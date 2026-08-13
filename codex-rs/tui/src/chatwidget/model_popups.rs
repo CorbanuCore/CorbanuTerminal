@@ -98,9 +98,12 @@ impl ModelSelectionPurpose {
     fn provider_subtitle(&self, provider_subtitle: &str) -> String {
         match self {
             Self::Session => provider_subtitle.to_string(),
-            Self::CodexPane { .. } => format!("New PFTerminal pane - {provider_subtitle}"),
+            Self::CodexPane { .. } => format!("New Corbanu Terminal pane - {provider_subtitle}"),
             Self::SpawnAgent { role, .. } => {
-                format!("PFTerminal {} pane - {provider_subtitle}", role.label())
+                format!(
+                    "Corbanu Terminal {} pane - {provider_subtitle}",
+                    role.label()
+                )
             }
         }
     }
@@ -126,8 +129,8 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 13] = [
     },
     ModelPickerProviderGroup {
         id: "pfterminal-plan",
-        label: "PfTerminal Plan",
-        subtitle: "USDC-funded PfTerminal plan",
+        label: "Corbanu Terminal Plan",
+        subtitle: "USDC-funded Corbanu Terminal plan",
     },
     ModelPickerProviderGroup {
         id: "kimi-code",
@@ -177,7 +180,7 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 13] = [
     ModelPickerProviderGroup {
         id: "gpu",
         label: "Rented GPU",
-        subtitle: "Authenticated PFTerminal rental",
+        subtitle: "Authenticated Corbanu Terminal rental",
     },
 ];
 
@@ -490,7 +493,7 @@ impl ChatWidget {
         let header = if tabs.is_empty() {
             self.model_menu_header(
                 "Select Model and Effort",
-                "Access hidden models by running pfterminal -m <model_name> or in your config.toml",
+                "Access hidden models by running corbanu -m <model_name> or in your config.toml",
             )
         } else {
             Box::new(())

@@ -5,7 +5,7 @@ expression: sanitized
 /status
 
 ╭─────────────────────────────────────────────────────────────────────────────────╮
-│  >_ PFTerminal (v0.1.29)                                                        │
+│  >_ Corbanu Terminal (v0.1.30)                                                  │
 │                                                                                 │
 │  Model:                claude-opus-5-plan                                       │
 │  Model provider:       Claude Plan                                              │

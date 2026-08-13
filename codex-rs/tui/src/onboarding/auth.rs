@@ -506,7 +506,7 @@ impl AuthModeWidget {
             vec![
                 Line::from(vec![
                     "  ".into(),
-                    "Choose a provider account for PFTerminal".into(),
+                    "Choose a provider account for Corbanu Terminal".into(),
                 ]),
                 "".into(),
             ]
@@ -515,7 +515,7 @@ impl AuthModeWidget {
                 Line::from(vec![
                     "  ".into(),
                     format!(
-                        "Connect a {} API key to use PFTerminal",
+                        "Connect a {} API key to use Corbanu Terminal",
                         self.api_key_provider_label()
                     )
                     .into(),
@@ -795,7 +795,7 @@ impl AuthModeWidget {
         };
         let usage_message = if self.provider_api_key_required() {
             format!(
-                "  PFTerminal will use {} with your API key.",
+                "  Corbanu Terminal will use {} with your API key.",
                 self.api_key_provider_label()
             )
         } else {
@@ -821,7 +821,7 @@ impl AuthModeWidget {
         Paragraph::new(vec![
             format!("  Saving {provider} securely…").into(),
             "".into(),
-            "  Keep PFTerminal open while the encrypted vault is updated."
+            "  Keep Corbanu Terminal open while the encrypted vault is updated."
                 .dim()
                 .into(),
         ])

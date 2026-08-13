@@ -478,7 +478,7 @@ fn acquire_ownership(home: &std::path::Path) -> Result<File> {
         let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
         anyhow::ensure!(
             result == 0,
-            "another wallet daemon owns this PfTerminal home"
+            "another wallet daemon owns this Corbanu Terminal home"
         );
     }
     #[cfg(windows)]
@@ -501,7 +501,7 @@ fn acquire_ownership(home: &std::path::Path) -> Result<File> {
         };
         anyhow::ensure!(
             locked != 0,
-            "another wallet daemon owns this PfTerminal home"
+            "another wallet daemon owns this Corbanu Terminal home"
         );
     }
     Ok(file)

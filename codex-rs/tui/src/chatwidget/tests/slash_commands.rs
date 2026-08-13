@@ -1688,7 +1688,7 @@ async fn pending_token_activity_refresh_keeps_composer_visible_in_short_viewport
             .vt100()
             .screen()
             .contents()
-            .contains("Ask PFTerminal to do anything")
+            .contains("Ask Corbanu Terminal to do anything")
     );
 }
 
@@ -2336,8 +2336,12 @@ async fn slash_archive_confirms_while_task_running() {
     assert!(chat.bottom_pane.has_active_view());
     assert_matches!(rx.try_recv(), Err(TryRecvError::Empty));
     let popup = render_bottom_popup(&chat, /*width*/ 80);
+    let popup_text = popup.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(popup.contains("Archive this session?"));
-    assert!(popup.contains("exit PFTerminal"));
+    assert!(
+        popup_text.contains("exit Corbanu Terminal"),
+        "expected branded archive warning, got {popup_text:?}"
+    );
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Down));
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
@@ -2628,8 +2632,9 @@ async fn slash_pets_on_unsupported_terminal_warns_without_picker() {
         .map(|lines| lines_to_single_string(lines))
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(rendered.contains("Pets are disabled in tmux."));
-    assert!(rendered.contains("outside tmux"));
+    let rendered_text = rendered.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(rendered_text.contains("Pets are disabled in tmux."));
+    assert!(rendered_text.contains("outside tmux"));
 }
 
 #[tokio::test]

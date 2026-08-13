@@ -123,7 +123,7 @@ pub(crate) fn build_claude_command_plan(
         if bridge.is_some() {
             None
         } else {
-            Some("pfterminal")
+            Some("corbanu")
         },
         base_url_override.as_deref(),
     );

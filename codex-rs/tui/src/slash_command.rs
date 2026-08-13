@@ -94,7 +94,7 @@ impl SlashCommand {
         match self {
             SlashCommand::Feedback => "send logs to maintainers",
             SlashCommand::New => "start a new chat during a conversation",
-            SlashCommand::Init => "create an AGENTS.md file with instructions for PFTerminal",
+            SlashCommand::Init => "create an AGENTS.md file with instructions for Corbanu Terminal",
             SlashCommand::Compact => "summarize conversation to prevent hitting the context limit",
             SlashCommand::Review => "review my current changes and find issues",
             SlashCommand::Rename => "rename the current thread",
@@ -103,14 +103,16 @@ impl SlashCommand {
             SlashCommand::Delete => "permanently delete this session and exit",
             SlashCommand::Clear => "clear the terminal and start a new chat",
             SlashCommand::Fork => "fork the current chat",
-            SlashCommand::App => "continue this session in PFTerminal Desktop",
-            SlashCommand::Quit | SlashCommand::Exit => "exit PFTerminal",
+            SlashCommand::App => "continue this session in Corbanu Terminal Desktop",
+            SlashCommand::Quit | SlashCommand::Exit => "exit Corbanu Terminal",
             SlashCommand::Copy => "copy last response as markdown",
             SlashCommand::Raw => "toggle raw scrollback mode for copy-friendly terminal selection",
             SlashCommand::Diff => "show git diff (including untracked files)",
             SlashCommand::Docs => "open MkDocs documentation in the terminal",
             SlashCommand::Mention => "mention a file",
-            SlashCommand::Skills => "use skills to improve how PFTerminal performs specific tasks",
+            SlashCommand::Skills => {
+                "use skills to improve how Corbanu Terminal performs specific tasks"
+            }
             SlashCommand::Import => "import setup, this project, and recent chats from Claude Code",
             SlashCommand::Hooks => "view and manage lifecycle hooks",
             SlashCommand::Status => "show current session configuration and token usage",
@@ -129,18 +131,18 @@ impl SlashCommand {
             SlashCommand::Ide => {
                 "include current selection, open files, and other context from your IDE"
             }
-            SlashCommand::Personality => "choose a communication style for PFTerminal",
+            SlashCommand::Personality => "choose a communication style for Corbanu Terminal",
             SlashCommand::Plan => "switch to Plan mode",
             SlashCommand::Goal => "set or view the goal for a long-running task",
             SlashCommand::Agent | SlashCommand::MultiAgents => "switch the active agent thread",
             SlashCommand::Spawn => "orchestrate Nazgul, Troll, and Orc agent roles",
             SlashCommand::Orchestrate => "attach and manage native pane whips",
             SlashCommand::Tasknode => "interact with Task Node tasks and rewards",
-            SlashCommand::Panes => "switch PFTerminal, Claude Code, or agent panes",
+            SlashCommand::Panes => "switch Corbanu Terminal, Claude Code, or agent panes",
             SlashCommand::Side | SlashCommand::Btw => {
                 "start a side conversation in an ephemeral fork"
             }
-            SlashCommand::Permissions => "choose what PFTerminal is allowed to do",
+            SlashCommand::Permissions => "choose what Corbanu Terminal is allowed to do",
             SlashCommand::Keymap => "remap TUI shortcuts",
             SlashCommand::Vim => "toggle Vim mode for the composer",
             SlashCommand::ElevateSandbox => "set up elevated agent sandbox",
@@ -154,10 +156,10 @@ impl SlashCommand {
             SlashCommand::Apps => "manage apps",
             SlashCommand::Plugins => "browse plugins",
             SlashCommand::Providers => "add provider API keys to the encrypted vault",
-            SlashCommand::Telegram => "connect and manage PFTerminal from Telegram",
+            SlashCommand::Telegram => "connect and manage Corbanu Terminal from Telegram",
             SlashCommand::Vault => "manage the encrypted credential vault (keys, tokens)",
-            SlashCommand::Wallet => "manage SOL, USDC, and PfTerminal inference plans",
-            SlashCommand::Logout => "log out of PFTerminal",
+            SlashCommand::Wallet => "manage SOL, USDC, and Corbanu Terminal inference plans",
+            SlashCommand::Logout => "log out of Corbanu Terminal",
             SlashCommand::Rollout => "print the rollout file path",
             SlashCommand::TestApproval => "test approval request",
         }

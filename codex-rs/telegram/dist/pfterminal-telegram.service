@@ -1,4 +1,4 @@
-# PFTerminal Telegram connector systemd user service.
+# Corbanu Terminal Telegram connector systemd user service.
 #
 # Install with:
 #   mkdir -p ~/.config/systemd/user
@@ -12,14 +12,14 @@
 # Run only one poller per Telegram bot token.
 
 [Unit]
-Description=PFTerminal Telegram connector
+Description=Corbanu Terminal Telegram connector
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
 [Service]
 Type=simple
 EnvironmentFile=%h/.config/pfterminal/telegram.env
-ExecStart=pfterminal telegram
+ExecStart=corbanu telegram
 Restart=always
 RestartSec=30s
 

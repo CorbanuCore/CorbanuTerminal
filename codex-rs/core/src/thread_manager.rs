@@ -2259,7 +2259,7 @@ fn resolve_spawn_multi_agent_version(
     is_thread_spawn: bool,
     configured_multi_agent_version: MultiAgentVersion,
 ) -> Option<MultiAgentVersion> {
-    // A fresh app-server thread/spawnAgent request is an explicit runtime boundary. PFTerminal
+    // A fresh app-server thread/spawnAgent request is an explicit runtime boundary. Corbanu Terminal
     // enables V2 on the child config even when the long-lived user-facing parent predates V2 and
     // is pinned to V1. Preserve an explicitly disabled parent, but otherwise honor that V2 child
     // request instead of silently exposing the legacy send_input(interrupt=true) surface.

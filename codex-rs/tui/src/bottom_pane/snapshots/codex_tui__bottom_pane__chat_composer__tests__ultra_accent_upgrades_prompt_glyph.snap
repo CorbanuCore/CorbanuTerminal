@@ -1,10 +1,9 @@
 ---
 source: tui/src/bottom_pane/chat_composer.rs
-assertion_line: 5063
 expression: terminal.backend()
 ---
 "                                                            "
-"» Ask PFTerminal to do anything                             "
+"» Ask Corbanu Terminal to do anything                       "
 "                                                            "
 "                                                            "
 "                                                            "

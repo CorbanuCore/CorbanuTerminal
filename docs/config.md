@@ -1,25 +1,26 @@
 # Configuration
 
-PFTerminal inherits Codex configuration but ships PFTerminal-specific provider
+Corbanu Terminal inherits Codex configuration but ships product-specific provider
 defaults. Most users do not need to define model providers manually.
 
 ## Config Location
 
-PFTerminal reads config from `CODEX_HOME/config.toml`.
+Corbanu Terminal reads config from `CODEX_HOME/config.toml`.
 
-Recommended PFTerminal home:
+To select a product home explicitly:
 
 ```bash
-export CODEX_HOME="${PFTERMINAL_HOME:-$HOME/.pfterminal}"
+export CORBANU_HOME="$HOME/.corbanu"
 ```
 
-If you use an installed `pfterminal` wrapper, it may set this automatically. If
-you run the source-built binary directly, set it yourself to keep PFTerminal
-state separate from stock Codex.
+`PFTERMINAL_HOME` remains supported for legacy automation. If neither product
+override is set, an explicit `CODEX_HOME` wins; otherwise Corbanu Terminal
+prefers an existing `.corbanu`, reuses a lone `.pfterminal`, and defaults fresh
+installs to `.corbanu`. This keeps product state separate from stock Codex.
 
 ## Built-In Providers
 
-These providers are compiled into PFTerminal:
+These providers are compiled into Corbanu Terminal:
 
 | Provider id   | Display name | Base URL                                | Env key              | Wire API         |
 | ------------- | ------------ | --------------------------------------- | -------------------- | ---------------- |
@@ -35,7 +36,7 @@ These providers are compiled into PFTerminal:
 | `baseten`     | Baseten      | `https://inference.baseten.co/v1`       | `BASETEN_API_KEY`    | Chat Completions |
 | `vercel`      | Vercel       | `https://ai-gateway.vercel.sh/v1`       | `AI_GATEWAY_API_KEY` | Responses        |
 
-OpenAI uses Codex account login from `/providers` or `pfterminal login`.
+OpenAI uses Codex account login from `/providers` or `corbanu login`.
 Provider API keys should normally be stored through onboarding, `/providers`,
 or `/vault`. Environment variables are supported for temporary sessions and
 automation.
@@ -110,20 +111,20 @@ model = "zai/glm-5.2-fast"
 You can also select a model per run:
 
 ```bash
-pfterminal -m glm-5.2
-pfterminal -m gpt-5.6-luna
-pfterminal -m deepseek-v4-flash
-pfterminal -m deepseek/deepseek-v4-flash-0731
-pfterminal -m zai-org/GLM-5.2
-pfterminal -m zai/glm-5.2
-pfterminal -m zai/glm-5.2-fast
+corbanu -m glm-5.2
+corbanu -m gpt-5.6-luna
+corbanu -m deepseek-v4-flash
+corbanu -m deepseek/deepseek-v4-flash-0731
+corbanu -m zai-org/GLM-5.2
+corbanu -m zai/glm-5.2
+corbanu -m zai/glm-5.2-fast
 ```
 
 The model picker maps these model slugs to the correct built-in provider.
 
 ## Vault And Secrets
 
-Provider API keys saved by PFTerminal are stored in the encrypted vault, not in
+Provider API keys saved by Corbanu Terminal are stored in the encrypted vault, not in
 `config.toml`.
 
 Vault labels:
@@ -148,21 +149,21 @@ onboarding or `/vault`.
 
 ## Telegram Connector
 
-`pfterminal telegram` runs a Telegram long-polling connector that drives the
-same in-process app-server harness as the terminal UI and `pfterminal exec`.
+`corbanu telegram` runs a Telegram long-polling connector that drives the
+same in-process app-server harness as the terminal UI and `corbanu exec`.
 Telegram-specific configuration is read locally by the connector from the
 `[telegram]` table. Core accepts this table during strict config validation,
 but the connector owns the individual settings.
 
-For interactive setup, run `/telegram` in the TUI. PFTerminal validates a
+For interactive setup, run `/telegram` in the TUI. Corbanu Terminal validates a
 masked BotFather token into the encrypted vault, waits automatically for the
 user to message the bot, asks which exact chat and sender to authorize, captures
 the current model/workspace/permission settings, and starts the connector. The
 bot remains silent until that authorization completes. Leaving the discovery
 screen cancels its polling, and stale results cannot reopen the screen. The
 same screen reports health and supports restart, stop, token replacement, and
-full disconnect. A configured connector is restored when PFTerminal starts;
-an operation lock prevents multiple PFTerminal processes from racing into two
+full disconnect. A configured connector is restored when Corbanu Terminal starts;
+an operation lock prevents multiple Corbanu Terminal processes from racing into two
 pollers. The setup script below remains available for unattended hosts.
 
 ```toml
@@ -178,7 +179,7 @@ mode = "polling"
 default_model = "glm-5.2"
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
-default_cwd = "/home/alice/pfterminal-telegram"
+default_cwd = "/home/alice/corbanu-telegram"
 webhook_url = ""
 ```
 
@@ -192,7 +193,7 @@ Connectors created through `/telegram` remove the token environment variable
 from their child process so the just-validated vault credential cannot be
 silently replaced by a stale shell value. `sandbox_mode` is connector-specific:
 the TUI copies the permission mode shown at authorization time without changing
-the global PFTerminal sandbox.
+the global Corbanu Terminal sandbox.
 
 Chats are default-deny. Only numeric Telegram chat IDs in `allowed_chat_ids`
 can start turns. Private chats use that list directly. Group and supergroup chat
@@ -268,9 +269,10 @@ during ingestion. Archives, executables, and unrelated binary media are
 rejected rather than unpacked or implied to be available.
 
 `default_cwd` is the workspace used for Telegram-created turns. Set it to the
-directory where the agent should work, not to the PFTerminal source tree or all
+directory where the agent should work, not to the Corbanu Terminal source tree or all
 of `$HOME`. Codex automatically loads `AGENTS.md` from that workspace. The setup
-script defaults `--workspace` to `~/pfterminal-telegram`, creates it, and seeds
+script defaults fresh installs to `~/corbanu-telegram`, reuses an existing
+legacy `~/pfterminal-telegram`, creates the selected directory, and seeds
 `AGENTS.md` there from `codex-rs/telegram/dist/AGENTS.md.template` when the
 workspace does not already have one. Use `--workspace "$HOME"` only when you
 intentionally want a home-rooted remote agent workspace.
@@ -278,10 +280,10 @@ intentionally want a home-rooted remote agent workspace.
 The recommended setup path is:
 
 ```bash
-pfterminal telegram --setup
+corbanu telegram --setup
 ```
 
-Installed PFTerminal packages bundle the setup script and service templates;
+Installed Corbanu Terminal packages bundle the setup script and service templates;
 `--setup` locates and runs that exact packaged copy. From a source checkout,
 `codex-rs/scripts/setup-telegram.sh --chat-id 21000038` remains available for
 scripted setup.
@@ -292,8 +294,9 @@ unattended setup,
 provide `PFTERMINAL_TELEGRAM_TOKEN` through the process environment without
 placing the value in a command argument or shell-history line.
 
-The script resolves `CODEX_HOME` the same way `pfterminal telegram` does,
-writes the token to `~/.config/pfterminal/telegram.env`, writes or merges the
+The script resolves `CODEX_HOME` the same way `corbanu telegram` does,
+writes the token to `~/.config/corbanu/telegram.env` on fresh installs (or reuses
+an existing legacy `~/.config/pfterminal/telegram.env`), writes or merges the
 `[telegram]` block, sets `default_cwd`, and backs up an existing `config.toml`
 before editing it. On reruns, the script only changes `[telegram]` settings that
 were explicitly passed on that invocation or are missing from the existing file,
@@ -301,7 +304,7 @@ so operator tuning such as `approval_policy = "on-failure"` is preserved. Do not
 pass the bot token on the command line; use `PFTERMINAL_TELEGRAM_TOKEN`, an
 existing env-file entry, or the interactive prompt.
 
-`pfterminal -c telegram.foo=... telegram` and profile overrides do not override
+`corbanu -c telegram.foo=... telegram` and profile overrides do not override
 `[telegram]` connector settings today. The connector reads this table directly
 from `CODEX_HOME/config.toml`; use the config file or setup script for Telegram
 settings. Core settings such as model, cwd, approval policy, and sandbox posture
@@ -326,7 +329,7 @@ filesystem sandbox, so do not use it on shared or untrusted hosts; install
 `bwrap` and enable unprivileged user namespaces instead. The setup script never
 writes this setting silently: pass `--allow-danger-full-access` or, on an
 interactive TTY, confirm the prompt that states this disables the sandbox
-globally for all PFTerminal surfaces. In non-interactive mode without the flag,
+globally for all Corbanu Terminal surfaces. In non-interactive mode without the flag,
 preflight failure exits non-zero and does not write `sandbox_mode`.
 
 At startup, the connector emits loud warnings when the effective approval policy
@@ -340,12 +343,12 @@ systemctl --user daemon-reload
 systemctl --user enable --now pfterminal-telegram.service
 ```
 
-The setup script runs `pfterminal telegram --health` before installing a managed
+The setup script runs `corbanu telegram --health` before installing a managed
 service, then installs a concrete user unit: `ExecStart` is rewritten to the
-absolute path returned by `command -v pfterminal`, and `EnvironmentFile` is
+absolute path returned by `command -v corbanu`, and `EnvironmentFile` is
 rewritten to the actual `--env-file` path. The checked-in template remains
 generic for review. The unit reads `CODEX_HOME` and `PFTERMINAL_TELEGRAM_TOKEN`
-from `~/.config/pfterminal/telegram.env`, restarts automatically, and uses
+from the selected Telegram environment file, restarts automatically, and uses
 `StartLimitIntervalSec=300` with `StartLimitBurst=5` so a persistent 409 conflict
 from a second poller stops instead of restart-fighting forever. Run only one
 poller per Telegram bot token.
@@ -353,7 +356,7 @@ poller per Telegram bot token.
 Before enabling any service, run the local readiness probe:
 
 ```bash
-pfterminal telegram --health
+corbanu telegram --health
 ```
 
 It verifies the Bot API identity, non-empty authorization policy, group user
@@ -369,14 +372,14 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.postfiat.pfterminal.
 ```
 
 On Windows, configure the connector first, verify it with
-`pfterminal telegram --health`, then install a current-user Scheduled Task:
+`corbanu telegram --health`, then install a current-user Scheduled Task:
 
 ```powershell
 .\codex-rs\scripts\install-telegram-task.ps1
-Start-ScheduledTask -TaskName 'PFTerminal Telegram'
+Start-ScheduledTask -TaskName 'Corbanu Terminal Telegram'
 ```
 
-The task command contains no bot token; credentials remain in the PFTerminal
+The task command contains no bot token; credentials remain in the Corbanu Terminal
 vault. The task refuses duplicate instances and has bounded restart settings.
 
 ## Provider Overrides

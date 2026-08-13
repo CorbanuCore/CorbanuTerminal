@@ -319,7 +319,7 @@ fn generate_identity(private_key: &Path) -> ProviderResult<()> {
     if !status.success() {
         return Err(ProviderError::new(
             ProviderErrorKind::Permanent,
-            "PfTerminal could not create its Vast SSH identity.",
+            "Corbanu Terminal could not create its Vast SSH identity.",
         ));
     }
     Ok(())
@@ -340,7 +340,7 @@ fn derive_public_key(private_key: &Path, public_key: &Path) -> ProviderResult<()
     if !output.status.success() {
         return Err(ProviderError::new(
             ProviderErrorKind::Permanent,
-            "PfTerminal could not recover its Vast SSH public key.",
+            "Corbanu Terminal could not recover its Vast SSH public key.",
         ));
     }
     let mut file = OpenOptions::new()
@@ -363,14 +363,14 @@ fn available_loopback_port() -> ProviderResult<u16> {
 fn local_transport_error(_error: std::io::Error) -> ProviderError {
     ProviderError::new(
         ProviderErrorKind::Permanent,
-        "PfTerminal could not initialize its local Vast SSH transport.",
+        "Corbanu Terminal could not initialize its local Vast SSH transport.",
     )
 }
 
 fn lock_error() -> ProviderError {
     ProviderError::new(
         ProviderErrorKind::Permanent,
-        "PfTerminal's local Vast SSH transport lock is unavailable.",
+        "Corbanu Terminal's local Vast SSH transport lock is unavailable.",
     )
 }
 

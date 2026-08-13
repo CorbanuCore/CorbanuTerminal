@@ -47,7 +47,7 @@ rustPlatform.buildRustPackage (_: {
   };
 
   meta = with lib; {
-    description = "PFTerminal command-line interface rust implementation";
+    description = "Corbanu Terminal command-line interface Rust implementation";
     license = licenses.asl20;
     homepage = "https://github.com/openai/codex";
     mainProgram = "codex";

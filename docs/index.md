@@ -1,6 +1,6 @@
-# PFTerminal
+# Corbanu Terminal
 
-PFTerminal is a crypto-native AI services terminal based on the open-source
+Corbanu Terminal is a crypto-native AI services terminal based on the open-source
 Codex CLI. It keeps the local coding-agent runtime and adds first-class model
 providers, retained multi-agent orchestration, wallet/plan, GPU, Telegram,
 Task Node, encrypted-vault, and persistent-pane product surfaces.
@@ -25,7 +25,7 @@ has been integrated.
 | Panes         | User panes and Claude Code headless panes with provider-backed profiles and turn artifacts.                             | [Claude Headless Panes](features/claude-headless-panes.md) |
 | Spawn         | Managed Nazgul/Troll/Orc orchestration through `/spawn` and `/spawn status`.                                            | [Spawn Orchestration](features/spawn-orchestration.md)     |
 | `/tasknode`   | Slash command for Task Node task views, actions, evidence, task requests, rewards, and account status.                  | [`/tasknode` Slash Command](features/tasknode.md)          |
-| Wallet/plan   | SOL/USDC wallet lifecycle, backup/restore, balance, and PFTerminal plan purchase/recovery workflows.                    | [Slash Commands](slash_commands.md)                        |
+| Wallet/plan   | SOL/USDC wallet lifecycle, backup/restore, balance, and Corbanu Terminal plan purchase/recovery workflows.                    | [Slash Commands](slash_commands.md)                        |
 | GPU           | Qualified and experimental GPU recipes with pre-charge review, status, stop, and terminate workflows.                   | [Slash Commands](slash_commands.md)                        |
 | Telegram      | Local connector configuration, authorization, start/stop/status, and disconnect workflows.                              | [Slash Commands](slash_commands.md)                        |
 | Codex fork    | Product command aliases, npm packages, installer names, TUI branding, and model picker behavior.                        | [Codex Fork](integrations/codex-fork.md)                   |
@@ -53,7 +53,7 @@ has been integrated.
 
 ## Core Claim
 
-PFTerminal is a Codex-derived terminal agent with all of the product surfaces
+Corbanu Terminal is a Codex-derived terminal agent with all of the product surfaces
 listed above kept first-class. The implementation changes include provider and
 model routing, native retained agents, pane/session persistence, wallet and GPU
 operations, remote-control and Task Node bridges, encrypted credential storage,
@@ -88,7 +88,7 @@ scripts/docs-site-build
 scripts/docs-site-serve --host 127.0.0.1 --port 8089
 ```
 
-On the current shared docs host, the static PFTerminal build is also published
+On the current shared docs host, the static Corbanu Terminal build is also published
 under the existing authenticated L1 docs server:
 
 ```text

@@ -1,12 +1,11 @@
 ---
 source: tui/src/chatwidget/tests/status_and_layout.rs
-assertion_line: 2604
 expression: normalized_backend_snapshot(terminal.backend())
 ---
 "                                                                                "
 "• Analyzing (0s • esc to interrupt)                                             "
 "                                                                                "
 "                                                                                "
-"› Ask PFTerminal to do anything                                                 "
+"› Ask Corbanu Terminal to do anything                                           "
 "                                                                                "
 "  Ambient GLM 5.2 standard · /tmp/project · Post Fiat Terminal · TPS: -- tok/s  "

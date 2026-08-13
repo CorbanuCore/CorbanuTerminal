@@ -64,7 +64,7 @@ const OPENAI_ACTOR_AUTHORIZATION_HEADER: &str = "x-openai-actor-authorization";
 pub const OPENAI_PROVIDER_ID: &str = "openai";
 /// OpenAI backend compatibility version for protocol-gated model access.
 ///
-/// This is intentionally separate from PFTerminal's product version. The OpenAI
+/// This is intentionally separate from Corbanu Terminal's product version. The OpenAI
 /// provider sends this value to first-party endpoints so fork-specific release
 /// numbering does not make the backend treat a compatible client as obsolete.
 pub const OPENAI_CODEX_COMPAT_VERSION: &str = "0.144.1";
@@ -1593,7 +1593,7 @@ pub fn built_in_model_providers(
     let vercel_anthropic_fast_provider = P::create_vercel_anthropic_fast_provider();
     let amazon_bedrock_provider = P::create_amazon_bedrock_provider(/*aws*/ None);
 
-    // PFTerminal bundles the first-party OpenAI provider, the local OSS
+    // Corbanu Terminal bundles the first-party OpenAI provider, the local OSS
     // providers, and the curated third-party coding providers exposed in the
     // login/model picker UX. Users can still add more providers in config.toml.
     [

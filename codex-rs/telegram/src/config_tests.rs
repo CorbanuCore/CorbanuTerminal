@@ -14,7 +14,7 @@ use codex_telegram::config::TelegramMode;
 
 #[test]
 fn telegram_cli_accepts_health_mode() {
-    let cli = Cli::try_parse_from(["pfterminal telegram", "--health"])
+    let cli = Cli::try_parse_from(["corbanu telegram", "--health"])
         .expect("--health should be a valid Telegram connector mode");
 
     assert!(cli.health);

@@ -29,12 +29,12 @@ fn title_preview_line(chat: &mut ChatWidget, items: &[TerminalTitleItem]) -> Str
 }
 
 #[tokio::test]
-async fn terminal_title_app_name_uses_pfterminal_identity() {
+async fn terminal_title_app_name_uses_corbanu_identity() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
 
     assert_eq!(
         title_preview_line(&mut chat, &[TerminalTitleItem::AppName]),
-        "pfterminal"
+        "corbanu"
     );
 }
 

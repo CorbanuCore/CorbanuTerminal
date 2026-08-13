@@ -1,4 +1,4 @@
-//! `/vault` slash-command handling for the PFTerminal credential vault.
+//! `/vault` slash-command handling for the Corbanu Terminal credential vault.
 //!
 //! This module parses `/vault` subcommands and renders their output as ratatui `Line`s. It keeps
 //! all secret-handling logic in one place so the slash-dispatch path stays small.

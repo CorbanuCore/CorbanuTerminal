@@ -169,7 +169,7 @@ where
                 .record_terminal_failure(
                     lease,
                     "provider-recovery-unsupported",
-                    "Provider cannot safely reconcile PFTerminal-owned resources.",
+                    "Provider cannot safely reconcile Corbanu Terminal-owned resources.",
                     now_ms,
                 )
                 .await;
@@ -661,7 +661,7 @@ where
                         observed_state: Some(GpuRentalState::TerminateRequested),
                         last_error_code: Some("provider-side-stop".to_string()),
                         last_error_message: Some(
-                            "The provider resource stopped outside PFTerminal; cleanup was requested."
+                            "The provider resource stopped outside Corbanu Terminal; cleanup was requested."
                                 .to_string(),
                         ),
                         next_retry_at_ms: Some(now_ms),
@@ -673,7 +673,7 @@ where
                 return Ok(vec![ControllerEvent::Warning {
                     rental_id: lease.rental.rental_id,
                     code: "provider-side-stop".to_string(),
-                    message: "Provider-side stop detected; PFTerminal is confirming cleanup."
+                    message: "Provider-side stop detected; Corbanu Terminal is confirming cleanup."
                         .to_string(),
                 }]);
             }
@@ -811,7 +811,7 @@ where
             [instance] => Ok(Some(instance.clone())),
             _ => Err(ProviderError::new(
                 ProviderErrorKind::Permanent,
-                "Multiple provider resources have the same PFTerminal ownership tag.",
+                "Multiple provider resources have the same Corbanu Terminal ownership tag.",
             )),
         }
     }

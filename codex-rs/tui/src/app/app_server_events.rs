@@ -53,7 +53,7 @@ impl App {
             AppServerEvent::Disconnected { message } => {
                 tracing::warn!("app-server event stream disconnected: {message}");
                 self.chat_widget.add_error_message(format!(
-                    "App-server connection degraded; PFTerminal will reconnect automatically: {message}"
+                    "App-server connection degraded; Corbanu Terminal will reconnect automatically: {message}"
                 ));
             }
         }

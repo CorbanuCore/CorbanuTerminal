@@ -182,7 +182,7 @@ function Assert-ValidReleaseVersion {
     )
 
     if ($Version -cne "latest" -and $Version -cnotmatch "^[0-9]+\.[0-9]+\.[0-9]+(?:-alpha(?:\.[0-9]+){0,2}|-beta(?:\.[0-9]+)?)?$") {
-        throw "Invalid PFTerminal release version: $Version. Expected latest or x.y.z[-alpha[.N[.M]]|-beta[.N]]."
+        throw "Invalid Corbanu Terminal release version: $Version. Expected latest or x.y.z[-alpha[.N[.M]]|-beta[.N]]."
     }
 }
 
@@ -335,7 +335,7 @@ function Test-ArchiveDigest {
 
     $actualDigest = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actualDigest -ne $ExpectedDigest) {
-        throw "Downloaded PFTerminal archive checksum did not match expected digest. Expected $ExpectedDigest but got $actualDigest."
+        throw "Downloaded Corbanu Terminal archive checksum did not match expected digest. Expected $ExpectedDigest but got $actualDigest."
     }
 }
 
@@ -453,7 +453,7 @@ function Resolve-VersionFromReleaseMetadata {
     )
 
     if (-not $ReleaseMetadata.tag_name) {
-        throw "Failed to resolve the latest PFTerminal release version."
+        throw "Failed to resolve the latest Corbanu Terminal release version."
     }
 
     $resolvedVersion = Normalize-Version -RawVersion $ReleaseMetadata.tag_name
@@ -478,7 +478,7 @@ function Resolve-ReleaseFromGitHub {
     try {
         $releaseMetadata = Invoke-RestMethod -Uri $metadataUri
     } catch {
-        throw "Could not fetch GitHub release metadata for PFTerminal $requestedRelease. GitHub API may be unavailable or rate limited. $($_.Exception.Message)"
+        throw "Could not fetch GitHub release metadata for Corbanu Terminal $requestedRelease. GitHub API may be unavailable or rate limited. $($_.Exception.Message)"
     }
 
     if ($NormalizedVersion -eq "latest") {
@@ -507,7 +507,7 @@ function Resolve-ReleaseFromReleases {
         $releaseMetadata = [string]$metadataResponse.Content | ConvertFrom-Json -ErrorAction Stop
         $resolvedVersion = Resolve-VersionFromReleaseMetadata -ReleaseMetadata $releaseMetadata
         if ($NormalizedVersion -ne "latest" -and $resolvedVersion -cne $NormalizedVersion) {
-            throw "Release metadata version did not match requested PFTerminal version $NormalizedVersion."
+            throw "Release metadata version did not match requested Corbanu Terminal version $NormalizedVersion."
         }
         $resolvedRelease = [PSCustomObject]@{
             Version = $resolvedVersion

@@ -12,7 +12,7 @@ pub use config::ModelsManagerConfig;
 /// OpenAI backend compatibility version for `/models` catalog requests.
 ///
 /// Keep this in sync with `codex_model_provider_info::OPENAI_CODEX_COMPAT_VERSION`.
-/// It is separate from PFTerminal's package version because OpenAI gates some
+/// It is separate from Corbanu Terminal's package version because OpenAI gates some
 /// model metadata by upstream Codex client compatibility, not fork release
 /// numbering.
 pub const OPENAI_CODEX_COMPAT_VERSION: &str = "0.144.1";

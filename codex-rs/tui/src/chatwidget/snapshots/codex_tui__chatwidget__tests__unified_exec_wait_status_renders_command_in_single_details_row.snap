@@ -7,6 +7,6 @@ expression: normalize_snapshot_paths(rendered)
   └ cargo test -p codex-core -- --exact…
 
 
-› Ask PFTerminal to do anything
+› Ask Corbanu Terminal to do anything
 
   Ambient GLM 5.2 standard · /tmp/project · Pos…

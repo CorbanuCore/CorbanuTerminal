@@ -80,7 +80,7 @@ async fn exit_resume_hint_falls_back_to_primary_when_active_codex_pane_has_no_ro
     assert_eq!(exit_thread.thread_id, primary_thread_id);
     assert_eq!(
         resume_hint_for_thread(&exit_thread),
-        Some("pfterminal resume 123e4567-e89b-12d3-a456-426614174001".to_string())
+        Some("corbanu resume 123e4567-e89b-12d3-a456-426614174001".to_string())
     );
 }
 
@@ -117,7 +117,7 @@ async fn exit_resume_hint_prefers_active_codex_pane_when_it_is_resumable() {
     assert_eq!(
         resume_hint_for_thread(&exit_thread),
         Some(
-            "pfterminal resume, then select Codex 1 (123e4567-e89b-12d3-a456-426614174004)"
+            "corbanu resume, then select Codex 1 (123e4567-e89b-12d3-a456-426614174004)"
                 .to_string()
         )
     );
@@ -158,7 +158,7 @@ async fn pane_layout_thread_resume_hint_does_not_require_rollout() {
 
     assert_eq!(
         resume_hint_for_pane_layout_thread(app.config.codex_home.as_ref(), Some(thread_id)),
-        Some("pfterminal resume 123e4567-e89b-12d3-a456-426614174010".to_string())
+        Some("corbanu resume 123e4567-e89b-12d3-a456-426614174010".to_string())
     );
 }
 
@@ -188,7 +188,7 @@ async fn session_summary_includes_resume_hint_for_persisted_rollout() {
     );
     assert_eq!(
         summary.resume_hint,
-        Some("pfterminal resume 123e4567-e89b-12d3-a456-426614174000".to_string())
+        Some("corbanu resume 123e4567-e89b-12d3-a456-426614174000".to_string())
     );
 }
 
@@ -215,7 +215,7 @@ async fn session_summary_names_picker_item_when_thread_has_name() {
     assert_eq!(
         summary.resume_hint,
         Some(
-            "pfterminal resume, then select my-session (123e4567-e89b-12d3-a456-426614174000)"
+            "corbanu resume, then select my-session (123e4567-e89b-12d3-a456-426614174000)"
                 .to_string()
         )
     );

@@ -3404,7 +3404,7 @@ async fn spawn_model_selection_popup_deepseek_provider_snapshot() {
 
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 110, /*height*/ 24);
     assert_chatwidget_snapshot!("spawn_model_selection_popup_deepseek_provider", popup);
-    assert!(popup.contains("PFTerminal Orc pane - DeepSeek API key"));
+    assert!(popup.contains("Corbanu Terminal Orc pane - DeepSeek API key"));
     assert!(popup.contains("[DeepSeek]"));
     assert!(popup.contains("DeepSeek V4 Flash 0731 (Direct) (current)"));
 
@@ -3490,12 +3490,12 @@ async fn spawn_model_selection_popup_snapshot() {
 
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 30);
     assert_chatwidget_snapshot!("spawn_model_selection_popup", popup);
-    assert!(popup.contains("PFTerminal Nazgul pane - OpenAI Codex plan"));
+    assert!(popup.contains("Corbanu Terminal Nazgul pane - OpenAI Codex plan"));
     assert!(popup.contains("GPT-5.6-Sol (current)"));
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Right));
     let switched = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 30);
-    assert!(switched.contains("PFTerminal Nazgul pane - Ambient coding plan"));
+    assert!(switched.contains("Corbanu Terminal Nazgul pane - Ambient coding plan"));
     assert!(switched.lines().any(|line| line.contains('›')));
 }
 
@@ -3512,7 +3512,7 @@ async fn codex_pane_model_picker_uses_provider_tabs_and_opens_name_prompt() {
     );
 
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 30);
-    assert!(popup.contains("New PFTerminal pane - OpenAI Codex plan"));
+    assert!(popup.contains("New Corbanu Terminal pane - OpenAI Codex plan"));
     assert!(popup.contains("GPT-5.6-Sol (current)"));
 
     chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
@@ -4021,11 +4021,14 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
             && minimax_popup.contains("OpenRouter: Owl Alpha - $0/M input, $0/M output."),
         "expected OpenRouter models to share the OpenRouter tab:\n{minimax_popup}"
     );
+    move_model_picker_selection_to(&mut minimax_chat, "moonshotai/kimi-k3");
+    let kimi_openrouter_popup =
+        render_bottom_popup_with_height(&minimax_chat, /*width*/ 140, /*height*/ 28);
     assert!(
-        minimax_popup.contains("moonshotai/kimi-k3")
-            && minimax_popup.contains("OpenRouter: Kimi K3")
-            && minimax_popup.contains("$3.00/M input, $0.30/M cached input, $15.00/M"),
-        "expected Kimi K3 in the OpenRouter tab:\n{minimax_popup}"
+        kimi_openrouter_popup.contains("moonshotai/kimi-k3")
+            && kimi_openrouter_popup.contains("OpenRouter: Kimi K3")
+            && kimi_openrouter_popup.contains("$3.00/M input, $0.30/M cached input, $15.00/M"),
+        "expected Kimi K3 in the OpenRouter tab:\n{kimi_openrouter_popup}"
     );
 
     let (mut openai_chat, _openai_rx, _openai_op_rx) =
@@ -4219,7 +4222,7 @@ async fn model_picker_opens_openrouter_reasoning_options_for_gemini() {
     }
     assert!(
         !reasoning_popup.contains("(default)"),
-        "expected Gemini reasoning picker not to invent a PFTerminal default:\n{reasoning_popup}"
+        "expected Gemini reasoning picker not to invent a Corbanu Terminal default:\n{reasoning_popup}"
     );
 }
 

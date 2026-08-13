@@ -30,7 +30,7 @@ pub struct GpuRecipe {
     /// manifests retain the source model ID for backward compatibility.
     #[serde(default)]
     pub served_model_id: String,
-    /// OpenAI-compatible protocol used by PfTerminal after the runtime is
+    /// OpenAI-compatible protocol used by Corbanu Terminal after the runtime is
     /// registered. Older manifests used chat completions exclusively.
     #[serde(default = "default_wire_api")]
     pub wire_api: String,

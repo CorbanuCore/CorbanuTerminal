@@ -7,7 +7,7 @@ before:
 /status
 
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│  >_ PFTerminal (v0.1.29)                                                    │
+│  >_ Corbanu Terminal (v0.1.30)                                              │
 │                                                                             │
 │  Model:            gpt-5.1-codex-max                                        │
 │  Model provider:   Ambient                                                  │
@@ -39,7 +39,7 @@ after:
 /status
 
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│  >_ PFTerminal (v0.1.29)                                                    │
+│  >_ Corbanu Terminal (v0.1.30)                                              │
 │                                                                             │
 │  Model:            gpt-5.1-codex-max                                        │
 │  Model provider:   Ambient                                                  │

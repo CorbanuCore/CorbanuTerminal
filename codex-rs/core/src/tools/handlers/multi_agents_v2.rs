@@ -150,7 +150,7 @@ pub(super) fn ensure_manager_tool_allowed(
     _tool_name: &str,
 ) -> Result<(), FunctionCallError> {
     // Role names are behavioral profiles and UI labels, not authorization tokens. Delegation
-    // permissions belong to the crew policy at the PfTerminal control-plane boundary.
+    // permissions belong to the crew policy at the Corbanu Terminal control-plane boundary.
     Ok(())
 }
 

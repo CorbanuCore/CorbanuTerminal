@@ -13,12 +13,17 @@ use chrono::Utc;
 use codex_app_server_protocol::ThreadAgentMessageParams;
 #[cfg(target_os = "windows")]
 use codex_config::types::WindowsSandboxModeToml;
+use codex_product_brand::LEGACY_MAIN_PANE_TITLE;
+use codex_product_brand::MAIN_PANE_TITLE;
+use codex_product_brand::native_pane_name;
+use codex_product_brand::native_pane_title;
 use codex_protocol::protocol::AgentMessageKind;
 use std::collections::HashSet;
 
 const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
 const RESERVED_PANE_DISPLAY_NAMES: &[&str] = &[
-    "PFTerminal - Main",
+    MAIN_PANE_TITLE,
+    LEGACY_MAIN_PANE_TITLE,
     "Codex - Main",
     "me",
     "none",
@@ -169,6 +174,7 @@ impl App {
                         .map(|role| role == "default")
                         .unwrap_or(true)
                 {
+                    insert(&native_pane_title(nickname));
                     insert(&format!("PFTerminal - {nickname}"));
                     insert(&format!("Codex - {nickname}"));
                 }
@@ -210,17 +216,20 @@ impl App {
         if let Some(stripped) = base.strip_prefix("Codex - ") {
             base = self.normalize_pane_display_name(stripped)?;
         }
-        if let Some(stripped) = base.strip_prefix("PFTerminal - ") {
-            base = self.normalize_pane_display_name(stripped)?;
+        if let Some(stripped) = native_pane_name(&base).map(str::to_owned) {
+            base = self.normalize_pane_display_name(&stripped)?;
         }
         let exclude_node_id = exclude_thread_id.map(crate::spawn_orchestration::thread_node_id);
         let occupied = self.occupied_pane_name_keys(exclude_node_id.as_deref());
         let mut candidate = base.clone();
         for suffix in 2..1000 {
             let candidate_key = candidate.to_ascii_lowercase();
+            let corbanu_display_key =
+                format!("corbanu terminal - {}", candidate.to_ascii_lowercase());
             let pfterminal_display_key = format!("pfterminal - {}", candidate.to_ascii_lowercase());
             let legacy_display_key = format!("codex - {}", candidate.to_ascii_lowercase());
             if !occupied.contains(&candidate_key)
+                && !occupied.contains(&corbanu_display_key)
                 && !occupied.contains(&pfterminal_display_key)
                 && !occupied.contains(&legacy_display_key)
             {
@@ -247,7 +256,7 @@ impl App {
 
         let Some(thread_id) = self.current_displayed_thread_id() else {
             self.chat_widget
-                .add_error_message("No active PFTerminal pane to rename.".to_string());
+                .add_error_message("No active Corbanu Terminal pane to rename.".to_string());
             return;
         };
         self.rename_codex_pane_display_name(app_server, thread_id, name)
@@ -428,7 +437,7 @@ impl App {
         {
             Ok(_) => {}
             Err(error) => self.chat_widget.add_error_message(format!(
-                "GPU rental state was saved, but the independent controller did not start: {error}. Run `pfterminal internal-gpu-controller` before relying on local TTL or spend enforcement."
+                "GPU rental state was saved, but the independent controller did not start: {error}. Run `corbanu internal-gpu-controller` before relying on local TTL or spend enforcement."
             )),
         }
     }
@@ -620,7 +629,7 @@ impl App {
                     fork_config.model_reasoning_effort = fork_reasoning_effort.clone();
                     match app_server.fork_thread(fork_config, thread_id).await {
                         Ok(mut forked) => {
-                            // Ultra is a PFTerminal UI/runtime mode. The app server may project it
+                            // Ultra is a Corbanu Terminal UI/runtime mode. The app server may project it
                             // onto the nearest provider-facing effort, but a fork must retain the
                             // user's selected mode in the attached session.
                             forked.session.reasoning_effort = fork_reasoning_effort;
@@ -1958,7 +1967,7 @@ impl App {
                         label: label.to_string(),
                         credential_type: codex_vault::CredentialType::ApiKey,
                         provider: Some(provider),
-                        notes: Some("PFTerminal GPU rental provider credential".to_string()),
+                        notes: Some("Corbanu Terminal GPU rental provider credential".to_string()),
                         revocation_notes: Some(
                             "Revoke at the provider and delete from /vault when retired."
                                 .to_string(),
@@ -3620,7 +3629,7 @@ impl App {
                     self.backend_parent_thread_for_spawn(role, parent_node_id.as_deref())
                 else {
                     self.chat_widget.add_error_message(
-                        "Cannot spawn a native agent before PFTerminal Main has started."
+                        "Cannot spawn a native agent before Corbanu Terminal Main has started."
                             .to_string(),
                     );
                     return Ok(AppRunControl::Continue);
@@ -3762,7 +3771,7 @@ impl App {
                         };
                         self.chat_widget.add_info_message(
                             format!(
-                                "Spawned PFTerminal {} pane{}{binding_suffix}.",
+                                "Spawned Corbanu Terminal {} pane{}{binding_suffix}.",
                                 role.label(),
                                 agent_nickname
                                     .as_deref()
@@ -3783,7 +3792,7 @@ impl App {
                             "thread/spawnAgent retry limit reached; keeping the TUI alive"
                         );
                         self.chat_widget.add_error_message(format!(
-                            "Failed to spawn PFTerminal {} pane: {err:#}",
+                            "Failed to spawn Corbanu Terminal {} pane: {err:#}",
                             role.label()
                         ));
                     }
@@ -4275,7 +4284,8 @@ impl App {
                 let Some(parent_thread_id) = self.primary_thread_id.or(self.active_thread_id)
                 else {
                     self.chat_widget.add_error_message(
-                        "Cannot create a Manager before PFTerminal Main has started.".to_string(),
+                        "Cannot create a Manager before Corbanu Terminal Main has started."
+                            .to_string(),
                     );
                     return Ok(AppRunControl::Continue);
                 };
@@ -4372,7 +4382,7 @@ impl App {
             } => {
                 if self.primary_thread_id.or(self.active_thread_id).is_none() {
                     self.chat_widget.add_error_message(
-                        "Cannot create a PFTerminal pane before PFTerminal Main has started."
+                        "Cannot create a Corbanu Terminal pane before Corbanu Terminal Main has started."
                             .to_string(),
                     );
                     return Ok(AppRunControl::Continue);
@@ -4421,13 +4431,14 @@ impl App {
                         self.select_agent_thread_and_discard_side(tui, app_server, thread_id)
                             .await?;
                         self.chat_widget.add_info_message(
-                            format!("Created and switched to PFTerminal pane {nickname}."),
+                            format!("Created and switched to Corbanu Terminal pane {nickname}."),
                             Some(format!("{model}; no task was started.")),
                         );
                     }
                     Err(err) => {
-                        self.chat_widget
-                            .add_error_message(format!("Failed to create PFTerminal pane: {err}"));
+                        self.chat_widget.add_error_message(format!(
+                            "Failed to create Corbanu Terminal pane: {err}"
+                        ));
                     }
                 }
             }

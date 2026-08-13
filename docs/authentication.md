@@ -1,6 +1,6 @@
 # Authentication And Vault
 
-PFTerminal has three credential surfaces:
+Corbanu Terminal has three credential surfaces:
 
 1. OpenAI Codex account login for the `openai` provider;
 2. provider API keys for Anthropic, Ambient, Kimi Code, Z.AI, DeepSeek,
@@ -9,7 +9,7 @@ PFTerminal has three credential surfaces:
    user-managed secrets.
 
 OpenAI Codex account login uses device auth from `/providers` or the inherited
-`pfterminal login` command. Provider keys entered through PFTerminal onboarding
+`corbanu login` command. Provider keys entered through Corbanu Terminal onboarding
 or `/providers` are written to the vault.
 
 ## OpenAI Codex Account
@@ -20,19 +20,24 @@ Use `/providers` and select:
 Provider: OpenAI Codex Account
 ```
 
-PFTerminal starts a device-code login, shows the verification URL and one-time
+Corbanu Terminal starts a device-code login, shows the verification URL and one-time
 code, and stores the resulting Codex/OpenAI account auth in the configured
-PFTerminal home.
+Corbanu Terminal home.
 
-Installed `pfterminal` launchers and the source-built `pfterminal` binary
-default `CODEX_HOME` to `$HOME/.pfterminal`. To override that location, set:
+Installed `corbanu` launchers and the source-built `corbanu` binary use the
+same deterministic state resolution as the installer. To override the product
+home explicitly, set:
 
 ```bash
-export CODEX_HOME="${PFTERMINAL_HOME:-$HOME/.pfterminal}"
+export CORBANU_HOME="$HOME/.corbanu"
 ```
 
-That keeps PFTerminal account auth, vault data, sessions, and logs separate
-from a stock Codex install that uses `$HOME/.codex`.
+`PFTERMINAL_HOME` remains supported for existing automation, and an explicit
+`CODEX_HOME` remains authoritative when neither product-specific override is
+set. With no override, Corbanu Terminal prefers an existing `$HOME/.corbanu`,
+reuses a lone `$HOME/.pfterminal` in place, and otherwise creates
+`$HOME/.corbanu`. This keeps account auth, vault data, sessions, and logs
+separate from a stock Codex install using `$HOME/.codex`.
 
 ## Provider Keys
 
@@ -82,7 +87,7 @@ The vault is backed by the Codex managed-secrets store:
 - metadata: labels, types, providers, and timestamps are listable without
   revealing raw secrets.
 
-The vault is global to the PFTerminal home directory, so stored credentials are
+The vault is global to the Corbanu Terminal home directory, so stored credentials are
 available from any working directory that uses the same `CODEX_HOME`.
 
 ## Using `/vault`
@@ -111,21 +116,21 @@ handled through secure UI, not chat output.
 
 ## Login And Logout Commands
 
-PFTerminal still includes inherited Codex login commands:
+Corbanu Terminal includes inherited Codex login commands:
 
 ```bash
-pfterminal login
-pfterminal login --with-api-key
-pfterminal login status
-pfterminal logout
-pfterminal logout --all
+corbanu login
+corbanu login --with-api-key
+corbanu login status
+corbanu logout
+corbanu logout --all
 ```
 
-`pfterminal logout` removes Codex/OpenAI account auth and preserves provider
-API keys in the vault. Use `pfterminal logout --all` only when you also want to
+`corbanu logout` removes Codex/OpenAI account auth and preserves provider
+API keys in the vault. Use `corbanu logout --all` only when you also want to
 remove provider API keys from the vault and legacy provider auth storage.
 
 For API-key providers, use the onboarding picker, `/providers`, `/vault`, or
-the provider environment variables above. Claude Plan and PFTerminal Plan are
+the provider environment variables above. Claude Plan and Corbanu Terminal Plan are
 account/entitlement routes rather than API-key rows; `/providers` reports their
 actual status separately.

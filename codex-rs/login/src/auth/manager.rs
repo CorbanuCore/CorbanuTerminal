@@ -1737,7 +1737,7 @@ fn load_pfterminal_legacy_codex_auth(
     auth_credentials_store_mode: AuthCredentialsStoreMode,
     keyring_backend_kind: AuthKeyringBackendKind,
 ) -> std::io::Result<Option<AuthDotJson>> {
-    let Some(legacy_codex_home) = pfterminal_legacy_codex_home(codex_home) else {
+    let Some(legacy_codex_home) = legacy_codex_home_for_product_home(codex_home) else {
         return Ok(None);
     };
     let storage = create_auth_storage(
@@ -1750,16 +1750,17 @@ fn load_pfterminal_legacy_codex_auth(
         .filter(AuthDotJson::has_primary_auth_material);
     if auth.is_some() {
         tracing::info!(
-            pfterminal_home = %codex_home.display(),
+            product_home = %codex_home.display(),
             legacy_codex_home = %legacy_codex_home.display(),
-            "loaded legacy Codex auth for PFTerminal"
+            "loaded legacy Codex auth for Corbanu Terminal"
         );
     }
     Ok(auth)
 }
 
-fn pfterminal_legacy_codex_home(codex_home: &Path) -> Option<PathBuf> {
-    if codex_home.file_name()? != ".pfterminal" {
+pub fn legacy_codex_home_for_product_home(codex_home: &Path) -> Option<PathBuf> {
+    let home_name = codex_home.file_name()?.to_str()?;
+    if home_name != ".corbanu" && home_name != ".pfterminal" {
         return None;
     }
     Some(codex_home.parent()?.join(".codex"))

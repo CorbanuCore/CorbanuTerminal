@@ -1,4 +1,4 @@
-# PFTerminal Specification
+# Corbanu Terminal Specification
 
 **Version:** 1.0 — 2026-06-26
 **Status:** Living document. Describes the current product, the active sprint, and the planned evolution toward full agentic orchestration.
@@ -7,9 +7,9 @@
 
 ## 1. Overview
 
-PFTerminal is a **terminal-native AI engineering command center** built as a product fork of the open-source Codex CLI. It keeps the Codex local coding-agent runtime — tools, sandbox, approvals, MCP, sessions — and retargets the product onto third-party model providers (Ambient, Z.AI, OpenRouter, Baseten, Vercel) and OpenAI Codex account login, rather than defaulting only to the OpenAI Responses API.
+Corbanu Terminal is a **terminal-native AI engineering command center** built as a product fork of the open-source Codex CLI. It keeps the Codex local coding-agent runtime — tools, sandbox, approvals, MCP, sessions — and retargets the product onto third-party model providers (Ambient, Z.AI, OpenRouter, Baseten, Vercel) and OpenAI Codex account login, rather than defaulting only to the OpenAI Responses API.
 
-PFTerminal is **not a web chat**. It lives in the user's repository, shell, and panes. It spawns, names, dispatches to, and monitors agent panes so that planning, implementation, review, and status all stay visible in the place engineers already work.
+Corbanu Terminal is **not a web chat**. It lives in the user's repository, shell, and panes. It spawns, names, dispatches to, and monitors agent panes so that planning, implementation, review, and status all stay visible in the place engineers already work.
 
 ### Core thesis
 
@@ -18,7 +18,7 @@ A single human working one-on-one with a single coding agent hits two persistent
 1. The agent **misrepresents completion** — it reports work is done without proving it.
 2. The agent does what you _said_, not what you _meant_ — literal compliance without intent alignment.
 
-PFTerminal's thesis is that a **hierarchy** of specialized agents — planning, execution, adversarial review, research, documentation — separated into distinct roles under a chain of command produces more reliable, verifiable engineering work than a single monolithic assistant. The human stops juggling dozens of terminal tabs and talks to **one orchestrator**, which deploys and supervises everything.
+Corbanu Terminal's thesis is that a **hierarchy** of specialized agents — planning, execution, adversarial review, research, documentation — separated into distinct roles under a chain of command produces more reliable, verifiable engineering work than a single monolithic assistant. The human stops juggling dozens of terminal tabs and talks to **one orchestrator**, which deploys and supervises everything.
 
 ---
 
@@ -26,7 +26,7 @@ PFTerminal's thesis is that a **hierarchy** of specialized agents — planning, 
 
 - **Hierarchy as a control structure.** Rank encodes authority, capability, and cost. Higher entities plan and supervise; lower entities execute and check.
 - **Archetype ≠ model.** Roles are behavioral templates, not fixed model assignments. Each spawned instance is configured with a specific model and parameters, bound to a milestone.
-- **Terminal-native.** Work stays in the repo, shell, and panes. PFTerminal fits the command line instead of forcing engineering work into a separate web UI.
+- **Terminal-native.** Work stays in the repo, shell, and panes. Corbanu Terminal fits the command line instead of forcing engineering work into a separate web UI.
 - **Human-in-the-loop.** The human (Sauron) is the final authority for goals, tool approvals, risky operations, and acceptance of completed work.
 - **Adversarial QA to minimize human review.** Reviewers (Trolls) are structurally adversarial to executors (Orcs), so most quality enforcement happens before a human ever looks.
 - **Verifiability.** "Done" must be demonstrable, not asserted. Completion produces an artifact: a proof, a passing check, a doc entry.
@@ -39,7 +39,7 @@ PFTerminal's thesis is that a **hierarchy** of specialized agents — planning, 
 
 ### 3.1 Runtime lineage
 
-PFTerminal inherits the Codex CLI Rust workspace under `codex-rs/` and preserves its major subsystems:
+Corbanu Terminal inherits the Codex CLI Rust workspace under `codex-rs/` and preserves its major subsystems:
 
 | Subsystem                            | Inherited from Codex                                 |
 | ------------------------------------ | ---------------------------------------------------- |
@@ -55,12 +55,13 @@ The product changes are code-level: provider definitions, model metadata, reques
 
 ### 3.2 Product command names
 
-PFTerminal keeps upstream-compatible `codex` paths while adding product-facing command names:
+Corbanu Terminal keeps upstream-compatible `codex` paths while adding product-facing command names:
 
-- `codex-rs/cli/Cargo.toml` defines both `codex` and `pfterminal` binaries.
-- The npm package `@agticorp/pfterminal` exposes both `pfterminal` and `codex` command aliases.
-- The standalone installer creates a `pfterminal` launcher and leaves any existing stock `codex` command alone.
-- State defaults to `$HOME/.pfterminal`, separate from a stock Codex install using `$HOME/.codex`.
+- `codex-rs/cli/Cargo.toml` defines both `codex` and `corbanu` binaries.
+- The npm package `@agticorp/pfterminal` exposes both `corbanu` and legacy
+  `pfterminal` command aliases for 0.1.30 compatibility.
+- The standalone installer creates a `corbanu` launcher and leaves any existing stock `codex` command alone.
+- State defaults to `$HOME/.corbanu`, separate from a stock Codex install using `$HOME/.codex`.
 
 ### 3.3 Repository layout
 
@@ -84,7 +85,7 @@ docs/              MkDocs user-facing documentation
 
 ## 4. Model Providers
 
-PFTerminal ships built-in providers. Users do not need to define providers manually in `config.toml`; they only need a credential for the provider they plan to use.
+Corbanu Terminal ships built-in providers. Users do not need to define providers manually in `config.toml`; they only need a credential for the provider they plan to use.
 
 ### 4.1 Built-in providers
 
@@ -126,9 +127,9 @@ The `/model` picker groups models into two sections:
 Switch models at runtime with `/model` or launch with a specific model:
 
 ```bash
-pfterminal -m glm-5.2
-pfterminal -m z-ai/glm-5.2
-pfterminal -m gpt-5.5
+corbanu -m glm-5.2
+corbanu -m z-ai/glm-5.2
+corbanu -m gpt-5.5
 ```
 
 Set a default provider and model in `$CODEX_HOME/config.toml`:
@@ -140,13 +141,13 @@ model = "zai-org/GLM-5.2-FP8"
 
 ### 4.4 GLM request shaping
 
-Ambient and Z.AI requests map PFTerminal reasoning levels to provider-specific fields (`reasoning_effort`, `enable_thinking`, `emit_usage`). Responses-style turn items are flattened into string input for the Chat Completions wire shape, and hidden reasoning is not replayed. This keeps GLM-class models working through the Codex tool-call loop without forcing them through OpenAI-specific semantics.
+Ambient and Z.AI requests map Corbanu Terminal reasoning levels to provider-specific fields (`reasoning_effort`, `enable_thinking`, `emit_usage`). Responses-style turn items are flattened into string input for the Chat Completions wire shape, and hidden reasoning is not replayed. This keeps GLM-class models working through the Codex tool-call loop without forcing them through OpenAI-specific semantics.
 
 ---
 
 ## 5. Authentication & Vault
 
-PFTerminal has three credential surfaces:
+Corbanu Terminal has three credential surfaces:
 
 1. **OpenAI Codex account login** for the `openai` provider (device auth).
 2. **Provider API keys** for Ambient, Z.AI, OpenRouter, Baseten, and Vercel.
@@ -171,7 +172,7 @@ Provider keys use stable vault labels:
 | `BASETEN_API_KEY`    | `provider/baseten_api_key`    |
 | `AI_GATEWAY_API_KEY` | `provider/ai_gateway_api_key` |
 
-The vault is global to the PFTerminal home directory, so stored credentials are available from any working directory that uses the same `CODEX_HOME`.
+The vault is global to the Corbanu Terminal home directory, so stored credentials are available from any working directory that uses the same `CODEX_HOME`.
 
 ### 5.2 Vault commands
 
@@ -197,7 +198,7 @@ Agents, subagents, and Claude panes need to use provider API keys **without** le
 
 - Users store credentials in `/vault` or `/providers`.
 - Agents request provider capabilities by name.
-- PFTerminal resolves vault credentials **outside** the model context.
+- Corbanu Terminal resolves vault credentials **outside** the model context.
 - Tools and provider transports receive only the minimum credential material needed.
 - Audit logs record credential access without recording the secret.
 
@@ -207,7 +208,7 @@ The planned architecture includes a **provider capability registry**, a **vault 
 
 ## 6. Multi-Agent Hierarchy
 
-PFTerminal runs a multi-agent hierarchy with a clear chain of command. Intent flows down through the hierarchy. Evidence, summaries, reviews, and approval requests flow back up.
+Corbanu Terminal runs a multi-agent hierarchy with a clear chain of command. Intent flows down through the hierarchy. Evidence, summaries, reviews, and approval requests flow back up.
 
 ### 6.1 Roles
 
@@ -218,7 +219,7 @@ PFTerminal runs a multi-agent hierarchy with a clear chain of command. Intent fl
 | Troll  | VP-Eng — Supervisor     | Owns a domain, supervises Orc executors, reviews progress, escalates conflicts.                      |
 | Orc    | IC — Executor           | Takes scoped tasks, edits code, runs checks, sends evidence-rich reports up.                         |
 
-A PFTerminal terminal and a Nazgul are a unified entity: **at most one Nazgul per PFTerminal terminal**. Direct human↔Nazgul communication happens in the TUI. Trolls report up to the Nazgul. Orcs report up to Trolls. Agents must not exist as isolated tabs with no visible chain of command.
+A Corbanu Terminal terminal and a Nazgul are a unified entity: **at most one Nazgul per Corbanu Terminal terminal**. Direct human↔Nazgul communication happens in the TUI. Trolls report up to the Nazgul. Orcs report up to Trolls. Agents must not exist as isolated tabs with no visible chain of command.
 
 ### 6.2 `/spawn` orchestration
 
@@ -238,7 +239,7 @@ Spawn
     Orc      Executor. Reports to a Troll.
 
   Harness
-  > PFTerminal Agent
+  > Corbanu Terminal Agent
     Claude Code Headless
 
   Model
@@ -274,7 +275,7 @@ The multi-agent depth configuration allows depth 2 (depth 0: Nazgul/root, depth 
 
 | Harness              | Status            | Description                                                                                                                                            |
 | -------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| PFTerminal Agent     | P0 (enabled)      | Uses the existing Codex/PFTerminal multi-agent runtime with parent/child graph, role metadata, status subscriptions, and `wait_agent`.                 |
+| Corbanu Terminal Agent     | P0 (enabled)      | Uses the existing Codex/Corbanu Terminal multi-agent runtime with parent/child graph, role metadata, status subscriptions, and `wait_agent`.                 |
 | Claude Code Headless | P1 (experimental) | Claude Code panes exist under `/panes` but need to emit the same `SpawnNode` status and completion events as native agents before treated as complete. |
 
 ### 6.5 Completion semantics
@@ -304,7 +305,7 @@ Spawned Work
 
 ## 7. Slash Commands
 
-PFTerminal inherits Codex slash commands and adds product-specific vault, provider, and spawn workflows.
+Corbanu Terminal inherits Codex slash commands and adds product-specific vault, provider, and spawn workflows.
 
 | Command                 | Purpose                                                       |
 | ----------------------- | ------------------------------------------------------------- |
@@ -331,13 +332,13 @@ For the full set of inherited Codex slash commands, see the [Codex CLI slash-com
 
 ## 8. Skills
 
-PFTerminal inherits Codex skills and ships bundled system skills.
+Corbanu Terminal inherits Codex skills and ships bundled system skills.
 
 ### Skill loading paths
 
 | Scope                 | Path                                                                     |
 | --------------------- | ------------------------------------------------------------------------ |
-| Bundled system skills | `$CODEX_HOME/skills/.system/` (i.e. `$HOME/.pfterminal/skills/.system/`) |
+| Bundled system skills | `$CODEX_HOME/skills/.system/` (i.e. `$HOME/.corbanu/skills/.system/`) |
 | User global skills    | `$HOME/.agents/skills/`                                                  |
 | Repo-scoped skills    | `<repo>/.agents/skills/`                                                 |
 
@@ -358,10 +359,10 @@ PFTerminal inherits Codex skills and ships bundled system skills.
 
 ### 9.1 Config location
 
-PFTerminal reads config from `$CODEX_HOME/config.toml`.
+Corbanu Terminal reads config from `$CODEX_HOME/config.toml`.
 
 ```bash
-export CODEX_HOME="${PFTERMINAL_HOME:-$HOME/.pfterminal}"
+export CORBANU_HOME="$HOME/.corbanu"
 ```
 
 ### 9.2 Common configs
@@ -425,19 +426,19 @@ Admins can set `allow_managed_hooks_only = true` in `requirements.toml` to ignor
 
 ### 10.1 Hammer reduction
 
-PFTerminal implements shared provider request state in SQLite, keyed by provider/model/key fingerprint, to prevent wasteful repeated large requests:
+Corbanu Terminal implements shared provider request state in SQLite, keyed by provider/model/key fingerprint, to prevent wasteful repeated large requests:
 
 - **Provider cooldown circuit breaker** after `429`, including `Retry-After` and reset-header parsing. Local exponential cooldown: 30s → 60s → 120s → capped at 5m.
-- **Cross-process request leases** so concurrent PFTerminal workers share active-request state and do not send large requests through the same credential simultaneously.
+- **Cross-process request leases** so concurrent Corbanu Terminal workers share active-request state and do not send large requests through the same credential simultaneously.
 - **Request-byte/input-token preflight telemetry** and third-party hammer-risk warnings before dispatch.
 - **Hard identical-tool-call loop guard** to detect and break repeated identical tool calls.
 - **Cache-aware provider telemetry** so large third-party requests do not produce user-facing warnings when the previous live request reported a healthy provider cache hit.
 
-If cooldown or lease is active, PFTerminal does not send; it shows wait time and offers wait, compact, switch provider/model, or start a fresh thread.
+If cooldown or lease is active, Corbanu Terminal does not send; it shows wait time and offers wait, compact, switch provider/model, or start a fresh thread.
 
 ### 10.2 GLM 5.2 tool compatibility
 
-GLM 5.2 works through the OpenAI-compatible transport and Codex tool-call loop. The observed failure was narrow: GLM repeatedly missed Codex's strict `apply_patch` grammar. PFTerminal follows the harness pattern of exposing model-family-appropriate edit primitives:
+GLM 5.2 works through the OpenAI-compatible transport and Codex tool-call loop. The observed failure was narrow: GLM repeatedly missed Codex's strict `apply_patch` grammar. Corbanu Terminal follows the harness pattern of exposing model-family-appropriate edit primitives:
 
 - **`structured_edit` and `structured_write`** for GLM/Z.AI/Ambient-style model profiles.
 - **Strict `apply_patch`** preserved unchanged for Codex-native models that handle the grammar correctly.
@@ -445,7 +446,7 @@ GLM 5.2 works through the OpenAI-compatible transport and Codex tool-call loop. 
 
 ### 10.3 Tool-call runaway remedy
 
-When a model emits malformed or truncated tool-call arguments (e.g. `EOF while parsing a string`), PFTerminal:
+When a model emits malformed or truncated tool-call arguments (e.g. `EOF while parsing a string`), Corbanu Terminal:
 
 - Treats the malformed call as **non-retriable** rather than recording it as a normal tool result and asking the model for a follow-up.
 - Stops persisting raw malformed oversized tool-call arguments into conversation history.
@@ -455,7 +456,7 @@ This prevents the failure mode where a model repeatedly attempts the same large 
 
 ### 10.4 Subagent provider compatibility
 
-Subagent tool visibility is gated by the `namespace_tools` provider capability. Third-party providers (Ambient, Z.AI, OpenRouter, Baseten, Vercel) advertise `namespace_tools: false`, which causes the V1 `multi_agent_v1` namespace-wrapped spec to be filtered out. PFTerminal ships V1 spawn tools that serialize as plain functions (not `ToolSpec::Namespace`) so they survive providers whose `namespace_tools` capability is false. V2's `spawn_agent` is already a plain `ToolSpec::Function` and survives the filter natively.
+Subagent tool visibility is gated by the `namespace_tools` provider capability. Third-party providers (Ambient, Z.AI, OpenRouter, Baseten, Vercel) advertise `namespace_tools: false`, which causes the V1 `multi_agent_v1` namespace-wrapped spec to be filtered out. Corbanu Terminal ships V1 spawn tools that serialize as plain functions (not `ToolSpec::Namespace`) so they survive providers whose `namespace_tools` capability is false. V2's `spawn_agent` is already a plain `ToolSpec::Function` and survives the filter natively.
 
 ---
 
@@ -476,31 +477,31 @@ Subagent tool visibility is gated by the `namespace_tools` provider capability. 
 ### 11.2 Release installer (preferred)
 
 ```bash
-curl -fsSL https://github.com/agtico/PfTerminal/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.sh | sh
 ```
 
-Creates a `pfterminal` launcher, defaults state to `$HOME/.pfterminal`, and leaves any existing stock `codex` command untouched.
+Creates a `corbanu` launcher, defaults state to `$HOME/.corbanu`, and leaves any existing stock `codex` command untouched.
 
 ### 11.3 Build from source
 
 ```bash
-git clone https://github.com/agtico/PfTerminal.git
-cd PfTerminal/codex-rs
-CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build -p codex-cli --bin pfterminal
+git clone https://github.com/CorbanuCore/CorbanuTerminal.git
+cd CorbanuTerminal/codex-rs
+CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build -p codex-cli --bin corbanu
 ```
 
-Launch from the workspace you want PFTerminal to inspect:
+Launch from the workspace you want Corbanu Terminal to inspect:
 
 ```bash
 cd ~/repos/my-project
-pfterminal
+corbanu
 ```
 
 ### 11.4 npm package
 
 ```bash
 npm install -g @agticorp/pfterminal
-pfterminal --version
+corbanu --version
 ```
 
 ---
@@ -515,7 +516,7 @@ The current `/spawn` slice is intentionally smaller than the full orchestration 
 | ------------------- | --------------------------------------------------------------------------- | ---------------------- |
 | **Sauron**          | Human user; the will/intent                                                 | (human)                |
 | **The Eye**         | Interface that conveys intent to the Nazgul                                 | Task node / automation |
-| **Nazgul**          | Orchestrator the user talks to; lives in one PFTerminal                     | Planning-tier          |
+| **Nazgul**          | Orchestrator the user talks to; lives in one Corbanu Terminal                     | Planning-tier          |
 | **Balrog**          | Planner; configures & spawns creatures; runs the harness; owns the Grimoire | Planning-tier          |
 | **Troll**           | Adversarial QA / foreman over Orcs                                          | Strong reviewer        |
 | **Orc**             | Executor; does the work                                                     | Per-instance           |
@@ -565,7 +566,7 @@ The mechanism by which the Balrog raises the quality of any document — most im
 
 ### 12.5 Wallet (roadmap)
 
-PFTerminal `/wallet` is planned as the native credential and small-spend layer for agents:
+Corbanu Terminal `/wallet` is planned as the native credential and small-spend layer for agents:
 
 - API keys for model providers, GPU clouds, RPC vendors, exchanges — each with labels, purpose, scope, spend caps, and rotation metadata.
 - Small Base USDC hot-wallet balances for buying search, inference, and other capacity.
@@ -583,11 +584,13 @@ MkDocs lives inside the repo — not a separate product. Rendered as a clean, vi
 
 ## 13. Branding
 
-The TUI and login surfaces use PFTerminal/Post Fiat branding:
+The TUI and login surfaces use Corbanu Terminal branding. Post Fiat remains
+the Layer 1 identity behind the integrated Post Fiat Task Node, while Ambient
+Inference remains a distinct inference service:
 
-- Device-code prompt: `Welcome to PFTerminal` and `Post Fiat's command-line coding agent`.
-- Session cards render `PFTerminal`.
-- Composer placeholder: `Ask PFTerminal to do anything`.
+- Device-code prompt: `Welcome to Corbanu Terminal` and `Post Fiat's command-line coding agent`.
+- Session cards render `Corbanu Terminal`.
+- Composer placeholder: `Ask Corbanu Terminal to do anything`.
 - Status surfaces include `Post Fiat Terminal`.
 - GLM reasoning is presented as `Standard` and `Deep` instead of raw OpenAI-style effort labels.
 
@@ -599,7 +602,7 @@ The TUI and login surfaces use PFTerminal/Post Fiat branding:
 
 ```bash
 cd codex-rs
-cargo build -p codex-cli --bin pfterminal
+cargo build -p codex-cli --bin corbanu
 just fmt          # format after code changes
 just test -p codex-tui   # test specific crate
 ```
@@ -611,8 +614,8 @@ Avoid `--all-features` for routine local runs; it expands the build matrix and i
 The TUI records diagnostics in bounded local stores by default. Set `log_dir` explicitly for a plaintext TUI log:
 
 ```bash
-pfterminal -c log_dir=./.pfterminal-log
-tail -F ./.pfterminal-log/codex-tui.log
+corbanu -c log_dir=./.corbanu-log
+tail -F ./.corbanu-log/codex-tui.log
 ```
 
 ### 14.3 Docs
@@ -634,4 +637,11 @@ Apache-2.0.
 
 ## 16. Upstream
 
-PFTerminal is based on the open-source Codex CLI project. Upstream changes are isolated through the `upstream` remote, and PFTerminal changes land through the `agtico/PfTerminal` repository. Product-specific provider constants stay in provider metadata modules, product model choices stay in bundled model metadata, UI branding stays in TUI-facing modules, and request-compatibility shims stay close to API serialization — so upstream Codex changes can be merged without hiding PFTerminal product behavior in scattered prompt text.
+Corbanu Terminal is based on the open-source Codex CLI project. Upstream
+changes are isolated through the `upstream` remote, and Corbanu Terminal
+changes land through the `CorbanuCore/CorbanuTerminal` repository.
+Product-specific provider constants stay in provider metadata modules, product
+model choices stay in bundled model metadata, UI branding stays in TUI-facing
+modules, and request-compatibility shims stay close to API serialization — so
+upstream Codex changes can be merged without hiding Corbanu Terminal product
+behavior in scattered prompt text.

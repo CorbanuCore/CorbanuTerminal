@@ -4954,7 +4954,7 @@ fn normalize_guardian_policy_config(value: Option<&str>) -> Option<String> {
     })
 }
 
-/// Returns the path to the PFTerminal configuration directory, which can be
+/// Returns the path to the Corbanu Terminal configuration directory, which can be
 /// specified by the `CODEX_HOME` environment variable. If not set, defaults to
 /// `~/.pfterminal`.
 ///

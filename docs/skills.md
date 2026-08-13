@@ -1,6 +1,6 @@
 # Skills
 
-PFTerminal inherits Codex skills and ships bundled system skills.
+Corbanu Terminal inherits Codex skills and ships bundled system skills.
 
 ## Built-In Skill Loading
 
@@ -10,14 +10,17 @@ Bundled skills are installed into:
 $CODEX_HOME/skills/.system/
 ```
 
-For the recommended PFTerminal home, that is:
+For a fresh Corbanu Terminal home, that is:
 
 ```text
-$HOME/.pfterminal/skills/.system/
+$HOME/.corbanu/skills/.system/
 ```
 
+An upgraded installation that reuses a lone `$HOME/.pfterminal` home keeps its
+skills there. An explicit `CODEX_HOME` remains authoritative.
+
 These skills load regardless of the directory where the user starts
-PFTerminal. User-installed global skills can also live in:
+Corbanu Terminal. User-installed global skills can also live in:
 
 ```text
 $HOME/.agents/skills/
@@ -31,8 +34,8 @@ Repo-scoped skills can live in:
 
 ## Current Bundled Skills
 
-PFTerminal currently includes the inherited Codex system skills plus
-PFTerminal's frontend design skill:
+Corbanu Terminal currently includes the inherited Codex system skills plus
+Corbanu Terminal's frontend design skill:
 
 | Skill             | Purpose                                             |
 | ----------------- | --------------------------------------------------- |

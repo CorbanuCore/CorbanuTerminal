@@ -1,6 +1,6 @@
 # Install And First Run
 
-This page is the new-machine setup runbook for PFTerminal. It covers the
+This page is the new-machine setup runbook for Corbanu Terminal. It covers the
 binary, provider credentials, the encrypted vault, and model selection.
 
 ## System Requirements
@@ -22,7 +22,7 @@ sudo apt-get update
 sudo apt-get install -y git curl ca-certificates bubblewrap libsecret-1-0
 ```
 
-`bubblewrap` is used by the Linux sandbox. If it is missing, PFTerminal can use
+`bubblewrap` is used by the Linux sandbox. If it is missing, Corbanu Terminal can use
 its bundled fallback, but installing the OS package removes the startup warning.
 
 On macOS, the release installer only needs the system `curl`, `tar`, and shell
@@ -36,23 +36,27 @@ xcode-select --install
 
 ### Linux / Terminal Release Installer
 
-The standalone installer downloads a release from `agtico/PfTerminal` and
+The standalone installer downloads a release from `CorbanuCore/CorbanuTerminal` and
 verifies the release artifact digest. This is the preferred path for Linux
 users and for macOS users who prefer terminal install over a DMG.
 
 ```bash
-curl -fsSL https://github.com/agtico/PfTerminal/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.sh | sh
 ```
 
-The release installer creates a `pfterminal` launcher and leaves any existing
-stock `codex` command alone. By default that launcher stores PFTerminal state in
-`$HOME/.pfterminal`, separate from a stock Codex install. Override the defaults
-only when you need a custom install location:
+The release installer creates `corbanu` as the primary launcher, preserves
+`pfterminal` as a compatibility alias, and leaves any existing stock `codex`
+command alone. State resolution is deterministic: `CORBANU_HOME`, then
+`PFTERMINAL_HOME`, then an explicit `CODEX_HOME` wins; otherwise
+`$HOME/.corbanu` wins when present; otherwise an existing
+`$HOME/.pfterminal` is reused in place; otherwise a fresh install creates
+`$HOME/.corbanu`. The installer never copies, merges, or deletes either state
+directory. Override the defaults only when you need a custom install location:
 
 ```bash
-curl -fsSL https://github.com/agtico/PfTerminal/releases/latest/download/install.sh |
-  PFTERMINAL_INSTALL_DIR="$HOME/.local/bin" \
-  PFTERMINAL_HOME="$HOME/.pfterminal" \
+curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.sh |
+  CORBANU_INSTALL_DIR="$HOME/.local/bin" \
+  CORBANU_HOME="$HOME/.corbanu" \
   sh
 ```
 
@@ -62,13 +66,13 @@ release yet, use the source build fallback below.
 ### macOS DMG
 
 Download the latest DMG from
-[GitHub Releases](https://github.com/agtico/PfTerminal/releases/latest):
+[GitHub Releases](https://github.com/CorbanuCore/CorbanuTerminal/releases/latest):
 
-- `PFTerminal-aarch64-apple-darwin.dmg` for Apple Silicon Macs.
-- `PFTerminal-x86_64-apple-darwin.dmg` for Intel Macs.
+- `CorbanuTerminal-aarch64-apple-darwin.dmg` for Apple Silicon Macs.
+- `CorbanuTerminal-x86_64-apple-darwin.dmg` for Intel Macs.
 
 Open the DMG and double-click `install.command`. The DMG contains the exact
-standalone package archive plus `pfterminal-package_SHA256SUMS`; the installer
+standalone package archive plus `corbanu-terminal-package_SHA256SUMS`; the installer
 uses the bundled archive and verifies it before installation.
 
 ### Release Build For Maintainers
@@ -77,17 +81,18 @@ Release artifacts are built by the manual `pfterminal-release` GitHub Actions
 workflow. It does not run on every push. Run it only when you want
 installer-ready macOS and Linux artifacts for the current Cargo version.
 
-The workflow builds and smoke-tests these package archives:
+The workflow builds and smoke-tests the canonical artifacts below and also
+publishes their 0.1.29-compatible `pfterminal-*` aliases during the migration:
 
 ```text
-pfterminal-package-aarch64-apple-darwin.tar.gz
-pfterminal-package-x86_64-apple-darwin.tar.gz
-pfterminal-package-aarch64-unknown-linux-musl.tar.gz
-pfterminal-package-x86_64-unknown-linux-gnu.tar.gz
-PFTerminal-aarch64-apple-darwin.dmg
-PFTerminal-x86_64-apple-darwin.dmg
-pfterminal-package_SHA256SUMS
-pfterminal-dmg_SHA256SUMS
+corbanu-terminal-package-aarch64-apple-darwin.tar.gz
+corbanu-terminal-package-x86_64-apple-darwin.tar.gz
+corbanu-terminal-package-aarch64-unknown-linux-musl.tar.gz
+corbanu-terminal-package-x86_64-unknown-linux-gnu.tar.gz
+CorbanuTerminal-aarch64-apple-darwin.dmg
+CorbanuTerminal-x86_64-apple-darwin.dmg
+corbanu-terminal-package_SHA256SUMS
+corbanu-terminal-dmg_SHA256SUMS
 ```
 
 Leave `publish_release` disabled to do a build-only validation. Enable it to
@@ -98,8 +103,8 @@ installer's `latest` resolution.
 ### Source Build
 
 ```bash
-git clone https://github.com/agtico/PfTerminal.git
-cd PfTerminal/codex-rs
+git clone https://github.com/CorbanuCore/CorbanuTerminal.git
+cd CorbanuTerminal/codex-rs
 
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source "$HOME/.cargo/env"
@@ -109,7 +114,7 @@ cargo install --locked just
 cargo install --locked dotslash
 cargo install --locked cargo-nextest
 
-CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build -p codex-cli --bin pfterminal
+CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build -p codex-cli --bin corbanu
 ```
 
 The first source build can take 10-20 minutes on a fresh Mac because Cargo has
@@ -117,49 +122,50 @@ to fetch git dependencies and compile the full workspace. The
 `CARGO_NET_GIT_FETCH_WITH_CLI=true` setting avoids intermittent macOS libgit2
 fetch stalls seen with nested git dependencies.
 
-Run the source-built binary from the workspace you want PFTerminal to inspect:
+Run the source-built binary from the workspace you want Corbanu Terminal to inspect:
 
 ```bash
 cd ~/repos
-/path/to/PfTerminal/codex-rs/target/debug/pfterminal
+/path/to/CorbanuTerminal/codex-rs/target/debug/corbanu
 ```
 
-The source-built `pfterminal` binary defaults `CODEX_HOME` to
-`$HOME/.pfterminal`; set `CODEX_HOME` only when you need a custom state
+The source-built `corbanu` binary defaults `CODEX_HOME` to
+`$HOME/.corbanu`; set `CODEX_HOME` only when you need a custom state
 directory.
 
 For repeated local use, install a wrapper on your `PATH`:
 
 ```bash
-mkdir -p "$HOME/.local/bin" "$HOME/.local/share/pfterminal/bin"
-install -m 0755 /path/to/PfTerminal/codex-rs/target/debug/pfterminal \
-  "$HOME/.local/share/pfterminal/bin/pfterminal"
-cat > "$HOME/.local/bin/pfterminal" <<'EOF'
+mkdir -p "$HOME/.local/bin" "$HOME/.local/share/corbanu/bin"
+install -m 0755 /path/to/CorbanuTerminal/codex-rs/target/debug/corbanu \
+  "$HOME/.local/share/corbanu/bin/corbanu"
+cat > "$HOME/.local/bin/corbanu" <<'EOF'
 #!/bin/sh
-export CODEX_HOME="${CODEX_HOME:-${PFTERMINAL_HOME:-$HOME/.pfterminal}}"
-exec "$HOME/.local/share/pfterminal/bin/pfterminal" "$@"
+export CODEX_HOME="${CORBANU_HOME:-${PFTERMINAL_HOME:-${CODEX_HOME:-$HOME/.corbanu}}}"
+exec "$HOME/.local/share/corbanu/bin/corbanu" "$@"
 EOF
-chmod 0755 "$HOME/.local/bin/pfterminal"
+chmod 0755 "$HOME/.local/bin/corbanu"
 ```
 
-Using the default `CODEX_HOME=$HOME/.pfterminal` keeps PFTerminal credentials,
+Using the default `CODEX_HOME=$HOME/.corbanu` keeps Corbanu Terminal credentials,
 vault data, sessions, logs, plugins, and skills separate from a stock Codex
 install.
 
 ### npm Package
 
-The npm package is `@agticorp/pfterminal` and exposes both `pfterminal` and
-`codex` command aliases. The launcher prefers the bundled `pfterminal` binary
-and defaults `CODEX_HOME` to `$HOME/.pfterminal`.
+The npm package remains `@agticorp/pfterminal` for 0.1.30 compatibility and
+exposes both `corbanu` and `pfterminal` command aliases. The launcher prefers
+the bundled `corbanu` binary
+and defaults `CODEX_HOME` to `$HOME/.corbanu`.
 
 ```bash
 npm install -g @agticorp/pfterminal
-pfterminal --version
+corbanu --version
 ```
 
 ## Provider Setup
 
-PFTerminal ships built-in providers. You do not need to define these providers
+Corbanu Terminal ships built-in providers. You do not need to define these providers
 manually in `config.toml`; you only need a credential for the provider you plan
 to use.
 
@@ -178,7 +184,7 @@ to use.
 | Vercel       | `vercel`      | `AI_GATEWAY_API_KEY` | `zai/glm-5.2`, `zai/glm-5.2-fast`                                                    |
 
 The first-run provider picker and `/providers` expose account/plan routes and
-all of the API-key rows above. Provider keys entered through the PFTerminal UI
+all of the API-key rows above. Provider keys entered through the Corbanu Terminal UI
 are stored in the encrypted vault and are available from any working directory.
 
 You can also provide keys through environment variables:
@@ -197,11 +203,11 @@ export AI_GATEWAY_API_KEY="..."
 
 Environment variables are useful for CI and temporary shells. For a normal
 desktop/server setup, prefer the UI or `/vault` so the key is encrypted at rest
-and listed in the PFTerminal vault.
+and listed in the Corbanu Terminal vault.
 
 ## Vault Setup
 
-PFTerminal stores provider API keys in the encrypted vault. Provider keys use
+Corbanu Terminal stores provider API keys in the encrypted vault. Provider keys use
 stable labels derived from their key names:
 
 | Provider key         | Vault label                   |
@@ -251,21 +257,21 @@ context.
 Use `/model` in the TUI or pass `-m` at startup.
 
 ```bash
-pfterminal -m gpt-5.6-luna                         # OpenAI Codex account
-pfterminal -m claude-opus-5                        # direct Anthropic API
-pfterminal -m k3                                   # Kimi Code
-pfterminal -m glm-5.2                              # Z.AI GLM 5.2
-pfterminal -m deepseek-v4-flash                    # direct DeepSeek Responses API
-pfterminal -m deepseek/deepseek-v4-flash-0731     # pinned OpenRouter route
-pfterminal -m muse-spark-1.1                       # Meta
-pfterminal -m zai/glm-5.2-fast                     # Vercel GLM 5.2 Fast
+corbanu -m gpt-5.6-luna                         # OpenAI Codex account
+corbanu -m claude-opus-5                        # direct Anthropic API
+corbanu -m k3                                   # Kimi Code
+corbanu -m glm-5.2                              # Z.AI GLM 5.2
+corbanu -m deepseek-v4-flash                    # direct DeepSeek Responses API
+corbanu -m deepseek/deepseek-v4-flash-0731     # pinned OpenRouter route
+corbanu -m muse-spark-1.1                       # Meta
+corbanu -m zai/glm-5.2-fast                     # Vercel GLM 5.2 Fast
 ```
 
 The `/model` picker groups models by account/provider route. Current categories
 include:
 
 - account and coding-plan routes such as OpenAI, Claude Plan, Ambient, Kimi
-  Code, Z.AI, and PFTerminal Plan; and
+  Code, Z.AI, and Corbanu Terminal Plan; and
 - metered API-key routes such as Anthropic, DeepSeek, OpenRouter, Meta,
   Baseten, and Vercel.
 
@@ -288,8 +294,8 @@ Current visible model metadata:
 After installing and adding a provider key:
 
 ```bash
-pfterminal --version
-pfterminal
+corbanu --version
+corbanu
 ```
 
 In the TUI:
@@ -305,7 +311,7 @@ Expected setup signs:
 - `/vault` shows the provider key label you added.
 - `/providers` includes OpenAI Codex Account plus API-key provider rows.
 - `/model` shows Coding Plans and Pay Per API Call sections.
-- `/skills` includes bundled PFTerminal system skills such as Frontend Design.
+- `/skills` includes bundled Corbanu Terminal system skills such as Frontend Design.
 
 ## Development Commands
 
@@ -313,7 +319,7 @@ From the repository root:
 
 ```bash
 cd codex-rs
-cargo build -p codex-cli --bin pfterminal
+cargo build -p codex-cli --bin corbanu
 just fmt
 just test -p codex-tui
 ```
@@ -327,8 +333,8 @@ The TUI records diagnostics in bounded local stores by default. Set `log_dir`
 explicitly to enable a plaintext TUI log for a run:
 
 ```bash
-pfterminal -c log_dir=./.pfterminal-log
-tail -F ./.pfterminal-log/codex-tui.log
+corbanu -c log_dir=./.corbanu-log
+tail -F ./.corbanu-log/codex-tui.log
 ```
 
 The non-interactive mode defaults to `RUST_LOG=error`, but messages are printed

@@ -672,7 +672,7 @@ pub(crate) async fn run_turn(
                             sess.send_event(
                                 &turn_context,
                                 EventMsg::Warning(WarningEvent {
-                                    message: "PfTerminal could not verify whether this action was complete; review the result before relying on it.".to_string(),
+                                    message: "Corbanu Terminal could not verify whether this action was complete; review the result before relying on it.".to_string(),
                                 }),
                             )
                             .await;
@@ -681,7 +681,7 @@ pub(crate) async fn run_turn(
                             sess.send_event(
                                 &turn_context,
                                 EventMsg::Warning(WarningEvent {
-                                    message: "PfTerminal stopped automatic continuation because the model repeatedly ended without measurable progress. Review the result or continue manually.".to_string(),
+                                    message: "Corbanu Terminal stopped automatic continuation because the model repeatedly ended without measurable progress. Review the result or continue manually.".to_string(),
                                 }),
                             )
                             .await;

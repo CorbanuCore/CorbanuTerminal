@@ -388,7 +388,7 @@ pub(super) async fn validate_applied_migrations(
         .collect::<Vec<_>>();
     if !foreign.is_empty() {
         anyhow::bail!(
-            "refusing to migrate {}: this database appears to belong to a different Codex/PFTerminal distribution; foreign migrations: {}; follow the repair recipe in pfterminal_codex_home_collision_incident_20260710.md",
+            "refusing to migrate {}: this database appears to belong to a different Codex/Corbanu Terminal distribution; foreign migrations: {}; follow the repair recipe in pfterminal_codex_home_collision_incident_20260710.md",
             path.display(),
             foreign.join(", ")
         );
@@ -655,7 +655,7 @@ mod tests {
 
         assert!(
             err.to_string()
-                .contains("different Codex/PFTerminal distribution")
+                .contains("different Codex/Corbanu Terminal distribution")
         );
         assert_eq!(
             tokio::fs::read(legacy_path)

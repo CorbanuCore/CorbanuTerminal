@@ -1,3 +1,4 @@
+use codex_product_brand::PRODUCT_NAME;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyEventKind;
 use ratatui::buffer::Buffer;
@@ -94,7 +95,7 @@ impl WidgetRef for &WelcomeWidget {
         lines.push(Line::from(vec![
             "  ".into(),
             "Welcome to ".into(),
-            "PFTerminal".bold(),
+            PRODUCT_NAME.bold(),
             ", your crypto-native AI terminal".into(),
         ]));
 

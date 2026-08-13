@@ -1,10 +1,9 @@
 ---
 source: tui/src/app/tests.rs
-assertion_line: 4036
 expression: rendered
 ---
 ╭────────────────────────────────────────────────────╮
-│ >_ PFTerminal (v<VERSION>)                         │
+│ >_ Corbanu Terminal (v<VERSION>)                   │
 │                                                    │
 │ model:     gpt-5.4 xhigh   fast   /model to change │
 │ directory: /tmp/project                            │

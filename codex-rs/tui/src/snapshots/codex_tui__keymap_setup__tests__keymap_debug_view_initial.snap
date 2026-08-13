@@ -3,7 +3,7 @@ source: tui/src/keymap_setup.rs
 expression: "render_debug(&view, 80)"
 ---
 Keypress Inspector
-Press any key to see what PFTerminal receives. Esc is inspected; Ctrl+C closes.
-Tip: PFTerminal can only inspect keys your terminal sends.
+Press any key to see what Corbanu Terminal receives. Esc is inspected; Ctrl+C cl
+Tip: Corbanu Terminal can only inspect keys your terminal sends.
 
 Waiting for a keypress...

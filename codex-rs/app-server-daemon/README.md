@@ -36,7 +36,7 @@ running app-server version when applicable.
 For a new remote machine:
 
 ```sh
-curl -fsSL https://github.com/agtico/PfTerminal/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.sh | sh
 $HOME/.codex/packages/standalone/current/codex app-server daemon bootstrap --remote-control
 ```
 

@@ -79,12 +79,12 @@ impl WidgetRef for &ExternalAgentConfigMigrationScreen {
         let intro_lines = match self.view {
             MigrationView::Summary => vec![
                 Line::from("Bring over supported setup from another coding agent."),
-                Line::from("PFTerminal may add files to your current project folder."),
+                Line::from("Corbanu Terminal may add files to your current project folder."),
                 Line::from("Your existing setup will not be changed."),
             ],
             MigrationView::Customize => vec![
                 Line::from("Choose items to import."),
-                Line::from("PFTerminal may add files to your current project folder."),
+                Line::from("Corbanu Terminal may add files to your current project folder."),
                 Line::from("Your existing setup will not be changed."),
             ],
         };

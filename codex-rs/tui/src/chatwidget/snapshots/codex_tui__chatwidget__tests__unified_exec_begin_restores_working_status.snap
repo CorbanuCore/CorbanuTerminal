@@ -1,12 +1,11 @@
 ---
 source: tui/src/chatwidget/tests/exec_flow.rs
-assertion_line: 287
 expression: normalized_backend_snapshot(terminal.backend())
 ---
 "                                                                                "
 "• Working (0s • esc to interrupt) · 1 background terminal running · /ps to view…"
 "                                                                                "
 "                                                                                "
-"› Ask PFTerminal to do anything                                                 "
+"› Ask Corbanu Terminal to do anything                                           "
 "                                                                                "
 "  Ambient GLM 5.2 standard · /tmp/project · Post Fiat Terminal · TPS: -- tok/s  "

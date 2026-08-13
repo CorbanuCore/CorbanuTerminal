@@ -1,10 +1,10 @@
 {
   "name": "@agticorp/pfterminal-sdk",
   "version": "0.0.0-dev",
-  "description": "TypeScript SDK for PFTerminal APIs.",
+  "description": "TypeScript SDK for Corbanu Terminal APIs.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/agtico/PfTerminal.git",
+    "url": "git+https://github.com/CorbanuCore/CorbanuTerminal.git",
     "directory": "sdk/typescript"
   },
   "keywords": [

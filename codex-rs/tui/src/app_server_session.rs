@@ -227,7 +227,7 @@ fn stored_auth_has_codex_backend_auth(config: &Config) -> bool {
     if stored_auth_at_path_has_codex_backend_auth(config, config.codex_home.as_path()) {
         return true;
     }
-    pfterminal_legacy_codex_home(config.codex_home.as_path())
+    codex_login::legacy_codex_home_for_product_home(config.codex_home.as_path())
         .as_deref()
         .is_some_and(|path| stored_auth_at_path_has_codex_backend_auth(config, path))
 }
@@ -248,13 +248,6 @@ fn stored_auth_at_path_has_codex_backend_auth(
             false
         }
     }
-}
-
-fn pfterminal_legacy_codex_home(codex_home: &std::path::Path) -> Option<PathBuf> {
-    if codex_home.file_name()? != ".pfterminal" {
-        return None;
-    }
-    Some(codex_home.parent()?.join(".codex"))
 }
 
 fn auth_dot_json_has_codex_backend_auth(auth: &AuthDotJson) -> bool {
@@ -2453,13 +2446,13 @@ mod tests {
 
     #[tokio::test]
     async fn injected_turn_start_failure_persists_error_with_full_chain() {
-        let temp_dir = TempDir::new().expect("create temporary PFTerminal home");
+        let temp_dir = TempDir::new().expect("create temporary Corbanu Terminal home");
         let sqlite = codex_state::SqliteConfig::new_for_testing(
             temp_dir
                 .path()
                 .to_path_buf()
                 .try_into()
-                .expect("absolute temporary PFTerminal home"),
+                .expect("absolute temporary Corbanu Terminal home"),
         );
         let state = codex_state::StateRuntime::init(sqlite.clone(), "test-provider".to_string())
             .await

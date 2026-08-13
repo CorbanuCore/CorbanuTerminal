@@ -314,6 +314,6 @@ fn missing_local_and_packaged_docs_returns_recovery_instruction() {
             .to_string()
             .contains("packaged documentation is missing")
     );
-    assert!(error.to_string().contains("Reinstall PFTerminal"));
+    assert!(error.to_string().contains("Reinstall Corbanu Terminal"));
     assert!(error.to_string().contains("/docs --config <path>"));
 }

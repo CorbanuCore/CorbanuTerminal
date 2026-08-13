@@ -3,10 +3,10 @@ source: tui/src/history_cell/tests.rs
 expression: rendered
 ---
 ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ✨ Update available! 0.1.29 -> 9.9.9                                                                       │
-│ Run powershell -ExecutionPolicy Bypass -c '$env:PFTERMINAL_NON_INTERACTIVE=1; irm                          │
-│ https://github.com/agtico/PfTerminal/releases/latest/download/install.ps1 | iex' to update.                │
+│ ✨ Update available! 0.1.30 -> 9.9.9                                                                       │
+│ Run powershell -ExecutionPolicy Bypass -c '$env:CORBANU_NON_INTERACTIVE=1; irm                             │
+│ https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.ps1 | iex' to update.      │
 │                                                                                                            │
 │ See full release notes:                                                                                    │
-│ https://github.com/agtico/PfTerminal/releases/latest                                                       │
+│ https://github.com/CorbanuCore/CorbanuTerminal/releases/latest                                             │
 ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

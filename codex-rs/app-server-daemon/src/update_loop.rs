@@ -175,7 +175,7 @@ async fn install_latest_standalone(http: &RouteAwareClientPool) -> Result<()> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .context("failed to invoke standalone PFTerminal updater")?;
+        .context("failed to invoke standalone Corbanu Terminal updater")?;
     let mut stdin = child
         .stdin
         .take()
@@ -183,17 +183,17 @@ async fn install_latest_standalone(http: &RouteAwareClientPool) -> Result<()> {
     stdin
         .write_all(&script)
         .await
-        .context("failed to pass standalone PFTerminal updater to shell")?;
+        .context("failed to pass standalone Corbanu Terminal updater to shell")?;
     drop(stdin);
     let status = child
         .wait()
         .await
-        .context("failed to wait for standalone PFTerminal updater")?;
+        .context("failed to wait for standalone Corbanu Terminal updater")?;
 
     if status.success() {
         Ok(())
     } else {
-        anyhow::bail!("standalone PFTerminal updater exited with status {status}")
+        anyhow::bail!("standalone Corbanu Terminal updater exited with status {status}")
     }
 }
 

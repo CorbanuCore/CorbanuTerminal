@@ -76,7 +76,7 @@ pub(crate) async fn validate_token(token: &str) -> Result<TelegramBotIdentity, S
     let webhook: WebhookInfo = telegram_call(token, "getWebhookInfo", /*body*/ None).await?;
     if !webhook.url.is_empty() {
         return Err(
-            "This bot currently uses a Telegram webhook. Remove that webhook before connecting it to PFTerminal polling."
+            "This bot currently uses a Telegram webhook. Remove that webhook before connecting it to Corbanu Terminal polling."
                 .to_string(),
         );
     }

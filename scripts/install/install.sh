@@ -79,7 +79,7 @@ validate_version() {
   fi
 
   if ! printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-alpha(\.[0-9]+){0,2}|-beta(\.[0-9]+)?)?$'; then
-    echo "Invalid PFTerminal release version: $version. Expected latest or x.y.z[-alpha[.N[.M]]|-beta[.N]]." >&2
+    echo "Invalid Corbanu Terminal release version: $version. Expected latest or x.y.z[-alpha[.N[.M]]|-beta[.N]]." >&2
     return 1
   fi
 }
@@ -152,7 +152,7 @@ download_file() {
     return
   fi
 
-  echo "curl or wget is required to install PFTerminal." >&2
+    echo "curl or wget is required to install Corbanu Terminal." >&2
   exit 1
 }
 
@@ -183,7 +183,7 @@ download_text() {
     return
   fi
 
-  echo "curl or wget is required to install PFTerminal." >&2
+    echo "curl or wget is required to install Corbanu Terminal." >&2
   exit 1
 }
 
@@ -351,7 +351,7 @@ parse_downloaded_release_metadata() {
   requested_release="$1"
   source_name="$2"
   if ! release_metadata="$(printf '%s\n' "$release_json" | parse_release_metadata)"; then
-    echo "Could not parse $source_name release metadata for PFTerminal $requested_release." >&2
+    echo "Could not parse $source_name release metadata for Corbanu Terminal $requested_release." >&2
     return 1
   fi
 }
@@ -363,7 +363,7 @@ resolve_metadata_version() {
     *) metadata_version="" ;;
   esac
   if [ -z "$metadata_version" ]; then
-    echo "Failed to resolve the latest PFTerminal release version." >&2
+    echo "Failed to resolve the latest Corbanu Terminal release version." >&2
     return 1
   fi
   validate_version "$metadata_version"
@@ -381,7 +381,7 @@ resolve_release_from_github() {
   fi
 
   if ! release_json="$(download_text "$metadata_url")"; then
-    echo "Could not fetch GitHub release metadata for PFTerminal $requested_release. GitHub API may be unavailable or rate limited." >&2
+    echo "Could not fetch GitHub release metadata for Corbanu Terminal $requested_release. GitHub API may be unavailable or rate limited." >&2
     exit 1
   fi
 
@@ -417,7 +417,7 @@ resolve_release_from_releases() {
     return 1
   fi
   if [ "$normalized_version" != "latest" ] && [ "$metadata_version" != "$normalized_version" ]; then
-    echo "Release metadata version did not match requested PFTerminal version $normalized_version." >&2
+    echo "Release metadata version did not match requested Corbanu Terminal version $normalized_version." >&2
     return 1
   fi
   resolved_version="$metadata_version"
@@ -572,7 +572,7 @@ file_sha256() {
     return
   fi
 
-  echo "sha256sum, shasum, or openssl is required to verify the PFTerminal download." >&2
+  echo "sha256sum, shasum, or openssl is required to verify the Corbanu Terminal download." >&2
   exit 1
 }
 
@@ -582,7 +582,7 @@ verify_archive_digest() {
   actual_digest="$(file_sha256 "$archive_path")"
 
   if [ "$actual_digest" != "$expected_digest" ]; then
-    echo "Downloaded PFTerminal archive checksum did not match expected digest." >&2
+    echo "Downloaded Corbanu Terminal archive checksum did not match expected digest." >&2
     echo "expected: $expected_digest" >&2
     echo "actual:   $actual_digest" >&2
     return 1
@@ -591,7 +591,7 @@ verify_archive_digest() {
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
-    echo "$1 is required to install PFTerminal." >&2
+    echo "$1 is required to install Corbanu Terminal." >&2
     exit 1
   fi
 }
@@ -1228,11 +1228,11 @@ release_dir="$RELEASES_DIR/$release_name"
 current_version="$(current_installed_version)"
 
 if [ -n "$current_version" ] && [ "$current_version" != "$resolved_version" ]; then
-  step "Updating PFTerminal CLI from $current_version to $resolved_version"
+  step "Updating Corbanu Terminal from $current_version to $resolved_version"
 elif [ -n "$current_version" ]; then
-  step "Updating PFTerminal CLI"
+  step "Updating Corbanu Terminal"
 else
-  step "Installing PFTerminal CLI"
+  step "Installing Corbanu Terminal"
 fi
 step "Detected platform: $platform_label"
 step "Resolved version: $resolved_version"

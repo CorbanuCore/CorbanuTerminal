@@ -2,11 +2,11 @@
 source: cli/src/doctor/output.rs
 expression: "render_human_report(&sample_report(), detailed_no_color_unicode_options())"
 ---
-PFTerminal Doctor v0.0.0
+Corbanu Terminal Doctor v0.0.0
 
 Notes
    ⚠ terminal     narrow terminal
-   ✗ auth         token expired - Run `pfterminal login`.
+   ✗ auth         token expired - Run `corbanu login`.
 ─────────────────────────────────────────────────────────────
 
 Environment
@@ -35,7 +35,7 @@ Environment
   ✓ state        state paths inspectable
 
 Configuration
-  ✗ auth         token expired — Run `pfterminal login`.
+  ✗ auth         token expired — Run `corbanu login`.
       OPENAI_API_KEY           present
 
 Updates

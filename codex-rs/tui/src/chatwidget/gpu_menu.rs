@@ -35,7 +35,7 @@ impl ChatWidget {
             items.push(SelectionItem {
                 name: format!("Configure {display_name} API key"),
                 description: Some(
-                    "Masked entry stored in the PFTerminal vault; replacing a key is supported."
+                    "Masked entry stored in the Corbanu Terminal vault; replacing a key is supported."
                         .to_string(),
                 ),
                 actions: vec![Box::new(move |tx| {
@@ -92,7 +92,7 @@ impl ChatWidget {
         self.show_selection_view(SelectionViewParams {
             title: Some("GPU rentals".to_string()),
             subtitle: Some(
-                "Active and potentially billable rentals remain visible across PFTerminal processes."
+                "Active and potentially billable rentals remain visible across Corbanu Terminal processes."
                     .to_string(),
             ),
             items,

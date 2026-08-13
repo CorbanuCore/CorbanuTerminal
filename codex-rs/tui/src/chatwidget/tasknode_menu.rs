@@ -2822,7 +2822,7 @@ impl TaskNodeClient {
                 "userDetailText": detail,
                 "requestedTaskKind": "personal",
                 "source": "pfterminal",
-                "sourceConversationTitle": "PFTerminal",
+                "sourceConversationTitle": "Corbanu Terminal",
                 "idempotencyKey": format!("pfterminal-request:{}", Uuid::new_v4()),
             }),
         )

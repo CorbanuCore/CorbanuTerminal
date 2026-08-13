@@ -94,7 +94,7 @@ impl BridgeRuntime {
             self.send_text(
                 chat_id,
                 &format!(
-                    "Not switching to {}.\n\nProvider {} requires an OpenAI login, but this Telegram connector is not logged in. The active model was left unchanged. Log in using the same PFTerminal home that runs the connector, then retry /model.",
+                    "Not switching to {}.\n\nProvider {} requires an OpenAI login, but this Telegram connector is not logged in. The active model was left unchanged. Log in using the same Corbanu Terminal home that runs the connector, then retry /model.",
                     resolution.model, choice.provider
                 ),
             )

@@ -3,7 +3,7 @@ use teloxide::utils::command::BotCommands;
 #[derive(BotCommands, Clone, Debug, PartialEq, Eq)]
 #[command(
     rename_rule = "lowercase",
-    description = "PFTerminal Telegram commands"
+    description = "Corbanu Terminal Telegram commands"
 )]
 pub enum Command {
     #[command(description = "start the connector")]

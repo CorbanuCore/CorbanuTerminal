@@ -3,9 +3,9 @@ source: tui/src/chatwidget/wallet_menu.rs
 assertion_line: 1181
 expression: rendered
 ---
-Locked wallet: Upgrade PfTerminal Plan — Unlock for 5 minutes, then choose a higher tier
-Unlocked wallet: Upgrade PfTerminal Plan — Choose a higher tier for the period starting 2026-08-19T00:35:20Z
-Upgrade PfTerminal Plan
+Locked wallet: Upgrade Corbanu Terminal Plan — Unlock for 5 minutes, then choose a higher tier
+Unlocked wallet: Upgrade Corbanu Terminal Plan — Choose a higher tier for the period starting 2026-08-19T00:35:20Z
+Upgrade Corbanu Terminal Plan
 Choose a tier above Starter. It starts 2026-08-19T00:35:20Z after the paid period you already own.
 The existing period and its remaining tokens are preserved.
 Confirmation: This upgrade begins 2026-08-19T00:35:20Z; the current paid period remains active until then.

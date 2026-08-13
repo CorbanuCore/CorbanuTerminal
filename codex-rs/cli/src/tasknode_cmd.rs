@@ -238,7 +238,7 @@ struct RequestCreateArgs {
     kind: String,
 
     /// Source title recorded in Task Node.
-    #[arg(long, default_value = "PFTerminal JSON helper")]
+    #[arg(long, default_value = "Corbanu Terminal JSON helper")]
     source_title: String,
 }
 
@@ -322,11 +322,11 @@ impl TaskEvidenceMode {
     fn command(self, task_id: &str) -> String {
         match self {
             Self::InitialSubmission => {
-                format!("pfterminal tasknode task evidence {task_id} --body-file <path> --json")
+                format!("corbanu tasknode task evidence {task_id} --body-file <path> --json")
             }
-            Self::VerificationResponse => format!(
-                "pfterminal tasknode verification respond {task_id} --body-file <path> --json"
-            ),
+            Self::VerificationResponse => {
+                format!("corbanu tasknode verification respond {task_id} --body-file <path> --json")
+            }
         }
     }
 }
@@ -724,7 +724,7 @@ fn evidence_mode_preflight(
                 "task_evidence_not_available",
                 "This task does not currently accept evidence. Refresh it and follow the server-reported lifecycle action."
                     .to_string(),
-                format!("pfterminal tasknode task show {task_id} --json"),
+                format!("corbanu tasknode task show {task_id} --json"),
             )
         },
         |mode| {
@@ -785,7 +785,7 @@ fn annotate_evidence_lifecycle(
     let (phase, next_command, notice) = if reward_issued {
         (
             "reward_issued",
-            "pfterminal tasknode rewards list --json".to_string(),
+            "corbanu tasknode rewards list --json".to_string(),
             "Task Node reports a terminal rewarded state.",
         )
     } else if verification_required {
@@ -797,13 +797,13 @@ fn annotate_evidence_lifecycle(
     } else if submitted_mode == TaskEvidenceMode::VerificationResponse {
         (
             "awaiting_reward",
-            format!("pfterminal tasknode task show {task_id} --json"),
+            format!("corbanu tasknode task show {task_id} --json"),
             "The verification response is submitted, but completion is not confirmed until Task Node reports the reward outcome.",
         )
     } else {
         (
             "awaiting_verification",
-            format!("pfterminal tasknode task show {task_id} --json"),
+            format!("corbanu tasknode task show {task_id} --json"),
             "Initial evidence is submitted, but completion is not confirmed. Recheck for the normal verification request and answer it.",
         )
     };
@@ -916,7 +916,7 @@ async fn run_link_start(
         "expiresAt": started.expires_at,
         "activeSessionPreserved": state.active.is_some(),
         "nextStep": format!(
-            "Open {} in a browser, complete GitHub auth, then run `pfterminal tasknode link poll --wait 120`.",
+            "Open {} in a browser, complete GitHub auth, then run `corbanu tasknode link poll --wait 120`.",
             started.verification_url
         ),
     }))?;
@@ -941,7 +941,7 @@ async fn run_link_poll(
         print_json(&json!({
             "ok": false,
             "error": "tasknode_link_not_started",
-            "message": "No link attempt is pending. Run `pfterminal tasknode link` first.",
+            "message": "No link attempt is pending. Run `corbanu tasknode link` first.",
         }))?;
         return Ok(1);
     };
@@ -1015,7 +1015,7 @@ async fn run_link_poll(
                 print_json(&json!({
                     "ok": false,
                     "error": "tasknode_link_expired",
-                    "message": "The link attempt expired or was already used. Run `pfterminal tasknode link` to start again.",
+                    "message": "The link attempt expired or was already used. Run `corbanu tasknode link` to start again.",
                     "serverResponse": response.body,
                 }))?;
                 return Ok(1);
@@ -1180,23 +1180,23 @@ fn require_active_session(
     if expired_active.is_some() {
         match state.pending {
             Some(_) => anyhow::bail!(
-                "Task Node session expired and a link attempt is pending. Finish GitHub auth, then run `pfterminal tasknode link poll`."
+                "Task Node session expired and a link attempt is pending. Finish GitHub auth, then run `corbanu tasknode link poll`."
             ),
             None => anyhow::bail!(
-                "Task Node session expired. Run `pfterminal tasknode link` to re-authenticate."
+                "Task Node session expired. Run `corbanu tasknode link` to re-authenticate."
             ),
         }
     }
     match state.pending {
         Some(pending) if !pending.verification_url.trim().is_empty() => anyhow::bail!(
-            "Task Node link is pending. Finish GitHub auth: {} then run `pfterminal tasknode link poll`.",
+            "Task Node link is pending. Finish GitHub auth: {} then run `corbanu tasknode link poll`.",
             pending.verification_url
         ),
         Some(_) => anyhow::bail!(
-            "Task Node link is pending. Run `pfterminal tasknode link poll` to complete it."
+            "Task Node link is pending. Run `corbanu tasknode link poll` to complete it."
         ),
         None => anyhow::bail!(
-            "Task Node is not linked. Run `pfterminal tasknode link` (or /tasknode link in the TUI)."
+            "Task Node is not linked. Run `corbanu tasknode link` (or /tasknode link in the TUI)."
         ),
     }
 }
@@ -1483,7 +1483,7 @@ mod tests {
                 "message": "This task requires verification_response evidence, not initial_submission evidence.",
                 "taskId": "task_test",
                 "requestedMode": "initial_submission",
-                "nextCommand": "pfterminal tasknode verification respond task_test --body-file <path> --json"
+                "nextCommand": "corbanu tasknode verification respond task_test --body-file <path> --json"
             })
         );
     }
@@ -1519,7 +1519,7 @@ mod tests {
                     "submittedMode": "initial_submission",
                     "phase": "verification_required",
                     "completionConfirmed": false,
-                    "nextCommand": "pfterminal tasknode verification respond task_test --body-file <path> --json",
+                    "nextCommand": "corbanu tasknode verification respond task_test --body-file <path> --json",
                     "notice": "Initial evidence is not completion. Answer the current verification request before expecting a reward.",
                     "currentVerificationRequest": {
                         "body": "Provide the exact test result."
@@ -1555,7 +1555,7 @@ mod tests {
                 "submittedMode": "verification_response",
                 "phase": "reward_issued",
                 "completionConfirmed": true,
-                "nextCommand": "pfterminal tasknode rewards list --json",
+                "nextCommand": "corbanu tasknode rewards list --json",
                 "notice": "Task Node reports a terminal rewarded state.",
                 "currentVerificationRequest": null
             })

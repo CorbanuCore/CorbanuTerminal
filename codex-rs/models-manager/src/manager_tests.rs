@@ -2170,7 +2170,7 @@ fn bundled_models_json_contains_openrouter_models() {
     assert_eq!(claude_fable_plan.display_name, "Claude Fable 5 Plan");
     assert_eq!(
         claude_fable_plan.description.as_deref(),
-        Some("Claude Fable 5 through Claude Code subscription auth in PFTerminal.")
+        Some("Claude Fable 5 through Claude Code subscription auth in Corbanu Terminal.")
     );
     assert_eq!(claude_fable_plan.context_window, Some(1_000_000));
     assert_eq!(

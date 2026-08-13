@@ -498,7 +498,7 @@ async fn handle_callback_inner(
                 "Unsupported callback.".to_string()
             }
         }
-        Some(_) => "This chat is not authorized to use PFTerminal.".to_string(),
+        Some(_) => "This chat is not authorized to use Corbanu Terminal.".to_string(),
         None => "Approval callbacks must come from the original Telegram chat.".to_string(),
     };
     let answer_text = callback_answer_text(&response);
@@ -601,7 +601,7 @@ async fn begin_or_explain(
             send_notice(
                 bot,
                 conversation,
-                "PFTerminal's Telegram inbox is full. Wait for queued work to finish, then retry.",
+                "Corbanu Terminal's Telegram inbox is full. Wait for queued work to finish, then retry.",
             )
             .await?;
             Ok(false)
@@ -610,7 +610,7 @@ async fn begin_or_explain(
             send_notice(
                 bot,
                 conversation,
-                "PFTerminal could not safely persist this update, so it was not started. Retry after checking host storage.",
+                "Corbanu Terminal could not safely persist this update, so it was not started. Retry after checking host storage.",
             )
             .await?;
             Ok(false)

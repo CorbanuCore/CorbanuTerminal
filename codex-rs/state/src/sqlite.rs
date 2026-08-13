@@ -197,7 +197,7 @@ impl SqliteConfig {
         }
         if self.home().file_name().and_then(|name| name.to_str()) == Some(".codex") {
             anyhow::bail!(
-                "refusing to rename upstream-named databases in {}: this database appears to belong to a different Codex/PFTerminal distribution; follow the repair recipe in pfterminal_codex_home_collision_incident_20260710.md",
+                "refusing to rename upstream-named databases in {}: this database appears to belong to a different Codex/Corbanu Terminal distribution; follow the repair recipe in pfterminal_codex_home_collision_incident_20260710.md",
                 self.home().display()
             );
         }

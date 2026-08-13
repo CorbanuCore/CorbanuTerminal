@@ -1,30 +1,32 @@
 # Getting Started
 
-Use this page after PFTerminal is installed. For a new-machine install, start
+Use this page after Corbanu Terminal is installed. For a new-machine install, start
 with [Install And First Run](install.md).
 
 ## First Run
 
-Start PFTerminal from the workspace you want it to inspect:
+Start Corbanu Terminal from the workspace you want it to inspect:
 
 ```bash
 cd ~/repos/my-project
-pfterminal
+corbanu
 ```
 
-If you built from source, the debug `pfterminal` binary also defaults
-PFTerminal state to `$HOME/.pfterminal`, separate from stock Codex:
+If you built from source, run the debug `corbanu` binary:
 
 ```bash
-/path/to/PfTerminal/codex-rs/target/debug/pfterminal
+/path/to/CorbanuTerminal/codex-rs/target/debug/corbanu
 ```
 
-On first run, choose a provider account and enter the API key. The key is stored
+With no explicit `CODEX_HOME`, Corbanu Terminal prefers an existing
+`$HOME/.corbanu`, otherwise reuses a lone `$HOME/.pfterminal` in place, and
+otherwise creates `$HOME/.corbanu`. On first run, choose a provider account and
+enter the API key. The key is stored
 in the encrypted vault, not in the chat transcript.
 
 ## Provider Choices
 
-PFTerminal currently ships these provider paths:
+Corbanu Terminal currently ships these provider paths:
 
 | Use case                  | Provider    | Current release-visible model examples                                                                           |
 | ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
@@ -43,10 +45,10 @@ PFTerminal currently ships these provider paths:
 Open `/model` to switch models. You can also start with a specific model:
 
 ```bash
-pfterminal -m glm-5.2
-pfterminal -m deepseek-v4-flash
-pfterminal -m deepseek/deepseek-v4-flash-0731
-pfterminal -m gpt-5.6-luna
+corbanu -m glm-5.2
+corbanu -m deepseek-v4-flash
+corbanu -m deepseek/deepseek-v4-flash-0731
+corbanu -m gpt-5.6-luna
 ```
 
 ## Vault Basics
@@ -79,9 +81,9 @@ Provider API keys stored through onboarding use labels such as
 | `/model`     | Select provider model and reasoning/effort mode                          |
 | `/providers` | Add or replace provider credentials and manage account routes            |
 | `/vault`     | Add, inspect, or delete credentials without exposing raw secrets to chat |
-| `/panes`     | Create or switch persistent PFTerminal and Claude headless panes         |
+| `/panes`     | Create or switch persistent Corbanu Terminal and Claude headless panes         |
 | `/spawn`     | Manage retained Nazgul/Troll/Orc agents                                  |
-| `/wallet`    | Manage the local SOL/USDC wallet and PFTerminal plans                    |
+| `/wallet`    | Manage the local SOL/USDC wallet and Corbanu Terminal plans                    |
 | `/gpu`       | Inspect, rent, stop, or terminate supported GPU capacity                 |
 | `/telegram`  | Configure and control the Telegram connector                             |
 | `/tasknode`  | Link and use Task Node tasks, context, chat, balances, and rewards       |

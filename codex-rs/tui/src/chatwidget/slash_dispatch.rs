@@ -203,7 +203,7 @@ impl ChatWidget {
                 self.bottom_pane.show_selection_view(SelectionViewParams {
                     title: Some("Archive this session?".to_string()),
                     subtitle: Some(
-                        "Are you sure? This will archive the current session and exit PFTerminal"
+                        "This will archive the current session and exit Corbanu Terminal."
                             .to_string(),
                     ),
                     footer_hint: Some(standard_popup_hint_line()),
@@ -1327,7 +1327,7 @@ impl ChatWidget {
     /// If `text` is a recognized slash command, dispatch it through the normal
     /// slash-command path and return true. External-pane input forwarding uses
     /// this to keep control-plane commands global: a slash command entered
-    /// while a Claude worker pane is active must act on PFTerminal itself,
+    /// while a Claude worker pane is active must act on Corbanu Terminal itself,
     /// never become a task forwarded to the worker.
     pub(crate) fn try_dispatch_slash_input(&mut self, text: &str) -> bool {
         let trimmed = text.trim();

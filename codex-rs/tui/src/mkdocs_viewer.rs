@@ -281,7 +281,7 @@ fn managed_package_mkdocs_config(package_root: &Path) -> Option<PathBuf> {
 fn missing_mkdocs_error(cwd: &Path, managed_package_root: Option<&Path>) -> MkDocsViewerError {
     match managed_package_root {
         Some(package_root) => MkDocsViewerError::new(format!(
-            "No mkdocs.yml found from {} upward, and packaged documentation is missing from {}. Reinstall PFTerminal or use `/docs --config <path>`.",
+            "No mkdocs.yml found from {} upward, and packaged documentation is missing from {}. Reinstall Corbanu Terminal or use `/docs --config <path>`.",
             cwd.display(),
             package_root.display()
         )),

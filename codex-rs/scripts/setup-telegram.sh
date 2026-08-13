@@ -6,8 +6,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 CODEX_RS_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
 TOKEN_ENV_VAR="PFTERMINAL_TELEGRAM_TOKEN"
-DEFAULT_ENV_FILE="$HOME/.config/pfterminal/telegram.env"
-DEFAULT_WORKSPACE="$HOME/pfterminal-telegram"
+DEFAULT_ENV_FILE="$HOME/.config/corbanu/telegram.env"
+DEFAULT_WORKSPACE="$HOME/corbanu-telegram"
+if [[ -f "$HOME/.config/pfterminal/telegram.env" && ! -e "$DEFAULT_ENV_FILE" ]]; then
+    DEFAULT_ENV_FILE="$HOME/.config/pfterminal/telegram.env"
+fi
+if [[ -d "$HOME/pfterminal-telegram" && ! -e "$DEFAULT_WORKSPACE" ]]; then
+    DEFAULT_WORKSPACE="$HOME/pfterminal-telegram"
+fi
 
 usage() {
     cat <<'USAGE'
@@ -16,8 +22,8 @@ Usage: setup-telegram.sh [OPTIONS]
 Options:
   --chat-id ID          Allowed chat ID. Repeat or pass comma-separated IDs.
   --user-id ID          User allowed to act in group chats. Repeat or comma-separate.
-  --workspace DIR       Telegram default_cwd. Defaults to ~/pfterminal-telegram.
-  --env-file PATH       EnvironmentFile to write. Defaults to ~/.config/pfterminal/telegram.env.
+  --workspace DIR       Telegram default_cwd. Fresh installs use ~/corbanu-telegram.
+  --env-file PATH       EnvironmentFile to write. Fresh installs use ~/.config/corbanu/telegram.env.
   --approval-policy VAL Approval policy. Defaults to on-request.
   --allow-danger-full-access
                         Allow writing top-level sandbox_mode="danger-full-access"
@@ -38,6 +44,10 @@ need_python() {
     command -v python3 >/dev/null 2>&1 || die "python3 is required"
 }
 
+resolve_terminal_binary() {
+    command -v corbanu 2>/dev/null || command -v pfterminal 2>/dev/null || true
+}
+
 abs_dir() {
     mkdir -p -- "$1"
     (cd -- "$1" && pwd -P)
@@ -52,20 +62,21 @@ abs_file() {
     printf '%s/%s\n' "$dir" "$base"
 }
 
-default_codex_home_dir_name() {
-    local source_file="$CODEX_RS_DIR/utils/home-dir/src/lib.rs"
-    local extracted=""
-    if [[ -r "$source_file" ]]; then
-        extracted="$(sed -n 's/^const DEFAULT_PFTERMINAL_HOME_DIR: &str = "\(.*\)";/\1/p' "$source_file" | head -n 1)"
-    fi
-    [[ -n "$extracted" ]] && printf '%s\n' "$extracted" || printf '.pfterminal\n'
-}
-
 resolve_codex_home() {
-    if [[ -n "${CODEX_HOME:-}" ]]; then
+    if [[ -n "${CORBANU_HOME:-}" ]]; then
+        abs_dir "$CORBANU_HOME"
+    elif [[ -n "${PFTERMINAL_HOME:-}" ]]; then
+        abs_dir "$PFTERMINAL_HOME"
+    elif [[ -n "${CODEX_HOME:-}" ]]; then
         abs_dir "$CODEX_HOME"
+    elif [[ -d "$HOME/.corbanu" && -d "$HOME/.pfterminal" ]]; then
+        printf 'warning: both %s and %s exist; using %s without merging either home\n' \
+            "$HOME/.corbanu" "$HOME/.pfterminal" "$HOME/.corbanu" >&2
+        abs_dir "$HOME/.corbanu"
+    elif [[ -d "$HOME/.pfterminal" ]]; then
+        abs_dir "$HOME/.pfterminal"
     else
-        abs_dir "$HOME/$(default_codex_home_dir_name)"
+        abs_dir "$HOME/.corbanu"
     fi
 }
 
@@ -431,26 +442,26 @@ install_systemd_unit() {
     local source="$CODEX_RS_DIR/telegram/dist/pfterminal-telegram.service"
     local target_dir="$HOME/.config/systemd/user"
     local target="$target_dir/pfterminal-telegram.service"
-    local pfterminal_bin
+    local terminal_bin
     [[ -r "$source" ]] || die "missing systemd service template: $source"
-    pfterminal_bin="$(command -v pfterminal || true)"
-    [[ -n "$pfterminal_bin" ]] || die "pfterminal was not found on PATH; install it before --install-systemd"
-    [[ "$pfterminal_bin" == /* ]] || die "command -v pfterminal did not return an absolute path: $pfterminal_bin"
+    terminal_bin="$(resolve_terminal_binary)"
+    [[ -n "$terminal_bin" ]] || die "corbanu (or legacy pfterminal) was not found on PATH; install it before --install-systemd"
+    [[ "$terminal_bin" == /* ]] || die "terminal command did not resolve to an absolute path: $terminal_bin"
     mkdir -p -- "$target_dir"
-    python3 - "$source" "$target" "$pfterminal_bin" "$ENV_FILE" <<'PY'
+    python3 - "$source" "$target" "$terminal_bin" "$ENV_FILE" <<'PY'
 import sys
 from pathlib import Path
 
 source = Path(sys.argv[1])
 target = Path(sys.argv[2])
-pfterminal_bin = sys.argv[3]
+terminal_bin = sys.argv[3]
 env_file = sys.argv[4]
 
 lines = source.read_text().splitlines()
 out = []
 for line in lines:
     if line.startswith("ExecStart="):
-        out.append(f"ExecStart={pfterminal_bin} telegram")
+        out.append(f"ExecStart={terminal_bin} telegram")
     elif line.startswith("EnvironmentFile="):
         out.append(f"EnvironmentFile={env_file}")
     else:
@@ -465,14 +476,14 @@ install_launchd_unit() {
     [[ "$(uname -s)" == "Darwin" ]] || die "--install-launchd requires macOS"
     local source="$CODEX_RS_DIR/telegram/dist/net.postfiat.pfterminal.telegram.plist"
     local target_dir="$HOME/Library/LaunchAgents"
-    local log_dir="$HOME/Library/Logs/PFTerminal"
+    local log_dir="$HOME/Library/Logs/Corbanu Terminal"
     local target="$target_dir/net.postfiat.pfterminal.telegram.plist"
-    local pfterminal_bin
+    local terminal_bin
     [[ -r "$source" ]] || die "missing launchd template: $source"
-    pfterminal_bin="$(command -v pfterminal || true)"
-    [[ "$pfterminal_bin" == /* ]] || die "pfterminal was not found at an absolute PATH entry"
+    terminal_bin="$(resolve_terminal_binary)"
+    [[ "$terminal_bin" == /* ]] || die "corbanu (or legacy pfterminal) was not found at an absolute PATH entry"
     mkdir -p -- "$target_dir" "$log_dir"
-    python3 - "$source" "$target" "$pfterminal_bin" "$CODEX_HOME_RESOLVED" "$log_dir" "$ENV_FILE" <<'PY'
+    python3 - "$source" "$target" "$terminal_bin" "$CODEX_HOME_RESOLVED" "$log_dir" "$ENV_FILE" <<'PY'
 import sys
 import shlex
 from xml.sax.saxutils import escape
@@ -492,9 +503,9 @@ PY
 }
 
 run_health_check() {
-    local pfterminal_bin
-    pfterminal_bin="$(command -v pfterminal || true)"
-    [[ "$pfterminal_bin" == /* ]] || die "pfterminal was not found at an absolute PATH entry"
+    local terminal_bin
+    terminal_bin="$(resolve_terminal_binary)"
+    [[ "$terminal_bin" == /* ]] || die "corbanu (or legacy pfterminal) was not found at an absolute PATH entry"
     printf 'Running Telegram health check before service installation...\n'
     set -a
     # This file is created mode 0600 by this script and is the same input the
@@ -502,7 +513,7 @@ run_health_check() {
     # shellcheck disable=SC1090
     source "$ENV_FILE"
     set +a
-    CODEX_HOME="$CODEX_HOME_RESOLVED" "$pfterminal_bin" telegram --health
+    CODEX_HOME="$CODEX_HOME_RESOLVED" "$terminal_bin" telegram --health
 }
 
 TOKEN_VALUE=""
@@ -606,7 +617,7 @@ if [[ -n "$SANDBOX_ISSUE" ]]; then
         SANDBOX_MODE_TO_SET="danger-full-access"
         printf 'Writing top-level sandbox_mode = "danger-full-access" because --allow-danger-full-access was passed.\n'
     elif [[ -t 0 ]]; then
-        read -r -p 'Set sandbox_mode = "danger-full-access" globally? This disables the sandbox for all PFTerminal surfaces and is only appropriate on a trusted single-user host. Type y to continue [y/N]: ' DANGER_REPLY
+        read -r -p 'Set sandbox_mode = "danger-full-access" globally? This disables the sandbox for all Corbanu Terminal surfaces and is only appropriate on a trusted single-user host. Type y to continue [y/N]: ' DANGER_REPLY
         if [[ "$DANGER_REPLY" == "y" || "$DANGER_REPLY" == "Y" ]]; then
             SANDBOX_MODE_TO_SET="danger-full-access"
             printf 'Writing top-level sandbox_mode = "danger-full-access" after interactive confirmation.\n'
@@ -639,6 +650,6 @@ seed_agents_md "$WORKSPACE"
 [[ $INSTALL_LAUNCHD -eq 1 ]] && install_launchd_unit
 
 printf '\nNext steps:\n'
-printf '  CODEX_HOME=%s pfterminal telegram\n' "$CODEX_HOME_RESOLVED"
+printf '  CODEX_HOME=%s corbanu telegram\n' "$CODEX_HOME_RESOLVED"
 printf '  For systemd, ensure %s contains %s, then run the enable/start commands printed by --install-systemd.\n' "$ENV_FILE" "$TOKEN_ENV_VAR"
 printf '  Send a Telegram message from an allowed chat ID to test the connector.\n'

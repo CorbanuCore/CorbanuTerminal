@@ -230,7 +230,7 @@ fn run_setup() -> anyhow::Result<()> {
     #[cfg(windows)]
     {
         anyhow::bail!(
-            "interactive Telegram setup is not yet available on Windows; configure [telegram], run `pfterminal telegram --health`, then use the bundled install-telegram-task.ps1"
+            "interactive Telegram setup is not yet available on Windows; configure [telegram], run `corbanu telegram --health`, then use the bundled install-telegram-task.ps1"
         );
     }
 
@@ -250,7 +250,8 @@ fn run_setup() -> anyhow::Result<()> {
 
 #[cfg(not(windows))]
 fn locate_setup_script() -> anyhow::Result<PathBuf> {
-    let executable = std::env::current_exe().context("resolve current PFTerminal executable")?;
+    let executable =
+        std::env::current_exe().context("resolve current Corbanu Terminal executable")?;
     if let Some(package_root) = executable.parent().and_then(|bin_dir| bin_dir.parent()) {
         let packaged = package_root
             .join("codex-resources")
@@ -270,7 +271,7 @@ fn locate_setup_script() -> anyhow::Result<PathBuf> {
         return Ok(source);
     }
     anyhow::bail!(
-        "Telegram setup resources are missing; reinstall PFTerminal or configure [telegram] manually"
+        "Telegram setup resources are missing; reinstall Corbanu Terminal or configure [telegram] manually"
     )
 }
 
@@ -370,7 +371,7 @@ async fn build_core_config(
         .strict_config(strict_config)
         .build()
         .await
-        .context("failed to build PFTerminal config for Telegram")
+        .context("failed to build Corbanu Terminal config for Telegram")
 }
 
 fn telegram_default_model_provider(config: &TelegramConfig) -> Option<String> {

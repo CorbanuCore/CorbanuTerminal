@@ -146,7 +146,7 @@ const TMUX_OPTION_NAMES: &[&str] = &[
 const NARROW_TERMINAL_COLUMNS: u16 = 80;
 const NARROW_TERMINAL_ROWS: u16 = 24;
 
-/// Options for building a local PFTerminal diagnostic report.
+/// Options for building a local Corbanu Terminal diagnostic report.
 ///
 /// The command always runs the full bounded diagnostic set. Human output includes
 /// detailed diagnostics by default; --summary keeps the terminal output compact.
@@ -457,7 +457,7 @@ async fn build_report(
                             "config could not be loaded",
                         )
                         .detail(err.to_string())
-                        .remediation("Fix the reported config error, then rerun pfterminal doctor.")
+                        .remediation("Fix the reported config error, then rerun corbanu doctor.")
                     })
                 },
                 async { run_sync_check("network", progress.clone(), network_check) },
@@ -523,7 +523,7 @@ async fn load_config(
         .harness_overrides(overrides)
         .build()
         .await
-        .context("failed to load PFTerminal config")
+        .context("failed to load Corbanu Terminal config")
 }
 
 fn config_overrides_from_interactive(
@@ -816,20 +816,23 @@ fn installation_check(show_details: bool) -> DoctorCheck {
         "CODEX_MANAGED_PACKAGE_ROOT",
     );
 
-    let path_entries = pfterminal_path_entries();
+    let path_entries = terminal_path_entries();
     let mut status = CheckStatus::Ok;
     let mut summary = "installation looks consistent".to_string();
     let mut remediation = None;
 
     if path_entries.len() > 1 {
-        details.push(format!("PATH pfterminal entries: {}", path_entries.len()));
+        details.push(format!(
+            "PATH Corbanu/legacy entries: {}",
+            path_entries.len()
+        ));
     }
     if show_details || path_entries.len() > 1 {
         details.extend(
             path_entries
                 .iter()
                 .enumerate()
-                .map(|(index, path)| format!("PATH pfterminal #{}: {path}", index + 1)),
+                .map(|(index, path)| format!("PATH terminal #{}: {path}", index + 1)),
         );
     }
 
@@ -860,7 +863,7 @@ fn installation_check(show_details: bool) -> DoctorCheck {
                 status = status.max(CheckStatus::Warning);
                 summary = "npm-managed launch is missing package-root provenance".to_string();
                 remediation = Some(
-                    "Reinstall or update PFTerminal so the JS shim provides CODEX_MANAGED_PACKAGE_ROOT."
+                    "Reinstall or update Corbanu Terminal so the JS shim provides CODEX_MANAGED_PACKAGE_ROOT."
                         .to_string(),
                 );
             }
@@ -1054,19 +1057,26 @@ fn display_list<T: AsRef<str>>(items: &[T]) -> String {
     }
 }
 
-fn pfterminal_path_entries() -> Vec<String> {
-    #[cfg(windows)]
-    let result = run_command("where", ["pfterminal"]);
-    #[cfg(not(windows))]
-    let result = run_command("which", ["-a", "pfterminal"]);
+fn terminal_path_entries() -> Vec<String> {
+    let mut entries = Vec::new();
+    for binary in ["corbanu", "pfterminal"] {
+        #[cfg(windows)]
+        let result = run_command("where", [binary]);
+        #[cfg(not(windows))]
+        let result = run_command("which", ["-a", binary]);
 
-    result
-        .unwrap_or_default()
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(str::to_string)
-        .collect()
+        entries.extend(
+            result
+                .unwrap_or_default()
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .map(str::to_string),
+        );
+    }
+    entries.sort();
+    entries.dedup();
+    entries
 }
 
 fn run_command<I, S>(program: &str, args: I) -> Result<String, String>
@@ -1260,7 +1270,7 @@ fn auth_check(config: &Config) -> DoctorCheck {
                 DoctorCheck::new("auth.credentials", "auth", status, summary).details(details);
             if status == CheckStatus::Fail {
                 check = check
-                    .remediation("Run pfterminal login again or provide a supported auth env var.");
+                    .remediation("Run corbanu login again or provide a supported auth env var.");
             }
             check
         }
@@ -1275,12 +1285,10 @@ fn auth_check(config: &Config) -> DoctorCheck {
             "auth.credentials",
             "auth",
             CheckStatus::Fail,
-            "no PFTerminal credentials were found",
+            "no Corbanu Terminal credentials were found",
         )
         .details(details)
-        .remediation(
-            "Run pfterminal login or provide an API key through a supported auth env var.",
-        ),
+        .remediation("Run corbanu login or provide an API key through a supported auth env var."),
         Err(err) => DoctorCheck::new(
             "auth.credentials",
             "auth",
@@ -1288,7 +1296,7 @@ fn auth_check(config: &Config) -> DoctorCheck {
             "stored credentials could not be read",
         )
         .detail(err.to_string())
-        .remediation("Fix auth storage access or run pfterminal login again."),
+        .remediation("Fix auth storage access or run corbanu login again."),
     }
 }
 
@@ -3598,7 +3606,7 @@ mod tests {
             provider_specific_auth_check(
                 /*requires_openai_auth*/ false,
                 Some("PROVIDER_API_KEY"),
-                Some("Set PROVIDER_API_KEY before running PFTerminal."),
+                Some("Set PROVIDER_API_KEY before running Corbanu Terminal."),
                 &config,
                 Vec::new(),
                 |_| false,
@@ -3613,7 +3621,7 @@ mod tests {
         );
         assert_eq!(
             check.remediation,
-            Some("Set PROVIDER_API_KEY before running PFTerminal.".to_string())
+            Some("Set PROVIDER_API_KEY before running Corbanu Terminal.".to_string())
         );
     }
 

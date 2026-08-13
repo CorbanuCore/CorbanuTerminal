@@ -659,7 +659,7 @@ pub(crate) fn smoke_provider_profile(provider_name: &str) -> Option<ClaudeProvid
 
 pub(crate) fn smoke_first_turn_prompt() -> String {
     concat!(
-        "Perform a read-only PFTerminal Claude pane smoke test. ",
+        "Perform a read-only Corbanu Terminal Claude pane smoke test. ",
         "Use Claude Code filesystem tools to inspect Cargo.toml, ",
         "codex-rs/tui/src/claude_panes.rs, and ",
         "docs/current-sprint/claude-code-integration-completion-spec.md. ",

@@ -1,6 +1,8 @@
-# Codex Fork Modifications
+# Corbanu Terminal Codex Fork
 
-PFTerminal is a product fork of the open-source Codex CLI. The current goal is to preserve Codex's local coding-agent runtime while changing the product defaults, packaging, branding, and provider integrations.
+Corbanu Terminal is a product fork of the open-source Codex CLI. It preserves
+Codex's local coding-agent runtime while changing product defaults, packaging,
+branding, and provider integrations.
 
 ## Runtime Lineage
 
@@ -18,14 +20,14 @@ The repository README and `codex-rs/README.md` document this as a Codex-derived 
 
 ## Product Command Names
 
-PFTerminal keeps upstream-compatible `codex` paths while adding product-facing command names:
+Corbanu Terminal keeps upstream-compatible internal `codex` paths while adding product-facing command names:
 
-- `codex-rs/cli/Cargo.toml` defines both `codex` and `pfterminal` binaries.
+- `codex-rs/cli/Cargo.toml` defines `codex`, `corbanu`, and compatibility `pfterminal` binaries.
 - `codex-rs/cli/src/pfterminal_main.rs` currently includes the same implementation as `main.rs`.
-- `codex-cli/package.json` publishes `@agticorp/pfterminal` with both `pfterminal` and `codex` bin aliases.
-- `codex-cli/bin/codex.js` resolves platform packages named `@agticorp/pfterminal-*`, prefers the bundled `pfterminal` binary, and defaults `CODEX_HOME` to `$HOME/.pfterminal`.
+- `codex-cli/package.json` publishes `@agticorp/pfterminal` with `corbanu` and compatibility `pfterminal` aliases; it does not claim the stock `codex` command.
+- `codex-cli/bin/codex.js` resolves the compatibility platform packages, prefers the bundled `corbanu` binary, and follows the Corbanu/PFTerminal home precedence.
 
-This keeps existing Codex workflows usable while making `pfterminal` the product-facing command.
+This keeps existing PFTerminal automation usable while making `corbanu` the primary product command.
 
 ## Packaging And Installers
 
@@ -35,24 +37,23 @@ The npm packaging has been renamed around `@agticorp/pfterminal`:
 - Platform packages: `@agticorp/pfterminal-linux-x64`, `@agticorp/pfterminal-darwin-arm64`, and related target variants.
 - TypeScript SDK package: `@agticorp/pfterminal-sdk`.
 
-Standalone installer scripts in `scripts/install/` install a `pfterminal`
-launcher, keep state under `$HOME/.pfterminal` by default, and avoid replacing
-an existing stock `codex` command.
+Standalone installer scripts in `scripts/install/` install `corbanu` plus the
+legacy alias, default fresh state to `$HOME/.corbanu`, reuse a lone
+`$HOME/.pfterminal` in place, and avoid replacing a stock `codex` command.
 
 ## Branding Changes
 
-The TUI and login surfaces have PFTerminal branding:
+The TUI and login surfaces have Corbanu Terminal branding:
 
-- Device-code prompt: `Welcome to PFTerminal` and `Post Fiat's command-line coding agent`.
-- Session cards render `PFTerminal`.
-- Composer placeholder text uses `Ask PFTerminal to do anything`.
-- Status surfaces include `Post Fiat Terminal`.
-- Tooltips and resume guidance reference `pfterminal`.
+- Device-code prompts welcome users to Corbanu Terminal.
+- Session cards, composer placeholders, status surfaces, and guidance use Corbanu Terminal.
+- Post Fiat Task Node and Ambient Inference retain their distinct product identities.
+- Legacy command, state, provider, receipt, service, and protocol identifiers remain readable where compatibility requires them.
 
 The status line can therefore show a session such as:
 
 ```text
-zai-org/GLM-5.2-FP8 standard ... Post Fiat Terminal
+zai-org/GLM-5.2-FP8 standard ... Corbanu Terminal
 ```
 
 ## Model Picker Changes
@@ -67,10 +68,10 @@ Key path: `codex-rs/tui/src/chatwidget/model_popups.rs`.
 
 ## Prompt And Base Instructions
 
-Bundled Ambient and Z.AI model metadata use PFTerminal base instructions:
+Bundled Ambient and Z.AI model metadata use Corbanu Terminal base instructions:
 
 ```text
-You are PFTerminal, a coding agent.
+You are Corbanu Terminal, a coding agent.
 ```
 
 The instructions preserve the Codex engineering posture: inspect code first, keep edits scoped, use `rg`/`rg --files`, and verify work when practical.
@@ -84,7 +85,7 @@ The fork should keep upstream Codex changes easy to reason about:
 - UI branding should stay in TUI-facing modules.
 - Request-compatibility shims should stay close to API serialization.
 
-That boundary makes it easier to merge upstream Codex changes without hiding PFTerminal product behavior in scattered prompt text.
+That boundary makes it easier to merge upstream Codex changes without hiding Corbanu Terminal product behavior in scattered prompt text.
 
 ## Source
 

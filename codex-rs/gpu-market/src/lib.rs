@@ -1,4 +1,4 @@
-//! Durable GPU rental control plane used by PFTerminal's `/gpu` product surface.
+//! Durable GPU rental control plane used by Corbanu Terminal's `/gpu` product surface.
 
 mod controller;
 mod credential;

@@ -1,4 +1,4 @@
 interface:
-  display_name: "PfTerminal Help"
-  short_description: "Use PfTerminal features with confidence"
-  default_prompt: "Use $pfterminal-help to explain how to accomplish this safely in PfTerminal."
+  display_name: "Corbanu Terminal Help"
+  short_description: "Use Corbanu Terminal features with confidence"
+  default_prompt: "Use $pfterminal-help to explain how to accomplish this safely in Corbanu Terminal."

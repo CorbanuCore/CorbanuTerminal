@@ -24,6 +24,6 @@ expression: normalize_snapshot_paths(term.backend().vt100().screen().contents())
   ↳ Hello, world! 14
   ↳ Hello, world! 15
 
-› Ask PFTerminal to do anything
+› Ask Corbanu Terminal to do anything
 
   Ambient GLM 5.2 standard · /tmp/project · Post Fiat Terminal · TPS: -- tok/s

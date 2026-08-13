@@ -77,7 +77,7 @@ if (!platformPackage) {
   throw new Error(`Unsupported target triple: ${targetTriple}`);
 }
 
-function findPFTerminalExecutable() {
+function findCorbanuExecutable() {
   let vendorRoot;
   try {
     const packageJsonPath = require.resolve(`${platformPackage}/package.json`);
@@ -88,8 +88,8 @@ function findPFTerminalExecutable() {
 
   const executableNames =
     process.platform === "win32"
-      ? ["pfterminal.exe", "codex.exe"]
-      : ["pfterminal", "codex"];
+      ? ["corbanu.exe", "pfterminal.exe", "codex.exe"]
+      : ["corbanu", "pfterminal", "codex"];
   for (const executableName of executableNames) {
     const executable = path.join(
       vendorRoot,
@@ -105,16 +105,16 @@ function findPFTerminalExecutable() {
   const packageManager = detectPackageManager();
   const updateCommand =
     packageManager === "bun"
-      ? "bun install -g @openai/codex@latest"
+      ? "bun install -g @agticorp/pfterminal@latest"
       : packageManager === "pnpm"
-        ? "pnpm add -g @openai/codex@latest"
-        : "npm install -g @openai/codex@latest";
+        ? "pnpm add -g @agticorp/pfterminal@latest"
+        : "npm install -g @agticorp/pfterminal@latest";
   throw new Error(
-    `Missing optional dependency ${platformPackage}. Reinstall PFTerminal: ${updateCommand}`,
+    `Missing optional dependency ${platformPackage}. Reinstall Corbanu Terminal: ${updateCommand}`,
   );
 }
 
-const binaryPath = findPFTerminalExecutable();
+const binaryPath = findCorbanuExecutable();
 
 // Use an asynchronous spawn instead of spawnSync so that Node is able to
 // respond to signals (e.g. Ctrl-C / SIGINT) while the native binary is
@@ -122,14 +122,14 @@ const binaryPath = findPFTerminalExecutable();
 // and guarantees that when either the child terminates or the parent
 // receives a fatal signal, both processes exit in a predictable manner.
 
-function isPnpmOwnedCodexInstall(nodeModulesDir) {
+function isPnpmOwnedCorbanuInstall(nodeModulesDir) {
   if (!existsSync(path.join(nodeModulesDir, ".modules.yaml"))) {
     return false;
   }
 
   try {
     return (
-      realpathSync(path.join(nodeModulesDir, "@openai", "codex")) ===
+      realpathSync(path.join(nodeModulesDir, "@agticorp", "pfterminal")) ===
       codexPackageRoot
     );
   } catch {
@@ -138,7 +138,7 @@ function isPnpmOwnedCodexInstall(nodeModulesDir) {
 }
 
 /**
- * Use heuristics to detect the package manager that was used to install PFTerminal
+ * Use heuristics to detect the package manager that installed Corbanu Terminal
  * in order to give the user a hint about how to update it.
  */
 function detectPackageManager() {
@@ -153,12 +153,12 @@ function detectPackageManager() {
       currentDir !== filesystemRoot;
       currentDir = path.dirname(currentDir)
     ) {
-      if (isPnpmOwnedCodexInstall(path.join(currentDir, "node_modules"))) {
+      if (isPnpmOwnedCorbanuInstall(path.join(currentDir, "node_modules"))) {
         return "pnpm";
       }
     }
 
-    if (isPnpmOwnedCodexInstall(path.join(filesystemRoot, "node_modules"))) {
+    if (isPnpmOwnedCorbanuInstall(path.join(filesystemRoot, "node_modules"))) {
       return "pnpm";
     }
   }

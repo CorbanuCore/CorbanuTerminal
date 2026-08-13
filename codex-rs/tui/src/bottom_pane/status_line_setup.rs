@@ -110,7 +110,7 @@ pub(crate) enum StatusLineItem {
     /// Remaining usage on the secondary rate limit.
     WeeklyLimit,
 
-    /// PFTerminal application version.
+    /// Corbanu Terminal application version.
     CodexVersion,
 
     /// Total context window size in tokens.
@@ -182,7 +182,7 @@ impl StatusLineItem {
             StatusLineItem::WeeklyLimit => {
                 "Remaining usage on the secondary usage limit (omitted when unavailable)"
             }
-            StatusLineItem::CodexVersion => "PFTerminal application version",
+            StatusLineItem::CodexVersion => "Corbanu Terminal application version",
             StatusLineItem::ContextWindowSize => {
                 "Total context window size in tokens (omitted when unknown)"
             }

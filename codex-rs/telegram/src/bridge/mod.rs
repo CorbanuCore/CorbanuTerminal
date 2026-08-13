@@ -690,7 +690,7 @@ impl BridgeRuntime {
                             .context("failed to replace unresumable Telegram thread")?;
                         self.notify_after_effect(
                             conversation,
-                            "The previous PFTerminal thread could not be resumed. I started a new thread and kept your pending Telegram message; prior thread context is not available in this chat.",
+                            "The previous Corbanu Terminal thread could not be resumed. I started a new thread and kept your pending Telegram message; prior thread context is not available in this chat.",
                             "thread replacement notice",
                         )
                         .await;

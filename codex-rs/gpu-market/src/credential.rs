@@ -147,7 +147,7 @@ impl VaultGpuCredentialResolver {
             label,
             credential_type: codex_vault::CredentialType::BearerToken,
             provider: Some("gpu-rental".to_string()),
-            notes: Some("PFTerminal per-rental inference endpoint token".to_string()),
+            notes: Some("Corbanu Terminal per-rental inference endpoint token".to_string()),
             revocation_notes: Some("Delete after provider-confirmed termination".to_string()),
             secret: token,
         });

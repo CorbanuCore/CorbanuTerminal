@@ -2584,10 +2584,10 @@ async fn restore_materializes_saved_native_orcs_without_rollouts() -> Result<()>
         .session
         .rollout_path
         .as_ref()
-        .expect("PFTerminal Main should have a local rollout path");
+        .expect("Corbanu Terminal Main should have a local rollout path");
     assert!(
         main_rollout_path.is_file(),
-        "a no-task PFTerminal Main must be durable before panes reference its layout"
+        "a no-task Corbanu Terminal Main must be durable before panes reference its layout"
     );
     app.primary_thread_id = Some(main_thread_id);
     app.active_thread_id = Some(main_thread_id);
@@ -3059,10 +3059,10 @@ async fn pane_picker_separates_user_panes_from_managed_spawn_crew() {
         .iter()
         .map(|item| item.name.as_str())
         .collect::<Vec<_>>();
-    assert!(names.contains(&"PFTerminal - Codex manager"));
-    assert!(names.contains(&"PFTerminal - Codex worker"));
+    assert!(names.contains(&"Corbanu Terminal - Codex manager"));
+    assert!(names.contains(&"Corbanu Terminal - Codex worker"));
     assert!(
-        !names.contains(&"PFTerminal - Task-only subagent"),
+        !names.contains(&"Corbanu Terminal - Task-only subagent"),
         "parent-controlled Core workers are not operator-owned user panes"
     );
 
@@ -3120,11 +3120,11 @@ async fn pane_picker_marks_exactly_the_active_native_thread_current() {
     let items = app.pane_picker_items();
     let main = items
         .iter()
-        .find(|item| item.name == "PFTerminal - Main")
+        .find(|item| item.name == "Corbanu Terminal - Main")
         .expect("Main pane row");
     let user = items
         .iter()
-        .find(|item| item.name == "PFTerminal - Matrix Twin")
+        .find(|item| item.name == "Corbanu Terminal - Matrix Twin")
         .expect("operator pane row");
 
     assert!(
@@ -4785,8 +4785,8 @@ async fn bound_claude_nazgul_context_explains_empty_spawn_hierarchy() {
         .spawn_context_for_user_pane("claude-test-pane")
         .expect("bound Claude pane should receive spawn context");
 
-    assert!(context.contains("You are the PFTerminal Nazgul/root pane"));
-    assert!(context.contains("Troll and Orc are PFTerminal orchestration roles"));
+    assert!(context.contains("You are the Corbanu Terminal Nazgul/root pane"));
+    assert!(context.contains("Troll and Orc are Corbanu Terminal orchestration roles"));
     assert!(context.contains("Trolls: none spawned yet."));
     assert!(context.contains("Orcs: none spawned yet."));
     assert!(context.contains("suggest using /spawn"));
@@ -6711,7 +6711,7 @@ async fn native_nazgul_sees_live_troll_and_orc_tree_even_if_spawned_before_them(
     let context = app
         .spawn_context_for_thread(nazgul_thread_id)
         .expect("Nazgul thread should receive live spawn context");
-    assert!(context.contains("You are the PFTerminal Nazgul/root pane"));
+    assert!(context.contains("You are the Corbanu Terminal Nazgul/root pane"));
     assert!(
         context.contains("Euclid [nazgul]"),
         "context uses the Nazgul picker label, got: {context}"
@@ -7188,7 +7188,7 @@ async fn codex_user_pane_remains_interactive_after_liveness_refresh_impl() -> Re
         .session
         .rollout_path
         .as_ref()
-        .expect("PFTerminal user pane should have a local rollout path");
+        .expect("Corbanu Terminal user pane should have a local rollout path");
     assert!(
         pane_rollout_path.is_file(),
         "a no-task operator pane must be durable immediately after thread/start"
@@ -12334,12 +12334,16 @@ fn session_start_error_surfaces_archived_guidance_without_rollout_path() {
         thread_id,
     };
     let expected = format!(
-        "session {thread_id} is archived. Run `pfterminal unarchive {thread_id}` to unarchive it first."
+        "session {thread_id} is archived. Run `corbanu unarchive {thread_id}` to unarchive it first."
     );
 
-    for action in ["resume", "fork"] {
+    for (action, server_binary) in [("resume", "codex"), ("fork", "pfterminal")] {
+        let server_message = expected.replace(
+            "Run `corbanu unarchive ",
+            &format!("Run `{server_binary} unarchive "),
+        );
         let err = color_eyre::eyre::eyre!(
-            "thread/{action} failed during TUI bootstrap: thread/{action} failed: {expected} (code -32600)"
+            "thread/{action} failed during TUI bootstrap: thread/{action} failed: {server_message} (code -32600)"
         );
 
         assert_eq!(

@@ -1,11 +1,11 @@
 # Slash commands
 
-PFTerminal retains the Codex-derived local command surface and adds
+Corbanu Terminal retains the Codex-derived local command surface and adds
 product-specific wallet, vault, provider, GPU, pane, spawn, Telegram, and Task
 Node workflows. The table below is the release-facing PF inventory, not an
 exhaustive replacement for the in-app command picker.
 
-## PFTerminal Commands
+## Corbanu Terminal Commands
 
 | Command                    | Purpose                                                       |
 | -------------------------- | ------------------------------------------------------------- |

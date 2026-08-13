@@ -18,6 +18,7 @@ use codex_app_server_protocol::SessionSource as AppServerSessionSource;
 use codex_app_server_protocol::ThreadAgentMessageParams;
 use codex_app_server_protocol::ThreadStatus;
 use codex_features::Feature;
+use codex_product_brand::MAIN_PANE_TITLE;
 use codex_protocol::ThreadId;
 use codex_protocol::crew::AgentClass;
 use codex_protocol::crew::CREW_AUTO_DISPATCH_CHAIN_LIMIT;
@@ -150,10 +151,10 @@ impl SpawnRole {
         match self {
             Self::Nazgul => None,
             Self::Troll => Some(
-                "<pfterminal_spawn_role>\nBehavior:\nYou are the PFTerminal Troll: an engineering manager / VP-of-engineering style supervisor. You report to the Nazgul, the effective CTO. Orcs are IC executors who report to you. You are not an IC.\n\nMandate:\nPrefer delegation, review, coordination, and enforcement over implementation yourself. Work against spec docs, and after work is done make sure the docs reflect what shipped. You may do code reviews yourself or have one Orc review another Orc's work. If a review finds a bug, send the fix back to the responsible Orc. Do not claim completion without concrete evidence.\n\nPersonality:\nHold a very high bar for correctness, business objective fit, tests, evidence, and documentation. Be blunt, adversarial, and demanding about weak work; pick apart Orc output, reject shortcuts, and force rework when the evidence is not good enough. Critique the work product directly.\n\nFinal Report Standards:\nYour final report to the Nazgul must include: Orcs used, what each did, evidence, issues forced back for rework, remaining risk.\n</pfterminal_spawn_role>",
+                "<pfterminal_spawn_role>\nBehavior:\nYou are the Corbanu Terminal Troll: an engineering manager / VP-of-engineering style supervisor. You report to the Nazgul, the effective CTO. Orcs are IC executors who report to you. You are not an IC.\n\nMandate:\nPrefer delegation, review, coordination, and enforcement over implementation yourself. Work against spec docs, and after work is done make sure the docs reflect what shipped. You may do code reviews yourself or have one Orc review another Orc's work. If a review finds a bug, send the fix back to the responsible Orc. Do not claim completion without concrete evidence.\n\nPersonality:\nHold a very high bar for correctness, business objective fit, tests, evidence, and documentation. Be blunt, adversarial, and demanding about weak work; pick apart Orc output, reject shortcuts, and force rework when the evidence is not good enough. Critique the work product directly.\n\nFinal Report Standards:\nYour final report to the Nazgul must include: Orcs used, what each did, evidence, issues forced back for rework, remaining risk.\n</pfterminal_spawn_role>",
             ),
             Self::Orc => Some(
-                "<pfterminal_spawn_role>\nYou are the PFTerminal Orc: an IC executor at the bottom of the chain of command. You report to your supervising Troll engineering manager, who reports to the Nazgul CTO, who reports to Sauron/the human CEO. Do exactly what the Troll tells you. Do not expand scope, reinterpret the assignment, or wander into unrelated work. Execute directly, produce concrete evidence, and report changed files, tests, benchmark output, or findings. Do not spawn child agents. Do not declare done without evidence. If your work is rejected, fix it precisely.\n</pfterminal_spawn_role>",
+                "<pfterminal_spawn_role>\nYou are the Corbanu Terminal Orc: an IC executor at the bottom of the chain of command. You report to your supervising Troll engineering manager, who reports to the Nazgul CTO, who reports to Sauron/the human CEO. Do exactly what the Troll tells you. Do not expand scope, reinterpret the assignment, or wander into unrelated work. Execute directly, produce concrete evidence, and report changed files, tests, benchmark output, or findings. Do not spawn child agents. Do not declare done without evidence. If your work is rejected, fix it precisely.\n</pfterminal_spawn_role>",
             ),
         }
     }
@@ -296,8 +297,8 @@ impl App {
         items.push(section_item("Existing User Panes"));
         items.push(self.nazgul_pane_item(
             CODEX_MAIN_PANE_ID.to_string(),
-            "PFTerminal - Main".to_string(),
-            "Current PFTerminal session".to_string(),
+            MAIN_PANE_TITLE.to_string(),
+            "Current Corbanu Terminal session".to_string(),
         ));
         for pane in self.claude_panes.panes() {
             items.push(self.nazgul_pane_item(
@@ -312,7 +313,7 @@ impl App {
         // primary Codex Main thread plus any additional Codex threads without a Troll/Orc role.
         let codex_panes = self.nazgul_codex_pane_picker_items();
         if !codex_panes.is_empty() {
-            items.push(section_item("PFTerminal Agent Panes"));
+            items.push(section_item("Corbanu Terminal Agent Panes"));
             items.extend(codex_panes);
         }
 
@@ -356,9 +357,9 @@ impl App {
                 is_primary,
             );
             let description = if is_primary {
-                "Primary PFTerminal Main thread".to_string()
+                "Primary Corbanu Terminal Main thread".to_string()
             } else {
-                "PFTerminal agent pane".to_string()
+                "Corbanu Terminal agent pane".to_string()
             };
             items.push(self.nazgul_pane_item(node_id, name, description));
         }
@@ -983,7 +984,7 @@ impl App {
         let troll_node_id = self.logical_native_node_for_thread(thread_id);
         let mut context = String::new();
         let _ = writeln!(context, "<pfterminal_spawn_context>");
-        let _ = writeln!(context, "You are the PFTerminal Troll pane: {label}.");
+        let _ = writeln!(context, "You are the Corbanu Terminal Troll pane: {label}.");
         let _ = writeln!(
             context,
             "Your persistent Troll doctrine and personality come from the built-in troll role; this application context contains only live identity, routing, and lifecycle state."
@@ -1022,7 +1023,7 @@ impl App {
     fn render_orc_spawn_context_for_thread(&self, thread_id: ThreadId, label: String) -> String {
         let mut context = String::new();
         let _ = writeln!(context, "<pfterminal_spawn_context>");
-        let _ = writeln!(context, "You are the PFTerminal Orc pane: {label}.");
+        let _ = writeln!(context, "You are the Corbanu Terminal Orc pane: {label}.");
         let _ = writeln!(
             context,
             "Your persistent Orc doctrine and personality come from the built-in orc role; this application context contains only live identity and reporting-line state."
@@ -1103,9 +1104,9 @@ impl App {
             footer_hint: Some(standard_popup_hint_line()),
             items: vec![
                 SelectionItem {
-                    name: "Harness: PFTerminal".to_string(),
+                    name: "Harness: Corbanu Terminal".to_string(),
                     description: Some(
-                        "Native PFTerminal agent pane; choose model and reasoning next."
+                        "Native Corbanu Terminal agent pane; choose model and reasoning next."
                             .to_string(),
                     ),
                     actions: vec![Box::new({
@@ -2357,7 +2358,7 @@ impl App {
                 .await
                 .map_err(|err| {
                     eyre!(
-                        "Cannot run native PFTerminal worker on {provider_name}; provider authentication is unavailable: {err}"
+                        "Cannot run native Corbanu Terminal worker on {provider_name}; provider authentication is unavailable: {err}"
                     )
                 })?;
         }
@@ -2406,7 +2407,7 @@ impl App {
             .map(|provider| provider_display_name(provider_id, provider.name.as_str()))
             .unwrap_or_else(|| provider_id.to_string());
         Err(eyre!(
-            "Cannot run a native PFTerminal worker on {provider_name}: provider `{provider_id}` is not in `agents.provider_allowlist` ({}). Add it to that setting to authorize spend on this provider.",
+            "Cannot run a native Corbanu Terminal worker on {provider_name}: provider `{provider_id}` is not in `agents.provider_allowlist` ({}). Add it to that setting to authorize spend on this provider.",
             allowlist.join(", ")
         ))
     }
@@ -2425,7 +2426,7 @@ impl App {
 
         if provider.requires_openai_auth && !self.chat_widget.has_openai_auth() {
             return Some(format!(
-                "Cannot run native PFTerminal worker on {provider_name}; OpenAI authentication is not configured. Run `pfterminal login --with-api-key`, add the OpenAI Codex account in /providers, or choose a non-OpenAI provider/model."
+                "Cannot run native Corbanu Terminal worker on {provider_name}; OpenAI authentication is not configured. Run `corbanu login --with-api-key`, add the OpenAI Codex account in /providers, or choose a non-OpenAI provider/model."
             ));
         }
 
@@ -2433,7 +2434,7 @@ impl App {
             && !self.provider_key_is_available(env_key)
         {
             return Some(format!(
-                "Cannot run native PFTerminal worker on {provider_name}; missing `{env_key}`. Add it in /providers or choose a different model."
+                "Cannot run native Corbanu Terminal worker on {provider_name}; missing `{env_key}`. Add it in /providers or choose a different model."
             ));
         }
 
@@ -2777,7 +2778,7 @@ impl App {
         if self.spawn_legacy_read_only {
             self.chat_widget.add_error_message(
                 "Restored a legacy /spawn hierarchy in read-only mode. Existing panes remain \
-                 inspectable, but PfTerminal will not dispatch or replay work until you create a \
+                 inspectable, but Corbanu Terminal will not dispatch or replay work until you create a \
                  new CrewSpec-backed crew."
                     .to_string(),
             );
@@ -3385,7 +3386,7 @@ impl App {
             {
                 Ok(()) => started.session.thread_name = Some(nickname.clone()),
                 Err(err) => self.chat_widget.add_error_message(format!(
-                    "Created PFTerminal pane {nickname}, but could not persist its name: {err}"
+                    "Created Corbanu Terminal pane {nickname}, but could not persist its name: {err}"
                 )),
             }
         }
@@ -3650,7 +3651,7 @@ impl App {
             SelectionItem {
                 name: "Create Nazgul pane".to_string(),
                 description: Some(
-                    "Spawn a new PFTerminal-native pane loaded with the built-in Nazgul role config and bind it as the root."
+                    "Spawn a new Corbanu Terminal-native pane loaded with the built-in Nazgul role config and bind it as the root."
                         .to_string(),
                 ),
                 actions: vec![Box::new(|tx| {
@@ -3666,7 +3667,7 @@ impl App {
             SelectionItem {
                 name: "Bind existing pane".to_string(),
                 description: Some(
-                    "Bind an existing user pane (PFTerminal Main, a PFTerminal agent pane, or a Claude pane) as the Nazgul root."
+                    "Bind an existing user pane (Corbanu Terminal Main, a Corbanu Terminal agent pane, or a Claude pane) as the Nazgul root."
                         .to_string(),
                 ),
                 actions: vec![Box::new(|tx| {
@@ -3811,7 +3812,7 @@ impl App {
 
     pub(crate) fn user_pane_title(&self, pane_id: &str) -> String {
         if pane_id == CODEX_MAIN_PANE_ID {
-            return "PFTerminal - Main".to_string();
+            return MAIN_PANE_TITLE.to_string();
         }
         self.claude_panes
             .panes()
@@ -3877,7 +3878,7 @@ impl App {
             let node_id = self.logical_native_node_for_thread(thread_id);
             items.push(SelectionItem {
                 name: format!("Troll: {name}"),
-                description: Some(format!("Native PFTerminal pane; {thread_id}")),
+                description: Some(format!("Native Corbanu Terminal pane; {thread_id}")),
                 actions: vec![Box::new(move |tx| {
                     tx.send(AppEvent::OpenSpawnHarnessPicker {
                         role: SpawnRole::Orc,
@@ -4119,7 +4120,8 @@ impl App {
                     .primary_thread_id
                     .map(SpawnTaskTarget::Native)
                     .ok_or_else(|| {
-                        "Cannot dispatch to Nazgul; PFTerminal Main is not loaded.".to_string()
+                        "Cannot dispatch to Nazgul; Corbanu Terminal Main is not loaded."
+                            .to_string()
                     });
             }
             if let Some(bound_thread_id) = self.nazgul_bound_thread_id() {
@@ -4480,7 +4482,7 @@ impl App {
         let _ = writeln!(context, "<pfterminal_spawn_context>");
         let _ = writeln!(
             context,
-            "You are the PFTerminal Troll pane: {}.",
+            "You are the Corbanu Terminal Troll pane: {}.",
             pane.title
         );
         let _ = writeln!(context, "Behavior:");
@@ -4538,7 +4540,11 @@ impl App {
     fn render_orc_spawn_context(&self, pane: &crate::claude_panes::ClaudePane) -> String {
         let mut context = String::new();
         let _ = writeln!(context, "<pfterminal_spawn_context>");
-        let _ = writeln!(context, "You are the PFTerminal Orc pane: {}.", pane.title);
+        let _ = writeln!(
+            context,
+            "You are the Corbanu Terminal Orc pane: {}.",
+            pane.title
+        );
         let _ = writeln!(
             context,
             "You are an IC executor. Chain of command: Orc -> Troll engineering manager -> Nazgul CTO -> Sauron/the human CEO."
@@ -4579,7 +4585,7 @@ impl App {
         let _ = writeln!(context, "<pfterminal_spawn_context>");
         let _ = writeln!(
             context,
-            "You are the PFTerminal Nazgul/root pane: {root_pane_title}.",
+            "You are the Corbanu Terminal Nazgul/root pane: {root_pane_title}.",
         );
         if include_role_prompt {
             let _ = writeln!(context, "Behavior:");
@@ -4651,7 +4657,7 @@ impl App {
         }
         let _ = writeln!(
             context,
-            "Troll and Orc are PFTerminal orchestration roles. They are panes/agents in this app."
+            "Troll and Orc are Corbanu Terminal orchestration roles. They are panes/agents in this app."
         );
         let _ = writeln!(
             context,
@@ -5404,7 +5410,7 @@ fn task_with_dispatch_provenance(
 ) -> String {
     let utc = Utc::now().to_rfc3339();
     format!(
-        "Assigned by {source_title} to {target_title} through PFTerminal /spawn dispatch \
+        "Assigned by {source_title} to {target_title} through Corbanu Terminal /spawn dispatch \
          (dispatch #{seq}, {utc}). Execute once; ignore duplicates of this dispatch id.\n\n{task}"
     )
 }
@@ -5949,11 +5955,11 @@ mod tests {
         let troll = SpawnRole::Troll
             .claude_pane_context()
             .expect("troll context");
-        assert!(troll.contains("You are the PFTerminal Troll"));
+        assert!(troll.contains("You are the Corbanu Terminal Troll"));
         assert!(troll.contains("report to the Nazgul"));
 
         let orc = SpawnRole::Orc.claude_pane_context().expect("orc context");
-        assert!(orc.contains("You are the PFTerminal Orc"));
+        assert!(orc.contains("You are the Corbanu Terminal Orc"));
         assert!(orc.contains("Do not spawn child agents"));
 
         assert!(SpawnRole::Nazgul.claude_pane_context().is_none());

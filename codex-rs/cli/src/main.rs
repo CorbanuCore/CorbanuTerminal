@@ -91,22 +91,22 @@ use codex_protocol::protocol::AskForApproval;
 use codex_protocol::user_input::UserInput;
 use codex_terminal_detection::TerminalName;
 
-/// PFTerminal CLI
+/// Corbanu Terminal CLI
 ///
 /// If no subcommand is specified, options will be forwarded to the interactive CLI.
 #[derive(Debug, Parser)]
 #[clap(
-    name = "pfterminal",
+    name = "corbanu",
     author,
     version,
-    about = "PFTerminal CLI",
+    about = "Corbanu Terminal CLI",
     // If a sub‑command is given, ignore requirements of the default args.
     subcommand_negates_reqs = true,
     // The executable is sometimes invoked via a platform‑specific name like
-    // `pfterminal-x86_64-unknown-linux-musl`, but the help output should always use
-    // the generic `pfterminal` command name that users run.
-    bin_name = "pfterminal",
-    override_usage = "pfterminal [OPTIONS] [PROMPT]\n       pfterminal [OPTIONS] <COMMAND> [ARGS]"
+    // `corbanu-x86_64-unknown-linux-musl`, but the help output should always use
+    // the generic `corbanu` command name that users run.
+    bin_name = "corbanu",
+    override_usage = "corbanu [OPTIONS] [PROMPT]\n       corbanu [OPTIONS] <COMMAND> [ARGS]"
 )]
 struct MultitoolCli {
     #[clap(flatten)]
@@ -127,7 +127,7 @@ struct MultitoolCli {
 
 #[derive(Debug, clap::Subcommand)]
 enum Subcommand {
-    /// Run PFTerminal non-interactively.
+    /// Run Corbanu Terminal non-interactively.
     #[clap(visible_alias = "e")]
     Exec(ExecCli),
 
@@ -140,10 +140,10 @@ enum Subcommand {
     /// Remove stored authentication credentials.
     Logout(LogoutCommand),
 
-    /// Internal vault helpers for PFTerminal integrations.
+    /// Internal vault helpers for Corbanu Terminal integrations.
     Vault(VaultCommand),
 
-    /// Internal: print the active Claude Code OAuth token for the PFTerminal-native Claude Plan provider.
+    /// Internal: print the active Claude Code OAuth token for the Corbanu Terminal-native Claude Plan provider.
     #[clap(hide = true, name = "internal-claude-oauth-token")]
     InternalClaudeOauthToken,
 
@@ -169,13 +169,13 @@ enum Subcommand {
     #[clap(name = "claude-pane-workflow-suite")]
     ClaudePaneWorkflowSuite(ClaudePaneWorkflowSuiteCommand),
 
-    /// Manage external MCP servers for PFTerminal.
+    /// Manage external MCP servers for Corbanu Terminal.
     Mcp(McpCli),
 
-    /// Manage PFTerminal plugins.
+    /// Manage Corbanu Terminal plugins.
     Plugin(PluginCli),
 
-    /// Start PFTerminal as an MCP server (stdio).
+    /// Start Corbanu Terminal as an MCP server (stdio).
     McpServer(McpServerCommand),
 
     /// [experimental] Run the app server or related tooling.
@@ -184,20 +184,20 @@ enum Subcommand {
     /// [experimental] Manage the app-server daemon with remote control enabled.
     RemoteControl(RemoteControlCommand),
 
-    /// Launch the PFTerminal desktop app (opens the app installer if missing).
+    /// Launch the Corbanu Terminal desktop app (opens the app installer if missing).
     #[cfg(any(target_os = "macos", target_os = "windows"))]
     App(app_cmd::AppCommand),
 
     /// Generate shell completion scripts.
     Completion(CompletionCommand),
 
-    /// Update PFTerminal to the latest version.
+    /// Update Corbanu Terminal to the latest version.
     Update,
 
-    /// Diagnose local PFTerminal installation, config, auth, and runtime health.
+    /// Diagnose local Corbanu Terminal installation, config, auth, and runtime health.
     Doctor(DoctorCommand),
 
-    /// Run commands within a PFTerminal-provided sandbox.
+    /// Run commands within a Corbanu Terminal-provided sandbox.
     Sandbox(HostSandboxArgs),
 
     /// Debugging tools.
@@ -207,7 +207,7 @@ enum Subcommand {
     #[clap(hide = true)]
     Execpolicy(ExecpolicyCommand),
 
-    /// Apply the latest diff produced by PFTerminal agent as a `git apply` to your local working tree.
+    /// Apply the latest diff produced by Corbanu Terminal agent as a `git apply` to your local working tree.
     #[clap(visible_alias = "a")]
     Apply(ApplyCommand),
 
@@ -316,7 +316,7 @@ struct DebugModelsCommand {
 
 #[derive(Debug, Parser)]
 struct ReviewCommand {
-    /// Error out when config.toml contains fields that are not recognized by this version of PFTerminal.
+    /// Error out when config.toml contains fields that are not recognized by this version of Corbanu Terminal.
     #[arg(long = "strict-config", default_value_t = false)]
     strict_config: bool,
 
@@ -326,7 +326,7 @@ struct ReviewCommand {
 
 #[derive(Debug, Parser)]
 struct McpServerCommand {
-    /// Error out when config.toml contains fields that are not recognized by this version of PFTerminal.
+    /// Error out when config.toml contains fields that are not recognized by this version of Corbanu Terminal.
     #[arg(long = "strict-config", default_value_t = false)]
     strict_config: bool,
 }
@@ -386,7 +386,7 @@ struct SessionArchiveConfigOverrides {
     #[clap(flatten)]
     shared: SharedCliOptions,
 
-    /// Error out when config.toml contains fields that are not recognized by this version of PFTerminal.
+    /// Error out when config.toml contains fields that are not recognized by this version of Corbanu Terminal.
     #[arg(long = "strict-config", default_value_t = false)]
     strict_config: bool,
 
@@ -497,13 +497,13 @@ struct LoginCommand {
 
     #[arg(
         long = "with-api-key",
-        help = "Read the API key from stdin (e.g. `printenv OPENAI_API_KEY | pfterminal login --with-api-key`)"
+        help = "Read the API key from stdin (e.g. `printenv OPENAI_API_KEY | corbanu login --with-api-key`)"
     )]
     with_api_key: bool,
 
     #[arg(
         long = "with-access-token",
-        help = "Read the access token from stdin (e.g. `printenv CODEX_ACCESS_TOKEN | pfterminal login --with-access-token`)"
+        help = "Read the access token from stdin (e.g. `printenv CODEX_ACCESS_TOKEN | corbanu login --with-access-token`)"
     )]
     with_access_token: bool,
 
@@ -630,7 +630,7 @@ struct AppServerCommand {
     #[command(flatten)]
     code_mode_host: codex_app_server::AppServerCodeModeHostArgs,
 
-    /// Error out when config.toml contains fields that are not recognized by this version of PFTerminal.
+    /// Error out when config.toml contains fields that are not recognized by this version of Corbanu Terminal.
     #[arg(long = "strict-config", default_value_t = false)]
     strict_config: bool,
 
@@ -675,7 +675,7 @@ struct AppServerCommand {
 
 #[derive(Debug, Parser)]
 struct ExecServerCommand {
-    /// Error out when config.toml contains fields that are not recognized by this version of PFTerminal.
+    /// Error out when config.toml contains fields that are not recognized by this version of Corbanu Terminal.
     #[arg(long = "strict-config", default_value_t = false)]
     strict_config: bool,
 
@@ -723,7 +723,7 @@ enum AppServerSubcommand {
     /// [experimental] Generate JSON Schema for the app server protocol.
     GenerateJsonSchema(GenerateJsonSchemaCommand),
 
-    /// [internal] Generate internal JSON Schema artifacts for PFTerminal tooling.
+    /// [internal] Generate internal JSON Schema artifacts for Corbanu Terminal tooling.
     #[clap(hide = true)]
     GenerateInternalJsonSchema(GenerateInternalJsonSchemaCommand),
 }
@@ -878,7 +878,7 @@ fn handle_app_exit(exit_info: AppExitInfo) -> anyhow::Result<()> {
 fn run_update_action(action: UpdateAction) -> anyhow::Result<()> {
     println!();
     let cmd_str = action.command_str();
-    println!("Updating PFTerminal via `{cmd_str}`...");
+    println!("Updating Corbanu Terminal via `{cmd_str}`...");
 
     let status = {
         #[cfg(windows)]
@@ -913,7 +913,7 @@ fn run_update_action(action: UpdateAction) -> anyhow::Result<()> {
     if !status.success() {
         anyhow::bail!("`{cmd_str}` failed with status {status}");
     }
-    println!("\n🎉 Update ran successfully! Please restart PFTerminal.");
+    println!("\n🎉 Update ran successfully! Please restart Corbanu Terminal.");
     Ok(())
 }
 
@@ -921,7 +921,7 @@ fn run_update_command() -> anyhow::Result<()> {
     #[cfg(debug_assertions)]
     {
         anyhow::bail!(
-            "`pfterminal update` is not available in debug builds. Install a release build of PFTerminal to use this command."
+            "`corbanu update` is not available in debug builds. Install a release build of Corbanu Terminal to use this command."
         );
     }
 
@@ -929,7 +929,7 @@ fn run_update_command() -> anyhow::Result<()> {
     {
         let Some(action) = codex_tui::get_update_action() else {
             anyhow::bail!(
-                "Could not detect the PFTerminal installation method. Please update manually from the latest PfTerminal release."
+                "Could not detect the Corbanu Terminal installation method. Please update manually from the latest Corbanu Terminal release."
             );
         };
         run_update_action(action)
@@ -1521,7 +1521,7 @@ async fn cli_main(
                         .await;
                     } else if login_cli.api_key.is_some() {
                         eprintln!(
-                            "The --api-key flag is no longer supported. Pipe the key instead, e.g. `printenv OPENAI_API_KEY | pfterminal login --with-api-key`."
+                            "The --api-key flag is no longer supported. Pipe the key instead, e.g. `printenv OPENAI_API_KEY | corbanu login --with-api-key`."
                         );
                         std::process::exit(1);
                     } else if login_cli.with_api_key {
@@ -1903,7 +1903,7 @@ fn profile_v2_for_subcommand<'a>(
             subcommand: DebugSubcommand::PromptInput(_),
         }) => Ok(Some(profile_v2)),
         _ => anyhow::bail!(
-            "--profile only applies to runtime commands and `pfterminal mcp`: `pfterminal`, `pfterminal exec`, `pfterminal review`, `pfterminal resume`, `pfterminal archive`, `pfterminal delete`, `pfterminal unarchive`, `pfterminal fork`, `pfterminal telegram`, `pfterminal mcp`, `pfterminal sandbox`, and `pfterminal debug prompt-input`."
+            "--profile only applies to runtime commands and `corbanu mcp`: `corbanu`, `corbanu exec`, `corbanu review`, `corbanu resume`, `corbanu archive`, `corbanu delete`, `corbanu unarchive`, `corbanu fork`, `corbanu telegram`, `corbanu mcp`, `corbanu sandbox`, and `corbanu debug prompt-input`."
         ),
     }
 }
@@ -1917,7 +1917,7 @@ async fn run_exec_server_command(
     let codex_self_exe = arg0_paths
         .codex_self_exe
         .clone()
-        .ok_or_else(|| anyhow::anyhow!("PFTerminal executable path is not configured"))?;
+        .ok_or_else(|| anyhow::anyhow!("Corbanu Terminal executable path is not configured"))?;
     let runtime_paths = codex_exec_server::ExecServerRuntimePaths::new(
         codex_self_exe,
         arg0_paths.codex_linux_sandbox_exe.clone(),
@@ -2021,7 +2021,7 @@ async fn load_exec_server_remote_auth_provider(
 
     let auth = load_exec_server_remote_auth(
         config,
-        "remote exec-server registration requires ChatGPT authentication or API key authentication; run `pfterminal login` or set CODEX_API_KEY",
+        "remote exec-server registration requires ChatGPT authentication or API key authentication; run `corbanu login` or set CODEX_API_KEY",
     )
     .await?;
 
@@ -2813,7 +2813,7 @@ async fn run_interactive_tui(
         }
 
         eprintln!(
-            "WARNING: TERM is set to \"dumb\". PFTerminal's interactive TUI may not work in this terminal."
+            "WARNING: TERM is set to \"dumb\". Corbanu Terminal's interactive TUI may not work in this terminal."
         );
         if !confirm("Continue anyway? [y/N]: ")? {
             return Ok(AppExitInfo::fatal(
@@ -2865,7 +2865,7 @@ async fn run_interactive_tui(
             Err(backup_err) => {
                 local_state_db::print_diagnostic_guidance(startup_error);
                 return Ok(AppExitInfo::fatal(format!(
-                    "failed to move damaged PFTerminal local database files into a backup folder automatically: {backup_err}"
+                    "failed to move damaged Corbanu Terminal local database files into a backup folder automatically: {backup_err}"
                 )));
             }
         }
@@ -2921,7 +2921,7 @@ fn confirm(prompt: &str) -> std::io::Result<bool> {
     Ok(answer.eq_ignore_ascii_case("y") || answer.eq_ignore_ascii_case("yes"))
 }
 
-/// Build the final `TuiCli` for a `pfterminal resume` invocation.
+/// Build the final `TuiCli` for a `corbanu resume` invocation.
 fn finalize_resume_interactive(
     mut interactive: TuiCli,
     root_config_overrides: CliConfigOverrides,
@@ -3053,7 +3053,7 @@ fn print_completion(cmd: CompletionCommand) {
 
 fn write_completion<W: std::io::Write>(shell: Shell, writer: &mut W) {
     let mut app = MultitoolCli::command();
-    generate(shell, &mut app, "pfterminal", writer);
+    generate(shell, &mut app, "corbanu", writer);
 }
 
 #[cfg(test)]
@@ -3065,7 +3065,7 @@ mod tests {
     use pretty_assertions::assert_eq;
 
     #[test]
-    fn completion_scripts_register_pfterminal_for_every_shell() {
+    fn completion_scripts_register_corbanu_for_every_shell() {
         for shell in [
             Shell::Bash,
             Shell::Zsh,
@@ -3077,7 +3077,7 @@ mod tests {
             write_completion(shell, &mut bytes);
             let script = String::from_utf8(bytes).expect("completion should be UTF-8");
             assert!(
-                script.contains("pfterminal"),
+                script.contains("corbanu"),
                 "{shell:?} completion omitted the executable name"
             );
             for stale_registration in [
@@ -3563,15 +3563,15 @@ mod tests {
     fn plugin_marketplace_help_uses_plugin_namespace() {
         let help = help_from_args(&["codex", "plugin", "marketplace", "--help"]);
         assert!(
-            help.contains("Usage: pfterminal plugin marketplace [OPTIONS] <COMMAND>"),
+            help.contains("Usage: corbanu plugin marketplace [OPTIONS] <COMMAND>"),
             "{help}"
         );
 
         for (subcommand, usage) in [
-            ("add", "Usage: pfterminal plugin marketplace add"),
-            ("list", "Usage: pfterminal plugin marketplace list"),
-            ("upgrade", "Usage: pfterminal plugin marketplace upgrade"),
-            ("remove", "Usage: pfterminal plugin marketplace remove"),
+            ("add", "Usage: corbanu plugin marketplace add"),
+            ("list", "Usage: corbanu plugin marketplace list"),
+            ("upgrade", "Usage: corbanu plugin marketplace upgrade"),
+            ("remove", "Usage: corbanu plugin marketplace remove"),
         ] {
             let help = help_from_args(&["codex", "plugin", "marketplace", subcommand, "--help"]);
             assert!(help.contains(usage), "{help}");
@@ -3874,7 +3874,7 @@ mod tests {
             lines,
             vec![
                 "Token usage: total=2 input=0 output=2".to_string(),
-                "To continue this session, run pfterminal resume 123e4567-e89b-12d3-a456-426614174000"
+                "To continue this session, run corbanu resume 123e4567-e89b-12d3-a456-426614174000"
                     .to_string(),
             ]
         );
@@ -3891,7 +3891,7 @@ mod tests {
             lines,
             vec![
                 "Token usage: total=2 input=0 output=2".to_string(),
-                "To continue this session, run pfterminal resume 123e4567-e89b-12d3-a456-426614174000"
+                "To continue this session, run corbanu resume 123e4567-e89b-12d3-a456-426614174000"
                     .to_string(),
             ]
         );
@@ -3919,7 +3919,7 @@ mod tests {
             lines,
             vec![
                 "Token usage: total=2 input=0 output=2".to_string(),
-                "To continue this session, run pfterminal resume, then select my-thread (123e4567-e89b-12d3-a456-426614174000)".to_string(),
+                "To continue this session, run corbanu resume, then select my-thread (123e4567-e89b-12d3-a456-426614174000)".to_string(),
             ]
         );
     }

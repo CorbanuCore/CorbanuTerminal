@@ -1429,13 +1429,13 @@ fn pane_layout_v1_migrates_legacy_batch_once() {
 fn settings_json_uses_helper_without_secret_material() {
     let profile = ClaudeProviderProfileKind::ZaiGlm52.profile();
     let settings =
-        settings_json_with_base_url(profile, Some("pfterminal"), /*base_url_override*/ None);
+        settings_json_with_base_url(profile, Some("corbanu"), /*base_url_override*/ None);
     let rendered = settings.to_string();
 
     assert!(rendered.contains("https://api.z.ai/api/anthropic"));
     assert!(rendered.contains("glm-5.2[1m]"));
     assert!(rendered.contains("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"));
-    assert!(rendered.contains("pfterminal vault auth-helper provider/zai_api_key"));
+    assert!(rendered.contains("corbanu vault auth-helper provider/zai_api_key"));
     assert!(!rendered.contains("zai-secret"));
 }
 
@@ -1461,7 +1461,7 @@ fn direct_provider_plan_uses_auth_helper_without_secret_env() {
     assert!(plan.bridge.is_none());
     assert_eq!(
         settings.pointer("/apiKeyHelper"),
-        Some(&json!("pfterminal vault auth-helper provider/zai_api_key"))
+        Some(&json!("corbanu vault auth-helper provider/zai_api_key"))
     );
     assert!(plan.env_remove.iter().any(|key| key == "ANTHROPIC_API_KEY"));
     assert!(
@@ -2032,7 +2032,7 @@ fn top_level_new_pane_items_are_collapsed() {
         .map(|item| item.name.as_str())
         .collect::<Vec<_>>();
 
-    assert_eq!(names, vec!["+ PFTerminal Pane", "+ Claude Pane"]);
+    assert_eq!(names, vec!["+ Corbanu Terminal Pane", "+ Claude Pane"]);
     assert!(
         names
             .iter()
@@ -2045,7 +2045,7 @@ fn top_level_new_pane_items_are_collapsed() {
 fn vercel_profile_settings_use_ai_gateway_anthropic_endpoint() {
     let profile = ClaudeProviderProfileKind::VercelGlm52.profile();
     let settings =
-        settings_json_with_base_url(profile, Some("pfterminal"), /*base_url_override*/ None);
+        settings_json_with_base_url(profile, Some("corbanu"), /*base_url_override*/ None);
 
     assert_eq!(
         settings.pointer("/env/ANTHROPIC_BASE_URL"),
@@ -2062,7 +2062,7 @@ fn vercel_profile_settings_use_ai_gateway_anthropic_endpoint() {
     assert_eq!(
         settings.pointer("/apiKeyHelper"),
         Some(&json!(
-            "pfterminal vault auth-helper provider/ai_gateway_api_key"
+            "corbanu vault auth-helper provider/ai_gateway_api_key"
         ))
     );
 }
@@ -2071,7 +2071,7 @@ fn vercel_profile_settings_use_ai_gateway_anthropic_endpoint() {
 fn vercel_fast_profile_uses_fast_model_for_all_claude_aliases() {
     let profile = ClaudeProviderProfileKind::VercelGlm52Fast.profile();
     let settings =
-        settings_json_with_base_url(profile, Some("pfterminal"), /*base_url_override*/ None);
+        settings_json_with_base_url(profile, Some("corbanu"), /*base_url_override*/ None);
 
     assert_eq!(
         settings.pointer("/env/ANTHROPIC_DEFAULT_OPUS_MODEL"),

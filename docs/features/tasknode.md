@@ -1,7 +1,7 @@
 # `/tasknode` Slash Command
 
 Status: slash-command feature and terminal parity pass implemented locally.
-PFTerminal now has `/tasknode` task-card rendering, evidence guidance, task
+Corbanu Terminal now has `/tasknode` task-card rendering, evidence guidance, task
 request commands, request tracking, read-only rewards/balance, and
 GitHub-linked Task Node session storage. Task Node has matching terminal task
 rendering and task request endpoints pending merge/deploy.
@@ -11,10 +11,10 @@ the backend/API support that makes the slash command useful.
 
 ## Command Surface
 
-I am a GitHub-authenticated user in PFTerminal and I want to natively interact
+I am a GitHub-authenticated user in Corbanu Terminal and I want to natively interact
 with the Task Node.
 
-The native PFTerminal surface is:
+The native Corbanu Terminal surface is:
 
 ```text
 /tasknode
@@ -51,9 +51,9 @@ Supported command family:
 
 ## Current Findings
 
-### PFTerminal
+### Corbanu Terminal
 
-PFTerminal already has the local TUI patterns needed for this feature:
+Corbanu Terminal already has the local TUI patterns needed for this feature:
 
 - `codex-rs/tui/src/slash_command.rs` owns built-in slash command discovery,
   descriptions, inline-arg support, and command availability.
@@ -70,7 +70,7 @@ PFTerminal already has the local TUI patterns needed for this feature:
   hashes without sending secrets through a model turn.
 - `/vault` is the right storage boundary for Task Node terminal session tokens.
 
-PFTerminal does not currently have a first-class GitHub login surface. It has
+Corbanu Terminal does not currently have a first-class GitHub login surface. It has
 GitHub-adjacent code for repository metadata, but `/tasknode` should treat Task
 Node account linking as a new host capability and avoid giving the model direct
 access to GitHub OAuth tokens.
@@ -111,7 +111,7 @@ The current mutation boundary is not GitHub-only yet. Task action and evidence
 routes call helpers that require a signed-in account and a linked wallet before
 they reach the offchain/direct-write path. A native `/tasknode` implementation
 therefore needs a Task Node backend bridge for GitHub-authenticated terminal
-sessions, not only a PFTerminal menu.
+sessions, not only a Corbanu Terminal menu.
 
 ### Current Terminal Parity Gap
 
@@ -136,32 +136,32 @@ with the task-card, submit, request, and copy-brief workflows.
 
 ### Goals
 
-- Let a GitHub-authenticated PFTerminal user link to their Task Node account.
+- Let a GitHub-authenticated Corbanu Terminal user link to their Task Node account.
 - Show account, GitHub, linked-wallet, balance, reward, and task status.
-- List outstanding tasks inside PFTerminal.
+- List outstanding tasks inside Corbanu Terminal.
 - Open a selected task and show a terminal-native task card before actions.
 - Render the web task brief contract in terminal form: objective, steps,
   verification requirements, current verification request, status, reward,
   deadline, relevant IDs, and requested output guidance.
 - Accept, refuse, cancel, or submit evidence when the Task Node backend allows
   an account-scoped terminal action.
-- Request a personal task from PFTerminal with free-form text, using the same
+- Request a personal task from Corbanu Terminal with free-form text, using the same
   Task Node context, memory, and queue inputs as the web task request path.
 - Show active task request state until a generated offer becomes a task card or
   the request needs attention.
 - Reuse existing Task Node task read models instead of creating a parallel task
   database.
-- Reuse the existing PFTerminal vault boundary for terminal session secrets.
+- Reuse the existing Corbanu Terminal vault boundary for terminal session secrets.
 
 ### Non-Goals
 
-- No seed phrase entry or wallet import in PFTerminal.
-- No private-key signing in PFTerminal.
+- No seed phrase entry or wallet import in Corbanu Terminal.
+- No private-key signing in Corbanu Terminal.
 - No PFT send, payout, swap, bridge, or custody features.
 - No raw GitHub OAuth token exposure to the model, transcript, shell tools, or
   subagents.
 - No fake completion if the backend still requires wallet signing for a task.
-- No direct database access from PFTerminal.
+- No direct database access from Corbanu Terminal.
 - No terminal-native Network Task routing button in v0. Text task requests map
   to personal task requests unless Task Node later exposes an explicit server
   policy for terminal-routed Network Tasks.
@@ -178,7 +178,7 @@ Task Node is the authority for account identity and eligibility:
 - It mints, refreshes, and revokes Task Node terminal sessions.
 - It accepts or rejects task actions.
 
-PFTerminal is the host UI and secret boundary:
+Corbanu Terminal is the host UI and secret boundary:
 
 - It opens `/tasknode`.
 - It starts and polls the Task Node terminal auth flow.
@@ -187,7 +187,7 @@ PFTerminal is the host UI and secret boundary:
 - It sends task actions and evidence to Task Node, then trusts only server
   receipts.
 
-Local GitHub state in PFTerminal, `gh auth status`, or a future PFTerminal
+Local GitHub state in Corbanu Terminal, `gh auth status`, or a future Corbanu Terminal
 GitHub provider login can be used as a convenience signal, but it is not
 authorization. The feature works only when Task Node says the account has a
 linked GitHub provider.
@@ -206,7 +206,7 @@ Rules:
   account with a linked GitHub provider.
 - If the account is authenticated by another method but lacks GitHub, Task Node
   returns `github_not_linked` and a GitHub-link URL.
-- PFTerminal must show the GitHub-link action and must not attempt to bypass the
+- Corbanu Terminal must show the GitHub-link action and must not attempt to bypass the
   gate with a local GitHub token.
 
 Recommended structured error:
@@ -221,14 +221,14 @@ Recommended structured error:
 
 ## Auth Model
 
-PFTerminal should not use a GitHub token as the Task Node API token. GitHub
+Corbanu Terminal should not use a GitHub token as the Task Node API token. GitHub
 proves identity to Task Node; Task Node should then mint its own terminal
 session token with explicit scopes.
 
 ### Recommended Flow
 
 1. User runs `/tasknode` and selects `Link GitHub / Task Node`.
-2. PFTerminal calls a new Task Node endpoint:
+2. Corbanu Terminal calls a new Task Node endpoint:
 
    ```http
    POST /api/auth/terminal/start/github
@@ -246,11 +246,11 @@ session token with explicit scopes.
    }
    ```
 
-4. PFTerminal opens or prints the verification URL.
+4. Corbanu Terminal opens or prints the verification URL.
 5. User completes GitHub OAuth in the browser through the existing Task Node
    GitHub provider path. Task Node creates or attaches the account cloud and
    persists the `github` provider link.
-6. PFTerminal polls:
+6. Corbanu Terminal polls:
 
    ```http
    GET /api/auth/terminal/session?requestId=tnterm_...
@@ -274,10 +274,10 @@ session token with explicit scopes.
    }
    ```
 
-8. PFTerminal stores the terminal session in the encrypted vault under a scoped
+8. Corbanu Terminal stores the terminal session in the encrypted vault under a scoped
    label such as `tasknode/session/<origin>`.
 
-If PFTerminal later adds a GitHub provider login using GitHub device auth or
+If Corbanu Terminal later adds a GitHub provider login using GitHub device auth or
 `gh auth status`, that can shorten the browser step, but Task Node still must
 mint the Task Node terminal session.
 
@@ -288,7 +288,7 @@ mint the Task Node terminal session.
 - Tokens are host-only secrets and must never enter the chat transcript.
 - Logs must redact `Authorization`, refresh tokens, GitHub access tokens, and
   terminal session tokens.
-- Logout removes the PFTerminal vault record and calls Task Node revocation when
+- Logout removes the Corbanu Terminal vault record and calls Task Node revocation when
   possible.
 
 ## `/tasknode` Backend API
@@ -383,7 +383,7 @@ projection, action history, evidence summary, reward fields, and links that are
 safe to show in a terminal.
 
 The terminal detail response must include either structured fields sufficient
-for PFTerminal to render a card, or a server-built terminal brief generated from
+for Corbanu Terminal to render a card, or a server-built terminal brief generated from
 the same contract as `src/features/tasks/task-copy-format.js`.
 
 Minimum structured detail:
@@ -449,7 +449,7 @@ Minimum structured detail:
 }
 ```
 
-PFTerminal can render from `task`, `currentVerificationRequest`,
+Corbanu Terminal can render from `task`, `currentVerificationRequest`,
 `rewardOutcome`, and `forensics` directly. The optional `terminal.briefText`
 lets the server own exact brief parity with the web `Copy task brief` formatter
 so Rust does not need to duplicate every presentation rule.
@@ -515,7 +515,7 @@ Allowed v0 actions:
 - `cancel`
 
 The server must decide whether this terminal session is allowed to create an
-account-scoped direct-write transition. PFTerminal should not decide that by
+account-scoped direct-write transition. Corbanu Terminal should not decide that by
 itself.
 
 If the server still requires a wallet-signed PFTL pointer, return:
@@ -528,7 +528,7 @@ If the server still requires a wallet-signed PFTL pointer, return:
 }
 ```
 
-PFTerminal should show the handoff and leave the task unchanged.
+Corbanu Terminal should show the handoff and leave the task unchanged.
 
 ### Evidence Submission
 
@@ -606,7 +606,7 @@ task request path:
 - linked account and linked wallet identity;
 - task policy, reward policy, and deadline defaults.
 
-Because PFTerminal intentionally has no wallet signing, Task Node must decide
+Because Corbanu Terminal intentionally has no wallet signing, Task Node must decide
 whether a terminal request can be recorded:
 
 - If direct offchain task lifecycle is enabled and dual-write is disabled, the
@@ -645,7 +645,7 @@ GET /api/terminal/tasknode/requests/:requestId
 ```
 
 These should mirror `GET /api/tasks/requests` and return active request rows so
-PFTerminal can show queued/generating/proposed/failed states until the generated
+Corbanu Terminal can show queued/generating/proposed/failed states until the generated
 offer becomes a normal task card.
 
 ### Balance
@@ -656,7 +656,7 @@ Authorization: Bearer tns_...
 ```
 
 This should wrap the existing read-only balance behavior. If no wallet is
-linked, return a structured `wallet_not_linked` response. PFTerminal must not
+linked, return a structured `wallet_not_linked` response. Corbanu Terminal must not
 prompt for a seed phrase or wallet password.
 
 ### Recent Rewards
@@ -669,7 +669,7 @@ Authorization: Bearer tns_...
 This can be derived from the `rewarded` task bucket first. A richer reward
 ledger can be added later if Task Node exposes one.
 
-## PFTerminal UI
+## Corbanu Terminal UI
 
 ### Slash Command
 
@@ -810,7 +810,7 @@ Please provide the PR URL and terminal output from the route smoke.
   Copy task link
 ```
 
-Actions should come from the server response where possible. PFTerminal can use
+Actions should come from the server response where possible. Corbanu Terminal can use
 status defaults only as a display fallback:
 
 - `proposed`: `accept`, `refuse`
@@ -858,7 +858,7 @@ Editable fields:
 - optional commit SHA
 - optional local artifact path for future upload/reference
 
-PFTerminal should create a local draft before submission under:
+Corbanu Terminal should create a local draft before submission under:
 
 ```text
 $PFT_HOME/tasknode/drafts/<task-id>/<timestamp>.json
@@ -879,12 +879,12 @@ Task Node will use your saved context document, account memory, recent chats,
 and current task queue.
 
 Examples
-- Give me a 2-4 hour engineering task that advances PFTerminal Task Node parity.
+- Give me a 2-4 hour engineering task that advances Corbanu Terminal Task Node parity.
 - Create a documentation task for the GitHub bridge deployment handoff.
 ```
 
 The prompt submits `userDetailText` through the terminal task request endpoint.
-After submit, PFTerminal shows the request ID, status, and generation state:
+After submit, Corbanu Terminal shows the request ID, status, and generation state:
 
 ```text
 Task request recorded
@@ -892,7 +892,7 @@ req_...
 Queued for generation. Run /tasknode requests to track it.
 ```
 
-If Task Node returns `wallet_action_required`, PFTerminal must show the handoff
+If Task Node returns `wallet_action_required`, Corbanu Terminal must show the handoff
 URL and must not request wallet secrets.
 
 ### Active Request List
@@ -910,7 +910,7 @@ Rows should collapse once a generated offer is visible in the normal task list.
 
 ## Local Modules
 
-Recommended PFTerminal module split:
+Recommended Corbanu Terminal module split:
 
 - `codex-rs/tui/src/tasknode.rs`
   - session state
@@ -1045,19 +1045,19 @@ struct TaskNodeTaskRequestRow {
 
 ## Caching And Background Refresh
 
-Task Node remains the authoritative task store. PFTerminal should not create a
+Task Node remains the authoritative task store. Corbanu Terminal should not create a
 parallel task database or infer task state from local actions.
 
 Recommended terminal cache:
 
-- Store non-secret task list/detail/request snapshots under the PFTerminal data
+- Store non-secret task list/detail/request snapshots under the Corbanu Terminal data
   directory, keyed by Task Node origin, account ID, and task ID or request ID.
 - Do not store terminal bearer tokens in that cache; keep them in `/vault`.
 - Cache invalidation key should include `taskId`, `updatedAt`, `lastEventAt`,
   and `forensics.eventCount` when available.
 - Opening a task should render immediately from the selected list row, then
   enrich from `GET /api/terminal/tasknode/tasks/:taskId`.
-- After loading a task list, PFTerminal may background-prefetch detail for the
+- After loading a task list, Corbanu Terminal may background-prefetch detail for the
   highlighted task and the next few visible rows. It should not prefetch the
   entire account history.
 - After any successful action, evidence submission, or task request, refresh
@@ -1071,7 +1071,7 @@ acceptable; background prefetch should be added if the card feels slow.
 
 ## Server-Side Requirements
 
-Task Node needs a backend bridge before PFTerminal can complete write actions
+Task Node needs a backend bridge before Corbanu Terminal can complete write actions
 without wallet functions.
 
 Required server changes:
@@ -1085,7 +1085,7 @@ Required server changes:
 4. Add terminal task read endpoints backed by `listTaskState` and
    `getTaskDetail`.
 5. Add terminal-shaped task detail fields or a shared task brief formatter so
-   PFTerminal can render the same task contract as the web task card without
+   Corbanu Terminal can render the same task contract as the web task card without
    reverse-engineering browser presentation code.
 6. Add terminal action/evidence endpoints that either:
    - perform account-scoped direct-write transitions when policy allows; or
@@ -1115,12 +1115,12 @@ wallet state before direct-write transitions.
 - No GitHub access token in model context.
 - No Task Node terminal token in model context.
 - No authorization header in logs, transcript, debug UI, or tool output.
-- No wallet seed, private key, or signing secret prompt in PFTerminal.
+- No wallet seed, private key, or signing secret prompt in Corbanu Terminal.
 - Task mutation receipts must come from Task Node, not local optimistic state.
-- PFTerminal can show optimistic loading states, but it must refresh from the
+- Corbanu Terminal can show optimistic loading states, but it must refresh from the
   server after every write.
 - Evidence drafts may contain user-authored task content, so they should stay
-  under the user-owned PFTerminal data directory and not be attached to model
+  under the user-owned Corbanu Terminal data directory and not be attached to model
   prompts unless the user explicitly does so.
 - Agent/subagent automation can request a host task action, but the host must
   mediate the token and redact request metadata.
@@ -1130,7 +1130,7 @@ wallet state before direct-write transitions.
 ### Phase 0: Bridge Hardening
 
 - Keep the Task Node backend terminal bridge deployed and reviewed.
-- Keep the PFTerminal local client from panicking inside the async TUI runtime.
+- Keep the Corbanu Terminal local client from panicking inside the async TUI runtime.
 - Always print the terminal GitHub verification URL on headless Linux.
 - Preserve terminal session tokens in `/vault` only.
 - Confirm production origin defaults to `https://tasknode.postfiat.org`.
@@ -1153,7 +1153,7 @@ wallet state before direct-write transitions.
   verification request while the user types evidence.
 - Support text and URL evidence first.
 - Add GitHub PR/commit normalization after the task-aware prompt works.
-- Store local drafts and receipts under the PFTerminal data directory.
+- Store local drafts and receipts under the Corbanu Terminal data directory.
 - Refresh task detail and list after successful submission.
 
 ### Phase 3: Text Task Requests
@@ -1180,7 +1180,7 @@ wallet state before direct-write transitions.
 ## Acceptance Criteria
 
 1. Running `/tasknode` opens a Task Node menu.
-2. A user can link GitHub through Task Node and PFTerminal stores only a Task
+2. A user can link GitHub through Task Node and Corbanu Terminal stores only a Task
    Node terminal session token.
 3. Task Node refuses terminal session issuance and terminal task mutations for
    accounts without a persisted linked GitHub provider.
@@ -1211,7 +1211,7 @@ wallet state before direct-write transitions.
 
 ## Tests
 
-### PFTerminal
+### Corbanu Terminal
 
 - Slash command enum/description/inline-arg coverage for `/tasknode`.
 - Dispatch tests for bare and inline `/tasknode` commands.
@@ -1254,11 +1254,11 @@ wallet state before direct-write transitions.
   account can see, or only network/offchain tasks?
 - How should Task Node expose tasks to GitHub-only accounts when current task
   projections are wallet-subject scoped?
-- Should PFTerminal support multiple Task Node origins at once?
+- Should Corbanu Terminal support multiple Task Node origins at once?
 - What is the terminal session TTL and refresh-token rotation policy?
 - What is the revocation UI in the Task Node web app?
 - Should evidence artifacts be uploaded to Task Node in v0, or should
-  PFTerminal submit only text and URLs until artifact storage is finalized?
+  Corbanu Terminal submit only text and URLs until artifact storage is finalized?
 - Should the task brief formatter move from frontend-only code into a shared
   module or should the terminal API return a server-built `terminal.briefText`?
 - Should terminal task requests be limited to personal tasks forever, or can

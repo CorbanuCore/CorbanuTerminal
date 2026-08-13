@@ -21,7 +21,7 @@ def load_build_module():
 
 
 class NpmMetadataTest(unittest.TestCase):
-    def test_staged_cli_only_publishes_pfterminal_command(self) -> None:
+    def test_staged_cli_publishes_corbanu_and_legacy_commands(self) -> None:
         build_module = load_build_module()
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -34,7 +34,18 @@ class NpmMetadataTest(unittest.TestCase):
             self.assertTrue((staging_dir / "mkdocs.yml").is_file())
             self.assertTrue((staging_dir / "docs" / "index.md").is_file())
 
-        self.assertEqual(package_json["bin"], {"pfterminal": "bin/codex.js"})
+        self.assertEqual(
+            package_json["bin"],
+            {
+                "corbanu": "bin/codex.js",
+                "pfterminal": "bin/codex.js",
+            },
+        )
+        self.assertIn("Corbanu Terminal", package_json["description"])
+        self.assertEqual(
+            package_json["repository"]["url"],
+            "git+https://github.com/CorbanuCore/CorbanuTerminal.git",
+        )
         self.assertEqual(package_json["files"], ["bin/codex.js", "mkdocs.yml", "docs"])
 
 

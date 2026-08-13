@@ -478,7 +478,7 @@ impl ChatWidget {
                 )),
                 Ok(_) => match client.lock().await {
                     Ok(()) => Box::new(history_cell::new_info_event(
-                        "Wallet locked in every PfTerminal process.".to_string(),
+                        "Wallet locked in every Corbanu Terminal process.".to_string(),
                         /*hint*/ None,
                     )),
                     Err(error) => Box::new(history_cell::new_error_event(format!(
@@ -496,7 +496,7 @@ impl ChatWidget {
 
     pub(crate) fn open_wallet_plans(&mut self, mode: WalletPlanPurchaseMode) {
         let mut header = ColumnRenderable::new();
-        header.push(Line::from("PfTerminal plans".bold()));
+        header.push(Line::from("Corbanu Terminal plans".bold()));
         self.show_selection_view(SelectionViewParams {
             view_id: Some(WALLET_PLANS_VIEW_ID),
             header: Box::new(header),
@@ -541,7 +541,7 @@ impl ChatWidget {
                 let mut header = ColumnRenderable::new();
                 match &mode {
                     WalletPlanPurchaseMode::New => {
-                        header.push(Line::from("PfTerminal plans".bold()));
+                        header.push(Line::from("Corbanu Terminal plans".bold()));
                         header.push(Line::from(
                             "One month, paid once in Solana USDC. No recurring wallet charge."
                                 .dim(),
@@ -551,7 +551,7 @@ impl ChatWidget {
                         current_plan_id,
                         starts_at,
                     } => {
-                        header.push(Line::from("Upgrade PfTerminal Plan".bold()));
+                        header.push(Line::from("Upgrade Corbanu Terminal Plan".bold()));
                         push_wallet_line(
                             &mut header,
                             &format!(
@@ -833,7 +833,7 @@ impl ChatWidget {
                     match stored {
                         Ok(()) => {
                             self.add_info_message(
-                                "PfTerminal Plan access recovered. Credential stored securely."
+                                "Corbanu Terminal Plan access recovered. Credential stored securely."
                                     .to_string(),
                                 /*hint*/ None,
                             );
@@ -864,7 +864,7 @@ impl ChatWidget {
         let tx = self.app_event_tx.clone();
         let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
             "wallet-passcode".to_string(),
-            "Recover PfTerminal Plan".to_string(),
+            "Recover Corbanu Terminal Plan".to_string(),
             "Wallet passcode — masked".to_string(),
             "Verify wallet ownership and restore plan access. No USDC will be sent.".to_string(),
             Box::new(move |_label, mut passcode| {
@@ -1075,7 +1075,7 @@ fn wallet_items(
         push_wallet_line(
             header,
             &format!(
-                "PfTerminal Plan · {} linked to another wallet",
+                "Corbanu Terminal Plan · {} linked to another wallet",
                 title_case_plan(&linked_plan.period.plan_id),
             ),
             /*dimmed*/ false,
@@ -1089,7 +1089,7 @@ fn wallet_items(
     if !overview.plan_credential_present {
         push_wallet_line(
             header,
-            "PfTerminal Plan · not connected",
+            "Corbanu Terminal Plan · not connected",
             /*dimmed*/ false,
         );
     }
@@ -1147,7 +1147,7 @@ fn wallet_items(
     if !overview.plan_credential_present && !overview.daemon.busy {
         if can_sign {
             items.push(item(
-                "Buy PfTerminal Plan",
+                "Buy Corbanu Terminal Plan",
                 "Choose a plan and confirm the exact USDC payment",
                 || AppEvent::OpenWalletPlans {
                     mode: WalletPlanPurchaseMode::New,
@@ -1155,7 +1155,7 @@ fn wallet_items(
             ));
         } else {
             items.push(item(
-                "Buy PfTerminal Plan",
+                "Buy Corbanu Terminal Plan",
                 "Unlock, choose a plan, and confirm the exact USDC payment",
                 || AppEvent::OpenWalletUnlock {
                     policy: UnlockPolicy::Timed {
@@ -1219,7 +1219,7 @@ fn wallet_items(
     if !overview.daemon.locked {
         items.push(item(
             "Lock wallet",
-            "Revoke signing from every PfTerminal process",
+            "Revoke signing from every Corbanu Terminal process",
             || AppEvent::WalletLockRequested,
         ));
     }
@@ -1230,13 +1230,13 @@ fn wallet_items(
                 WalletPlanPurchaseMode::New => unreachable!(),
             };
             items.push(item(
-                "Upgrade PfTerminal Plan",
+                "Upgrade Corbanu Terminal Plan",
                 &format!("Choose a higher tier for the period starting {starts_at}"),
                 move || AppEvent::OpenWalletPlans { mode: mode.clone() },
             ));
         } else if overview.plan_credential_present {
             items.push(item(
-                "Buy a PfTerminal plan",
+                "Buy a Corbanu Terminal plan",
                 "Pay once with USDC and activate metered inference",
                 || AppEvent::OpenWalletPlans {
                     mode: WalletPlanPurchaseMode::New,
@@ -1254,7 +1254,7 @@ fn wallet_items(
         && let Some(mode) = upgrade_mode
     {
         items.push(item(
-            "Upgrade PfTerminal Plan",
+            "Upgrade Corbanu Terminal Plan",
             "Unlock for 5 minutes, then choose a higher tier",
             move || AppEvent::OpenWalletUnlock {
                 policy: UnlockPolicy::Timed {
@@ -1268,7 +1268,7 @@ fn wallet_items(
     }
     if overview.plan_credential_present {
         items.push(item(
-            "Disconnect PfTerminal Plan",
+            "Disconnect Corbanu Terminal Plan",
             "Remove the plan credential; keep the wallet and paid period",
             || AppEvent::ConfirmWalletPlanDisconnect,
         ));
@@ -1301,7 +1301,7 @@ fn linked_plan_owner_description(plan: &WalletPlanStatus) -> String {
 
 fn wallet_plan_summary(plan: &WalletPlanStatus) -> String {
     let mut summary = format!(
-        "PfTerminal Plan · {} active",
+        "Corbanu Terminal Plan · {} active",
         title_case_plan(&plan.period.plan_id)
     );
     if let Some(next) = plan.queued_periods.first() {
@@ -1509,7 +1509,10 @@ mod tests {
         });
 
         let summary = wallet_plan_summary(&plan);
-        assert_eq!(summary, "PfTerminal Plan · Starter active · Basic next");
+        assert_eq!(
+            summary,
+            "Corbanu Terminal Plan · Starter active · Basic next"
+        );
         assert!(!summary.contains("token"));
         assert!(!summary.contains("2026-"));
         assert!(!summary.contains("USDC"));
@@ -1555,13 +1558,21 @@ mod tests {
             .into_iter()
             .map(|item| item.name)
             .collect::<Vec<_>>();
-        assert!(names.iter().any(|name| name == "Buy a PfTerminal plan"));
         assert!(
             names
                 .iter()
-                .any(|name| name == "Disconnect PfTerminal Plan")
+                .any(|name| name == "Buy a Corbanu Terminal plan")
         );
-        assert!(!names.iter().any(|name| name == "Upgrade PfTerminal Plan"));
+        assert!(
+            names
+                .iter()
+                .any(|name| name == "Disconnect Corbanu Terminal Plan")
+        );
+        assert!(
+            !names
+                .iter()
+                .any(|name| name == "Upgrade Corbanu Terminal Plan")
+        );
         assert!(!names.iter().any(|name| name == "View latest plan receipt"));
         assert_eq!(
             linked_plan_owner_description(&linked),
@@ -1586,7 +1597,7 @@ mod tests {
     #[test]
     fn unlocked_daemon_without_this_tui_capability_requires_unlock_again() {
         let items = names(/*locked*/ false, /*client_can_sign*/ false);
-        assert!(items.iter().any(|name| name == "Buy PfTerminal Plan"));
+        assert!(items.iter().any(|name| name == "Buy Corbanu Terminal Plan"));
         assert!(items.iter().any(|name| name == "Recover existing plan"));
         assert!(
             items
@@ -1599,14 +1610,18 @@ mod tests {
                 .iter()
                 .any(|name| name == "Unlock for a custom duration")
         );
-        assert!(!items.iter().any(|name| name == "Buy a PfTerminal plan"));
+        assert!(
+            !items
+                .iter()
+                .any(|name| name == "Buy a Corbanu Terminal plan")
+        );
         insta::assert_snapshot!("wallet_locked_action_names", items.join("\n"));
     }
 
     #[test]
     fn scoped_capability_enables_spending_actions_only_in_owning_tui() {
         let items = names(/*locked*/ false, /*client_can_sign*/ true);
-        assert!(items.iter().any(|name| name == "Buy PfTerminal Plan"));
+        assert!(items.iter().any(|name| name == "Buy Corbanu Terminal Plan"));
         assert!(items.iter().any(|name| name == "Recover existing plan"));
         assert!(!items.iter().any(|name| name.starts_with("Unlock for")));
     }
@@ -1621,7 +1636,7 @@ mod tests {
         );
         let purchase = items
             .iter()
-            .position(|item| item.name == "Buy PfTerminal Plan")
+            .position(|item| item.name == "Buy Corbanu Terminal Plan")
             .expect("fresh wallet purchase action");
         let recovery = items
             .iter()
@@ -1663,8 +1678,8 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(names.contains(&"Lock wallet"));
         assert!(!names.iter().any(|name| name.starts_with("Unlock for")));
-        assert!(!names.contains(&"Buy a PfTerminal plan"));
-        assert!(!names.contains(&"Buy PfTerminal Plan"));
+        assert!(!names.contains(&"Buy a Corbanu Terminal plan"));
+        assert!(!names.contains(&"Buy Corbanu Terminal Plan"));
         assert!(!names.contains(&"Recover plan access"));
         assert!(!names.contains(&"Recover existing plan"));
     }
@@ -1678,7 +1693,7 @@ mod tests {
             wallet_items(&mut header, locked_overview, /*client_can_sign*/ false);
         let locked_upgrade = locked_items
             .iter()
-            .position(|item| item.name == "Upgrade PfTerminal Plan")
+            .position(|item| item.name == "Upgrade Corbanu Terminal Plan")
             .expect("locked upgrade action");
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = crate::app_event_sender::AppEventSender::new(tx);
@@ -1705,7 +1720,7 @@ mod tests {
         );
         let unlocked_upgrade = unlocked_items
             .iter()
-            .position(|item| item.name == "Upgrade PfTerminal Plan")
+            .position(|item| item.name == "Upgrade Corbanu Terminal Plan")
             .expect("unlocked upgrade action");
         (unlocked_items[unlocked_upgrade].actions[0])(&sender);
         assert!(matches!(
@@ -1734,7 +1749,7 @@ mod tests {
         let items = wallet_items(&mut header, active, /*client_can_sign*/ true);
         let upgrade = items
             .iter()
-            .position(|item| item.name == "Upgrade PfTerminal Plan")
+            .position(|item| item.name == "Upgrade Corbanu Terminal Plan")
             .expect("upgrade action");
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = crate::app_event_sender::AppEventSender::new(tx);
@@ -1816,14 +1831,14 @@ mod tests {
             .iter()
             .map(|item| item.name.as_str())
             .collect::<Vec<_>>();
-        assert!(names.contains(&"Disconnect PfTerminal Plan"));
+        assert!(names.contains(&"Disconnect Corbanu Terminal Plan"));
         assert!(names.contains(&"Remove wallet from this device"));
 
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = crate::app_event_sender::AppEventSender::new(tx);
         let disconnect = items
             .iter()
-            .position(|item| item.name == "Disconnect PfTerminal Plan")
+            .position(|item| item.name == "Disconnect Corbanu Terminal Plan")
             .expect("disconnect action");
         (items[disconnect].actions[0])(&sender);
         assert!(matches!(
@@ -1899,8 +1914,8 @@ mod tests {
         let rendered = [
             "Remove wallet from this device",
             "Wallet: 3speRmS…JRwV5r",
-            "Funds stay on Solana. PfTerminal cannot recover them without your recovery material.",
-            "This also disconnects the local PfTerminal Plan credential. It does not cancel or refund the paid period.",
+            "Funds stay on Solana. Corbanu Terminal cannot recover them without your recovery material.",
+            "This also disconnects the local Corbanu Terminal Plan credential. It does not cancel or refund the paid period.",
             "Cancel — Keep the wallet on this device",
             "Remove wallet — I have saved the recovery material",
         ]
@@ -1912,9 +1927,9 @@ mod tests {
     fn wallet_upgrade_flow_copy_snapshot() {
         let upgrade_intro = "Choose a tier above Starter. It starts 2026-08-19T00:35:20Z after the paid period you already own.";
         let rendered = [
-            "Locked wallet: Upgrade PfTerminal Plan — Unlock for 5 minutes, then choose a higher tier",
-            "Unlocked wallet: Upgrade PfTerminal Plan — Choose a higher tier for the period starting 2026-08-19T00:35:20Z",
-            "Upgrade PfTerminal Plan",
+            "Locked wallet: Upgrade Corbanu Terminal Plan — Unlock for 5 minutes, then choose a higher tier",
+            "Unlocked wallet: Upgrade Corbanu Terminal Plan — Choose a higher tier for the period starting 2026-08-19T00:35:20Z",
+            "Upgrade Corbanu Terminal Plan",
             upgrade_intro,
             "The existing period and its remaining tokens are preserved.",
             "Confirmation: This upgrade begins 2026-08-19T00:35:20Z; the current paid period remains active until then.",

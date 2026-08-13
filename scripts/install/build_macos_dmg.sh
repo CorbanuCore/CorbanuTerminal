@@ -128,23 +128,23 @@ EOF
 chmod 0755 "$staging_dir/install.command"
 
 cat > "$staging_dir/README.txt" <<EOF
-PFTerminal ${version} for ${platform_label}
+Corbanu Terminal ${version} for ${platform_label}
 
-Double-click install.command to install the pfterminal command.
+Double-click install.command to install the corbanu command and its pfterminal compatibility alias.
 
 Default install locations:
-  Command launcher: \$HOME/.local/bin/pfterminal
-  PFTerminal state: \$HOME/.pfterminal
+  Primary launcher: \$HOME/.local/bin/corbanu
+  Fresh-install state: \$HOME/.corbanu
 
 The installer leaves any existing stock codex command alone. It installs the
 bundled package archive from this DMG and verifies it against
 pfterminal-package_SHA256SUMS before installation.
 
 Advanced terminal install:
-  sh /Volumes/PFTerminal-${version}-${target}/install.command
+  sh /Volumes/CorbanuTerminal-${version}-${target}/install.command
 EOF
 
-volume_name="PFTerminal-${version}-${target}"
+volume_name="CorbanuTerminal-${version}-${target}"
 archive_size_bytes="$(stat -f '%z' "$archive_path")"
 image_size_mib="$(( (archive_size_bytes + 1048575) / 1048576 + 256 ))"
 

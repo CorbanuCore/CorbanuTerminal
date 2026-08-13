@@ -131,20 +131,20 @@ impl PtyCodex {
             self.read_output(Duration::from_millis(/*millis*/ 50))?;
             self.answer_startup_queries()?;
 
-            if self.palette_answered && self.screen_contains("PFTerminal") {
+            if self.palette_answered && self.screen_contains("Corbanu Terminal") {
                 return Ok(());
             }
 
             if let Some(status) = self.child.try_wait()? {
                 bail!(
-                    "PFTerminal exited before the focus test started ({status}); screen:\n{}",
+                    "Corbanu Terminal exited before the focus test started ({status}); screen:\n{}",
                     self.screen_contents(),
                 );
             }
         }
 
         bail!(
-            "PFTerminal did not initialize within {:?}; screen:\n{}",
+            "Corbanu Terminal did not initialize within {:?}; screen:\n{}",
             STARTUP_TIMEOUT,
             self.screen_contents(),
         );

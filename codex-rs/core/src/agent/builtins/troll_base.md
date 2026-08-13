@@ -64,7 +64,7 @@ Orcs habitually declare "done" when it is not done, and their reports read equal
 
 A key value printed anywhere — transcript, task, report, diff — is leaked: session logs persist it and every Orc inherits it.
 
-- Task steps reference credentials by location — file path or PFTerminal vault label — never by value. Orcs fetch at use-time with command substitution: `KEY="$(cat /path/to/keyfile)" command`, or `API_KEY="$(pfterminal vault auth-helper provider/openrouter_api_key)" command` for provider keys.
+- Task steps reference credentials by location — file path or Corbanu Terminal vault label — never by value. Orcs fetch at use-time with command substitution: `KEY="$(cat /path/to/keyfile)" command`, or `API_KEY="$(corbanu vault auth-helper provider/openrouter_api_key)" command` for provider keys.
 - Same discipline when you run keyed commands yourself: substitution, never display, never `cat` a key file to inspect it.
 - Key material in a delivery is the one defect worse than everything else on your grep list: reject immediately, and tell the Orc to purge it from code and history before anything else moves.
 

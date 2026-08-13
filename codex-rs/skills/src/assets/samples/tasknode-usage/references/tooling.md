@@ -1,10 +1,10 @@
 # Task Node Tooling
 
-Use this reference before making live Task Node calls or operating Task Node through PFTerminal.
+Use this reference before making live Task Node calls or operating Task Node through Corbanu Terminal.
 
 ## Current Terminal Surface
 
-PFTerminal exposes Task Node through slash commands:
+Corbanu Terminal exposes Task Node through slash commands:
 
 - `/tasknode` - open the Task Node menu.
 - `/tasknode link` - link GitHub / Task Node.
@@ -31,7 +31,7 @@ Follow the TUI footer for exact keybindings. Multiline prompts may use a submit 
 
 Prefer the JSON helper for agent work.
 
-**Resolve the helper binary first.** PFTerminal entrypoints pin isolated state
+**Resolve the helper binary first.** Corbanu Terminal entrypoints pin isolated state
 homes: `pfterminal` uses `${PFTERMINAL_HOME:-$HOME/.pfterminal}`, and
 `pfterminal-debug` uses
 `${PFTERMINAL_DEBUG_HOME:-$HOME/.pfterminal-debug}`. Calling the wrong entrypoint
@@ -46,7 +46,7 @@ case "${CODEX_HOME:-}" in
   "$PF_STABLE_HOME") PF_BIN=pfterminal ;;
   "$PF_DEBUG_HOME") PF_BIN=pfterminal-debug ;;
   *)
-    echo "CODEX_HOME does not match the stable or debug PFTerminal state home" >&2
+    echo "CODEX_HOME does not match the stable or debug Corbanu Terminal state home" >&2
     return 1 2>/dev/null || exit 1
     ;;
 esac
@@ -77,7 +77,7 @@ pfterminal tasknode rewards list --json
 pfterminal tasknode balance --json
 ```
 
-The helper reuses the same PFTerminal vault session as the TUI and never prints the bearer token. Non-streaming commands emit one JSON object. Streaming chat emits JSON lines for SSE events when the backend streams; dry-run or preflight responses may return one normal JSON object.
+The helper reuses the same Corbanu Terminal vault session as the TUI and never prints the bearer token. Non-streaming commands emit one JSON object. Streaming chat emits JSON lines for SSE events when the backend streams; dry-run or preflight responses may return one normal JSON object.
 
 ## Evidence Lifecycle Gate
 
@@ -99,7 +99,7 @@ Use `--origin <url>` only for explicit local/dev testing. Production defaults to
 
 ## Agent Operation Pattern
 
-Use a real PFTerminal tmux session for UI-only flows, visual verification, or interactions not yet exposed by the JSON helper.
+Use a real Corbanu Terminal tmux session for UI-only flows, visual verification, or interactions not yet exposed by the JSON helper.
 
 Recommended tmux pattern:
 
@@ -122,7 +122,7 @@ Direct HTTP calls are acceptable only when the token is retrieved by approved lo
 https://tasknode.postfiat.org
 ```
 
-The terminal bridge requires GitHub-linked terminal auth. If a route returns `401`, link or relink Task Node from PFTerminal.
+The terminal bridge requires GitHub-linked terminal auth. If a route returns `401`, link or relink Task Node from Corbanu Terminal.
 
 ## Helper Behavior Expectations
 

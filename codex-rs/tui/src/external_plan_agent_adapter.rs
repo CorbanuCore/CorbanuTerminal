@@ -89,7 +89,7 @@ pub(crate) fn write_dispatch_contract(context: &mut String) {
     );
     let _ = writeln!(
         context,
-        "PFTerminal will route that task to the target pane. Do not claim you sent a task unless you emit a dispatch block."
+        "Corbanu Terminal will route that task to the target pane. Do not claim you sent a task unless you emit a dispatch block."
     );
     let _ = writeln!(
         context,

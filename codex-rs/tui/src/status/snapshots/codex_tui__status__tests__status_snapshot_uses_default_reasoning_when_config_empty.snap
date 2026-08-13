@@ -5,7 +5,7 @@ expression: sanitized
 /status
 
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│  >_ PFTerminal (v0.1.29)                                                    │
+│  >_ Corbanu Terminal (v0.1.30)                                              │
 │                                                                             │
 │  Remote:           unix:///tmp/codex-home/app-server-control/app-server-    │
 │                    control.sock (v0.133.0)                                  │

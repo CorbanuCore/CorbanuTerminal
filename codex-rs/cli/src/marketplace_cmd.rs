@@ -29,7 +29,7 @@ use crate::plugin_cmd::configured_marketplace_sources;
 use crate::plugin_cmd::load_cli_auth_mode;
 
 #[derive(Debug, Parser)]
-#[command(bin_name = "pfterminal plugin marketplace")]
+#[command(bin_name = "corbanu plugin marketplace")]
 pub struct MarketplaceCli {
     #[clap(flatten)]
     pub config_overrides: CliConfigOverrides,
@@ -43,7 +43,7 @@ enum MarketplaceSubcommand {
     /// Add a local or Git marketplace to the configured marketplace sources.
     Add(AddMarketplaceArgs),
 
-    /// List plugin marketplaces PFTerminal is currently considering and their roots.
+    /// List plugin marketplaces Corbanu Terminal is currently considering and their roots.
     List(ListMarketplaceArgs),
 
     /// Refresh configured Git marketplace snapshots.
@@ -57,8 +57,8 @@ enum MarketplaceSubcommand {
 
 #[derive(Debug, Parser)]
 #[command(
-    bin_name = "pfterminal plugin marketplace add",
-    after_help = "Examples:\n  pfterminal plugin marketplace add ./path/to/marketplace\n  pfterminal plugin marketplace add owner/repo --ref main\n  pfterminal plugin marketplace add https://github.com/owner/repo --sparse plugins/foo"
+    bin_name = "corbanu plugin marketplace add",
+    after_help = "Examples:\n  corbanu plugin marketplace add ./path/to/marketplace\n  corbanu plugin marketplace add owner/repo --ref main\n  corbanu plugin marketplace add https://github.com/owner/repo --sparse plugins/foo"
 )]
 struct AddMarketplaceArgs {
     /// Marketplace source: a local path, owner/repo[@ref], HTTPS Git URL, or SSH Git URL.
@@ -83,7 +83,7 @@ struct AddMarketplaceArgs {
 }
 
 #[derive(Debug, Parser)]
-#[command(bin_name = "pfterminal plugin marketplace list")]
+#[command(bin_name = "corbanu plugin marketplace list")]
 struct ListMarketplaceArgs {
     /// Output marketplace list as JSON.
     #[arg(long = "json")]
@@ -92,8 +92,8 @@ struct ListMarketplaceArgs {
 
 #[derive(Debug, Parser)]
 #[command(
-    bin_name = "pfterminal plugin marketplace upgrade",
-    after_help = "Examples:\n  pfterminal plugin marketplace upgrade\n  pfterminal plugin marketplace upgrade debug"
+    bin_name = "corbanu plugin marketplace upgrade",
+    after_help = "Examples:\n  corbanu plugin marketplace upgrade\n  corbanu plugin marketplace upgrade debug"
 )]
 struct UpgradeMarketplaceArgs {
     /// Optional configured marketplace name to upgrade. Omit to upgrade all Git marketplaces.
@@ -107,8 +107,8 @@ struct UpgradeMarketplaceArgs {
 
 #[derive(Debug, Parser)]
 #[command(
-    bin_name = "pfterminal plugin marketplace remove",
-    after_help = "Example:\n  pfterminal plugin marketplace remove debug"
+    bin_name = "corbanu plugin marketplace remove",
+    after_help = "Example:\n  corbanu plugin marketplace remove debug"
 )]
 struct RemoveMarketplaceArgs {
     /// Configured marketplace name to remove.

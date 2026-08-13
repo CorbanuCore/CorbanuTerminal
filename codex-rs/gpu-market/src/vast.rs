@@ -353,7 +353,7 @@ impl VastProvider {
         let wanted = ssh_public_key_identity(public_key).ok_or_else(|| {
             ProviderError::new(
                 ProviderErrorKind::Permanent,
-                "PfTerminal's Vast SSH public key is invalid.",
+                "Corbanu Terminal's Vast SSH public key is invalid.",
             )
         })?;
         let already_attached = keys.iter().any(|entry| {

@@ -34,9 +34,9 @@ fn sqlite_home_is_blocking_file(startup_error: &LocalStateDbStartupError) -> boo
 }
 
 pub(crate) fn print_auto_backup_start(startup_error: &LocalStateDbStartupError) {
-    eprintln!("PFTerminal couldn't start because its local database appears to be damaged.");
+    eprintln!("Corbanu Terminal couldn't start because its local database appears to be damaged.");
     eprintln!(
-        "Moving the damaged local database aside so PFTerminal can rebuild it from saved data."
+        "Moving the damaged local database aside so Corbanu Terminal can rebuild it from saved data."
     );
     print_technical_details(startup_error);
 }
@@ -51,9 +51,9 @@ pub(crate) fn confirm_fresh_start_rebuild(
     startup_error: &LocalStateDbStartupError,
     backups: &[RuntimeDbBackup],
 ) -> std::io::Result<()> {
-    eprintln!("PFTerminal rebuilt its local database.");
+    eprintln!("Corbanu Terminal rebuilt its local database.");
     eprintln!(
-        "PFTerminal detected a damaged local database, moved it into a backup folder, and will continue startup with a fresh database."
+        "Corbanu Terminal detected a damaged local database, moved it into a backup folder, and will continue startup with a fresh database."
     );
     eprintln!("Database path: {}", startup_error.database_path().display());
     if let Some(backup_folder) = backup_folder(backups) {
@@ -73,17 +73,19 @@ pub(crate) fn confirm_fresh_start_rebuild(
 }
 
 pub(crate) fn print_diagnostic_guidance(startup_error: &LocalStateDbStartupError) {
-    eprintln!("PFTerminal couldn't start because its local database appears to be damaged.");
-    eprintln!("Run `pfterminal doctor` to check your setup and get next-step guidance.");
+    eprintln!("Corbanu Terminal couldn't start because its local database appears to be damaged.");
+    eprintln!("Run `corbanu doctor` to check your setup and get next-step guidance.");
     eprintln!("If this keeps happening, share the technical details below when asking for help.");
     print_technical_details(startup_error);
 }
 
 pub(crate) fn print_locked_guidance(startup_error: &LocalStateDbStartupError) {
     eprintln!(
-        "PFTerminal couldn't start because another PFTerminal process is using its local data."
+        "Corbanu Terminal couldn't start because another Corbanu Terminal process is using its local data."
     );
-    eprintln!("Quit any other copies of PFTerminal that may still be running, then try again.");
+    eprintln!(
+        "Quit any other copies of Corbanu Terminal that may still be running, then try again."
+    );
     print_technical_details(startup_error);
 }
 

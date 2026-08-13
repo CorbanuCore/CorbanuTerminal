@@ -1,4 +1,4 @@
-//! PFTerminal credential vault.
+//! Corbanu Terminal credential vault.
 //!
 //! This crate provides a labeled credential store built on top of [`codex_secrets::SecretsManager`].
 //! Credentials are encrypted at rest using the existing age-encrypted secrets substrate (the same
@@ -208,7 +208,7 @@ pub struct AddCredential {
     pub secret: String,
 }
 
-/// The PFTerminal credential vault.
+/// The Corbanu Terminal credential vault.
 ///
 /// Wraps [`SecretsManager`] (managed-secrets namespace) to provide labeled,
 /// encrypted-at-rest credential storage with explicit reveal/export controls.

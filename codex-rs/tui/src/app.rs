@@ -983,13 +983,17 @@ fn session_start_error(
 fn archived_session_guidance(err: &color_eyre::eyre::Report) -> Option<String> {
     let err = err.to_string();
     let message = &err[err.find("session ")?..];
-    if !message.contains(" is archived. Run `pfterminal unarchive ") {
+    if !message.contains(" is archived. Run `") || !message.contains(" unarchive ") {
         return None;
     }
     let message = message
         .split_once(" (code ")
         .map_or(message, |(message, _)| message);
-    Some(message.to_string())
+    Some(
+        message
+            .replace("Run `codex unarchive ", "Run `corbanu unarchive ")
+            .replace("Run `pfterminal unarchive ", "Run `corbanu unarchive "),
+    )
 }
 
 fn active_turn_interrupt_race(error: &TypedRequestError) -> Option<String> {
@@ -1380,7 +1384,7 @@ impl App {
             color_eyre::eyre::eyre!(
                 "Invalid `tui.keymap` configuration: {err}\n\
 Fix the config and retry.\n\
-See the PFTerminal keymap documentation for supported actions and examples."
+See the Corbanu Terminal keymap documentation for supported actions and examples."
             )
         })?;
         #[cfg(not(debug_assertions))]
@@ -1635,7 +1639,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
         }
         app.refresh_gpu_spend_indicator().await;
         // A rental outlives the TUI that created it. Reattach the independent reconciler on
-        // every startup; its process lock deduplicates concurrent PFTerminal processes and it
+        // every startup; its process lock deduplicates concurrent Corbanu Terminal processes and it
         // exits immediately when there is no potentially billable work.
         app.start_gpu_controller();
         let telegram_home = app.config.codex_home.clone().to_path_buf();
@@ -1793,7 +1797,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
                                 Err(err) => {
                                     tracing::error!(error = ?err, "contained app event handler failure");
                                     app.chat_widget.add_error_message(format!(
-                                        "A command failed but PFTerminal is still running: {err:#}"
+                                        "A command failed but Corbanu Terminal is still running: {err:#}"
                                     ));
                                     AppRunControl::Continue
                                 },
@@ -1814,7 +1818,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
                             if let Err(err) = app.handle_active_thread_event(tui, &mut app_server, event).await {
                                 tracing::error!(error = ?err, "contained active-thread event failure");
                                 app.chat_widget.add_error_message(format!(
-                                    "A pane event failed but PFTerminal is still running: {err:#}"
+                                    "A pane event failed but Corbanu Terminal is still running: {err:#}"
                                 ));
                             }
                         } else {
@@ -1830,7 +1834,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
                                 Err(err) => {
                                     tracing::error!(error = ?err, "contained terminal input handler failure");
                                     app.chat_widget.add_error_message(format!(
-                                        "An input command failed but PFTerminal is still running: {err:#}"
+                                        "An input command failed but Corbanu Terminal is still running: {err:#}"
                                     ));
                                     AppRunControl::Continue
                                 },
@@ -1858,7 +1862,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
                                 Err(err) => {
                                     tracing::error!(error = ?err, "contained interrupt handler failure");
                                     app.chat_widget.add_error_message(format!(
-                                        "Interrupt failed but PFTerminal is still running: {err:#}"
+                                        "Interrupt failed but Corbanu Terminal is still running: {err:#}"
                                     ));
                                     AppRunControl::Continue
                                 },
@@ -1874,7 +1878,7 @@ See the PFTerminal keymap documentation for supported actions and examples."
                                 listen_for_app_server_events = false;
                                 tracing::warn!("app-server event stream closed");
                                 app.chat_widget.add_error_message(
-                                    "App-server event stream closed; PFTerminal is degraded and will reconnect automatically."
+                                    "App-server event stream closed; Corbanu Terminal is degraded and will reconnect automatically."
                                         .to_string(),
                                 );
                             }

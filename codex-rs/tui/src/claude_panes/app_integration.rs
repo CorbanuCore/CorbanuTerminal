@@ -18,6 +18,8 @@ use crate::key_hint;
 use crate::spawn_orchestration::SpawnRole;
 use crate::spawn_orchestration::thread_node_id;
 use crate::tui;
+use codex_product_brand::MAIN_PANE_TITLE;
+use codex_product_brand::native_pane_title;
 use codex_protocol::ThreadId;
 use crossterm::event::KeyCode;
 
@@ -68,7 +70,7 @@ impl App {
     ) -> Option<String> {
         if let Some(title) = self.claude_panes.active_claude_pane_title() {
             return Some(format!(
-                "'/{command}' cannot target Claude pane `{title}`. Select Main or an operator-created PFTerminal pane first; Claude pane removal needs its own pane lifecycle action."
+                "'/{command}' cannot target Claude pane `{title}`. Select Main or an operator-created Corbanu Terminal pane first; Claude pane removal needs its own pane lifecycle action."
             ));
         }
         if Some(thread_id) != self.primary_thread_id && self.is_managed_spawn_crew_thread(thread_id)
@@ -81,7 +83,7 @@ impl App {
             && self.agent_navigation.is_parent_owned(thread_id)
         {
             return Some(format!(
-                "'/{command}' cannot target a parent-controlled task worker. Switch to Main or an operator-created PFTerminal pane first."
+                "'/{command}' cannot target a parent-controlled task worker. Switch to Main or an operator-created Corbanu Terminal pane first."
             ));
         }
         None
@@ -277,7 +279,7 @@ impl App {
                         /*is_closed*/ true,
                     );
                     self.chat_widget.add_error_message(format!(
-                        "PFTerminal pane {thread_id} restored with direct input disabled; refusing to present it as usable."
+                        "Corbanu Terminal pane {thread_id} restored with direct input disabled; refusing to present it as usable."
                     ));
                 }
                 Err(err) => {
@@ -293,7 +295,7 @@ impl App {
                         /*is_closed*/ true,
                     );
                     self.chat_widget.add_error_message(format!(
-                        "Failed to resume PFTerminal pane {thread_id}: {err}"
+                        "Failed to resume Corbanu Terminal pane {thread_id}: {err}"
                     ));
                 }
             }
@@ -413,7 +415,7 @@ impl App {
         let tx = self.app_event_tx.clone();
         let initial_name = self.next_codex_pane_nickname();
         let view = CustomPromptView::new(
-            "Name PFTerminal pane".to_string(),
+            "Name Corbanu Terminal pane".to_string(),
             "Pane display name".to_string(),
             initial_name,
             Some(format!("Model: {model}")),
@@ -443,7 +445,7 @@ impl App {
                 }
             });
         let view = CustomPromptView::new(
-            "Rename PFTerminal pane".to_string(),
+            "Rename Corbanu Terminal pane".to_string(),
             "Pane display name".to_string(),
             initial_name,
             /*context_label*/ None,
@@ -860,7 +862,7 @@ impl App {
                 return true;
             }
         };
-        // Control-plane guard: slash commands act on PFTerminal itself, never
+        // Control-plane guard: slash commands act on Corbanu Terminal itself, never
         // on the active worker pane. Without this, a recognized command that
         // reaches the op path while a Claude pane is active is forwarded to
         // the worker as task text (the round-3 B5 failure mode).
@@ -1150,8 +1152,8 @@ impl App {
             .and_then(|thread_id| self.agent_navigation.get(&thread_id))
             .and_then(|entry| entry.agent_nickname.as_deref())
             .filter(|nickname| !nickname.trim().is_empty())
-            .map(|nickname| format!("PFTerminal - {nickname}"))
-            .unwrap_or_else(|| "PFTerminal - Main".to_string());
+            .map(native_pane_title)
+            .unwrap_or_else(|| MAIN_PANE_TITLE.to_string());
         let main_rename_shortcuts = self
             .primary_thread_id
             .map(|thread_id| vec![rename_codex_pane_shortcut(thread_id)])
@@ -1231,8 +1233,8 @@ impl App {
                     .agent_nickname
                     .as_deref()
                     .filter(|nickname| !nickname.trim().is_empty())
-                    .map(|nickname| format!("PFTerminal - {nickname}"))
-                    .unwrap_or_else(|| format!("PFTerminal - {}", short_thread_id(thread_id)));
+                    .map(native_pane_title)
+                    .unwrap_or_else(|| native_pane_title(&short_thread_id(thread_id)));
                 let description = self.codex_pane_description(thread_id, entry);
                 let mut item = SelectionItem {
                     name: name.clone(),
@@ -1321,16 +1323,16 @@ impl App {
                     .unwrap_or(true)
             })
             .count();
-        format!("PFTerminal {}", count + 1)
+        format!("Corbanu {}", count + 1)
     }
 }
 
 pub(crate) fn new_pane_items() -> Vec<SelectionItem> {
     vec![
         SelectionItem {
-            name: "+ PFTerminal Pane".to_string(),
+            name: "+ Corbanu Terminal Pane".to_string(),
             description: Some(
-                "Create a persistent native PFTerminal pane; choose model next.".to_string(),
+                "Create a persistent native Corbanu Terminal pane; choose model next.".to_string(),
             ),
             actions: vec![Box::new(|tx| {
                 tx.send(AppEvent::OpenCodexPaneModelPicker);

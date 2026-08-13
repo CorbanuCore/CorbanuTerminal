@@ -1,4 +1,4 @@
-//! Diagnoses whether PFTerminal update paths target the running installation.
+//! Diagnoses whether Corbanu Terminal update paths target the running installation.
 //!
 //! Update diagnostics combine cached version metadata, install-channel hints,
 //! and bounded latest-version probes. For npm-managed launches, this module also
@@ -76,7 +76,7 @@ pub(super) fn updates_check(config: &Config) -> DoctorCheck {
                 status = status.max(CheckStatus::Warning);
                 summary = "npm update target could not be proven".to_string();
                 remediation = Some(
-                    "Reinstall or update PFTerminal so the JS shim provides CODEX_MANAGED_PACKAGE_ROOT."
+                    "Reinstall or update Corbanu Terminal so the JS shim provides CODEX_MANAGED_PACKAGE_ROOT."
                         .to_string(),
                 );
             }

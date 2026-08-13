@@ -112,9 +112,9 @@ impl App {
             }
         }
 
-        let primary_thread_id = self
-            .primary_thread_id
-            .ok_or_else(|| eyre!("PFTerminal Main is unavailable; no crew data was removed."))?;
+        let primary_thread_id = self.primary_thread_id.ok_or_else(|| {
+            eyre!("Corbanu Terminal Main is unavailable; no crew data was removed.")
+        })?;
         self.save_active_claude_pane_transcript();
         self.claude_panes
             .set_active_user_pane(CODEX_MAIN_PANE_ID)
@@ -361,7 +361,9 @@ impl App {
         let root_thread_id = self
             .primary_thread_id
             .or(self.active_thread_id)
-            .ok_or_else(|| eyre!("Cannot create a crew before PFTerminal Main has started."))?;
+            .ok_or_else(|| {
+                eyre!("Cannot create a crew before Corbanu Terminal Main has started.")
+            })?;
         let spawn_config = self.native_spawn_agent_config()?;
         self.ensure_crew_providers_ready(&crew).await?;
         match self.spawn_crew.as_mut() {

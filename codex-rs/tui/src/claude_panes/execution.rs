@@ -450,7 +450,7 @@ fn kill_claude_process_tree(root_pid: libc::pid_t) -> Result<()> {
         if process_group > 0 {
             if process_group == current_process_group {
                 return Err(anyhow!(
-                    "refusing to kill Claude process tree {root_pid}: descendant {pid} shares PFTerminal process group {current_process_group}"
+                    "refusing to kill Claude process tree {root_pid}: descendant {pid} shares Corbanu Terminal process group {current_process_group}"
                 ));
             }
             process_groups.insert(process_group);

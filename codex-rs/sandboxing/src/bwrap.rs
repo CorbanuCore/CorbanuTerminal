@@ -15,16 +15,16 @@ use std::time::Instant;
 const SYSTEM_BWRAP_PROGRAM: &str = "bwrap";
 pub const APPARMOR_BWRAP_USERNS_PROFILE: &str = "rootlesskit";
 const MISSING_BWRAP_WARNING: &str = concat!(
-    "PFTerminal could not find bubblewrap on PATH. ",
+    "Corbanu Terminal could not find bubblewrap on PATH. ",
     "Install bubblewrap with your OS package manager. ",
     "See the sandbox prerequisites: ",
     "https://developers.openai.com/codex/concepts/sandboxing#prerequisites. ",
-    "PFTerminal will use the bundled bubblewrap in the meantime.",
+    "Corbanu Terminal will use the bundled bubblewrap in the meantime.",
 );
 const USER_NAMESPACE_WARNING: &str =
-    "PFTerminal's Linux sandbox uses bubblewrap and needs access to create user namespaces.";
+    "Corbanu Terminal's Linux sandbox uses bubblewrap and needs access to create user namespaces.";
 pub(crate) const WSL1_BWRAP_WARNING: &str = concat!(
-    "PFTerminal's Linux sandbox uses bubblewrap, which is not supported on WSL1 ",
+    "Corbanu Terminal's Linux sandbox uses bubblewrap, which is not supported on WSL1 ",
     "because WSL1 cannot create the required user namespaces. ",
     "Use WSL2 for sandboxed shell commands."
 );

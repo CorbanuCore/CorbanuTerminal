@@ -42,7 +42,7 @@ impl WalletDaemonClient {
         let executable = daemon_executable().map_err(unavailable)?;
         if !executable.is_file() {
             return Err(WalletDaemonError::Unavailable(format!(
-                "required wallet daemon executable is missing from this PFTerminal installation: {}",
+                "required wallet daemon executable is missing from this Corbanu Terminal installation: {}",
                 executable.display()
             )));
         }

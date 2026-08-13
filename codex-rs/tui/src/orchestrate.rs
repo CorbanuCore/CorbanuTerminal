@@ -578,9 +578,11 @@ pub(crate) fn resolve_whip_instruction_path(
     } else {
         format!("{name}.md")
     };
-    let project_path = cwd.join(".pfterminal").join("whips").join(&file_name);
-    if project_path.exists() {
-        return Ok(Some(project_path));
+    for product_dir in [".corbanu", ".pfterminal"] {
+        let project_path = cwd.join(product_dir).join("whips").join(&file_name);
+        if project_path.exists() {
+            return Ok(Some(project_path));
+        }
     }
     let global_path = codex_home.join("whips").join(file_name);
     Ok(global_path.exists().then_some(global_path))
@@ -630,8 +632,14 @@ fn available_whip_instruction_entries(codex_home: &Path, cwd: &Path) -> Vec<Whip
     let mut seen = HashSet::new();
     let mut entries = Vec::new();
     scan_whip_instruction_dir(
-        &cwd.join(".pfterminal").join("whips"),
+        &cwd.join(".corbanu").join("whips"),
         "project",
+        &mut seen,
+        &mut entries,
+    );
+    scan_whip_instruction_dir(
+        &cwd.join(".pfterminal").join("whips"),
+        "legacy project",
         &mut seen,
         &mut entries,
     );
@@ -1073,7 +1081,7 @@ impl App {
         if items.is_empty() {
             items.push(SelectionItem {
                 name: "No Worker panes available".to_string(),
-                description: Some("Create a PFTerminal or Claude pane first.".to_string()),
+                description: Some("Create a Corbanu Terminal or Claude pane first.".to_string()),
                 is_disabled: true,
                 ..Default::default()
             });
@@ -1098,7 +1106,7 @@ impl App {
         let mut items = vec![SelectionItem {
             name: "Create Manager pane".to_string(),
             description: Some(format!(
-                "Create a PFTerminal pane using {} and start in Drafting.",
+                "Create a Corbanu Terminal pane using {} and start in Drafting.",
                 self.native_spawn_default_model()
             )),
             is_default: true,
@@ -1182,7 +1190,7 @@ impl App {
         if items.is_empty() {
             items.push(SelectionItem {
                 name: "No Worker panes available".to_string(),
-                description: Some("Create a PFTerminal or Claude pane first.".to_string()),
+                description: Some("Create a Corbanu Terminal or Claude pane first.".to_string()),
                 is_disabled: true,
                 ..Default::default()
             });
@@ -1354,7 +1362,7 @@ impl App {
         items.push(SelectionItem {
             name: "Create Manager pane".to_string(),
             description: Some(format!(
-                "Create a PFTerminal pane using {}.",
+                "Create a Corbanu Terminal pane using {}.",
                 self.native_spawn_default_model()
             )),
             is_default: true,
@@ -1531,7 +1539,7 @@ impl App {
             "Save Assignment Spec".to_string(),
             "Basename, for example keep-going".to_string(),
             suggested_name,
-            Some("Saved under ~/.pfterminal/whips".to_string()),
+            Some("Saved under $CODEX_HOME/whips".to_string()),
             Box::new(move |requested_name: String| {
                 tx.send(AppEvent::SaveOrchestrateWhipAndConfirm {
                     target: target.clone(),
@@ -1561,7 +1569,7 @@ impl App {
             Ok(whip_name) => {
                 self.chat_widget.add_info_message(
                     format!("Saved assignment spec `{whip_name}`."),
-                    Some("Saved globally under ~/.pfterminal/whips.".to_string()),
+                    Some("Saved globally under $CODEX_HOME/whips.".to_string()),
                 );
                 self.open_orchestrate_manager_picker(
                     target,
@@ -1755,7 +1763,7 @@ impl App {
             } else {
                 "idle"
             };
-            let mut description = format!("PFTerminal; {status}; {thread_id}");
+            let mut description = format!("Corbanu Terminal; {status}; {thread_id}");
             if let Some(task) = entry.last_task_message.as_deref() {
                 description.push_str(&format!(
                     "; task: {}",
@@ -2532,7 +2540,7 @@ impl App {
             })
         {
             return Err(
-                "PFTerminal Main cannot be an assignment Manager; create a Manager pane."
+                "Corbanu Terminal Main cannot be an assignment Manager; create a Manager pane."
                     .to_string(),
             );
         }
@@ -3497,7 +3505,7 @@ impl App {
                 return self
                     .primary_thread_id
                     .map(FireDestination::Native)
-                    .ok_or_else(|| "PFTerminal Main is not loaded.".to_string());
+                    .ok_or_else(|| "Corbanu Terminal Main is not loaded.".to_string());
             }
             if self
                 .claude_panes
@@ -3519,7 +3527,9 @@ impl App {
         self.active_thread_id
             .or(self.primary_thread_id)
             .map(thread_node_id)
-            .ok_or_else(|| "No current PFTerminal pane is available as whip holder.".to_string())
+            .ok_or_else(|| {
+                "No current Corbanu Terminal pane is available as whip holder.".to_string()
+            })
     }
 
     fn target_node_is_idle(&self, node_id: &str) -> bool {
@@ -4209,14 +4219,21 @@ mod tests {
     }
 
     #[test]
-    fn project_keep_going_file_overrides_global_file() {
+    fn corbanu_project_file_overrides_global_and_legacy_project_files() {
         let codex_home = tempfile::tempdir().expect("codex home");
         let cwd = tempfile::tempdir().expect("cwd");
         let global_whips = codex_home.path().join("whips");
         fs::create_dir_all(&global_whips).expect("global whips dir");
         fs::write(global_whips.join("keep-going.md"), "global override")
             .expect("write global whip");
-        let project_whips = cwd.path().join(".pfterminal").join("whips");
+        let legacy_project_whips = cwd.path().join(".pfterminal").join("whips");
+        fs::create_dir_all(&legacy_project_whips).expect("legacy project whips dir");
+        fs::write(
+            legacy_project_whips.join("keep-going.md"),
+            "legacy project override",
+        )
+        .expect("write legacy project whip");
+        let project_whips = cwd.path().join(".corbanu").join("whips");
         fs::create_dir_all(&project_whips).expect("project whips dir");
         let project_path = project_whips.join("keep-going.md");
         fs::write(&project_path, "project override").expect("write project whip");
@@ -4227,6 +4244,22 @@ mod tests {
 
         assert_eq!(path, project_path);
         assert_eq!(contents, "project override");
+    }
+
+    #[test]
+    fn legacy_project_file_remains_readable() {
+        let codex_home = tempfile::tempdir().expect("codex home");
+        let cwd = tempfile::tempdir().expect("cwd");
+        let legacy_whips = cwd.path().join(".pfterminal").join("whips");
+        fs::create_dir_all(&legacy_whips).expect("legacy project whips dir");
+        let legacy_path = legacy_whips.join("legacy.md");
+        fs::write(&legacy_path, "legacy instructions").expect("write legacy whip");
+
+        let (path, contents) = read_whip_instruction(codex_home.path(), cwd.path(), "legacy")
+            .expect("legacy project whip");
+
+        assert_eq!(path, legacy_path);
+        assert_eq!(contents, "legacy instructions");
     }
 
     #[test]

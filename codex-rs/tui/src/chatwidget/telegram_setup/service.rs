@@ -86,7 +86,7 @@ fn start_connector_unlocked(codex_home: &Path) -> Result<String, String> {
         }
     }
     let executable = std::env::current_exe()
-        .map_err(|_| "Could not locate the running PFTerminal executable.".to_string())?;
+        .map_err(|_| "Could not locate the running Corbanu Terminal executable.".to_string())?;
     run_health_check(&executable, codex_home)?;
     let telegram_dir = codex_home.join("telegram");
     std::fs::create_dir_all(&telegram_dir)
@@ -184,7 +184,7 @@ fn with_operation_lock<T>(
             Err(_) => return Err("Could not lock Telegram connector operations.".to_string()),
         }
     }
-    Err("Another PFTerminal process is changing Telegram. Retry in a moment.".to_string())
+    Err("Another Corbanu Terminal process is changing Telegram. Retry in a moment.".to_string())
 }
 
 fn run_health_check(executable: &Path, codex_home: &Path) -> Result<(), String> {
@@ -290,7 +290,7 @@ pub(super) fn store_token(codex_home: &Path, token: String) -> Result<(), String
                 label: TOKEN_LABEL.to_string(),
                 credential_type: CredentialType::BearerToken,
                 provider: Some("telegram".to_string()),
-                notes: Some("PFTerminal Telegram bot token".to_string()),
+                notes: Some("Corbanu Terminal Telegram bot token".to_string()),
                 revocation_notes: Some("Revoke or rotate this token with @BotFather.".to_string()),
                 secret: token,
             })
@@ -306,7 +306,7 @@ fn write_telegram_config(
     let mut config = read_config(codex_home)?;
     let table = config
         .as_table_mut()
-        .ok_or_else(|| "PFTerminal config root is not a table.".to_string())?;
+        .ok_or_else(|| "Corbanu Terminal config root is not a table.".to_string())?;
     match connection {
         Some((candidate, defaults)) => {
             let mut telegram = table
@@ -355,9 +355,9 @@ fn write_telegram_config(
         }
     }
     let serialized = toml::to_string_pretty(&config)
-        .map_err(|_| "Could not serialize PFTerminal configuration.".to_string())?;
+        .map_err(|_| "Could not serialize Corbanu Terminal configuration.".to_string())?;
     std::fs::create_dir_all(codex_home)
-        .map_err(|_| "Could not create the PFTerminal home.".to_string())?;
+        .map_err(|_| "Could not create the Corbanu Terminal home.".to_string())?;
     codex_utils_path::write_atomically(&codex_home.join("config.toml"), &serialized)
         .map_err(|_| "Could not persist Telegram configuration.".to_string())
 }
@@ -368,8 +368,9 @@ fn read_config(codex_home: &Path) -> Result<toml::Value, String> {
         return Ok(toml::Value::Table(Default::default()));
     }
     let contents = std::fs::read_to_string(&path)
-        .map_err(|_| "Could not read PFTerminal configuration.".to_string())?;
-    toml::from_str(&contents).map_err(|_| "PFTerminal configuration is invalid TOML.".to_string())
+        .map_err(|_| "Could not read Corbanu Terminal configuration.".to_string())?;
+    toml::from_str(&contents)
+        .map_err(|_| "Corbanu Terminal configuration is invalid TOML.".to_string())
 }
 
 fn runtime_path(codex_home: &Path) -> PathBuf {

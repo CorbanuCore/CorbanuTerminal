@@ -3,7 +3,7 @@ source: tui/src/chatwidget/tests/popups_and_settings.rs
 expression: popup
 ---
   Select Model and Effort
-  Access hidden models by running pfterminal -m <model_name> or in your config
+  Access hidden models by running corbanu -m <model_name> or in your config.to
 
 › 1. z-ai/glm-5.2 (current)  z-ai/glm-5.2 description
 

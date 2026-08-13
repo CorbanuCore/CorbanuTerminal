@@ -10,6 +10,10 @@ pub const TASK_NODE_NAME: &str = "Post Fiat Task Node";
 pub const INFERENCE_NAME: &str = "Ambient Inference";
 pub const NEWSLETTER_NAME: &str = "Corbanu Newsletter";
 pub const PLAN_NAME: &str = "Corbanu Terminal Plan";
+pub const NATIVE_PANE_PREFIX: &str = "Corbanu Terminal - ";
+pub const LEGACY_NATIVE_PANE_PREFIX: &str = "PFTerminal - ";
+pub const MAIN_PANE_TITLE: &str = "Corbanu Terminal - Main";
+pub const LEGACY_MAIN_PANE_TITLE: &str = "PFTerminal - Main";
 
 pub const RELATIONSHIP_SENTENCE: &str =
     "Corbanu Terminal integrates Post Fiat Task Node and Ambient Inference.";
@@ -22,6 +26,16 @@ pub const INSTALL_SH_URL: &str =
     "https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.sh";
 pub const INSTALL_PS1_URL: &str =
     "https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.ps1";
+
+pub fn native_pane_title(name: &str) -> String {
+    format!("{NATIVE_PANE_PREFIX}{name}")
+}
+
+pub fn native_pane_name(title: &str) -> Option<&str> {
+    title
+        .strip_prefix(NATIVE_PANE_PREFIX)
+        .or_else(|| title.strip_prefix(LEGACY_NATIVE_PANE_PREFIX))
+}
 
 #[cfg(test)]
 mod tests {
@@ -41,5 +55,13 @@ mod tests {
         assert!(GITHUB_LATEST_RELEASE_URL.starts_with(GITHUB_REPOSITORY_URL));
         assert!(INSTALL_SH_URL.starts_with(GITHUB_REPOSITORY_URL));
         assert!(INSTALL_PS1_URL.starts_with(GITHUB_REPOSITORY_URL));
+    }
+
+    #[test]
+    fn pane_titles_render_corbanu_and_read_both_brand_generations() {
+        assert_eq!(native_pane_title("Main"), MAIN_PANE_TITLE);
+        assert_eq!(native_pane_name(MAIN_PANE_TITLE), Some("Main"));
+        assert_eq!(native_pane_name(LEGACY_MAIN_PANE_TITLE), Some("Main"));
+        assert_eq!(native_pane_name("Claude - Main"), None);
     }
 }

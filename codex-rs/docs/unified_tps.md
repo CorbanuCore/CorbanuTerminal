@@ -2,7 +2,7 @@
 
 Status: draft implementation spec.
 
-This document defines how PFTerminal should calculate and render tokens per
+This document defines how Corbanu Terminal should calculate and render tokens per
 second (TPS). The goal is to prevent the UI from showing multiple incompatible
 TPS numbers, such as a live `Working` row value that disagrees with the footer.
 
@@ -15,7 +15,7 @@ definition.
 
 Normative requirements in this document use `must`. File paths, suggested type
 names, and recommended ownership locations are implementation guidance for the
-current PFTerminal codebase; they can change if the behavior, data contract, and
+current Corbanu Terminal codebase; they can change if the behavior, data contract, and
 tests remain equivalent.
 
 Implementation summary:

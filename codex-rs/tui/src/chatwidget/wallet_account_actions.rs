@@ -8,7 +8,7 @@ use codex_wallet_daemon::WalletDaemonClient;
 impl ChatWidget {
     pub(crate) fn confirm_wallet_plan_disconnect(&mut self) {
         let mut header = ColumnRenderable::new();
-        header.push(Line::from("Disconnect PfTerminal Plan".bold()));
+        header.push(Line::from("Disconnect Corbanu Terminal Plan".bold()));
         push_wallet_text(
             &mut header,
             "This removes the plan credential from this device. Your paid period and wallet remain unchanged.",
@@ -50,16 +50,16 @@ impl ChatWidget {
             .dismiss_view_by_id(super::wallet_menu::WALLET_DISCONNECT_PLAN_VIEW_ID);
         match result {
             Ok(true) => self.add_info_message(
-                "PfTerminal Plan disconnected from this device. The paid period and wallet were not changed."
+                "Corbanu Terminal Plan disconnected from this device. The paid period and wallet were not changed."
                     .to_string(),
                 /*hint*/ None,
             ),
             Ok(false) => self.add_info_message(
-                "PfTerminal Plan was already disconnected on this device.".to_string(),
+                "Corbanu Terminal Plan was already disconnected on this device.".to_string(),
                 /*hint*/ None,
             ),
             Err(error) => {
-                self.add_error_message(format!("Unable to disconnect PfTerminal Plan: {error}"));
+                self.add_error_message(format!("Unable to disconnect Corbanu Terminal Plan: {error}"));
                 self.open_wallet_menu();
                 return;
             }
@@ -74,12 +74,12 @@ impl ChatWidget {
         header.push(Line::from(format!("Wallet: {short}")));
         push_wallet_text(
             &mut header,
-            "Funds stay on Solana. PfTerminal cannot recover them without your recovery material.",
+            "Funds stay on Solana. Corbanu Terminal cannot recover them without your recovery material.",
             WalletTextStyle::Danger,
         );
         push_wallet_text(
             &mut header,
-            "This also disconnects the local PfTerminal Plan credential. It does not cancel or refund the paid period.",
+            "This also disconnects the local Corbanu Terminal Plan credential. It does not cancel or refund the paid period.",
             WalletTextStyle::Dimmed,
         );
         self.show_selection_view(SelectionViewParams {
@@ -165,7 +165,7 @@ impl ChatWidget {
         self.wallet_balances = None;
         match result {
             Ok(()) => self.add_info_message(
-                "Wallet and PfTerminal Plan credential removed from this device. On-chain funds and the paid period were not changed."
+                "Wallet and Corbanu Terminal Plan credential removed from this device. On-chain funds and the paid period were not changed."
                     .to_string(),
                 /*hint*/ None,
             ),

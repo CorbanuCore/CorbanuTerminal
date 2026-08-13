@@ -3,7 +3,7 @@ source: tui/src/chatwidget/tests/slash_commands.rs
 expression: popup
 ---
   Archive this session?
-  Are you sure? This will archive the current session and exit PFTerminal
+  This will archive the current session and exit Corbanu Terminal.
 
 › No, don't archive      Return to the current session
   Yes, archive and exit  Archive this session now

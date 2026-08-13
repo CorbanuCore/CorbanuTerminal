@@ -1,6 +1,6 @@
 # Features
 
-These pages document implemented PFTerminal feature surfaces, acceptance
+These pages document implemented Corbanu Terminal feature surfaces, acceptance
 evidence, or operational behavior. They are not current sprint commitments and
 not TBD backlog items.
 

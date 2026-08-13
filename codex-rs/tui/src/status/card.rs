@@ -13,6 +13,7 @@ use chrono::DateTime;
 use chrono::Local;
 use codex_app_server_protocol::AskForApproval;
 use codex_model_provider_info::WireApi;
+use codex_product_brand::PRODUCT_NAME;
 use codex_protocol::ThreadId;
 use codex_protocol::account::PlanType;
 use codex_protocol::config_types::ApprovalsReviewer;
@@ -735,7 +736,7 @@ fn status_account_value(
             (None, None) => "ChatGPT".to_string(),
         },
         StatusAccountDisplay::ApiKey => {
-            "OpenAI API key configured (run pfterminal login to use ChatGPT)".to_string()
+            "OpenAI API key configured (run corbanu login to use ChatGPT)".to_string()
         }
     })
 }
@@ -745,7 +746,7 @@ impl HistoryCell for StatusHistoryCell {
         let mut lines: Vec<Line<'static>> = Vec::new();
         lines.push(Line::from(vec![
             Span::from(format!("{}>_ ", FieldFormatter::INDENT)).dim(),
-            Span::from("PFTerminal").bold(),
+            Span::from(PRODUCT_NAME).bold(),
             Span::from(" ").dim(),
             Span::from(format!("(v{CODEX_CLI_VERSION})")).dim(),
         ]));

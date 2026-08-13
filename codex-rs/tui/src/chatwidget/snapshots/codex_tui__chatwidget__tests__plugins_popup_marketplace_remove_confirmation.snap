@@ -4,7 +4,7 @@ expression: confirmation
 ---
   Plugins
   Remove Repo Marketplace marketplace?
-  This removes the configured marketplace from PFTerminal.
+  This removes the configured marketplace from Corbanu Terminal.
 
   Remove marketplace  Remove this marketplace from the available plugin list.
 › Back to plugins     Keep this marketplace installed.

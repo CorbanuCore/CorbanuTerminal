@@ -1,11 +1,11 @@
 [CmdletBinding()]
 param(
-    [string]$PFTerminal = (Get-Command pfterminal -ErrorAction Stop).Source,
-    [string]$TaskName = "PFTerminal Telegram"
+    [string]$Corbanu Terminal = (Get-Command pfterminal -ErrorAction Stop).Source,
+    [string]$TaskName = "Corbanu Terminal Telegram"
 )
 
 $ErrorActionPreference = "Stop"
-$resolved = (Resolve-Path $PFTerminal).Path
+$resolved = (Resolve-Path $Corbanu Terminal).Path
 
 Write-Host "Checking Telegram configuration, bot identity, provider, workspace, and sandbox..."
 & $resolved telegram --health
@@ -13,7 +13,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Telegram health check failed; the Scheduled Task was not installed."
 }
 
-# Credentials remain in the PFTerminal vault. The task receives no token on
+# Credentials remain in the Corbanu Terminal vault. The task receives no token on
 # its command line and runs only in the current interactive user's account.
 $action = New-ScheduledTaskAction -Execute $resolved -Argument "telegram"
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
