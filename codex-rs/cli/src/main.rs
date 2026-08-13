@@ -1,5 +1,6 @@
 use clap::Args;
 use clap::CommandFactory;
+use clap::FromArgMatches;
 use clap::Parser;
 use clap_complete::Shell;
 use clap_complete::generate;
@@ -1096,7 +1097,7 @@ async fn cli_main(
         remote,
         mut interactive,
         subcommand,
-    } = MultitoolCli::parse();
+    } = parse_multitool_cli();
 
     // Fold --enable/--disable into config overrides so they flow to all subcommands.
     let toggle_overrides = feature_toggles.to_overrides()?;
@@ -1862,6 +1863,21 @@ async fn cli_main(
     }
 
     Ok(())
+}
+
+fn parse_multitool_cli() -> MultitoolCli {
+    let mut command = MultitoolCli::command();
+    if pfterminal_home::current_entrypoint_is_corbanu() {
+        command = command
+            .name("corbanu")
+            .bin_name("corbanu")
+            .about("Corbanu Terminal CLI")
+            .long_about("Corbanu Terminal CLI")
+            .override_usage(
+                "corbanu [OPTIONS] [PROMPT]\n       corbanu [OPTIONS] <COMMAND> [ARGS]",
+            );
+    }
+    MultitoolCli::from_arg_matches(&command.get_matches()).unwrap_or_else(|err| err.exit())
 }
 
 fn profile_v2_for_subcommand<'a>(

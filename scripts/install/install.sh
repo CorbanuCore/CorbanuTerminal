@@ -2,20 +2,36 @@
 
 set -eu
 
-RELEASE="${PFTERMINAL_RELEASE:-${CODEX_RELEASE:-latest}}"
-NON_INTERACTIVE="${PFTERMINAL_NON_INTERACTIVE:-${CODEX_NON_INTERACTIVE:-false}}"
+RELEASE="${CORBANU_RELEASE:-${PFTERMINAL_RELEASE:-${CODEX_RELEASE:-latest}}}"
+NON_INTERACTIVE="${CORBANU_NON_INTERACTIVE:-${PFTERMINAL_NON_INTERACTIVE:-${CODEX_NON_INTERACTIVE:-false}}}"
 DEFAULT_PREFER_RELEASES_OPENAI_COM="false"
-PREFER_RELEASES_OPENAI_COM="${PFTERMINAL_INSTALLER_USE_RELEASES_OPENAI_COM:-${CODEX_INSTALLER_USE_RELEASES_OPENAI_COM:-$DEFAULT_PREFER_RELEASES_OPENAI_COM}}"
+PREFER_RELEASES_OPENAI_COM="${CORBANU_INSTALLER_USE_RELEASES_OPENAI_COM:-${PFTERMINAL_INSTALLER_USE_RELEASES_OPENAI_COM:-${CODEX_INSTALLER_USE_RELEASES_OPENAI_COM:-$DEFAULT_PREFER_RELEASES_OPENAI_COM}}}"
 RELEASES_BASE_URL="https://releases.openai.com/codex"
+GITHUB_REPOSITORY="CorbanuCore/CorbanuTerminal"
 RELEASES_CONNECT_TIMEOUT=10
 RELEASES_METADATA_TIMEOUT=30
 RELEASES_ASSET_TIMEOUT=300
 release_source="github"
 
-BIN_DIR="${PFTERMINAL_INSTALL_DIR:-${CODEX_INSTALL_DIR:-$HOME/.local/bin}}"
-BIN_PATH="$BIN_DIR/pfterminal"
+BIN_DIR="${CORBANU_INSTALL_DIR:-${PFTERMINAL_INSTALL_DIR:-${CODEX_INSTALL_DIR:-$HOME/.local/bin}}}"
+BIN_PATH="$BIN_DIR/corbanu"
+LEGACY_BIN_PATH="$BIN_DIR/pfterminal"
 CODE_MODE_HOST_BIN_PATH="$BIN_DIR/codex-code-mode-host"
-CODEX_HOME_DIR="${PFTERMINAL_HOME:-${CODEX_HOME:-$HOME/.pfterminal}}"
+if [ -n "${CORBANU_HOME:-}" ]; then
+  CODEX_HOME_DIR="$CORBANU_HOME"
+elif [ -n "${PFTERMINAL_HOME:-}" ]; then
+  CODEX_HOME_DIR="$PFTERMINAL_HOME"
+elif [ -n "${CODEX_HOME:-}" ]; then
+  CODEX_HOME_DIR="$CODEX_HOME"
+elif [ -d "$HOME/.corbanu" ] && [ -d "$HOME/.pfterminal" ]; then
+  CODEX_HOME_DIR="$HOME/.corbanu"
+  printf 'WARNING: Both %s and %s exist; using %s without merging or deleting either home.\n' \
+    "$HOME/.corbanu" "$HOME/.pfterminal" "$HOME/.corbanu" >&2
+elif [ -d "$HOME/.pfterminal" ]; then
+  CODEX_HOME_DIR="$HOME/.pfterminal"
+else
+  CODEX_HOME_DIR="$HOME/.corbanu"
+fi
 STANDALONE_ROOT="$CODEX_HOME_DIR/packages/standalone"
 RELEASES_DIR="$STANDALONE_ROOT/releases"
 CURRENT_LINK="$STANDALONE_ROOT/current"
@@ -84,10 +100,16 @@ parse_args() {
 Usage: install.sh [--release VERSION]
 
 Environment:
+  CORBANU_RELEASE             Version to install; overridden by --release.
+  CORBANU_NON_INTERACTIVE     Set to 1, true, or yes to skip prompts.
+  CORBANU_INSTALL_DIR         Directory for the corbanu and pfterminal launchers.
+  CORBANU_HOME                Corbanu state directory; fresh installs default to ~/.corbanu.
+
+  Compatibility variables:
   PFTERMINAL_RELEASE          Version to install; overridden by --release.
   PFTERMINAL_NON_INTERACTIVE  Set to 1, true, or yes to skip prompts.
-  PFTERMINAL_INSTALL_DIR      Directory for the pfterminal launcher.
-  PFTERMINAL_HOME             PFTerminal state directory; defaults to ~/.pfterminal.
+  PFTERMINAL_INSTALL_DIR      Directory for both launchers.
+  PFTERMINAL_HOME             Existing PFTerminal state directory.
 
   Legacy CODEX_* installer variables are still honored as fallbacks.
 EOF
@@ -309,7 +331,7 @@ release_url_for_asset() {
   asset="$1"
   resolved_version="$2"
 
-  printf 'https://github.com/agtico/PfTerminal/releases/download/rust-v%s/%s\n' "$resolved_version" "$asset"
+  printf 'https://github.com/%s/releases/download/rust-v%s/%s\n' "$GITHUB_REPOSITORY" "$resolved_version" "$asset"
 }
 
 releases_url_for_asset() {
@@ -322,7 +344,7 @@ releases_url_for_asset() {
 release_metadata_url() {
   resolved_version="$1"
 
-  printf 'https://api.github.com/repos/agtico/PfTerminal/releases/tags/rust-v%s\n' "$resolved_version"
+  printf 'https://api.github.com/repos/%s/releases/tags/rust-v%s\n' "$GITHUB_REPOSITORY" "$resolved_version"
 }
 
 parse_downloaded_release_metadata() {
@@ -351,7 +373,7 @@ resolve_release_from_github() {
   normalized_version="$1"
   if [ "$normalized_version" = "latest" ]; then
     requested_release="latest"
-    metadata_url="https://api.github.com/repos/agtico/PfTerminal/releases/latest"
+    metadata_url="https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest"
   else
     resolved_version="$normalized_version"
     requested_release="$resolved_version"
@@ -463,14 +485,20 @@ release_asset_digest() {
 }
 
 select_release_assets() {
-  package_asset="pfterminal-package-$vendor_target.tar.gz"
-  checksum_asset="pfterminal-package_SHA256SUMS"
+  package_asset="corbanu-terminal-package-$vendor_target.tar.gz"
+  checksum_asset="corbanu-terminal-package_SHA256SUMS"
   download_fallback_url=""
   checksum_fallback_url=""
 
   if release_asset_exists "$package_asset" &&
     release_asset_exists "$checksum_asset"; then
     install_layout="package"
+    asset="$package_asset"
+  elif release_asset_exists "pfterminal-package-$vendor_target.tar.gz" &&
+    release_asset_exists "pfterminal-package_SHA256SUMS"; then
+    install_layout="package"
+    package_asset="pfterminal-package-$vendor_target.tar.gz"
+    checksum_asset="pfterminal-package_SHA256SUMS"
     asset="$package_asset"
   elif release_asset_exists "codex-package-$vendor_target.tar.gz" &&
     release_asset_exists "codex-package_SHA256SUMS"; then
@@ -482,7 +510,7 @@ select_release_assets() {
     install_layout="legacy-platform-npm"
     asset="codex-npm-$npm_tag-$resolved_version.tgz"
   else
-    echo "Could not find PFTerminal package or platform npm release assets for PFTerminal $resolved_version." >&2
+    echo "Could not find Corbanu Terminal package or compatible legacy release assets for $resolved_version." >&2
     return 1
   fi
 
@@ -596,7 +624,7 @@ add_to_path() {
 
   case ":$PATH:" in
     *":$BIN_DIR:"*)
-      resolved_visible="$(command -v pfterminal 2>/dev/null || true)"
+      resolved_visible="$(command -v corbanu 2>/dev/null || true)"
       if [ -z "$conflict_manager" ] || [ "$resolved_visible" = "$BIN_PATH" ]; then
         return
       fi
@@ -786,6 +814,12 @@ version_from_binary() {
 }
 
 current_installed_version() {
+  version="$(version_from_binary "$CURRENT_LINK/bin/corbanu" || true)"
+  if [ -n "$version" ]; then
+    printf '%s\n' "$version"
+    return 0
+  fi
+
   version="$(version_from_binary "$CURRENT_LINK/bin/pfterminal" || true)"
   if [ -n "$version" ]; then
     printf '%s\n' "$version"
@@ -808,7 +842,7 @@ resolve_existing_pfterminal() {
 classify_existing_pfterminal() {
   existing_path="$1"
 
-  if [ -z "$existing_path" ] || [ "$existing_path" = "$BIN_PATH" ]; then
+  if [ -z "$existing_path" ] || [ "$existing_path" = "$LEGACY_BIN_PATH" ]; then
     return 1
   fi
 
@@ -864,30 +898,30 @@ prompt_yes_no() {
 print_launch_instructions() {
   case "$path_action" in
     added)
-      step "Current terminal: export PATH=\"$BIN_DIR:\$PATH\" && pfterminal"
-      step "Future terminals: open a new terminal and run: pfterminal"
+      step "Current terminal: export PATH=\"$BIN_DIR:\$PATH\" && corbanu"
+      step "Future terminals: open a new terminal and run: corbanu"
       step "PATH was added to $path_profile"
       ;;
     updated)
-      step "Current terminal: export PATH=\"$BIN_DIR:\$PATH\" && pfterminal"
-      step "Future terminals: open a new terminal and run: pfterminal"
+      step "Current terminal: export PATH=\"$BIN_DIR:\$PATH\" && corbanu"
+      step "Future terminals: open a new terminal and run: corbanu"
       step "PATH was updated in $path_profile"
       ;;
     configured)
-      step "Current terminal: export PATH=\"$BIN_DIR:\$PATH\" && pfterminal"
-      step "Future terminals: open a new terminal and run: pfterminal"
+      step "Current terminal: export PATH=\"$BIN_DIR:\$PATH\" && corbanu"
+      step "Future terminals: open a new terminal and run: corbanu"
       step "PATH is already configured in $path_profile"
       ;;
     *)
-      step "Current terminal: pfterminal"
-      step "Future terminals: open a new terminal and run: pfterminal"
+      step "Current terminal: corbanu"
+      step "Future terminals: open a new terminal and run: corbanu"
       ;;
   esac
 }
 
 maybe_launch_pfterminal_now() {
-  if prompt_yes_no "Start PFTerminal now?"; then
-    step "Launching PFTerminal"
+  if prompt_yes_no "Start Corbanu Terminal now?"; then
+    step "Launching Corbanu Terminal"
     release_install_lock 2>/dev/null || true
     if [ -e /dev/tty ]; then
       exec "$BIN_PATH" </dev/tty
@@ -954,10 +988,25 @@ install_package_release() {
     "$stage_release/bin/pfterminal-walletd" \
     "$stage_release/bin/codex-code-mode-host" \
     "$stage_release/codex-path/rg"
+  for optional_binary in \
+    corbanu \
+    corbanu-debug \
+    corbanu-acp \
+    pfterminal-acp \
+    corbanu-walletd; do
+    if [ -f "$stage_release/bin/$optional_binary" ]; then
+      chmod 0755 "$stage_release/bin/$optional_binary"
+    fi
+  done
   if [ -f "$stage_release/codex-resources/bwrap" ]; then
     chmod 0755 "$stage_release/codex-resources/bwrap"
   fi
   ln -sf "bin/pfterminal" "$stage_release/pfterminal"
+  if [ -x "$stage_release/bin/corbanu" ]; then
+    ln -sf "bin/corbanu" "$stage_release/corbanu"
+  else
+    ln -sf "bin/pfterminal" "$stage_release/corbanu"
+  fi
 
   if [ -e "$release_dir" ] || [ -L "$release_dir" ]; then
     rm -rf "$release_dir"
@@ -1010,6 +1059,7 @@ release_dir_is_complete() {
         [ -x "$release_dir/bin/pfterminal-walletd" ] &&
         [ -x "$release_dir/bin/codex-code-mode-host" ] &&
         [ -x "$release_dir/pfterminal" ] &&
+        [ -x "$release_dir/corbanu" ] &&
         [ -x "$release_dir/codex-path/rg" ] ||
         return 1
       ;;
@@ -1040,15 +1090,19 @@ update_current_link() {
   replace_path_with_symlink "$CURRENT_LINK" "$release_dir" "$tmp_link"
 }
 
-release_pfterminal_relative_path() {
+release_terminal_relative_path() {
   release_dir="$1"
 
-  if [ -x "$release_dir/bin/pfterminal" ]; then
+  if [ -x "$release_dir/bin/corbanu" ]; then
+    printf 'bin/corbanu\n'
+  elif [ -x "$release_dir/corbanu" ]; then
+    printf 'corbanu\n'
+  elif [ -x "$release_dir/bin/pfterminal" ]; then
     printf 'bin/pfterminal\n'
   elif [ -x "$release_dir/pfterminal" ]; then
     printf 'pfterminal\n'
   else
-    echo "Installed PFTerminal release does not contain a pfterminal binary: $release_dir" >&2
+    echo "Installed release does not contain a Corbanu Terminal or PFTerminal binary: $release_dir" >&2
     return 1
   fi
 }
@@ -1058,35 +1112,38 @@ shell_quote() {
 }
 
 write_visible_command_wrapper() {
-  target="$1"
-  tmp_script="$2"
+  destination="$1"
+  target="$2"
+  tmp_script="$3"
 
   rm -f "$tmp_script"
   {
     printf '#!/bin/sh\n'
-    printf 'export CODEX_HOME="${PFTERMINAL_HOME:-$HOME/.pfterminal}"\n'
+    printf 'export CODEX_HOME=%s\n' "$(shell_quote "$CODEX_HOME_DIR")"
     printf 'exec %s "$@"\n' "$(shell_quote "$target")"
   } >"$tmp_script"
   chmod 0755 "$tmp_script"
 
-  if mv -f "$tmp_script" "$BIN_PATH"; then
+  if mv -f "$tmp_script" "$destination"; then
     return
   fi
 
-  rm -f "$BIN_PATH"
-  mv -f "$tmp_script" "$BIN_PATH"
+  rm -f "$destination"
+  mv -f "$tmp_script" "$destination"
 }
 
 update_visible_command() {
   release_dir="$1"
   mkdir -p "$BIN_DIR"
-  tmp_script="$BIN_DIR/.pfterminal.$$"
+  tmp_script="$BIN_DIR/.corbanu.$$"
+  legacy_tmp_script="$BIN_DIR/.pfterminal.$$"
   tmp_link="$BIN_DIR/.codex-code-mode-host.$$"
-  if ! pfterminal_relative_path="$(release_pfterminal_relative_path "$release_dir")"; then
+  if ! terminal_relative_path="$(release_terminal_relative_path "$release_dir")"; then
     exit 1
   fi
 
-  write_visible_command_wrapper "$CURRENT_LINK/$pfterminal_relative_path" "$tmp_script"
+  write_visible_command_wrapper "$BIN_PATH" "$CURRENT_LINK/$terminal_relative_path" "$tmp_script"
+  write_visible_command_wrapper "$LEGACY_BIN_PATH" "$CURRENT_LINK/$terminal_relative_path" "$legacy_tmp_script"
 
   if [ "$os" = "darwin" ] && [ -x "$release_dir/bin/codex-code-mode-host" ]; then
     replace_path_with_symlink \
@@ -1202,7 +1259,7 @@ if ! release_dir_is_complete "$release_dir" "$resolved_version" "$vendor_target"
   archive_path="$tmp_dir/$asset"
   checksum_path="$tmp_dir/$checksum_asset"
 
-  step "Downloading PFTerminal CLI"
+  step "Downloading Corbanu Terminal"
   if [ "$install_layout" = "package" ]; then
     checksum_digest="$(release_asset_digest "$checksum_asset")"
     download_file_with_fallback "$checksum_url" "$checksum_fallback_url" "$checksum_path" "$checksum_digest" "$checksum_asset" "$asset"
@@ -1220,7 +1277,7 @@ if ! release_dir_is_complete "$release_dir" "$resolved_version" "$vendor_target"
   fi
 fi
 if ! release_dir_is_complete "$release_dir" "$resolved_version" "$vendor_target" "$install_layout"; then
-  echo "Installed PFTerminal command did not report expected version $resolved_version." >&2
+  echo "Installed Corbanu Terminal command did not report expected version $resolved_version." >&2
   exit 1
 fi
 update_current_link "$release_dir"
@@ -1246,5 +1303,5 @@ case "$path_action" in
     ;;
 esac
 
-printf 'PFTerminal CLI %s installed successfully.\n' "$resolved_version"
+printf 'Corbanu Terminal %s installed successfully. The pfterminal command remains available as a compatibility alias.\n' "$resolved_version"
 maybe_launch_pfterminal_now

@@ -17,6 +17,33 @@ TARGET = "x86_64-unknown-linux-gnu"
 
 
 class PFTerminalReleaseContractTest(unittest.TestCase):
+    def test_installer_prefers_native_corbanu_release_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive, checksum, metadata = create_release_fixture(
+                root, asset_family="corbanu-terminal-package"
+            )
+            result, requests = run_installer(root, metadata, archive, checksum)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(
+                any("corbanu-terminal-package_SHA256SUMS" in url for url in requests)
+            )
+            self.assertTrue(
+                any(
+                    f"corbanu-terminal-package-{TARGET}.tar.gz" in url
+                    for url in requests
+                )
+            )
+            for command in ("corbanu", "pfterminal"):
+                version = subprocess.run(
+                    [root / "install-bin" / command, "--version"],
+                    capture_output=True,
+                    check=True,
+                    text=True,
+                )
+                self.assertEqual(version.stdout, f"corbanu {VERSION}\n")
+
     def test_installer_selects_and_installs_pfterminal_release_assets(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -25,8 +52,9 @@ class PFTerminalReleaseContractTest(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn(
-                f"PFTerminal CLI {VERSION} installed successfully.", result.stdout
+                f"Corbanu Terminal {VERSION} installed successfully.", result.stdout
             )
+            self.assertIn("compatibility alias", result.stdout)
             self.assertTrue(
                 any("pfterminal-package_SHA256SUMS" in url for url in requests)
             )
@@ -34,10 +62,15 @@ class PFTerminalReleaseContractTest(unittest.TestCase):
                 any(f"pfterminal-package-{TARGET}.tar.gz" in url for url in requests)
             )
             installed = root / "install-bin" / "pfterminal"
+            corbanu = root / "install-bin" / "corbanu"
             version = subprocess.run(
                 [installed, "--version"], capture_output=True, check=True, text=True
             )
+            corbanu_version = subprocess.run(
+                [corbanu, "--version"], capture_output=True, check=True, text=True
+            )
             self.assertEqual(version.stdout, f"pfterminal {VERSION}\n")
+            self.assertEqual(corbanu_version.stdout, version.stdout)
 
     def test_unrelated_asset_family_fails_with_pfterminal_diagnostic(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -58,12 +91,14 @@ class PFTerminalReleaseContractTest(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(
-                f"Could not find PFTerminal package or platform npm release assets for PFTerminal {VERSION}.",
+                f"Could not find Corbanu Terminal package or compatible legacy release assets for {VERSION}.",
                 result.stderr,
             )
 
 
-def create_release_fixture(root: Path) -> tuple[Path, Path, str]:
+def create_release_fixture(
+    root: Path, *, asset_family: str = "pfterminal-package"
+) -> tuple[Path, Path, str]:
     package = root / "package"
     for directory in ("bin", "codex-path", "codex-resources"):
         (package / directory).mkdir(parents=True, exist_ok=True)
@@ -76,19 +111,27 @@ def create_release_fixture(root: Path) -> tuple[Path, Path, str]:
         package / "bin" / "pfterminal-debug",
         f"#!/bin/sh\nprintf 'pfterminal {VERSION}\\n'\n",
     )
+    if asset_family == "corbanu-terminal-package":
+        write_executable(
+            package / "bin" / "corbanu",
+            f"#!/bin/sh\nprintf 'corbanu {VERSION}\\n'\n",
+        )
+        write_executable(package / "bin" / "corbanu-debug", "#!/bin/sh\nexit 0\n")
+        write_executable(package / "bin" / "corbanu-acp", "#!/bin/sh\nexit 0\n")
+        write_executable(package / "bin" / "corbanu-walletd", "#!/bin/sh\nexit 0\n")
     write_executable(package / "bin" / "pfterminal-walletd", "#!/bin/sh\nexit 0\n")
     write_executable(package / "bin" / "codex-code-mode-host", "#!/bin/sh\nexit 0\n")
     write_executable(package / "codex-path" / "rg", "#!/bin/sh\nexit 0\n")
     write_executable(package / "codex-resources" / "bwrap", "#!/bin/sh\nexit 0\n")
 
-    asset = f"pfterminal-package-{TARGET}.tar.gz"
+    asset = f"{asset_family}-{TARGET}.tar.gz"
     archive = root / asset
     with tarfile.open(archive, "w:gz") as output:
         for child in package.iterdir():
             output.add(child, arcname=child.name)
 
     archive_digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-    checksum = root / "pfterminal-package_SHA256SUMS"
+    checksum = root / f"{asset_family}_SHA256SUMS"
     checksum.write_text(f"{archive_digest}  {asset}\n", encoding="utf-8")
     checksum_digest = hashlib.sha256(checksum.read_bytes()).hexdigest()
     metadata = json.dumps(
@@ -138,6 +181,12 @@ def run_installer(
                 cp "$PFTERMINAL_TEST_CHECKSUM" "$output"
                 ;;
               */pfterminal-package-*.tar.gz)
+                cp "$PFTERMINAL_TEST_ARCHIVE" "$output"
+                ;;
+              */corbanu-terminal-package_SHA256SUMS)
+                cp "$PFTERMINAL_TEST_CHECKSUM" "$output"
+                ;;
+              */corbanu-terminal-package-*.tar.gz)
                 cp "$PFTERMINAL_TEST_ARCHIVE" "$output"
                 ;;
               *) exit 22 ;;

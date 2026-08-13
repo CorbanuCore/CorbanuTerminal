@@ -19,6 +19,7 @@ $functionNames = @(
     "Set-JunctionTarget",
     "Test-IsJunction",
     "Ensure-Junction",
+    "Ensure-CorbanuCompatibilityExecutables",
     "Find-ReleaseAssetMetadata",
     "Get-WindowsPackageAssetName",
     "Resolve-ReleaseAssetSelection",
@@ -39,11 +40,12 @@ foreach ($functionName in $functionNames) {
     Invoke-Expression $definition.Extent.Text
 }
 
-if ($source -notmatch '\$packageAsset\s*=\s*Get-WindowsPackageAssetName\s+-Target\s+\$target') {
-    throw "Windows installer entrypoint must select the published PFTerminal ZIP asset."
+if ($source -notmatch 'CorbanuCore/CorbanuTerminal') {
+    throw "Windows installer must use the canonical Corbanu Terminal repository."
 }
-if ($source -notmatch '\$checksumAsset\s*=\s*"pfterminal-package_SHA256SUMS"') {
-    throw "Windows installer entrypoint must select the published PFTerminal checksum manifest."
+if ($source -notmatch 'corbanu-terminal-package_SHA256SUMS' -or
+    $source -notmatch 'pfterminal-package_SHA256SUMS') {
+    throw "Windows installer must support both Corbanu and legacy checksum manifests."
 }
 
 $digest = "sha256:" + ("a" * 64)
@@ -54,23 +56,42 @@ $release = [PSCustomObject]@{
     Metadata = [PSCustomObject]@{
         assets = @(
             [PSCustomObject]@{
-                name = "pfterminal-package-$target.zip"
+                name = "corbanu-terminal-package-$target.zip"
                 digest = $digest
-                browser_download_url = "https://example.invalid/pfterminal-package-$target.zip"
+                browser_download_url = "https://example.invalid/corbanu-terminal-package-$target.zip"
             },
             [PSCustomObject]@{
-                name = "pfterminal-package_SHA256SUMS"
+                name = "corbanu-terminal-package_SHA256SUMS"
                 digest = $digest
-                browser_download_url = "https://example.invalid/pfterminal-package_SHA256SUMS"
+                browser_download_url = "https://example.invalid/corbanu-terminal-package_SHA256SUMS"
             }
         )
     }
 }
 $selection = Resolve-ReleaseAssetSelection -ResolvedRelease $release -Target $target -NpmTag "win32-x64"
+if ($selection.PackageAsset -ne "corbanu-terminal-package-$target.zip" -or
+    $selection.ChecksumAsset -ne "corbanu-terminal-package_SHA256SUMS" -or
+    $selection.InstallLayout -ne "Package") {
+    throw "Windows installer did not prefer the Corbanu release asset family."
+}
+
+$release.Metadata.assets = @(
+    [PSCustomObject]@{
+        name = "pfterminal-package-$target.zip"
+        digest = $digest
+        browser_download_url = "https://example.invalid/pfterminal-package-$target.zip"
+    },
+    [PSCustomObject]@{
+        name = "pfterminal-package_SHA256SUMS"
+        digest = $digest
+        browser_download_url = "https://example.invalid/pfterminal-package_SHA256SUMS"
+    }
+)
+$selection = Resolve-ReleaseAssetSelection -ResolvedRelease $release -Target $target -NpmTag "win32-x64"
 if ($selection.PackageAsset -ne "pfterminal-package-$target.zip" -or
     $selection.ChecksumAsset -ne "pfterminal-package_SHA256SUMS" -or
     $selection.InstallLayout -ne "Package") {
-    throw "Windows installer did not select the PFTerminal release asset family."
+    throw "Windows installer did not retain the PFTerminal release fallback."
 }
 
 # Windows executables cannot be deleted while a running process holds them.
@@ -82,12 +103,12 @@ $oldRelease = Join-Path $releasesDir "0.1.21-x86_64-pc-windows-msvc"
 $newRelease = Join-Path $releasesDir "0.1.22-x86_64-pc-windows-msvc"
 $currentDir = Join-Path $testRoot "current"
 $lockedLegacyBinary = Join-Path $oldRelease "bin\codex.exe"
-$newBinary = Join-Path $newRelease "bin\pfterminal.exe"
+$newBinary = Join-Path $newRelease "bin\corbanu.exe"
 $lock = $null
 
 try {
     $packageAsset = Get-WindowsPackageAssetName -Target "x86_64-pc-windows-msvc"
-    if ($packageAsset -ne "pfterminal-package-x86_64-pc-windows-msvc.zip") {
+    if ($packageAsset -ne "corbanu-terminal-package-x86_64-pc-windows-msvc.zip") {
         throw "Windows package selection must use the published ZIP asset: $packageAsset"
     }
 
@@ -96,7 +117,7 @@ try {
     $archiveDestination = Join-Path $testRoot "archive-destination"
     New-Item -ItemType Directory -Force -Path (Join-Path $archiveSource "bin") | Out-Null
     [System.IO.File]::WriteAllText(
-        (Join-Path $archiveSource "bin\pfterminal.exe"),
+        (Join-Path $archiveSource "bin\corbanu.exe"),
         "package executable"
     )
     Compress-Archive -Path (Join-Path $archiveSource "*") -DestinationPath $archivePath
@@ -104,8 +125,12 @@ try {
     Expand-WindowsPackageArchive `
         -ArchivePath $archivePath `
         -DestinationPath $archiveDestination
-    if (-not (Test-Path -LiteralPath (Join-Path $archiveDestination "bin\pfterminal.exe") -PathType Leaf)) {
+    Ensure-CorbanuCompatibilityExecutables -PackageDir $archiveDestination -Layout "Package"
+    if (-not (Test-Path -LiteralPath (Join-Path $archiveDestination "bin\corbanu.exe") -PathType Leaf)) {
         throw "Windows package ZIP extraction did not preserve the package layout."
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $archiveDestination "bin\pfterminal.exe") -PathType Leaf)) {
+        throw "Windows package compatibility did not expose the legacy command alias."
     }
 
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $lockedLegacyBinary) | Out-Null
@@ -133,7 +158,7 @@ try {
     if (-not (Test-Path -LiteralPath $lockedLegacyBinary -PathType Leaf)) {
         throw "Upgrade modified the old release while its legacy executable was locked."
     }
-    if (-not (Test-Path -LiteralPath (Join-Path $currentDir "bin\pfterminal.exe") -PathType Leaf)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $currentDir "bin\corbanu.exe") -PathType Leaf)) {
         throw "The retargeted current junction does not expose the new release."
     }
 } finally {

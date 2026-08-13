@@ -59,6 +59,41 @@ class PackageInputs:
 
 
 PACKAGE_VARIANTS: dict[str, PackageVariant] = {
+    "corbanu": PackageVariant(
+        name="corbanu",
+        cargo_bin="corbanu",
+        executable_stem="corbanu",
+        extra_binaries=(
+            PackageExtraBinary(
+                cargo_bin="pfterminal",
+                executable_stem="pfterminal",
+            ),
+            PackageExtraBinary(
+                cargo_bin="corbanu-debug",
+                executable_stem="corbanu-debug",
+            ),
+            PackageExtraBinary(
+                cargo_bin="pfterminal-debug",
+                executable_stem="pfterminal-debug",
+            ),
+            PackageExtraBinary(
+                cargo_bin="corbanu-acp",
+                executable_stem="corbanu-acp",
+            ),
+            PackageExtraBinary(
+                cargo_bin="pfterminal-acp",
+                executable_stem="pfterminal-acp",
+            ),
+            PackageExtraBinary(
+                cargo_bin="corbanu-walletd",
+                executable_stem="corbanu-walletd",
+            ),
+            PackageExtraBinary(
+                cargo_bin="pfterminal-walletd",
+                executable_stem="pfterminal-walletd",
+            ),
+        ),
+    ),
     "pfterminal": PackageVariant(
         name="pfterminal",
         cargo_bin="pfterminal",

@@ -24,7 +24,7 @@ class InstallShTest(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
+                "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/tags/"
                 f"rust-v{VERSION}"
             ],
         )
@@ -41,9 +41,9 @@ class InstallShTest(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
+                "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/tags/"
                 f"rust-v{VERSION}",
-                "https://github.com/agtico/PfTerminal/releases/download/"
+                "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                 f"rust-v{VERSION}/codex-package_SHA256SUMS",
             ],
         )
@@ -57,9 +57,9 @@ class InstallShTest(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
+                "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/tags/"
                 f"rust-v{version}",
-                "https://github.com/agtico/PfTerminal/releases/download/"
+                "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                 f"rust-v{version}/codex-package_SHA256SUMS",
             ],
         )
@@ -72,8 +72,8 @@ class InstallShTest(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                "https://api.github.com/repos/agtico/PfTerminal/releases/latest",
-                "https://github.com/agtico/PfTerminal/releases/download/"
+                "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/latest",
+                "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                 f"rust-v{VERSION}/codex-package_SHA256SUMS",
             ],
         )
@@ -88,8 +88,8 @@ class InstallShTest(unittest.TestCase):
         self.assertEqual(
             requests,
             [
-                "https://api.github.com/repos/agtico/PfTerminal/releases/latest",
-                "https://github.com/agtico/PfTerminal/releases/download/"
+                "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/latest",
+                "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                 f"rust-v{VERSION}/codex-package_SHA256SUMS",
             ],
         )
@@ -105,7 +105,7 @@ class InstallShTest(unittest.TestCase):
         self.assertIn("/codex-npm-", requests[1])
         self.assertNotIn("codex-package_SHA256SUMS", requests[1])
 
-    def test_macos_install_exposes_code_mode_host_beside_pfterminal(self) -> None:
+    def test_macos_install_exposes_both_launchers_with_shared_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             archive_path, checksum_path, metadata_json = create_package_release(root)
@@ -123,10 +123,16 @@ class InstallShTest(unittest.TestCase):
             install_bin = root / "install-bin"
             current = root / "pfterminal-home" / "packages" / "standalone" / "current"
             pfterminal_path = install_bin / "pfterminal"
+            corbanu_path = install_bin / "corbanu"
             host_path = install_bin / "codex-code-mode-host"
-            wrapper = pfterminal_path.read_text(encoding="utf-8")
-            self.assertIn(str(current / "bin" / "pfterminal"), wrapper)
-            self.assertIn("$HOME/.pfterminal", wrapper)
+            legacy_wrapper = pfterminal_path.read_text(encoding="utf-8")
+            corbanu_wrapper = corbanu_path.read_text(encoding="utf-8")
+            expected_target = str(current / "corbanu")
+            expected_home = str(root / "pfterminal-home")
+            self.assertIn(expected_target, legacy_wrapper)
+            self.assertIn(expected_target, corbanu_wrapper)
+            self.assertIn(expected_home, legacy_wrapper)
+            self.assertIn(expected_home, corbanu_wrapper)
             self.assertEqual(
                 os.readlink(host_path),
                 str(current / "bin" / "codex-code-mode-host"),
@@ -209,10 +215,10 @@ class InstallShTest(unittest.TestCase):
                         requests,
                         [
                             "https://releases.openai.com/codex/channels/latest",
-                            "https://api.github.com/repos/agtico/PfTerminal/releases/latest",
-                            "https://github.com/agtico/PfTerminal/releases/download/"
+                            "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/latest",
+                            "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                             f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                            "https://github.com/agtico/PfTerminal/releases/download/"
+                            "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                             f"rust-v{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
                         ],
                     )
@@ -243,11 +249,11 @@ class InstallShTest(unittest.TestCase):
                 requests,
                 [
                     f"https://releases.openai.com/codex/releases/{VERSION}/release.json",
-                    "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
+                    "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/tags/"
                     f"rust-v{VERSION}",
-                    "https://github.com/agtico/PfTerminal/releases/download/"
+                    "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/agtico/PfTerminal/releases/download/"
+                    "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
@@ -275,10 +281,10 @@ class InstallShTest(unittest.TestCase):
                 [
                     "https://releases.openai.com/codex/channels/latest",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/agtico/PfTerminal/releases/download/"
+                    "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package_SHA256SUMS",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
-                    "https://github.com/agtico/PfTerminal/releases/download/"
+                    "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
@@ -306,10 +312,10 @@ class InstallShTest(unittest.TestCase):
                 [
                     "https://releases.openai.com/codex/channels/latest",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/agtico/PfTerminal/releases/download/"
+                    "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package_SHA256SUMS",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
-                    "https://github.com/agtico/PfTerminal/releases/download/"
+                    "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
                 ],
             )
@@ -342,9 +348,9 @@ class InstallShTest(unittest.TestCase):
                 [
                     "https://releases.openai.com/codex/channels/latest",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/agtico/PfTerminal/releases/download/"
+                    "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                    "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
+                    "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/tags/"
                     f"rust-v{VERSION}",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
                 ],
@@ -386,9 +392,9 @@ class InstallShTest(unittest.TestCase):
                 [
                     "https://releases.openai.com/codex/channels/latest",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/agtico/PfTerminal/releases/download/"
+                    "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                    "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
+                    "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/tags/"
                     f"rust-v{VERSION}",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package-aarch64-apple-darwin.tar.gz",
                 ],
@@ -417,9 +423,9 @@ class InstallShTest(unittest.TestCase):
                 [
                     "https://releases.openai.com/codex/channels/latest",
                     f"https://releases.openai.com/codex/releases/{VERSION}/codex-package_SHA256SUMS",
-                    "https://github.com/agtico/PfTerminal/releases/download/"
+                    "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-package_SHA256SUMS",
-                    "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
+                    "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/tags/"
                     f"rust-v{VERSION}",
                 ],
             )
@@ -478,9 +484,9 @@ class InstallShTest(unittest.TestCase):
                 first_requests,
                 [
                     f"https://releases.openai.com/codex/releases/{VERSION}/release.json",
-                    "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
+                    "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/tags/"
                     f"rust-v{VERSION}",
-                    "https://github.com/agtico/PfTerminal/releases/download/"
+                    "https://github.com/CorbanuCore/CorbanuTerminal/releases/download/"
                     f"rust-v{VERSION}/codex-npm-darwin-arm64-{VERSION}.tgz",
                 ],
             )
@@ -500,7 +506,7 @@ class InstallShTest(unittest.TestCase):
                 second_requests,
                 [
                     f"https://releases.openai.com/codex/releases/{VERSION}/release.json",
-                    "https://api.github.com/repos/agtico/PfTerminal/releases/tags/"
+                    "https://api.github.com/repos/CorbanuCore/CorbanuTerminal/releases/tags/"
                     f"rust-v{VERSION}",
                 ],
             )
@@ -604,7 +610,7 @@ def run_installer_in(
                   exit 22
                 fi
                 ;;
-              https://github.com/agtico/PfTerminal/releases/download/*/codex-package_SHA256SUMS)
+              https://github.com/CorbanuCore/CorbanuTerminal/releases/download/*/codex-package_SHA256SUMS)
                 if [ "$CODEX_TEST_RELEASES_MODE" = "corrupt_checksum_and_github" ]; then
                   printf '<html>proxy error</html>\n' >"$output"
                   exit 0
@@ -615,14 +621,14 @@ def run_installer_in(
                   exit 22
                 fi
                 ;;
-              https://github.com/agtico/PfTerminal/releases/download/*/codex-package-*.tar.gz)
+              https://github.com/CorbanuCore/CorbanuTerminal/releases/download/*/codex-package-*.tar.gz)
                 if [ -n "$CODEX_TEST_ARCHIVE_PATH" ]; then
                   cp "$CODEX_TEST_ARCHIVE_PATH" "$output"
                 else
                   exit 22
                 fi
                 ;;
-              https://github.com/agtico/PfTerminal/releases/download/*/codex-npm-*.tgz)
+              https://github.com/CorbanuCore/CorbanuTerminal/releases/download/*/codex-npm-*.tgz)
                 if [ -n "$CODEX_TEST_LEGACY_ARCHIVE_PATH" ]; then
                   cp "$CODEX_TEST_LEGACY_ARCHIVE_PATH" "$output"
                 else

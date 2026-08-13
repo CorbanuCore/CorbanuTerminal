@@ -16,6 +16,23 @@ from codex_package.targets import TARGET_SPECS
 
 
 class SourceBinariesForTargetTest(unittest.TestCase):
+    def test_corbanu_package_contains_primary_commands_and_legacy_aliases(self) -> None:
+        variant = PACKAGE_VARIANTS["corbanu"]
+
+        self.assertEqual(variant.cargo_bin, "corbanu")
+        self.assertEqual(
+            [binary.cargo_bin for binary in variant.extra_binaries],
+            [
+                "pfterminal",
+                "corbanu-debug",
+                "pfterminal-debug",
+                "corbanu-acp",
+                "pfterminal-acp",
+                "corbanu-walletd",
+                "pfterminal-walletd",
+            ],
+        )
+
     def test_release_workflow_prebuilds_every_package_binary(self) -> None:
         workflow = (
             Path(__file__).resolve().parents[2]
@@ -24,8 +41,17 @@ class SourceBinariesForTargetTest(unittest.TestCase):
             / "pfterminal-release.yml"
         ).read_text(encoding="utf-8")
 
+        self.assertEqual(workflow.count("--bin corbanu \\"), 3)
+        self.assertEqual(workflow.count("--bin pfterminal \\"), 3)
+        self.assertEqual(workflow.count("--bin corbanu-debug \\"), 3)
         self.assertEqual(workflow.count("--bin pfterminal-debug \\"), 3)
+        self.assertEqual(workflow.count("--bin corbanu-acp \\"), 3)
+        self.assertEqual(workflow.count("--bin pfterminal-acp \\"), 3)
+        self.assertEqual(workflow.count("--bin corbanu-walletd \\"), 3)
+        self.assertEqual(workflow.count("--bin pfterminal-walletd \\"), 3)
         self.assertEqual(workflow.count("--bin codex-code-mode-host"), 3)
+        self.assertEqual(workflow.count("--variant corbanu \\"), 3)
+        self.assertEqual(workflow.count('--extra-bin "corbanu-debug='), 3)
         self.assertEqual(workflow.count('--extra-bin "pfterminal-debug='), 3)
         self.assertEqual(workflow.count("--code-mode-host-bin "), 3)
         self.assertEqual(workflow.count("--bin bwrap"), 1)

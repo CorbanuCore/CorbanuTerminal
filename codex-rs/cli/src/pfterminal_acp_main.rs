@@ -43,6 +43,8 @@ use std::process::Command;
 
 /// Environment variable that pins the PFTerminal executable explicitly.
 const PFTERMINAL_PATH_ENV: &str = "PFTERMINAL_PATH";
+/// Environment variable that pins the Corbanu Terminal executable explicitly.
+const CORBANU_PATH_ENV: &str = "CORBANU_PATH";
 /// Environment variable that pins the adapter executable explicitly.
 const CODEX_ACP_PATH_ENV: &str = "CODEX_ACP_PATH";
 /// The variable `codex-acp` reads to choose which binary to drive.
@@ -50,11 +52,64 @@ const CODEX_PATH_ENV: &str = "CODEX_PATH";
 
 const ADAPTER_BIN: &str = "codex-acp";
 const PFTERMINAL_BIN: &str = "pfterminal";
+const CORBANU_BIN: &str = "corbanu";
+
+#[derive(Clone, Copy)]
+enum TerminalBrand {
+    Corbanu,
+    LegacyPfterminal,
+}
+
+impl TerminalBrand {
+    fn current() -> Self {
+        let is_corbanu = env::current_exe()
+            .ok()
+            .and_then(|path| {
+                path.file_stem()
+                    .map(|stem| stem.to_string_lossy().into_owned())
+            })
+            .is_some_and(|stem| stem == "corbanu-acp");
+        if is_corbanu {
+            Self::Corbanu
+        } else {
+            Self::LegacyPfterminal
+        }
+    }
+
+    fn launcher(self) -> &'static str {
+        match self {
+            Self::Corbanu => "corbanu-acp",
+            Self::LegacyPfterminal => "pfterminal-acp",
+        }
+    }
+
+    fn product(self) -> &'static str {
+        match self {
+            Self::Corbanu => "Corbanu Terminal",
+            Self::LegacyPfterminal => "PFTerminal",
+        }
+    }
+
+    fn primary_binary(self) -> &'static str {
+        match self {
+            Self::Corbanu => CORBANU_BIN,
+            Self::LegacyPfterminal => PFTERMINAL_BIN,
+        }
+    }
+
+    fn fallback_binary(self) -> &'static str {
+        match self {
+            Self::Corbanu => PFTERMINAL_BIN,
+            Self::LegacyPfterminal => CORBANU_BIN,
+        }
+    }
+}
 
 const ADAPTER_INSTALL_HINT: &str = "install it with `npm install -g @agentclientprotocol/codex-acp`, or set \
      CODEX_ACP_PATH to its executable";
 
-fn main() -> std::process::ExitCode {
+pub(crate) fn main() -> std::process::ExitCode {
+    let brand = TerminalBrand::current();
     let args: Vec<OsString> = env::args_os().skip(1).collect();
 
     // Handled locally rather than forwarded: `pfterminal-acp --version` should
@@ -63,19 +118,19 @@ fn main() -> std::process::ExitCode {
     // sends these flags, so intercepting them cannot affect a live session.
     if let Some(first) = args.first() {
         if first == "--version" || first == "-V" {
-            print_version();
+            print_version(brand);
             return std::process::ExitCode::SUCCESS;
         }
         if first == "--help" || first == "-h" {
-            print_help();
+            print_help(brand);
             return std::process::ExitCode::SUCCESS;
         }
     }
 
-    let pfterminal = match resolve_pfterminal() {
+    let terminal = match resolve_terminal(brand) {
         Ok(path) => path,
         Err(err) => {
-            eprintln!("pfterminal-acp: {err}");
+            eprintln!("{}: {err}", brand.launcher());
             return std::process::ExitCode::from(127);
         }
     };
@@ -83,7 +138,7 @@ fn main() -> std::process::ExitCode {
     let adapter = match resolve_adapter() {
         Ok(path) => path,
         Err(err) => {
-            eprintln!("pfterminal-acp: {err}");
+            eprintln!("{}: {err}", brand.launcher());
             return std::process::ExitCode::from(127);
         }
     };
@@ -93,19 +148,20 @@ fn main() -> std::process::ExitCode {
     // Authoritative: a CODEX_PATH inherited from the environment would silently
     // point the adapter at a different agent while the client still believes it
     // is talking to PFTerminal.
-    command.env(CODEX_PATH_ENV, &pfterminal);
+    command.env(CODEX_PATH_ENV, &terminal);
 
-    exec(command, &adapter)
+    exec(command, &adapter, brand)
 }
 
 /// Replace this process with the adapter, preserving stdio, signals and status.
 #[cfg(unix)]
-fn exec(mut command: Command, adapter: &Path) -> ! {
+fn exec(mut command: Command, adapter: &Path, brand: TerminalBrand) -> ! {
     use std::os::unix::process::CommandExt;
     // `exec` only returns on failure.
     let err = command.exec();
     eprintln!(
-        "pfterminal-acp: failed to execute {}: {err}",
+        "{}: failed to execute {}: {err}",
+        brand.launcher(),
         adapter.display()
     );
     std::process::exit(126)
@@ -118,12 +174,13 @@ fn exec(mut command: Command, adapter: &Path) -> ! {
 /// arrive as success, 3010 (the common "reboot required" code) as 194, and
 /// NTSTATUS-style negatives as arbitrary low bytes.
 #[cfg(not(unix))]
-fn exec(mut command: Command, adapter: &Path) -> ! {
+fn exec(mut command: Command, adapter: &Path, brand: TerminalBrand) -> ! {
     match command.status() {
         Ok(status) => std::process::exit(status.code().unwrap_or(1)),
         Err(err) => {
             eprintln!(
-                "pfterminal-acp: failed to execute {}: {err}",
+                "{}: failed to execute {}: {err}",
+                brand.launcher(),
                 adapter.display()
             );
             std::process::exit(126)
@@ -137,30 +194,45 @@ fn exec(mut command: Command, adapter: &Path) -> ! {
 /// together: when a user has several PFTerminal installs, the adapter should
 /// drive the one it was installed alongside, not whichever happens to win on
 /// `PATH`.
-fn resolve_pfterminal() -> Result<PathBuf, String> {
-    if let Some(explicit) = env::var_os(PFTERMINAL_PATH_ENV) {
+fn resolve_terminal(brand: TerminalBrand) -> Result<PathBuf, String> {
+    let explicit = match brand {
+        TerminalBrand::Corbanu => env::var_os(CORBANU_PATH_ENV)
+            .map(|path| (CORBANU_PATH_ENV, path))
+            .or_else(|| env::var_os(PFTERMINAL_PATH_ENV).map(|path| (PFTERMINAL_PATH_ENV, path))),
+        TerminalBrand::LegacyPfterminal => {
+            env::var_os(PFTERMINAL_PATH_ENV).map(|path| (PFTERMINAL_PATH_ENV, path))
+        }
+    };
+    if let Some((variable, explicit)) = explicit {
         let path = PathBuf::from(explicit);
         if is_executable(&path) {
             return Ok(absolute(path));
         }
         return Err(format!(
-            "{PFTERMINAL_PATH_ENV} is set to {} but that is not an executable file",
+            "{variable} is set to {} but that is not an executable file",
             path.display()
         ));
     }
 
-    if let Some(sibling) = sibling_executable(PFTERMINAL_BIN) {
-        return Ok(absolute(sibling));
-    }
-
-    if let Some(found) = find_on_path(PFTERMINAL_BIN) {
-        return Ok(absolute(found));
+    for binary in [brand.primary_binary(), brand.fallback_binary()] {
+        if let Some(sibling) = sibling_executable(binary) {
+            return Ok(absolute(sibling));
+        }
+        if let Some(found) = find_on_path(binary) {
+            return Ok(absolute(found));
+        }
     }
 
     Err(format!(
-        "could not find the `{PFTERMINAL_BIN}` executable next to this binary or on PATH; \
-         set {PFTERMINAL_PATH_ENV} to its location"
+        "could not find `{}` or its compatibility alias `{}` next to this binary or on PATH",
+        brand.primary_binary(),
+        brand.fallback_binary()
     ))
+}
+
+#[cfg(test)]
+fn resolve_pfterminal() -> Result<PathBuf, String> {
+    resolve_terminal(TerminalBrand::LegacyPfterminal)
 }
 
 fn resolve_adapter() -> Result<PathBuf, String> {
@@ -248,11 +320,11 @@ fn absolute(path: PathBuf) -> PathBuf {
     path.canonicalize().unwrap_or(path)
 }
 
-fn print_version() {
-    println!("pfterminal-acp {}", env!("CARGO_PKG_VERSION"));
-    match resolve_pfterminal() {
-        Ok(path) => println!("  pfterminal: {}", path.display()),
-        Err(err) => println!("  pfterminal: NOT FOUND ({err})"),
+fn print_version(brand: TerminalBrand) {
+    println!("{} {}", brand.launcher(), env!("CARGO_PKG_VERSION"));
+    match resolve_terminal(brand) {
+        Ok(path) => println!("  {}: {}", brand.primary_binary(), path.display()),
+        Err(err) => println!("  {}: NOT FOUND ({err})", brand.primary_binary()),
     }
     match resolve_adapter() {
         Ok(path) => println!("  codex-acp:  {}", path.display()),
@@ -260,15 +332,15 @@ fn print_version() {
     }
 }
 
-fn print_help() {
+fn print_help(brand: TerminalBrand) {
     println!(
         "\
-pfterminal-acp — run PFTerminal as an ACP agent over stdio.
+{} — run {} as an ACP agent over stdio.
 
 USAGE:
-    pfterminal-acp [ADAPTER_ARGS...]
+    {} [ADAPTER_ARGS...]
 
-This is a launcher, not an ACP implementation. It resolves the PFTerminal
+This is a launcher, not an ACP implementation. It resolves the terminal
 executable, sets CODEX_PATH, and hands off to the codex-acp adapter.
 
 Arguments are forwarded to the adapter unchanged, except that a leading
@@ -278,12 +350,16 @@ It is normally started by an ACP client (such as Buzz) rather than by hand;
 stdin and stdout carry the protocol.
 
 ENVIRONMENT:
+    {CORBANU_PATH_ENV}       pin the Corbanu Terminal executable
     {PFTERMINAL_PATH_ENV}    pin the PFTerminal executable
     {CODEX_ACP_PATH_ENV}     pin the codex-acp executable
     {CODEX_PATH_ENV}          set by this launcher; any inherited value is overridden
 
 REQUIREMENTS:
-    codex-acp must be installed — {ADAPTER_INSTALL_HINT}."
+    codex-acp must be installed — {ADAPTER_INSTALL_HINT}.",
+        brand.launcher(),
+        brand.product(),
+        brand.launcher(),
     );
 }
 

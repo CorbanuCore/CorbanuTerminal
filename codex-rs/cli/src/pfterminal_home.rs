@@ -1,8 +1,8 @@
 use anyhow::Context;
 use std::path::PathBuf;
 
-const STABLE_HOME_ENV: &str = "PFTERMINAL_HOME";
-const DEBUG_HOME_ENV: &str = "PFTERMINAL_DEBUG_HOME";
+const CORBANU_DEBUG_HOME_ENV: &str = "CORBANU_DEBUG_HOME";
+const LEGACY_DEBUG_HOME_ENV: &str = "PFTERMINAL_DEBUG_HOME";
 
 pub(crate) fn configure_for_current_process() -> anyhow::Result<()> {
     let Some(arg0) = std::env::args_os().next() else {
@@ -14,26 +14,35 @@ pub(crate) fn configure_for_current_process() -> anyhow::Result<()> {
     configure_for_entrypoint(&entrypoint)
 }
 
+pub(crate) fn current_entrypoint_is_corbanu() -> bool {
+    std::env::args_os()
+        .next()
+        .and_then(|arg0| entrypoint_from_argv0(&arg0))
+        .is_some_and(|entrypoint| entrypoint == "corbanu" || entrypoint == "corbanu-debug")
+}
+
 pub(crate) fn configure_for_entrypoint(entrypoint: &str) -> anyhow::Result<()> {
     let home = match entrypoint {
-        "pfterminal" => resolve_home(
-            std::env::var_os(STABLE_HOME_ENV).map(PathBuf::from),
+        "pfterminal" | "corbanu" => return Ok(()),
+        "pfterminal-debug" | "corbanu-debug" => resolve_home(
+            std::env::var_os(CORBANU_DEBUG_HOME_ENV).map(PathBuf::from),
+            std::env::var_os(LEGACY_DEBUG_HOME_ENV).map(PathBuf::from),
+            std::env::var_os("CODEX_HOME").map(PathBuf::from),
             dirs::home_dir(),
-            ".pfterminal",
-        ),
-        "pfterminal-debug" => resolve_home(
-            std::env::var_os(DEBUG_HOME_ENV).map(PathBuf::from),
-            dirs::home_dir(),
-            ".pfterminal-debug",
         ),
         _ => return Ok(()),
     }
     .with_context(|| format!("could not resolve the isolated home for {entrypoint}"))?;
 
     // This runs at process entry, before the async runtime or any worker threads exist.
-    // Restricting CODEX_HOME here prevents PF stable, PF debug, and stock Codex state from
-    // sharing databases even when the invoking shell exports a stock CODEX_HOME.
-    unsafe { std::env::set_var("CODEX_HOME", home) };
+    // This process is specifically the isolated debug entrypoint. Stable-home
+    // variables must not outrank its selected debug home when the shared home
+    // resolver runs later.
+    unsafe {
+        std::env::remove_var("CORBANU_HOME");
+        std::env::remove_var("PFTERMINAL_HOME");
+        std::env::set_var("CODEX_HOME", home);
+    }
     Ok(())
 }
 
@@ -52,11 +61,33 @@ fn entrypoint_from_argv0(arg0: &std::ffi::OsStr) -> Option<String> {
 }
 
 fn resolve_home(
-    override_home: Option<PathBuf>,
+    corbanu_override: Option<PathBuf>,
+    legacy_override: Option<PathBuf>,
+    codex_override: Option<PathBuf>,
     user_home: Option<PathBuf>,
-    leaf: &str,
 ) -> Option<PathBuf> {
-    override_home.or_else(|| user_home.map(|home| home.join(leaf)))
+    corbanu_override
+        .or(legacy_override)
+        .or(codex_override)
+        .or_else(|| {
+            user_home.map(|home| {
+                let corbanu_home = home.join(".corbanu-debug");
+                let legacy_home = home.join(".pfterminal-debug");
+                match (corbanu_home.is_dir(), legacy_home.is_dir()) {
+                    (true, true) => {
+                        eprintln!(
+                            "Both {} and {} exist; using {} without merging or deleting either home.",
+                            corbanu_home.display(),
+                            legacy_home.display(),
+                            corbanu_home.display()
+                        );
+                        corbanu_home
+                    }
+                    (false, true) => legacy_home,
+                    (true, false) | (false, false) => corbanu_home,
+                }
+            })
+        })
 }
 
 #[cfg(test)]
@@ -64,49 +95,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn stable_and_debug_defaults_are_distinct_from_each_other_and_stock_codex() {
-        let user_home = PathBuf::from("/home/tester");
-        let stable = resolve_home(
-            /*override_home*/ None,
-            Some(user_home.clone()),
-            ".pfterminal",
-        )
-        .unwrap();
+    fn debug_default_is_distinct_from_stock_codex() {
+        let user_home = tempfile::TempDir::new().expect("user home");
         let debug = resolve_home(
-            /*override_home*/ None,
-            Some(user_home.clone()),
-            ".pfterminal-debug",
+            /*corbanu_override*/ None,
+            /*legacy_override*/ None,
+            /*codex_override*/ None,
+            Some(user_home.path().to_path_buf()),
         )
         .unwrap();
 
-        assert_eq!(stable, user_home.join(".pfterminal"));
-        assert_eq!(debug, user_home.join(".pfterminal-debug"));
-        assert_ne!(stable, debug);
-        assert_ne!(stable, user_home.join(".codex"));
-        assert_ne!(debug, user_home.join(".codex"));
+        assert_eq!(debug, user_home.path().join(".corbanu-debug"));
+        assert_ne!(debug, user_home.path().join(".codex"));
     }
 
     #[test]
-    fn explicit_pf_home_overrides_only_its_matching_entrypoint() {
+    fn corbanu_debug_home_beats_legacy_and_codex_overrides() {
         let user_home = PathBuf::from("/home/tester");
-        let stable_override = PathBuf::from("/tmp/pf-stable");
+        let corbanu_override = PathBuf::from("/tmp/corbanu-debug");
         let debug_override = PathBuf::from("/tmp/pf-debug");
+        let codex_override = PathBuf::from("/tmp/codex");
 
         assert_eq!(
             resolve_home(
-                Some(stable_override.clone()),
-                Some(user_home.clone()),
-                ".pfterminal",
-            ),
-            Some(stable_override),
-        );
-        assert_eq!(
-            resolve_home(
-                Some(debug_override.clone()),
+                Some(corbanu_override.clone()),
+                Some(debug_override),
+                Some(codex_override),
                 Some(user_home),
-                ".pfterminal-debug"
             ),
-            Some(debug_override),
+            Some(corbanu_override),
         );
     }
 
@@ -119,6 +136,10 @@ mod tests {
         assert_eq!(
             entrypoint_from_argv0(std::ffi::OsStr::new(r"C:\Tools\pfterminal-debug.exe")),
             Some("pfterminal-debug".to_string())
+        );
+        assert_eq!(
+            entrypoint_from_argv0(std::ffi::OsStr::new(r"C:\Tools\corbanu-debug.exe")),
+            Some("corbanu-debug".to_string())
         );
     }
 }
