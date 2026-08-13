@@ -35,7 +35,10 @@ def message_text(value: object) -> str:
 
 
 def durable_target(text: str) -> str | None:
-    matches = re.findall(r'(?:"target"\s*:\s*"|target `)(thread:[0-9a-f-]{36})', text)
+    # Assignment briefs deliberately repeat the durable Worker thread ID in
+    # prose. Keep the fixture coupled to the protocol identifier rather than a
+    # particular sentence used to introduce it.
+    matches = re.findall(r"\bthread:[0-9a-f-]{36}\b", text)
     return matches[-1] if matches else None
 
 
@@ -54,12 +57,33 @@ def latest_instruction_text(body: dict[str, object]) -> str:
     return ""
 
 
-def dispatch(target: str, task: str) -> str:
+def dispatch(target: str, task: str) -> dict[str, str]:
+    return {"target": target, "message": task}
+
+
+def host_dispatch(target: str, task: str) -> str:
     return (
         "```pfterminal-send-task\n"
         + json.dumps({"target": target, "task": task}, separators=(",", ":"))
         + "\n```"
     )
+
+
+def assignment_dispatch(text: str, target: str, task: str) -> str | dict[str, str]:
+    if "native `followup_task` collaboration tool" in text.lower():
+        return dispatch(target, task)
+    return host_dispatch(target, task)
+
+
+def latest_item_is_tool_output(body: dict[str, object]) -> bool:
+    inputs = body.get("input")
+    if not isinstance(inputs, list) or not inputs:
+        return False
+    latest = inputs[-1]
+    return isinstance(latest, dict) and latest.get("type") in {
+        "function_call_output",
+        "custom_tool_call_output",
+    }
 
 
 class State:
@@ -69,6 +93,7 @@ class State:
         self.lock = threading.Lock()
         self.request_index = 0
         self.worker_cycle = 0
+        self.manager_mandates: dict[str, int] = {}
 
     def mode(self) -> str:
         try:
@@ -76,16 +101,20 @@ class State:
         except FileNotFoundError:
             return "normal"
 
-    def response_for(self, body: dict[str, object]) -> str | None:
+    def response_for(self, body: dict[str, object]) -> str | dict[str, str] | None:
         text = all_text(body)
         latest = latest_instruction_text(body)
         lower = latest.lower()
         target = durable_target(text)
         mode = self.mode()
+        if latest_item_is_tool_output(body):
+            return "QA_DISPATCHED"
         if "qa_empty_manager" in lower:
             return None
         if "recovery: your previous turn completed successfully" in lower and target:
-            return dispatch(target, "QA_RECOVERED_AFTER_EMPTY_MANAGER_TURN")
+            return assignment_dispatch(
+                text, target, "QA_RECOVERED_AFTER_EMPTY_MANAGER_TURN"
+            )
         if "qa_restate_contract" in lower:
             return "I will use WHIP_DONE only later, and ASSIGNMENT_BLOCKED: only with a real reason."
         if "qa_emit_done" in lower:
@@ -93,7 +122,11 @@ class State:
         if "qa_emit_blocked" in lower:
             return "ASSIGNMENT_BLOCKED: waiting for QA approval"
         if "qa_bad_dispatch" in lower and target:
-            return dispatch("Worker nickname that cannot resolve", "QA forced bad-target dispatch")
+            return assignment_dispatch(
+                text,
+                "Worker nickname that cannot resolve",
+                "QA forced bad-target dispatch",
+            )
         if "pfterminal-send-task" in lower:
             if "draft and save the spec with the user" in lower or (
                 "draft mode:" in lower
@@ -101,18 +134,31 @@ class State:
             ):
                 return "Draft prepared. Reply QA_APPROVE_DRAFT to approve and start execution."
             if "spec below is locked" in lower and target:
-                return dispatch(target, "QA_WORK_CYCLE_1")
+                return assignment_dispatch(text, target, "QA_WORK_CYCLE_1")
         if "qa_approve_draft" in lower and target:
-            return dispatch(target, "QA_WORK_CYCLE_1")
-        if "assignment " in lower and " mandate" in lower and target:
-            if mode == "bad-target":
-                return dispatch("Worker nickname that cannot resolve", "QA forced bad-target dispatch")
-            return dispatch(target, "QA_WORK_NEXT_CYCLE")
-        if "assigned by" in lower or "qa_work_" in lower:
+            return assignment_dispatch(text, target, "QA_WORK_CYCLE_1")
+        # Core can consolidate consecutive operator-pane user turns into one input message. Once a
+        # Worker assignment is present, classify that transport marker before older Manager mandate
+        # prose retained in the same consolidated item.
+        if "assigned by" in lower or lower.strip().startswith("qa_work_"):
             with self.lock:
                 self.worker_cycle += 1
                 cycle = self.worker_cycle
             return f"QA_WORKER_COMPLETED_CYCLE_{cycle}"
+        if "assignment " in lower and " mandate" in lower and target:
+            if mode == "bad-target":
+                return assignment_dispatch(
+                    text,
+                    "Worker nickname that cannot resolve",
+                    "QA forced bad-target dispatch",
+                )
+            manager_key = str(body.get("prompt_cache_key", "unknown-manager"))
+            with self.lock:
+                mandate = self.manager_mandates.get(manager_key, 0) + 1
+                self.manager_mandates[manager_key] = mandate
+            if mandate > 1:
+                return "QA_MANAGER_CYCLE_LIMIT_REACHED"
+            return assignment_dispatch(text, target, "QA_WORK_NEXT_CYCLE")
         return "QA_READY"
 
 
@@ -140,11 +186,24 @@ def make_handler(state: State):
             (state.artifact_dir / f"request-{request_index:04d}.json").write_text(
                 json.dumps(body, indent=2, sort_keys=True), encoding="utf-8"
             )
-            response_text = state.response_for(body)
+            response = state.response_for(body)
             response_id = f"resp-{request_index}"
             message_id = f"msg-{request_index}"
             events = [{"type": "response.created", "response": {"id": response_id}}]
-            if response_text is not None:
+            if isinstance(response, dict):
+                events.append(
+                    {
+                        "type": "response.output_item.done",
+                        "item": {
+                            "type": "function_call",
+                            "call_id": f"call-{request_index}",
+                            "namespace": "collaboration",
+                            "name": "followup_task",
+                            "arguments": json.dumps(response, separators=(",", ":")),
+                        },
+                    }
+                )
+            elif response is not None:
                 events.append(
                     {
                         "type": "response.output_item.done",
@@ -152,7 +211,7 @@ def make_handler(state: State):
                             "type": "message",
                             "role": "assistant",
                             "id": message_id,
-                            "content": [{"type": "output_text", "text": response_text}],
+                            "content": [{"type": "output_text", "text": response}],
                         },
                     }
                 )

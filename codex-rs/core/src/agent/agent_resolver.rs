@@ -12,7 +12,8 @@ pub(crate) async fn resolve_agent_target(
     target: &str,
 ) -> Result<ThreadId, FunctionCallError> {
     register_session_root(session, turn);
-    if let Ok(thread_id) = ThreadId::from_string(target) {
+    let thread_id = target.strip_prefix("thread:").unwrap_or(target);
+    if let Ok(thread_id) = ThreadId::from_string(thread_id) {
         return Ok(thread_id);
     }
 

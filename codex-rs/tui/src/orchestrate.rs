@@ -2748,12 +2748,10 @@ impl App {
             &worker_label,
             instruction.as_ref().ok().map(|(_, text)| text.as_str()),
             instruction.as_ref().ok().map(|(path, _)| path.as_path()),
+            self.assignment_dispatch_protocol_for_target(&whip.target),
         );
         match destination {
-            FireDestination::Native(thread_id) => {
-                self.app_event_tx
-                    .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
-            }
+            FireDestination::Native(thread_id) => self.send_native_task_event(thread_id, task),
             FireDestination::ClaudePane(pane_id) => {
                 self.app_event_tx
                     .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task });
@@ -2764,6 +2762,18 @@ impl App {
             None,
         );
         Ok(())
+    }
+
+    pub(crate) fn assignment_dispatch_protocol_for_target(
+        &self,
+        target: &str,
+    ) -> AssignmentDispatchProtocol {
+        match node_id_thread(target) {
+            Some(thread_id) if self.is_native_spawn_thread(thread_id) => {
+                AssignmentDispatchProtocol::NativeFollowup
+            }
+            _ => AssignmentDispatchProtocol::HostAdapter,
+        }
     }
 
     fn plan_whip_fire(
@@ -2913,6 +2923,7 @@ impl App {
                 instruction.as_ref().ok().map(|(_, text)| text.as_str()),
                 instruction.as_ref().ok().map(|(path, _)| path.as_path()),
                 now,
+                self.assignment_dispatch_protocol_for_target(&whip.target),
             )
         } else {
             let (instruction_path, instruction_text) = instruction?;
@@ -2973,10 +2984,7 @@ impl App {
         };
         match plan.destination {
             FireDestination::Native(thread_id) => {
-                self.app_event_tx.send(AppEvent::SubmitSpawnAgentTask {
-                    thread_id,
-                    task: plan.task,
-                });
+                self.send_native_task_event(thread_id, plan.task);
             }
             FireDestination::ClaudePane(pane_id) => {
                 self.app_event_tx.send(AppEvent::SubmitSpawnClaudePaneTask {
@@ -3158,9 +3166,9 @@ impl App {
                 "Assignment {id} recovery: your previous turn completed successfully but emitted no visible assistant response. Process the latest user message already present in this conversation. Continue drafting the assignment from the available context and dispatch the Worker when the specification is sufficiently concrete. Do not ask the user to repeat information they already supplied."
             );
             match self.fire_destination_for_node(manager) {
-                Ok(FireDestination::Native(thread_id)) => self
-                    .app_event_tx
-                    .send(AppEvent::SubmitSpawnAgentTask { thread_id, task }),
+                Ok(FireDestination::Native(thread_id)) => {
+                    self.send_native_task_event(thread_id, task)
+                }
                 Ok(FireDestination::ClaudePane(pane_id)) => self
                     .app_event_tx
                     .send(AppEvent::SubmitSpawnClaudePaneTask { pane_id, task }),
@@ -3598,6 +3606,7 @@ pub(crate) fn assignment_mandate_task(
     instructions: Option<&str>,
     path: Option<&Path>,
     now: DateTime<Utc>,
+    dispatch_protocol: AssignmentDispatchProtocol,
 ) -> String {
     let source = path
         .map(|path| path.display().to_string())
@@ -3614,7 +3623,8 @@ pub(crate) fn assignment_mandate_task(
         .filter(|text| !text.is_empty())
         .map(|text| format!("\n\nWorker's latest completed output:\n{text}"))
         .unwrap_or_else(|| "\n\nWorker's latest completed output: unavailable.".to_string());
-    let dispatch_protocol = assignment_dispatch_protocol(whip, "<next concrete task>");
+    let dispatch_protocol =
+        assignment_dispatch_instructions(whip, "<next concrete task>", dispatch_protocol);
     format!(
         "Assignment {} mandate. Worker {worker_label} stopped at {}. Audit its latest result and act.\n\n{dispatch_protocol}\n\nReport ASSIGNMENT_BLOCKED: <reason> only for a genuinely user-owned decision, or emit WHIP_DONE only when complete. When you emit either marker, place it alone on its own line. Spec source: {source}.{spec}{worker_result}",
         whip.id,
@@ -3628,6 +3638,7 @@ fn assignment_birth_brief(
     worker_label: &str,
     instructions: Option<&str>,
     path: Option<&Path>,
+    dispatch_protocol: AssignmentDispatchProtocol,
 ) -> String {
     let duration = match whip.kind {
         WhipKind::Assignment {
@@ -3657,28 +3668,39 @@ fn assignment_birth_brief(
             "Draft mode: ask the user for the assignment requirements. When they are concrete, send the first task to Worker {worker_label}."
         )
     };
-    let dispatch_protocol = assignment_dispatch_protocol(whip, "<concrete task>");
+    let dispatch_protocol =
+        assignment_dispatch_instructions(whip, "<concrete task>", dispatch_protocol);
     format!(
         "You are Manager {manager_label} for Worker {worker_label}. This assignment lasts until {duration} after execution starts.\n\n{dispatch_protocol}\n\n{kickoff} After each Worker result, audit it and send the next task until the assignment is complete. Keep progress concise. User messages take priority. Use WHIP_DONE alone only when complete, or ASSIGNMENT_BLOCKED: <reason> alone only for a decision only the user can make. If the Worker is idle, you will be prompted again after {} minutes.{inline}",
         whip.cooldown_s / 60,
     )
 }
 
-fn assignment_dispatch_protocol(whip: &Whip, task_placeholder: &str) -> String {
-    let native_worker = whip
-        .holder
-        .as_deref()
-        .and_then(node_id_thread)
-        .and_then(|_| node_id_thread(&whip.target));
-    if let Some(worker_thread_id) = native_worker {
-        return format!(
-            "Dispatch only with the native `followup_task` collaboration tool. Set its target to the durable Worker thread ID `{worker_thread_id}` and its message to `{task_placeholder}`. This is not a shell command or tool-discovery request. Do not emit a `pfterminal-send-task` block, spawn another agent, or replace the Worker."
-        );
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AssignmentDispatchProtocol {
+    NativeFollowup,
+    HostAdapter,
+}
+
+fn assignment_dispatch_instructions(
+    whip: &Whip,
+    task_placeholder: &str,
+    dispatch_protocol: AssignmentDispatchProtocol,
+) -> String {
+    match dispatch_protocol {
+        AssignmentDispatchProtocol::NativeFollowup => {
+            let worker_thread_id = node_id_thread(&whip.target)
+                .map(|thread_id| thread_id.to_string())
+                .unwrap_or_else(|| whip.target.clone());
+            format!(
+                "Dispatch only with the native `followup_task` collaboration tool. Set its target to the durable Worker thread ID `{worker_thread_id}` and its message to `{task_placeholder}`. This is not a shell command or tool-discovery request. Do not emit a `pfterminal-send-task` block, spawn another agent, or replace the Worker."
+            )
+        }
+        AssignmentDispatchProtocol::HostAdapter => format!(
+            "To send work across this host-routed pane boundary, write this fenced assistant-text block; it is not a shell command or tool:\n```pfterminal-send-task\n{{\"target\":\"{}\",\"task\":\"{task_placeholder}\"}}\n```",
+            whip.target,
+        ),
     }
-    format!(
-        "To send work across this external-pane boundary, write this fenced assistant-text block; it is not a shell command or tool:\n```pfterminal-send-task\n{{\"target\":\"{}\",\"task\":\"{task_placeholder}\"}}\n```",
-        whip.target,
-    )
 }
 
 fn format_duration_seconds(seconds: i64) -> String {
@@ -4002,7 +4024,14 @@ mod tests {
             execution_duration_s: Some(28_800),
         };
 
-        let brief = assignment_birth_brief(&whip, "Manager", "Worker", None, None);
+        let brief = assignment_birth_brief(
+            &whip,
+            "Manager",
+            "Worker",
+            None,
+            None,
+            AssignmentDispatchProtocol::NativeFollowup,
+        );
 
         assert!(brief.contains("native `followup_task` collaboration tool"));
         assert!(brief.contains(&worker_thread_id.to_string()));
@@ -4016,12 +4045,16 @@ mod tests {
     }
 
     #[test]
-    fn external_assignment_brief_retains_host_dispatch_adapter() {
+    fn operator_pane_assignment_brief_retains_host_dispatch_adapter() {
         let now = Utc::now();
         let mut whip = Whip::new(
             "whip-1".to_string(),
-            Some("pane:manager".to_string()),
-            "thread:worker".to_string(),
+            Some(thread_node_id(
+                ThreadId::from_string("00000000-0000-0000-0000-000000000603").expect("manager id"),
+            )),
+            thread_node_id(
+                ThreadId::from_string("00000000-0000-0000-0000-000000000604").expect("worker id"),
+            ),
             DRAFT_WITH_MANAGER_SPEC.to_string(),
             ResolvedAttachOptions::default(),
             now,
@@ -4034,10 +4067,17 @@ mod tests {
             execution_duration_s: Some(28_800),
         };
 
-        let brief = assignment_birth_brief(&whip, "Manager", "Worker", None, None);
+        let brief = assignment_birth_brief(
+            &whip,
+            "Manager",
+            "Worker",
+            None,
+            None,
+            AssignmentDispatchProtocol::HostAdapter,
+        );
 
         assert!(brief.contains("```pfterminal-send-task"));
-        assert!(brief.contains("\"target\":\"thread:worker\""));
+        assert!(brief.contains("\"target\":\"thread:00000000-0000-0000-0000-000000000604\""));
         assert!(!brief.contains("native `followup_task` collaboration tool"));
     }
 

@@ -876,6 +876,11 @@ impl App {
             AppEvent::CodexOp(op) => {
                 let is_user_turn = matches!(&op, AppCommand::UserTurn { .. });
                 if is_user_turn {
+                    if let Some(thread_id) = self.active_thread_id {
+                        self.note_assignment_user_turn(
+                            &crate::spawn_orchestration::thread_node_id(thread_id),
+                        );
+                    }
                     self.handle_draw_pre_render(tui)?;
                     if self.transcript_reflow.has_pending_reflow() {
                         self.transcript_reflow.schedule_immediate();
@@ -4001,6 +4006,91 @@ impl App {
                         self.chat_widget.add_error_message(format!(
                             "Could not admit task for {label}; no automatic replay was attempted: {error:#}"
                         ));
+                    }
+                }
+            }
+            AppEvent::SubmitCodexUserPaneTask { thread_id, task } => {
+                let task = task.trim().to_string();
+                let target_node_id = self.logical_native_node_for_thread(thread_id);
+                let is_operator_pane = self
+                    .agent_navigation
+                    .get(&thread_id)
+                    .is_some_and(|entry| self.is_operator_owned_codex_user_pane(thread_id, entry));
+                if !is_operator_pane {
+                    let detail =
+                        format!("native thread {thread_id} is not an operator-owned user pane");
+                    self.record_spawn_dispatch_failed_for_task(&target_node_id, &task, &detail);
+                    self.chat_widget.add_error_message(detail);
+                    return Ok(AppRunControl::Continue);
+                }
+                if task.is_empty() {
+                    self.record_spawn_dispatch_failed_for_task(
+                        &target_node_id,
+                        &task,
+                        "operator pane task cannot be empty",
+                    );
+                    self.chat_widget
+                        .add_error_message("Operator pane task cannot be empty.".to_string());
+                    return Ok(AppRunControl::Continue);
+                }
+                if task.len() > crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES {
+                    let detail = format!(
+                        "task is {} bytes; maximum is {} bytes",
+                        task.len(),
+                        crate::dispatch_queue::MAX_DISPATCH_TASK_BYTES
+                    );
+                    self.record_spawn_dispatch_failed_for_task(&target_node_id, &task, &detail);
+                    self.chat_widget.add_error_message(detail);
+                    return Ok(AppRunControl::Continue);
+                }
+                let session = match self.thread_event_channels.get(&thread_id) {
+                    Some(channel) => channel.store.lock().await.session.clone(),
+                    None => None,
+                };
+                let Some(session) = session else {
+                    let detail = format!(
+                        "operator-owned pane {thread_id} has no live session available for turn submission"
+                    );
+                    self.record_spawn_dispatch_failed_for_task(&target_node_id, &task, &detail);
+                    self.chat_widget.add_error_message(detail);
+                    return Ok(AppRunControl::Continue);
+                };
+                let mut op = AppCommand::user_turn(
+                    vec![codex_app_server_protocol::UserInput::Text {
+                        text: task.clone(),
+                        text_elements: Vec::new(),
+                    }],
+                    session.cwd.to_path_buf(),
+                    AskForApproval::from(self.config.permissions.approval_policy.value()),
+                    self.config.permissions.active_permission_profile(),
+                    session.model,
+                    session.reasoning_effort,
+                    /*summary*/ None,
+                    /*service_tier*/ None,
+                    /*final_output_json_schema*/ None,
+                    session.collaboration_mode.map(|mode| *mode),
+                    session.personality,
+                );
+                if let AppCommand::UserTurn {
+                    approvals_reviewer, ..
+                } = &mut op
+                {
+                    *approvals_reviewer = Some(self.config.approvals_reviewer);
+                }
+                match self.submit_thread_op(app_server, thread_id, op).await {
+                    Ok(()) => {
+                        self.record_spawn_dispatch_delivered_for_task(&target_node_id, &task);
+                        self.agent_navigation.set_running(thread_id, true);
+                        self.agent_navigation.set_last_task_message(
+                            thread_id,
+                            Some(task.chars().take(240).collect()),
+                        );
+                        self.persist_pane_state();
+                    }
+                    Err(error) => {
+                        let detail = format!("operator pane turn submission failed: {error:#}");
+                        self.record_spawn_dispatch_failed_for_task(&target_node_id, &task, &detail);
+                        self.chat_widget.add_error_message(detail);
                     }
                 }
             }

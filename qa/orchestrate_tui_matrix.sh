@@ -14,6 +14,7 @@ CURRENT_HOME=""
 CAPTURE_INDEX=0
 PANE_COUNT=0
 LAST_CAPTURE_PATH=""
+TERMINAL_LABEL=${PFTERMINAL_QA_PRODUCT_LABEL:-PFTerminal}
 
 mkdir -p "$ARTIFACT_ROOT/server"
 : >"$CONTROL"
@@ -217,13 +218,13 @@ create_pane() {
   capture "panes-before-create-$name" >/dev/null
   select_down $((PANE_COUNT + 1))
   capture "after-select-create-$name" >/dev/null
-  wait_screen "Name Codex pane"
+  wait_screen "Name $TERMINAL_LABEL pane"
   tmux send-keys -t "$CURRENT_SESSION":0.0 C-u
   literal_keys "$name"
   tmux send-keys -t "$CURRENT_SESSION":0.0 Enter
   sleep 0.2
   tmux send-keys -t "$CURRENT_SESSION":0.0 Enter
-  wait_screen "Created and switched to Codex pane $name" 100
+  wait_screen "Created and switched to $TERMINAL_LABEL pane $name" 100
   PANE_COUNT=$((PANE_COUNT + 1))
   capture "created-$name" >/dev/null
 }
@@ -265,6 +266,10 @@ guided_prewritten_create_manager() {
   wait_screen "New Assignment - Manager"
   select_down 0
   wait_layout '.orchestrate_whips | to_entries[0].value.kind.phase == "executing"'
+  # The deterministic fixture runs the minimum two productive mandate fires, then returns a plain
+  # terminal response. Let that final Manager turn settle before rows send slash commands or user
+  # markers to its pane.
+  sleep 4
 }
 
 guided_draft_existing_manager() {
@@ -296,7 +301,7 @@ row_1() {
   local panes
   open_panes_capture "panes-after-two-cycles" >/dev/null
   panes=$LAST_CAPTURE_PATH
-  grep -Fq "Codex - Worker" "$panes" || fail 1 "Worker vanished from /panes"
+  grep -Fq "$TERMINAL_LABEL - Worker" "$panes" || fail 1 "Worker vanished from /panes"
   screen_contains "$panes" "managed-by Manager" || fail 1 "Worker assignment label missing"
   wait_layout '.orchestrate_whips | to_entries[0].value.fires >= 2' || fail 1 "two mandate cycles did not fire"
   snapshot_layout "final-layout"
@@ -310,7 +315,7 @@ row_2() {
   local panes
   open_panes_capture "draft-running-panes" >/dev/null
   panes=$LAST_CAPTURE_PATH
-  grep -Fq "Codex - Worker" "$panes" || fail 2 "Worker missing after first draft dispatch"
+  grep -Fq "$TERMINAL_LABEL - Worker" "$panes" || fail 2 "Worker missing after first draft dispatch"
   wait_layout '.orchestrate_whips | to_entries[0].value.last_dispatch_result == "delivered"' \
     || fail 2 "first draft dispatch was not delivered"
   snapshot_layout "final-layout"
@@ -458,9 +463,9 @@ row_9() {
   local before after assignment_id
   open_panes_capture "pane-hygiene-before-detach" >/dev/null
   before=$LAST_CAPTURE_PATH
-  grep -Fq "Codex - Main" "$before" || fail 9 "Main pane missing"
-  grep -Fq "Codex - Worker" "$before" || fail 9 "Worker pane missing"
-  grep -Fq "Codex - Manager" "$before" || fail 9 "Manager pane missing"
+  grep -Fq "$TERMINAL_LABEL - Main" "$before" || fail 9 "Main pane missing"
+  grep -Fq "$TERMINAL_LABEL - Worker" "$before" || fail 9 "Worker pane missing"
+  grep -Fq "$TERMINAL_LABEL - Manager" "$before" || fail 9 "Manager pane missing"
   tmux send-keys -t "$CURRENT_SESSION":0.0 Esc
   wait_screen_absent "Search panes and crew"
   switch_pane "Worker"
@@ -471,8 +476,8 @@ row_9() {
   wait_layout '.orchestrate_whips | length == 0'
   open_panes_capture "pane-hygiene-after-detach" >/dev/null
   after=$LAST_CAPTURE_PATH
-  grep -Fq "Codex - Worker" "$after" || fail 9 "detach removed Worker pane"
-  grep -Fq "Codex - Manager" "$after" || fail 9 "detach removed Manager pane"
+  grep -Fq "$TERMINAL_LABEL - Worker" "$after" || fail 9 "detach removed Worker pane"
+  grep -Fq "$TERMINAL_LABEL - Manager" "$after" || fail 9 "detach removed Manager pane"
   if grep -Eq 'managed-by|managing' "$after"; then
     fail 9 "detach left assignment labels on panes"
   fi
@@ -491,7 +496,7 @@ row_10() {
   candidates=$LAST_CAPTURE_PATH
   grep -Fq "Create Manager pane" "$candidates" || fail 10 "create Manager option missing"
   if grep -Fq "Bind Main" "$candidates"; then
-    fail 10 "Codex Main was offered as Manager"
+    fail 10 "$TERMINAL_LABEL Main was offered as Manager"
   fi
 
   start_row 10-main 900
@@ -508,7 +513,7 @@ row_10() {
   submit_user "QA_APPROVE_DRAFT"
   wait_layout '.orchestrate_whips | to_entries[0].value.kind.phase == "executing" and to_entries[0].value.last_dispatch_result == "delivered"'
   snapshot_layout "codex-main-worker-layout"
-  printf 'PASS\t10\tCodex Main constraints\n' >>"$RESULTS"
+  printf 'PASS\t10\t%s Main constraints\n' "$TERMINAL_LABEL" >>"$RESULTS"
 }
 
 row_11() {
@@ -533,7 +538,9 @@ row_12() {
   start_row 12 900
   create_pane "Worker"
   local worker_thread_id worker_node
-  worker_thread_id=$(head -n 1 "$(rg -l '\"agent_nickname\":\"Worker\"' "$CURRENT_HOME/sessions" | head -n 1)" | jq -r '.payload.id')
+  worker_thread_id=$(jq -r '(.layout // .) | .codex_user_pane_ids[-1]' "$(layout_file)")
+  [[ "$worker_thread_id" != "null" && -n "$worker_thread_id" ]] \
+    || fail 12 "Worker durable thread ID was not persisted in the pane layout"
   worker_node="thread:$worker_thread_id"
   submit "/orchestrate attach $worker_node keep-going --mode auto --holder none --max 2 --cooldown 2s"
   wait_layout '.orchestrate_whips | to_entries[0].value.kind.type == "legacy_nudge"'

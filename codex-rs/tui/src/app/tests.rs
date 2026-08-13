@@ -3147,19 +3147,22 @@ async fn pane_picker_marks_exactly_the_active_native_thread_current() {
     );
 }
 
-/// Drains app events looking for a `SubmitSpawnAgentTask` for `thread_id`. Returns its task text.
+/// Drains native task events for `thread_id`, whether the target is a managed agent or an
+/// operator-owned user pane. Returns the task texts.
 fn drain_spawn_agent_tasks_for(
     rx: &mut tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
     thread_id: ThreadId,
 ) -> Vec<String> {
     let mut matched = Vec::new();
     while let Ok(event) = rx.try_recv() {
-        if let AppEvent::SubmitSpawnAgentTask {
-            thread_id: t, task, ..
-        } = event
-            && t == thread_id
-        {
-            matched.push(task);
+        match event {
+            AppEvent::SubmitSpawnAgentTask { thread_id: t, task }
+            | AppEvent::SubmitCodexUserPaneTask { thread_id: t, task }
+                if t == thread_id =>
+            {
+                matched.push(task)
+            }
+            _ => {}
         }
     }
     matched
@@ -5304,6 +5307,7 @@ async fn assignment_overnight_loop_survives_cycles_backoff_and_manager_markers()
         Some("Run the audit."),
         None,
         started,
+        crate::orchestrate::AssignmentDispatchProtocol::HostAdapter,
     );
     assert!(mandate.contains("Worker's latest completed output:"));
     assert!(mandate.contains("WORKER_AUDIT_RESULT: baseline checkout is invalid"));
@@ -5527,7 +5531,46 @@ async fn assignment_manager_empty_completion_retries_current_turn_once_then_paus
 }
 
 #[tokio::test]
-async fn inactive_native_manager_text_never_dispatches_to_worker() {
+async fn operator_assignment_birth_brief_routes_as_normal_user_pane_turn() {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    write_test_whip(
+        &app,
+        "operator-birth-brief",
+        "Manager must coordinate the operator-owned Worker pane.",
+    );
+    let manager_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000463").expect("manager id");
+    let worker_thread_id =
+        ThreadId::from_string("00000000-0000-0000-0000-000000000464").expect("worker id");
+    app.upsert_agent_picker_thread(manager_thread_id, Some("Manager".to_string()), None, false);
+    app.upsert_agent_picker_thread(worker_thread_id, Some("Worker".to_string()), None, false);
+    let manager_node = crate::spawn_orchestration::thread_node_id(manager_thread_id);
+    let worker_node = crate::spawn_orchestration::thread_node_id(worker_thread_id);
+
+    app.handle_orchestrate_command(format!(
+        "attach {worker_node} operator-birth-brief --mode review --holder {manager_node} --for 1h"
+    ));
+
+    let mut manager_tasks = Vec::new();
+    while let Ok(event) = app_event_rx.try_recv() {
+        match event {
+            AppEvent::SubmitCodexUserPaneTask { thread_id, task }
+                if thread_id == manager_thread_id =>
+            {
+                manager_tasks.push(task);
+            }
+            AppEvent::SubmitSpawnAgentTask { thread_id, .. } if thread_id == manager_thread_id => {
+                panic!("operator-owned Manager must never receive a collaboration mailbox task");
+            }
+            _ => {}
+        }
+    }
+    pretty_assertions::assert_eq!(manager_tasks.len(), 1);
+    assert!(manager_tasks[0].contains("Worker"));
+}
+
+#[tokio::test]
+async fn native_manager_host_adapter_dispatches_only_from_completed_assignment_turn() {
     let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
     write_test_whip(
         &app,
@@ -5607,16 +5650,15 @@ async fn inactive_native_manager_text_never_dispatches_to_worker() {
     app.enqueue_thread_notification(manager_thread_id, completed.clone())
         .await
         .expect("enqueue inactive Manager completion");
-    assert!(
-        drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id).is_none(),
-        "TurnCompleted must not parse native assistant text as a task"
-    );
+    let worker_task = drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id)
+        .expect("completed Manager output should dispatch through the assignment host adapter");
+    assert!(worker_task.contains("Review the branch and report concrete defects."));
     assert!(matches!(
         app.orchestrate_whips
             .get("assignment-1")
             .map(|whip| &whip.kind),
         Some(crate::orchestrate::WhipKind::Assignment {
-            phase: crate::orchestrate::AssignmentPhase::Drafting,
+            phase: crate::orchestrate::AssignmentPhase::Executing,
             ..
         })
     ));
@@ -5626,7 +5668,7 @@ async fn inactive_native_manager_text_never_dispatches_to_worker() {
         .expect("replay inactive Manager completion");
     assert!(
         drain_spawn_agent_task_for(&mut app_event_rx, worker_thread_id).is_none(),
-        "terminal notification replay must remain transport-free"
+        "terminal notification replay must not dispatch the same host task twice"
     );
 }
 

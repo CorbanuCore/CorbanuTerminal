@@ -2773,7 +2773,7 @@ async fn multi_agent_v2_send_message_rejects_interrupt_parameter() {
 }
 
 #[tokio::test]
-async fn multi_agent_v2_followup_task_completion_notifies_parent_on_every_turn() {
+async fn multi_agent_v2_followup_task_accepts_durable_thread_target_and_notifies_parent() {
     let (mut session, mut turn) = make_session_and_context().await;
     let manager = thread_manager();
     let mut config = turn.config.as_ref().clone();
@@ -2841,7 +2841,7 @@ async fn multi_agent_v2_followup_task_completion_notifies_parent_on_every_turn()
             turn,
             "followup_task",
             function_payload(json!({
-                "target": agent_id.to_string(),
+                "target": format!("thread:{agent_id}"),
                 "message": "continue",
             })),
         ))

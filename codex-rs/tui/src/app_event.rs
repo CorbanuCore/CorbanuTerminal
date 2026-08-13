@@ -389,6 +389,11 @@ pub(crate) enum AppEvent {
         thread_id: codex_protocol::ThreadId,
         task: String,
     },
+    /// Start a normal turn in an operator-owned native user pane.
+    SubmitCodexUserPaneTask {
+        thread_id: codex_protocol::ThreadId,
+        task: String,
+    },
     /// Deliver an edge-adapter message through the canonical native mailbox.
     SendSpawnAgentMailboxMessage {
         params: ThreadAgentMessageParams,

@@ -310,6 +310,79 @@ fn direct_orc_task_reaches_provider_through_core_mailbox_without_prompt_wrapper(
 }
 
 #[test]
+fn operator_pane_dispatch_starts_normal_turn_with_target_session_model() -> Result<()> {
+    run_dispatch_integration(|| async {
+        let mock = MockServer::start().await;
+        let responses = mount_sse_repeating(&mock, sse_completed("operator-pane-response")).await;
+        let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 3).await?;
+        fixture
+            .app
+            .handle_event(
+                &mut fixture.tui,
+                &mut fixture.server,
+                AppEvent::CreateCodexPane {
+                    model: "dispatch-worker-model".to_string(),
+                    provider: Some("dispatch_mock".to_string()),
+                    effort: None,
+                    display_name: Some("Worker".to_string()),
+                },
+            )
+            .await?;
+        let target = fixture
+            .app
+            .active_thread_id
+            .expect("created operator pane is selected");
+        assert_ne!(target, fixture.root);
+
+        // Exercise inactive-pane routing: dispatch must use the target's cached session instead of
+        // whichever model happens to be visible in Main.
+        fixture.app.active_thread_id = Some(fixture.root);
+        let task = "run the operator-pane acceptance command";
+        fixture
+            .app
+            .app_event_tx
+            .send(AppEvent::SubmitCodexUserPaneTask {
+                thread_id: target,
+                task: task.to_string(),
+            });
+        fixture
+            .route_until(std::time::Duration::from_secs(20), |app| {
+                !responses.requests().is_empty()
+                    && app
+                        .agent_navigation
+                        .get(&target)
+                        .is_some_and(|entry| !entry.is_running)
+            })
+            .await?;
+
+        let requests = responses.requests();
+        pretty_assertions::assert_eq!(requests.len(), 1);
+        let request = &requests[0];
+        assert!(
+            request
+                .message_input_texts("user")
+                .join("\n")
+                .contains(task)
+        );
+        assert!(
+            !request
+                .body_json()
+                .to_string()
+                .contains("<inter_agent_message ")
+        );
+        pretty_assertions::assert_eq!(
+            request
+                .body_json()
+                .get("model")
+                .and_then(serde_json::Value::as_str),
+            Some("dispatch-worker-model")
+        );
+        fixture.server.shutdown().await?;
+        Ok(())
+    })
+}
+
+#[test]
 fn cold_restored_orc_task_is_readmitted_through_core_mailbox() -> Result<()> {
     run_dispatch_integration(|| async {
         let mock = MockServer::start().await;

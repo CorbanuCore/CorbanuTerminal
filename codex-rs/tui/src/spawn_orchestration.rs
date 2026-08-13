@@ -1245,6 +1245,22 @@ impl App {
         task.trim().to_string()
     }
 
+    /// Route native work according to thread ownership. Managed `/spawn` agents consume the Core
+    /// mailbox, while operator-created `/panes` threads accept ordinary user turns.
+    pub(crate) fn send_native_task_event(&self, thread_id: ThreadId, task: String) {
+        let is_operator_pane = self
+            .agent_navigation
+            .get(&thread_id)
+            .is_some_and(|entry| self.is_operator_owned_codex_user_pane(thread_id, entry));
+        if is_operator_pane {
+            self.app_event_tx
+                .send(AppEvent::SubmitCodexUserPaneTask { thread_id, task });
+        } else {
+            self.app_event_tx
+                .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
+        }
+    }
+
     pub(crate) fn open_spawn_claude_pane_task_prompt(&mut self, pane_id: String) {
         let title = self.user_pane_title(&pane_id);
         let tx = self.app_event_tx.clone();
@@ -1450,8 +1466,7 @@ impl App {
                             .insert(origin_id.to_string());
                     }
                     self.register_spawn_dispatch_acks_for_task(&target_node_id, &task, vec![ack]);
-                    self.app_event_tx
-                        .send(AppEvent::SubmitSpawnAgentTask { thread_id, task });
+                    self.send_native_task_event(thread_id, task);
                     any_queued = true;
                 }
                 Ok(SpawnTaskTarget::UnavailableNative(thread_id)) => {
@@ -1598,6 +1613,19 @@ impl App {
             thread_node_id(source_thread_id)
         };
         self.dispatch_orchestrate_blocks_from_text(&source_node_id, &assistant_text);
+        if let Some((_, target)) = self.assignment_dispatch_target_for_holder(&source_node_id)
+            && self.assignment_dispatch_protocol_for_target(&target)
+                == crate::orchestrate::AssignmentDispatchProtocol::HostAdapter
+        {
+            let (visible_text, dispatches) = extract_spawn_task_dispatches(&assistant_text);
+            self.dispatch_spawn_task_blocks_from_model_turn(
+                &source_node_id,
+                &source_node_id,
+                &turn.id,
+                dispatches,
+            );
+            assistant_text = visible_text;
+        }
 
         // Core owns native-to-native mailbox delivery. The TUI still needs a durable projection
         // of the terminal result so `/spawn`, parent context, and restored pane state agree with

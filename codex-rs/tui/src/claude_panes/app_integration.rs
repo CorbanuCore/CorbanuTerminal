@@ -38,7 +38,7 @@ use super::registry::persist_pane_layout;
 use super::turn_types::ClaudePaneTurnOutput;
 use super::turn_types::ClaudePaneTurnProgress;
 impl App {
-    fn is_operator_owned_codex_user_pane(
+    pub(crate) fn is_operator_owned_codex_user_pane(
         &self,
         thread_id: ThreadId,
         entry: &crate::multi_agents::AgentPickerThreadEntry,
