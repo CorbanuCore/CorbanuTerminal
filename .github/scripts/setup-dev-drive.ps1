@@ -10,7 +10,9 @@ function Test-DevDrive {
     param([string]$Drive)
 
     & fsutil devdrv query $Drive *> $null
-    return $LASTEXITCODE -eq 0
+    $IsDevDrive = $LASTEXITCODE -eq 0
+    $global:LASTEXITCODE = 0
+    return $IsDevDrive
 }
 
 function Invoke-BestEffort {
@@ -18,8 +20,13 @@ function Invoke-BestEffort {
 
     try {
         & $Script
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "$Description exited with status $LASTEXITCODE"
+        }
     } catch {
         Write-Warning "$Description failed: $($_.Exception.Message)"
+    } finally {
+        $global:LASTEXITCODE = 0
     }
 }
 
