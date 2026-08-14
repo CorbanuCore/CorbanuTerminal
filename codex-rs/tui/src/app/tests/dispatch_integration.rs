@@ -545,6 +545,79 @@ fn operator_pane_dispatch_starts_normal_turn_with_target_session_model() -> Resu
 }
 
 #[test]
+fn operator_pane_dispatch_defers_contended_store_without_blocking_ui() -> Result<()> {
+    run_dispatch_integration(|| async {
+        let mock = MockServer::start().await;
+        let responses =
+            mount_sse_repeating(&mock, sse_completed("deferred-operator-response")).await;
+        let mut fixture = RealDispatchFixture::start(&mock, /*max_threads*/ 3).await?;
+        fixture
+            .app
+            .handle_event(
+                &mut fixture.tui,
+                &mut fixture.server,
+                AppEvent::CreateCodexPane {
+                    model: "dispatch-worker-model".to_string(),
+                    provider: Some("dispatch_mock".to_string()),
+                    effort: None,
+                    display_name: Some("Worker".to_string()),
+                },
+            )
+            .await?;
+        let target = fixture
+            .app
+            .active_thread_id
+            .expect("created operator pane is selected");
+        let store = Arc::clone(
+            &fixture
+                .app
+                .thread_event_channels
+                .get(&target)
+                .expect("operator pane event channel")
+                .store,
+        );
+        let store_guard = store.lock().await;
+        let task = "submit after the thread store becomes available";
+
+        tokio::time::timeout(
+            std::time::Duration::from_millis(250),
+            fixture.app.handle_event(
+                &mut fixture.tui,
+                &mut fixture.server,
+                AppEvent::SubmitCodexUserPaneTask {
+                    thread_id: target,
+                    task: task.to_string(),
+                },
+            ),
+        )
+        .await
+        .expect("contended dispatch must return control to the UI")?;
+        assert!(
+            responses.requests().is_empty(),
+            "submission must wait for a coherent session snapshot"
+        );
+
+        drop(store_guard);
+        fixture
+            .route_until(std::time::Duration::from_secs(20), |_| {
+                !responses.requests().is_empty()
+            })
+            .await?;
+
+        let requests = responses.requests();
+        pretty_assertions::assert_eq!(requests.len(), 1);
+        assert!(
+            requests[0]
+                .message_input_texts("user")
+                .join("\n")
+                .contains(task)
+        );
+        fixture.server.shutdown().await?;
+        Ok(())
+    })
+}
+
+#[test]
 fn cold_restored_orc_task_is_readmitted_through_core_mailbox() -> Result<()> {
     run_dispatch_integration(|| async {
         let mock = MockServer::start().await;

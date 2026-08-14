@@ -4062,7 +4062,24 @@ impl App {
                     return Ok(AppRunControl::Continue);
                 }
                 let session = match self.thread_event_channels.get(&thread_id) {
-                    Some(channel) => channel.store.lock().await.session.clone(),
+                    Some(channel) => match channel.store.try_lock() {
+                        Ok(store) => store.session.clone(),
+                        Err(_) => {
+                            // Never wait on a thread store from the main dispatcher. A thread-event
+                            // handler may hold this lock while doing asynchronous work, which would
+                            // otherwise freeze all terminal input. Wait off-loop, then replay the
+                            // submission so it observes the latest pane ownership and session.
+                            let store = Arc::clone(&channel.store);
+                            let app_event_tx = self.app_event_tx.clone();
+                            tokio::spawn(async move {
+                                let store_guard = store.lock().await;
+                                drop(store_guard);
+                                app_event_tx
+                                    .send(AppEvent::SubmitCodexUserPaneTask { thread_id, task });
+                            });
+                            return Ok(AppRunControl::Continue);
+                        }
+                    },
                     None => None,
                 };
                 let Some(session) = session else {
