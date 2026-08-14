@@ -33,3 +33,31 @@ Before normal-launch performance results are treated as release evidence:
 1. publish a qualified package built through the deduplication/strip packaging path;
 2. reinstall that published release so `current` points to the stripped artifact;
 3. confirm the installed binary and archive sizes, then rerun launch/performance smoke tests.
+
+## Interactive startup and dispatcher findings
+
+- TUI bootstrap previously called `model/list` with `OnlineIfUncached`, so a cold model cache could
+  block first paint on the provider network. The request path now uses the bundled/on-disk catalog
+  with `Offline`; the app server's existing refresh worker still updates the catalog online in the
+  background. A five-second delayed `/models` regression fixture confirms bootstrap returns the
+  bundled catalog within one second. All seven app-server `model_list` tests pass.
+- `SubmitCodexUserPaneTask` previously awaited a thread-store mutex inside the main app-event
+  dispatcher. It now uses `try_lock`; contention waits outside the dispatcher and re-enqueues the
+  original task so ownership and session state are revalidated. The regression test holds the lock,
+  requires the UI dispatcher to return within 250 ms, then confirms exactly one provider request
+  after release. Both contended and uncontended operator-pane dispatch tests pass.
+
+## Aggregate verification
+
+- `python3 -m pytest scripts/install scripts/codex_package -q`: 53 tests and 17 subtests passed.
+- Core incompatible provider/model config coverage: fail-closed and interactive recovery tests
+  passed. The broader filtered Core command exhausted disk while linking; after generated build
+  artifacts were removed, both exact production-boundary tests passed.
+- Full `codex-tui` rerun after refreshing mechanical 0.1.31 version snapshots: 3,816 passed, one
+  failed, nine skipped. `safety_retry_preserves_a_committed_steer_from_the_interrupted_turn` passed
+  on retry and was reported flaky. The sole persistent failure is the pre-existing
+  `fork_current_session_preserves_conversation_ultra` test, outside the files changed by this fix
+  list. The release gate is therefore not completely green until that unrelated failure is either
+  fixed or formally waived.
+- Generated incremental caches and enumerated giant test executables were removed after QA. The
+  release-profile `corbanu-debug` binary and wrapper remain intact and both report version 0.1.31.
