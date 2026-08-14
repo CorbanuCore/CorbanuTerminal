@@ -105,10 +105,12 @@ class InstallShTest(unittest.TestCase):
         self.assertIn("/codex-npm-", requests[1])
         self.assertNotIn("codex-package_SHA256SUMS", requests[1])
 
-    def test_macos_install_exposes_both_launchers_with_shared_state(self) -> None:
+    def test_macos_install_exposes_release_and_debug_launchers(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            archive_path, checksum_path, metadata_json = create_package_release(root)
+            archive_path, checksum_path, metadata_json = create_package_release(
+                root, debug_binaries=("corbanu-debug", "pfterminal-debug")
+            )
 
             result, _requests = run_installer_in(
                 root,
@@ -124,20 +126,82 @@ class InstallShTest(unittest.TestCase):
             current = root / "pfterminal-home" / "packages" / "standalone" / "current"
             pfterminal_path = install_bin / "pfterminal"
             corbanu_path = install_bin / "corbanu"
+            pfterminal_debug_path = install_bin / "pfterminal-debug"
+            corbanu_debug_path = install_bin / "corbanu-debug"
             host_path = install_bin / "codex-code-mode-host"
             legacy_wrapper = pfterminal_path.read_text(encoding="utf-8")
             corbanu_wrapper = corbanu_path.read_text(encoding="utf-8")
+            legacy_debug_wrapper = pfterminal_debug_path.read_text(encoding="utf-8")
+            corbanu_debug_wrapper = corbanu_debug_path.read_text(encoding="utf-8")
             expected_target = str(current / "corbanu")
+            expected_debug_target = str(current / "bin" / "corbanu-debug")
             expected_home = str(root / "pfterminal-home")
+            expected_debug_home = f"{expected_home}-debug"
             self.assertIn(expected_target, legacy_wrapper)
             self.assertIn(expected_target, corbanu_wrapper)
             self.assertIn(expected_home, legacy_wrapper)
             self.assertIn(expected_home, corbanu_wrapper)
+            self.assertIn(expected_debug_target, legacy_debug_wrapper)
+            self.assertIn(expected_debug_target, corbanu_debug_wrapper)
+            self.assertIn(expected_debug_home, legacy_debug_wrapper)
+            self.assertIn(expected_debug_home, corbanu_debug_wrapper)
+            self.assertNotIn(expected_debug_home, legacy_wrapper)
+            self.assertNotIn(expected_debug_home, corbanu_wrapper)
+            self.assertEqual(
+                subprocess.run(
+                    [str(corbanu_debug_path), "--version"],
+                    capture_output=True,
+                    check=False,
+                    text=True,
+                ).returncode,
+                0,
+            )
             self.assertEqual(
                 os.readlink(host_path),
                 str(current / "bin" / "codex-code-mode-host"),
             )
             self.assertTrue(os.access(host_path, os.X_OK))
+
+    def test_package_without_debug_binary_removes_managed_stale_launchers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive_path, checksum_path, metadata_json = create_package_release(
+                root, debug_binaries=()
+            )
+            install_bin = root / "install-bin"
+            install_bin.mkdir()
+            current = root / "pfterminal-home" / "packages" / "standalone" / "current"
+            for name in ("corbanu-debug", "pfterminal-debug"):
+                write_executable(
+                    install_bin / name,
+                    f"#!/bin/sh\nexec '{current}/bin/{name}' \"$@\"\n",
+                )
+
+            result, _requests = run_installer_in(
+                root,
+                VERSION,
+                metadata_json=metadata_json,
+                archive_path=archive_path,
+                checksum_path=checksum_path,
+                force_macos=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                result.stderr.count(
+                    "release has no debug binary; skipping corbanu-debug launcher"
+                ),
+                1,
+            )
+            self.assertFalse((install_bin / "corbanu-debug").exists())
+            self.assertFalse((install_bin / "pfterminal-debug").exists())
+            version_result = subprocess.run(
+                [str(install_bin / "corbanu"), "--version"],
+                capture_output=True,
+                check=False,
+                text=True,
+            )
+            self.assertEqual(version_result.returncode, 0, version_result.stderr)
 
     def test_releases_mirror_opt_in_installs_verified_package(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -714,6 +778,7 @@ def create_package_release(
     root: Path,
     *,
     metadata_version: str = VERSION,
+    debug_binaries: tuple[str, ...] = ("pfterminal-debug",),
 ) -> tuple[Path, Path, str]:
     package_dir = root / "package"
     (package_dir / "bin").mkdir(parents=True)
@@ -723,10 +788,11 @@ def create_package_release(
         package_dir / "bin" / "pfterminal",
         f"#!/bin/sh\nprintf 'pfterminal {VERSION}\\n'\n",
     )
-    write_executable(
-        package_dir / "bin" / "pfterminal-debug",
-        f"#!/bin/sh\nprintf 'pfterminal {VERSION}\\n'\n",
-    )
+    for binary in debug_binaries:
+        write_executable(
+            package_dir / "bin" / binary,
+            f"#!/bin/sh\nprintf '{binary} {VERSION}\\n'\n",
+        )
     write_executable(
         package_dir / "bin" / "pfterminal-walletd",
         "#!/bin/sh\nexit 0\n",

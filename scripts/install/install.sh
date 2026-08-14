@@ -16,6 +16,8 @@ release_source="github"
 BIN_DIR="${CORBANU_INSTALL_DIR:-${PFTERMINAL_INSTALL_DIR:-${CODEX_INSTALL_DIR:-$HOME/.local/bin}}}"
 BIN_PATH="$BIN_DIR/corbanu"
 LEGACY_BIN_PATH="$BIN_DIR/pfterminal"
+DEBUG_BIN_PATH="$BIN_DIR/corbanu-debug"
+LEGACY_DEBUG_BIN_PATH="$BIN_DIR/pfterminal-debug"
 CODE_MODE_HOST_BIN_PATH="$BIN_DIR/codex-code-mode-host"
 if [ -n "${CORBANU_HOME:-}" ]; then
   CODEX_HOME_DIR="$CORBANU_HOME"
@@ -32,6 +34,7 @@ elif [ -d "$HOME/.pfterminal" ]; then
 else
   CODEX_HOME_DIR="$HOME/.corbanu"
 fi
+DEBUG_CODEX_HOME_DIR="${CODEX_HOME_DIR}-debug"
 STANDALONE_ROOT="$CODEX_HOME_DIR/packages/standalone"
 RELEASES_DIR="$STANDALONE_ROOT/releases"
 CURRENT_LINK="$STANDALONE_ROOT/current"
@@ -45,6 +48,7 @@ conflict_manager=""
 conflict_path=""
 lock_kind=""
 tmp_dir=""
+debug_launchers_installed="false"
 
 step() {
   printf '==> %s\n' "$1"
@@ -984,13 +988,13 @@ install_package_release() {
   tar -xzf "$archive_path" -C "$stage_release"
   chmod 0755 \
     "$stage_release/bin/pfterminal" \
-    "$stage_release/bin/pfterminal-debug" \
     "$stage_release/bin/pfterminal-walletd" \
     "$stage_release/bin/codex-code-mode-host" \
     "$stage_release/codex-path/rg"
   for optional_binary in \
     corbanu \
     corbanu-debug \
+    pfterminal-debug \
     corbanu-acp \
     pfterminal-acp \
     corbanu-walletd; do
@@ -1055,7 +1059,6 @@ release_dir_is_complete() {
     package)
       [ -f "$release_dir/codex-package.json" ] &&
         [ -x "$release_dir/bin/pfterminal" ] &&
-        [ -x "$release_dir/bin/pfterminal-debug" ] &&
         [ -x "$release_dir/bin/pfterminal-walletd" ] &&
         [ -x "$release_dir/bin/codex-code-mode-host" ] &&
         [ -x "$release_dir/pfterminal" ] &&
@@ -1107,6 +1110,30 @@ release_terminal_relative_path() {
   fi
 }
 
+release_debug_terminal_relative_path() {
+  release_dir="$1"
+
+  if [ -x "$release_dir/bin/corbanu-debug" ]; then
+    printf 'bin/corbanu-debug\n'
+  elif [ -x "$release_dir/bin/pfterminal-debug" ]; then
+    printf 'bin/pfterminal-debug\n'
+  else
+    return 1
+  fi
+}
+
+remove_managed_debug_wrapper() {
+  path="$1"
+
+  if [ -L "$path" ]; then
+    case "$(readlink "$path" 2>/dev/null || true)" in
+      "$CURRENT_LINK"/*) rm -f "$path" ;;
+    esac
+  elif [ -f "$path" ] && grep -F "$CURRENT_LINK/" "$path" >/dev/null 2>&1; then
+    rm -f "$path"
+  fi
+}
+
 shell_quote() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
@@ -1114,12 +1141,13 @@ shell_quote() {
 write_visible_command_wrapper() {
   destination="$1"
   target="$2"
-  tmp_script="$3"
+  codex_home="$3"
+  tmp_script="$4"
 
   rm -f "$tmp_script"
   {
     printf '#!/bin/sh\n'
-    printf 'export CODEX_HOME=%s\n' "$(shell_quote "$CODEX_HOME_DIR")"
+    printf 'export CODEX_HOME=%s\n' "$(shell_quote "$codex_home")"
     printf 'exec %s "$@"\n' "$(shell_quote "$target")"
   } >"$tmp_script"
   chmod 0755 "$tmp_script"
@@ -1137,13 +1165,35 @@ update_visible_command() {
   mkdir -p "$BIN_DIR"
   tmp_script="$BIN_DIR/.corbanu.$$"
   legacy_tmp_script="$BIN_DIR/.pfterminal.$$"
+  debug_tmp_script="$BIN_DIR/.corbanu-debug.$$"
+  legacy_debug_tmp_script="$BIN_DIR/.pfterminal-debug.$$"
   tmp_link="$BIN_DIR/.codex-code-mode-host.$$"
   if ! terminal_relative_path="$(release_terminal_relative_path "$release_dir")"; then
     exit 1
   fi
 
-  write_visible_command_wrapper "$BIN_PATH" "$CURRENT_LINK/$terminal_relative_path" "$tmp_script"
-  write_visible_command_wrapper "$LEGACY_BIN_PATH" "$CURRENT_LINK/$terminal_relative_path" "$legacy_tmp_script"
+  write_visible_command_wrapper "$BIN_PATH" "$CURRENT_LINK/$terminal_relative_path" "$CODEX_HOME_DIR" "$tmp_script"
+  write_visible_command_wrapper "$LEGACY_BIN_PATH" "$CURRENT_LINK/$terminal_relative_path" "$CODEX_HOME_DIR" "$legacy_tmp_script"
+
+  if [ "$install_layout" = "package" ]; then
+    if debug_terminal_relative_path="$(release_debug_terminal_relative_path "$release_dir")"; then
+      write_visible_command_wrapper \
+        "$DEBUG_BIN_PATH" \
+        "$CURRENT_LINK/$debug_terminal_relative_path" \
+        "$DEBUG_CODEX_HOME_DIR" \
+        "$debug_tmp_script"
+      write_visible_command_wrapper \
+        "$LEGACY_DEBUG_BIN_PATH" \
+        "$CURRENT_LINK/$debug_terminal_relative_path" \
+        "$DEBUG_CODEX_HOME_DIR" \
+        "$legacy_debug_tmp_script"
+      debug_launchers_installed="true"
+    else
+      warn "release has no debug binary; skipping corbanu-debug launcher"
+      remove_managed_debug_wrapper "$DEBUG_BIN_PATH"
+      remove_managed_debug_wrapper "$LEGACY_DEBUG_BIN_PATH"
+    fi
+  fi
 
   if [ "$os" = "darwin" ] && [ -x "$release_dir/bin/codex-code-mode-host" ]; then
     replace_path_with_symlink \
@@ -1158,6 +1208,10 @@ update_visible_command() {
 
 verify_visible_command() {
   "$BIN_PATH" --version >/dev/null
+  if [ "$debug_launchers_installed" = "true" ]; then
+    "$DEBUG_BIN_PATH" --version >/dev/null
+    "$LEGACY_DEBUG_BIN_PATH" --version >/dev/null
+  fi
   if [ "$os" = "darwin" ] && [ "$install_layout" = "package" ]; then
     [ -x "$CODE_MODE_HOST_BIN_PATH" ]
   fi
