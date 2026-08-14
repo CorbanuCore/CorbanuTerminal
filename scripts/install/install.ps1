@@ -43,6 +43,15 @@ $GitHubApiBaseUri = "https://api.github.com/repos/$GitHubRepository"
 $GitHubReleaseBaseUri = "https://github.com/$GitHubRepository/releases/download"
 $ReleasesMetadataTimeoutSec = 30
 $ReleasesAssetTimeoutSec = 300
+$KeepReleases = 2
+if (-not [string]::IsNullOrWhiteSpace($env:CORBANU_KEEP_RELEASES)) {
+    $parsedKeepReleases = 0
+    if ([int]::TryParse($env:CORBANU_KEEP_RELEASES, [ref]$parsedKeepReleases) -and $parsedKeepReleases -ge 0) {
+        $KeepReleases = $parsedKeepReleases
+    } else {
+        Write-Warning "CORBANU_KEEP_RELEASES must be a non-negative integer; using the default of 2."
+    }
+}
 
 function Write-Step {
     param(
@@ -834,6 +843,47 @@ function Ensure-Junction {
     throw "Refusing to replace file at $LinkPath with a junction."
 }
 
+function Remove-OldStandaloneReleases {
+    param(
+        [string]$ReleasesDir,
+        [string]$CurrentDir,
+        [int]$Keep
+    )
+
+    if (-not (Test-Path -LiteralPath $ReleasesDir -PathType Container) -or
+        -not (Test-Path -LiteralPath $CurrentDir -PathType Container) -or
+        -not (Test-IsJunction -Path $CurrentDir)) {
+        Write-WarningStep "current release junction is missing or dangling; skipping release pruning"
+        return
+    }
+
+    $currentItem = Get-Item -LiteralPath $CurrentDir -Force
+    $currentTarget = [IO.Path]::GetFullPath([string]$currentItem.Target).TrimEnd("\")
+    $managedRoot = [IO.Path]::GetFullPath($ReleasesDir).TrimEnd("\")
+    $managedPrefix = "$managedRoot\"
+    if (-not $currentTarget.StartsWith($managedPrefix, [System.StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-Path -LiteralPath $currentTarget -PathType Container)) {
+        Write-WarningStep "current release target is outside the managed releases directory or unavailable; skipping release pruning"
+        return
+    }
+
+    $candidates = Get-ChildItem -LiteralPath $ReleasesDir -Force -Directory -ErrorAction SilentlyContinue |
+        Where-Object {
+            -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -and
+            -not $_.FullName.Equals($currentTarget, [System.StringComparison]::OrdinalIgnoreCase)
+        } |
+        Sort-Object -Property LastWriteTimeUtc -Descending |
+        Select-Object -Skip $Keep
+    foreach ($candidate in $candidates) {
+        try {
+            Remove-Item -LiteralPath $candidate.FullName -Recurse -Force
+            Write-Step "Pruned old standalone release: $($candidate.Name)"
+        } catch {
+            Write-WarningStep "Could not prune old standalone release $($candidate.FullName): $($_.Exception.Message)"
+        }
+    }
+}
+
 function Ensure-CorbanuCompatibilityExecutables {
     param(
         [string]$PackageDir,
@@ -1239,6 +1289,7 @@ try {
         if ($null -ne $oldStandaloneBackup) {
             Remove-Item -LiteralPath $oldStandaloneBackup -Recurse -Force
         }
+        Remove-OldStandaloneReleases -ReleasesDir $releasesDir -CurrentDir $currentDir -Keep $KeepReleases
     }
 } finally {
     Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue

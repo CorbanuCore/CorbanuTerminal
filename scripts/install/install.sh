@@ -11,6 +11,7 @@ GITHUB_REPOSITORY="CorbanuCore/CorbanuTerminal"
 RELEASES_CONNECT_TIMEOUT=10
 RELEASES_METADATA_TIMEOUT=30
 RELEASES_ASSET_TIMEOUT=300
+KEEP_RELEASES="${CORBANU_KEEP_RELEASES:-2}"
 release_source="github"
 
 BIN_DIR="${CORBANU_INSTALL_DIR:-${PFTERMINAL_INSTALL_DIR:-${CODEX_INSTALL_DIR:-$HOME/.local/bin}}}"
@@ -108,6 +109,7 @@ Environment:
   CORBANU_NON_INTERACTIVE     Set to 1, true, or yes to skip prompts.
   CORBANU_INSTALL_DIR         Directory for the corbanu and pfterminal launchers.
   CORBANU_HOME                Corbanu state directory; fresh installs default to ~/.corbanu.
+  CORBANU_KEEP_RELEASES       Number of prior standalone releases to retain (default: 2).
 
   Compatibility variables:
   PFTERMINAL_RELEASE          Version to install; overridden by --release.
@@ -1217,6 +1219,80 @@ verify_visible_command() {
   fi
 }
 
+release_dir_mtime() {
+  path="$1"
+  case "$os" in
+    darwin) stat -f '%m' "$path" ;;
+    *) stat -c '%Y' "$path" ;;
+  esac
+}
+
+prune_old_releases() {
+  case "$KEEP_RELEASES" in
+    "" | *[!0-9]*)
+      warn "CORBANU_KEEP_RELEASES must be a non-negative integer; skipping release pruning"
+      return
+      ;;
+  esac
+  if [ "${#KEEP_RELEASES}" -gt 9 ]; then
+    warn "CORBANU_KEEP_RELEASES is too large; skipping release pruning"
+    return
+  fi
+
+  if [ ! -d "$RELEASES_DIR" ]; then
+    return
+  fi
+  canonical_releases_dir="$(CDPATH= cd -- "$RELEASES_DIR" 2>/dev/null && pwd -P)" || return
+  if ! current_target="$(CDPATH= cd -- "$CURRENT_LINK" 2>/dev/null && pwd -P)"; then
+    warn "current release link is missing or dangling; skipping release pruning"
+    return
+  fi
+  case "$current_target" in
+    "$canonical_releases_dir"/*) ;;
+    *)
+      warn "current release target is outside the managed releases directory; skipping release pruning"
+      return
+      ;;
+  esac
+
+  prune_list="$STANDALONE_ROOT/.release-prune.$$"
+  sorted_prune_list="$prune_list.sorted"
+  : >"$prune_list"
+  for candidate in "$RELEASES_DIR"/*; do
+    [ -d "$candidate" ] || continue
+    [ ! -L "$candidate" ] || continue
+    candidate_target="$(CDPATH= cd -- "$candidate" 2>/dev/null && pwd -P)" || continue
+    [ "$candidate_target" != "$current_target" ] || continue
+    mtime="$(release_dir_mtime "$candidate" 2>/dev/null || printf '0')"
+    printf '%s\t%s\n' "$mtime" "$candidate" >>"$prune_list"
+  done
+  sort -rn "$prune_list" >"$sorted_prune_list"
+
+  retained=0
+  tab="$(printf '\t')"
+  while IFS="$tab" read -r _mtime candidate; do
+    [ -n "$candidate" ] || continue
+    if [ "$retained" -lt "$KEEP_RELEASES" ]; then
+      retained=$((retained + 1))
+      continue
+    fi
+    [ -d "$candidate" ] || continue
+    [ ! -L "$candidate" ] || continue
+    candidate_target="$(CDPATH= cd -- "$candidate" 2>/dev/null && pwd -P)" || continue
+    [ "$candidate_target" != "$current_target" ] || continue
+    case "$candidate_target" in
+      "$canonical_releases_dir"/*) ;;
+      *) continue ;;
+    esac
+    if rm -rf "$candidate"; then
+      step "Pruned old standalone release: $(basename "$candidate")"
+    else
+      warn "could not prune old standalone release: $candidate"
+    fi
+  done <"$sorted_prune_list"
+  rm -f "$prune_list" "$sorted_prune_list"
+}
+
 parse_args "$@"
 
 require_command mktemp
@@ -1338,6 +1414,7 @@ update_current_link "$release_dir"
 update_visible_command "$release_dir"
 add_to_path
 verify_visible_command
+prune_old_releases
 release_install_lock
 handle_conflicting_install
 

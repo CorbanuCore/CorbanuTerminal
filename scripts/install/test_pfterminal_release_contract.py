@@ -17,6 +17,21 @@ TARGET = "x86_64-unknown-linux-gnu"
 
 
 class PFTerminalReleaseContractTest(unittest.TestCase):
+    def test_windows_installer_prunes_releases_after_command_verification(self) -> None:
+        installer = INSTALLER.with_suffix(".ps1").read_text(encoding="utf-8")
+
+        self.assertIn("$env:CORBANU_KEEP_RELEASES", installer)
+        self.assertIn("function Remove-OldStandaloneReleases", installer)
+        self.assertLess(
+            installer.index(
+                "Test-VisibleTerminalCommands -VisibleBinDir $visibleBinDir"
+            ),
+            installer.index(
+                "Remove-OldStandaloneReleases -ReleasesDir $releasesDir "
+                "-CurrentDir $currentDir -Keep $KeepReleases"
+            ),
+        )
+
     def test_installer_prefers_native_corbanu_release_assets(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

@@ -203,6 +203,107 @@ class InstallShTest(unittest.TestCase):
             )
             self.assertEqual(version_result.returncode, 0, version_result.stderr)
 
+    def test_install_prunes_to_current_plus_two_prior_releases(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive_path, checksum_path, metadata_json = create_package_release(root)
+            releases = root / "pfterminal-home" / "packages" / "standalone" / "releases"
+            releases.mkdir(parents=True)
+            for index in range(1, 5):
+                release = releases / f"old-{index}"
+                release.mkdir()
+                os.utime(release, (index, index))
+            current = releases.parent / "current"
+            current.symlink_to(releases / "old-1")
+
+            result, _requests = run_installer_in(
+                root,
+                VERSION,
+                metadata_json=metadata_json,
+                archive_path=archive_path,
+                checksum_path=checksum_path,
+                force_macos=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                {path.name for path in releases.iterdir()},
+                {
+                    f"{VERSION}-aarch64-apple-darwin",
+                    "old-3",
+                    "old-4",
+                },
+            )
+            self.assertEqual(
+                current.resolve(), releases / f"{VERSION}-aarch64-apple-darwin"
+            )
+            self.assertEqual(result.stdout.count("Pruned old standalone release:"), 2)
+
+    def test_zero_release_retention_keeps_only_current(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive_path, checksum_path, metadata_json = create_package_release(root)
+            releases = root / "pfterminal-home" / "packages" / "standalone" / "releases"
+            releases.mkdir(parents=True)
+            for name in ("old-a", "old-b"):
+                (releases / name).mkdir()
+
+            result, _requests = run_installer_in(
+                root,
+                VERSION,
+                metadata_json=metadata_json,
+                archive_path=archive_path,
+                checksum_path=checksum_path,
+                force_macos=True,
+                keep_releases="0",
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                {path.name for path in releases.iterdir()},
+                {f"{VERSION}-aarch64-apple-darwin"},
+            )
+
+    def test_dangling_current_link_skips_release_pruning(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            releases = root / "pfterminal-home" / "packages" / "standalone" / "releases"
+            releases.mkdir(parents=True)
+            for name in ("old-a", "old-b", "old-c", "old-d"):
+                (releases / name).mkdir()
+            (releases.parent / "current").symlink_to(releases / "missing")
+
+            result = run_prune_function(root, keep_releases="0")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                {path.name for path in releases.iterdir()},
+                {"old-a", "old-b", "old-c", "old-d"},
+            )
+            self.assertIn(
+                "current release link is missing or dangling; skipping release pruning",
+                result.stderr,
+            )
+
+    def test_release_pruning_never_deletes_current_target(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            releases = root / "pfterminal-home" / "packages" / "standalone" / "releases"
+            releases.mkdir(parents=True)
+            for name in ("old-a", "current-release", "old-c", "old-d"):
+                (releases / name).mkdir()
+            current_target = releases / "current-release"
+            (releases.parent / "current").symlink_to(current_target)
+
+            result = run_prune_function(root, keep_releases="0")
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                {path.name for path in releases.iterdir()},
+                {"current-release"},
+            )
+            self.assertEqual((releases.parent / "current").resolve(), current_target)
+
     def test_releases_mirror_opt_in_installs_verified_package(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -608,6 +709,7 @@ def run_installer_in(
     force_macos: bool = False,
     use_mirror: bool | None = False,
     releases_mode: str = "",
+    keep_releases: str | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     bin_dir = root / "bin"
     bin_dir.mkdir(exist_ok=True)
@@ -759,6 +861,8 @@ def run_installer_in(
         env["CODEX_INSTALLER_USE_RELEASES_OPENAI_COM"] = (
             "TRUE" if use_mirror else "false"
         )
+    if keep_releases is not None:
+        env["CORBANU_KEEP_RELEASES"] = keep_releases
     result = subprocess.run(
         ["/bin/sh", str(INSTALL_SCRIPT)],
         capture_output=True,
@@ -772,6 +876,37 @@ def run_installer_in(
         else []
     )
     return result, requests
+
+
+def run_prune_function(
+    root: Path, *, keep_releases: str
+) -> subprocess.CompletedProcess[str]:
+    installer_source = INSTALL_SCRIPT.read_text(encoding="utf-8")
+    definitions, _main = installer_source.split('\nparse_args "$@"\n', 1)
+    script = root / "prune-only.sh"
+    script.write_text(
+        f"{definitions}\nos=linux\nprune_old_releases\n",
+        encoding="utf-8",
+    )
+    home = root / "home"
+    home.mkdir()
+    env = os.environ.copy()
+    env.update(
+        {
+            "HOME": str(home),
+            "PATH": "/usr/bin:/bin",
+            "CORBANU_HOME": str(root / "pfterminal-home"),
+            "CORBANU_INSTALL_DIR": str(root / "install-bin"),
+            "CORBANU_KEEP_RELEASES": keep_releases,
+        }
+    )
+    return subprocess.run(
+        ["/bin/sh", script],
+        capture_output=True,
+        check=False,
+        env=env,
+        text=True,
+    )
 
 
 def create_package_release(
