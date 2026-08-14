@@ -623,10 +623,15 @@ impl App {
                 if let Some(thread_id) = self.chat_widget.thread_id() {
                     self.refresh_in_memory_config_from_disk_best_effort("forking the thread")
                         .await;
-                    let mut fork_config = self.config.clone();
+                    // The active thread can use a different provider, cwd, permissions, or
+                    // service tier from the freshly reloaded app defaults. Fork from the
+                    // widget's thread-scoped runtime snapshot so model/provider pairs remain
+                    // coherent across resumed and switched threads.
+                    let mut fork_config = self.chat_widget.config_ref().clone();
                     fork_config.model = Some(self.chat_widget.current_model().to_string());
                     let fork_reasoning_effort = self.chat_widget.current_reasoning_effort();
                     fork_config.model_reasoning_effort = fork_reasoning_effort.clone();
+                    fork_config.service_tier = self.chat_widget.configured_service_tier();
                     match app_server.fork_thread(fork_config, thread_id).await {
                         Ok(mut forked) => {
                             // Ultra is a Corbanu Terminal UI/runtime mode. The app server may project it
