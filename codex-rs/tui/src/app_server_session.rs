@@ -431,8 +431,8 @@ impl AppServerSession {
                 None
             }
         };
-        // `hooks/list` holds the global config queue during startup. Submit models and config
-        // requirements together so an uncached model fetch can overlap both config requests.
+        // `hooks/list` holds the global config queue during startup. Submit the on-disk model
+        // catalog and config requirements together so both config requests can overlap.
         let model_request_id = self.next_request_id();
         let requirements_request_id = self.next_request_id();
         let (models, requirements) = tokio::try_join!(
