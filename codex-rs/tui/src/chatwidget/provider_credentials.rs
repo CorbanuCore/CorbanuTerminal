@@ -409,7 +409,7 @@ fn provider_credential_item(
             }
         }
         ProviderCredentialOption::PfTerminalPlan => {
-            let name = "Provider: Corbanu Terminal Plan".to_string();
+            let name = "Provider: Corbanu Plan".to_string();
             SelectionItem {
                 name: name.clone(),
                 search_value: Some(name),
@@ -652,7 +652,7 @@ mod tests {
             vec![
                 "Provider: OpenAI Codex Account",
                 "Provider: Claude Code Plan",
-                "Provider: Corbanu Terminal Plan",
+                "Provider: Corbanu Plan",
                 "Provider: Anthropic API Key",
                 "Provider: Ambient API Key",
                 "Provider: Kimi Code API Key",

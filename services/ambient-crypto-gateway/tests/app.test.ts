@@ -188,7 +188,7 @@ describe("Ambient crypto gateway", () => {
     assert.equal(limited.body.error.window, "weekly");
     assert.equal(limited.headers["x-codex-active-limit"], "pfterminal");
     assert.equal(limited.headers["x-pfterminal-limit-name"], "PfTerminal Plan weekly tokens");
-    assert.equal(limited.headers["x-corbanu-limit-name"], "Corbanu Terminal Plan weekly tokens");
+    assert.equal(limited.headers["x-corbanu-limit-name"], "Corbanu Plan weekly tokens");
     assert.equal(
       limited.headers["x-corbanu-primary-used-percent"],
       limited.headers["x-pfterminal-primary-used-percent"],

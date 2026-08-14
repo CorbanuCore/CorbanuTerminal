@@ -587,7 +587,7 @@ fn reset_label(count: i64) -> &'static str {
 
 fn pfterminal_plan_usage_item() -> SelectionItem {
     SelectionItem {
-        name: "Corbanu Terminal Plan usage".to_string(),
+        name: "Corbanu Plan usage".to_string(),
         description: Some(
             "View prepaid spend, used and in-flight tokens, limits, and reset times.".to_string(),
         ),

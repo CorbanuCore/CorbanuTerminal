@@ -35,7 +35,7 @@ const app = createGatewayApp({
 });
 
 const server = app.listen(config.port, config.host, () => {
-  process.stdout.write(`Ambient crypto gateway listening on ${config.host}:${config.port}\n`);
+  process.stdout.write(`Corbanu Plan gateway listening on ${config.host}:${config.port}\n`);
 });
 
 async function shutdown(): Promise<void> {

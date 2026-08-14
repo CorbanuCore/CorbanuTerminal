@@ -98,7 +98,7 @@ Useful commands include:
 
 - `/providers` for account and API-key setup.
 - `/vault` for encrypted credentials.
-- `/wallet` for the local wallet and Corbanu Terminal plan.
+- `/wallet` for the local wallet and Corbanu Plan.
 - `/model` or `corbanu -m <model>` to select a model.
 - `/spawn` and `/panes` for managed agent work.
 - `/tasknode` for Post Fiat Task Node.
@@ -109,7 +109,7 @@ Useful commands include:
 | ------------------------- | -------------------------------------------------------- |
 | OpenAI                    | Codex account authentication or API-backed configuration |
 | Anthropic                 | Direct API keys and Claude Code plan-backed panes        |
-| Corbanu Terminal Plan     | Prepaid inference purchased with USDC through `/wallet`  |
+| [Corbanu Plan](https://github.com/CorbanuCore/CorbanuPlan) | Prepaid inference purchased with USDC through `/wallet`  |
 | Kimi Code                 | Direct Kimi Code access                                  |
 | Z.AI                      | Direct Z.AI access, including GLM models                 |
 | OpenRouter                | OpenRouter's catalogue, including Kimi, GLM, and Grok    |
@@ -120,14 +120,15 @@ Useful commands include:
 | Custom providers          | Additional endpoints configured in `config.toml`         |
 
 Use `/providers` for interactive setup. The public provider alias is
-`corbanu-terminal-plan`; the legacy `pfterminal-plan` identifier remains
-accepted so existing configuration and receipts continue to work.
+`corbanu-plan`; the earlier `corbanu-terminal-plan` alias and legacy
+`pfterminal-plan` identifier remain accepted so existing configuration and
+receipts continue to work.
 
 ## Wallet and Task Node
 
 `/wallet` creates or restores a local wallet, shows SOL and USDC balances,
-controls signing access, backs up recovery material, and manages Corbanu
-Terminal inference plans. Wallet secrets stay outside normal chat history and
+controls signing access, backs up recovery material, and manages Corbanu Plans.
+Wallet secrets stay outside normal chat history and
 model context.
 
 `/tasknode` connects Corbanu Terminal to Post Fiat Task Node tasks, rewards,

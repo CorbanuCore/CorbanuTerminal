@@ -1,6 +1,6 @@
 ---
 name: pfterminal-help
-description: Help users operate Corbanu Terminal's product-specific features and slash commands. Use when a user asks how to configure providers or credentials, use the encrypted vault, create or restore a Solana wallet, buy or manage a Corbanu Terminal Plan, rent GPUs through Vast.ai or RunPod, choose rented models, spawn or supervise agent hierarchies, navigate panes, use Task Node, or troubleshoot Corbanu Terminal state and workflows. Focus on what to do in the TUI and what each action means, not source-code implementation.
+description: Help users operate Corbanu Terminal's product-specific features and slash commands. Use when a user asks how to configure providers or credentials, use the encrypted vault, create or restore a Solana wallet, buy or manage a Corbanu Plan, rent GPUs through Vast.ai or RunPod, choose rented models, spawn or supervise agent hierarchies, navigate panes, use Task Node, or troubleshoot Corbanu Terminal state and workflows. Focus on what to do in the TUI and what each action means, not source-code implementation.
 ---
 
 # Corbanu Terminal Help
@@ -15,7 +15,7 @@ Do not turn product help into a code tour. Do not ask the user to paste API keys
 | --- | --- | --- |
 | Add or replace an inference credential | `/providers` | Provider access and model selection are separate; use `/model` afterward. |
 | Store or inspect any secret | `/vault` | The vault manages credentials; `/providers` is its provider-focused front door. |
-| Hold SOL/USDC or buy a Corbanu Terminal Plan | `/wallet` | Wallet custody and the local plan credential are separate state. |
+| Hold SOL/USDC or buy a Corbanu Plan | `/wallet` | Wallet custody and the local plan credential are separate state. |
 | Rent model-serving GPUs | `/gpu` | Corbanu Terminal controls a third-party rental; the marketplace account is billed. |
 | Create a Nazgul/Troll/Orc hierarchy | `/spawn` | Spawn creates roles and reporting relationships. |
 | Attach ongoing supervision to existing work | `/orchestrate` | Orchestration manages a persistent assignment; it does not create the crew. |
@@ -25,7 +25,7 @@ Do not turn product help into a code tour. Do not ask the user to paste API keys
 
 ## Providers and models
 
-Use `/providers` to view sign-in and credential status for account plans, Corbanu Terminal Plan, and supported API-key providers. Selecting an API-key provider opens masked entry and stores the key in the encrypted vault. Environment-provided keys may appear as available without being copied into the vault.
+Use `/providers` to view sign-in and credential status for account plans, Corbanu Plan, and supported API-key providers. Selecting an API-key provider opens masked entry and stores the key in the encrypted vault. Environment-provided keys may appear as available without being copied into the vault.
 
 Use `/model` to choose the provider, model, and reasoning effort for the session. Adding a credential does not automatically select that provider. If a model is unavailable, check `/providers` for authentication and `/model` for catalog visibility before changing files or clearing state.
 
@@ -42,9 +42,9 @@ Use bare `/vault` for the action menu:
 - `/vault credential add` must have no inline secret; Corbanu Terminal opens the secure modal.
 - Delete only when the user intends to remove that stored credential. Explain which provider or workflow will lose access.
 
-The vault and wallet are different. The vault stores service credentials; `/wallet` manages a signing key, on-chain balances, and Corbanu Terminal Plan linkage.
+The vault and wallet are different. The vault stores service credentials; `/wallet` manages a signing key, on-chain balances, and Corbanu Plan linkage.
 
-## Wallet and Corbanu Terminal Plan
+## Wallet and Corbanu Plan
 
 `/wallet` manages a local Solana-mainnet wallet holding SOL and canonical USDC. Keep some SOL for transaction fees unless the checkout explicitly says fees are sponsored.
 
@@ -53,8 +53,8 @@ For a new user:
 1. Choose **Create wallet** or **Restore wallet**.
 2. Save the recovery material from the secure view and set a passcode.
 3. Use **Receive** to fund the shown address with the correct network assets.
-4. Choose **Buy Corbanu Terminal Plan**, unlock the wallet, review the tier and exact USDC payment, then confirm.
-5. After activation, use `/model` to select a model offered through Corbanu Terminal Plan.
+4. Choose **Buy Corbanu Plan**, unlock the wallet, review the tier and exact USDC payment, then confirm.
+5. After activation, use `/model` to select a model offered through Corbanu Plan.
 
 Explain wallet actions precisely:
 
@@ -62,7 +62,7 @@ Explain wallet actions precisely:
 - **Plan details** shows prepaid tier, token use, limits, reset dates, and queued periods without crowding the wallet summary.
 - **Upgrade** purchases the period shown by the confirmation screen; do not imply an immediate tier change when the UI shows a future period.
 - **Recover existing plan** signs an ownership proof and sends no USDC. Use it only for a wallet that previously purchased a plan.
-- **Disconnect Corbanu Terminal Plan** removes the local plan credential but keeps the wallet and paid period.
+- **Disconnect Corbanu Plan** removes the local plan credential but keeps the wallet and paid period.
 - **Remove wallet from this device** removes local custody and the local plan credential; it does not move on-chain funds or cancel a paid period.
 - **Back up recovery material** requires the wallet passcode and uses the secure view. Never request or repeat the recovery material in chat.
 

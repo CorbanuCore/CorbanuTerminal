@@ -32,7 +32,7 @@ export function readGatewayConfig(env: NodeJS.ProcessEnv = process.env): Gateway
     "PFT_AMBIENT_TOKEN_PEPPER_FILE",
   );
   if (tokenPepper.length < 32) {
-    throw new Error("the PfTerminal plan token pepper must contain at least 32 characters");
+    throw new Error("the Corbanu Plan token pepper must contain at least 32 characters");
   }
 
   return {

@@ -1,9 +1,14 @@
-# Ambient Crypto Gateway
+# Corbanu Plan gateway
 
-This service accepts one-month PfTerminal subscriptions through x402 on Solana, binds the
-settlement to the paying wallet, and issues revocable PfTerminal API keys after a signed-wallet
-challenge. Customer keys proxy only the supported Ambient inference routes; the operator's
+This compatibility copy accepts one-month Corbanu Plan purchases through x402 on Solana, binds
+settlement to the paying wallet, and issues revocable Corbanu Plan API keys after a signed-wallet
+challenge. Customer keys proxy only the supported Ambient Inference routes; the operator's
 Ambient credential stays server-side.
+
+The canonical billing service and methodology now live in
+[`CorbanuCore/CorbanuPlan`](https://github.com/CorbanuCore/CorbanuPlan). This copy remains during
+the deployment transition so the existing gateway, database, paid periods, and rollback path do
+not change implicitly.
 
 End customers do not need an Ambient browser account. The operator must supply an Ambient
 account and upstream credential that are approved for the intended proxy arrangement.

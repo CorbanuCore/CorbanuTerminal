@@ -2133,7 +2133,7 @@ fn should_show_login_screen(login_status: LoginStatus, config: &Config) -> bool 
         return true;
     }
 
-    // Corbanu Terminal Plan credentials are provisioned and recovered inside the TUI through
+    // Corbanu Plan credentials are provisioned and recovered inside the TUI through
     // `/wallet`. Sending a disconnected Plan user through the external-provider onboarding
     // picker makes that recovery path unreachable and falsely suggests that every other
     // stored account was removed. Keep the terminal available so the wallet can be restored

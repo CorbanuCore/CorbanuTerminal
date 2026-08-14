@@ -266,7 +266,7 @@ function createApiKeyAuth(
     const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined;
     if (!token || token.length > 256) {
       authFailures.recordFailure(request);
-      response.status(401).json({ error: "a valid PfTerminal API key is required" });
+      response.status(401).json({ error: "a valid Corbanu Plan API key is required" });
       return;
     }
     const period = await store.authenticateApiKey(hashToken(token, pepper), now());
@@ -306,7 +306,7 @@ async function proxyAmbientRequest(
     settled = true;
     const result = await store.settleApiKeyUsage(reservation.id, disposition, usage, now());
     if ((result?.chargedTokens ?? 0) > reservation.reservedTokens) {
-      console.warn("Corbanu Terminal Plan usage exceeded its reservation; subsequent requests will remain exhausted until reset");
+      console.warn("Corbanu Plan usage exceeded its reservation; subsequent requests will remain exhausted until reset");
     }
     if (result && !response.headersSent) writePlanHeaders(response, result);
   };
@@ -414,7 +414,7 @@ function writeLimitResponse(response: Response, limit: PlanLimitReached): void {
   const usedPercent = Math.min(100, Math.max(0, (limit.usedTokens / limit.limitTokens) * 100));
   response.setHeader("Retry-After", String(retryAfterSeconds));
   response.setHeader("X-Codex-Active-Limit", "pfterminal");
-  response.setHeader("X-Corbanu-Limit-Name", `Corbanu Terminal Plan ${limit.window} tokens`);
+  response.setHeader("X-Corbanu-Limit-Name", `Corbanu Plan ${limit.window} tokens`);
   response.setHeader("X-Corbanu-Primary-Used-Percent", usedPercent.toFixed(2));
   response.setHeader("X-Corbanu-Primary-Reset-At", String(resetSeconds));
   response.setHeader("X-PfTerminal-Limit-Name", `PfTerminal Plan ${limit.window} tokens`);
@@ -431,7 +431,7 @@ function writeLimitResponse(response: Response, limit: PlanLimitReached): void {
       reservedTokens: limit.reservedTokens,
       remainingTokens: limit.remainingTokens,
       resetsAt: limit.resetsAt.toISOString(),
-      action: "Open /wallet to review or upgrade the Corbanu Terminal Plan.",
+      action: "Open /wallet to review or upgrade Corbanu Plan.",
     },
   });
 }

@@ -91,7 +91,7 @@ export function createX402Middleware(config: X402Config): RequestHandler {
           network: config.network,
           payTo: config.payTo,
         },
-        description: `One month of PfTerminal Ambient ${planId}`,
+        description: `One month of Corbanu Plan ${planId}, powered by Ambient Inference`,
         mimeType: "application/json",
         resource: new URL(purchasePath(planId), config.publicBaseUrl).toString(),
         settlementFailedResponseBody: settlementFailureBody,
@@ -108,12 +108,12 @@ export function createX402Middleware(config: X402Config): RequestHandler {
         route,
         {
           accepts: [] as [],
-          description: "Wallet-authenticated PfTerminal account operation",
+          description: "Wallet-authenticated Corbanu Plan account operation",
           mimeType: "application/json",
           resource: new URL(route.slice(route.indexOf(" ") + 1), config.publicBaseUrl).toString(),
           extensions: declareSIWxExtension({
             network: [config.network],
-            statement: "Authenticate this PfTerminal account operation",
+            statement: "Authenticate this Corbanu Plan account operation",
             expirationSeconds: 300,
           }),
         },

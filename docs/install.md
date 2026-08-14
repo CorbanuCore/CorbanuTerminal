@@ -271,7 +271,7 @@ The `/model` picker groups models by account/provider route. Current categories
 include:
 
 - account and coding-plan routes such as OpenAI, Claude Plan, Ambient, Kimi
-  Code, Z.AI, and Corbanu Terminal Plan; and
+  Code, Z.AI, and Corbanu Plan; and
 - metered API-key routes such as Anthropic, DeepSeek, OpenRouter, Meta,
   Baseten, and Vercel.
 

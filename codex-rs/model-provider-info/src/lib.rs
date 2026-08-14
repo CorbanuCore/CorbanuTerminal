@@ -96,11 +96,12 @@ pub const AMBIENT_GLM_5_2_CONTEXT_WINDOW: i64 = 101_376;
 pub const AMBIENT_LEGACY_GLM_5_2_FP8_MODEL: &str = "zai-org/GLM-5.2-FP8";
 pub const AMBIENT_KIMI_K2_7_CODE_MODEL: &str = "moonshotai/kimi-k2.7-code";
 pub const AMBIENT_API_KEY_ENV_VAR: &str = "AMBIENT_API_KEY";
-/// Public provider identifier accepted by Corbanu Terminal 0.1.30+.
+/// Current public provider identifier.
 ///
-/// The legacy identifier remains canonical in persisted state for the 0.1.30
-/// compatibility window.
-pub const CORBANU_PLAN_PROVIDER_ID: &str = "corbanu-terminal-plan";
+/// Both earlier identifiers remain accepted, while the original PFTerminal ID
+/// stays canonical in persisted state until a versioned migration exists.
+pub const CORBANU_PLAN_PROVIDER_ID: &str = "corbanu-plan";
+pub const CORBANU_TERMINAL_PLAN_PROVIDER_ID: &str = "corbanu-terminal-plan";
 pub const CORBANU_PLAN_API_KEY_ENV_VAR: &str = "CORBANU_PLAN_API_KEY";
 pub const PFTERMINAL_PLAN_PROVIDER_ID: &str = "pfterminal-plan";
 pub const PFTERMINAL_PLAN_GATEWAY_ORIGIN: &str = "https://pfterminal-plan-gateway.fly.dev";
@@ -111,7 +112,7 @@ pub const PFTERMINAL_PLAN_API_KEY_ENV_VAR: &str = "PFTERMINAL_PLAN_API_KEY";
 /// configuration and credential storage.
 pub fn canonical_provider_id(provider_id: &str) -> &str {
     match provider_id {
-        CORBANU_PLAN_PROVIDER_ID => PFTERMINAL_PLAN_PROVIDER_ID,
+        CORBANU_PLAN_PROVIDER_ID | CORBANU_TERMINAL_PLAN_PROVIDER_ID => PFTERMINAL_PLAN_PROVIDER_ID,
         _ => provider_id,
     }
 }

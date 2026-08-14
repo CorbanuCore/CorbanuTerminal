@@ -173,7 +173,7 @@ export async function setWalletClassification(
 
 export function renderAccountingReport(report: AccountingReport): string {
   const lines = [
-    "Corbanu Terminal Plan accounting",
+    "Corbanu Plan accounting",
     `As of: ${report.generatedAt}`,
     `Receiver: ${report.receiverAddress}`,
     `Receiver balance: ${report.receiverUsdc} USDC`,

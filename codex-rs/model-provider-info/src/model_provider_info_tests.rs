@@ -636,7 +636,7 @@ fn test_built_in_model_providers_keep_legacy_plan_id_with_corbanu_name() {
     let providers = built_in_model_providers(/*openai_base_url*/ None);
     let provider = providers
         .get(PFTERMINAL_PLAN_PROVIDER_ID)
-        .expect("Corbanu Terminal Plan provider");
+        .expect("Corbanu Plan provider");
 
     assert!(provider.is_pfterminal_plan());
     assert_eq!(provider.name, PLAN_NAME);
@@ -655,6 +655,10 @@ fn test_built_in_model_providers_keep_legacy_plan_id_with_corbanu_name() {
     );
     assert_eq!(
         canonical_provider_id(CORBANU_PLAN_PROVIDER_ID),
+        PFTERMINAL_PLAN_PROVIDER_ID
+    );
+    assert_eq!(
+        canonical_provider_id(CORBANU_TERMINAL_PLAN_PROVIDER_ID),
         PFTERMINAL_PLAN_PROVIDER_ID
     );
     assert_eq!(
