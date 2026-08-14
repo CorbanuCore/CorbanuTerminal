@@ -2,7 +2,21 @@
 
 Date: 2026-08-14 UTC
 
-Publishing remains a human decision. No tag or release was created by this QA run.
+Release decision: qualified for publication. No tag or release existed when this record was
+finalized.
+
+## Final canonical release binary
+
+- Built `corbanu` with `cargo build --release -p codex-cli --bin corbanu` from commit
+  `3cbcb3e097` plus the QA record update that follows it.
+- Build completed successfully in 10m 16s.
+- Output: `codex-rs/target/release/corbanu` (1,324,762,208 bytes before package stripping).
+- SHA-256: `4ccf8d33c2931788cdb6309431913c47b52a1cec6677c8267ffcd80ab7e4bed0`.
+- The exact binary reports `corbanu 0.1.31` and launches successfully. An isolated auth-empty
+  `exec` smoke reached normal session initialization and then failed closed with HTTP 401; no
+  authenticated model request or billable inference occurred.
+- A fresh isolated home materialized all bundled system skills from the binary. Both
+  `frontend-design` and `tasknode-usage` were present.
 
 ## Release-profile debug launcher
 
@@ -47,17 +61,35 @@ Before normal-launch performance results are treated as release evidence:
   requires the UI dispatcher to return within 250 ms, then confirms exactly one provider request
   after release. Both contended and uncontended operator-pane dispatch tests pass.
 
+## Task Node skill and cross-provider fork findings
+
+- The Task Node skill was embedded, but its instructions still hard-coded `pfterminal` and
+  `pfterminal-debug`. When the compatibility debug command was absent, an agent attempted a large
+  source build instead of using the installed Corbanu helper.
+- The skill now resolves installed Corbanu entrypoints while preserving the active `CODEX_HOME`,
+  prefers `corbanu-debug` for conventional debug homes, retains legacy names only as fallbacks, and
+  explicitly forbids source builds to obtain the helper.
+- A live debug-home smoke selected `~/.local/bin/corbanu-debug`, reported `corbanu 0.1.31`, and
+  returned linked Task Node status from the same vault. The embedded-skills unit suite passed all
+  four tests, including the new command-resolution contract.
+- The remaining Ultra fork test exposed a real runtime boundary: `/fork` copied the active model
+  but retained the app default provider. A resumed OpenAI thread under Ambient defaults therefore
+  attempted the invalid pair `gpt-5.4` + `ambient`.
+- Regular forks now derive their model, provider, cwd, permissions, and service tier from the
+  active thread runtime snapshot. The strengthened cross-provider Ultra regression creates a new
+  thread and preserves both `gpt-5.4` and Ultra.
+
 ## Aggregate verification
 
 - `python3 -m pytest scripts/install scripts/codex_package -q`: 53 tests and 17 subtests passed.
 - Core incompatible provider/model config coverage: fail-closed and interactive recovery tests
-  passed. The broader filtered Core command exhausted disk while linking; after generated build
-  artifacts were removed, both exact production-boundary tests passed.
+  passed again against the final source candidate.
+- `codex-skills`: four tests passed, including embedded Task Node command resolution.
 - Full `codex-tui` rerun after refreshing mechanical 0.1.31 version snapshots: 3,816 passed, one
   failed, nine skipped. `safety_retry_preserves_a_committed_steer_from_the_interrupted_turn` passed
-  on retry and was reported flaky. The sole persistent failure is the pre-existing
-  `fork_current_session_preserves_conversation_ultra` test, outside the files changed by this fix
-  list. The release gate is therefore not completely green until that unrelated failure is either
-  fixed or formally waived.
+  on retry and was reported flaky. The sole persistent failure,
+  `fork_current_session_preserves_conversation_ultra`, was then diagnosed as a cross-provider fork
+  bug, fixed, and passed in the final targeted library-only run. No known test failure remains.
 - Generated incremental caches and enumerated giant test executables were removed after QA. The
-  release-profile `corbanu-debug` binary and wrapper remain intact and both report version 0.1.31.
+  running release-profile `corbanu-debug` binary and wrapper remain intact and both report version
+  0.1.31.
