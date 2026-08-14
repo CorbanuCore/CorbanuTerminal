@@ -3919,6 +3919,14 @@ impl Config {
             .then_some(requested_model_for_pair_validation.as_deref())
             .flatten()
             .and_then(|value| corrected_catalog_provider(value, &model_provider_id));
+        if incompatible_explicit_provider.is_some() && allow_provider_model_fallback {
+            let requested_model = requested_model_for_pair_validation
+                .as_deref()
+                .unwrap_or_default();
+            startup_warnings.push(format!(
+                "Configured model `{requested_model}` is not supported by provider `{model_provider_id}`; using the provider's default model instead. Your configuration file was not changed."
+            ));
+        }
         if let Some(supported_provider) = incompatible_explicit_provider
             && !allow_provider_model_fallback
         {

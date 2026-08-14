@@ -12247,6 +12247,42 @@ async fn explicit_incompatible_model_provider_pair_fails_closed() -> std::io::Re
 }
 
 #[tokio::test]
+async fn interactive_fallback_recovers_persisted_incompatible_pairs() -> std::io::Result<()> {
+    use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+    use codex_model_provider_info::OPENAI_PROVIDER_ID;
+
+    for (model, provider) in [
+        ("gpt-5.6-sol", CLAUDE_PLAN_PROVIDER_ID),
+        ("glm-5.2", OPENAI_PROVIDER_ID),
+    ] {
+        let cfg = toml::from_str::<ConfigToml>(&format!(
+            "model_provider = {provider:?}\nmodel = {model:?}\n"
+        ))
+        .expect("config should deserialize");
+
+        let config = Config::load_from_base_config_with_overrides(
+            cfg,
+            ConfigOverrides {
+                allow_provider_model_fallback: true,
+                ..ConfigOverrides::default()
+            },
+            tempdir()?.abs(),
+        )
+        .await?;
+
+        assert_eq!(config.model_provider_id, provider);
+        assert_eq!(config.model, None);
+        assert!(config.startup_warnings.iter().any(|warning| {
+            warning.contains(model)
+                && warning.contains(provider)
+                && warning.contains("using the provider's default model")
+                && warning.contains("configuration file was not changed")
+        }));
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn inferred_bare_claude_uses_claude_plan_without_direct_api_spend() -> std::io::Result<()> {
     use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
     use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
