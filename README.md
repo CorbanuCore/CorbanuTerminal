@@ -109,7 +109,7 @@ Useful commands include:
 | ------------------------- | -------------------------------------------------------- |
 | OpenAI                    | Codex account authentication or API-backed configuration |
 | Anthropic                 | Direct API keys and Claude Code plan-backed panes        |
-| Corbanu Terminal Plan     | Prepaid inference purchased with USDC through `/wallet`  |
+| Corbanu Plan              | Prepaid inference purchased with USDC through `/wallet`  |
 | Kimi Code                 | Direct Kimi Code access                                  |
 | Z.AI                      | Direct Z.AI access, including GLM models                 |
 | OpenRouter                | OpenRouter's catalogue, including Kimi, GLM, and Grok    |
@@ -122,6 +122,10 @@ Useful commands include:
 Use `/providers` for interactive setup. The public provider alias is
 `corbanu-terminal-plan`; the legacy `pfterminal-plan` identifier remains
 accepted so existing configuration and receipts continue to work.
+
+Corbanu Terminal contains the public client integration for Corbanu Plan. The
+hosted plan service, billing operations, and internal methodology are maintained
+privately by CorbanuCore.
 
 ## Wallet and Task Node
 

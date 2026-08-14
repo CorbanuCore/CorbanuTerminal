@@ -1,7 +1,6 @@
 packages:
   - codex-cli
   - codex-rs/responses-api-proxy/npm
-  - services/ambient-crypto-gateway
   - sdk/typescript
 
 ignoredBuiltDependencies:
