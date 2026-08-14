@@ -1,8 +1,11 @@
 """Canonical Codex package directory layout."""
 
+import hashlib
 import json
+import os
 import shutil
 import stat
+import subprocess
 from pathlib import Path
 
 from .targets import PackageInputs
@@ -39,6 +42,8 @@ def build_package_dir(
     variant: PackageVariant,
     spec: TargetSpec,
     inputs: PackageInputs,
+    *,
+    symbols_dir: Path | None = None,
 ) -> None:
     bin_dir = package_dir / "bin"
     resources_dir = package_dir / "codex-resources"
@@ -53,18 +58,46 @@ def build_package_dir(
         bin_dir / entrypoint_name,
         is_windows=spec.is_windows,
     )
+    strip_packaged_executable(
+        bin_dir / entrypoint_name,
+        spec,
+        symbols_dir=symbols_dir,
+    )
     copy_executable(
         inputs.code_mode_host_bin,
         bin_dir / f"codex-code-mode-host{spec.exe_suffix}",
         is_windows=spec.is_windows,
     )
+    strip_packaged_executable(
+        bin_dir / f"codex-code-mode-host{spec.exe_suffix}",
+        spec,
+        symbols_dir=symbols_dir,
+    )
+    placed_binaries = [(inputs.entrypoint_bin, bin_dir / entrypoint_name)]
     for extra in variant.extra_binaries:
         output_name = extra.entrypoint_name(spec)
-        copy_executable(
-            inputs.extra_bins[output_name],
-            bin_dir / output_name,
-            is_windows=spec.is_windows,
-        )
+        source = inputs.extra_bins[output_name]
+        destination = bin_dir / output_name
+        alias_target = None
+        if not spec.is_windows:
+            alias_target = next(
+                (
+                    placed_destination
+                    for placed_source, placed_destination in placed_binaries
+                    if executable_sources_match(source, placed_source)
+                ),
+                None,
+            )
+        if alias_target is not None:
+            destination.symlink_to(os.path.relpath(alias_target, destination.parent))
+        else:
+            copy_executable(source, destination, is_windows=spec.is_windows)
+            strip_packaged_executable(
+                destination,
+                spec,
+                symbols_dir=symbols_dir,
+            )
+            placed_binaries.append((source, destination))
     copy_executable(inputs.rg_bin, path_dir / spec.rg_name, is_windows=spec.is_windows)
 
     if inputs.zsh_bin is not None:
@@ -215,6 +248,99 @@ def copy_executable(src: Path, dest: Path, *, is_windows: bool) -> None:
     if not is_windows:
         mode = dest.stat().st_mode
         dest.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def executable_sources_match(left: Path, right: Path) -> bool:
+    try:
+        if os.path.samefile(left, right):
+            return True
+    except OSError:
+        pass
+
+    if left.stat().st_size != right.stat().st_size:
+        return False
+    return file_digest(left) == file_digest(right)
+
+
+def file_digest(path: Path) -> bytes:
+    digest = hashlib.sha256()
+    with open(path, "rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.digest()
+
+
+def strip_packaged_executable(
+    path: Path,
+    spec: TargetSpec,
+    *,
+    symbols_dir: Path | None,
+) -> None:
+    binary_format = native_binary_format(path)
+    if spec.is_windows or binary_format is None:
+        return
+
+    strip_tool = resolve_binary_tool("STRIP", ("llvm-strip", "strip"))
+    if binary_format == "elf":
+        if symbols_dir is not None:
+            symbols_dir.mkdir(parents=True, exist_ok=True)
+            debug_path = symbols_dir / f"{path.name}.debug"
+            objcopy_tool = resolve_binary_tool("OBJCOPY", ("llvm-objcopy", "objcopy"))
+            subprocess.run(
+                [objcopy_tool, "--only-keep-debug", path, debug_path],
+                check=True,
+            )
+        subprocess.run(
+            [strip_tool, "--strip-debug", "--strip-unneeded", path],
+            check=True,
+        )
+        if symbols_dir is not None:
+            subprocess.run(
+                [objcopy_tool, f"--add-gnu-debuglink={debug_path}", path],
+                check=True,
+            )
+    elif binary_format == "mach-o":
+        if symbols_dir is not None:
+            symbols_dir.mkdir(parents=True, exist_ok=True)
+            dsymutil = resolve_binary_tool("DSYMUTIL", ("dsymutil",))
+            subprocess.run(
+                [dsymutil, path, "-o", symbols_dir / f"{path.name}.dSYM"],
+                check=True,
+            )
+        subprocess.run([strip_tool, "-S", "-x", path], check=True)
+
+
+def native_binary_format(path: Path) -> str | None:
+    with open(path, "rb") as binary:
+        magic = binary.read(4)
+    if magic == b"\x7fELF":
+        return "elf"
+    if magic in {
+        b"\xcf\xfa\xed\xfe",
+        b"\xfe\xed\xfa\xcf",
+        b"\xca\xfe\xba\xbe",
+        b"\xbe\xba\xfe\xca",
+    }:
+        return "mach-o"
+    return None
+
+
+def resolve_binary_tool(environment_variable: str, candidates: tuple[str, ...]) -> str:
+    configured = os.environ.get(environment_variable)
+    if configured:
+        resolved = shutil.which(configured)
+        if resolved is not None:
+            return resolved
+        raise RuntimeError(
+            f"{environment_variable} names an unavailable executable: {configured}"
+        )
+    for candidate in candidates:
+        resolved = shutil.which(candidate)
+        if resolved is not None:
+            return resolved
+    raise RuntimeError(
+        f"Required packaging tool is unavailable: {', '.join(candidates)}"
+    )
 
 
 def copy_telegram_resources(dest: Path, spec: TargetSpec) -> None:

@@ -30,6 +30,7 @@ class TargetSpec:
 class PackageExtraBinary:
     cargo_bin: str
     executable_stem: str
+    alias_of: str | None = None
 
     def entrypoint_name(self, spec: TargetSpec) -> str:
         return f"{self.executable_stem}{spec.exe_suffix}"
@@ -67,14 +68,17 @@ PACKAGE_VARIANTS: dict[str, PackageVariant] = {
             PackageExtraBinary(
                 cargo_bin="pfterminal",
                 executable_stem="pfterminal",
+                alias_of="corbanu",
             ),
             PackageExtraBinary(
                 cargo_bin="corbanu-debug",
                 executable_stem="corbanu-debug",
+                alias_of="corbanu",
             ),
             PackageExtraBinary(
                 cargo_bin="pfterminal-debug",
                 executable_stem="pfterminal-debug",
+                alias_of="corbanu",
             ),
             PackageExtraBinary(
                 cargo_bin="corbanu-acp",
@@ -83,6 +87,7 @@ PACKAGE_VARIANTS: dict[str, PackageVariant] = {
             PackageExtraBinary(
                 cargo_bin="pfterminal-acp",
                 executable_stem="pfterminal-acp",
+                alias_of="corbanu-acp",
             ),
             PackageExtraBinary(
                 cargo_bin="corbanu-walletd",
@@ -91,6 +96,7 @@ PACKAGE_VARIANTS: dict[str, PackageVariant] = {
             PackageExtraBinary(
                 cargo_bin="pfterminal-walletd",
                 executable_stem="pfterminal-walletd",
+                alias_of="corbanu-walletd",
             ),
         ),
     ),
@@ -102,6 +108,7 @@ PACKAGE_VARIANTS: dict[str, PackageVariant] = {
             PackageExtraBinary(
                 cargo_bin="pfterminal-debug",
                 executable_stem="pfterminal-debug",
+                alias_of="pfterminal",
             ),
             PackageExtraBinary(
                 cargo_bin="pfterminal-walletd",

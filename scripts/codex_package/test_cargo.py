@@ -32,6 +32,21 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 "pfterminal-walletd",
             ],
         )
+        self.assertEqual(
+            {
+                binary.executable_stem: binary.alias_of
+                for binary in variant.extra_binaries
+            },
+            {
+                "pfterminal": "corbanu",
+                "corbanu-debug": "corbanu",
+                "pfterminal-debug": "corbanu",
+                "corbanu-acp": None,
+                "pfterminal-acp": "corbanu-acp",
+                "corbanu-walletd": None,
+                "pfterminal-walletd": "corbanu-walletd",
+            },
+        )
 
     def test_release_workflow_prebuilds_every_package_binary(self) -> None:
         workflow = (
@@ -42,13 +57,13 @@ class SourceBinariesForTargetTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertEqual(workflow.count("--bin corbanu \\"), 3)
-        self.assertEqual(workflow.count("--bin pfterminal \\"), 3)
-        self.assertEqual(workflow.count("--bin corbanu-debug \\"), 3)
-        self.assertEqual(workflow.count("--bin pfterminal-debug \\"), 3)
+        self.assertEqual(workflow.count("--bin pfterminal \\"), 1)
+        self.assertEqual(workflow.count("--bin corbanu-debug \\"), 1)
+        self.assertEqual(workflow.count("--bin pfterminal-debug \\"), 1)
         self.assertEqual(workflow.count("--bin corbanu-acp \\"), 3)
-        self.assertEqual(workflow.count("--bin pfterminal-acp \\"), 3)
+        self.assertEqual(workflow.count("--bin pfterminal-acp \\"), 1)
         self.assertEqual(workflow.count("--bin corbanu-walletd \\"), 3)
-        self.assertEqual(workflow.count("--bin pfterminal-walletd \\"), 3)
+        self.assertEqual(workflow.count("--bin pfterminal-walletd \\"), 1)
         self.assertEqual(workflow.count("--bin codex-code-mode-host"), 3)
         self.assertEqual(workflow.count("--variant corbanu \\"), 3)
         self.assertEqual(workflow.count('--extra-bin "corbanu-debug='), 3)
@@ -56,6 +71,33 @@ class SourceBinariesForTargetTest(unittest.TestCase):
         self.assertEqual(workflow.count("--code-mode-host-bin "), 3)
         self.assertEqual(workflow.count("--bin bwrap"), 1)
         self.assertEqual(workflow.count("--bwrap-bin "), 1)
+        self.assertEqual(workflow.count("--symbols-dir "), 2)
+
+    def test_unix_source_build_reuses_canonical_alias_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            entrypoint = touch_file(root / "corbanu")
+            code_mode_host = touch_file(root / "codex-code-mode-host")
+            acp = touch_file(root / "corbanu-acp")
+            walletd = touch_file(root / "corbanu-walletd")
+            outputs = build_source_binaries(
+                TARGET_SPECS["aarch64-apple-darwin"],
+                PACKAGE_VARIANTS["corbanu"],
+                cargo=str(root / "cargo-that-should-not-run"),
+                profile="release",
+                entrypoint_bin=entrypoint,
+                code_mode_host_bin=code_mode_host,
+                extra_bins={"corbanu-acp": acp, "corbanu-walletd": walletd},
+                bwrap_bin=None,
+                codex_command_runner_bin=None,
+                codex_windows_sandbox_setup_bin=None,
+            )
+
+        self.assertEqual(outputs.extra_bins["pfterminal"], entrypoint)
+        self.assertEqual(outputs.extra_bins["corbanu-debug"], entrypoint)
+        self.assertEqual(outputs.extra_bins["pfterminal-debug"], entrypoint)
+        self.assertEqual(outputs.extra_bins["pfterminal-acp"], acp)
+        self.assertEqual(outputs.extra_bins["pfterminal-walletd"], walletd)
 
     def test_release_workflow_can_reuse_qualified_platform_artifacts(self) -> None:
         workflow = (

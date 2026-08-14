@@ -48,6 +48,7 @@ def build_source_binaries(
         extra.cargo_bin
         for extra in variant.extra_binaries
         if resolve_extra_output_path(explicit_extra_bins, extra, spec) is None
+        and (spec.is_windows or extra.alias_of is None)
     ]
     binaries = source_binaries_for_target(
         spec,
@@ -87,23 +88,34 @@ def build_source_binaries(
         )
 
     output_dir = cargo_profile_output_dir(spec, profile)
+    resolved_entrypoint = resolve_output_path(
+        entrypoint_bin,
+        output_dir / variant.entrypoint_name(spec),
+    )
+    resolved_extra_bins: dict[str, Path] = {}
+    for extra in variant.extra_binaries:
+        output_name = extra.entrypoint_name(spec)
+        explicit_output = resolve_extra_output_path(explicit_extra_bins, extra, spec)
+        if explicit_output is not None:
+            resolved_extra_bins[output_name] = explicit_output
+        elif not spec.is_windows and extra.alias_of is not None:
+            alias_source_name = f"{extra.alias_of}{spec.exe_suffix}"
+            resolved_extra_bins[output_name] = (
+                resolved_entrypoint
+                if alias_source_name == variant.entrypoint_name(spec)
+                else resolved_extra_bins[alias_source_name]
+            )
+        else:
+            resolved_extra_bins[output_name] = output_dir / output_name
+
     outputs = SourceBuildOutputs(
-        entrypoint_bin=resolve_output_path(
-            entrypoint_bin,
-            output_dir / variant.entrypoint_name(spec),
-        ),
+        entrypoint_bin=resolved_entrypoint,
         code_mode_host_bin=(
             code_mode_host_bin.resolve()
             if code_mode_host_bin is not None
             else output_dir / f"codex-code-mode-host{spec.exe_suffix}"
         ),
-        extra_bins={
-            extra.entrypoint_name(spec): resolve_extra_output_path(
-                explicit_extra_bins, extra, spec
-            )
-            or output_dir / extra.entrypoint_name(spec)
-            for extra in variant.extra_binaries
-        },
+        extra_bins=resolved_extra_bins,
         bwrap_bin=resolve_output_path(
             bwrap_bin,
             output_dir / "bwrap" if spec.is_linux else None,

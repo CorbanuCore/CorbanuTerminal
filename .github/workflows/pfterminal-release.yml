@@ -86,9 +86,7 @@ jobs:
     env:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
-      CARGO_PROFILE_RELEASE_DEBUG: "0"
       CARGO_PROFILE_RELEASE_LTO: "false"
-      CARGO_PROFILE_RELEASE_STRIP: "symbols"
       TARGET: ${{ matrix.target }}
     strategy:
       fail-fast: false
@@ -121,13 +119,8 @@ jobs:
             --target "$TARGET" \
             --release \
             --bin corbanu \
-            --bin pfterminal \
-            --bin corbanu-debug \
-            --bin pfterminal-debug \
             --bin corbanu-acp \
-            --bin pfterminal-acp \
             --bin corbanu-walletd \
-            --bin pfterminal-walletd \
             --bin codex-code-mode-host
 
       - name: Build standalone package archive
@@ -139,18 +132,21 @@ jobs:
             --target "$TARGET" \
             --variant corbanu \
             --entrypoint-bin "codex-rs/target/${TARGET}/release/corbanu" \
-            --extra-bin "pfterminal=codex-rs/target/${TARGET}/release/pfterminal" \
-            --extra-bin "corbanu-debug=codex-rs/target/${TARGET}/release/corbanu-debug" \
-            --extra-bin "pfterminal-debug=codex-rs/target/${TARGET}/release/pfterminal-debug" \
+            --extra-bin "pfterminal=codex-rs/target/${TARGET}/release/corbanu" \
+            --extra-bin "corbanu-debug=codex-rs/target/${TARGET}/release/corbanu" \
+            --extra-bin "pfterminal-debug=codex-rs/target/${TARGET}/release/corbanu" \
             --extra-bin "corbanu-acp=codex-rs/target/${TARGET}/release/corbanu-acp" \
-            --extra-bin "pfterminal-acp=codex-rs/target/${TARGET}/release/pfterminal-acp" \
+            --extra-bin "pfterminal-acp=codex-rs/target/${TARGET}/release/corbanu-acp" \
             --extra-bin "corbanu-walletd=codex-rs/target/${TARGET}/release/corbanu-walletd" \
-            --extra-bin "pfterminal-walletd=codex-rs/target/${TARGET}/release/pfterminal-walletd" \
+            --extra-bin "pfterminal-walletd=codex-rs/target/${TARGET}/release/corbanu-walletd" \
             --code-mode-host-bin "codex-rs/target/${TARGET}/release/codex-code-mode-host" \
             --cargo-profile release \
+            --symbols-dir "dist/${TARGET}/debug-symbols" \
             --package-dir "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
             --archive-output "dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz" \
             --force
+          tar -C "dist/${TARGET}/debug-symbols" -czf \
+            "dist/${TARGET}/corbanu-symbols-${TARGET}.tar.gz" .
 
       - name: Smoke test package archive
         shell: bash
@@ -253,6 +249,7 @@ jobs:
           path: |
             dist/${{ matrix.target }}/pfterminal-package-${{ matrix.target }}.tar.gz
             dist/${{ matrix.target }}/PFTerminal-${{ matrix.target }}.dmg
+            dist/${{ matrix.target }}/corbanu-symbols-${{ matrix.target }}.tar.gz
           if-no-files-found: error
           compression-level: 0
 
@@ -268,9 +265,7 @@ jobs:
     env:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
-      CARGO_PROFILE_RELEASE_DEBUG: "0"
       CARGO_PROFILE_RELEASE_LTO: "false"
-      CARGO_PROFILE_RELEASE_STRIP: "symbols"
       TARGET: ${{ matrix.target }}
     strategy:
       fail-fast: false
@@ -347,13 +342,8 @@ jobs:
             --target "$TARGET" \
             --release \
             --bin corbanu \
-            --bin pfterminal \
-            --bin corbanu-debug \
-            --bin pfterminal-debug \
             --bin corbanu-acp \
-            --bin pfterminal-acp \
             --bin corbanu-walletd \
-            --bin pfterminal-walletd \
             --bin codex-code-mode-host \
             --bin bwrap
 
@@ -366,19 +356,22 @@ jobs:
             --target "$TARGET" \
             --variant corbanu \
             --entrypoint-bin "codex-rs/target/${TARGET}/release/corbanu" \
-            --extra-bin "pfterminal=codex-rs/target/${TARGET}/release/pfterminal" \
-            --extra-bin "corbanu-debug=codex-rs/target/${TARGET}/release/corbanu-debug" \
-            --extra-bin "pfterminal-debug=codex-rs/target/${TARGET}/release/pfterminal-debug" \
+            --extra-bin "pfterminal=codex-rs/target/${TARGET}/release/corbanu" \
+            --extra-bin "corbanu-debug=codex-rs/target/${TARGET}/release/corbanu" \
+            --extra-bin "pfterminal-debug=codex-rs/target/${TARGET}/release/corbanu" \
             --extra-bin "corbanu-acp=codex-rs/target/${TARGET}/release/corbanu-acp" \
-            --extra-bin "pfterminal-acp=codex-rs/target/${TARGET}/release/pfterminal-acp" \
+            --extra-bin "pfterminal-acp=codex-rs/target/${TARGET}/release/corbanu-acp" \
             --extra-bin "corbanu-walletd=codex-rs/target/${TARGET}/release/corbanu-walletd" \
-            --extra-bin "pfterminal-walletd=codex-rs/target/${TARGET}/release/pfterminal-walletd" \
+            --extra-bin "pfterminal-walletd=codex-rs/target/${TARGET}/release/corbanu-walletd" \
             --code-mode-host-bin "codex-rs/target/${TARGET}/release/codex-code-mode-host" \
             --bwrap-bin "codex-rs/target/${TARGET}/release/bwrap" \
             --cargo-profile release \
+            --symbols-dir "dist/${TARGET}/debug-symbols" \
             --package-dir "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
             --archive-output "dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz" \
             --force
+          tar -C "dist/${TARGET}/debug-symbols" -czf \
+            "dist/${TARGET}/corbanu-symbols-${TARGET}.tar.gz" .
 
       - name: Smoke test package archive
         shell: bash
@@ -425,7 +418,9 @@ jobs:
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: pfterminal-package-${{ matrix.target }}
-          path: dist/${{ matrix.target }}/pfterminal-package-${{ matrix.target }}.tar.gz
+          path: |
+            dist/${{ matrix.target }}/pfterminal-package-${{ matrix.target }}.tar.gz
+            dist/${{ matrix.target }}/corbanu-symbols-${{ matrix.target }}.tar.gz
           if-no-files-found: error
           compression-level: 0
 
