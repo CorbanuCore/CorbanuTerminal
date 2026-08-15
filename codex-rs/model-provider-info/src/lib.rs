@@ -9,6 +9,9 @@ use codex_api::Provider as ApiProvider;
 use codex_api::RetryConfig as ApiRetryConfig;
 use codex_api::is_azure_responses_provider;
 use codex_product_brand::PLAN_NAME;
+
+/// Display name for the plan's Anthropic-wire non-private Fable route.
+const PLAN_ANTHROPIC_NAME: &str = "Corbanu Plan (Fable, non-private)";
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::ModelProviderAuthInfo;
 use codex_protocol::error::CodexErr;
@@ -104,6 +107,10 @@ pub const CORBANU_PLAN_PROVIDER_ID: &str = "corbanu-plan";
 pub const CORBANU_TERMINAL_PLAN_PROVIDER_ID: &str = "corbanu-terminal-plan";
 pub const CORBANU_PLAN_API_KEY_ENV_VAR: &str = "CORBANU_PLAN_API_KEY";
 pub const PFTERMINAL_PLAN_PROVIDER_ID: &str = "pfterminal-plan";
+/// Anthropic-wire sibling of the Corbanu Plan provider. Same gateway, same
+/// customer key; serves only the plan's non-private `claude-fable-5` route.
+pub const PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID: &str = "pfterminal-plan-anthropic";
+pub const CORBANU_PLAN_ANTHROPIC_PROVIDER_ID: &str = "corbanu-plan-anthropic";
 pub const PFTERMINAL_PLAN_GATEWAY_ORIGIN: &str = "https://pfterminal-plan-gateway.fly.dev";
 pub const PFTERMINAL_PLAN_DEFAULT_BASE_URL: &str = "https://pfterminal-plan-gateway.fly.dev/v1";
 pub const PFTERMINAL_PLAN_API_KEY_ENV_VAR: &str = "PFTERMINAL_PLAN_API_KEY";
@@ -113,6 +120,7 @@ pub const PFTERMINAL_PLAN_API_KEY_ENV_VAR: &str = "PFTERMINAL_PLAN_API_KEY";
 pub fn canonical_provider_id(provider_id: &str) -> &str {
     match provider_id {
         CORBANU_PLAN_PROVIDER_ID | CORBANU_TERMINAL_PLAN_PROVIDER_ID => PFTERMINAL_PLAN_PROVIDER_ID,
+        CORBANU_PLAN_ANTHROPIC_PROVIDER_ID => PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
         _ => provider_id,
     }
 }
@@ -187,12 +195,13 @@ pub const VERCEL_API_KEY_ENV_VAR: &str = "AI_GATEWAY_API_KEY";
 
 /// Built-in catalog providers eligible for impossible-pair correction. User-defined providers
 /// (e.g. a private Azure deployment) are never second-guessed.
-const PAIR_CORRECTION_KNOWN_PROVIDERS: [&str; 18] = [
+const PAIR_CORRECTION_KNOWN_PROVIDERS: [&str; 19] = [
     OPENAI_PROVIDER_ID,
     ANTHROPIC_PROVIDER_ID,
     CLAUDE_PLAN_PROVIDER_ID,
     AMBIENT_PROVIDER_ID,
     PFTERMINAL_PLAN_PROVIDER_ID,
+    PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
     KIMI_CODE_PROVIDER_ID,
     ZAI_PROVIDER_ID,
     ZAI_ANTHROPIC_PROVIDER_ID,
@@ -330,6 +339,7 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     if model.starts_with("claude-")
         && provider != ANTHROPIC_PROVIDER_ID
         && provider != CLAUDE_PLAN_PROVIDER_ID
+        && provider != PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
     {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
@@ -344,6 +354,7 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     }
     if matches!(model, DEEPSEEK_DEFAULT_MODEL | DEEPSEEK_PRO_MODEL)
         && provider != DEEPSEEK_PROVIDER_ID
+        && provider != PFTERMINAL_PLAN_PROVIDER_ID
     {
         return Some(DEEPSEEK_PROVIDER_ID);
     }
@@ -358,6 +369,10 @@ pub fn resolve_model_for_provider(
     model_provider_id: &str,
 ) -> Option<String> {
     match model_provider_id {
+        PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID => Some(CLAUDE_FABLE_5_MODEL.to_string()),
+        PFTERMINAL_PLAN_PROVIDER_ID if model.as_deref().map(str::trim) == Some(DEEPSEEK_PRO_MODEL) => {
+            Some(DEEPSEEK_PRO_MODEL.to_string())
+        }
         AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID => match model {
             Some(model) if model.trim() == AMBIENT_LEGACY_GLM_5_2_FP8_MODEL => {
                 Some(AMBIENT_DEFAULT_MODEL.to_string())
@@ -1092,6 +1107,17 @@ impl ModelProviderInfo {
         }
     }
 
+    /// Anthropic-wire sibling of the Corbanu Plan provider: same gateway and
+    /// customer key, serving only the plan's non-private Fable route on
+    /// `/v1/messages`.
+    pub fn create_pfterminal_plan_anthropic_provider() -> ModelProviderInfo {
+        ModelProviderInfo {
+            wire_api: WireApi::Anthropic,
+            name: PLAN_ANTHROPIC_NAME.into(),
+            ..Self::create_pfterminal_plan_provider()
+        }
+    }
+
     pub fn create_kimi_code_provider() -> ModelProviderInfo {
         ModelProviderInfo {
             name: KIMI_CODE_PROVIDER_NAME.into(),
@@ -1593,6 +1619,7 @@ pub fn built_in_model_providers(
     let vercel_anthropic_provider = P::create_vercel_anthropic_provider();
     let vercel_anthropic_fast_provider = P::create_vercel_anthropic_fast_provider();
     let amazon_bedrock_provider = P::create_amazon_bedrock_provider(/*aws*/ None);
+    let pfterminal_plan_anthropic_provider = P::create_pfterminal_plan_anthropic_provider();
 
     // Corbanu Terminal bundles the first-party OpenAI provider, the local OSS
     // providers, and the curated third-party coding providers exposed in the
@@ -1602,6 +1629,10 @@ pub fn built_in_model_providers(
         (CLAUDE_PLAN_PROVIDER_ID, claude_plan_provider),
         (AMBIENT_PROVIDER_ID, ambient_provider),
         (PFTERMINAL_PLAN_PROVIDER_ID, pfterminal_plan_provider),
+        (
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+            pfterminal_plan_anthropic_provider,
+        ),
         (KIMI_CODE_PROVIDER_ID, kimi_code_provider),
         (ZAI_PROVIDER_ID, zai_provider),
         (ZAI_ANTHROPIC_PROVIDER_ID, zai_anthropic_provider),

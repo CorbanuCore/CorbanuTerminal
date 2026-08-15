@@ -29,7 +29,6 @@ use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 #[cfg(test)]
 use codex_model_provider_info::DEEPSEEK_DEFAULT_MODEL;
-#[cfg(test)]
 use codex_model_provider_info::DEEPSEEK_PRO_MODEL;
 use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
@@ -43,6 +42,8 @@ use codex_model_provider_info::OPENROUTER_DEEPSEEK_V4_PRO_0813_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::OPENROUTER_GROK_4_6_MODEL;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
+use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
+use codex_model_provider_info::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
@@ -369,9 +370,12 @@ impl ChatWidget {
 
     fn resolved_model_provider(&self, model: &str) -> Option<String> {
         if model == self.current_model()
-            && self.config.model_provider_id == PFTERMINAL_PLAN_PROVIDER_ID
+            && matches!(
+                self.config.model_provider_id.as_str(),
+                PFTERMINAL_PLAN_PROVIDER_ID | PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
+            )
         {
-            return Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string());
+            return Some(self.config.model_provider_id.clone());
         }
         self.model_catalog
             .provider_for_model(model)
@@ -407,16 +411,43 @@ impl ChatWidget {
                 .filter(|preset| {
                     matches!(
                         preset.model.as_str(),
-                        AMBIENT_DEFAULT_MODEL | AMBIENT_KIMI_K2_7_CODE_MODEL
+                        AMBIENT_DEFAULT_MODEL
+                            | AMBIENT_KIMI_K2_7_CODE_MODEL
+                            | DEEPSEEK_PRO_MODEL
+                            | CLAUDE_FABLE_5_MODEL
                     )
                 })
                 .cloned()
                 .map(|mut preset| {
-                    preset.provider_id = Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string());
+                    // Fable rides the plan's Anthropic-wire sibling provider;
+                    // every other plan model uses the chat-wire plan provider.
+                    preset.provider_id = Some(if preset.model == CLAUDE_FABLE_5_MODEL {
+                        PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID.to_string()
+                    } else {
+                        PFTERMINAL_PLAN_PROVIDER_ID.to_string()
+                    });
+                    if matches!(
+                        preset.model.as_str(),
+                        DEEPSEEK_PRO_MODEL | CLAUDE_FABLE_5_MODEL
+                    ) {
+                        preset.description = format!(
+                            "{} Non-private: served through a third-party provider.",
+                            preset.description
+                        )
+                        .trim_start()
+                        .to_string();
+                    }
                     preset.is_default = preset.model == AMBIENT_DEFAULT_MODEL;
                     preset
                 })
-                .collect::<Vec<_>>();
+                .collect::<Vec<_>>()
+                .into_iter()
+                .fold(Vec::<_>::new(), |mut unique, preset| {
+                    if !unique.iter().any(|existing: &ModelPreset| existing.model == preset.model) {
+                        unique.push(preset);
+                    }
+                    unique
+                });
             presets.extend(paid_models);
         }
 
@@ -579,6 +610,7 @@ impl ChatWidget {
             Some(
                 AMBIENT_PROVIDER_ID
                 | PFTERMINAL_PLAN_PROVIDER_ID
+                | PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
                 | KIMI_CODE_PROVIDER_ID
                 | CLAUDE_PLAN_PROVIDER_ID
                 | ANTHROPIC_PROVIDER_ID
@@ -610,7 +642,9 @@ impl ChatWidget {
         let group_id = match provider {
             Some(OPENAI_PROVIDER_ID) => "openai",
             Some(AMBIENT_PROVIDER_ID) => "ambient",
-            Some(PFTERMINAL_PLAN_PROVIDER_ID) => "pfterminal-plan",
+            Some(PFTERMINAL_PLAN_PROVIDER_ID | PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID) => {
+                "pfterminal-plan"
+            }
             Some(KIMI_CODE_PROVIDER_ID) => "kimi-code",
             Some(ZAI_PROVIDER_ID) => "zai",
             Some(DEEPSEEK_PROVIDER_ID) => "deepseek",
