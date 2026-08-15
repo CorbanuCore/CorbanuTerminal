@@ -218,13 +218,13 @@ There is exactly one visible TPS value.
 Footer example:
 
 ```text
-glm-5.2 deep · ~/repos · Post Fiat Terminal · TPS: 28.7 tok/s
+glm-5.2 deep · ~/repos · Corbanu Terminal · TPS: 28.7 tok/s
 ```
 
 Footer example while only stream-estimated data is available:
 
 ```text
-glm-5.2 deep · ~/repos · Post Fiat Terminal · TPS: ~28.7 tok/s
+glm-5.2 deep · ~/repos · Corbanu Terminal · TPS: ~28.7 tok/s
 ```
 
 Running row example:

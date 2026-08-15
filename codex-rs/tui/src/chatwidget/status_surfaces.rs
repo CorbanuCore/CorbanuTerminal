@@ -762,7 +762,7 @@ impl ChatWidget {
             ),
             StatusLineItem::WorkspaceHeadline => self.status_line_workspace_headline.clone(),
             StatusLineItem::TaskProgress => self.terminal_title_task_progress(),
-            StatusLineItem::Brand => Some("Post Fiat Terminal".to_string()),
+            StatusLineItem::Brand => Some("Corbanu Terminal".to_string()),
             StatusLineItem::Tps => Some(self.tps_estimator.label(Instant::now())),
         }
     }

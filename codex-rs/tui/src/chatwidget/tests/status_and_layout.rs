@@ -2758,7 +2758,7 @@ async fn default_status_line_includes_product_brand() {
     chat.refresh_status_line();
 
     let status_line = status_line_text(&chat).expect("default status line should render");
-    assert!(status_line.contains("Post Fiat Terminal"));
+    assert!(status_line.contains("Corbanu Terminal"));
     assert!(status_line.ends_with("TPS: -- tok/s"));
 }
 
@@ -2774,7 +2774,7 @@ async fn status_line_tps_updates_during_active_streaming() {
     chat.on_agent_message_delta("12345678901234567890".to_string());
 
     let status_line = status_line_text(&chat).expect("status line should render");
-    assert!(status_line.contains("Post Fiat Terminal"));
+    assert!(status_line.contains("Corbanu Terminal"));
     assert!(
         status_line.contains("TPS: ~"),
         "stream-estimated active TPS should be marked approximate: {status_line}"
@@ -2809,7 +2809,7 @@ async fn status_line_tps_updates_from_completed_turn_average() {
     );
 
     let status_line = status_line_text(&chat).expect("status line should render after TPS sample");
-    assert!(status_line.contains("Post Fiat Terminal"));
+    assert!(status_line.contains("Corbanu Terminal"));
     assert!(status_line.ends_with("TPS: 20.0 tok/s"));
 }
 
@@ -2827,7 +2827,7 @@ async fn status_line_tps_uses_streamed_text_when_usage_is_missing() {
 
     let status_line =
         status_line_text(&chat).expect("status line should render after fallback TPS sample");
-    assert!(status_line.contains("Post Fiat Terminal"));
+    assert!(status_line.contains("Corbanu Terminal"));
     assert!(status_line.ends_with("TPS: ~5.0 tok/s"));
 }
 
@@ -2859,7 +2859,7 @@ async fn status_line_tps_updates_when_usage_arrives_after_completion() {
 
     let status_line =
         status_line_text(&chat).expect("status line should render after late usage update");
-    assert!(status_line.contains("Post Fiat Terminal"));
+    assert!(status_line.contains("Corbanu Terminal"));
     assert!(status_line.ends_with("TPS: 20.0 tok/s"));
 }
 
