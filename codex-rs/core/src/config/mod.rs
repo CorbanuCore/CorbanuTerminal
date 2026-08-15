@@ -3881,6 +3881,8 @@ impl Config {
             merge_configured_model_providers(built_in_model_providers, cfg.model_providers)
                 .map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?;
 
+        let provider_came_from_override = model_provider.is_some();
+        let model_came_from_override = model.is_some();
         let requested_provider_was_explicit =
             model_provider.is_some() || cfg.model_provider.is_some();
         let requested_model_provider_id = model_provider
@@ -3919,6 +3921,14 @@ impl Config {
             .then_some(requested_model_for_pair_validation.as_deref())
             .flatten()
             .and_then(|value| corrected_catalog_provider(value, &model_provider_id));
+        // Fail closed only when the model and provider were requested together from the
+        // same source (both runtime overrides, or both from the config file). A provider
+        // selected explicitly at runtime paired with a model merely inherited from the
+        // config file is mixed provenance: honor the provider, replace the stale model
+        // with the provider's catalog default, and warn. This keeps interactive
+        // bootstrap and resume from hard-failing on pairs persisted by older releases.
+        let allow_provider_model_fallback = allow_provider_model_fallback
+            || (provider_came_from_override && !model_came_from_override && cfg.model.is_some());
         if incompatible_explicit_provider.is_some() && allow_provider_model_fallback {
             let requested_model = requested_model_for_pair_validation
                 .as_deref()

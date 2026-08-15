@@ -1998,6 +1998,9 @@ fn thread_start_params_from_config(
     ThreadStartParams {
         model: config.model.clone(),
         model_provider: thread_params_mode.model_provider_from_config(config),
+        // Interactive sessions tolerate model/provider pairs persisted by older
+        // releases: keep the provider, let its catalog choose a valid default.
+        allow_provider_model_fallback: true,
         service_tier: service_tier_override_from_config(config),
         cwd: thread_cwd_from_config(config, thread_params_mode, remote_cwd_override),
         runtime_workspace_roots: Some(config.workspace_roots.clone()),
