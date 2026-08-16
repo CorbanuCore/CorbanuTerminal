@@ -50,6 +50,30 @@ fn config_with_personality(personality: Option<Personality>) -> ModelsManagerCon
 }
 
 #[test]
+fn max_output_override_only_lowers_the_catalog_limit() {
+    let mut model = model_info_from_slug("claude-fable-5");
+    model.max_output_tokens = Some(128_000);
+
+    let lowered = with_config_overrides(
+        model.clone(),
+        &ModelsManagerConfig {
+            model_max_output_tokens: Some(32_768),
+            ..Default::default()
+        },
+    );
+    assert_eq!(lowered.max_output_tokens, Some(32_768));
+
+    let not_raised = with_config_overrides(
+        model,
+        &ModelsManagerConfig {
+            model_max_output_tokens: Some(256_000),
+            ..Default::default()
+        },
+    );
+    assert_eq!(not_raised.max_output_tokens, Some(128_000));
+}
+
+#[test]
 fn base_instruction_override_preserves_catalog_approval_messages() {
     let mut model = model_info_from_slug("unknown-model");
     let approvals = ApprovalMessages {

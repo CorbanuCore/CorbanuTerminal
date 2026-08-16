@@ -113,6 +113,8 @@ pub const PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID: &str = "pfterminal-plan-anthrop
 pub const CORBANU_PLAN_ANTHROPIC_PROVIDER_ID: &str = "corbanu-plan-anthropic";
 /// Context reliably served by the SkyAPI Fable route used by Corbanu Plan.
 pub const PFTERMINAL_PLAN_FABLE_CONTEXT_WINDOW: i64 = 128_000;
+/// Completion ceiling that leaves input headroom on the SkyAPI Fable route.
+pub const PFTERMINAL_PLAN_FABLE_MAX_OUTPUT_TOKENS: i64 = 32_768;
 pub const PFTERMINAL_PLAN_GATEWAY_ORIGIN: &str = "https://pfterminal-plan-gateway.fly.dev";
 pub const PFTERMINAL_PLAN_DEFAULT_BASE_URL: &str = "https://pfterminal-plan-gateway.fly.dev/v1";
 pub const PFTERMINAL_PLAN_API_KEY_ENV_VAR: &str = "PFTERMINAL_PLAN_API_KEY";
@@ -372,7 +374,9 @@ pub fn resolve_model_for_provider(
 ) -> Option<String> {
     match model_provider_id {
         PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID => Some(CLAUDE_FABLE_5_MODEL.to_string()),
-        PFTERMINAL_PLAN_PROVIDER_ID if model.as_deref().map(str::trim) == Some(DEEPSEEK_PRO_MODEL) => {
+        PFTERMINAL_PLAN_PROVIDER_ID
+            if model.as_deref().map(str::trim) == Some(DEEPSEEK_PRO_MODEL) =>
+        {
             Some(DEEPSEEK_PRO_MODEL.to_string())
         }
         AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID => match model {
@@ -481,12 +485,26 @@ pub fn default_model_context_window_for_provider(
     model_provider_id: &str,
     model: &str,
 ) -> Option<i64> {
-    match (model_provider_id, model.trim()) {
+    match (canonical_provider_id(model_provider_id), model.trim()) {
         (AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID, AMBIENT_DEFAULT_MODEL) => {
             Some(AMBIENT_GLM_5_2_CONTEXT_WINDOW)
         }
         (PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID, CLAUDE_FABLE_5_MODEL) => {
             Some(PFTERMINAL_PLAN_FABLE_CONTEXT_WINDOW)
+        }
+        _ => None,
+    }
+}
+
+/// Return a provider-route output ceiling when it is narrower than the
+/// model's shared catalog capability.
+pub fn default_model_max_output_tokens_for_provider(
+    model_provider_id: &str,
+    model: &str,
+) -> Option<i64> {
+    match (canonical_provider_id(model_provider_id), model.trim()) {
+        (PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID, CLAUDE_FABLE_5_MODEL) => {
+            Some(PFTERMINAL_PLAN_FABLE_MAX_OUTPUT_TOKENS)
         }
         _ => None,
     }

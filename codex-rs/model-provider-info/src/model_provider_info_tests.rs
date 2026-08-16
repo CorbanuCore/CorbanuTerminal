@@ -484,7 +484,31 @@ fn plan_fable_context_ceiling_is_scoped_to_the_skyapi_route() {
         Some(PFTERMINAL_PLAN_FABLE_CONTEXT_WINDOW)
     );
     assert_eq!(
+        default_model_context_window_for_provider(
+            CORBANU_PLAN_ANTHROPIC_PROVIDER_ID,
+            CLAUDE_FABLE_5_MODEL,
+        ),
+        Some(PFTERMINAL_PLAN_FABLE_CONTEXT_WINDOW)
+    );
+    assert_eq!(
         default_model_context_window_for_provider(ANTHROPIC_PROVIDER_ID, CLAUDE_FABLE_5_MODEL),
+        None
+    );
+}
+
+#[test]
+fn plan_fable_output_ceiling_is_scoped_to_the_skyapi_route() {
+    for provider in [
+        PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+        CORBANU_PLAN_ANTHROPIC_PROVIDER_ID,
+    ] {
+        assert_eq!(
+            default_model_max_output_tokens_for_provider(provider, CLAUDE_FABLE_5_MODEL),
+            Some(PFTERMINAL_PLAN_FABLE_MAX_OUTPUT_TOKENS)
+        );
+    }
+    assert_eq!(
+        default_model_max_output_tokens_for_provider(ANTHROPIC_PROVIDER_ID, CLAUDE_FABLE_5_MODEL,),
         None
     );
 }

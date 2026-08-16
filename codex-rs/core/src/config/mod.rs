@@ -105,6 +105,7 @@ use codex_model_provider_info::canonical_provider_id;
 use codex_model_provider_info::corrected_catalog_provider;
 use codex_model_provider_info::create_oss_provider_with_base_url;
 use codex_model_provider_info::default_model_context_window_for_provider;
+use codex_model_provider_info::default_model_max_output_tokens_for_provider;
 use codex_model_provider_info::merge_configured_model_providers;
 use codex_model_provider_info::resolve_model_for_provider;
 use codex_models_manager::ModelsManagerConfig;
@@ -1752,6 +1753,9 @@ impl Config {
         });
         ModelsManagerConfig {
             model_context_window,
+            model_max_output_tokens: model.and_then(|model| {
+                default_model_max_output_tokens_for_provider(&self.model_provider_id, model)
+            }),
             model_auto_compact_token_limit: self.model_auto_compact_token_limit,
             tool_output_token_limit: self.tool_output_token_limit,
             base_instructions: self.base_instructions.clone(),

@@ -1493,9 +1493,9 @@ fn bundled_claude_5_models_have_provider_reported_output_limits() {
 
     for (slug, max_output_tokens) in [
         ("claude-opus-5-plan", 128_000),
-        ("claude-fable-5-plan", 32_768),
+        ("claude-fable-5-plan", 128_000),
         ("claude-opus-5", 128_000),
-        ("claude-fable-5", 32_768),
+        ("claude-fable-5", 128_000),
     ] {
         let model = response
             .models

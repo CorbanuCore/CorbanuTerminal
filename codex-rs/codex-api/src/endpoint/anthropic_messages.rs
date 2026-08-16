@@ -219,12 +219,21 @@ impl AnthropicUsage {
         let mut output = current.output_tokens;
 
         if let Some(value) = self.input_tokens {
-            non_cached_input = value;
-            if self.cache_read_input_tokens.is_none() {
-                cached_input = 0;
-            }
-            if self.cache_creation_input_tokens.is_none() {
-                cache_write_input = 0;
+            if self.cache_read_input_tokens.is_none()
+                && self.cache_creation_input_tokens.is_none()
+                && (cached_input > 0 || cache_write_input > 0)
+            {
+                // Some Anthropic-compatible providers repeat cumulative total
+                // input on `message_delta` without repeating its cache
+                // breakdown. Retain that breakdown without adding it to the
+                // cumulative total a second time.
+                cached_input = cached_input.min(value);
+                cache_write_input = cache_write_input.min(value.saturating_sub(cached_input));
+                non_cached_input = value
+                    .saturating_sub(cached_input)
+                    .saturating_sub(cache_write_input);
+            } else {
+                non_cached_input = value;
             }
         }
         if let Some(value) = self.cache_read_input_tokens {
@@ -1356,7 +1365,7 @@ data: {"type":"message_stop"}
     }
 
     #[tokio::test]
-    async fn cumulative_delta_input_does_not_readd_start_cache_tokens() {
+    async fn cumulative_delta_input_preserves_cache_breakdown_without_readding_it() {
         let events = collect_events(&[
             br#"event: message_start
 data: {"type":"message_start","message":{"id":"msg_usage","model":"compatible-model","usage":{"input_tokens":9,"cache_creation_input_tokens":5,"cache_read_input_tokens":7,"output_tokens":0}}}
@@ -1386,8 +1395,8 @@ data: {"type":"message_stop"}
             Ok(ResponseEvent::Completed {
                 token_usage: Some(TokenUsage {
                     input_tokens: 21,
-                    cached_input_tokens: 0,
-                    cache_write_input_tokens: 0,
+                    cached_input_tokens: 7,
+                    cache_write_input_tokens: 5,
                     output_tokens: 2,
                     total_tokens: 23,
                     ..
