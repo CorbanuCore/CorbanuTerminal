@@ -1,5 +1,8 @@
 use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
+use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID;
+use codex_model_provider_info::PFTERMINAL_PLAN_FABLE_MAX_OUTPUT_TOKENS;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::Op;
 use codex_protocol::user_input::UserInput;
@@ -102,6 +105,67 @@ fn anthropic_length_truncated_tool_response() -> ResponseTemplate {
         "data: {\"type\":\"message_stop\"}\n\n",
     );
     ResponseTemplate::new(200).set_body_raw(body, "text/event-stream")
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn plan_fable_route_sends_scoped_max_tokens() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let server = wiremock::MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path_regex(".*/messages$"))
+        .respond_with(anthropic_success_response())
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let provider = ModelProviderInfo {
+        base_url: Some(format!("{}/v1", server.uri())),
+        env_key: Some("PATH".to_string()),
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        stream_idle_timeout_ms: Some(2_000),
+        ..ModelProviderInfo::create_pfterminal_plan_anthropic_provider()
+    };
+    let test = test_codex()
+        .with_config(move |config| {
+            config.model = Some(CLAUDE_FABLE_5_MODEL.to_string());
+            config.model_provider_id = PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID.to_string();
+            config.model_provider = provider;
+        })
+        .build(&server)
+        .await?;
+
+    test.codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "Check the route limit.".to_string(),
+                text_elements: Vec::new(),
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        })
+        .await?;
+
+    loop {
+        let event = test.codex.next_event().await?;
+        match event.msg {
+            EventMsg::TurnComplete(_) => break,
+            EventMsg::Error(error) => panic!("plan Fable turn failed: {error:?}"),
+            _ => {}
+        }
+    }
+
+    let requests = server.received_requests().await.expect("recorded requests");
+    assert_eq!(requests.len(), 1);
+    let body: serde_json::Value = serde_json::from_slice(&requests[0].body)?;
+    assert_eq!(
+        body.get("max_tokens").and_then(serde_json::Value::as_i64),
+        Some(PFTERMINAL_PLAN_FABLE_MAX_OUTPUT_TOKENS)
+    );
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

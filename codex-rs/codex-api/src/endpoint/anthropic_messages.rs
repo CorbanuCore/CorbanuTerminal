@@ -222,6 +222,7 @@ impl AnthropicUsage {
             if self.cache_read_input_tokens.is_none()
                 && self.cache_creation_input_tokens.is_none()
                 && (cached_input > 0 || cache_write_input > 0)
+                && value >= current.input_tokens
             {
                 // Some Anthropic-compatible providers repeat cumulative total
                 // input on `message_delta` without repeating its cache
@@ -1381,6 +1382,48 @@ data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text
 "#,
             br#"event: message_delta
 data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":21,"output_tokens":2}}
+
+"#,
+            br#"event: message_stop
+data: {"type":"message_stop"}
+
+"#,
+        ])
+        .await;
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Ok(ResponseEvent::Completed {
+                token_usage: Some(TokenUsage {
+                    input_tokens: 21,
+                    cached_input_tokens: 7,
+                    cache_write_input_tokens: 5,
+                    output_tokens: 2,
+                    total_tokens: 23,
+                    ..
+                }),
+                ..
+            })
+        )));
+    }
+
+    #[tokio::test]
+    async fn repeated_non_cached_delta_input_preserves_start_cache_usage() {
+        let events = collect_events(&[
+            br#"event: message_start
+data: {"type":"message_start","message":{"id":"msg_usage","model":"anthropic-model","usage":{"input_tokens":9,"cache_creation_input_tokens":5,"cache_read_input_tokens":7,"output_tokens":0}}}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"OK"}}
+
+"#,
+            br#"event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":9,"output_tokens":2}}
 
 "#,
             br#"event: message_stop
