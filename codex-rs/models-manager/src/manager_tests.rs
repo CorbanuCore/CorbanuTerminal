@@ -2172,7 +2172,7 @@ fn bundled_models_json_contains_openrouter_models() {
         claude_fable_plan.description.as_deref(),
         Some("Claude Fable 5 through Claude Code subscription auth in Corbanu Terminal.")
     );
-    assert_eq!(claude_fable_plan.context_window, Some(1_000_000));
+    assert_eq!(claude_fable_plan.context_window, Some(128_000));
     assert_eq!(
         claude_fable_plan.default_reasoning_level,
         Some(ReasoningEffort::High)
@@ -2204,7 +2204,7 @@ fn bundled_models_json_contains_openrouter_models() {
         claude_fable.description.as_deref(),
         Some("Claude Fable 5 through the Anthropic Messages API.")
     );
-    assert_eq!(claude_fable.context_window, Some(1_000_000));
+    assert_eq!(claude_fable.context_window, Some(128_000));
     assert_eq!(
         claude_fable.default_reasoning_level,
         Some(ReasoningEffort::High)

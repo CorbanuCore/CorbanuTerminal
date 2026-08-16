@@ -222,6 +222,47 @@ impl From<AnthropicUsage> for TokenUsage {
     }
 }
 
+impl AnthropicUsage {
+    /// Anthropic commonly reports input/cache usage on `message_start` and only
+    /// output usage on `message_delta`. Preserve fields omitted by later events
+    /// so context accounting does not collapse to the completion size.
+    fn merge_into(self, current: Option<TokenUsage>) -> TokenUsage {
+        let current = current.unwrap_or_default();
+        let mut non_cached_input = current
+            .input_tokens
+            .saturating_sub(current.cached_input_tokens)
+            .saturating_sub(current.cache_write_input_tokens);
+        let mut cached_input = current.cached_input_tokens;
+        let mut cache_write_input = current.cache_write_input_tokens;
+        let mut output = current.output_tokens;
+
+        if let Some(value) = self.input_tokens {
+            non_cached_input = value;
+        }
+        if let Some(value) = self.cache_read_input_tokens {
+            cached_input = value;
+        }
+        if let Some(value) = self.cache_creation_input_tokens {
+            cache_write_input = value;
+        }
+        if let Some(value) = self.output_tokens {
+            output = value;
+        }
+
+        let input = non_cached_input
+            .saturating_add(cached_input)
+            .saturating_add(cache_write_input);
+        TokenUsage {
+            input_tokens: input,
+            cached_input_tokens: cached_input,
+            cache_write_input_tokens: cache_write_input,
+            output_tokens: output,
+            reasoning_output_tokens: 0,
+            total_tokens: input.saturating_add(output),
+        }
+    }
+}
+
 #[derive(Default)]
 struct AnthropicToolCallState {
     id: Option<String>,
@@ -368,7 +409,7 @@ impl AnthropicStreamState {
             self.last_server_model = Some(model);
         }
         if let Some(usage) = message.usage {
-            self.token_usage = Some(usage.into());
+            self.token_usage = Some(usage.merge_into(self.token_usage.take()));
         }
         true
     }
@@ -553,7 +594,7 @@ impl AnthropicStreamState {
 
     fn on_message_delta(&mut self, event: AnthropicStreamEvent) {
         if let Some(usage) = event.usage {
-            self.token_usage = Some(usage.into());
+            self.token_usage = Some(usage.merge_into(self.token_usage.take()));
         }
         if let Some(delta) = event.delta
             && let Some(stop_reason) = delta.stop_reason.as_deref()
@@ -1173,7 +1214,7 @@ mod tests {
                 "{stop_reason}: an empty stream must not report a completed turn: {events:?}"
             );
             assert!(
-                events.iter().any(|event| event.is_err()),
+                events.iter().any(std::result::Result::is_err),
                 "{stop_reason}: an empty stream must surface a failure: {events:?}"
             );
         }
@@ -1285,7 +1326,7 @@ data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text
 
 "#,
             br#"event: message_delta
-data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":9,"cache_creation_input_tokens":0,"cache_read_input_tokens":12,"output_tokens":2}}
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}
 
 "#,
             br#"event: message_stop
@@ -1312,7 +1353,8 @@ data: {"type":"message_stop"}
                 response_id,
                 token_usage: Some(TokenUsage {
                     input_tokens: 21,
-                    cached_input_tokens: 12,
+                    cached_input_tokens: 7,
+                    cache_write_input_tokens: 5,
                     output_tokens: 2,
                     reasoning_output_tokens: 0,
                     total_tokens: 23,
