@@ -1491,11 +1491,11 @@ fn bundled_claude_5_models_have_provider_reported_output_limits() {
     let response = crate::bundled_models_response()
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
 
-    for slug in [
-        "claude-opus-5-plan",
-        "claude-fable-5-plan",
-        "claude-opus-5",
-        "claude-fable-5",
+    for (slug, max_output_tokens) in [
+        ("claude-opus-5-plan", 128_000),
+        ("claude-fable-5-plan", 32_768),
+        ("claude-opus-5", 128_000),
+        ("claude-fable-5", 32_768),
     ] {
         let model = response
             .models
@@ -1504,7 +1504,7 @@ fn bundled_claude_5_models_have_provider_reported_output_limits() {
             .unwrap_or_else(|| panic!("bundled models.json should include {slug}"));
         assert_eq!(
             model.max_output_tokens,
-            Some(128_000),
+            Some(max_output_tokens),
             "{slug} must be requestable on the Anthropic wire"
         );
     }
@@ -2172,7 +2172,7 @@ fn bundled_models_json_contains_openrouter_models() {
         claude_fable_plan.description.as_deref(),
         Some("Claude Fable 5 through Claude Code subscription auth in Corbanu Terminal.")
     );
-    assert_eq!(claude_fable_plan.context_window, Some(128_000));
+    assert_eq!(claude_fable_plan.context_window, Some(1_000_000));
     assert_eq!(
         claude_fable_plan.default_reasoning_level,
         Some(ReasoningEffort::High)
@@ -2204,7 +2204,7 @@ fn bundled_models_json_contains_openrouter_models() {
         claude_fable.description.as_deref(),
         Some("Claude Fable 5 through the Anthropic Messages API.")
     );
-    assert_eq!(claude_fable.context_window, Some(128_000));
+    assert_eq!(claude_fable.context_window, Some(1_000_000));
     assert_eq!(
         claude_fable.default_reasoning_level,
         Some(ReasoningEffort::High)

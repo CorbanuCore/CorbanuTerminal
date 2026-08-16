@@ -204,24 +204,6 @@ struct AnthropicError {
     message: Option<String>,
 }
 
-impl From<AnthropicUsage> for TokenUsage {
-    fn from(usage: AnthropicUsage) -> Self {
-        let non_cached = usage.input_tokens.unwrap_or(0);
-        let cache_creation = usage.cache_creation_input_tokens.unwrap_or(0);
-        let cache_read = usage.cache_read_input_tokens.unwrap_or(0);
-        let input_tokens = non_cached + cache_creation + cache_read;
-        let output_tokens = usage.output_tokens.unwrap_or(0);
-        Self {
-            input_tokens,
-            cached_input_tokens: cache_read,
-            cache_write_input_tokens: cache_creation,
-            output_tokens,
-            reasoning_output_tokens: 0,
-            total_tokens: input_tokens + output_tokens,
-        }
-    }
-}
-
 impl AnthropicUsage {
     /// Anthropic commonly reports input/cache usage on `message_start` and only
     /// output usage on `message_delta`. Preserve fields omitted by later events
@@ -238,6 +220,12 @@ impl AnthropicUsage {
 
         if let Some(value) = self.input_tokens {
             non_cached_input = value;
+            if self.cache_read_input_tokens.is_none() {
+                cached_input = 0;
+            }
+            if self.cache_creation_input_tokens.is_none() {
+                cache_write_input = 0;
+            }
         }
         if let Some(value) = self.cache_read_input_tokens {
             cached_input = value;
@@ -1365,6 +1353,48 @@ data: {"type":"message_stop"}
             }) if response_id == "msg_1"
         );
         assert_eq!(events.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn cumulative_delta_input_does_not_readd_start_cache_tokens() {
+        let events = collect_events(&[
+            br#"event: message_start
+data: {"type":"message_start","message":{"id":"msg_usage","model":"compatible-model","usage":{"input_tokens":9,"cache_creation_input_tokens":5,"cache_read_input_tokens":7,"output_tokens":0}}}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"OK"}}
+
+"#,
+            br#"event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":21,"output_tokens":2}}
+
+"#,
+            br#"event: message_stop
+data: {"type":"message_stop"}
+
+"#,
+        ])
+        .await;
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Ok(ResponseEvent::Completed {
+                token_usage: Some(TokenUsage {
+                    input_tokens: 21,
+                    cached_input_tokens: 0,
+                    cache_write_input_tokens: 0,
+                    output_tokens: 2,
+                    total_tokens: 23,
+                    ..
+                }),
+                ..
+            })
+        )));
     }
 
     #[tokio::test]

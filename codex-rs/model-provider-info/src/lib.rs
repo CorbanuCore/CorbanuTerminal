@@ -111,6 +111,8 @@ pub const PFTERMINAL_PLAN_PROVIDER_ID: &str = "pfterminal-plan";
 /// customer key; serves only the plan's non-private `claude-fable-5` route.
 pub const PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID: &str = "pfterminal-plan-anthropic";
 pub const CORBANU_PLAN_ANTHROPIC_PROVIDER_ID: &str = "corbanu-plan-anthropic";
+/// Context reliably served by the SkyAPI Fable route used by Corbanu Plan.
+pub const PFTERMINAL_PLAN_FABLE_CONTEXT_WINDOW: i64 = 128_000;
 pub const PFTERMINAL_PLAN_GATEWAY_ORIGIN: &str = "https://pfterminal-plan-gateway.fly.dev";
 pub const PFTERMINAL_PLAN_DEFAULT_BASE_URL: &str = "https://pfterminal-plan-gateway.fly.dev/v1";
 pub const PFTERMINAL_PLAN_API_KEY_ENV_VAR: &str = "PFTERMINAL_PLAN_API_KEY";
@@ -482,6 +484,9 @@ pub fn default_model_context_window_for_provider(
     match (model_provider_id, model.trim()) {
         (AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID, AMBIENT_DEFAULT_MODEL) => {
             Some(AMBIENT_GLM_5_2_CONTEXT_WINDOW)
+        }
+        (PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID, CLAUDE_FABLE_5_MODEL) => {
+            Some(PFTERMINAL_PLAN_FABLE_CONTEXT_WINDOW)
         }
         _ => None,
     }

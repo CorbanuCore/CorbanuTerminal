@@ -475,6 +475,21 @@ fn ambient_glm_context_ceiling_is_scoped_to_ambient_routes() {
 }
 
 #[test]
+fn plan_fable_context_ceiling_is_scoped_to_the_skyapi_route() {
+    assert_eq!(
+        default_model_context_window_for_provider(
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+            CLAUDE_FABLE_5_MODEL,
+        ),
+        Some(PFTERMINAL_PLAN_FABLE_CONTEXT_WINDOW)
+    );
+    assert_eq!(
+        default_model_context_window_for_provider(ANTHROPIC_PROVIDER_ID, CLAUDE_FABLE_5_MODEL),
+        None
+    );
+}
+
+#[test]
 fn test_create_zai_provider() {
     assert_eq!(
         ModelProviderInfo::create_zai_provider(),
