@@ -6,6 +6,7 @@ use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ModelServiceTier;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
+use codex_protocol::openai_models::WeekdaySet;
 use codex_tools::JsonSchemaPrimitiveType;
 use codex_tools::JsonSchemaType;
 use pretty_assertions::assert_eq;
@@ -40,6 +41,28 @@ fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {
         supported_in_api: true,
         input_modalities: Vec::new(),
     }
+}
+
+#[test]
+fn scheduled_billing_renders_weekday_and_legacy_daily_contracts() {
+    let scheduled = |peak_weekdays| ModelBilling::PlanSchedule {
+        off_peak_relative_burn_millis: 1_000,
+        peak_relative_burn_millis: 3_000,
+        peak_start_utc_hour: 6,
+        peak_end_utc_hour: 10,
+        peak_weekdays,
+        promotional_off_peak_relative_burn_millis: None,
+        promotion_valid_through_utc: None,
+    };
+
+    assert_eq!(
+        format_model_billing(&scheduled(Some(WeekdaySet::weekdays_only()))),
+        "plan, normal off-peak 1x / peak 3x at 06:00-10:00 UTC on Monday/Tuesday/Wednesday/Thursday/Friday"
+    );
+    assert_eq!(
+        format_model_billing(&scheduled(None)),
+        "plan, normal off-peak 1x / peak 3x at 06:00-10:00 UTC"
+    );
 }
 
 #[test]

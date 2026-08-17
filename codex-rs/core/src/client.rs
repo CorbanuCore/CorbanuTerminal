@@ -1237,7 +1237,18 @@ impl ModelClient {
     fn ambient_zai_reasoning_effort(
         effort: Option<&ReasoningEffortConfig>,
     ) -> Option<&'static str> {
-        wants_deep_reasoning(effort).then_some("max")
+        match effort {
+            None | Some(ReasoningEffortConfig::None) => None,
+            Some(effort) if wants_deep_reasoning(Some(effort)) => Some("max"),
+            Some(_) => Some("high"),
+        }
+    }
+
+    fn direct_zai_enable_thinking(protocol: ChatReasoningProtocol, effort: Option<&str>) -> bool {
+        match protocol {
+            ChatReasoningProtocol::PreservedRequired => effort.is_some(),
+            ChatReasoningProtocol::Independent => effort.is_some_and(|effort| effort != "none"),
+        }
     }
 
     fn chat_reasoning_effort(
@@ -1642,15 +1653,19 @@ impl ModelClient {
                 .as_ref()
                 .or(model_info.default_reasoning_level.as_ref()),
         )?;
-        // `enable_thinking` is honoured by Z.AI direct only. Ambient takes the
-        // `reasoning` object instead; sending both would leave the ignored
-        // field on the wire for no reason. Required-thinking models advertise
-        // a scalar effort in the catalogue, so keep thinking enabled whenever
-        // an effort will be sent.
-        let ambient_enable_thinking =
-            self.state.provider.info().is_zai().then_some(
-                ambient_reasoning_effort.is_some() || catalogue_reasoning_effort.is_some(),
-            );
+        // Prefer the exact catalogue dialect over the coarse Ambient/Z.AI compatibility mapping.
+        // Ambient carries this control only in its `reasoning` object, while direct Z.AI uses the
+        // top-level scalar plus `enable_thinking`.
+        let selected_reasoning_effort = catalogue_reasoning_effort.or(ambient_reasoning_effort);
+        let direct_zai_enable_thinking =
+            self.state
+                .provider
+                .info()
+                .is_zai()
+                .then_some(Self::direct_zai_enable_thinking(
+                    model_info.chat_completions.reasoning_protocol,
+                    selected_reasoning_effort.as_deref(),
+                ));
         let response_format = prompt.output_schema.as_ref().map(|schema| {
             json!({
                 "type": "json_schema",
@@ -1678,13 +1693,17 @@ impl ModelClient {
         let provider_reasoning = if self.state.provider.info().is_openrouter() {
             Self::openrouter_reasoning(model_info, effort.as_ref())?
         } else if self.state.provider.info().is_ambient() {
-            Some(Self::ambient_reasoning(ambient_reasoning_effort.as_deref()))
+            Some(Self::ambient_reasoning(
+                selected_reasoning_effort.as_deref(),
+            ))
         } else if vercel_provider_options.is_some() {
             Some(Self::vercel_reasoning(model_info, effort.as_ref()))
         } else {
             None
         };
-        let reasoning_effort = ambient_reasoning_effort.or(catalogue_reasoning_effort);
+        let reasoning_effort = (!self.state.provider.info().is_ambient())
+            .then_some(selected_reasoning_effort)
+            .flatten();
         Ok(ChatCompletionsRequest {
             model: upstream_model.to_string(),
             messages,
@@ -1700,7 +1719,7 @@ impl ModelClient {
             tools,
             response_format,
             emit_usage: uses_zai_reasoning.then_some(true),
-            enable_thinking: ambient_enable_thinking,
+            enable_thinking: direct_zai_enable_thinking,
             reasoning_effort,
             reasoning: provider_reasoning,
             provider: self.state.provider.info().chat_completions_provider.clone(),

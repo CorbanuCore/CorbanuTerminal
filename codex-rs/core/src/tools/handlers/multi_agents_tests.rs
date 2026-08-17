@@ -258,7 +258,13 @@ async fn spawn_model_switch_cannot_route_around_the_provider_allowlist() {
     // the outcome, the child must never end up on a provider the operator did not
     // authorize.
     let allowlist = vec!["claude-plan".to_string(), "openai".to_string()];
-    for model in ["claude-fable-5", "claude-opus-5", "x-ai/grok-4.5", "k3"] {
+    for model in [
+        "claude-fable-5",
+        "claude-opus-5",
+        "x-ai/grok-4.5",
+        "k3",
+        "glm-5.3",
+    ] {
         let mut config = (*turn.config).clone();
         config.agent_provider_allowlist = Some(allowlist.clone());
         let parent_provider = config.model_provider_id.clone();
@@ -717,6 +723,7 @@ async fn spawn_agent_explicit_runtime_supports_required_multimodel_pairs() {
         (CLAUDE_PLAN_PROVIDER_ID, CLAUDE_FABLE_5_PLAN_MODEL),
         (OPENROUTER_PROVIDER_ID, "x-ai/grok-4.5"),
         (KIMI_CODE_PROVIDER_ID, KIMI_CODE_K3_MODEL),
+        (ZAI_PROVIDER_ID, "glm-5.3"),
     ];
 
     for (provider, model) in expected {

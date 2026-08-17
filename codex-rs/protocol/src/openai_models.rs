@@ -251,6 +251,70 @@ pub struct ChatCompletionsCapabilities {
     pub reasoning_effort_protocol: ChatReasoningEffortProtocol,
 }
 
+/// UTC weekdays on which a scheduled plan peak applies.
+///
+/// `ModelBilling::PlanSchedule::peak_weekdays == None` retains the legacy behavior where the
+/// peak window applies every day.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, TS, JsonSchema, PartialEq, Eq)]
+pub struct WeekdaySet {
+    pub monday: bool,
+    pub tuesday: bool,
+    pub wednesday: bool,
+    pub thursday: bool,
+    pub friday: bool,
+    pub saturday: bool,
+    pub sunday: bool,
+}
+
+impl WeekdaySet {
+    pub const fn weekdays_only() -> Self {
+        Self {
+            monday: true,
+            tuesday: true,
+            wednesday: true,
+            thursday: true,
+            friday: true,
+            saturday: false,
+            sunday: false,
+        }
+    }
+
+    pub const fn is_empty(self) -> bool {
+        !self.monday
+            && !self.tuesday
+            && !self.wednesday
+            && !self.thursday
+            && !self.friday
+            && !self.saturday
+            && !self.sunday
+    }
+
+    pub const fn is_every_day(self) -> bool {
+        self.monday
+            && self.tuesday
+            && self.wednesday
+            && self.thursday
+            && self.friday
+            && self.saturday
+            && self.sunday
+    }
+
+    pub fn names(self) -> Vec<&'static str> {
+        [
+            (self.monday, "Monday"),
+            (self.tuesday, "Tuesday"),
+            (self.wednesday, "Wednesday"),
+            (self.thursday, "Thursday"),
+            (self.friday, "Friday"),
+            (self.saturday, "Saturday"),
+            (self.sunday, "Sunday"),
+        ]
+        .into_iter()
+        .filter_map(|(enabled, name)| enabled.then_some(name))
+        .collect()
+    }
+}
+
 /// Billing data for an exact provider/model route.
 ///
 /// Monetary values use milli-USD per million tokens so catalogue metadata remains exact,
@@ -276,6 +340,10 @@ pub enum ModelBilling {
         peak_start_utc_hour: u8,
         /// Exclusive peak-window end, expressed as an hour in UTC.
         peak_end_utc_hour: u8,
+        /// UTC weekdays on which the peak window applies. Omitted means every day for backward
+        /// compatibility with older catalogue entries.
+        #[serde(default)]
+        peak_weekdays: Option<WeekdaySet>,
         #[serde(default)]
         promotional_off_peak_relative_burn_millis: Option<u32>,
         #[serde(default)]
@@ -1103,6 +1171,37 @@ mod tests {
                 r#""ultra""#.to_string(),
                 "future".to_string(),
             )
+        );
+    }
+
+    #[test]
+    fn plan_schedule_without_peak_weekdays_keeps_legacy_daily_semantics() {
+        let billing: ModelBilling = from_str(
+            r#"{
+                "kind": "plan_schedule",
+                "off_peak_relative_burn_millis": 1000,
+                "peak_relative_burn_millis": 3000,
+                "peak_start_utc_hour": 6,
+                "peak_end_utc_hour": 10
+            }"#,
+        )
+        .expect("legacy plan schedule should deserialize");
+
+        assert_eq!(
+            billing,
+            ModelBilling::PlanSchedule {
+                off_peak_relative_burn_millis: 1_000,
+                peak_relative_burn_millis: 3_000,
+                peak_start_utc_hour: 6,
+                peak_end_utc_hour: 10,
+                peak_weekdays: None,
+                promotional_off_peak_relative_burn_millis: None,
+                promotion_valid_through_utc: None,
+            }
+        );
+        assert_eq!(
+            WeekdaySet::weekdays_only().names(),
+            vec!["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
         );
     }
 

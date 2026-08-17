@@ -1180,59 +1180,7 @@ fn spawn_agent_models_description(
                 .as_ref()
                 .and_then(|metadata| metadata.billing().map(|billing| (metadata, billing)))
                 .map_or_else(String::new, |(metadata, billing)| {
-                    let billing = match billing {
-                        ModelBilling::Plan {
-                            relative_burn_millis,
-                        } => {
-                            format!("plan, burn {}x", format_millis(*relative_burn_millis))
-                        }
-                        ModelBilling::PlanSchedule {
-                            off_peak_relative_burn_millis,
-                            peak_relative_burn_millis,
-                            peak_start_utc_hour,
-                            peak_end_utc_hour,
-                            promotional_off_peak_relative_burn_millis,
-                            promotion_valid_through_utc,
-                        } => {
-                            let promotion = promotional_off_peak_relative_burn_millis
-                                .zip(promotion_valid_through_utc.as_deref())
-                                .map_or_else(String::new, |(burn, valid_through)| {
-                                    format!(
-                                        ", promotional off-peak {}x through {valid_through}",
-                                        format_millis(burn)
-                                    )
-                                });
-                            format!(
-                                "plan, normal off-peak {}x / peak {}x at {:02}:00-{:02}:00 UTC{}",
-                                format_millis(*off_peak_relative_burn_millis),
-                                format_millis(*peak_relative_burn_millis),
-                                peak_start_utc_hour,
-                                peak_end_utc_hour,
-                                promotion
-                            )
-                        }
-                        ModelBilling::Metered {
-                            input_milli_usd_per_million_tokens,
-                            output_milli_usd_per_million_tokens,
-                            ..
-                        } => format!(
-                            "metered ${}/${} per M tok",
-                            format_millis(*input_milli_usd_per_million_tokens),
-                            format_millis(*output_milli_usd_per_million_tokens)
-                        ),
-                        ModelBilling::AuthDependent {
-                            plan_relative_burn_millis,
-                            api_key_input_milli_usd_per_million_tokens,
-                            api_key_output_milli_usd_per_million_tokens,
-                            ..
-                        } => format!(
-                            "auth-dependent: subscription burn {}x or API ${}/${} per M tok",
-                            format_millis(*plan_relative_burn_millis),
-                            format_millis(*api_key_input_milli_usd_per_million_tokens),
-                            format_millis(*api_key_output_milli_usd_per_million_tokens)
-                        ),
-                        ModelBilling::Local => "local".to_string(),
-                    };
+                    let billing = format_model_billing(billing);
                     format!(" {billing}, {};", metadata.capability())
                 });
             let frontier_effort_suffix = model
@@ -1284,6 +1232,67 @@ fn spawn_agent_models_description(
 Available authorized exact runtime overrides (optional; omit both fields to inherit the current runtime). Pass the provider as `model_provider` and the model as `model`.\n\
 Default allocation policy: compare the task with this catalogue before every spawn. Prefer an authorized `plan` runtime over a `metered` runtime when both can do the work, then choose the lowest-burn capable plan runtime. Use `fast` for mechanical or tightly specified work, `balanced` for ordinary engineering, and `frontier` only for genuinely hard reasoning, planning, or review. For frontier models with `max` or `ultra`, reserve those efforts for frontier work; `ultra` is the orchestration setting when automatic delegation is actually needed. Vision work requires a `vision` runtime; never send images to `text-only`. Plan capacity is finite, not free. If the user names a provider or model, treat it as an exact constraint: if it is unavailable or unauthorized, report that failure and do not substitute another runtime without the user's explicit consent.\n{model_descriptions}"
     )
+}
+
+fn format_model_billing(billing: &ModelBilling) -> String {
+    match billing {
+        ModelBilling::Plan {
+            relative_burn_millis,
+        } => format!("plan, burn {}x", format_millis(*relative_burn_millis)),
+        ModelBilling::PlanSchedule {
+            off_peak_relative_burn_millis,
+            peak_relative_burn_millis,
+            peak_start_utc_hour,
+            peak_end_utc_hour,
+            peak_weekdays,
+            promotional_off_peak_relative_burn_millis,
+            promotion_valid_through_utc,
+        } => {
+            let promotion = promotional_off_peak_relative_burn_millis
+                .zip(promotion_valid_through_utc.as_deref())
+                .map_or_else(String::new, |(burn, valid_through)| {
+                    format!(
+                        ", promotional off-peak {}x through {valid_through}",
+                        format_millis(burn)
+                    )
+                });
+            let peak_days = peak_weekdays
+                .filter(|weekdays| !weekdays.is_every_day())
+                .map_or_else(String::new, |weekdays| {
+                    format!(" on {}", weekdays.names().join("/"))
+                });
+            format!(
+                "plan, normal off-peak {}x / peak {}x at {:02}:00-{:02}:00 UTC{}{}",
+                format_millis(*off_peak_relative_burn_millis),
+                format_millis(*peak_relative_burn_millis),
+                peak_start_utc_hour,
+                peak_end_utc_hour,
+                peak_days,
+                promotion
+            )
+        }
+        ModelBilling::Metered {
+            input_milli_usd_per_million_tokens,
+            output_milli_usd_per_million_tokens,
+            ..
+        } => format!(
+            "metered ${}/${} per M tok",
+            format_millis(*input_milli_usd_per_million_tokens),
+            format_millis(*output_milli_usd_per_million_tokens)
+        ),
+        ModelBilling::AuthDependent {
+            plan_relative_burn_millis,
+            api_key_input_milli_usd_per_million_tokens,
+            api_key_output_milli_usd_per_million_tokens,
+            ..
+        } => format!(
+            "auth-dependent: subscription burn {}x or API ${}/${} per M tok",
+            format_millis(*plan_relative_burn_millis),
+            format_millis(*api_key_input_milli_usd_per_million_tokens),
+            format_millis(*api_key_output_milli_usd_per_million_tokens)
+        ),
+        ModelBilling::Local => "local".to_string(),
+    }
 }
 
 fn format_millis(value: u32) -> String {

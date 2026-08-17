@@ -1315,6 +1315,10 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         Some(ZAI_PROVIDER_ID)
     );
     assert_eq!(
+        corrected_catalog_provider("glm-5.3", AMBIENT_PROVIDER_ID),
+        Some(ZAI_PROVIDER_ID)
+    );
+    assert_eq!(
         corrected_catalog_provider("gpt-5.5", CLAUDE_PLAN_PROVIDER_ID),
         Some(OPENAI_PROVIDER_ID)
     );
@@ -1405,6 +1409,7 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (AMBIENT_KIMI_K2_7_CODE_MODEL, AMBIENT_PROVIDER_ID),
         (KIMI_CODE_K3_MODEL, KIMI_CODE_PROVIDER_ID),
         (ZAI_DEFAULT_MODEL, ZAI_PROVIDER_ID),
+        ("glm-5.3", ZAI_PROVIDER_ID),
         (CLAUDE_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (ANTHROPIC_DEFAULT_MODEL, CLAUDE_PLAN_PROVIDER_ID),
@@ -1432,4 +1437,17 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
     }
     assert_eq!(canonical_catalog_provider(""), None);
     assert_eq!(canonical_catalog_provider("private/custom-model"), None);
+}
+
+#[test]
+fn zai_glm_5_3_resolves_only_on_the_direct_zai_route() {
+    assert_eq!(canonical_catalog_provider("glm-5.3"), Some(ZAI_PROVIDER_ID));
+    assert_eq!(
+        resolve_model_for_provider(Some("glm-5.3".to_string()), ZAI_PROVIDER_ID).as_deref(),
+        Some("glm-5.3")
+    );
+    assert_eq!(
+        resolve_model_for_provider(Some("glm-5.3".to_string()), AMBIENT_PROVIDER_ID).as_deref(),
+        Some(AMBIENT_DEFAULT_MODEL)
+    );
 }

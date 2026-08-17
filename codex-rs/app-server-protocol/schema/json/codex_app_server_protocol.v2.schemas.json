@@ -10017,6 +10017,18 @@
               "minimum": 0.0,
               "type": "integer"
             },
+            "peak_weekdays": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/WeekdaySet"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "UTC weekdays on which the peak window applies. Omitted means every day for backward compatibility with older catalogue entries."
+            },
             "promotion_valid_through_utc": {
               "default": null,
               "type": [
@@ -20430,6 +20442,42 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "WeekdaySet": {
+      "description": "UTC weekdays on which a scheduled plan peak applies.\n\n`ModelBilling::PlanSchedule::peak_weekdays == None` retains the legacy behavior where the peak window applies every day.",
+      "properties": {
+        "friday": {
+          "type": "boolean"
+        },
+        "monday": {
+          "type": "boolean"
+        },
+        "saturday": {
+          "type": "boolean"
+        },
+        "sunday": {
+          "type": "boolean"
+        },
+        "thursday": {
+          "type": "boolean"
+        },
+        "tuesday": {
+          "type": "boolean"
+        },
+        "wednesday": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "friday",
+        "monday",
+        "saturday",
+        "sunday",
+        "thursday",
+        "tuesday",
+        "wednesday"
+      ],
       "type": "object"
     },
     "WindowsSandboxReadiness": {

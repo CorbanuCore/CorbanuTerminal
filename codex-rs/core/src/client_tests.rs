@@ -46,6 +46,7 @@ use codex_protocol::models::AgentMessageInputContent;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputPayload;
+use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ChatReasoningEffortProtocol;
 use codex_protocol::openai_models::ChatReasoningProtocol;
@@ -964,6 +965,191 @@ fn zai_required_thinking_models_send_an_enabled_supported_effort() {
                 &responses_metadata,
             )
             .is_err()
+    );
+}
+
+#[test]
+fn zai_optional_thinking_controls_never_contradict_the_selected_effort() {
+    let client = test_model_client(SessionSource::Cli)
+        .for_provider(&ModelProviderInfo::create_zai_provider());
+    let mut model = test_model_info();
+    model.chat_completions.reasoning_protocol = ChatReasoningProtocol::Independent;
+    model.chat_completions.reasoning_effort_protocol =
+        ChatReasoningEffortProtocol::NoneHighMaxDefaultHigh;
+    let prompt = Prompt::default();
+    let responses_metadata = test_responses_metadata_for_client(
+        &client,
+        /*turn_id*/ None,
+        format!("{}:0", client.state.thread_id),
+        /*parent_thread_id*/ None,
+        TestCodexResponsesRequestKind::Turn,
+    );
+
+    let disabled = client
+        .build_chat_completions_request(
+            &prompt,
+            &model,
+            Some(ReasoningEffort::None),
+            &responses_metadata,
+        )
+        .expect("optional-thinking disabled request");
+    let enabled = client
+        .build_chat_completions_request(
+            &prompt,
+            &model,
+            Some(ReasoningEffort::Medium),
+            &responses_metadata,
+        )
+        .expect("optional-thinking enabled request");
+
+    assert_eq!(
+        (
+            disabled.enable_thinking,
+            disabled.reasoning_effort.as_deref(),
+            enabled.enable_thinking,
+            enabled.reasoning_effort.as_deref(),
+        ),
+        (Some(false), Some("none"), Some(true), Some("high"))
+    );
+}
+
+#[test]
+fn ambient_required_low_reasoning_is_enabled_without_duplicate_scalar_control() {
+    let client = test_model_client(SessionSource::Cli)
+        .for_provider(&ModelProviderInfo::create_ambient_provider());
+    let mut model = test_ambient_model_info();
+    model.chat_completions.reasoning_protocol = ChatReasoningProtocol::PreservedRequired;
+    model.chat_completions.reasoning_effort_protocol =
+        ChatReasoningEffortProtocol::LowHighMaxRequiredDefaultMax;
+    let responses_metadata = test_responses_metadata_for_client(
+        &client,
+        /*turn_id*/ None,
+        format!("{}:0", client.state.thread_id),
+        /*parent_thread_id*/ None,
+        TestCodexResponsesRequestKind::Turn,
+    );
+
+    let request = client
+        .build_chat_completions_request(
+            &Prompt::default(),
+            &model,
+            Some(ReasoningEffort::Low),
+            &responses_metadata,
+        )
+        .expect("Ambient required-low request");
+
+    assert_eq!(
+        request.reasoning,
+        Some(json!({"enabled": true, "effort": "low"}))
+    );
+    assert_eq!(request.reasoning_effort, None);
+    assert_eq!(request.enable_thinking, None);
+}
+
+#[test]
+fn zai_glm_5_3_replays_preserved_reasoning_with_tool_calls_and_outputs() {
+    let model = codex_models_manager::bundled_models_response()
+        .expect("bundled model catalogue")
+        .models
+        .into_iter()
+        .find(|model| model.slug == "glm-5.3")
+        .expect("GLM 5.3 model metadata");
+    let message = |role: &str, text: &str| ResponseItem::Message {
+        id: None,
+        role: role.to_string(),
+        content: vec![ContentItem::InputText {
+            text: text.to_string(),
+        }],
+        phase: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let tool_call = |name: &str, arguments: &str, call_id: &str| ResponseItem::FunctionCall {
+        id: None,
+        name: name.to_string(),
+        namespace: None,
+        arguments: arguments.to_string(),
+        call_id: call_id.to_string(),
+        encrypted_function_args: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let tool_output = |call_id: &str, output: &str| ResponseItem::FunctionCallOutput {
+        id: None,
+        call_id: call_id.to_string(),
+        output: FunctionCallOutputPayload::from_text(output.to_string()),
+        internal_chat_message_metadata_passthrough: None,
+    };
+    let prompt = Prompt {
+        input: vec![
+            message("user", "Inspect the repository before editing."),
+            ResponseItem::Reasoning {
+                id: None,
+                summary: Vec::new(),
+                content: Some(vec![
+                    ReasoningItemContent::ReasoningText {
+                        text: "I need to inspect ".to_string(),
+                    },
+                    ReasoningItemContent::ReasoningText {
+                        text: "the repository before editing.".to_string(),
+                    },
+                ]),
+                encrypted_content: None,
+                anthropic_content_block: None,
+                internal_chat_message_metadata_passthrough: None,
+            },
+            tool_call("exec_command", r#"{"cmd":"rg TODO"}"#, "call-rg"),
+            tool_call("view_image", r#"{"path":"diagram.png"}"#, "call-image"),
+            tool_output("call-rg", "src/main.rs:10: TODO"),
+            tool_output("call-image", "diagram inspected"),
+            message("user", "Continue with the fix."),
+        ],
+        ..Default::default()
+    };
+    let client = test_model_client(SessionSource::Cli)
+        .for_provider(&ModelProviderInfo::create_zai_provider());
+    let responses_metadata = test_responses_metadata_for_client(
+        &client,
+        /*turn_id*/ None,
+        format!("{}:0", client.state.thread_id),
+        /*parent_thread_id*/ None,
+        TestCodexResponsesRequestKind::Turn,
+    );
+
+    let request = client
+        .build_chat_completions_request(&prompt, &model, /*effort*/ None, &responses_metadata)
+        .expect("GLM 5.3 continuation request");
+    let replay = request
+        .messages
+        .iter()
+        .find(|message| {
+            message.role == "assistant"
+                && message.reasoning_content.is_some()
+                && !message.tool_calls.is_empty()
+        })
+        .expect("reasoning and tool calls must share the replayed assistant message");
+
+    assert_eq!(request.model, "glm-5.3");
+    assert_eq!(request.enable_thinking, Some(true));
+    assert_eq!(request.reasoning_effort.as_deref(), Some("max"));
+    assert_eq!(
+        replay.reasoning_content.as_deref(),
+        Some("I need to inspect the repository before editing.")
+    );
+    assert_eq!(
+        replay
+            .tool_calls
+            .iter()
+            .map(|call| (call.id.as_str(), call.function.name.as_str()))
+            .collect::<Vec<_>>(),
+        vec![("call-rg", "exec_command"), ("call-image", "view_image")]
+    );
+    for call_id in ["call-rg", "call-image"] {
+        assert!(request.messages.iter().any(|message| {
+            message.role == "tool" && message.tool_call_id.as_deref() == Some(call_id)
+        }));
+    }
+    assert!(
+        replay.content.is_none(),
+        "reasoning must not leak into visible content"
     );
 }
 

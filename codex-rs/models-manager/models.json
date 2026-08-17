@@ -90,11 +90,20 @@
           "off_peak_relative_burn_millis": 1000,
           "peak_relative_burn_millis": 3000,
           "peak_start_utc_hour": 6,
-          "peak_end_utc_hour": 10
+          "peak_end_utc_hour": 10,
+          "peak_weekdays": {
+            "monday": true,
+            "tuesday": true,
+            "wednesday": true,
+            "thursday": true,
+            "friday": true,
+            "saturday": false,
+            "sunday": false
+          }
         }
       },
       "display_name": "Z.AI GLM 5.3",
-      "description": "GLM 5.3 through the Z.AI Coding Plan. Legacy plans consume 3x quota during weekday peak hours (06:00-10:00 UTC) and 1x off-peak; newer credit plans use token-based input, cached-input, and output multipliers with a 50% off-peak discount.",
+      "description": "GLM 5.3 through the legacy Z.AI Coding Plan: 3x quota during weekday peak hours (06:00-10:00 UTC) and 1x off-peak.",
       "default_reasoning_level": "max",
       "supported_reasoning_levels": [
         {

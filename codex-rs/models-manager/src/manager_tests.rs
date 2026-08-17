@@ -1641,6 +1641,7 @@ fn bundled_models_have_complete_orchestration_contracts() {
                     peak_relative_burn_millis,
                     peak_start_utc_hour,
                     peak_end_utc_hour,
+                    peak_weekdays,
                     promotional_off_peak_relative_burn_millis,
                     promotion_valid_through_utc,
                 } => {
@@ -1654,6 +1655,11 @@ fn bundled_models_have_complete_orchestration_contracts() {
                             && *peak_end_utc_hour <= 24
                             && peak_start_utc_hour < peak_end_utc_hour,
                         "{} must have a valid UTC peak window",
+                        model.slug
+                    );
+                    assert!(
+                        peak_weekdays.is_none_or(|weekdays| !weekdays.is_empty()),
+                        "{} must not specify an empty peak weekday set",
                         model.slug
                     );
                     assert_eq!(
@@ -1807,6 +1813,23 @@ fn bundled_models_json_contains_ambient_and_zai_models() {
     );
     assert_eq!(zai_glm_5_3.visibility, ModelVisibility::List);
     assert!(zai_glm_5_3.supports_parallel_tool_calls);
+    assert_eq!(
+        zai_glm_5_3
+            .orchestration
+            .as_ref()
+            .and_then(ModelOrchestrationMetadata::billing),
+        Some(&ModelBilling::PlanSchedule {
+            off_peak_relative_burn_millis: 1_000,
+            peak_relative_burn_millis: 3_000,
+            peak_start_utc_hour: 6,
+            peak_end_utc_hour: 10,
+            peak_weekdays: Some(codex_protocol::openai_models::WeekdaySet::weekdays_only()),
+            promotional_off_peak_relative_burn_millis: None,
+            promotion_valid_through_utc: None,
+        })
+    );
+    let preset = ModelPreset::from(zai_glm_5_3.clone());
+    assert_eq!(preset.provider_id.as_deref(), Some("zai"));
     assert_standard_base(&zai_glm_5_3.base_instructions);
     assert!(!zai_glm_5_3.used_fallback_model_metadata);
 
