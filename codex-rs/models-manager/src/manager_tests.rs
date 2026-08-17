@@ -11,6 +11,7 @@ use codex_login::ExternalAuth;
 use codex_login::ExternalAuthRefreshContext;
 use codex_login::TokenData;
 use codex_protocol::auth::AuthMode;
+use codex_protocol::openai_models::ChatReasoningEffortProtocol;
 use codex_protocol::openai_models::ChatReasoningProtocol;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelBilling;
@@ -642,6 +643,7 @@ async fn chatgpt_cache_does_not_evict_pfterminal_provider_models() {
     assert!(slugs.contains(&"gpt-5.5"));
     assert!(slugs.contains(&"z-ai/glm-5.2"));
     assert!(slugs.contains(&"moonshotai/kimi-k2.7-code"));
+    assert!(slugs.contains(&"glm-5.3"));
     assert!(slugs.contains(&"glm-5.2"));
     assert!(slugs.contains(&"z-ai/glm-5.2"));
     assert!(slugs.contains(&"zai-org/GLM-5.2"));
@@ -1740,7 +1742,7 @@ fn bundled_orchestration_policy_distinguishes_gpt_5_6_tiers_and_disables_gpt_5_5
 }
 
 #[test]
-fn bundled_models_json_contains_ambient_models() {
+fn bundled_models_json_contains_ambient_and_zai_models() {
     let response = crate::bundled_models_response()
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
 
@@ -1768,6 +1770,45 @@ fn bundled_models_json_contains_ambient_models() {
     assert!(ambient_default.supports_parallel_tool_calls);
     assert_standard_base(&ambient_default.base_instructions);
     assert!(!ambient_default.used_fallback_model_metadata);
+
+    let zai_glm_5_3 = response
+        .models
+        .iter()
+        .find(|model| model.slug == "glm-5.3")
+        .expect("bundled models.json should include Z.AI GLM 5.3");
+
+    assert_eq!(
+        (
+            zai_glm_5_3.context_window,
+            zai_glm_5_3.max_output_tokens,
+            zai_glm_5_3.default_reasoning_level.clone(),
+            zai_glm_5_3.chat_completions.reasoning_protocol,
+            zai_glm_5_3.chat_completions.reasoning_effort_protocol,
+        ),
+        (
+            Some(1_000_000),
+            Some(128_000),
+            Some(ReasoningEffort::Max),
+            ChatReasoningProtocol::PreservedRequired,
+            ChatReasoningEffortProtocol::LowHighMaxRequiredDefaultMax,
+        )
+    );
+    assert_eq!(
+        zai_glm_5_3
+            .supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            ReasoningEffort::Low,
+            ReasoningEffort::High,
+            ReasoningEffort::Max,
+        ]
+    );
+    assert_eq!(zai_glm_5_3.visibility, ModelVisibility::List);
+    assert!(zai_glm_5_3.supports_parallel_tool_calls);
+    assert_standard_base(&zai_glm_5_3.base_instructions);
+    assert!(!zai_glm_5_3.used_fallback_model_metadata);
 
     let ambient_kimi = response
         .models

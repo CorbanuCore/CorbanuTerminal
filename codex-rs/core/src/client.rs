@@ -1636,15 +1636,21 @@ impl ModelClient {
                 .map(str::to_string)
             })
             .flatten();
+        let catalogue_reasoning_effort = Self::chat_reasoning_effort(
+            model_info.chat_completions.reasoning_effort_protocol,
+            effort
+                .as_ref()
+                .or(model_info.default_reasoning_level.as_ref()),
+        )?;
         // `enable_thinking` is honoured by Z.AI direct only. Ambient takes the
         // `reasoning` object instead; sending both would leave the ignored
-        // field on the wire for no reason.
-        let ambient_enable_thinking = self
-            .state
-            .provider
-            .info()
-            .is_zai()
-            .then_some(ambient_reasoning_effort.is_some());
+        // field on the wire for no reason. Required-thinking models advertise
+        // a scalar effort in the catalogue, so keep thinking enabled whenever
+        // an effort will be sent.
+        let ambient_enable_thinking =
+            self.state.provider.info().is_zai().then_some(
+                ambient_reasoning_effort.is_some() || catalogue_reasoning_effort.is_some(),
+            );
         let response_format = prompt.output_schema.as_ref().map(|schema| {
             json!({
                 "type": "json_schema",
@@ -1678,13 +1684,7 @@ impl ModelClient {
         } else {
             None
         };
-        let catalogue_reasoning_effort = Self::chat_reasoning_effort(
-            model_info.chat_completions.reasoning_effort_protocol,
-            effort
-                .as_ref()
-                .or(model_info.default_reasoning_level.as_ref()),
-        )?;
-
+        let reasoning_effort = ambient_reasoning_effort.or(catalogue_reasoning_effort);
         Ok(ChatCompletionsRequest {
             model: upstream_model.to_string(),
             messages,
@@ -1701,7 +1701,7 @@ impl ModelClient {
             response_format,
             emit_usage: uses_zai_reasoning.then_some(true),
             enable_thinking: ambient_enable_thinking,
-            reasoning_effort: ambient_reasoning_effort.or(catalogue_reasoning_effort),
+            reasoning_effort,
             reasoning: provider_reasoning,
             provider: self.state.provider.info().chat_completions_provider.clone(),
             plugins: openrouter_web_plugins,

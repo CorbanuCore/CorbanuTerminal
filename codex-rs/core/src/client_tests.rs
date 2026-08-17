@@ -47,6 +47,8 @@ use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::openai_models::ChatReasoningEffortProtocol;
+use codex_protocol::openai_models::ChatReasoningProtocol;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::InternalSessionSource;
@@ -911,6 +913,58 @@ fn test_model_info() -> ModelInfo {
         "experimental_supported_tools": []
     }))
     .expect("deserialize test model info")
+}
+
+#[test]
+fn zai_required_thinking_models_send_an_enabled_supported_effort() {
+    let client = test_model_client(SessionSource::Cli)
+        .for_provider(&ModelProviderInfo::create_zai_provider());
+    let mut model = test_model_info();
+    model.slug = "glm-required-thinking".to_string();
+    model.default_reasoning_level = Some(ReasoningEffort::Max);
+    model.chat_completions.reasoning_protocol = ChatReasoningProtocol::PreservedRequired;
+    model.chat_completions.reasoning_effort_protocol =
+        ChatReasoningEffortProtocol::LowHighMaxRequiredDefaultMax;
+    let prompt = Prompt::default();
+    let responses_metadata = test_responses_metadata_for_client(
+        &client,
+        /*turn_id*/ None,
+        format!("{}:0", client.state.thread_id),
+        /*parent_thread_id*/ None,
+        TestCodexResponsesRequestKind::Turn,
+    );
+
+    let default_request = client
+        .build_chat_completions_request(&prompt, &model, /*effort*/ None, &responses_metadata)
+        .expect("required-thinking default request");
+    let medium_request = client
+        .build_chat_completions_request(
+            &prompt,
+            &model,
+            Some(ReasoningEffort::Medium),
+            &responses_metadata,
+        )
+        .expect("required-thinking medium request");
+
+    assert_eq!(
+        (
+            default_request.enable_thinking,
+            default_request.reasoning_effort.as_deref(),
+            medium_request.enable_thinking,
+            medium_request.reasoning_effort.as_deref(),
+        ),
+        (Some(true), Some("max"), Some(true), Some("high"))
+    );
+    assert!(
+        client
+            .build_chat_completions_request(
+                &prompt,
+                &model,
+                Some(ReasoningEffort::None),
+                &responses_metadata,
+            )
+            .is_err()
+    );
 }
 
 fn test_ambient_model_info() -> ModelInfo {
