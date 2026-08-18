@@ -26,17 +26,13 @@ use codex_protocol::ThreadId;
 use codex_protocol::protocol::RolloutItem;
 #[cfg(test)]
 use codex_utils_absolute_path::test_support::PathExt;
-use log::LevelFilter;
 use serde_json::Value;
-use sqlx::ConnectOptions;
 use sqlx::QueryBuilder;
 use sqlx::Row;
 use sqlx::Sqlite;
 use sqlx::SqliteConnection;
 use sqlx::SqlitePool;
 use sqlx::migrate::Migrator;
-use sqlx::sqlite::SqliteConnectOptions;
-use sqlx::sqlite::SqlitePoolOptions;
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::path::PathBuf;
@@ -158,7 +154,7 @@ impl StateRuntime {
         let logs_path = sqlite.logs_db_path();
         let goals_path = sqlite.goals_db_path();
         let memories_path = sqlite.memories_db_path();
-        validate_applied_migrations(&state_path, &state_migrator)
+        validate_applied_migrations(&sqlite, &state_path, &state_migrator)
             .await
             .map_err(|source| {
                 RuntimeDbInitError::new(
@@ -337,21 +333,14 @@ pub async fn open_thread_history_db(sqlite: &SqliteConfig) -> anyhow::Result<Sql
 }
 
 pub(super) async fn validate_applied_migrations(
+    sqlite: &SqliteConfig,
     path: &Path,
     migrator: &Migrator,
 ) -> anyhow::Result<()> {
     if !tokio::fs::try_exists(path).await? {
         return Ok(());
     }
-    let options = SqliteConnectOptions::new()
-        .filename(path)
-        .create_if_missing(false)
-        .read_only(true)
-        .log_statements(LevelFilter::Off);
-    let pool = SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect_with(options)
-        .await?;
+    let pool = sqlite.open_read_only_pool(path).await?;
     let table_exists = sqlx::query_scalar::<_, i64>(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_sqlx_migrations'",
     )
@@ -448,8 +437,6 @@ mod tests {
     use crate::migrations::STATE_MIGRATOR;
     use codex_utils_absolute_path::test_support::PathExt;
     use pretty_assertions::assert_eq;
-    use sqlx::SqlitePool;
-    use sqlx::sqlite::SqliteConnectOptions;
     use std::collections::BTreeMap;
     use std::collections::BTreeSet;
     use std::sync::Mutex;
@@ -602,20 +589,17 @@ mod tests {
             .await
             .expect("create runtime home");
         let legacy_path = codex_home.join("state_5.sqlite");
-        let pool = SqlitePool::connect_with(
-            SqliteConnectOptions::new()
-                .filename(&legacy_path)
-                .create_if_missing(true),
-        )
-        .await
-        .expect("create legacy state db");
+        let sqlite = crate::SqliteConfig::new_for_testing(codex_home.as_path().abs());
+        let pool = sqlite
+            .open_read_write_pool(&legacy_path)
+            .await
+            .expect("create legacy state db");
         STATE_MIGRATOR
             .run(&pool)
             .await
             .expect("apply legacy state schema");
         pool.close().await;
 
-        let sqlite = crate::SqliteConfig::new_for_testing(codex_home.as_path().abs());
         let runtime =
             StateRuntime::init_for_testing(codex_home.clone(), "test-provider".to_string())
                 .await

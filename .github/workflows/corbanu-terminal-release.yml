@@ -1,4 +1,4 @@
-name: pfterminal-release
+name: corbanu-terminal-release
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
         description: "Release version; must match codex-rs/Cargo.toml."
         required: true
         type: string
-        default: "0.1.30"
+        default: "0.1.33"
       publish_release:
         description: "Create or update the matching GitHub release."
         required: true
@@ -71,7 +71,7 @@ jobs:
           echo "tag=rust-v${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Test Unix installer release contract
-        run: python3 scripts/install/test_pfterminal_release_contract.py
+        run: python3 scripts/install/test_corbanu_release_contract.py
 
   build-macos:
     needs: validate
@@ -86,9 +86,7 @@ jobs:
     env:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
-      CARGO_PROFILE_RELEASE_DEBUG: "0"
       CARGO_PROFILE_RELEASE_LTO: "false"
-      CARGO_PROFILE_RELEASE_STRIP: "symbols"
       TARGET: ${{ matrix.target }}
     strategy:
       fail-fast: false
@@ -121,13 +119,8 @@ jobs:
             --target "$TARGET" \
             --release \
             --bin corbanu \
-            --bin pfterminal \
-            --bin corbanu-debug \
-            --bin pfterminal-debug \
             --bin corbanu-acp \
-            --bin pfterminal-acp \
             --bin corbanu-walletd \
-            --bin pfterminal-walletd \
             --bin codex-code-mode-host
 
       - name: Build standalone package archive
@@ -139,35 +132,38 @@ jobs:
             --target "$TARGET" \
             --variant corbanu \
             --entrypoint-bin "codex-rs/target/${TARGET}/release/corbanu" \
-            --extra-bin "pfterminal=codex-rs/target/${TARGET}/release/pfterminal" \
-            --extra-bin "corbanu-debug=codex-rs/target/${TARGET}/release/corbanu-debug" \
-            --extra-bin "pfterminal-debug=codex-rs/target/${TARGET}/release/pfterminal-debug" \
+            --extra-bin "corbanu-debug=codex-rs/target/${TARGET}/release/corbanu" \
             --extra-bin "corbanu-acp=codex-rs/target/${TARGET}/release/corbanu-acp" \
-            --extra-bin "pfterminal-acp=codex-rs/target/${TARGET}/release/pfterminal-acp" \
             --extra-bin "corbanu-walletd=codex-rs/target/${TARGET}/release/corbanu-walletd" \
-            --extra-bin "pfterminal-walletd=codex-rs/target/${TARGET}/release/pfterminal-walletd" \
             --code-mode-host-bin "codex-rs/target/${TARGET}/release/codex-code-mode-host" \
             --cargo-profile release \
-            --package-dir "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
-            --archive-output "dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz" \
+            --symbols-dir "dist/${TARGET}/debug-symbols" \
+            --package-dir "${RUNNER_TEMP}/corbanu-terminal-package-${TARGET}" \
+            --archive-output "dist/${TARGET}/corbanu-terminal-package-${TARGET}.tar.gz" \
             --force
+          tar -C "dist/${TARGET}/debug-symbols" -czf \
+            "dist/${TARGET}/corbanu-symbols-${TARGET}.tar.gz" .
 
       - name: Smoke test package archive
         shell: bash
         run: |
           set -euo pipefail
-          archive="dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz"
+          archive="dist/${TARGET}/corbanu-terminal-package-${TARGET}.tar.gz"
           package_dir="${RUNNER_TEMP}/smoke-${TARGET}"
           mkdir -p "$package_dir"
           tar -xzf "$archive" -C "$package_dir"
           "$package_dir/bin/corbanu" --version
           "$package_dir/bin/corbanu" telegram --help >/dev/null
-          "$package_dir/bin/pfterminal" --version
-          "$package_dir/bin/pfterminal" telegram --help >/dev/null
+          help_output="$("$package_dir/bin/corbanu" exec --help 2>&1)"
+          grep -F '~/.corbanu/config.toml' <<<"$help_output"
+          grep -F '$CORBANU_HOME/config.toml' <<<"$help_output"
+          ! grep -Eqi 'pfterminal|postfiat|PFTERMINAL' <<<"$help_output"
           test -x "$package_dir/bin/corbanu-acp"
-          test -x "$package_dir/bin/pfterminal-acp"
           test -x "$package_dir/bin/corbanu-walletd"
-          test -x "$package_dir/bin/pfterminal-walletd"
+          test ! -e "$package_dir/bin/pfterminal"
+          test ! -e "$package_dir/bin/pfterminal-debug"
+          test ! -e "$package_dir/bin/pfterminal-acp"
+          test ! -e "$package_dir/bin/pfterminal-walletd"
           "$package_dir/bin/corbanu-walletd" --help >/dev/null
           wallet_home="${RUNNER_TEMP}/wallet-smoke-${TARGET}"
           "$package_dir/bin/corbanu-walletd" --codex-home "$wallet_home" &
@@ -189,8 +185,8 @@ jobs:
           bash -n "$telegram_resources/setup-telegram.sh"
           test -f "$telegram_resources/install-telegram-task.ps1"
           test -f "$telegram_resources/dist/AGENTS.md.template"
-          test -f "$telegram_resources/dist/pfterminal-telegram.service"
-          plutil -lint "$telegram_resources/dist/net.postfiat.pfterminal.telegram.plist" >/dev/null
+          test -f "$telegram_resources/dist/corbanu-terminal-telegram.service"
+          plutil -lint "$telegram_resources/dist/org.corbanu.terminal.telegram.plist" >/dev/null
 
       - name: Free runner disk before DMG packaging
         shell: bash
@@ -202,7 +198,7 @@ jobs:
           if (( available_kb < reserve_kb )); then
             rm -rf \
               codex-rs/target \
-              "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
+              "${RUNNER_TEMP}/corbanu-terminal-package-${TARGET}" \
               "${RUNNER_TEMP}/smoke-${TARGET}" \
               "${RUNNER_TEMP}/rusty_v8" \
               "${HOME}/.cargo/git" \
@@ -216,7 +212,7 @@ jobs:
           else
             echo "Skipping destructive cleanup: ${available_kb} KiB available exceeds ${reserve_kb} KiB reserve"
           fi
-          ls -lh "dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz"
+          ls -lh "dist/${TARGET}/corbanu-terminal-package-${TARGET}.tar.gz"
           df -h .
 
       - name: Build macOS DMG installer
@@ -224,35 +220,36 @@ jobs:
         run: |
           set -euo pipefail
           scripts/install/build_macos_dmg.sh \
-            --archive "dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz" \
+            --archive "dist/${TARGET}/corbanu-terminal-package-${TARGET}.tar.gz" \
             --target "$TARGET" \
             --version "${{ needs.validate.outputs.version }}" \
-            --output "dist/${TARGET}/PFTerminal-${TARGET}.dmg"
+            --output "dist/${TARGET}/CorbanuTerminal-${TARGET}.dmg"
 
       - name: Smoke test macOS DMG installer
         shell: bash
         run: |
           set -euo pipefail
-          dmg="dist/${TARGET}/PFTerminal-${TARGET}.dmg"
+          dmg="dist/${TARGET}/CorbanuTerminal-${TARGET}.dmg"
           hdiutil imageinfo "$dmg" >/dev/null
-          mount_dir="${RUNNER_TEMP}/pfterminal-dmg-${TARGET}"
+          mount_dir="${RUNNER_TEMP}/corbanu-terminal-dmg-${TARGET}"
           rm -rf "$mount_dir"
           mkdir -p "$mount_dir"
           hdiutil attach "$dmg" -mountpoint "$mount_dir" -nobrowse -quiet
           trap 'hdiutil detach "$mount_dir" -quiet || true' EXIT
           test -x "$mount_dir/install.command"
           test -x "$mount_dir/install.sh"
-          test -f "$mount_dir/pfterminal-package-${TARGET}.tar.gz"
-          test -f "$mount_dir/pfterminal-package_SHA256SUMS"
+          test -f "$mount_dir/corbanu-terminal-package-${TARGET}.tar.gz"
+          test -f "$mount_dir/corbanu-terminal-package_SHA256SUMS"
           sh "$mount_dir/install.sh" --help >/dev/null
 
       - name: Upload macOS package artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: pfterminal-package-${{ matrix.target }}
+          name: corbanu-terminal-package-${{ matrix.target }}
           path: |
-            dist/${{ matrix.target }}/pfterminal-package-${{ matrix.target }}.tar.gz
-            dist/${{ matrix.target }}/PFTerminal-${{ matrix.target }}.dmg
+            dist/${{ matrix.target }}/corbanu-terminal-package-${{ matrix.target }}.tar.gz
+            dist/${{ matrix.target }}/CorbanuTerminal-${{ matrix.target }}.dmg
+            dist/${{ matrix.target }}/corbanu-symbols-${{ matrix.target }}.tar.gz
           if-no-files-found: error
           compression-level: 0
 
@@ -268,9 +265,7 @@ jobs:
     env:
       CARGO_NET_GIT_FETCH_WITH_CLI: "true"
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
-      CARGO_PROFILE_RELEASE_DEBUG: "0"
       CARGO_PROFILE_RELEASE_LTO: "false"
-      CARGO_PROFILE_RELEASE_STRIP: "symbols"
       TARGET: ${{ matrix.target }}
     strategy:
       fail-fast: false
@@ -347,13 +342,8 @@ jobs:
             --target "$TARGET" \
             --release \
             --bin corbanu \
-            --bin pfterminal \
-            --bin corbanu-debug \
-            --bin pfterminal-debug \
             --bin corbanu-acp \
-            --bin pfterminal-acp \
             --bin corbanu-walletd \
-            --bin pfterminal-walletd \
             --bin codex-code-mode-host \
             --bin bwrap
 
@@ -366,36 +356,39 @@ jobs:
             --target "$TARGET" \
             --variant corbanu \
             --entrypoint-bin "codex-rs/target/${TARGET}/release/corbanu" \
-            --extra-bin "pfterminal=codex-rs/target/${TARGET}/release/pfterminal" \
-            --extra-bin "corbanu-debug=codex-rs/target/${TARGET}/release/corbanu-debug" \
-            --extra-bin "pfterminal-debug=codex-rs/target/${TARGET}/release/pfterminal-debug" \
+            --extra-bin "corbanu-debug=codex-rs/target/${TARGET}/release/corbanu" \
             --extra-bin "corbanu-acp=codex-rs/target/${TARGET}/release/corbanu-acp" \
-            --extra-bin "pfterminal-acp=codex-rs/target/${TARGET}/release/pfterminal-acp" \
             --extra-bin "corbanu-walletd=codex-rs/target/${TARGET}/release/corbanu-walletd" \
-            --extra-bin "pfterminal-walletd=codex-rs/target/${TARGET}/release/pfterminal-walletd" \
             --code-mode-host-bin "codex-rs/target/${TARGET}/release/codex-code-mode-host" \
             --bwrap-bin "codex-rs/target/${TARGET}/release/bwrap" \
             --cargo-profile release \
-            --package-dir "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
-            --archive-output "dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz" \
+            --symbols-dir "dist/${TARGET}/debug-symbols" \
+            --package-dir "${RUNNER_TEMP}/corbanu-terminal-package-${TARGET}" \
+            --archive-output "dist/${TARGET}/corbanu-terminal-package-${TARGET}.tar.gz" \
             --force
+          tar -C "dist/${TARGET}/debug-symbols" -czf \
+            "dist/${TARGET}/corbanu-symbols-${TARGET}.tar.gz" .
 
       - name: Smoke test package archive
         shell: bash
         run: |
           set -euo pipefail
-          archive="dist/${TARGET}/pfterminal-package-${TARGET}.tar.gz"
+          archive="dist/${TARGET}/corbanu-terminal-package-${TARGET}.tar.gz"
           package_dir="${RUNNER_TEMP}/smoke-${TARGET}"
           mkdir -p "$package_dir"
           tar -xzf "$archive" -C "$package_dir"
           "$package_dir/bin/corbanu" --version
           "$package_dir/bin/corbanu" telegram --help >/dev/null
-          "$package_dir/bin/pfterminal" --version
-          "$package_dir/bin/pfterminal" telegram --help >/dev/null
+          help_output="$("$package_dir/bin/corbanu" exec --help 2>&1)"
+          grep -F '~/.corbanu/config.toml' <<<"$help_output"
+          grep -F '$CORBANU_HOME/config.toml' <<<"$help_output"
+          ! grep -Eqi 'pfterminal|postfiat|PFTERMINAL' <<<"$help_output"
           test -x "$package_dir/bin/corbanu-acp"
-          test -x "$package_dir/bin/pfterminal-acp"
           test -x "$package_dir/bin/corbanu-walletd"
-          test -x "$package_dir/bin/pfterminal-walletd"
+          test ! -e "$package_dir/bin/pfterminal"
+          test ! -e "$package_dir/bin/pfterminal-debug"
+          test ! -e "$package_dir/bin/pfterminal-acp"
+          test ! -e "$package_dir/bin/pfterminal-walletd"
           "$package_dir/bin/corbanu-walletd" --help >/dev/null
           wallet_home="${RUNNER_TEMP}/wallet-smoke-${TARGET}"
           "$package_dir/bin/corbanu-walletd" --codex-home "$wallet_home" &
@@ -418,14 +411,16 @@ jobs:
           bash -n "$telegram_resources/setup-telegram.sh"
           test -f "$telegram_resources/install-telegram-task.ps1"
           test -f "$telegram_resources/dist/AGENTS.md.template"
-          test -f "$telegram_resources/dist/pfterminal-telegram.service"
-          test -f "$telegram_resources/dist/net.postfiat.pfterminal.telegram.plist"
+          test -f "$telegram_resources/dist/corbanu-terminal-telegram.service"
+          test -f "$telegram_resources/dist/org.corbanu.terminal.telegram.plist"
 
       - name: Upload Linux package archive
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: pfterminal-package-${{ matrix.target }}
-          path: dist/${{ matrix.target }}/pfterminal-package-${{ matrix.target }}.tar.gz
+          name: corbanu-terminal-package-${{ matrix.target }}
+          path: |
+            dist/${{ matrix.target }}/corbanu-terminal-package-${{ matrix.target }}.tar.gz
+            dist/${{ matrix.target }}/corbanu-symbols-${{ matrix.target }}.tar.gz
           if-no-files-found: error
           compression-level: 0
 
@@ -496,13 +491,8 @@ jobs:
             --target "$TARGET" \
             --release \
             --bin corbanu \
-            --bin pfterminal \
-            --bin corbanu-debug \
-            --bin pfterminal-debug \
             --bin corbanu-acp \
-            --bin pfterminal-acp \
             --bin corbanu-walletd \
-            --bin pfterminal-walletd \
             --bin codex-code-mode-host \
             --bin codex-command-runner \
             --bin codex-windows-sandbox-setup
@@ -516,26 +506,22 @@ jobs:
             --target "$TARGET" \
             --variant corbanu \
             --entrypoint-bin "codex-rs/target/${TARGET}/release/corbanu.exe" \
-            --extra-bin "pfterminal=codex-rs/target/${TARGET}/release/pfterminal.exe" \
-            --extra-bin "corbanu-debug=codex-rs/target/${TARGET}/release/corbanu-debug.exe" \
-            --extra-bin "pfterminal-debug=codex-rs/target/${TARGET}/release/pfterminal-debug.exe" \
+            --extra-bin "corbanu-debug=codex-rs/target/${TARGET}/release/corbanu.exe" \
             --extra-bin "corbanu-acp=codex-rs/target/${TARGET}/release/corbanu-acp.exe" \
-            --extra-bin "pfterminal-acp=codex-rs/target/${TARGET}/release/pfterminal-acp.exe" \
             --extra-bin "corbanu-walletd=codex-rs/target/${TARGET}/release/corbanu-walletd.exe" \
-            --extra-bin "pfterminal-walletd=codex-rs/target/${TARGET}/release/pfterminal-walletd.exe" \
             --code-mode-host-bin "codex-rs/target/${TARGET}/release/codex-code-mode-host.exe" \
             --codex-command-runner-bin "codex-rs/target/${TARGET}/release/codex-command-runner.exe" \
             --codex-windows-sandbox-setup-bin "codex-rs/target/${TARGET}/release/codex-windows-sandbox-setup.exe" \
             --cargo-profile release \
-            --package-dir "${RUNNER_TEMP}/pfterminal-package-${TARGET}" \
-            --archive-output "dist/${TARGET}/pfterminal-package-${TARGET}.zip" \
+            --package-dir "${RUNNER_TEMP}/corbanu-terminal-package-${TARGET}" \
+            --archive-output "dist/${TARGET}/corbanu-terminal-package-${TARGET}.zip" \
             --force
 
       - name: Smoke test package archive
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $archive = "dist/${env:TARGET}/pfterminal-package-${env:TARGET}.zip"
+          $archive = "dist/${env:TARGET}/corbanu-terminal-package-${env:TARGET}.zip"
           $packageDir = Join-Path $env:RUNNER_TEMP "smoke-${env:TARGET}"
           if (Test-Path $packageDir) {
             Remove-Item -Recurse -Force $packageDir
@@ -545,14 +531,16 @@ jobs:
           $corbanu = Join-Path $packageDir "bin/corbanu.exe"
           & $corbanu --version
           & $corbanu telegram --help | Out-Null
-          $pfterminal = Join-Path $packageDir "bin/pfterminal.exe"
-          & $pfterminal --version
-          & $pfterminal telegram --help | Out-Null
+          $helpOutput = (& $corbanu exec --help 2>&1 | Out-String)
+          if ($helpOutput -notmatch [regex]::Escape('~/.corbanu/config.toml')) { throw "Corbanu config path missing from help" }
+          if ($helpOutput -notmatch [regex]::Escape('$CORBANU_HOME/config.toml')) { throw "CORBANU_HOME missing from help" }
+          if ($helpOutput -match '(?i:pfterminal|postfiat)') { throw "legacy brand exposed in help" }
           if (-not (Test-Path (Join-Path $packageDir "bin/corbanu-acp.exe"))) { throw "missing corbanu-acp.exe" }
-          if (-not (Test-Path (Join-Path $packageDir "bin/pfterminal-acp.exe"))) { throw "missing pfterminal-acp.exe" }
           $walletDaemon = Join-Path $packageDir "bin/corbanu-walletd.exe"
           if (-not (Test-Path $walletDaemon)) { throw "missing corbanu-walletd.exe" }
-          if (-not (Test-Path (Join-Path $packageDir "bin/pfterminal-walletd.exe"))) { throw "missing pfterminal-walletd.exe" }
+          foreach ($legacyName in @("pfterminal.exe", "pfterminal-debug.exe", "pfterminal-acp.exe", "pfterminal-walletd.exe")) {
+            if (Test-Path (Join-Path $packageDir "bin/$legacyName")) { throw "package contains legacy command: $legacyName" }
+          }
           & $walletDaemon --help | Out-Null
           $walletHome = Join-Path $env:RUNNER_TEMP "wallet-smoke-${env:TARGET}"
           $walletProcess = Start-Process -FilePath $walletDaemon -ArgumentList @("--codex-home", $walletHome) -PassThru
@@ -573,8 +561,8 @@ jobs:
           if (-not (Test-Path $telegramSetup)) { throw "missing Telegram setup script" }
           if (-not (Test-Path $telegramTask)) { throw "missing Telegram Scheduled Task installer" }
           if (-not (Test-Path (Join-Path $telegramResources "dist/AGENTS.md.template"))) { throw "missing Telegram AGENTS template" }
-          if (-not (Test-Path (Join-Path $telegramResources "dist/pfterminal-telegram.service"))) { throw "missing Telegram systemd template" }
-          if (-not (Test-Path (Join-Path $telegramResources "dist/net.postfiat.pfterminal.telegram.plist"))) { throw "missing Telegram launchd template" }
+          if (-not (Test-Path (Join-Path $telegramResources "dist/corbanu-terminal-telegram.service"))) { throw "missing Telegram systemd template" }
+          if (-not (Test-Path (Join-Path $telegramResources "dist/org.corbanu.terminal.telegram.plist"))) { throw "missing Telegram launchd template" }
           $tokens = $null
           $parseErrors = $null
           $null = [System.Management.Automation.Language.Parser]::ParseFile($telegramTask, [ref]$tokens, [ref]$parseErrors)
@@ -583,8 +571,8 @@ jobs:
       - name: Upload Windows package archive
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: pfterminal-package-${{ matrix.target }}
-          path: dist/${{ matrix.target }}/pfterminal-package-${{ matrix.target }}.zip
+          name: corbanu-terminal-package-${{ matrix.target }}
+          path: dist/${{ matrix.target }}/corbanu-terminal-package-${{ matrix.target }}.zip
           if-no-files-found: error
           compression-level: 0
 
@@ -616,57 +604,43 @@ jobs:
           run-id: ${{ inputs.reuse_run_id }}
           github-token: ${{ github.token }}
           path: downloaded
-          pattern: pfterminal-package-*
+          pattern: corbanu-terminal-package-*
 
       - name: Download package archives from this run
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: downloaded
-          pattern: pfterminal-package-*
+          pattern: corbanu-terminal-package-*
 
       - name: Build checksum manifest
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release-dist
-          find downloaded -type f -name 'pfterminal-package-*.tar.gz' -exec cp {} release-dist/ \;
-          find downloaded -type f -name 'pfterminal-package-*.zip' -exec cp {} release-dist/ \;
-          find downloaded -type f -name 'PFTerminal-*.dmg' -exec cp {} release-dist/ \;
-          for archive in release-dist/pfterminal-package-*.tar.gz release-dist/pfterminal-package-*.zip; do
-            [[ -f "$archive" ]] || continue
-            name="$(basename "$archive")"
-            cp "$archive" "release-dist/corbanu-terminal-package-${name#pfterminal-package-}"
-          done
-          for dmg in release-dist/PFTerminal-*.dmg; do
-            [[ -f "$dmg" ]] || continue
-            name="$(basename "$dmg")"
-            cp "$dmg" "release-dist/CorbanuTerminal-${name#PFTerminal-}"
-          done
+          find downloaded -type f -name 'corbanu-terminal-package-*.tar.gz' -exec cp {} release-dist/ \;
+          find downloaded -type f -name 'corbanu-terminal-package-*.zip' -exec cp {} release-dist/ \;
+          find downloaded -type f -name 'CorbanuTerminal-*.dmg' -exec cp {} release-dist/ \;
           cp scripts/install/install.sh release-dist/install.sh
           cp scripts/install/install.ps1 release-dist/install.ps1
 
           find release-dist -maxdepth 1 -type f \( \
               -name 'corbanu-terminal-package-*.tar.gz' -o \
-              -name 'corbanu-terminal-package-*.zip' -o \
-              -name 'pfterminal-package-*.tar.gz' -o \
-              -name 'pfterminal-package-*.zip' \
+              -name 'corbanu-terminal-package-*.zip' \
             \) -print |
             sort |
             while IFS= read -r archive; do
               sha256sum "$archive" |
                 awk -v name="$(basename "$archive")" '{ print $1 "  " name }'
             done > release-dist/corbanu-terminal-package_SHA256SUMS
-          cp release-dist/corbanu-terminal-package_SHA256SUMS release-dist/pfterminal-package_SHA256SUMS
 
-          find release-dist -maxdepth 1 -type f \( -name 'CorbanuTerminal-*.dmg' -o -name 'PFTerminal-*.dmg' \) -print |
+          find release-dist -maxdepth 1 -type f -name 'CorbanuTerminal-*.dmg' -print |
             sort |
             while IFS= read -r dmg; do
               sha256sum "$dmg" |
                 awk -v name="$(basename "$dmg")" '{ print $1 "  " name }'
             done > release-dist/corbanu-terminal-dmg_SHA256SUMS
-          cp release-dist/corbanu-terminal-dmg_SHA256SUMS release-dist/pfterminal-dmg_SHA256SUMS
 
-          expected_count=10
+          expected_count=5
           actual_count="$(find release-dist -maxdepth 1 -type f \( -name '*-package-*.tar.gz' -o -name '*-package-*.zip' \) | wc -l | tr -d ' ')"
           if [[ "$actual_count" != "$expected_count" ]]; then
             echo "Expected ${expected_count} package archives, found ${actual_count}"
@@ -674,7 +648,7 @@ jobs:
             exit 1
           fi
 
-          expected_dmg_count=4
+          expected_dmg_count=2
           actual_dmg_count="$(find release-dist -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d ' ')"
           if [[ "$actual_dmg_count" != "$expected_dmg_count" ]]; then
             echo "Expected ${expected_dmg_count} macOS DMG installers, found ${actual_dmg_count}"
@@ -688,7 +662,7 @@ jobs:
       - name: Upload release asset bundle
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: pfterminal-release-assets
+          name: corbanu-terminal-release-assets
           path: release-dist/*
           if-no-files-found: error
           compression-level: 0

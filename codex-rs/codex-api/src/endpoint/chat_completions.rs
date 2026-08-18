@@ -60,7 +60,7 @@ const GENERATION_ID_HEADERS: [&str; 3] = [
 const SSE_IDLE_TIMEOUT_MESSAGE: &str = "idle timeout waiting for SSE";
 const DEFAULT_ACTIONABLE_SILENCE_TIMEOUT: Duration = Duration::from_secs(180);
 const SERIALIZED_TOOL_TEXT_PROBE_CHARS: usize = 96;
-const CALL_METRICS_TAG: &str = "pfterminal_call_metrics";
+const CALL_METRICS_TAG: &str = "corbanu_call_metrics";
 static CHAT_CALL_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 pub struct ChatCompletionsClient<T: HttpTransport> {
@@ -600,7 +600,7 @@ impl ChatCallMetrics {
         // terminal (interactive TUI), printing them corrupts the rendered UI with one JSON line
         // per API call, so route them to the tracing log instead.
         if std::io::stderr().is_terminal() {
-            tracing::info!(target: "pfterminal_call_metrics", "{serialized}");
+            tracing::info!(target: "corbanu_call_metrics", "{serialized}");
         } else {
             eprintln!("{serialized}");
         }

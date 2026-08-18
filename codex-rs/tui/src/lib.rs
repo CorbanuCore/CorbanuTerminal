@@ -1141,6 +1141,12 @@ pub async fn run_main(
         None
     };
 
+    let launch_explicitly_selects_model_or_provider = cli.model.is_some()
+        || cli.oss
+        || cli_kv_overrides
+            .iter()
+            .any(|(key, _)| matches!(key.as_str(), "model" | "model_provider"));
+
     // When using `--oss`, let the bootstrapper pick the model based on selected provider
     let model = if let Some(model) = &cli.model {
         Some(model.clone())
@@ -1158,6 +1164,12 @@ pub async fn run_main(
 
     let overrides = ConfigOverrides {
         model,
+        // Interactive startup must tolerate model/provider pairs persisted by
+        // older releases. Preserve the configured provider and let its model
+        // catalog select a valid default. Explicit launch choices and
+        // --strict-config remain fail-closed.
+        allow_provider_model_fallback: !strict_config
+            && !launch_explicitly_selects_model_or_provider,
         approval_policy,
         sandbox_mode,
         cwd: cwd_override,
@@ -2121,7 +2133,7 @@ fn should_show_login_screen(login_status: LoginStatus, config: &Config) -> bool 
         return true;
     }
 
-    // Corbanu Terminal Plan credentials are provisioned and recovered inside the TUI through
+    // Corbanu Plan credentials are provisioned and recovered inside the TUI through
     // `/wallet`. Sending a disconnected Plan user through the external-provider onboarding
     // picker makes that recovery path unreachable and falsely suggests that every other
     // stored account was removed. Keep the terminal available so the wallet can be restored

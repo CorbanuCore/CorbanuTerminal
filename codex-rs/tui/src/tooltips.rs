@@ -11,11 +11,16 @@ const IS_MACOS: bool = cfg!(target_os = "macos");
 #[cfg(test)]
 const IS_WINDOWS: bool = cfg!(target_os = "windows");
 
+#[cfg(test)]
 const APP_TOOLTIP: &str = "Try the **Desktop app**. Run 'codex app' or visit https://chatgpt.com/codex?app-landing-page=true";
+#[cfg(test)]
 const FAST_TOOLTIP: &str =
     "*New* Use **/fast** to enable our fastest inference with increased plan usage.";
+#[cfg(test)]
 const OTHER_TOOLTIP: &str = "*New* Build faster with the **Desktop app**. Run 'codex app' or visit https://chatgpt.com/codex?app-landing-page=true";
+#[cfg(test)]
 const OTHER_TOOLTIP_NON_MAC: &str = "*New* Build faster with Codex.";
+#[cfg(test)]
 const FREE_GO_TOOLTIP: &str =
     "*New* For a limited time, Codex is included in your plan for free – let’s build together.";
 
@@ -102,6 +107,7 @@ pub(crate) mod announcement {
     #[cfg(test)]
     use chrono::Utc;
     use codex_http_client::HttpClientFactory;
+    #[cfg(test)]
     use codex_protocol::account::PlanType;
     #[cfg(test)]
     use regex_lite::Regex;
@@ -113,11 +119,6 @@ pub(crate) mod announcement {
 
     /// Prewarm the cache of the announcement tip.
     pub(crate) fn prewarm(_http_client_factory: HttpClientFactory) {}
-
-    /// Fetch the announcement tip, return None if the prewarm is not done yet.
-    pub(crate) fn fetch_announcement_tip(_plan: Option<PlanType>) -> Option<String> {
-        None
-    }
 
     #[cfg(test)]
     #[derive(Debug, Deserialize)]

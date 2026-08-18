@@ -1240,6 +1240,9 @@ impl ThreadRequestProcessor {
         .await
     }
 
+    // The arguments mirror the protocol request plus connection metadata; grouping them would
+    // obscure the hand-off between the public request handlers and this shared implementation.
+    #[allow(clippy::too_many_arguments)]
     async fn thread_start_inner(
         &self,
         request_id: ConnectionRequestId,

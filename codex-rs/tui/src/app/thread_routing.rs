@@ -81,6 +81,7 @@ impl App {
             .is_some_and(|store| store.active_turn_id().is_none())
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(super) fn note_thread_interrupt_failure(
         &mut self,
         thread_id: ThreadId,

@@ -3,7 +3,7 @@ source: tui/src/history_cell/tests.rs
 expression: rendered
 ---
 ╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ✨ Update available! 0.1.30 -> 9.9.9                                                                       │
+│ ✨ Update available! 0.1.31 -> 9.9.9                                                                       │
 │ Run powershell -ExecutionPolicy Bypass -c '$env:CORBANU_NON_INTERACTIVE=1; irm                             │
 │ https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.ps1 | iex' to update.      │
 │                                                                                                            │

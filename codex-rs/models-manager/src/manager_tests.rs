@@ -11,6 +11,7 @@ use codex_login::ExternalAuth;
 use codex_login::ExternalAuthRefreshContext;
 use codex_login::TokenData;
 use codex_protocol::auth::AuthMode;
+use codex_protocol::openai_models::ChatReasoningEffortProtocol;
 use codex_protocol::openai_models::ChatReasoningProtocol;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelBilling;
@@ -642,6 +643,7 @@ async fn chatgpt_cache_does_not_evict_pfterminal_provider_models() {
     assert!(slugs.contains(&"gpt-5.5"));
     assert!(slugs.contains(&"z-ai/glm-5.2"));
     assert!(slugs.contains(&"moonshotai/kimi-k2.7-code"));
+    assert!(slugs.contains(&"glm-5.3"));
     assert!(slugs.contains(&"glm-5.2"));
     assert!(slugs.contains(&"z-ai/glm-5.2"));
     assert!(slugs.contains(&"zai-org/GLM-5.2"));
@@ -1491,11 +1493,11 @@ fn bundled_claude_5_models_have_provider_reported_output_limits() {
     let response = crate::bundled_models_response()
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
 
-    for slug in [
-        "claude-opus-5-plan",
-        "claude-fable-5-plan",
-        "claude-opus-5",
-        "claude-fable-5",
+    for (slug, max_output_tokens) in [
+        ("claude-opus-5-plan", 128_000),
+        ("claude-fable-5-plan", 128_000),
+        ("claude-opus-5", 128_000),
+        ("claude-fable-5", 128_000),
     ] {
         let model = response
             .models
@@ -1504,7 +1506,7 @@ fn bundled_claude_5_models_have_provider_reported_output_limits() {
             .unwrap_or_else(|| panic!("bundled models.json should include {slug}"));
         assert_eq!(
             model.max_output_tokens,
-            Some(128_000),
+            Some(max_output_tokens),
             "{slug} must be requestable on the Anthropic wire"
         );
     }
@@ -1639,6 +1641,7 @@ fn bundled_models_have_complete_orchestration_contracts() {
                     peak_relative_burn_millis,
                     peak_start_utc_hour,
                     peak_end_utc_hour,
+                    peak_weekdays,
                     promotional_off_peak_relative_burn_millis,
                     promotion_valid_through_utc,
                 } => {
@@ -1652,6 +1655,11 @@ fn bundled_models_have_complete_orchestration_contracts() {
                             && *peak_end_utc_hour <= 24
                             && peak_start_utc_hour < peak_end_utc_hour,
                         "{} must have a valid UTC peak window",
+                        model.slug
+                    );
+                    assert!(
+                        peak_weekdays.is_none_or(|weekdays| !weekdays.is_empty()),
+                        "{} must not specify an empty peak weekday set",
                         model.slug
                     );
                     assert_eq!(
@@ -1740,7 +1748,7 @@ fn bundled_orchestration_policy_distinguishes_gpt_5_6_tiers_and_disables_gpt_5_5
 }
 
 #[test]
-fn bundled_models_json_contains_ambient_models() {
+fn bundled_models_json_contains_ambient_and_zai_models() {
     let response = crate::bundled_models_response()
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
 
@@ -1768,6 +1776,62 @@ fn bundled_models_json_contains_ambient_models() {
     assert!(ambient_default.supports_parallel_tool_calls);
     assert_standard_base(&ambient_default.base_instructions);
     assert!(!ambient_default.used_fallback_model_metadata);
+
+    let zai_glm_5_3 = response
+        .models
+        .iter()
+        .find(|model| model.slug == "glm-5.3")
+        .expect("bundled models.json should include Z.AI GLM 5.3");
+
+    assert_eq!(
+        (
+            zai_glm_5_3.context_window,
+            zai_glm_5_3.max_output_tokens,
+            zai_glm_5_3.default_reasoning_level.clone(),
+            zai_glm_5_3.chat_completions.reasoning_protocol,
+            zai_glm_5_3.chat_completions.reasoning_effort_protocol,
+        ),
+        (
+            Some(1_000_000),
+            Some(128_000),
+            Some(ReasoningEffort::Max),
+            ChatReasoningProtocol::PreservedRequired,
+            ChatReasoningEffortProtocol::LowHighMaxRequiredDefaultMax,
+        )
+    );
+    assert_eq!(
+        zai_glm_5_3
+            .supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            ReasoningEffort::Low,
+            ReasoningEffort::High,
+            ReasoningEffort::Max,
+        ]
+    );
+    assert_eq!(zai_glm_5_3.visibility, ModelVisibility::List);
+    assert!(zai_glm_5_3.supports_parallel_tool_calls);
+    assert_eq!(
+        zai_glm_5_3
+            .orchestration
+            .as_ref()
+            .and_then(ModelOrchestrationMetadata::billing),
+        Some(&ModelBilling::PlanSchedule {
+            off_peak_relative_burn_millis: 1_000,
+            peak_relative_burn_millis: 3_000,
+            peak_start_utc_hour: 6,
+            peak_end_utc_hour: 10,
+            peak_weekdays: Some(codex_protocol::openai_models::WeekdaySet::weekdays_only()),
+            promotional_off_peak_relative_burn_millis: None,
+            promotion_valid_through_utc: None,
+        })
+    );
+    let preset = ModelPreset::from(zai_glm_5_3.clone());
+    assert_eq!(preset.provider_id.as_deref(), Some("zai"));
+    assert_standard_base(&zai_glm_5_3.base_instructions);
+    assert!(!zai_glm_5_3.used_fallback_model_metadata);
 
     let ambient_kimi = response
         .models

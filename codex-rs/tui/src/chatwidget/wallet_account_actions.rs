@@ -8,7 +8,7 @@ use codex_wallet_daemon::WalletDaemonClient;
 impl ChatWidget {
     pub(crate) fn confirm_wallet_plan_disconnect(&mut self) {
         let mut header = ColumnRenderable::new();
-        header.push(Line::from("Disconnect Corbanu Terminal Plan".bold()));
+        header.push(Line::from("Disconnect Corbanu Plan".bold()));
         push_wallet_text(
             &mut header,
             "This removes the plan credential from this device. Your paid period and wallet remain unchanged.",
@@ -50,16 +50,16 @@ impl ChatWidget {
             .dismiss_view_by_id(super::wallet_menu::WALLET_DISCONNECT_PLAN_VIEW_ID);
         match result {
             Ok(true) => self.add_info_message(
-                "Corbanu Terminal Plan disconnected from this device. The paid period and wallet were not changed."
+                "Corbanu Plan disconnected from this device. The paid period and wallet were not changed."
                     .to_string(),
                 /*hint*/ None,
             ),
             Ok(false) => self.add_info_message(
-                "Corbanu Terminal Plan was already disconnected on this device.".to_string(),
+                "Corbanu Plan was already disconnected on this device.".to_string(),
                 /*hint*/ None,
             ),
             Err(error) => {
-                self.add_error_message(format!("Unable to disconnect Corbanu Terminal Plan: {error}"));
+                self.add_error_message(format!("Unable to disconnect Corbanu Plan: {error}"));
                 self.open_wallet_menu();
                 return;
             }
@@ -79,7 +79,7 @@ impl ChatWidget {
         );
         push_wallet_text(
             &mut header,
-            "This also disconnects the local Corbanu Terminal Plan credential. It does not cancel or refund the paid period.",
+            "This also disconnects the local Corbanu Plan credential. It does not cancel or refund the paid period.",
             WalletTextStyle::Dimmed,
         );
         self.show_selection_view(SelectionViewParams {
@@ -89,16 +89,13 @@ impl ChatWidget {
                 confirmation_item("Cancel", "Keep the wallet on this device", || {
                     AppEvent::OpenWallet
                 }),
-                {
-                    let address = address;
-                    confirmation_item(
-                        "Remove wallet",
-                        "I have saved the recovery material",
-                        move || AppEvent::WalletRemoveRequested {
-                            address: address.clone(),
-                        },
-                    )
-                },
+                confirmation_item(
+                    "Remove wallet",
+                    "I have saved the recovery material",
+                    move || AppEvent::WalletRemoveRequested {
+                        address: address.clone(),
+                    },
+                ),
             ],
             initial_selected_idx: Some(0),
             allow_number_shortcuts: false,
@@ -165,7 +162,7 @@ impl ChatWidget {
         self.wallet_balances = None;
         match result {
             Ok(()) => self.add_info_message(
-                "Wallet and Corbanu Terminal Plan credential removed from this device. On-chain funds and the paid period were not changed."
+                "Wallet and Corbanu Plan credential removed from this device. On-chain funds and the paid period were not changed."
                     .to_string(),
                 /*hint*/ None,
             ),

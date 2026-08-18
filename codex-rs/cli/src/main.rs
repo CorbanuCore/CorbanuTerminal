@@ -465,7 +465,7 @@ type HostSandboxArgs = UnsupportedSandboxArgs;
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 #[derive(Debug, Parser)]
 struct UnsupportedSandboxArgs {
-    /// Layer $PFTERMINAL_HOME/<name>.config.toml on top of the base user config.
+    /// Layer $CORBANU_HOME/<name>.config.toml on top of the base user config.
     #[arg(long = "profile", short = 'p')]
     pub config_profile: Option<ProfileV2Name>,
 
@@ -2378,6 +2378,7 @@ async fn run_internal_gpu_controller(command: GpuControllerCommand) -> anyhow::R
     let controller_lock_path = sqlite_home.join("gpu-controller.lock");
     let controller_lock = std::fs::OpenOptions::new()
         .create(true)
+        .truncate(false)
         .read(true)
         .write(true)
         .open(&controller_lock_path)?;

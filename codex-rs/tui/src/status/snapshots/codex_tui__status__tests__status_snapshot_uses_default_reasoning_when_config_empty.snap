@@ -5,7 +5,7 @@ expression: sanitized
 /status
 
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v0.1.30)                                              │
+│  >_ Corbanu Terminal (v0.1.31)                                              │
 │                                                                             │
 │  Remote:           unix:///tmp/codex-home/app-server-control/app-server-    │
 │                    control.sock (v0.133.0)                                  │

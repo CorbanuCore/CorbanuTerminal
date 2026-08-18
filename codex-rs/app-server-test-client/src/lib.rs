@@ -1829,16 +1829,6 @@ impl CodexClient {
         self.send_request(request, request_id, "account/login/start")
     }
 
-    fn login_account_openai_provider_device_code(&mut self) -> Result<LoginAccountResponse> {
-        let request_id = self.request_id();
-        let request = ClientRequest::LoginAccount {
-            request_id: request_id.clone(),
-            params: codex_app_server_protocol::LoginAccountParams::OpenaiProviderDeviceCode,
-        };
-
-        self.send_request(request, request_id, "account/login/start")
-    }
-
     fn get_account_rate_limits(&mut self) -> Result<GetAccountRateLimitsResponse> {
         let request_id = self.request_id();
         let request = ClientRequest::GetAccountRateLimits {

@@ -31,50 +31,67 @@ Follow the TUI footer for exact keybindings. Multiline prompts may use a submit 
 
 Prefer the JSON helper for agent work.
 
-**Resolve the helper binary first.** Corbanu Terminal entrypoints pin isolated state
-homes: `pfterminal` uses `${PFTERMINAL_HOME:-$HOME/.pfterminal}`, and
-`pfterminal-debug` uses
-`${PFTERMINAL_DEBUG_HOME:-$HOME/.pfterminal-debug}`. Calling the wrong entrypoint
-queries a different vault than the running session and reports "not linked"
-even when the session is linked. Pick the binary that exactly matches the
-session's `CODEX_HOME`; fail closed when it matches neither home:
+**Resolve the helper binary first.** Child commands inherit the running session's
+`CODEX_HOME`, which is the authoritative location of its Task Node vault. Prefer
+the installed Corbanu entrypoint. For a conventional debug home, prefer
+`corbanu-debug`; if a release does not ship that optional alias, `corbanu` still
+uses the inherited `CODEX_HOME`. The `pfterminal` names are compatibility
+fallbacks only. Never search a source checkout or run `cargo build` to obtain a
+helper. Fail closed if the session home or every installed entrypoint is missing:
 
 ```bash
-PF_STABLE_HOME="${PFTERMINAL_HOME:-$HOME/.pfterminal}"
-PF_DEBUG_HOME="${PFTERMINAL_DEBUG_HOME:-$HOME/.pfterminal-debug}"
-case "${CODEX_HOME:-}" in
-  "$PF_STABLE_HOME") PF_BIN=pfterminal ;;
-  "$PF_DEBUG_HOME") PF_BIN=pfterminal-debug ;;
+if [ -z "${CODEX_HOME:-}" ]; then
+  echo "CODEX_HOME is missing; refusing to guess which Task Node vault to use" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+case "$CODEX_HOME" in
+  "${CORBANU_DEBUG_HOME:-$HOME/.corbanu-debug}"|\
+  "${PFTERMINAL_DEBUG_HOME:-$HOME/.pfterminal-debug}")
+    CORBANU_CANDIDATES="corbanu-debug corbanu pfterminal-debug pfterminal"
+    ;;
   *)
-    echo "CODEX_HOME does not match the stable or debug Corbanu Terminal state home" >&2
-    return 1 2>/dev/null || exit 1
+    CORBANU_CANDIDATES="corbanu pfterminal corbanu-debug pfterminal-debug"
     ;;
 esac
-"$PF_BIN" tasknode status --json
+
+CORBANU_BIN=""
+for candidate in $CORBANU_CANDIDATES; do
+  if command -v "$candidate" >/dev/null 2>&1; then
+    CORBANU_BIN="$(command -v "$candidate")"
+    break
+  fi
+done
+if [ -z "$CORBANU_BIN" ]; then
+  echo "No installed Corbanu Terminal entrypoint is available on PATH" >&2
+  echo "Install Corbanu Terminal; do not build a helper from a source checkout" >&2
+  return 1 2>/dev/null || exit 1
+fi
+"$CORBANU_BIN" tasknode status --json
 ```
 
-Every `pfterminal tasknode` command below means `"$PF_BIN" tasknode`.
+Every command below uses the resolved `"$CORBANU_BIN"`.
 
 ```bash
-pfterminal tasknode status --json
-pfterminal tasknode chat list --json
-pfterminal tasknode chat history <conversation-id> --json
-pfterminal tasknode chat search "<query>" --json
-pfterminal tasknode chat send --message "<text>" --json
-pfterminal tasknode chat send --stream --message "<text>" --json
-pfterminal tasknode context get --json
-pfterminal tasknode context save --body-file <path> --revision <n> --json
-pfterminal tasknode request create --body-file <path> --json
-pfterminal tasknode requests list --json
-pfterminal tasknode requests show <request-id> --json
-pfterminal tasknode tasks list --tab outstanding --json
-pfterminal tasknode task show <task-id> --json
-pfterminal tasknode task accept <task-id> --json
-pfterminal tasknode task refuse <task-id> --reason-file <path> --json
-pfterminal tasknode task evidence <task-id> --body-file <path> --json
-pfterminal tasknode verification respond <task-id> --body-file <path> --json
-pfterminal tasknode rewards list --json
-pfterminal tasknode balance --json
+"$CORBANU_BIN" tasknode status --json
+"$CORBANU_BIN" tasknode chat list --json
+"$CORBANU_BIN" tasknode chat history <conversation-id> --json
+"$CORBANU_BIN" tasknode chat search "<query>" --json
+"$CORBANU_BIN" tasknode chat send --message "<text>" --json
+"$CORBANU_BIN" tasknode chat send --stream --message "<text>" --json
+"$CORBANU_BIN" tasknode context get --json
+"$CORBANU_BIN" tasknode context save --body-file <path> --revision <n> --json
+"$CORBANU_BIN" tasknode request create --body-file <path> --json
+"$CORBANU_BIN" tasknode requests list --json
+"$CORBANU_BIN" tasknode requests show <request-id> --json
+"$CORBANU_BIN" tasknode tasks list --tab outstanding --json
+"$CORBANU_BIN" tasknode task show <task-id> --json
+"$CORBANU_BIN" tasknode task accept <task-id> --json
+"$CORBANU_BIN" tasknode task refuse <task-id> --reason-file <path> --json
+"$CORBANU_BIN" tasknode task evidence <task-id> --body-file <path> --json
+"$CORBANU_BIN" tasknode verification respond <task-id> --body-file <path> --json
+"$CORBANU_BIN" tasknode rewards list --json
+"$CORBANU_BIN" tasknode balance --json
 ```
 
 The helper reuses the same Corbanu Terminal vault session as the TUI and never prints the bearer token. Non-streaming commands emit one JSON object. Streaming chat emits JSON lines for SSE events when the backend streams; dry-run or preflight responses may return one normal JSON object.
@@ -84,16 +101,16 @@ The helper reuses the same Corbanu Terminal vault session as the TUI and never p
 Initial evidence and verification response are different state transitions and use different commands:
 
 ```bash
-pfterminal tasknode task show <task-id> --json
-pfterminal tasknode task evidence <task-id> --body-file <path> --json
-pfterminal tasknode task show <task-id> --json
-pfterminal tasknode verification respond <task-id> --body-file <path> --json
-pfterminal tasknode task show <task-id> --json
+"$CORBANU_BIN" tasknode task show <task-id> --json
+"$CORBANU_BIN" tasknode task evidence <task-id> --body-file <path> --json
+"$CORBANU_BIN" tasknode task show <task-id> --json
+"$CORBANU_BIN" tasknode verification respond <task-id> --body-file <path> --json
+"$CORBANU_BIN" tasknode task show <task-id> --json
 ```
 
 The evidence commands preflight the server-reported task actions and reject a mode mismatch. Successful receipts include `pfterminalLifecycle` with `completionConfirmed`, the current phase, and `nextCommand`. Always follow that command. After initial evidence, respond when `actions.canSubmitVerificationEvidence` becomes true. After verification, confirm `rewardOutcome` or an explicit `rewarded` state before reporting completion.
 
-If verification has not materialized yet, query `pfterminal tasknode tasks list --tab verification --json`. Keep the task pending rather than treating the initial evidence receipt as completion.
+If verification has not materialized yet, query `"$CORBANU_BIN" tasknode tasks list --tab verification --json`. Keep the task pending rather than treating the initial evidence receipt as completion.
 
 Use `--origin <url>` only for explicit local/dev testing. Production defaults to `https://tasknode.postfiat.org` unless the environment or saved session overrides it.
 
@@ -104,7 +121,7 @@ Use a real Corbanu Terminal tmux session for UI-only flows, visual verification,
 Recommended tmux pattern:
 
 ```bash
-tmux new-session -d -s tasknode-work -x 160 -y 48 'cd /home/pfrpc/repos && pfterminal --yolo'
+tmux new-session -d -s tasknode-work -x 160 -y 48 "cd /home/pfrpc/repos && '$CORBANU_BIN' --yolo"
 tmux send-keys -t tasknode-work '/tasknode chat' Enter
 tmux capture-pane -t tasknode-work -p -S -120
 tmux kill-session -t tasknode-work

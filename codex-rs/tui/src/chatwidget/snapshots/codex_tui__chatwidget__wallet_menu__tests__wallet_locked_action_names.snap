@@ -3,7 +3,7 @@ source: tui/src/chatwidget/wallet_menu.rs
 expression: "items.join(\"\\n\")"
 ---
 Receive
-Buy Corbanu Terminal Plan
+Buy Corbanu Plan
 Recover existing plan
 Unlock for one signing action
 Unlock for 5 minutes

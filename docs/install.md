@@ -44,9 +44,8 @@ users and for macOS users who prefer terminal install over a DMG.
 curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.sh | sh
 ```
 
-The release installer creates `corbanu` as the primary launcher, preserves
-`pfterminal` as a compatibility alias, and leaves any existing stock `codex`
-command alone. State resolution is deterministic: `CORBANU_HOME`, then
+The release installer creates the `corbanu` launcher and leaves any existing
+stock `codex` command alone. State resolution is deterministic: `CORBANU_HOME`, then
 `PFTERMINAL_HOME`, then an explicit `CODEX_HOME` wins; otherwise
 `$HOME/.corbanu` wins when present; otherwise an existing
 `$HOME/.pfterminal` is reused in place; otherwise a fresh install creates
@@ -77,12 +76,11 @@ uses the bundled archive and verifies it before installation.
 
 ### Release Build For Maintainers
 
-Release artifacts are built by the manual `pfterminal-release` GitHub Actions
+Release artifacts are built by the manual `corbanu-terminal-release` GitHub Actions
 workflow. It does not run on every push. Run it only when you want
 installer-ready macOS and Linux artifacts for the current Cargo version.
 
-The workflow builds and smoke-tests the canonical artifacts below and also
-publishes their 0.1.29-compatible `pfterminal-*` aliases during the migration:
+The workflow builds and smoke-tests these Corbanu Terminal artifacts:
 
 ```text
 corbanu-terminal-package-aarch64-apple-darwin.tar.gz
@@ -153,9 +151,8 @@ install.
 
 ### npm Package
 
-The canonical npm package is `@corbanucore/terminal` and exposes both `corbanu`
-and `pfterminal` command aliases. The launcher prefers
-the bundled `corbanu` binary
+The canonical npm package is `@corbanucore/terminal` and exposes the `corbanu`
+command. The launcher prefers the bundled `corbanu` binary
 and defaults `CODEX_HOME` to `$HOME/.corbanu`.
 
 ```bash
@@ -271,7 +268,7 @@ The `/model` picker groups models by account/provider route. Current categories
 include:
 
 - account and coding-plan routes such as OpenAI, Claude Plan, Ambient, Kimi
-  Code, Z.AI, and Corbanu Terminal Plan; and
+  Code, Z.AI, and Corbanu Plan; and
 - metered API-key routes such as Anthropic, DeepSeek, OpenRouter, Meta,
   Baseten, and Vercel.
 

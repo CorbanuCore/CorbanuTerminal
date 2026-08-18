@@ -265,6 +265,7 @@ impl ChatWidget {
         self.add_error_message(format!("OpenAI Codex account login failed: {message}"));
     }
 
+    #[allow(dead_code)]
     pub(crate) fn on_codex_account_login_completed(
         &mut self,
         notification: codex_app_server_protocol::AccountLoginCompletedNotification,
@@ -409,7 +410,7 @@ fn provider_credential_item(
             }
         }
         ProviderCredentialOption::PfTerminalPlan => {
-            let name = "Provider: Corbanu Terminal Plan".to_string();
+            let name = "Provider: Corbanu Plan".to_string();
             SelectionItem {
                 name: name.clone(),
                 search_value: Some(name),
@@ -652,7 +653,7 @@ mod tests {
             vec![
                 "Provider: OpenAI Codex Account",
                 "Provider: Claude Code Plan",
-                "Provider: Corbanu Terminal Plan",
+                "Provider: Corbanu Plan",
                 "Provider: Anthropic API Key",
                 "Provider: Ambient API Key",
                 "Provider: Kimi Code API Key",

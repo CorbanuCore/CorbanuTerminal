@@ -1,5 +1,6 @@
 ---
 source: tui/src/chatwidget/tests/status_and_layout.rs
+assertion_line: 2078
 expression: snapshot
 ---
 "                                                                                "
@@ -8,4 +9,4 @@ expression: snapshot
 "                                                                                "
 "› Ask Corbanu Terminal to do anything                                           "
 "                                                                                "
-"  Ambient GLM 5.2 standard · /tmp/project · Post F… Goal paused (/goal resume)  "
+"  Ambient GLM 5.2 standard · /tmp/project · Corban… Goal paused (/goal resume)  "

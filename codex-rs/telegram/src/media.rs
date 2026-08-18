@@ -549,7 +549,7 @@ mod tests {
     #[tokio::test]
     async fn byte_cap_removes_payload_and_metadata_as_one_artifact() {
         let root = std::env::temp_dir().join(format!(
-            "pfterminal-telegram-media-{}-{}",
+            "corbanu-telegram-media-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -576,7 +576,7 @@ mod tests {
     #[tokio::test]
     async fn cleanup_removes_orphaned_metadata() {
         let root = std::env::temp_dir().join(format!(
-            "pfterminal-telegram-media-orphan-{}-{}",
+            "corbanu-telegram-media-orphan-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

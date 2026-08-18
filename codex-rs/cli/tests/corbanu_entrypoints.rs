@@ -23,7 +23,7 @@ fn primary_and_legacy_entrypoints_report_the_same_version() -> Result<()> {
     let pfterminal = output("pfterminal", &["--version"], None)?;
 
     assert_eq!(corbanu, pfterminal.replace("pfterminal", "corbanu"));
-    assert!(corbanu.contains("0.1.30"));
+    assert!(corbanu.contains(env!("CARGO_PKG_VERSION")));
     Ok(())
 }
 
@@ -61,7 +61,7 @@ fn corbanu_acp_reports_the_new_launcher_and_terminal() -> Result<()> {
     let version = output("corbanu-acp", &["--version"], None)?;
     let help = output("corbanu-acp", &["--help"], None)?;
 
-    assert!(version.contains("corbanu-acp 0.1.30"));
+    assert!(version.contains(&format!("corbanu-acp {}", env!("CARGO_PKG_VERSION"))));
     assert!(version.contains("corbanu:"));
     assert!(help.contains("run Corbanu Terminal as an ACP agent"));
     assert!(help.contains("corbanu-acp [ADAPTER_ARGS...]"));

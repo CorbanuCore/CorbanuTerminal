@@ -52,6 +52,8 @@ use ratatui::widgets::Paragraph;
 use ratatui::widgets::Widget;
 use ratatui::widgets::Wrap;
 
+// Overlay variants are long-lived UI state; boxing here would add indirection to every render.
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum Overlay {
     Transcript(TranscriptOverlay),
     Static(StaticOverlay),

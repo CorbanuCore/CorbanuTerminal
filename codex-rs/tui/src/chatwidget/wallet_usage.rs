@@ -55,8 +55,7 @@ async fn load_plan_usage(
     key: Option<Zeroizing<String>>,
 ) -> Result<WalletPlanUsageOverview, String> {
     let key = key.ok_or_else(|| {
-        "Corbanu Terminal Plan is disconnected. Reconnect it from /wallet to view usage."
-            .to_string()
+        "Corbanu Plan is disconnected. Reconnect it from /wallet to view usage.".to_string()
     })?;
     let gateway = gateway_client()?;
     let account_request = gateway
@@ -101,7 +100,7 @@ async fn load_plan_usage(
 
 fn plan_usage_loading_params() -> SelectionViewParams {
     let mut header = ColumnRenderable::new();
-    header.push(Line::from("Corbanu Terminal Plan usage".bold()));
+    header.push(Line::from("Corbanu Plan usage".bold()));
     header.push(Line::from("Loading authoritative usage…".dim()));
     SelectionViewParams {
         view_id: Some(WALLET_PLAN_USAGE_VIEW_ID),
@@ -117,7 +116,7 @@ fn plan_usage_loading_params() -> SelectionViewParams {
 
 fn plan_usage_params(result: Result<WalletPlanUsageOverview, String>) -> SelectionViewParams {
     let mut header = ColumnRenderable::new();
-    header.push(Line::from("Corbanu Terminal Plan usage".bold()));
+    header.push(Line::from("Corbanu Plan usage".bold()));
     let items = match result {
         Ok(overview) => {
             push_usage_summary(&mut header, &overview);
@@ -138,7 +137,7 @@ fn plan_usage_params(result: Result<WalletPlanUsageOverview, String>) -> Selecti
             header.push(Line::from(format!("Unavailable: {error}").red()));
             vec![crate::chatwidget::wallet_menu::item(
                 "Retry",
-                "Fetch Corbanu Terminal Plan usage again",
+                "Fetch Corbanu Plan usage again",
                 || AppEvent::OpenWalletPlanUsage,
             )]
         }

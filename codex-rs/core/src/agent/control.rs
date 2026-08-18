@@ -348,6 +348,7 @@ impl AgentControl {
         result
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
     async fn submit_inter_agent_communication(
         &self,
         agent_id: ThreadId,

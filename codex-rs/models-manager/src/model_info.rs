@@ -38,6 +38,15 @@ pub fn with_config_overrides(mut model: ModelInfo, config: &ModelsManagerConfig)
                 }),
         );
     }
+    if let Some(max_output_tokens) = config.model_max_output_tokens {
+        model.max_output_tokens = Some(
+            model
+                .max_output_tokens
+                .map_or(max_output_tokens, |catalog_limit| {
+                    max_output_tokens.min(catalog_limit)
+                }),
+        );
+    }
     if let Some(auto_compact_token_limit) = config.model_auto_compact_token_limit {
         model.auto_compact_token_limit = Some(auto_compact_token_limit);
     }

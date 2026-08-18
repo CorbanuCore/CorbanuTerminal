@@ -233,4 +233,24 @@ mod tests {
                 .is_ok()
         );
     }
+
+    #[test]
+    fn tasknode_skill_resolves_installed_corbanu_helper_without_building_source() {
+        let skill = SYSTEM_SKILLS_DIR
+            .get_file("tasknode-usage/SKILL.md")
+            .and_then(|file| file.contents_utf8())
+            .expect("embedded Task Node skill");
+        let tooling = SYSTEM_SKILLS_DIR
+            .get_file("tasknode-usage/references/tooling.md")
+            .and_then(|file| file.contents_utf8())
+            .expect("embedded Task Node tooling reference");
+
+        assert!(skill.contains("$CORBANU_BIN"));
+        assert!(skill.contains("Never compile a terminal binary from source"));
+        assert!(tooling.contains("command -v \"$candidate\""));
+        assert!(tooling.contains("corbanu-debug corbanu pfterminal-debug pfterminal"));
+        assert!(tooling.contains("Install Corbanu Terminal; do not build a helper"));
+        assert!(!skill.contains("`pfterminal tasknode"));
+        assert!(!tooling.contains("cargo build -p codex-cli"));
+    }
 }

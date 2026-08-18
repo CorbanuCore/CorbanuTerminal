@@ -36,6 +36,7 @@
 //! pins, and merged usage attribution between two different agents.
 
 use std::env;
+use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::path::Path;
 use std::path::PathBuf;
@@ -62,12 +63,13 @@ enum TerminalBrand {
 
 impl TerminalBrand {
     fn current() -> Self {
-        let is_corbanu = env::current_exe()
-            .ok()
-            .and_then(|path| {
-                path.file_stem()
-                    .map(|stem| stem.to_string_lossy().into_owned())
-            })
+        let executable_name = env::args_os().next();
+        Self::from_executable_name(executable_name.as_deref())
+    }
+
+    fn from_executable_name(executable_name: Option<&OsStr>) -> Self {
+        let is_corbanu = executable_name
+            .and_then(|name| Path::new(name).file_stem())
             .is_some_and(|stem| stem == "corbanu-acp");
         if is_corbanu {
             Self::Corbanu
@@ -395,6 +397,18 @@ mod tests {
         } else {
             assert_eq!(names, vec!["codex-acp".to_string()]);
         }
+    }
+
+    #[test]
+    fn terminal_brand_uses_invoked_alias_instead_of_resolved_executable() {
+        assert!(matches!(
+            TerminalBrand::from_executable_name(Some(OsStr::new("corbanu-acp"))),
+            TerminalBrand::Corbanu
+        ));
+        assert!(matches!(
+            TerminalBrand::from_executable_name(Some(OsStr::new("pfterminal-acp"))),
+            TerminalBrand::LegacyPfterminal
+        ));
     }
 
     #[test]

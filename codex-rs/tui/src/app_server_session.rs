@@ -431,8 +431,8 @@ impl AppServerSession {
                 None
             }
         };
-        // `hooks/list` holds the global config queue during startup. Submit models and config
-        // requirements together so an uncached model fetch can overlap both config requests.
+        // `hooks/list` holds the global config queue during startup. Submit the on-disk model
+        // catalog and config requirements together so both config requests can overlap.
         let model_request_id = self.next_request_id();
         let requirements_request_id = self.next_request_id();
         let (models, requirements) = tokio::try_join!(
@@ -738,6 +738,8 @@ impl AppServerSession {
         started_thread_from_start_response(response, config, self.thread_params_mode()).await
     }
 
+    // These values map directly to the spawn-agent protocol and its model overrides.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn spawn_agent_thread(
         &mut self,
         config: &Config,
@@ -1890,16 +1892,6 @@ fn config_request_overrides_from_config(
     Some(overrides)
 }
 
-fn remove_model_resume_overrides(
-    overrides: Option<HashMap<String, serde_json::Value>>,
-) -> Option<HashMap<String, serde_json::Value>> {
-    let mut overrides = overrides?;
-    overrides.remove("model_reasoning_effort");
-    overrides.remove("model_reasoning_summary");
-    overrides.remove("model_verbosity");
-    (!overrides.is_empty()).then_some(overrides)
-}
-
 fn service_tier_override_from_config(config: &Config) -> Option<Option<String>> {
     config.service_tier.clone().map(Some).or_else(|| {
         (config.notices.fast_default_opt_out == Some(true))
@@ -1998,6 +1990,9 @@ fn thread_start_params_from_config(
     ThreadStartParams {
         model: config.model.clone(),
         model_provider: thread_params_mode.model_provider_from_config(config),
+        // Interactive sessions tolerate model/provider pairs persisted by older
+        // releases: keep the provider, let its catalog choose a valid default.
+        allow_provider_model_fallback: true,
         service_tier: service_tier_override_from_config(config),
         cwd: thread_cwd_from_config(config, thread_params_mode, remote_cwd_override),
         runtime_workspace_roots: Some(config.workspace_roots.clone()),

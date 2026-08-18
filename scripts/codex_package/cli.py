@@ -63,6 +63,14 @@ def parse_args() -> argparse.Namespace:
         help="Replace an existing package directory or archive output.",
     )
     parser.add_argument(
+        "--symbols-dir",
+        type=Path,
+        help=(
+            "Optional directory for debug-symbol sidecars. Symbols are kept "
+            "outside the install archive while packaged Unix binaries are stripped."
+        ),
+    )
+    parser.add_argument(
         "--cargo",
         default="cargo",
         help="Cargo executable to use for source-built package artifacts.",
@@ -207,7 +215,15 @@ def main() -> int:
         codex_windows_sandbox_setup_bin=source_outputs.codex_windows_sandbox_setup_bin,
     )
     prepare_package_dir(package_dir, force=args.force)
-    build_package_dir(package_dir, version, variant, spec, inputs)
+    symbols_dir = args.symbols_dir.resolve() if args.symbols_dir is not None else None
+    build_package_dir(
+        package_dir,
+        version,
+        variant,
+        spec,
+        inputs,
+        symbols_dir=symbols_dir,
+    )
     validate_package_dir(
         package_dir, variant, spec, include_zsh=inputs.zsh_bin is not None
     )

@@ -623,10 +623,15 @@ impl App {
                 if let Some(thread_id) = self.chat_widget.thread_id() {
                     self.refresh_in_memory_config_from_disk_best_effort("forking the thread")
                         .await;
-                    let mut fork_config = self.config.clone();
+                    // The active thread can use a different provider, cwd, permissions, or
+                    // service tier from the freshly reloaded app defaults. Fork from the
+                    // widget's thread-scoped runtime snapshot so model/provider pairs remain
+                    // coherent across resumed and switched threads.
+                    let mut fork_config = self.chat_widget.config_ref().clone();
                     fork_config.model = Some(self.chat_widget.current_model().to_string());
                     let fork_reasoning_effort = self.chat_widget.current_reasoning_effort();
                     fork_config.model_reasoning_effort = fork_reasoning_effort.clone();
+                    fork_config.service_tier = self.chat_widget.configured_service_tier();
                     match app_server.fork_thread(fork_config, thread_id).await {
                         Ok(mut forked) => {
                             // Ultra is a Corbanu Terminal UI/runtime mode. The app server may project it
@@ -4062,7 +4067,24 @@ impl App {
                     return Ok(AppRunControl::Continue);
                 }
                 let session = match self.thread_event_channels.get(&thread_id) {
-                    Some(channel) => channel.store.lock().await.session.clone(),
+                    Some(channel) => match channel.store.try_lock() {
+                        Ok(store) => store.session.clone(),
+                        Err(_) => {
+                            // Never wait on a thread store from the main dispatcher. A thread-event
+                            // handler may hold this lock while doing asynchronous work, which would
+                            // otherwise freeze all terminal input. Wait off-loop, then replay the
+                            // submission so it observes the latest pane ownership and session.
+                            let store = Arc::clone(&channel.store);
+                            let app_event_tx = self.app_event_tx.clone();
+                            tokio::spawn(async move {
+                                let store_guard = store.lock().await;
+                                drop(store_guard);
+                                app_event_tx
+                                    .send(AppEvent::SubmitCodexUserPaneTask { thread_id, task });
+                            });
+                            return Ok(AppRunControl::Continue);
+                        }
+                    },
                     None => None,
                 };
                 let Some(session) = session else {

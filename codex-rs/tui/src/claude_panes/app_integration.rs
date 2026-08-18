@@ -143,6 +143,7 @@ impl App {
         true
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn restore_pane_layout_for_thread(
         &mut self,
         app_server: &mut AppServerSession,
@@ -326,6 +327,7 @@ impl App {
         thread_ids
     }
 
+    #[allow(dead_code)]
     fn valid_restored_nazgul_binding(&self, pane_id: &str) -> bool {
         pane_id == CODEX_MAIN_PANE_ID
             || crate::spawn_orchestration::node_id_thread(pane_id).is_some()

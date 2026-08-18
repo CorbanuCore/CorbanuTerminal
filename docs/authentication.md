@@ -131,6 +131,6 @@ API keys in the vault. Use `corbanu logout --all` only when you also want to
 remove provider API keys from the vault and legacy provider auth storage.
 
 For API-key providers, use the onboarding picker, `/providers`, `/vault`, or
-the provider environment variables above. Claude Plan and Corbanu Terminal Plan are
+the provider environment variables above. Claude Plan and Corbanu Plan are
 account/entitlement routes rather than API-key rows; `/providers` reports their
 actual status separately.

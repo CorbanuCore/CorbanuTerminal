@@ -170,7 +170,7 @@ const MAX_SERVER_SIDE_MODEL_CONTINUATIONS: u64 = 5;
 fn trace_turn_timing(label: &str, start: Instant) {
     if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
         debug!(
-            target: "pfterminal_turn",
+            target: "corbanu_turn",
             label,
             elapsed_ms = start.elapsed().as_millis(),
             "pfterminal turn timing"

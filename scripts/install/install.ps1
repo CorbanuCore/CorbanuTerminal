@@ -43,6 +43,15 @@ $GitHubApiBaseUri = "https://api.github.com/repos/$GitHubRepository"
 $GitHubReleaseBaseUri = "https://github.com/$GitHubRepository/releases/download"
 $ReleasesMetadataTimeoutSec = 30
 $ReleasesAssetTimeoutSec = 300
+$KeepReleases = 2
+if (-not [string]::IsNullOrWhiteSpace($env:CORBANU_KEEP_RELEASES)) {
+    $parsedKeepReleases = 0
+    if ([int]::TryParse($env:CORBANU_KEEP_RELEASES, [ref]$parsedKeepReleases) -and $parsedKeepReleases -ge 0) {
+        $KeepReleases = $parsedKeepReleases
+    } else {
+        Write-Warning "CORBANU_KEEP_RELEASES must be a non-negative integer; using the default of 2."
+    }
+}
 
 function Write-Step {
     param(
@@ -269,10 +278,6 @@ function Resolve-ReleaseAssetSelection {
         [PSCustomObject]@{
             PackageAsset = Get-WindowsPackageAssetName -Target $Target
             ChecksumAsset = "corbanu-terminal-package_SHA256SUMS"
-        },
-        [PSCustomObject]@{
-            PackageAsset = "pfterminal-package-$Target.zip"
-            ChecksumAsset = "pfterminal-package_SHA256SUMS"
         },
         [PSCustomObject]@{
             PackageAsset = "codex-package-$Target.tar.gz"
@@ -637,9 +642,9 @@ function Move-OldStandaloneBinIfApproved {
         return $null
     }
 
-    Write-Step "We found an older PFTerminal install at $VisibleBinDir"
-    Write-WarningStep "To continue, PFTerminal needs to update the install at this path."
-    if (-not (Prompt-YesNo "Replace it with the current PFTerminal setup now?")) {
+    Write-Step "We found an older terminal install at $VisibleBinDir"
+    Write-WarningStep "To continue, Corbanu Terminal needs to update the install at this path."
+    if (-not (Prompt-YesNo "Replace it with the current Corbanu Terminal setup now?")) {
         throw "Cannot replace older standalone install without confirmation: $VisibleBinDir"
     }
 
@@ -834,7 +839,48 @@ function Ensure-Junction {
     throw "Refusing to replace file at $LinkPath with a junction."
 }
 
-function Ensure-CorbanuCompatibilityExecutables {
+function Remove-OldStandaloneReleases {
+    param(
+        [string]$ReleasesDir,
+        [string]$CurrentDir,
+        [int]$Keep
+    )
+
+    if (-not (Test-Path -LiteralPath $ReleasesDir -PathType Container) -or
+        -not (Test-Path -LiteralPath $CurrentDir -PathType Container) -or
+        -not (Test-IsJunction -Path $CurrentDir)) {
+        Write-WarningStep "current release junction is missing or dangling; skipping release pruning"
+        return
+    }
+
+    $currentItem = Get-Item -LiteralPath $CurrentDir -Force
+    $currentTarget = [IO.Path]::GetFullPath([string]$currentItem.Target).TrimEnd("\")
+    $managedRoot = [IO.Path]::GetFullPath($ReleasesDir).TrimEnd("\")
+    $managedPrefix = "$managedRoot\"
+    if (-not $currentTarget.StartsWith($managedPrefix, [System.StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-Path -LiteralPath $currentTarget -PathType Container)) {
+        Write-WarningStep "current release target is outside the managed releases directory or unavailable; skipping release pruning"
+        return
+    }
+
+    $candidates = Get-ChildItem -LiteralPath $ReleasesDir -Force -Directory -ErrorAction SilentlyContinue |
+        Where-Object {
+            -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -and
+            -not $_.FullName.Equals($currentTarget, [System.StringComparison]::OrdinalIgnoreCase)
+        } |
+        Sort-Object -Property LastWriteTimeUtc -Descending |
+        Select-Object -Skip $Keep
+    foreach ($candidate in $candidates) {
+        try {
+            Remove-Item -LiteralPath $candidate.FullName -Recurse -Force
+            Write-Step "Pruned old standalone release: $($candidate.Name)"
+        } catch {
+            Write-WarningStep "Could not prune old standalone release $($candidate.FullName): $($_.Exception.Message)"
+        }
+    }
+}
+
+function Ensure-CorbanuExecutables {
     param(
         [string]$PackageDir,
         [string]$Layout
@@ -857,9 +903,6 @@ function Ensure-CorbanuCompatibilityExecutables {
         if (-not (Test-Path -LiteralPath $corbanuPath -PathType Leaf) -and
             (Test-Path -LiteralPath $legacyPath -PathType Leaf)) {
             Copy-Item -LiteralPath $legacyPath -Destination $corbanuPath
-        } elseif (-not (Test-Path -LiteralPath $legacyPath -PathType Leaf) -and
-            (Test-Path -LiteralPath $corbanuPath -PathType Leaf)) {
-            Copy-Item -LiteralPath $corbanuPath -Destination $legacyPath
         }
     }
 }
@@ -876,7 +919,8 @@ function Test-PackageContentsAreComplete {
     $expectedFiles = @(
         "codex-package.json",
         "bin\corbanu.exe",
-        "bin\pfterminal.exe",
+        "bin\corbanu-acp.exe",
+        "bin\corbanu-walletd.exe",
         "bin\codex-code-mode-host.exe",
         "codex-path\rg.exe",
         "codex-resources\codex-command-runner.exe",
@@ -938,7 +982,7 @@ function Test-ReleaseIsComplete {
             $codexPath = Join-Path $ReleaseDir "corbanu.exe"
         }
         default {
-            throw "Unknown PFTerminal installer layout: $Layout"
+            throw "Unknown Corbanu Terminal installer layout: $Layout"
         }
     }
 
@@ -991,8 +1035,8 @@ function Get-ConflictingInstall {
         return $null
     }
 
-    Write-Step "Detected existing $manager-managed PFTerminal at $existingPath"
-    Write-WarningStep "Multiple managed PFTerminal installs can be ambiguous because PATH order decides which one runs."
+    Write-Step "Detected an existing $manager-managed legacy terminal at $existingPath"
+    Write-WarningStep "Multiple managed terminal installs are ambiguous because PATH order decides which command runs."
 
     return [PSCustomObject]@{
         Manager = $manager
@@ -1018,15 +1062,15 @@ function Maybe-HandleConflictingInstall {
     }
     $uninstallCommand = if ($manager -eq "bun") { "bun" } else { "npm" }
 
-    if (Prompt-YesNo "Uninstall the existing $manager-managed PFTerminal now?") {
+    if (Prompt-YesNo "Uninstall the existing $manager-managed legacy terminal now?") {
         Write-Step "Running: $uninstallCommand $($uninstallArgs -join ' ')"
         try {
             & $uninstallCommand @uninstallArgs
         } catch {
-            Write-WarningStep "Failed to uninstall the existing $manager-managed PFTerminal. Continuing with the standalone install."
+            Write-WarningStep "Failed to uninstall the existing $manager-managed legacy terminal. Continuing with the standalone install."
         }
     } else {
-        Write-WarningStep "Leaving the existing $manager-managed PFTerminal installed. PATH order will determine which pfterminal runs."
+        Write-WarningStep "Leaving the existing $manager-managed legacy terminal installed. PATH order will determine which terminal command runs."
     }
 }
 
@@ -1035,7 +1079,7 @@ function Test-VisibleTerminalCommands {
         [string]$VisibleBinDir
     )
 
-    foreach ($commandName in @("corbanu.exe", "pfterminal.exe")) {
+    foreach ($commandName in @("corbanu.exe")) {
         $command = Join-Path $VisibleBinDir $commandName
         & $command --version *> $null
         if ($LASTEXITCODE -ne 0) {
@@ -1173,7 +1217,7 @@ try {
             New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
             if ($installLayout -eq "Package") {
                 Expand-WindowsPackageArchive -ArchivePath $archivePath -DestinationPath $stagingDir
-                Ensure-CorbanuCompatibilityExecutables -PackageDir $stagingDir -Layout $installLayout
+                Ensure-CorbanuExecutables -PackageDir $stagingDir -Layout $installLayout
                 if (-not (Test-PackageContentsAreComplete -PackageDir $stagingDir)) {
                     throw "Downloaded Corbanu Terminal package archive did not contain the expected package layout."
                 }
@@ -1196,7 +1240,7 @@ try {
                     Copy-Item -LiteralPath (Join-Path $vendorRoot $relativeSource) -Destination (Join-Path $stagingDir $copyMap[$relativeSource])
                 }
 
-                Ensure-CorbanuCompatibilityExecutables -PackageDir $stagingDir -Layout $installLayout
+                Ensure-CorbanuExecutables -PackageDir $stagingDir -Layout $installLayout
 
                 if (-not (Test-LegacyPlatformNpmContentsAreComplete -PackageDir $stagingDir)) {
                     throw "Downloaded Corbanu Terminal npm archive did not contain the expected legacy platform package layout."
@@ -1239,6 +1283,7 @@ try {
         if ($null -ne $oldStandaloneBackup) {
             Remove-Item -LiteralPath $oldStandaloneBackup -Recurse -Force
         }
+        Remove-OldStandaloneReleases -ReleasesDir $releasesDir -CurrentDir $currentDir -Keep $KeepReleases
     }
 } finally {
     Remove-Item -Recurse -Force $tempDir -ErrorAction SilentlyContinue
@@ -1283,7 +1328,7 @@ if ($prioritizeVisibleBin) {
 
 Write-Step "Current PowerShell session: corbanu"
 Write-Step "Future PowerShell windows: open a new PowerShell window and run: corbanu"
-Write-Host "Corbanu Terminal $resolvedVersion installed successfully. The pfterminal command remains available as a compatibility alias."
+Write-Host "Corbanu Terminal $resolvedVersion installed successfully."
 
 $corbanuCommand = Join-Path $visibleBinDir "corbanu.exe"
 if (Prompt-YesNo "Start Corbanu Terminal now?") {

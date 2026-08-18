@@ -499,8 +499,6 @@ const AUTO_REVIEW_DESCRIPTION: &str = "Only ask for actions detected as potentia
 const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 const DEFAULT_STATUS_LINE_ITEMS: [&str; 4] =
     ["model-with-reasoning", "current-dir", "brand", "tps"];
-const MAX_AGENT_COPY_HISTORY: usize = 32;
-
 /// Common initialization parameters shared by all `ChatWidget` constructors.
 pub(crate) struct ChatWidgetInit {
     pub(crate) config: Config,

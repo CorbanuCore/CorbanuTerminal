@@ -50,6 +50,10 @@ fn is_sse_idle_timeout(err: &CodexErr) -> bool {
 
 /// Handles a retryable stream error and returns `Ok(())` when the caller should
 /// retry the request loop.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "retry state is explicit so both stream callers share one policy boundary"
+)]
 pub(crate) async fn handle_retryable_response_stream_error(
     retries: &mut u64,
     max_retries: u64,

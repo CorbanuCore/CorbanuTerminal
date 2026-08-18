@@ -70,7 +70,7 @@ impl StatusSurfacePreviewItem {
             StatusSurfacePreviewItem::ModelWithReasoning => "gpt-5.2-codex medium",
             StatusSurfacePreviewItem::Reasoning => "medium",
             StatusSurfacePreviewItem::TaskProgress => "Tasks 0/0",
-            StatusSurfacePreviewItem::Brand => "Post Fiat Terminal",
+            StatusSurfacePreviewItem::Brand => "Corbanu Terminal",
             StatusSurfacePreviewItem::Tps => "TPS: -- tok/s",
         }
     }

@@ -105,6 +105,7 @@ use codex_model_provider_info::canonical_provider_id;
 use codex_model_provider_info::corrected_catalog_provider;
 use codex_model_provider_info::create_oss_provider_with_base_url;
 use codex_model_provider_info::default_model_context_window_for_provider;
+use codex_model_provider_info::default_model_max_output_tokens_for_provider;
 use codex_model_provider_info::merge_configured_model_providers;
 use codex_model_provider_info::resolve_model_for_provider;
 use codex_models_manager::ModelsManagerConfig;
@@ -743,7 +744,7 @@ pub struct Config {
     /// appends one extra argument containing a JSON payload describing the
     /// event.
     ///
-    /// Example `~/.pfterminal/config.toml` snippet:
+    /// Example `~/.corbanu/config.toml` snippet:
     ///
     /// ```toml
     /// notify = ["notify-send", "Codex"]
@@ -1579,7 +1580,7 @@ pub fn gpu_runtime_model_provider(
     let mut provider = create_oss_provider_with_base_url(record.base_url.as_str(), wire_api);
     provider.name = format!("Rented GPU · {}", record.model_id);
     provider.auth = Some(ModelProviderAuthInfo {
-        command: current_pfterminal_auth_helper(),
+        command: current_corbanu_auth_helper(),
         args: vec!["internal-gpu-endpoint-token".to_string(), record.rental_id],
         // Vault access may briefly serialize with the rental controller in another process.
         // Leave enough startup time for that lock handoff instead of rejecting a healthy
@@ -1594,23 +1595,23 @@ pub fn gpu_runtime_model_provider(
     Some((record.provider_id, provider))
 }
 
-fn current_pfterminal_auth_helper() -> String {
+fn current_corbanu_auth_helper() -> String {
     std::env::current_exe()
         .ok()
-        .and_then(pfterminal_auth_helper_from_executable)
-        .unwrap_or_else(|| "pfterminal".to_string())
+        .and_then(corbanu_auth_helper_from_executable)
+        .unwrap_or_else(|| "corbanu".to_string())
 }
 
-fn pfterminal_auth_helper_from_executable(path: PathBuf) -> Option<String> {
+fn corbanu_auth_helper_from_executable(path: PathBuf) -> Option<String> {
     let file_name = path.file_name()?.to_str()?;
-    if file_name == "pfterminal" {
+    if matches!(file_name, "corbanu" | "corbanu-debug") {
         return Some(path.to_string_lossy().into_owned());
     }
     // Linux marks the procfs target of a running executable as deleted when an update or
     // development rebuild atomically replaces it. `/proc/self/exe` still resolves the live
     // executable and can safely self-invoke hidden helper modes for that process.
     #[cfg(target_os = "linux")]
-    if file_name == "pfterminal (deleted)" {
+    if matches!(file_name, "corbanu (deleted)" | "corbanu-debug (deleted)") {
         return Some("/proc/self/exe".to_string());
     }
     None
@@ -1630,10 +1631,14 @@ pub async fn load_gpu_runtime_model_providers(
 pub async fn load_gpu_runtime_model_provider_records(
     sqlite_home: &Path,
 ) -> Vec<codex_state::GpuRuntimeProvider> {
-    let sqlite = codex_state::SqliteConfig::from_sqlite_home(
-        AbsolutePathBuf::from_absolute_path(sqlite_home)
-            .expect("resolved sqlite home must be absolute"),
-    );
+    let Ok(sqlite_home) = AbsolutePathBuf::from_absolute_path(sqlite_home) else {
+        tracing::warn!(
+            path = %sqlite_home.display(),
+            "ignoring GPU runtime provider overlay from a non-absolute SQLite home"
+        );
+        return Vec::new();
+    };
+    let sqlite = codex_state::SqliteConfig::from_sqlite_home(sqlite_home);
     if !sqlite.has_existing_state_db() {
         return Vec::new();
     }
@@ -1752,6 +1757,9 @@ impl Config {
         });
         ModelsManagerConfig {
             model_context_window,
+            model_max_output_tokens: model.and_then(|model| {
+                default_model_max_output_tokens_for_provider(&self.model_provider_id, model)
+            }),
             model_auto_compact_token_limit: self.model_auto_compact_token_limit,
             tool_output_token_limit: self.tool_output_token_limit,
             base_instructions: self.base_instructions.clone(),
@@ -3881,6 +3889,8 @@ impl Config {
             merge_configured_model_providers(built_in_model_providers, cfg.model_providers)
                 .map_err(|message| std::io::Error::new(std::io::ErrorKind::InvalidData, message))?;
 
+        let provider_came_from_override = model_provider.is_some();
+        let model_came_from_override = model.is_some();
         let requested_provider_was_explicit =
             model_provider.is_some() || cfg.model_provider.is_some();
         let requested_model_provider_id = model_provider
@@ -3919,6 +3929,22 @@ impl Config {
             .then_some(requested_model_for_pair_validation.as_deref())
             .flatten()
             .and_then(|value| corrected_catalog_provider(value, &model_provider_id));
+        // Fail closed only when the model and provider were requested together from the
+        // same source (both runtime overrides, or both from the config file). A provider
+        // selected explicitly at runtime paired with a model merely inherited from the
+        // config file is mixed provenance: honor the provider, replace the stale model
+        // with the provider's catalog default, and warn. This keeps interactive
+        // bootstrap and resume from hard-failing on pairs persisted by older releases.
+        let allow_provider_model_fallback = allow_provider_model_fallback
+            || (provider_came_from_override && !model_came_from_override && cfg.model.is_some());
+        if incompatible_explicit_provider.is_some() && allow_provider_model_fallback {
+            let requested_model = requested_model_for_pair_validation
+                .as_deref()
+                .unwrap_or_default();
+            startup_warnings.push(format!(
+                "Configured model `{requested_model}` is not supported by provider `{model_provider_id}`; using the provider's default model instead. Your configuration file was not changed."
+            ));
+        }
         if let Some(supported_provider) = incompatible_explicit_provider
             && !allow_provider_model_fallback
         {
@@ -4956,7 +4982,7 @@ fn normalize_guardian_policy_config(value: Option<&str>) -> Option<String> {
 
 /// Returns the path to the Corbanu Terminal configuration directory, which can be
 /// specified by the `CODEX_HOME` environment variable. If not set, defaults to
-/// `~/.pfterminal`.
+/// `~/.corbanu`.
 ///
 /// - If `CODEX_HOME` is set, the value must exist and be a directory. The
 ///   value will be canonicalized and this function will Err otherwise.

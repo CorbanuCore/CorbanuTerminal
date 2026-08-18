@@ -21,16 +21,16 @@ pub struct BalanceClient {
 }
 
 impl BalanceClient {
-    pub fn new(rpc_url: impl Into<String>, network: Network) -> Self {
-        Self {
+    pub fn new(rpc_url: impl Into<String>, network: Network) -> Result<Self> {
+        Ok(Self {
             rpc_url: rpc_url.into(),
             usdc_mint: solana_usdc_mint(network),
             client: reqwest::Client::builder()
                 .connect_timeout(Duration::from_secs(10))
                 .timeout(Duration::from_secs(15))
                 .build()
-                .expect("wallet balance HTTP client configuration is static"),
-        }
+                .context("failed to construct wallet balance HTTP client")?,
+        })
     }
 
     pub async fn balances(&self, address: &str) -> Result<WalletBalances> {

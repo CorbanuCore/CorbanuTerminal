@@ -30,7 +30,11 @@ use pretty_assertions::assert_eq;
 use serde_json::json;
 use tempfile::TempDir;
 use tokio::time::timeout;
+use wiremock::Mock;
 use wiremock::MockServer;
+use wiremock::ResponseTemplate;
+use wiremock::matchers::method;
+use wiremock::matchers::path_regex;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const INVALID_REQUEST_ERROR_CODE: i64 = -32600;
@@ -214,6 +218,63 @@ async fn list_models_returns_ambient_default_catalog() -> Result<()> {
 }
 
 #[tokio::test]
+async fn list_models_does_not_wait_for_cold_cache_network_refresh() -> Result<()> {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path_regex(".*/models$"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(ModelsResponse { models: Vec::new() })
+                .set_delay(Duration::from_secs(5)),
+        )
+        .mount(&server)
+        .await;
+
+    let codex_home = TempDir::new()?;
+    std::fs::write(
+        codex_home.path().join("config.toml"),
+        format!(
+            r#"
+model_provider = "{OPENAI_PROVIDER_ID}"
+openai_base_url = "{}/v1"
+"#,
+            server.uri()
+        ),
+    )?;
+    write_chatgpt_auth(
+        codex_home.path(),
+        ChatGptAuthFixture::new("chatgpt-access-token").plan_type("pro"),
+        AuthCredentialsStoreMode::File,
+    )?;
+
+    let mut mcp = TestAppServer::builder()
+        .with_codex_home(codex_home.path())
+        .without_auto_env()
+        .with_env_overrides(&[(OPENAI_API_KEY_ENV_VAR, None)])
+        .build_initialized()
+        .await?;
+
+    let response: ModelListResponse = timeout(
+        Duration::from_secs(1),
+        mcp.request(|request_id| ClientRequest::ModelList {
+            request_id,
+            params: ModelListParams {
+                limit: Some(100),
+                cursor: None,
+                include_hidden: None,
+            },
+        }),
+    )
+    .await??;
+
+    assert!(
+        !response.data.is_empty(),
+        "bundled catalog should be available"
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn list_models_includes_hidden_models() -> Result<()> {
     let codex_home = TempDir::new()?;
     write_models_cache(codex_home.path())?;
@@ -242,7 +303,7 @@ async fn list_models_includes_hidden_models() -> Result<()> {
 }
 
 #[tokio::test]
-async fn list_models_uses_chatgpt_remote_catalog_as_source_of_truth() -> Result<()> {
+async fn list_models_includes_chatgpt_catalog_after_background_refresh() -> Result<()> {
     let server = MockServer::start().await;
     let remote_model: ModelInfo = serde_json::from_value(json!({
         "slug": "chatgpt-remote-only",
@@ -307,19 +368,6 @@ openai_base_url = "{server_uri}/v1"
         .with_env_overrides(&[("OPENAI_API_KEY", None)])
         .build_initialized()
         .await?;
-    let ModelListResponse {
-        data: items,
-        next_cursor,
-    } = mcp
-        .request(|request_id| ClientRequest::ModelList {
-            request_id,
-            params: ModelListParams {
-                limit: Some(100),
-                cursor: None,
-                include_hidden: None,
-            },
-        })
-        .await?;
     let mut expected_presets: Vec<ModelPreset> = vec![remote_model.into()];
     ModelPreset::mark_default_by_picker_visibility(&mut expected_presets);
     let mut expected_items = expected_presets
@@ -346,10 +394,31 @@ openai_base_url = "{server_uri}/v1"
     expected_items[0].is_default = false;
 
     // The models manager uses a global bundled catalog as its base and merges the
-    // remote `/models` response into it, so this test pins remote presence and
-    // endpoint usage rather than asserting that the remote catalog is exclusive.
-    assert!(items.contains(&expected_items[0]));
-    assert!(next_cursor.is_none());
+    // background `/models` response into it. Poll the non-blocking endpoint until
+    // that background result is visible rather than requiring bootstrap to wait.
+    timeout(DEFAULT_TIMEOUT, async {
+        loop {
+            let ModelListResponse {
+                data: items,
+                next_cursor,
+            } = mcp
+                .request(|request_id| ClientRequest::ModelList {
+                    request_id,
+                    params: ModelListParams {
+                        limit: Some(100),
+                        cursor: None,
+                        include_hidden: None,
+                    },
+                })
+                .await?;
+            assert!(next_cursor.is_none());
+            if items.contains(&expected_items[0]) {
+                return Ok::<(), Error>(());
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await??;
     assert_eq!(
         models_mock.requests().len(),
         1,

@@ -217,7 +217,7 @@ impl SqliteConfig {
                 DbKind::Memories => runtime_memories_migrator(),
                 DbKind::ThreadHistory => runtime_thread_history_migrator(),
             };
-            validate_applied_migrations(&legacy_path, &migrator).await?;
+            validate_applied_migrations(self, &legacy_path, &migrator).await?;
             rename_if_source_still_exists(&legacy_path, &namespaced_path).await?;
             for suffix in ["-wal", "-shm"] {
                 let legacy_sidecar = PathBuf::from(format!("{}{suffix}", legacy_path.display()));

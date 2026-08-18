@@ -204,20 +204,59 @@ struct AnthropicError {
     message: Option<String>,
 }
 
-impl From<AnthropicUsage> for TokenUsage {
-    fn from(usage: AnthropicUsage) -> Self {
-        let non_cached = usage.input_tokens.unwrap_or(0);
-        let cache_creation = usage.cache_creation_input_tokens.unwrap_or(0);
-        let cache_read = usage.cache_read_input_tokens.unwrap_or(0);
-        let input_tokens = non_cached + cache_creation + cache_read;
-        let output_tokens = usage.output_tokens.unwrap_or(0);
-        Self {
-            input_tokens,
-            cached_input_tokens: cache_read,
-            cache_write_input_tokens: cache_creation,
-            output_tokens,
+impl AnthropicUsage {
+    /// Anthropic commonly reports input/cache usage on `message_start` and only
+    /// output usage on `message_delta`. Preserve fields omitted by later events
+    /// so context accounting does not collapse to the completion size.
+    fn merge_into(self, current: Option<TokenUsage>) -> TokenUsage {
+        let current = current.unwrap_or_default();
+        let mut non_cached_input = current
+            .input_tokens
+            .saturating_sub(current.cached_input_tokens)
+            .saturating_sub(current.cache_write_input_tokens);
+        let mut cached_input = current.cached_input_tokens;
+        let mut cache_write_input = current.cache_write_input_tokens;
+        let mut output = current.output_tokens;
+
+        if let Some(value) = self.input_tokens {
+            if self.cache_read_input_tokens.is_none()
+                && self.cache_creation_input_tokens.is_none()
+                && (cached_input > 0 || cache_write_input > 0)
+                && value >= current.input_tokens
+            {
+                // Some Anthropic-compatible providers repeat cumulative total
+                // input on `message_delta` without repeating its cache
+                // breakdown. Retain that breakdown without adding it to the
+                // cumulative total a second time.
+                cached_input = cached_input.min(value);
+                cache_write_input = cache_write_input.min(value.saturating_sub(cached_input));
+                non_cached_input = value
+                    .saturating_sub(cached_input)
+                    .saturating_sub(cache_write_input);
+            } else {
+                non_cached_input = value;
+            }
+        }
+        if let Some(value) = self.cache_read_input_tokens {
+            cached_input = value;
+        }
+        if let Some(value) = self.cache_creation_input_tokens {
+            cache_write_input = value;
+        }
+        if let Some(value) = self.output_tokens {
+            output = value;
+        }
+
+        let input = non_cached_input
+            .saturating_add(cached_input)
+            .saturating_add(cache_write_input);
+        TokenUsage {
+            input_tokens: input,
+            cached_input_tokens: cached_input,
+            cache_write_input_tokens: cache_write_input,
+            output_tokens: output,
             reasoning_output_tokens: 0,
-            total_tokens: input_tokens + output_tokens,
+            total_tokens: input.saturating_add(output),
         }
     }
 }
@@ -368,7 +407,7 @@ impl AnthropicStreamState {
             self.last_server_model = Some(model);
         }
         if let Some(usage) = message.usage {
-            self.token_usage = Some(usage.into());
+            self.token_usage = Some(usage.merge_into(self.token_usage.take()));
         }
         true
     }
@@ -553,7 +592,7 @@ impl AnthropicStreamState {
 
     fn on_message_delta(&mut self, event: AnthropicStreamEvent) {
         if let Some(usage) = event.usage {
-            self.token_usage = Some(usage.into());
+            self.token_usage = Some(usage.merge_into(self.token_usage.take()));
         }
         if let Some(delta) = event.delta
             && let Some(stop_reason) = delta.stop_reason.as_deref()
@@ -1173,7 +1212,7 @@ mod tests {
                 "{stop_reason}: an empty stream must not report a completed turn: {events:?}"
             );
             assert!(
-                events.iter().any(|event| event.is_err()),
+                events.iter().any(std::result::Result::is_err),
                 "{stop_reason}: an empty stream must surface a failure: {events:?}"
             );
         }
@@ -1285,7 +1324,7 @@ data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text
 
 "#,
             br#"event: message_delta
-data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":9,"cache_creation_input_tokens":0,"cache_read_input_tokens":12,"output_tokens":2}}
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}
 
 "#,
             br#"event: message_stop
@@ -1312,7 +1351,8 @@ data: {"type":"message_stop"}
                 response_id,
                 token_usage: Some(TokenUsage {
                     input_tokens: 21,
-                    cached_input_tokens: 12,
+                    cached_input_tokens: 7,
+                    cache_write_input_tokens: 5,
                     output_tokens: 2,
                     reasoning_output_tokens: 0,
                     total_tokens: 23,
@@ -1323,6 +1363,90 @@ data: {"type":"message_stop"}
             }) if response_id == "msg_1"
         );
         assert_eq!(events.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn cumulative_delta_input_preserves_cache_breakdown_without_readding_it() {
+        let events = collect_events(&[
+            br#"event: message_start
+data: {"type":"message_start","message":{"id":"msg_usage","model":"compatible-model","usage":{"input_tokens":9,"cache_creation_input_tokens":5,"cache_read_input_tokens":7,"output_tokens":0}}}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"OK"}}
+
+"#,
+            br#"event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":21,"output_tokens":2}}
+
+"#,
+            br#"event: message_stop
+data: {"type":"message_stop"}
+
+"#,
+        ])
+        .await;
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Ok(ResponseEvent::Completed {
+                token_usage: Some(TokenUsage {
+                    input_tokens: 21,
+                    cached_input_tokens: 7,
+                    cache_write_input_tokens: 5,
+                    output_tokens: 2,
+                    total_tokens: 23,
+                    ..
+                }),
+                ..
+            })
+        )));
+    }
+
+    #[tokio::test]
+    async fn repeated_non_cached_delta_input_preserves_start_cache_usage() {
+        let events = collect_events(&[
+            br#"event: message_start
+data: {"type":"message_start","message":{"id":"msg_usage","model":"anthropic-model","usage":{"input_tokens":9,"cache_creation_input_tokens":5,"cache_read_input_tokens":7,"output_tokens":0}}}
+
+"#,
+            br#"event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+"#,
+            br#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"OK"}}
+
+"#,
+            br#"event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":9,"output_tokens":2}}
+
+"#,
+            br#"event: message_stop
+data: {"type":"message_stop"}
+
+"#,
+        ])
+        .await;
+
+        assert!(events.iter().any(|event| matches!(
+            event,
+            Ok(ResponseEvent::Completed {
+                token_usage: Some(TokenUsage {
+                    input_tokens: 21,
+                    cached_input_tokens: 7,
+                    cache_write_input_tokens: 5,
+                    output_tokens: 2,
+                    total_tokens: 23,
+                    ..
+                }),
+                ..
+            })
+        )));
     }
 
     #[tokio::test]

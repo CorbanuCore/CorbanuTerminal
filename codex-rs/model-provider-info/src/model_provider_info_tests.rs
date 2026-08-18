@@ -475,6 +475,45 @@ fn ambient_glm_context_ceiling_is_scoped_to_ambient_routes() {
 }
 
 #[test]
+fn plan_fable_context_ceiling_is_scoped_to_the_skyapi_route() {
+    assert_eq!(
+        default_model_context_window_for_provider(
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+            CLAUDE_FABLE_5_MODEL,
+        ),
+        Some(PFTERMINAL_PLAN_FABLE_CONTEXT_WINDOW)
+    );
+    assert_eq!(
+        default_model_context_window_for_provider(
+            CORBANU_PLAN_ANTHROPIC_PROVIDER_ID,
+            CLAUDE_FABLE_5_MODEL,
+        ),
+        Some(PFTERMINAL_PLAN_FABLE_CONTEXT_WINDOW)
+    );
+    assert_eq!(
+        default_model_context_window_for_provider(ANTHROPIC_PROVIDER_ID, CLAUDE_FABLE_5_MODEL),
+        None
+    );
+}
+
+#[test]
+fn plan_fable_output_ceiling_is_scoped_to_the_skyapi_route() {
+    for provider in [
+        PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+        CORBANU_PLAN_ANTHROPIC_PROVIDER_ID,
+    ] {
+        assert_eq!(
+            default_model_max_output_tokens_for_provider(provider, CLAUDE_FABLE_5_MODEL),
+            Some(PFTERMINAL_PLAN_FABLE_MAX_OUTPUT_TOKENS)
+        );
+    }
+    assert_eq!(
+        default_model_max_output_tokens_for_provider(ANTHROPIC_PROVIDER_ID, CLAUDE_FABLE_5_MODEL,),
+        None
+    );
+}
+
+#[test]
 fn test_create_zai_provider() {
     assert_eq!(
         ModelProviderInfo::create_zai_provider(),
@@ -636,7 +675,7 @@ fn test_built_in_model_providers_keep_legacy_plan_id_with_corbanu_name() {
     let providers = built_in_model_providers(/*openai_base_url*/ None);
     let provider = providers
         .get(PFTERMINAL_PLAN_PROVIDER_ID)
-        .expect("Corbanu Terminal Plan provider");
+        .expect("Corbanu Plan provider");
 
     assert!(provider.is_pfterminal_plan());
     assert_eq!(provider.name, PLAN_NAME);
@@ -655,6 +694,10 @@ fn test_built_in_model_providers_keep_legacy_plan_id_with_corbanu_name() {
     );
     assert_eq!(
         canonical_provider_id(CORBANU_PLAN_PROVIDER_ID),
+        PFTERMINAL_PLAN_PROVIDER_ID
+    );
+    assert_eq!(
+        canonical_provider_id(CORBANU_TERMINAL_PLAN_PROVIDER_ID),
         PFTERMINAL_PLAN_PROVIDER_ID
     );
     assert_eq!(
@@ -1272,6 +1315,10 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         Some(ZAI_PROVIDER_ID)
     );
     assert_eq!(
+        corrected_catalog_provider("glm-5.3", AMBIENT_PROVIDER_ID),
+        Some(ZAI_PROVIDER_ID)
+    );
+    assert_eq!(
         corrected_catalog_provider("gpt-5.5", CLAUDE_PLAN_PROVIDER_ID),
         Some(OPENAI_PROVIDER_ID)
     );
@@ -1362,6 +1409,7 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (AMBIENT_KIMI_K2_7_CODE_MODEL, AMBIENT_PROVIDER_ID),
         (KIMI_CODE_K3_MODEL, KIMI_CODE_PROVIDER_ID),
         (ZAI_DEFAULT_MODEL, ZAI_PROVIDER_ID),
+        ("glm-5.3", ZAI_PROVIDER_ID),
         (CLAUDE_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (ANTHROPIC_DEFAULT_MODEL, CLAUDE_PLAN_PROVIDER_ID),
@@ -1389,4 +1437,17 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
     }
     assert_eq!(canonical_catalog_provider(""), None);
     assert_eq!(canonical_catalog_provider("private/custom-model"), None);
+}
+
+#[test]
+fn zai_glm_5_3_resolves_only_on_the_direct_zai_route() {
+    assert_eq!(canonical_catalog_provider("glm-5.3"), Some(ZAI_PROVIDER_ID));
+    assert_eq!(
+        resolve_model_for_provider(Some("glm-5.3".to_string()), ZAI_PROVIDER_ID).as_deref(),
+        Some("glm-5.3")
+    );
+    assert_eq!(
+        resolve_model_for_provider(Some("glm-5.3".to_string()), AMBIENT_PROVIDER_ID).as_deref(),
+        Some(AMBIENT_DEFAULT_MODEL)
+    );
 }

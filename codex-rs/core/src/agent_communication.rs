@@ -7,6 +7,7 @@ const AGENT_COMMUNICATION_TARGET: &str = "codex_otel.agent_communication";
 pub(crate) enum AgentCommunicationKind {
     Spawn,
     Message,
+    #[cfg_attr(not(test), allow(dead_code))]
     Followup,
     Result,
 }

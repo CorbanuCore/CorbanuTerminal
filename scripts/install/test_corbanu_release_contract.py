@@ -16,7 +16,22 @@ VERSION = "9.8.7"
 TARGET = "x86_64-unknown-linux-gnu"
 
 
-class PFTerminalReleaseContractTest(unittest.TestCase):
+class CorbanuReleaseContractTest(unittest.TestCase):
+    def test_windows_installer_prunes_releases_after_command_verification(self) -> None:
+        installer = INSTALLER.with_suffix(".ps1").read_text(encoding="utf-8")
+
+        self.assertIn("$env:CORBANU_KEEP_RELEASES", installer)
+        self.assertIn("function Remove-OldStandaloneReleases", installer)
+        self.assertLess(
+            installer.index(
+                "Test-VisibleTerminalCommands -VisibleBinDir $visibleBinDir"
+            ),
+            installer.index(
+                "Remove-OldStandaloneReleases -ReleasesDir $releasesDir "
+                "-CurrentDir $currentDir -Keep $KeepReleases"
+            ),
+        )
+
     def test_installer_prefers_native_corbanu_release_assets(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -35,44 +50,17 @@ class PFTerminalReleaseContractTest(unittest.TestCase):
                     for url in requests
                 )
             )
-            for command in ("corbanu", "pfterminal"):
-                version = subprocess.run(
-                    [root / "install-bin" / command, "--version"],
-                    capture_output=True,
-                    check=True,
-                    text=True,
-                )
-                self.assertEqual(version.stdout, f"corbanu {VERSION}\n")
-
-    def test_installer_selects_and_installs_pfterminal_release_assets(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            archive, checksum, metadata = create_release_fixture(root)
-            result, requests = run_installer(root, metadata, archive, checksum)
-
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn(
-                f"Corbanu Terminal {VERSION} installed successfully.", result.stdout
-            )
-            self.assertIn("compatibility alias", result.stdout)
-            self.assertTrue(
-                any("pfterminal-package_SHA256SUMS" in url for url in requests)
-            )
-            self.assertTrue(
-                any(f"pfterminal-package-{TARGET}.tar.gz" in url for url in requests)
-            )
-            installed = root / "install-bin" / "pfterminal"
-            corbanu = root / "install-bin" / "corbanu"
             version = subprocess.run(
-                [installed, "--version"], capture_output=True, check=True, text=True
+                [root / "install-bin" / "corbanu", "--version"],
+                capture_output=True,
+                check=True,
+                text=True,
             )
-            corbanu_version = subprocess.run(
-                [corbanu, "--version"], capture_output=True, check=True, text=True
-            )
-            self.assertEqual(version.stdout, f"pfterminal {VERSION}\n")
-            self.assertEqual(corbanu_version.stdout, version.stdout)
+            self.assertEqual(version.stdout, f"corbanu {VERSION}\n")
+            self.assertFalse((root / "install-bin" / "pfterminal").exists())
+            self.assertNotIn("compatibility alias", result.stdout)
 
-    def test_unrelated_asset_family_fails_with_pfterminal_diagnostic(self) -> None:
+    def test_unrelated_asset_family_fails_with_corbanu_diagnostic(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             metadata = json.dumps(
@@ -95,31 +83,38 @@ class PFTerminalReleaseContractTest(unittest.TestCase):
                 result.stderr,
             )
 
+    def test_bundled_package_installs_without_network_requests(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive, checksum, metadata = create_release_fixture(root)
+            result, requests = run_installer(
+                root,
+                metadata,
+                archive,
+                checksum,
+                bundled=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(requests, [])
+            self.assertIn("Using bundled Corbanu Terminal package", result.stdout)
+            self.assertTrue((root / "install-bin" / "corbanu").is_file())
+
 
 def create_release_fixture(
-    root: Path, *, asset_family: str = "pfterminal-package"
+    root: Path, *, asset_family: str = "corbanu-terminal-package"
 ) -> tuple[Path, Path, str]:
     package = root / "package"
     for directory in ("bin", "codex-path", "codex-resources"):
         (package / directory).mkdir(parents=True, exist_ok=True)
     (package / "codex-package.json").write_text("{}\n", encoding="utf-8")
     write_executable(
-        package / "bin" / "pfterminal",
-        f"#!/bin/sh\nprintf 'pfterminal {VERSION}\\n'\n",
+        package / "bin" / "corbanu",
+        f"#!/bin/sh\nprintf 'corbanu {VERSION}\\n'\n",
     )
-    write_executable(
-        package / "bin" / "pfterminal-debug",
-        f"#!/bin/sh\nprintf 'pfterminal {VERSION}\\n'\n",
-    )
-    if asset_family == "corbanu-terminal-package":
-        write_executable(
-            package / "bin" / "corbanu",
-            f"#!/bin/sh\nprintf 'corbanu {VERSION}\\n'\n",
-        )
-        write_executable(package / "bin" / "corbanu-debug", "#!/bin/sh\nexit 0\n")
-        write_executable(package / "bin" / "corbanu-acp", "#!/bin/sh\nexit 0\n")
-        write_executable(package / "bin" / "corbanu-walletd", "#!/bin/sh\nexit 0\n")
-    write_executable(package / "bin" / "pfterminal-walletd", "#!/bin/sh\nexit 0\n")
+    write_executable(package / "bin" / "corbanu-debug", "#!/bin/sh\nexit 0\n")
+    write_executable(package / "bin" / "corbanu-acp", "#!/bin/sh\nexit 0\n")
+    write_executable(package / "bin" / "corbanu-walletd", "#!/bin/sh\nexit 0\n")
     write_executable(package / "bin" / "codex-code-mode-host", "#!/bin/sh\nexit 0\n")
     write_executable(package / "codex-path" / "rg", "#!/bin/sh\nexit 0\n")
     write_executable(package / "codex-resources" / "bwrap", "#!/bin/sh\nexit 0\n")
@@ -155,6 +150,8 @@ def run_installer(
     metadata: str,
     archive: Path | None = None,
     checksum: Path | None = None,
+    *,
+    bundled: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     fake_bin = root / "fake-bin"
     fake_bin.mkdir()
@@ -172,22 +169,16 @@ def run_installer(
               if [ "$previous" = "-o" ]; then output="$argument"; fi
               previous="$argument"
             done
-            printf '%s\n' "$url" >>"$PFTERMINAL_TEST_REQUEST_LOG"
+            printf '%s\n' "$url" >>"$CORBANU_TEST_REQUEST_LOG"
             case "$url" in
               https://api.github.com/*)
-                printf '%s\n' "$PFTERMINAL_TEST_METADATA"
-                ;;
-              */pfterminal-package_SHA256SUMS)
-                cp "$PFTERMINAL_TEST_CHECKSUM" "$output"
-                ;;
-              */pfterminal-package-*.tar.gz)
-                cp "$PFTERMINAL_TEST_ARCHIVE" "$output"
+                printf '%s\n' "$CORBANU_TEST_METADATA"
                 ;;
               */corbanu-terminal-package_SHA256SUMS)
-                cp "$PFTERMINAL_TEST_CHECKSUM" "$output"
+                cp "$CORBANU_TEST_CHECKSUM" "$output"
                 ;;
               */corbanu-terminal-package-*.tar.gz)
-                cp "$PFTERMINAL_TEST_ARCHIVE" "$output"
+                cp "$CORBANU_TEST_ARCHIVE" "$output"
                 ;;
               *) exit 22 ;;
             esac
@@ -205,20 +196,27 @@ def run_installer(
             "HOME": str(home),
             "PATH": f"{fake_bin}:/usr/bin:/bin",
             "SHELL": "/bin/sh",
-            "PFTERMINAL_HOME": str(root / "pfterminal-home"),
-            "PFTERMINAL_INSTALL_DIR": str(root / "install-bin"),
-            "PFTERMINAL_NON_INTERACTIVE": "1",
-            "PFTERMINAL_RELEASE": VERSION,
-            "PFTERMINAL_TEST_ARCHIVE": str(archive or ""),
-            "PFTERMINAL_TEST_CHECKSUM": str(checksum or ""),
-            "PFTERMINAL_TEST_METADATA": metadata,
-            "PFTERMINAL_TEST_REQUEST_LOG": str(request_log),
+            "CORBANU_HOME": str(root / "corbanu-home"),
+            "CORBANU_INSTALL_DIR": str(root / "install-bin"),
+            "CORBANU_NON_INTERACTIVE": "1",
+            "CORBANU_RELEASE": VERSION,
+            "CORBANU_TEST_ARCHIVE": str(archive or ""),
+            "CORBANU_TEST_CHECKSUM": str(checksum or ""),
+            "CORBANU_TEST_METADATA": metadata,
+            "CORBANU_TEST_REQUEST_LOG": str(request_log),
         }
     )
+    if bundled:
+        env["CORBANU_PACKAGE_ARCHIVE"] = str(archive or "")
+        env["CORBANU_CHECKSUM_MANIFEST"] = str(checksum or "")
     result = subprocess.run(
         ["/bin/sh", INSTALLER], capture_output=True, check=False, env=env, text=True
     )
-    requests = request_log.read_text(encoding="utf-8").splitlines()
+    requests = (
+        request_log.read_text(encoding="utf-8").splitlines()
+        if request_log.exists()
+        else []
+    )
     return result, requests
 
 

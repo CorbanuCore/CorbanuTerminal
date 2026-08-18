@@ -24,13 +24,10 @@ curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/downlo
 irm https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.ps1 | iex
 ```
 
-The standalone installer creates `corbanu` and compatibility command aliases.
-It does not replace a stock `codex` command. macOS users can alternatively
+The standalone installer creates the `corbanu` command. It does not replace a
+stock `codex` command. macOS users can alternatively
 download the latest Corbanu Terminal DMG from
 [GitHub Releases](https://github.com/CorbanuCore/CorbanuTerminal/releases/latest).
-
-`pfterminal` remains a supported command alias during the migration. Existing
-automation does not need to change immediately.
 
 ## Local state and compatibility
 
@@ -98,7 +95,7 @@ Useful commands include:
 
 - `/providers` for account and API-key setup.
 - `/vault` for encrypted credentials.
-- `/wallet` for the local wallet and Corbanu Terminal plan.
+- `/wallet` for the local wallet and Corbanu Plan.
 - `/model` or `corbanu -m <model>` to select a model.
 - `/spawn` and `/panes` for managed agent work.
 - `/tasknode` for Post Fiat Task Node.
@@ -120,8 +117,13 @@ Useful commands include:
 | Custom providers          | Additional endpoints configured in `config.toml`         |
 
 Use `/providers` for interactive setup. The public provider alias is
-`corbanu-terminal-plan`; the legacy `pfterminal-plan` identifier remains
-accepted so existing configuration and receipts continue to work.
+`corbanu-plan`; the earlier `corbanu-terminal-plan` alias and legacy
+`pfterminal-plan` identifier remain accepted so existing configuration and
+receipts continue to work.
+
+Corbanu Terminal contains the public client integration for Corbanu Plan. The
+hosted plan service, billing operations, and internal methodology are maintained
+privately by CorbanuCore.
 
 Corbanu Terminal contains the public client integration for Corbanu Plan. The
 hosted plan service, billing operations, and internal methodology are maintained
@@ -130,8 +132,8 @@ privately by CorbanuCore.
 ## Wallet and Task Node
 
 `/wallet` creates or restores a local wallet, shows SOL and USDC balances,
-controls signing access, backs up recovery material, and manages Corbanu
-Terminal inference plans. Wallet secrets stay outside normal chat history and
+controls signing access, backs up recovery material, and manages Corbanu Plans.
+Wallet secrets stay outside normal chat history and
 model context.
 
 `/tasknode` connects Corbanu Terminal to Post Fiat Task Node tasks, rewards,
@@ -182,9 +184,6 @@ cd CorbanuTerminal/codex-rs
 CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build -p codex-cli --bin corbanu
 ./target/debug/corbanu
 ```
-
-The legacy `pfterminal` binary is built from the same codebase for migration
-compatibility.
 
 ## Upstream and license
 

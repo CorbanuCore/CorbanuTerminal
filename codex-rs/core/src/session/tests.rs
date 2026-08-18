@@ -48,8 +48,13 @@ use codex_model_provider_info::AMBIENT_API_KEY_ENV_VAR;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::AMBIENT_GLM_5_2_CONTEXT_WINDOW;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
+use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
+use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
+use codex_model_provider_info::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID;
+use codex_model_provider_info::PFTERMINAL_PLAN_FABLE_CONTEXT_WINDOW;
+use codex_model_provider_info::PFTERMINAL_PLAN_FABLE_MAX_OUTPUT_TOKENS;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_models_manager::bundled_models_response;
@@ -5053,6 +5058,48 @@ async fn per_turn_context_ceiling_tracks_static_provider_switches() {
         None,
         "the Ambient route ceiling must not leak into another provider"
     );
+}
+
+#[tokio::test]
+async fn per_turn_fable_limits_are_scoped_to_the_plan_route() {
+    let session_configuration = make_session_configuration_for_tests().await;
+    let plan_configuration = session_configuration
+        .apply(&SessionSettingsUpdate {
+            model_provider: Some(PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID.to_string()),
+            collaboration_mode: Some(CollaborationMode {
+                mode: ModeKind::Default,
+                settings: Settings {
+                    model: CLAUDE_FABLE_5_MODEL.to_string(),
+                    reasoning_effort: None,
+                    developer_instructions: None,
+                },
+            }),
+            ..Default::default()
+        })
+        .expect("switch to Corbanu Plan Fable");
+    let plan_turn =
+        Session::build_per_turn_config(&plan_configuration, plan_configuration.cwd().clone());
+    let plan_model_config = plan_turn.to_models_manager_config();
+    assert_eq!(
+        plan_model_config.model_context_window,
+        Some(PFTERMINAL_PLAN_FABLE_CONTEXT_WINDOW)
+    );
+    assert_eq!(
+        plan_model_config.model_max_output_tokens,
+        Some(PFTERMINAL_PLAN_FABLE_MAX_OUTPUT_TOKENS)
+    );
+
+    let direct_configuration = plan_configuration
+        .apply(&SessionSettingsUpdate {
+            model_provider: Some(ANTHROPIC_PROVIDER_ID.to_string()),
+            ..Default::default()
+        })
+        .expect("switch to direct Anthropic");
+    let direct_turn =
+        Session::build_per_turn_config(&direct_configuration, direct_configuration.cwd().clone());
+    let direct_model_config = direct_turn.to_models_manager_config();
+    assert_eq!(direct_model_config.model_context_window, None);
+    assert_eq!(direct_model_config.model_max_output_tokens, None);
 }
 
 pub(crate) async fn make_session_configuration_for_tests() -> SessionConfiguration {

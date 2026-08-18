@@ -16,7 +16,12 @@ pub async fn supported_models(
     http_client_factory: HttpClientFactory,
 ) -> Vec<Model> {
     thread_manager
-        .list_models(RefreshStrategy::OnlineIfUncached, http_client_factory)
+        // `model/list` is part of TUI bootstrap, so it must not wait for a
+        // provider request on a cold cache. The manager always starts with the
+        // bundled catalog and can overlay a fresh disk cache here. The app
+        // server's models refresh worker updates it from the network in the
+        // background.
+        .list_models(RefreshStrategy::Offline, http_client_factory)
         .await
         .into_iter()
         .filter(|preset| include_hidden || preset.show_in_picker)
