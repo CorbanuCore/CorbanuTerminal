@@ -66,18 +66,8 @@ PACKAGE_VARIANTS: dict[str, PackageVariant] = {
         executable_stem="corbanu",
         extra_binaries=(
             PackageExtraBinary(
-                cargo_bin="pfterminal",
-                executable_stem="pfterminal",
-                alias_of="corbanu",
-            ),
-            PackageExtraBinary(
                 cargo_bin="corbanu-debug",
                 executable_stem="corbanu-debug",
-                alias_of="corbanu",
-            ),
-            PackageExtraBinary(
-                cargo_bin="pfterminal-debug",
-                executable_stem="pfterminal-debug",
                 alias_of="corbanu",
             ),
             PackageExtraBinary(
@@ -85,18 +75,8 @@ PACKAGE_VARIANTS: dict[str, PackageVariant] = {
                 executable_stem="corbanu-acp",
             ),
             PackageExtraBinary(
-                cargo_bin="pfterminal-acp",
-                executable_stem="pfterminal-acp",
-                alias_of="corbanu-acp",
-            ),
-            PackageExtraBinary(
                 cargo_bin="corbanu-walletd",
                 executable_stem="corbanu-walletd",
-            ),
-            PackageExtraBinary(
-                cargo_bin="pfterminal-walletd",
-                executable_stem="pfterminal-walletd",
-                alias_of="corbanu-walletd",
             ),
         ),
     ),

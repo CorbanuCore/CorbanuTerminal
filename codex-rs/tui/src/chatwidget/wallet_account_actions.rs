@@ -89,16 +89,13 @@ impl ChatWidget {
                 confirmation_item("Cancel", "Keep the wallet on this device", || {
                     AppEvent::OpenWallet
                 }),
-                {
-                    let address = address;
-                    confirmation_item(
-                        "Remove wallet",
-                        "I have saved the recovery material",
-                        move || AppEvent::WalletRemoveRequested {
-                            address: address.clone(),
-                        },
-                    )
-                },
+                confirmation_item(
+                    "Remove wallet",
+                    "I have saved the recovery material",
+                    move || AppEvent::WalletRemoveRequested {
+                        address: address.clone(),
+                    },
+                ),
             ],
             initial_selected_idx: Some(0),
             allow_number_shortcuts: false,

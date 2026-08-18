@@ -21,7 +21,7 @@ def load_build_module():
 
 
 class NpmMetadataTest(unittest.TestCase):
-    def test_staged_cli_publishes_corbanu_and_legacy_commands(self) -> None:
+    def test_staged_cli_publishes_only_the_corbanu_command(self) -> None:
         build_module = load_build_module()
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -36,10 +36,7 @@ class NpmMetadataTest(unittest.TestCase):
 
         self.assertEqual(
             package_json["bin"],
-            {
-                "corbanu": "bin/codex.js",
-                "pfterminal": "bin/codex.js",
-            },
+            {"corbanu": "bin/codex.js"},
         )
         self.assertEqual(package_json["name"], "@corbanucore/terminal")
         self.assertTrue(

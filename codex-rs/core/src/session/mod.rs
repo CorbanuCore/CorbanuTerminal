@@ -993,7 +993,7 @@ impl Session {
     fn trace_session_timing(label: &str, start: Instant) {
         if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
             debug!(
-                target: "pfterminal_session",
+                target: "corbanu_session",
                 label,
                 elapsed_ms = start.elapsed().as_millis(),
                 "pfterminal session timing"

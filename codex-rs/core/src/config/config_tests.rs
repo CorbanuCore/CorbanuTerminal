@@ -12283,7 +12283,8 @@ async fn interactive_fallback_recovers_persisted_incompatible_pairs() -> std::io
 }
 
 #[tokio::test]
-async fn override_provider_with_stale_config_model_recovers_without_opt_in() -> std::io::Result<()> {
+async fn override_provider_with_stale_config_model_recovers_without_opt_in() -> std::io::Result<()>
+{
     use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
     use codex_model_provider_info::OPENAI_PROVIDER_ID;
 
@@ -12311,8 +12312,7 @@ async fn override_provider_with_stale_config_model_recovers_without_opt_in() -> 
         assert_eq!(config.model_provider_id, provider);
         assert_eq!(config.model, None);
         assert!(config.startup_warnings.iter().any(|warning| {
-            warning.contains(stale_model)
-                && warning.contains("using the provider's default model")
+            warning.contains(stale_model) && warning.contains("using the provider's default model")
         }));
     }
     Ok(())

@@ -5,7 +5,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 CODEX_RS_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd -P)"
-TOKEN_ENV_VAR="PFTERMINAL_TELEGRAM_TOKEN"
+TOKEN_ENV_VAR="CORBANU_TELEGRAM_TOKEN"
 DEFAULT_ENV_FILE="$HOME/.config/corbanu/telegram.env"
 DEFAULT_WORKSPACE="$HOME/corbanu-telegram"
 if [[ -f "$HOME/.config/pfterminal/telegram.env" && ! -e "$DEFAULT_ENV_FILE" ]]; then
@@ -45,7 +45,7 @@ need_python() {
 }
 
 resolve_terminal_binary() {
-    command -v corbanu 2>/dev/null || command -v pfterminal 2>/dev/null || true
+    command -v corbanu 2>/dev/null || true
 }
 
 abs_dir() {
@@ -439,13 +439,13 @@ seed_agents_md() {
 }
 
 install_systemd_unit() {
-    local source="$CODEX_RS_DIR/telegram/dist/pfterminal-telegram.service"
+    local source="$CODEX_RS_DIR/telegram/dist/corbanu-terminal-telegram.service"
     local target_dir="$HOME/.config/systemd/user"
-    local target="$target_dir/pfterminal-telegram.service"
+    local target="$target_dir/corbanu-terminal-telegram.service"
     local terminal_bin
     [[ -r "$source" ]] || die "missing systemd service template: $source"
     terminal_bin="$(resolve_terminal_binary)"
-    [[ -n "$terminal_bin" ]] || die "corbanu (or legacy pfterminal) was not found on PATH; install it before --install-systemd"
+    [[ -n "$terminal_bin" ]] || die "corbanu was not found on PATH; install it before --install-systemd"
     [[ "$terminal_bin" == /* ]] || die "terminal command did not resolve to an absolute path: $terminal_bin"
     mkdir -p -- "$target_dir"
     python3 - "$source" "$target" "$terminal_bin" "$ENV_FILE" <<'PY'
@@ -469,19 +469,19 @@ for line in lines:
 target.write_text("\n".join(out) + "\n")
 PY
     printf 'Installed systemd user unit at %s\n' "$target"
-    printf 'Enable it with:\n  systemctl --user daemon-reload\n  systemctl --user enable --now pfterminal-telegram.service\n'
+    printf 'Enable it with:\n  systemctl --user daemon-reload\n  systemctl --user enable --now corbanu-terminal-telegram.service\n'
 }
 
 install_launchd_unit() {
     [[ "$(uname -s)" == "Darwin" ]] || die "--install-launchd requires macOS"
-    local source="$CODEX_RS_DIR/telegram/dist/net.postfiat.pfterminal.telegram.plist"
+    local source="$CODEX_RS_DIR/telegram/dist/org.corbanu.terminal.telegram.plist"
     local target_dir="$HOME/Library/LaunchAgents"
     local log_dir="$HOME/Library/Logs/Corbanu Terminal"
-    local target="$target_dir/net.postfiat.pfterminal.telegram.plist"
+    local target="$target_dir/org.corbanu.terminal.telegram.plist"
     local terminal_bin
     [[ -r "$source" ]] || die "missing launchd template: $source"
     terminal_bin="$(resolve_terminal_binary)"
-    [[ "$terminal_bin" == /* ]] || die "corbanu (or legacy pfterminal) was not found at an absolute PATH entry"
+    [[ "$terminal_bin" == /* ]] || die "corbanu was not found at an absolute PATH entry"
     mkdir -p -- "$target_dir" "$log_dir"
     python3 - "$source" "$target" "$terminal_bin" "$CODEX_HOME_RESOLVED" "$log_dir" "$ENV_FILE" <<'PY'
 import sys
@@ -505,7 +505,7 @@ PY
 run_health_check() {
     local terminal_bin
     terminal_bin="$(resolve_terminal_binary)"
-    [[ "$terminal_bin" == /* ]] || die "corbanu (or legacy pfterminal) was not found at an absolute PATH entry"
+    [[ "$terminal_bin" == /* ]] || die "corbanu was not found at an absolute PATH entry"
     printf 'Running Telegram health check before service installation...\n'
     set -a
     # This file is created mode 0600 by this script and is the same input the

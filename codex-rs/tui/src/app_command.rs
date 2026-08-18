@@ -87,6 +87,7 @@ pub(crate) enum AppCommand {
         force_reload: bool,
     },
     Compact,
+    #[allow(dead_code)]
     SetThreadName {
         name: String,
     },
@@ -231,6 +232,7 @@ impl AppCommand {
         Self::Compact
     }
 
+    #[allow(dead_code)]
     pub(crate) fn set_thread_name(name: String) -> Self {
         Self::SetThreadName { name }
     }

@@ -166,7 +166,7 @@ const EXEC_DEFAULT_LOG_FILTER: &str = "error,opentelemetry_sdk=off,opentelemetry
 fn trace_exec_timing(label: &str, start: std::time::Instant) {
     if std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some() {
         eprintln!(
-            "[pfterminal-exec] {label} elapsed_ms={}",
+            "[corbanu-exec] {label} elapsed_ms={}",
             start.elapsed().as_millis()
         );
     }

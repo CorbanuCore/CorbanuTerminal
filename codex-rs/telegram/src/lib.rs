@@ -303,7 +303,7 @@ async fn run_health_check(
         .context("Telegram health failed: state directory is not writable")?;
     tokio::fs::remove_file(&state_probe).await?;
 
-    let workspace_probe = core_config.cwd.join(".pfterminal-telegram-health-probe");
+    let workspace_probe = core_config.cwd.join(".corbanu-telegram-health-probe");
     tokio::fs::write(&workspace_probe, b"ok")
         .await
         .context("Telegram health failed: workspace is not writable")?;

@@ -223,8 +223,8 @@ def validate_package_dir(
                 telegram_dir / "setup-telegram.sh",
                 telegram_dir / "install-telegram-task.ps1",
                 telegram_dir / "dist" / "AGENTS.md.template",
-                telegram_dir / "dist" / "pfterminal-telegram.service",
-                telegram_dir / "dist" / "net.postfiat.pfterminal.telegram.plist",
+                telegram_dir / "dist" / "corbanu-terminal-telegram.service",
+                telegram_dir / "dist" / "org.corbanu.terminal.telegram.plist",
             ]
         )
         if not spec.is_windows:
@@ -358,16 +358,16 @@ def copy_telegram_resources(dest: Path, spec: TargetSpec) -> None:
         / "telegram"
         / "dist"
         / "AGENTS.md.template",
-        Path("dist/pfterminal-telegram.service"): REPO_ROOT
+        Path("dist/corbanu-terminal-telegram.service"): REPO_ROOT
         / "codex-rs"
         / "telegram"
         / "dist"
-        / "pfterminal-telegram.service",
-        Path("dist/net.postfiat.pfterminal.telegram.plist"): REPO_ROOT
+        / "corbanu-terminal-telegram.service",
+        Path("dist/org.corbanu.terminal.telegram.plist"): REPO_ROOT
         / "codex-rs"
         / "telegram"
         / "dist"
-        / "net.postfiat.pfterminal.telegram.plist",
+        / "org.corbanu.terminal.telegram.plist",
     }
     for relative_path, source in sources.items():
         target = dest / relative_path

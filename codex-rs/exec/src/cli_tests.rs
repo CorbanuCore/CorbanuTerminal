@@ -80,8 +80,9 @@ fn help_uses_corbanu_command_and_compatible_home_identity() {
     let help = error.to_string();
 
     assert!(help.contains("Usage: corbanu exec"));
-    assert!(help.contains("$PFTERMINAL_HOME/config.toml"));
+    assert!(help.contains("$CORBANU_HOME/config.toml"));
     assert!(help.contains("running Corbanu Terminal outside a Git repository"));
     assert!(!help.contains("Usage: codex exec"));
+    assert!(!help.contains("$PFTERMINAL_HOME/config.toml"));
     assert!(!help.contains("$CODEX_HOME/config.toml"));
 }

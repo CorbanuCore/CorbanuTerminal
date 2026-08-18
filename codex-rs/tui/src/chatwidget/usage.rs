@@ -585,7 +585,8 @@ fn reset_label(count: i64) -> &'static str {
     }
 }
 
-fn pfterminal_plan_usage_item() -> SelectionItem {
+#[cfg(test)]
+fn corbanu_plan_usage_item() -> SelectionItem {
     SelectionItem {
         name: "Corbanu Plan usage".to_string(),
         description: Some(
@@ -598,12 +599,12 @@ fn pfterminal_plan_usage_item() -> SelectionItem {
 }
 
 #[cfg(test)]
-mod pfterminal_plan_tests {
+mod corbanu_plan_tests {
     use super::*;
 
     #[test]
     fn plan_usage_action_opens_dedicated_usage_view() {
-        let item = pfterminal_plan_usage_item();
+        let item = corbanu_plan_usage_item();
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = crate::app_event_sender::AppEventSender::new(tx);
         (item.actions[0])(&sender);

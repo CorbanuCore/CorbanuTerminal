@@ -589,17 +589,7 @@ fn is_model_output_item(item: &ResponseItem) -> bool {
 }
 
 fn maybe_dump_responses_request(request: &ResponsesApiRequest) {
-    let Ok(path) = std::env::var("PFTERMINAL_DUMP_RESPONSES_REQUEST") else {
-        return;
-    };
-    let Ok(payload) = serde_json::to_vec_pretty(request) else {
-        return;
-    };
-    let _ = std::fs::write(path, payload);
-}
-
-fn maybe_dump_responses_ws_request(request: &ResponseCreateWsRequest) {
-    let Ok(path) = std::env::var("PFTERMINAL_DUMP_RESPONSES_REQUEST") else {
+    let Ok(path) = std::env::var("CORBANU_DUMP_RESPONSES_REQUEST") else {
         return;
     };
     let Ok(payload) = serde_json::to_vec_pretty(request) else {
@@ -609,7 +599,7 @@ fn maybe_dump_responses_ws_request(request: &ResponseCreateWsRequest) {
 }
 
 fn maybe_dump_chat_request(request: &ChatCompletionsRequest) {
-    let Ok(path) = std::env::var("PFTERMINAL_DUMP_CHAT_REQUEST") else {
+    let Ok(path) = std::env::var("CORBANU_DUMP_CHAT_REQUEST") else {
         return;
     };
     let Ok(payload) = serde_json::to_vec_pretty(request) else {
@@ -619,7 +609,7 @@ fn maybe_dump_chat_request(request: &ChatCompletionsRequest) {
 }
 
 fn maybe_dump_anthropic_messages_request(request: &AnthropicMessagesRequest) {
-    let Ok(path) = std::env::var("PFTERMINAL_DUMP_ANTHROPIC_REQUEST") else {
+    let Ok(path) = std::env::var("CORBANU_DUMP_ANTHROPIC_REQUEST") else {
         return;
     };
     let Ok(payload) = serde_json::to_vec_pretty(request) else {
@@ -629,16 +619,16 @@ fn maybe_dump_anthropic_messages_request(request: &AnthropicMessagesRequest) {
 }
 
 fn trace_stream_timing_enabled() -> bool {
-    std::env::var_os("PFTERMINAL_TRACE_STREAM_TIMING").is_some()
+    std::env::var_os("CORBANU_TRACE_STREAM_TIMING").is_some()
 }
 
 fn trace_stream_timing(label: &str, start: Instant) {
     if trace_stream_timing_enabled() {
         debug!(
-            target: "pfterminal_stream",
+            target: "corbanu_stream",
             label,
             elapsed_ms = start.elapsed().as_millis(),
-            "pfterminal stream timing"
+            "corbanu stream timing"
         );
     }
 }

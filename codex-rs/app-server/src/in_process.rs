@@ -996,6 +996,6 @@ mod tests {
 
     #[test]
     fn default_in_process_capacity_has_streaming_burst_headroom() {
-        assert!(DEFAULT_IN_PROCESS_CHANNEL_CAPACITY >= 4096);
+        const { assert!(DEFAULT_IN_PROCESS_CHANNEL_CAPACITY >= 4096) };
     }
 }

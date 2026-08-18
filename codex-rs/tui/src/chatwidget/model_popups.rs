@@ -20,6 +20,7 @@ use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 #[cfg(test)]
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
+use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 #[cfg(test)]
@@ -42,7 +43,6 @@ use codex_model_provider_info::OPENROUTER_DEEPSEEK_V4_PRO_0813_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::OPENROUTER_GROK_4_6_MODEL;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
-use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
@@ -443,7 +443,10 @@ impl ChatWidget {
                 .collect::<Vec<_>>()
                 .into_iter()
                 .fold(Vec::<_>::new(), |mut unique, preset| {
-                    if !unique.iter().any(|existing: &ModelPreset| existing.model == preset.model) {
+                    if !unique
+                        .iter()
+                        .any(|existing: &ModelPreset| existing.model == preset.model)
+                    {
                         unique.push(preset);
                     }
                     unique

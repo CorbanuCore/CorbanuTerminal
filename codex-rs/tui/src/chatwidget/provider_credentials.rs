@@ -265,6 +265,7 @@ impl ChatWidget {
         self.add_error_message(format!("OpenAI Codex account login failed: {message}"));
     }
 
+    #[allow(dead_code)]
     pub(crate) fn on_codex_account_login_completed(
         &mut self,
         notification: codex_app_server_protocol::AccountLoginCompletedNotification,

@@ -32,7 +32,7 @@ class PackageLayoutTest(unittest.TestCase):
 
         self.assertIn("[string]$TerminalPath", script)
         self.assertIn("Get-Command corbanu", script)
-        self.assertIn("Get-Command pfterminal", script)
+        self.assertNotIn("Get-Command pfterminal", script)
         declarations = [line for line in script.splitlines() if "[string]$" in line]
         self.assertTrue(declarations)
         for declaration in declarations:
@@ -168,7 +168,7 @@ class PackageLayoutTest(unittest.TestCase):
 
             self.assertTrue((package_dir / "bin" / "codex-code-mode-host").is_file())
 
-    def test_corbanu_unix_aliases_are_relative_links_and_survive_archive(self) -> None:
+    def test_corbanu_debug_alias_is_relative_and_survives_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             package_dir = root / "package"
@@ -207,11 +207,7 @@ class PackageLayoutTest(unittest.TestCase):
             validate_package_dir(package_dir, variant, spec, include_zsh=False)
 
             expected_aliases = {
-                "pfterminal": "corbanu",
                 "corbanu-debug": "corbanu",
-                "pfterminal-debug": "corbanu",
-                "pfterminal-acp": "corbanu-acp",
-                "pfterminal-walletd": "corbanu-walletd",
             }
             for alias, target in expected_aliases.items():
                 alias_path = package_dir / "bin" / alias
@@ -220,6 +216,13 @@ class PackageLayoutTest(unittest.TestCase):
                 self.assertEqual(alias_path.resolve(), package_dir / "bin" / target)
             for canonical in ("corbanu", "corbanu-acp", "corbanu-walletd"):
                 self.assertFalse((package_dir / "bin" / canonical).is_symlink())
+            for legacy in (
+                "pfterminal",
+                "pfterminal-debug",
+                "pfterminal-acp",
+                "pfterminal-walletd",
+            ):
+                self.assertFalse((package_dir / "bin" / legacy).exists())
 
             archive_path = root / "corbanu.tar.gz"
             write_archive(package_dir, archive_path, force=False)

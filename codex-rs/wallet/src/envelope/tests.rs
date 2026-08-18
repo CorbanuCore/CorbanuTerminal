@@ -162,17 +162,14 @@ fn concurrent_creates_serialize_without_replacing_the_winner() {
     );
     let barrier = Arc::new(Barrier::new(3));
     let passcodes = ["111111", "222222"];
-    let handles = passcodes
-        .into_iter()
-        .map(|passphrase| {
-            let wallet = wallet.clone();
-            let barrier = Arc::clone(&barrier);
-            std::thread::spawn(move || {
-                barrier.wait();
-                wallet.create(passphrase, Network::Mainnet)
-            })
+    let handles = passcodes.map(|passphrase| {
+        let wallet = wallet.clone();
+        let barrier = Arc::clone(&barrier);
+        std::thread::spawn(move || {
+            barrier.wait();
+            wallet.create(passphrase, Network::Mainnet)
         })
-        .collect::<Vec<_>>();
+    });
     barrier.wait();
     let results = handles
         .into_iter()

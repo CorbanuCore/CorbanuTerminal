@@ -101,10 +101,10 @@ pub(super) async fn reconcile_plan_receipt(
                 ),
             };
             match daemon.address.as_deref() {
-                Some(address) => BalanceClient::new(rpc, network)
-                    .balances(address)
-                    .await
-                    .ok(),
+                Some(address) => match BalanceClient::new(rpc, network) {
+                    Ok(client) => client.balances(address).await.ok(),
+                    Err(_) => None,
+                },
                 None => None,
             }
         }

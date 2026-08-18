@@ -74,15 +74,7 @@ fn resolve_home(
                 let corbanu_home = home.join(".corbanu-debug");
                 let legacy_home = home.join(".pfterminal-debug");
                 match (corbanu_home.is_dir(), legacy_home.is_dir()) {
-                    (true, true) => {
-                        eprintln!(
-                            "Both {} and {} exist; using {} without merging or deleting either home.",
-                            corbanu_home.display(),
-                            legacy_home.display(),
-                            corbanu_home.display()
-                        );
-                        corbanu_home
-                    }
+                    (true, true) => corbanu_home,
                     (false, true) => legacy_home,
                     (true, false) | (false, false) => corbanu_home,
                 }

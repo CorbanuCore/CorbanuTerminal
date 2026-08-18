@@ -186,6 +186,7 @@ pub struct CodexThread {
     pub(crate) session: Arc<Session>,
     /// Compatibility view for PF integrations built against the pre-upstream
     /// `thread.codex.session` access path.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) codex: LegacyCodexThreadView,
     pub(crate) io: SessionIo,
     pub(crate) session_source: SessionSource,
@@ -195,6 +196,7 @@ pub struct CodexThread {
 }
 
 pub(crate) struct LegacyCodexThreadView {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) session: Arc<Session>,
 }
 

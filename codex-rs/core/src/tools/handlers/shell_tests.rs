@@ -202,6 +202,13 @@ async fn shell_command_handler_removes_provider_auth_env_from_exec_params() {
         justification: None,
     };
 
+    let cwd = turn_context
+        .environments
+        .primary()
+        .expect("primary environment")
+        .cwd()
+        .to_abs_path()
+        .expect("native environment cwd");
     let exec_params = ShellCommandHandler::to_exec_params(
         &params,
         &session,
@@ -210,7 +217,7 @@ async fn shell_command_handler_removes_provider_auth_env_from_exec_params() {
             .environments
             .primary()
             .expect("primary environment"),
-        turn_context.cwd.clone(),
+        cwd,
         /*allow_login_shell*/ true,
     )
     .expect("exec params");

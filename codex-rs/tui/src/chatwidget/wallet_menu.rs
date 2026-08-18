@@ -235,8 +235,11 @@ impl ChatWidget {
                     (daemon.address.as_deref(), daemon.network.as_deref())
                 {
                     let (rpc, network) = wallet_balance_endpoint(network, catalog.as_ref());
-                    match BalanceClient::new(rpc, network).balances(address).await {
-                        Ok(value) => (Some(value), None),
+                    match BalanceClient::new(rpc, network) {
+                        Ok(client) => match client.balances(address).await {
+                            Ok(value) => (Some(value), None),
+                            Err(error) => (None, Some(error.to_string())),
+                        },
                         Err(error) => (None, Some(error.to_string())),
                     }
                 } else {

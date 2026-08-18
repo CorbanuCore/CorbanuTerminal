@@ -112,6 +112,10 @@ impl InputQueue {
     /// completion: mail received after the task has been detached is immediately eligible for
     /// the next admitted human turn, while mail received during the task is advanced by that
     /// task's terminal boundary.
+    #[allow(
+        clippy::await_holding_invalid_type,
+        reason = "active-turn and mailbox admission must remain atomic across both locks"
+    )]
     pub(crate) async fn enqueue_mailbox_communication_for_session(
         &self,
         active_turn: &Mutex<Option<ActiveTurn>>,
@@ -300,10 +304,6 @@ impl InputQueue {
         turn_state.lock().await.pending_input.items.split_off(0)
     }
 
-    #[expect(
-        clippy::await_holding_invalid_type,
-        reason = "active turn checks and turn state updates must remain atomic"
-    )]
     pub(crate) async fn get_pending_input(
         &self,
         active_turn: &Mutex<Option<ActiveTurn>>,
@@ -348,6 +348,10 @@ impl InputQueue {
         }
     }
 
+    #[allow(
+        clippy::await_holding_invalid_type,
+        reason = "active-turn and turn-state inspection must remain atomic"
+    )]
     async fn take_turn_pending_input(
         active_turn: &Mutex<Option<ActiveTurn>>,
     ) -> (Vec<TurnInput>, bool) {

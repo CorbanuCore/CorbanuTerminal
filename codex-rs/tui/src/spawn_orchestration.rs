@@ -2460,6 +2460,8 @@ impl App {
         .is_some_and(|value| !value.trim().is_empty())
     }
 
+    // These fields mirror the persisted pane identity and its app-server spawn response.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn register_spawn_agent_pane(
         &mut self,
         thread_id: ThreadId,

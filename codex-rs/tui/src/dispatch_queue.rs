@@ -188,6 +188,7 @@ impl<'de> Deserialize<'de> for PendingSpawnDispatch {
         }
 
         #[derive(Deserialize)]
+        #[allow(clippy::large_enum_variant)]
         #[serde(untagged)]
         enum Repr {
             Full(Fields),

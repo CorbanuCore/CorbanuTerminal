@@ -738,6 +738,8 @@ impl AppServerSession {
         started_thread_from_start_response(response, config, self.thread_params_mode()).await
     }
 
+    // These values map directly to the spawn-agent protocol and its model overrides.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn spawn_agent_thread(
         &mut self,
         config: &Config,
@@ -1888,16 +1890,6 @@ fn config_request_overrides_from_config(
         serde_json::json!(config.agent_max_depth),
     );
     Some(overrides)
-}
-
-fn remove_model_resume_overrides(
-    overrides: Option<HashMap<String, serde_json::Value>>,
-) -> Option<HashMap<String, serde_json::Value>> {
-    let mut overrides = overrides?;
-    overrides.remove("model_reasoning_effort");
-    overrides.remove("model_reasoning_summary");
-    overrides.remove("model_verbosity");
-    (!overrides.is_empty()).then_some(overrides)
 }
 
 fn service_tier_override_from_config(config: &Config) -> Option<Option<String>> {

@@ -9,8 +9,8 @@ Usage: build_macos_dmg.sh --archive PATH --target TARGET --version VERSION --out
 Builds a macOS DMG containing:
   - install.command
   - install.sh
-  - pfterminal-package-<target>.tar.gz
-  - pfterminal-package_SHA256SUMS
+  - corbanu-terminal-package-<target>.tar.gz
+  - corbanu-terminal-package_SHA256SUMS
 
 The DMG installer uses the bundled package archive and does not need to fetch
 release assets from GitHub.
@@ -91,7 +91,7 @@ esac
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 archive_name="$(basename "$archive_path")"
-expected_archive_name="pfterminal-package-${target}.tar.gz"
+expected_archive_name="corbanu-terminal-package-${target}.tar.gz"
 if [[ "$archive_name" != "$expected_archive_name" ]]; then
   echo "Archive name must be $expected_archive_name, got: $archive_name" >&2
   exit 2
@@ -103,7 +103,7 @@ rm -f "$output_path"
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 
-staging_dir="$work_dir/PFTerminal Installer"
+staging_dir="$work_dir/Corbanu Terminal Installer"
 mkdir -p "$staging_dir"
 
 cp "$archive_path" "$staging_dir/$archive_name"
@@ -111,7 +111,7 @@ cp "$repo_root/scripts/install/install.sh" "$staging_dir/install.sh"
 chmod 0755 "$staging_dir/install.sh"
 
 archive_sha256="$(shasum -a 256 "$archive_path" | awk '{ print $1 }')"
-printf '%s  %s\n' "$archive_sha256" "$archive_name" > "$staging_dir/pfterminal-package_SHA256SUMS"
+printf '%s  %s\n' "$archive_sha256" "$archive_name" > "$staging_dir/corbanu-terminal-package_SHA256SUMS"
 
 cat > "$staging_dir/install.command" <<EOF
 #!/bin/sh
@@ -119,9 +119,9 @@ set -eu
 
 SCRIPT_DIR=\$(CDPATH= cd -- "\$(dirname -- "\$0")" && pwd)
 
-export PFTERMINAL_RELEASE="${version}"
-export PFTERMINAL_PACKAGE_ARCHIVE="\$SCRIPT_DIR/${archive_name}"
-export PFTERMINAL_CHECKSUM_MANIFEST="\$SCRIPT_DIR/pfterminal-package_SHA256SUMS"
+export CORBANU_RELEASE="${version}"
+export CORBANU_PACKAGE_ARCHIVE="\$SCRIPT_DIR/${archive_name}"
+export CORBANU_CHECKSUM_MANIFEST="\$SCRIPT_DIR/corbanu-terminal-package_SHA256SUMS"
 
 exec /bin/sh "\$SCRIPT_DIR/install.sh" "\$@"
 EOF
@@ -130,7 +130,7 @@ chmod 0755 "$staging_dir/install.command"
 cat > "$staging_dir/README.txt" <<EOF
 Corbanu Terminal ${version} for ${platform_label}
 
-Double-click install.command to install the corbanu command and its pfterminal compatibility alias.
+Double-click install.command to install Corbanu Terminal.
 
 Default install locations:
   Primary launcher: \$HOME/.local/bin/corbanu
@@ -138,7 +138,7 @@ Default install locations:
 
 The installer leaves any existing stock codex command alone. It installs the
 bundled package archive from this DMG and verifies it against
-pfterminal-package_SHA256SUMS before installation.
+corbanu-terminal-package_SHA256SUMS before installation.
 
 Advanced terminal install:
   sh /Volumes/CorbanuTerminal-${version}-${target}/install.command

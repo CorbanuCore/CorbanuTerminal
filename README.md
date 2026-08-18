@@ -24,13 +24,10 @@ curl -fsSL https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/downlo
 irm https://github.com/CorbanuCore/CorbanuTerminal/releases/latest/download/install.ps1 | iex
 ```
 
-The standalone installer creates `corbanu` and compatibility command aliases.
-It does not replace a stock `codex` command. macOS users can alternatively
+The standalone installer creates the `corbanu` command. It does not replace a
+stock `codex` command. macOS users can alternatively
 download the latest Corbanu Terminal DMG from
 [GitHub Releases](https://github.com/CorbanuCore/CorbanuTerminal/releases/latest).
-
-`pfterminal` remains a supported command alias during the migration. Existing
-automation does not need to change immediately.
 
 ## Local state and compatibility
 
@@ -183,9 +180,6 @@ cd CorbanuTerminal/codex-rs
 CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build -p codex-cli --bin corbanu
 ./target/debug/corbanu
 ```
-
-The legacy `pfterminal` binary is built from the same codebase for migration
-compatibility.
 
 ## Upstream and license
 

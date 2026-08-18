@@ -1,10 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$TerminalPath = $(
-        $command = Get-Command corbanu -ErrorAction SilentlyContinue
-        if ($null -eq $command) {
-            $command = Get-Command pfterminal -ErrorAction Stop
-        }
+        $command = Get-Command corbanu -ErrorAction Stop
         $command.Source
     ),
     [string]$TaskName = "Corbanu Terminal Telegram"
