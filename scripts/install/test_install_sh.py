@@ -138,6 +138,8 @@ class InstallShTest(unittest.TestCase):
             self.assertIn(expected_debug_target, corbanu_debug_wrapper)
             self.assertIn(expected_debug_home, corbanu_debug_wrapper)
             self.assertNotIn(expected_debug_home, corbanu_wrapper)
+            self.assertTrue(Path(expected_debug_home).is_dir())
+            self.assertNotIn("CODEX_HOME points to", result.stderr)
             self.assertFalse((install_bin / "pfterminal").exists())
             self.assertFalse((install_bin / "pfterminal-debug").exists())
             self.assertEqual(
