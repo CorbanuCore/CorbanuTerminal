@@ -7,7 +7,7 @@ on:
         description: "Release version; must match codex-rs/Cargo.toml."
         required: true
         type: string
-        default: "0.1.33"
+        default: "0.1.34"
       publish_release:
         description: "Create or update the matching GitHub release."
         required: true
@@ -154,6 +154,9 @@ jobs:
           tar -xzf "$archive" -C "$package_dir"
           "$package_dir/bin/corbanu" --version
           "$package_dir/bin/corbanu" telegram --help >/dev/null
+          CLAUDE_CODE_OAUTH_TOKEN=corbanu-release-smoke \
+            "$package_dir/bin/corbanu" internal-claude-oauth-token \
+            | grep -Fx 'corbanu-release-smoke' >/dev/null
           help_output="$("$package_dir/bin/corbanu" exec --help 2>&1)"
           grep -F '~/.corbanu/config.toml' <<<"$help_output"
           grep -F '$CORBANU_HOME/config.toml' <<<"$help_output"
@@ -379,6 +382,9 @@ jobs:
           tar -xzf "$archive" -C "$package_dir"
           "$package_dir/bin/corbanu" --version
           "$package_dir/bin/corbanu" telegram --help >/dev/null
+          CLAUDE_CODE_OAUTH_TOKEN=corbanu-release-smoke \
+            "$package_dir/bin/corbanu" internal-claude-oauth-token \
+            | grep -Fx 'corbanu-release-smoke' >/dev/null
           help_output="$("$package_dir/bin/corbanu" exec --help 2>&1)"
           grep -F '~/.corbanu/config.toml' <<<"$help_output"
           grep -F '$CORBANU_HOME/config.toml' <<<"$help_output"
@@ -531,6 +537,15 @@ jobs:
           $corbanu = Join-Path $packageDir "bin/corbanu.exe"
           & $corbanu --version
           & $corbanu telegram --help | Out-Null
+          $env:CLAUDE_CODE_OAUTH_TOKEN = "corbanu-release-smoke"
+          try {
+            $token = & $corbanu internal-claude-oauth-token
+            if ($LASTEXITCODE -ne 0 -or $token -ne "corbanu-release-smoke") {
+              throw "canonical Claude provider auth helper failed"
+            }
+          } finally {
+            Remove-Item Env:CLAUDE_CODE_OAUTH_TOKEN -ErrorAction SilentlyContinue
+          }
           $helpOutput = (& $corbanu exec --help 2>&1 | Out-String)
           if ($helpOutput -notmatch [regex]::Escape('~/.corbanu/config.toml')) { throw "Corbanu config path missing from help" }
           if ($helpOutput -notmatch [regex]::Escape('$CORBANU_HOME/config.toml')) { throw "CORBANU_HOME missing from help" }
