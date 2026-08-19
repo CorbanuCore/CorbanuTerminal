@@ -1,8 +1,6 @@
 #![cfg(any(not(debug_assertions), test))]
 
 use crate::legacy_core::config::Config;
-use crate::npm_registry;
-use crate::npm_registry::NpmPackageInfo;
 use crate::update_action;
 use crate::update_action::UpdateAction;
 use crate::update_versions::extract_version_from_latest_tag;
@@ -63,17 +61,11 @@ const LEGACY_PFTERMINAL_LATEST_RELEASE_URL: &str =
     "https://api.github.com/repos/agtico/PfTerminal/releases/latest";
 const LEGACY_PFTERMINAL_RELEASE_BY_TAG_URL: &str =
     "https://api.github.com/repos/agtico/PfTerminal/releases/tags";
-const HOMEBREW_CASK_API_URL: &str = "https://formulae.brew.sh/api/cask/codex.json";
 const RELEASE_VALIDATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
 
 #[derive(Deserialize, Debug, Clone)]
 struct ReleaseInfo {
     tag_name: String,
-}
-
-#[derive(Deserialize, Debug, Clone)]
-struct HomebrewCaskInfo {
-    version: String,
 }
 
 async fn check_for_update(
@@ -103,33 +95,6 @@ async fn fetch_latest_version_for_action(
     github_latest_release_url: &str,
 ) -> anyhow::Result<String> {
     match action {
-        Some(UpdateAction::BrewUpgrade) => {
-            let HomebrewCaskInfo { version } = client_pool
-                .get(HOMEBREW_CASK_API_URL)
-                .headers(default_headers())
-                .send()
-                .await?
-                .error_for_status()?
-                .json::<HomebrewCaskInfo>()
-                .await?;
-            Ok(version)
-        }
-        Some(UpdateAction::NpmGlobalLatest)
-        | Some(UpdateAction::BunGlobalLatest)
-        | Some(UpdateAction::PnpmGlobalLatest) => {
-            let latest_version =
-                fetch_latest_github_release_version(client_pool, github_latest_release_url).await?;
-            let package_info = client_pool
-                .get(npm_registry::PACKAGE_URL)
-                .headers(default_headers())
-                .send()
-                .await?
-                .error_for_status()?
-                .json::<NpmPackageInfo>()
-                .await?;
-            npm_registry::ensure_version_ready(&package_info, &latest_version)?;
-            Ok(latest_version)
-        }
         Some(UpdateAction::StandaloneUnix) | Some(UpdateAction::StandaloneWindows) | None => {
             fetch_latest_github_release_version(client_pool, github_latest_release_url).await
         }
