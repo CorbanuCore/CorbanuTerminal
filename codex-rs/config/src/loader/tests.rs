@@ -70,10 +70,34 @@ impl ExecutorFileSystem for TestFileSystem {
 
     fn get_metadata<'a>(
         &'a self,
-        _path: &'a PathUri,
+        path: &'a PathUri,
         _sandbox: Option<&'a FileSystemSandboxContext>,
     ) -> ExecutorFileSystemFuture<'a, FileMetadata> {
-        Box::pin(async move { unimplemented!("test filesystem only supports reads") })
+        Box::pin(async move {
+            let path = path.to_abs_path()?;
+            let symlink_metadata = tokio::fs::symlink_metadata(path.as_path()).await?;
+            let metadata = tokio::fs::metadata(path.as_path()).await?;
+            let created_at_ms = metadata
+                .created()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .and_then(|duration| i64::try_from(duration.as_millis()).ok())
+                .unwrap_or_default();
+            let modified_at_ms = metadata
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .and_then(|duration| i64::try_from(duration.as_millis()).ok())
+                .unwrap_or_default();
+            Ok(FileMetadata {
+                is_directory: metadata.is_dir(),
+                is_file: metadata.is_file(),
+                is_symlink: symlink_metadata.file_type().is_symlink(),
+                size: metadata.len(),
+                created_at_ms,
+                modified_at_ms,
+            })
+        })
     }
 
     fn read_directory<'a>(
@@ -102,6 +126,59 @@ impl ExecutorFileSystem for TestFileSystem {
     ) -> ExecutorFileSystemFuture<'a, ()> {
         Box::pin(async move { unimplemented!("test filesystem only supports reads") })
     }
+}
+
+#[tokio::test]
+async fn upstream_global_codex_home_is_not_loaded_as_a_project_layer() {
+    let home = tempdir().expect("temp user home");
+    let corbanu_home = home.path().join(".corbanu");
+    let upstream_codex_home = home.path().join(".codex");
+    std::fs::create_dir_all(&corbanu_home).expect("create Corbanu home");
+    std::fs::create_dir_all(&upstream_codex_home).expect("create upstream Codex home");
+
+    let trusted_home = home.path().canonicalize().expect("canonical home");
+    let trusted_home = trusted_home.to_str().expect("UTF-8 home path");
+    std::fs::write(
+        corbanu_home.join(CONFIG_TOML_FILE),
+        format!(
+            r#"
+[projects.'{}']
+trust_level = "trusted"
+"#,
+            trusted_home.replace('\\', "\\\\")
+        ),
+    )
+    .expect("write Corbanu user config");
+
+    // These keys are intentionally denied in project-local config. The bug is
+    // not that they are denied; it is that upstream's global file was treated
+    // as a project file at all when Corbanu uses `~/.corbanu`.
+    std::fs::write(
+        upstream_codex_home.join(CONFIG_TOML_FILE),
+        r#"
+model_provider = "pfterminal-plan"
+notify = ["test-notify"]
+"#,
+    )
+    .expect("write upstream global config");
+
+    let cwd = AbsolutePathBuf::from_absolute_path(home.path()).expect("absolute cwd");
+    let stack = load_config_layers_state(
+        &TestFileSystem,
+        &corbanu_home,
+        Some(cwd),
+        &[],
+        LoaderOverrides::without_managed_config_for_tests(),
+        &crate::NoopThreadConfigLoader,
+    )
+    .await
+    .expect("load config without treating upstream home as a project");
+
+    assert_eq!(
+        stack.startup_warnings(),
+        Some(&[][..]),
+        "upstream global config must not produce a project-local-key warning"
+    );
 }
 
 #[tokio::test]
