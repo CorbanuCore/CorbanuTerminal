@@ -40,6 +40,7 @@ use rmcp::model::JsonRpcMessage;
 use rmcp::model::ProtocolVersion;
 use rmcp::model::ServerJsonRpcMessage;
 use rmcp::model::ServerResult;
+use rmcp::transport::auth::AuthError;
 use rmcp::transport::common::http_header::HEADER_MCP_PROTOCOL_VERSION;
 use rmcp::transport::streamable_http_client::AuthRequiredError;
 use rmcp::transport::streamable_http_client::InsufficientScopeError;
@@ -189,12 +190,13 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
                 StreamableHttpClientAdapterError::SessionExpired404,
             ));
         }
-        if response.status == StatusCode::UNAUTHORIZED.as_u16()
-            && let Some(header) = response_header(&response.headers, WWW_AUTHENTICATE)
-        {
-            return Err(StreamableHttpError::AuthRequired(AuthRequiredError::new(
-                header,
-            )));
+        if response.status == StatusCode::UNAUTHORIZED.as_u16() {
+            let body = collect_body(&mut body_stream, maximum_response_bytes).await?;
+            let body_preview = body_preview(String::from_utf8_lossy(&body).to_string());
+            return Err(unauthorized_streamable_http_error(
+                &body_preview,
+                response_header(&response.headers, WWW_AUTHENTICATE),
+            ));
         }
         if response.status == StatusCode::FORBIDDEN.as_u16()
             && let Some(challenge) = insufficient_scope_challenge(&response.headers)
@@ -497,6 +499,25 @@ fn body_preview(body: impl Into<String>) -> String {
         ));
     }
     body_preview
+}
+
+fn unauthorized_streamable_http_error(
+    body_preview: &str,
+    www_authenticate: Option<String>,
+) -> StreamableHttpError<StreamableHttpClientAdapterError> {
+    if let Some(header) = www_authenticate {
+        return StreamableHttpError::AuthRequired(AuthRequiredError::new(header));
+    }
+
+    // Some managed MCP endpoints return a JSON error body without an OAuth
+    // WWW-Authenticate challenge. Classify the HTTP status rather than surfacing
+    // the provider response as an unexpected transport payload.
+    let auth_error = if body_preview.contains("token_expired") {
+        AuthError::TokenExpired
+    } else {
+        AuthError::AuthorizationRequired
+    };
+    StreamableHttpError::Auth(auth_error)
 }
 
 fn client_jsonrpc_message_fields(

@@ -291,12 +291,12 @@ async fn streamable_http_401_does_not_trigger_recovery() -> anyhow::Result<()> {
     .await?;
 
     let first_error = call_echo_tool(&client, "unauthorized").await.unwrap_err();
-    assert!(first_error.to_string().contains("401"));
+    assert!(first_error.to_string().contains("authorization required"));
 
     let second_error = call_echo_tool(&client, "still-unauthorized")
         .await
         .unwrap_err();
-    assert!(second_error.to_string().contains("401"));
+    assert!(second_error.to_string().contains("authorization required"));
 
     Ok(())
 }

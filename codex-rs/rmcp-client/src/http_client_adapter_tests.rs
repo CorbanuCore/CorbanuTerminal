@@ -1,8 +1,38 @@
 use std::io::ErrorKind;
 
 use pretty_assertions::assert_eq;
+use rmcp::transport::auth::AuthError;
+use rmcp::transport::streamable_http_client::StreamableHttpError;
 
 use super::SseEventSizeLimit;
+use super::unauthorized_streamable_http_error;
+
+#[test]
+fn unauthorized_token_expiry_body_is_classified_as_expired_authentication() {
+    match unauthorized_streamable_http_error(
+        r#"{"error":{"code":"token_expired"}}"#,
+        /*www_authenticate*/ None,
+    ) {
+        StreamableHttpError::Auth(AuthError::TokenExpired) => {}
+        error => panic!("expected token-expiry auth error, got {error:?}"),
+    }
+}
+
+#[test]
+fn unauthorized_response_without_challenge_is_authentication_required() {
+    match unauthorized_streamable_http_error("unauthorized", None) {
+        StreamableHttpError::Auth(AuthError::AuthorizationRequired) => {}
+        error => panic!("expected authorization-required error, got {error:?}"),
+    }
+}
+
+#[test]
+fn unauthorized_challenge_prefers_oauth_authentication_metadata() {
+    match unauthorized_streamable_http_error("ignored", Some("Bearer realm=\"mcp\"".to_string())) {
+        StreamableHttpError::AuthRequired(_) => {}
+        error => panic!("expected OAuth auth-required error, got {error:?}"),
+    }
+}
 
 #[test]
 fn lf_terminators_reset_the_event_limit() {
