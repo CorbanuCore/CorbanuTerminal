@@ -352,7 +352,7 @@ Corbanu Terminal inherits Codex skills and ships bundled system skills.
 | `plugin-creator`  | Scaffold Codex plugins                              |
 | `skill-creator`   | Create or update a skill                            |
 | `skill-installer` | Install curated or GitHub-hosted skills             |
-| `tasknode-usage`  | Use Task Node as an agent-side second brain          |
+| `tasknode-usage`  | Use Task Node as an agent-side second brain         |
 
 ---
 
