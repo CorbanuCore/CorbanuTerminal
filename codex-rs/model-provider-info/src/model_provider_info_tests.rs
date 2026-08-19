@@ -159,6 +159,31 @@ fn only_kimi_built_in_uses_ambiguous_action_stop_semantics() {
 }
 
 #[test]
+fn built_in_command_auth_uses_the_canonical_installed_executable() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let command_auth_providers = providers
+        .iter()
+        .filter_map(|(provider_id, provider)| {
+            provider
+                .auth
+                .as_ref()
+                .map(|auth| (provider_id.as_str(), auth.command.as_str()))
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        !command_auth_providers.is_empty(),
+        "the invariant must exercise at least one built-in command-auth provider"
+    );
+    for (provider_id, command) in command_auth_providers {
+        assert_eq!(
+            command, CORBANU_PROVIDER_AUTH_COMMAND,
+            "built-in provider {provider_id} depends on an executable that supported Corbanu installs do not guarantee"
+        );
+    }
+}
+
+#[test]
 fn test_deserialize_anthropic_wire_api() {
     let provider_toml = r#"
 name = "Anthropic-compatible"
@@ -598,7 +623,7 @@ fn test_create_claude_plan_provider() {
             env_key_instructions: None,
             experimental_bearer_token: None,
             auth: Some(ModelProviderAuthInfo {
-                command: "pfterminal".to_string(),
+                command: CORBANU_PROVIDER_AUTH_COMMAND.to_string(),
                 args: vec!["internal-claude-oauth-token".to_string()],
                 timeout_ms: NonZeroU64::new(5_000).expect("timeout should be non-zero"),
                 refresh_interval_ms: 60_000,
