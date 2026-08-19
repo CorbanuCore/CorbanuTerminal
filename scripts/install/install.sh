@@ -1158,6 +1158,7 @@ update_visible_command() {
 
   if [ "$install_layout" = "package" ]; then
     if debug_terminal_relative_path="$(release_debug_terminal_relative_path "$release_dir")"; then
+      mkdir -p "$DEBUG_CODEX_HOME_DIR"
       write_visible_command_wrapper \
         "$DEBUG_BIN_PATH" \
         "$CURRENT_LINK/$debug_terminal_relative_path" \

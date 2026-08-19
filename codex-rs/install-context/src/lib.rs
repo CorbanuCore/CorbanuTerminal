@@ -94,12 +94,17 @@ impl InstallContext {
         codex_home: Option<&Path>,
     ) -> Self {
         let package_layout = current_exe.and_then(CodexPackageLayout::from_exe);
-        let method = if let Some(method) = method_override {
-            method
-        } else if let Some(exe_path) = current_exe {
+        let detected_method = current_exe.map_or(InstallMethod::Other, |exe_path| {
             install_method_from_exe(exe_path, codex_home, package_layout.as_ref(), is_macos)
+        });
+        // Package-manager markers describe the process that set them, not every
+        // descendant process. A standalone Corbanu launched from an npm-, bun-,
+        // or pnpm-managed parent must keep the provenance proven by its own
+        // executable layout so updates cannot target the parent's installation.
+        let method = if matches!(detected_method, InstallMethod::Standalone { .. }) {
+            detected_method
         } else {
-            InstallMethod::Other
+            method_override.unwrap_or(detected_method)
         };
 
         Self {
@@ -584,6 +589,32 @@ mod tests {
                 .join(default_rg_command())
                 .into_path_buf()
         );
+        Ok(())
+    }
+
+    #[test]
+    fn standalone_layout_wins_over_inherited_package_manager_marker() -> std::io::Result<()> {
+        let codex_home = tempfile::tempdir()?;
+        let release_dir = codex_home
+            .path()
+            .join("packages/standalone/releases/1.2.3-x86_64-unknown-linux-musl");
+        fs::create_dir_all(&release_dir)?;
+        let exe_path = release_dir.join(if cfg!(windows) {
+            "corbanu.exe"
+        } else {
+            "corbanu"
+        });
+        fs::write(&exe_path, "")?;
+
+        for inherited_method in [InstallMethod::Npm, InstallMethod::Bun, InstallMethod::Pnpm] {
+            let context = InstallContext::from_exe_with_codex_home(
+                /*is_macos*/ false,
+                /*current_exe*/ Some(&exe_path),
+                /*method_override*/ Some(inherited_method),
+                /*codex_home*/ Some(codex_home.path()),
+            );
+            assert!(matches!(context.method, InstallMethod::Standalone { .. }));
+        }
         Ok(())
     }
 

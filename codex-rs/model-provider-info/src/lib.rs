@@ -40,6 +40,8 @@ const DEFAULT_STREAM_LONG_FAILURE_MAX_RETRIES: u64 = 1;
 const DEFAULT_STREAM_MAX_RETRIES: u64 = 5;
 const DEFAULT_REQUEST_MAX_RETRIES: u64 = 4;
 pub const DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS: u64 = 15_000;
+/// Canonical executable guaranteed by every supported Corbanu Terminal install.
+const CORBANU_PROVIDER_AUTH_COMMAND: &str = "corbanu";
 /// Hard cap for user-configured `stream_max_retries`.
 const MAX_STREAM_MAX_RETRIES: u64 = 100;
 /// Hard cap for user-configured `request_max_retries`.
@@ -1042,7 +1044,7 @@ impl ModelProviderInfo {
             env_key_instructions: None,
             experimental_bearer_token: None,
             auth: Some(ModelProviderAuthInfo {
-                command: "pfterminal".to_string(),
+                command: CORBANU_PROVIDER_AUTH_COMMAND.to_string(),
                 args: vec!["internal-claude-oauth-token".to_string()],
                 timeout_ms: provider_auth_timeout_ms(),
                 refresh_interval_ms: 60_000,
