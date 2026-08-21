@@ -150,6 +150,7 @@ const OPENROUTER_ANTHROPIC_PROVIDER_NAME: &str = "OpenRouter Anthropic";
 pub const OPENROUTER_ANTHROPIC_PROVIDER_ID: &str = "openrouter-anthropic";
 pub const OPENROUTER_DEFAULT_MODEL: &str = "z-ai/glm-5.2";
 pub const OPENROUTER_GROK_4_6_MODEL: &str = "x-ai/grok-4.6";
+pub const OPENROUTER_OX_ALPHA_MODEL: &str = "stealth/ox-alpha";
 pub const OPENROUTER_API_KEY_ENV_VAR: &str = "OPENROUTER_API_KEY";
 const DEEPSEEK_PROVIDER_NAME: &str = "DeepSeek";
 pub const DEEPSEEK_PROVIDER_ID: &str = "deepseek";
@@ -284,6 +285,7 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
             | "deepseek/deepseek-v4-flash-0731"
             | "tencent/hy3:free"
             | "moonshotai/kimi-k3"
+            | OPENROUTER_OX_ALPHA_MODEL
     ) {
         return Some(OPENROUTER_PROVIDER_ID);
     }

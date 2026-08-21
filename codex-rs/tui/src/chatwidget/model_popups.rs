@@ -69,6 +69,8 @@ const OPENROUTER_DEEPSEEK_V4_FLASH_0731_MODEL: &str = "deepseek/deepseek-v4-flas
 const OPENROUTER_TENCENT_HY3_FREE_MODEL: &str = "tencent/hy3:free";
 #[cfg(test)]
 const OPENROUTER_KIMI_K3_MODEL: &str = "moonshotai/kimi-k3";
+#[cfg(test)]
+const OPENROUTER_OX_ALPHA_MODEL: &str = "stealth/ox-alpha";
 const OPENAI_GPT_5_5_MODEL: &str = "gpt-5.5";
 const OPENAI_GPT_5_6_SOL_MODEL: &str = "gpt-5.6-sol";
 const OPENAI_GPT_5_6_TERRA_MODEL: &str = "gpt-5.6-terra";
@@ -1401,6 +1403,7 @@ mod tests {
             OPENROUTER_DEEPSEEK_V4_FLASH_0731_MODEL,
             OPENROUTER_TENCENT_HY3_FREE_MODEL,
             OPENROUTER_KIMI_K3_MODEL,
+            OPENROUTER_OX_ALPHA_MODEL,
         ] {
             assert_eq!(
                 ChatWidget::model_provider_for_selection(model).as_deref(),
