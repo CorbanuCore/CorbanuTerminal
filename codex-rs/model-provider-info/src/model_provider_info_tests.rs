@@ -923,6 +923,8 @@ fn openrouter_preserves_nonempty_model_slugs() {
             "deepseek/deepseek-v4-pro",
             "deepseek/deepseek-v4-flash-0731",
             "tencent/hy3:free",
+            "moonshotai/kimi-k3",
+            OPENROUTER_OX_ALPHA_MODEL,
             "vendor/future-model",
         ] {
             assert_eq!(
@@ -1442,6 +1444,7 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (OPENROUTER_GROK_4_6_MODEL, OPENROUTER_PROVIDER_ID),
         ("x-ai/grok-4.5", OPENROUTER_PROVIDER_ID),
         ("moonshotai/kimi-k3", OPENROUTER_PROVIDER_ID),
+        (OPENROUTER_OX_ALPHA_MODEL, OPENROUTER_PROVIDER_ID),
         (DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_PROVIDER_ID),
         (DEEPSEEK_PRO_MODEL, DEEPSEEK_PROVIDER_ID),
         (

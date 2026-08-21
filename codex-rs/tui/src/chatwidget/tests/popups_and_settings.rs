@@ -4030,6 +4030,15 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
             && kimi_openrouter_popup.contains("$3.00/M input, $0.30/M cached input, $15.00/M"),
         "expected Kimi K3 in the OpenRouter tab:\n{kimi_openrouter_popup}"
     );
+    move_model_picker_selection_to(&mut minimax_chat, "stealth/ox-alpha");
+    let ox_alpha_openrouter_popup =
+        render_bottom_popup_with_height(&minimax_chat, /*width*/ 140, /*height*/ 28);
+    assert!(
+        ox_alpha_openrouter_popup.contains("stealth/ox-alpha")
+            && ox_alpha_openrouter_popup.contains("OpenRouter: Ox Alpha")
+            && ox_alpha_openrouter_popup.contains("$0/M input, $0/M output"),
+        "expected Ox Alpha in the OpenRouter tab:\n{ox_alpha_openrouter_popup}"
+    );
 
     let (mut openai_chat, _openai_rx, _openai_op_rx) =
         make_chatwidget_manual(Some("gpt-5.6-sol")).await;

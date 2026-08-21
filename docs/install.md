@@ -283,6 +283,7 @@ Current visible model metadata:
 | `deepseek/deepseek-v4-flash-0731`     | OpenRouter              | Exact pinned OpenRouter DeepSeek Flash route              |
 | `deepseek/deepseek-v4-pro`            | OpenRouter              | OpenRouter DeepSeek V4 Pro route                          |
 | `moonshotai/kimi-k3`                  | OpenRouter              | Metered Kimi K3 route                                     |
+| `stealth/ox-alpha`                    | OpenRouter              | Free Ox Alpha coding and reasoning route                  |
 | `muse-spark-1.1`                      | Meta                    | Meta API route                                            |
 | `glm-5.2` and provider-specific slugs | Multiple                | Ambient, Z.AI, Baseten, Vercel, and OpenRouter GLM routes |
 

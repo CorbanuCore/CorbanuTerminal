@@ -39,6 +39,7 @@ Visible OpenRouter models are bundled in
 | `minimax/minimax-m3` | OpenRouter MiniMax M3 | `$0.60/M input`, `$2.40/M output` |
 | `openrouter/owl-alpha` | OpenRouter Owl Alpha | `$0/M input`, `$0/M output` |
 | `google/gemini-3.5-flash` | OpenRouter Gemini 3.5 Flash | `$1.50/M input`, `$9.00/M output` |
+| `stealth/ox-alpha` | OpenRouter Ox Alpha | `$0/M input`, `$0/M output` |
 | `tencent/hy3:free` | OpenRouter Tencent Hy3 Free | `$0/M input`, `$0/M output` |
 
 Grok 4.6's listed rates double when the prompt exceeds 200,000 tokens.
@@ -65,6 +66,7 @@ pfterminal -m x-ai/grok-4.5
 pfterminal -m minimax/minimax-m3
 pfterminal -m openrouter/owl-alpha
 pfterminal -m google/gemini-3.5-flash
+pfterminal -m stealth/ox-alpha
 ```
 
 ## Vault Behavior

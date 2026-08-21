@@ -1465,6 +1465,7 @@ fn bundled_models_json_tracks_verified_image_capabilities() {
         "moonshotai/kimi-k2.7-code",
         "minimax/minimax-m3",
         "google/gemini-3.5-flash",
+        "stealth/ox-alpha",
         "claude-opus-5-plan",
         "claude-fable-5-plan",
         "claude-opus-5",
@@ -1888,6 +1889,7 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
         "minimax/minimax-m3",
         "openrouter/owl-alpha",
         "google/gemini-3.5-flash",
+        "stealth/ox-alpha",
         "x-ai/grok-4.5",
         "deepseek-v4-flash",
         "deepseek/deepseek-v4-pro",
@@ -2174,7 +2176,36 @@ fn bundled_models_json_contains_openrouter_models() {
             .contains("$3.00/M input, $0.30/M cached input, $15.00/M output")
     );
 
-    for model in [grok, deepseek_pro, deepseek_flash, hy3, kimi] {
+    let ox_alpha = openrouter_model("stealth/ox-alpha");
+    assert_eq!(ox_alpha.display_name, "OpenRouter Ox Alpha");
+    assert_eq!(ox_alpha.context_window, Some(1_048_576));
+    assert_eq!(ox_alpha.max_output_tokens, Some(131_072));
+    assert_eq!(ox_alpha.default_reasoning_level, Some(ReasoningEffort::Max));
+    assert_eq!(
+        ox_alpha
+            .supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            ReasoningEffort::Low,
+            ReasoningEffort::High,
+            ReasoningEffort::Max
+        ]
+    );
+    assert_eq!(
+        ox_alpha.input_modalities,
+        vec![InputModality::Text, InputModality::Image]
+    );
+    assert!(
+        ox_alpha
+            .description
+            .as_deref()
+            .unwrap_or_default()
+            .contains("$0/M input, $0/M output")
+    );
+
+    for model in [grok, deepseek_pro, deepseek_flash, hy3, kimi, ox_alpha] {
         assert_eq!(model.visibility, ModelVisibility::List);
         assert!(!model.supports_parallel_tool_calls);
         assert_standard_base(&model.base_instructions);
@@ -2279,6 +2310,7 @@ fn bundled_models_json_contains_openrouter_models() {
         "minimax/minimax-m3",
         "openrouter/owl-alpha",
         "google/gemini-3.5-flash",
+        "stealth/ox-alpha",
         "zai-org/GLM-5.2",
         "zai/glm-5.2",
         "zai/glm-5.2-fast",
