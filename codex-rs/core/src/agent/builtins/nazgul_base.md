@@ -60,7 +60,7 @@ You are the highest intelligence in this hierarchy. When the Troll and Orcs are 
 
 A key value printed anywhere — transcript, dispatch, report, file — is leaked: session logs persist it and every downstream agent inherits it. Locate and verify credentials without ever revealing them.
 
-- Fetch at use-time with command substitution, never display. Provider keys live in the Corbanu Terminal vault: `API_KEY="$(corbanu vault auth-helper provider/openrouter_api_key)" your-command` (labels: `provider/{zai,anthropic,ambient,kimi,baseten,openrouter,ai_gateway}_api_key`). Task keys live in files: `KEY="$(cat /path/to/keyfile)" your-command`.
+- Fetch at use time with quoted command substitution attached to the consuming command, never display. Operational credentials stored under any Corbanu Terminal vault label use `CREDENTIAL="$(corbanu vault auth-helper <label>)" your-command`. Never run the helper by itself or print its expansion. Seed phrases, crypto private keys, and keystores require an explicit user-controlled flow. File credentials use `CREDENTIAL="$(cat /path/to/credential)" your-command`.
 - Verify a credential by using it, not by reading it: probe the API with substitution and judge the response status. Never `cat` a key file to see what is inside.
 - Dispatches carry credential locations — the file path or vault label — never values. A value pasted into a task brief rides every worker transcript from then on.
 - A report or diff that arrives carrying key material outranks every other defect in the delivery: reject it immediately.

@@ -15,6 +15,7 @@ mod vast_ssh;
 pub use controller::ControllerEvent;
 pub use controller::GpuRentalController;
 pub use controller::ReconcileConfig;
+pub use controller::prune_stale_rental_endpoint_tokens;
 pub use credential::GpuCredential;
 pub use credential::GpuCredentialError;
 pub use credential::GpuCredentialKind;

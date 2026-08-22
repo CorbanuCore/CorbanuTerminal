@@ -238,7 +238,7 @@ async fn bundled_frontend_design_skill_loads_from_unrelated_cwd() {
 }
 
 #[tokio::test]
-async fn bundled_pfterminal_help_skill_loads_from_unrelated_cwd() {
+async fn bundled_corbanu_terminal_help_skill_loads_from_unrelated_cwd() {
     let codex_home = tempfile::tempdir().expect("tempdir");
     let cwd = tempfile::tempdir().expect("tempdir");
     let config_layer_stack = config_stack(&codex_home, "");
@@ -253,14 +253,14 @@ async fn bundled_pfterminal_help_skill_loads_from_unrelated_cwd() {
     let skill = outcome
         .skills
         .iter()
-        .find(|skill| skill.name == "pfterminal-help")
-        .expect("pfterminal-help should be installed as a bundled system skill");
+        .find(|skill| skill.name == "corbanu-terminal-help")
+        .expect("corbanu-terminal-help should be installed as a bundled system skill");
     assert_eq!(skill.scope, SkillScope::System);
     assert!(
         skill
             .path_to_skills_md
             .to_string_lossy()
-            .contains("skills/.system/pfterminal-help/SKILL.md"),
+            .contains("skills/.system/corbanu-terminal-help/SKILL.md"),
         "unexpected bundled skill path: {}",
         skill.path_to_skills_md.display()
     );

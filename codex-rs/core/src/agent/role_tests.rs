@@ -799,6 +799,17 @@ fn hierarchy_roles_use_native_reusable_agent_lifecycle() {
 }
 
 #[test]
+fn hierarchy_roles_can_use_operational_credentials_under_any_vault_label() {
+    for role_base in [NAZGUL_BASE, TROLL_BASE, ORC_BASE] {
+        assert!(role_base.contains("corbanu vault auth-helper <label>"));
+        assert!(role_base.contains("Never run the helper by itself"));
+        assert!(role_base.to_lowercase().contains("seed phrases"));
+        assert!(!role_base.contains("whitelisted provider"));
+        assert!(!role_base.contains("provider/openrouter_api_key"));
+    }
+}
+
+#[test]
 fn hierarchy_managers_treat_low_context_as_compaction_pressure_not_worker_death() {
     for manager_base in [NAZGUL_BASE, TROLL_BASE] {
         assert!(manager_base.contains("automatic_compaction=enabled"));

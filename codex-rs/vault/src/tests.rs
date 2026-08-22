@@ -154,6 +154,20 @@ fn delete_removes_credential_and_secret() {
 }
 
 #[test]
+fn delete_many_removes_present_credentials_and_ignores_missing_labels() {
+    let (_dir, _keyring, vault) = test_vault();
+    vault.add(api_key_entry("first", "secret-1")).unwrap();
+
+    assert_eq!(
+        vault
+            .delete_many(&["first".into(), "missing".into()])
+            .unwrap(),
+        1
+    );
+    assert!(!vault.exists("first").unwrap());
+}
+
+#[test]
 fn reveal_missing_label_errors() {
     let (_dir, _keyring, vault) = test_vault();
     let err = vault
@@ -163,6 +177,71 @@ fn reveal_missing_label_errors() {
         matches!(err, VaultError::NotFound { ref label } if label == "ghost"),
         "unexpected: {err:?}"
     );
+}
+
+fn assert_programmatic_use_round_trip(credential_type: CredentialType, label: &str) {
+    let (_dir, _keyring, vault) = test_vault();
+    let secret = "programmatic-use-fixture";
+    vault
+        .add(AddCredential {
+            label: label.to_string(),
+            credential_type,
+            provider: None,
+            notes: None,
+            revocation_notes: None,
+            secret: secret.to_string(),
+        })
+        .unwrap();
+
+    assert_eq!(vault.reveal_for_programmatic_use(label).unwrap(), secret);
+}
+
+#[test]
+fn programmatic_use_accepts_manual_secrets_under_arbitrary_labels() {
+    assert_programmatic_use_round_trip(CredentialType::ManualSecret, "infrastructure/primary");
+}
+
+#[test]
+fn programmatic_use_accepts_api_keys_under_arbitrary_labels() {
+    assert_programmatic_use_round_trip(CredentialType::ApiKey, "external-service/key");
+}
+
+#[test]
+fn programmatic_use_accepts_deployment_credentials_under_arbitrary_labels() {
+    assert_programmatic_use_round_trip(CredentialType::DeploymentKey, "hosting/deploy");
+}
+
+#[test]
+fn programmatic_use_rejects_key_custody_material_without_deleting_it() {
+    let (_dir, _keyring, vault) = test_vault();
+    let credential_types = [CredentialType::CryptoPrivateKey, CredentialType::SeedPhrase];
+
+    for (index, credential_type) in credential_types.into_iter().enumerate() {
+        let label = format!("custody-{index}");
+        let secret = format!("custody-material-{index}");
+        vault
+            .add(AddCredential {
+                label: label.clone(),
+                credential_type,
+                provider: None,
+                notes: None,
+                revocation_notes: None,
+                secret: secret.clone(),
+            })
+            .unwrap();
+
+        let error = vault
+            .reveal_for_programmatic_use(&label)
+            .expect_err("key custody material must require explicit user access");
+        assert!(matches!(
+            error,
+            VaultError::ProgrammaticUseDenied {
+                label: denied_label,
+                credential_type: denied_type,
+            } if denied_label == label && denied_type == credential_type
+        ));
+        assert_eq!(vault.reveal(&label).unwrap(), secret);
+    }
 }
 
 #[test]

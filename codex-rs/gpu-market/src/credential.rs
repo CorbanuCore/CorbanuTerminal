@@ -6,6 +6,8 @@ use zeroize::Zeroize;
 pub const VAST_API_KEY_LABEL: &str = "gpu/provider/vast/api-key";
 pub const RUNPOD_API_KEY_LABEL: &str = "gpu/provider/runpod/api-key";
 pub const HUGGINGFACE_TOKEN_LABEL: &str = "gpu/huggingface/token";
+const RENTAL_ENDPOINT_TOKEN_PREFIX: &str = "gpu/rental/";
+const RENTAL_ENDPOINT_TOKEN_SUFFIX: &str = "/endpoint-token";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GpuCredentialKind {
@@ -105,6 +107,28 @@ impl GpuCredentialError {
 pub trait GpuCredentialResolver: Send + Sync {
     fn resolve(&self, kind: &GpuCredentialKind) -> Result<GpuCredential, GpuCredentialError>;
 
+    /// Lists rental ids with managed endpoint tokens. Read-only resolvers may return no ids.
+    fn rental_endpoint_token_ids(&self) -> Result<Vec<String>, GpuCredentialError> {
+        Ok(Vec::new())
+    }
+
+    /// Deletes a managed endpoint token after its rental is provider-confirmed terminated.
+    fn delete_rental_endpoint_token(&self, _rental_id: &str) -> Result<bool, GpuCredentialError> {
+        Ok(false)
+    }
+
+    /// Deletes managed endpoint tokens in one store operation when supported.
+    fn delete_rental_endpoint_tokens(
+        &self,
+        rental_ids: &[String],
+    ) -> Result<usize, GpuCredentialError> {
+        let mut deleted = 0;
+        for rental_id in rental_ids {
+            deleted += usize::from(self.delete_rental_endpoint_token(rental_id)?);
+        }
+        Ok(deleted)
+    }
+
     fn ensure_rental_endpoint_token(
         &self,
         rental_id: &str,
@@ -188,6 +212,57 @@ impl GpuCredentialResolver for VaultGpuCredentialResolver {
     ) -> Result<GpuCredential, GpuCredentialError> {
         VaultGpuCredentialResolver::ensure_rental_endpoint_token(self, rental_id)
     }
+
+    fn rental_endpoint_token_ids(&self) -> Result<Vec<String>, GpuCredentialError> {
+        let mut rental_ids = self
+            .vault
+            .list()
+            .map_err(|_| GpuCredentialError::StoreUnavailable)?
+            .into_iter()
+            .filter(|credential| credential.provider.as_deref() == Some("gpu-rental"))
+            .filter_map(|credential| {
+                rental_id_from_endpoint_token_label(credential.label.as_str()).map(str::to_string)
+            })
+            .collect::<Vec<_>>();
+        rental_ids.sort_unstable();
+        rental_ids.dedup();
+        Ok(rental_ids)
+    }
+
+    fn delete_rental_endpoint_token(&self, rental_id: &str) -> Result<bool, GpuCredentialError> {
+        let label = GpuCredentialKind::RentalEndpointToken {
+            rental_id: rental_id.to_string(),
+        }
+        .canonical_label()?;
+        self.vault
+            .delete(label.as_str())
+            .map_err(|_| GpuCredentialError::StoreUnavailable)
+    }
+
+    fn delete_rental_endpoint_tokens(
+        &self,
+        rental_ids: &[String],
+    ) -> Result<usize, GpuCredentialError> {
+        let labels = rental_ids
+            .iter()
+            .map(|rental_id| {
+                GpuCredentialKind::RentalEndpointToken {
+                    rental_id: rental_id.clone(),
+                }
+                .canonical_label()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        self.vault
+            .delete_many(&labels)
+            .map_err(|_| GpuCredentialError::StoreUnavailable)
+    }
+}
+
+fn rental_id_from_endpoint_token_label(label: &str) -> Option<&str> {
+    let rental_id = label
+        .strip_prefix(RENTAL_ENDPOINT_TOKEN_PREFIX)?
+        .strip_suffix(RENTAL_ENDPOINT_TOKEN_SUFFIX)?;
+    validate_rental_id(rental_id).is_ok().then_some(rental_id)
 }
 
 fn validate_rental_id(rental_id: &str) -> Result<(), GpuCredentialError> {

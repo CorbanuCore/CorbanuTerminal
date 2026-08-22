@@ -169,6 +169,18 @@ impl LocalSecretsBackend {
         Ok(removed)
     }
 
+    pub fn delete_many(&self, entries: &[(SecretScope, SecretName)]) -> Result<usize> {
+        let mut file = self.load_file()?;
+        let deleted = entries
+            .iter()
+            .filter(|(scope, name)| file.secrets.remove(&scope.canonical_key(name)).is_some())
+            .count();
+        if deleted > 0 {
+            self.save_file(&file)?;
+        }
+        Ok(deleted)
+    }
+
     pub fn list(&self, scope_filter: Option<&SecretScope>) -> Result<Vec<SecretListEntry>> {
         let file = self.load_file()?;
         let mut entries = Vec::new();
@@ -566,6 +578,10 @@ impl SecretsBackend for LocalSecretsBackend {
 
     fn delete(&self, scope: &SecretScope, name: &SecretName) -> Result<bool> {
         LocalSecretsBackend::delete(self, scope, name)
+    }
+
+    fn delete_many(&self, entries: &[(SecretScope, SecretName)]) -> Result<usize> {
+        LocalSecretsBackend::delete_many(self, entries)
     }
 
     fn list(&self, scope_filter: Option<&SecretScope>) -> Result<Vec<SecretListEntry>> {
