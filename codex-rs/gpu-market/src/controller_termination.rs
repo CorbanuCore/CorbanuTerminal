@@ -163,12 +163,15 @@ where
         Ok(Vec::new())
     }
 
-    async fn confirm_terminated(
+    pub(super) async fn confirm_terminated(
         &self,
         lease: GpuRentalLease,
         now_ms: i64,
     ) -> anyhow::Result<Vec<ControllerEvent>> {
         let rental_id = lease.rental.rental_id.clone();
+        if let Some(credentials) = &self.credentials {
+            credentials.delete_rental_endpoint_token(rental_id.as_str())?;
+        }
         self.apply_update(
             &lease,
             GpuRentalUpdate {

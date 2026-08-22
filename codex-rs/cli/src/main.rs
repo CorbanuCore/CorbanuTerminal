@@ -560,7 +560,7 @@ struct VaultCommand {
 
 #[derive(Debug, clap::Subcommand)]
 enum VaultSubcommand {
-    /// Print a whitelisted provider key for Claude Code apiKeyHelper.
+    /// Resolve an operational vault credential for immediate command use.
     #[clap(name = "auth-helper")]
     AuthHelper(VaultAuthHelperCommand),
 }
@@ -2375,6 +2375,13 @@ async fn run_internal_gpu_controller(command: GpuControllerCommand) -> anyhow::R
     let sqlite = config.sqlite_config().clone();
     let sqlite_home = sqlite.home().to_path_buf();
     std::fs::create_dir_all(&sqlite_home)?;
+    let state = StateRuntime::init(sqlite, "gpu-controller".to_string()).await?;
+    let installation_id = codex_core::resolve_installation_id(&config.codex_home).await?;
+    let credentials = Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
+        codex_vault::Vault::new(config.codex_home.to_path_buf()),
+    )));
+    codex_gpu_market::prune_stale_rental_endpoint_tokens(&state, credentials.as_ref()).await?;
+
     let controller_lock_path = sqlite_home.join("gpu-controller.lock");
     let controller_lock = std::fs::OpenOptions::new()
         .create(true)
@@ -2387,11 +2394,6 @@ async fn run_internal_gpu_controller(command: GpuControllerCommand) -> anyhow::R
         Err(std::fs::TryLockError::WouldBlock) => return Ok(()),
         Err(std::fs::TryLockError::Error(error)) => return Err(error.into()),
     }
-    let state = StateRuntime::init(sqlite, "gpu-controller".to_string()).await?;
-    let installation_id = codex_core::resolve_installation_id(&config.codex_home).await?;
-    let credentials = Arc::new(codex_gpu_market::VaultGpuCredentialResolver::new(Arc::new(
-        codex_vault::Vault::new(config.codex_home.to_path_buf()),
-    )));
     let reconcile_config = codex_gpu_market::ReconcileConfig::default();
     let vast = codex_gpu_market::GpuRentalController::new_with_runtime(
         state.clone(),
@@ -2452,12 +2454,6 @@ async fn run_vault_auth_helper(
     config_overrides: CliConfigOverrides,
     command: VaultAuthHelperCommand,
 ) -> anyhow::Result<()> {
-    if !provider_vault_label_allowed_for_auth_helper(&command.label) {
-        anyhow::bail!(
-            "vault auth-helper can only reveal whitelisted provider labels for Claude panes"
-        );
-    }
-
     let cli_kv_overrides = config_overrides
         .parse_overrides()
         .map_err(anyhow::Error::msg)?;
@@ -2466,7 +2462,7 @@ async fn run_vault_auth_helper(
         .build()
         .await?;
     let vault = codex_vault::Vault::new(config.codex_home.to_path_buf());
-    let secret = vault.reveal(&command.label)?;
+    let secret = vault.reveal_for_programmatic_use(&command.label)?;
     std::io::stdout().write_all(secret.as_bytes())?;
     Ok(())
 }
@@ -2569,21 +2565,6 @@ async fn run_claude_pane_workflow_suite_command(
         );
     }
     Ok(())
-}
-
-fn provider_vault_label_allowed_for_auth_helper(label: &str) -> bool {
-    matches!(
-        label,
-        "provider/zai_api_key"
-            | "provider/anthropic_api_key"
-            | "provider/ambient_api_key"
-            | "provider/kimi_api_key"
-            | "provider/deepseek_api_key"
-            | "provider/baseten_api_key"
-            | "provider/openrouter_api_key"
-            | "provider/model_api_key"
-            | "provider/ai_gateway_api_key"
-    )
 }
 
 /// Prepend root-level overrides so they have lower precedence than
@@ -3463,10 +3444,14 @@ mod tests {
     }
 
     #[test]
-    fn vault_auth_helper_parses_provider_label() {
-        let cli =
-            MultitoolCli::try_parse_from(["codex", "vault", "auth-helper", "provider/zai_api_key"])
-                .expect("parse");
+    fn vault_auth_helper_parses_arbitrary_label() {
+        let cli = MultitoolCli::try_parse_from([
+            "codex",
+            "vault",
+            "auth-helper",
+            "infrastructure/primary",
+        ])
+        .expect("parse");
 
         let Some(Subcommand::Vault(VaultCommand {
             action: VaultSubcommand::AuthHelper(command),
@@ -3476,26 +3461,7 @@ mod tests {
             panic!("expected vault auth-helper subcommand");
         };
 
-        assert_eq!(command.label, "provider/zai_api_key");
-        assert!(provider_vault_label_allowed_for_auth_helper(&command.label));
-        assert!(provider_vault_label_allowed_for_auth_helper(
-            "provider/anthropic_api_key"
-        ));
-        assert!(provider_vault_label_allowed_for_auth_helper(
-            "provider/ambient_api_key"
-        ));
-        assert!(provider_vault_label_allowed_for_auth_helper(
-            "provider/kimi_api_key"
-        ));
-        assert!(provider_vault_label_allowed_for_auth_helper(
-            "provider/deepseek_api_key"
-        ));
-        assert!(provider_vault_label_allowed_for_auth_helper(
-            "provider/model_api_key"
-        ));
-        assert!(provider_vault_label_allowed_for_auth_helper(
-            "provider/ai_gateway_api_key"
-        ));
+        assert_eq!(command.label, "infrastructure/primary");
     }
 
     #[test]

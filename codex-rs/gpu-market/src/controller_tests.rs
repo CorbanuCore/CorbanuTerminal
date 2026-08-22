@@ -24,6 +24,7 @@ use codex_state::GpuRentalCreateParams;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -44,6 +45,61 @@ impl GpuCredentialResolver for FakeCredentials {
             GpuCredentialKind::HuggingFaceToken => Err(GpuCredentialError::Missing),
             GpuCredentialKind::ProviderApiKey { .. } => Err(GpuCredentialError::Missing),
         }
+    }
+}
+
+#[derive(Debug)]
+struct TrackingCredentials {
+    rental_ids: StdMutex<Vec<String>>,
+    deleted: StdMutex<Vec<String>>,
+}
+
+impl TrackingCredentials {
+    fn new(rental_ids: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        Self {
+            rental_ids: StdMutex::new(rental_ids.into_iter().map(Into::into).collect()),
+            deleted: StdMutex::new(Vec::new()),
+        }
+    }
+
+    fn deleted(&self) -> Vec<String> {
+        self.deleted
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+}
+
+impl GpuCredentialResolver for TrackingCredentials {
+    fn resolve(&self, kind: &GpuCredentialKind) -> Result<GpuCredential, GpuCredentialError> {
+        FakeCredentials.resolve(kind)
+    }
+
+    fn rental_endpoint_token_ids(&self) -> Result<Vec<String>, GpuCredentialError> {
+        Ok(self
+            .rental_ids
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone())
+    }
+
+    fn delete_rental_endpoint_token(&self, rental_id: &str) -> Result<bool, GpuCredentialError> {
+        let removed = {
+            let mut rental_ids = self
+                .rental_ids
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let before = rental_ids.len();
+            rental_ids.retain(|stored| stored != rental_id);
+            rental_ids.len() != before
+        };
+        if removed {
+            self.deleted
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(rental_id.to_string());
+        }
+        Ok(removed)
     }
 }
 
@@ -574,6 +630,77 @@ async fn create_authorized_rental(state: &StateRuntime, operation_id: &str) {
             .request_gpu_rental_creation(params.rental_id.as_str(), NOW_MS)
             .await
             .expect("authorize creation")
+    );
+}
+
+#[tokio::test]
+async fn reconciliation_prunes_orphaned_endpoint_tokens_and_preserves_tracked_rentals() {
+    let state = state_runtime().await;
+    let active = rental_params("active-token");
+    state
+        .create_gpu_rental(&active, NOW_MS)
+        .await
+        .expect("create tracked rental");
+    state
+        .request_gpu_rental_creation(active.rental_id.as_str(), NOW_MS)
+        .await
+        .expect("authorize tracked rental");
+    let credentials = Arc::new(TrackingCredentials::new([
+        "orphan-token",
+        active.rental_id.as_str(),
+    ]));
+    let controller = controller_with_dependencies(
+        state,
+        FakeProvider::new(CreateBehavior::Success),
+        credentials.clone(),
+        Arc::new(FakeReadiness),
+    );
+
+    controller
+        .reconcile_due(NOW_MS)
+        .await
+        .expect("prune orphaned endpoint tokens");
+
+    assert_eq!(credentials.deleted(), vec!["orphan-token"]);
+}
+
+#[tokio::test]
+async fn provider_confirmed_termination_deletes_the_endpoint_token() {
+    let state = state_runtime().await;
+    let provider = FakeProvider::new(CreateBehavior::Success);
+    create_authorized_rental(&state, "token-cleanup").await;
+    let credentials = Arc::new(TrackingCredentials::new(["rental-token-cleanup"]));
+    let controller = controller_with_dependencies(
+        state.clone(),
+        provider,
+        credentials.clone(),
+        Arc::new(FakeReadiness),
+    );
+    controller.reconcile_due(NOW_MS).await.expect("create");
+    state
+        .request_gpu_rental_termination("rental-token-cleanup", NOW_MS + 1)
+        .await
+        .expect("request termination");
+    controller
+        .reconcile_due(NOW_MS + 1)
+        .await
+        .expect("send termination");
+    assert_eq!(credentials.deleted(), vec!["rental-token-cleanup"]);
+
+    controller
+        .reconcile_due(NOW_MS + 2)
+        .await
+        .expect("confirm termination");
+
+    assert_eq!(credentials.deleted(), vec!["rental-token-cleanup"]);
+    assert_eq!(
+        state
+            .get_gpu_rental("rental-token-cleanup")
+            .await
+            .expect("load rental")
+            .expect("rental exists")
+            .observed_state,
+        GpuRentalState::TerminatedConfirmed
     );
 }
 

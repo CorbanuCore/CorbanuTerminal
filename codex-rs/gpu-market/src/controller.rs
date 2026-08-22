@@ -135,6 +135,9 @@ where
     }
 
     pub async fn reconcile_due(&self, now_ms: i64) -> anyhow::Result<Vec<ControllerEvent>> {
+        if let Some(credentials) = &self.credentials {
+            prune_stale_rental_endpoint_tokens(&self.state, credentials.as_ref()).await?;
+        }
         self.state.prune_terminal_gpu_runtime_providers().await?;
         let provider = self.provider.capabilities().provider;
         let leases = self
@@ -631,22 +634,7 @@ where
         };
         let instance = match self.provider.get_instance(resource_id.clone()).await {
             Ok(None) => {
-                self.apply_update(
-                    &lease,
-                    GpuRentalUpdate {
-                        desired_state: Some(GpuRentalState::TerminatedConfirmed),
-                        observed_state: Some(GpuRentalState::TerminatedConfirmed),
-                        next_retry_at_ms: Some(i64::MAX),
-                        clear_last_error: true,
-                        ..GpuRentalUpdate::default()
-                    },
-                    now_ms,
-                )
-                .await?;
-                return Ok(vec![ControllerEvent::StateChanged {
-                    rental_id: lease.rental.rental_id,
-                    state: GpuRentalState::TerminatedConfirmed,
-                }]);
+                return self.confirm_terminated(lease, now_ms).await;
             }
             Ok(Some(instance))
                 if matches!(
@@ -957,6 +945,39 @@ where
         }
         Ok(())
     }
+}
+
+/// Deletes managed endpoint tokens that cannot belong to a provisioning or serving rental.
+pub async fn prune_stale_rental_endpoint_tokens(
+    state: &StateRuntime,
+    credentials: &dyn crate::GpuCredentialResolver,
+) -> anyhow::Result<usize> {
+    let mut stale_rental_ids = Vec::new();
+    for rental_id in credentials.rental_endpoint_token_ids()? {
+        let rental = state.get_gpu_rental(rental_id.as_str()).await?;
+        if rental.is_none_or(|rental| !rental_requires_endpoint_token(&rental)) {
+            stale_rental_ids.push(rental_id);
+        }
+    }
+    Ok(credentials.delete_rental_endpoint_tokens(&stale_rental_ids)?)
+}
+
+fn rental_requires_endpoint_token(rental: &GpuRental) -> bool {
+    if rental.desired_state == GpuRentalState::TerminateRequested {
+        return false;
+    }
+    matches!(
+        (rental.desired_state, rental.observed_state),
+        (GpuRentalState::CreatePending, GpuRentalState::Quoted)
+            | (_, GpuRentalState::Allocating)
+            | (_, GpuRentalState::Reconciling)
+            | (_, GpuRentalState::Bootstrapping)
+            | (_, GpuRentalState::Downloading)
+            | (_, GpuRentalState::Starting)
+            | (_, GpuRentalState::Probing)
+            | (_, GpuRentalState::Ready)
+            | (_, GpuRentalState::Degraded)
+    )
 }
 
 fn manifest_step_digest(value: &str) -> String {

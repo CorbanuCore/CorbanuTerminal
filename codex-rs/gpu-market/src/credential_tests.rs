@@ -36,3 +36,18 @@ fn unsafe_rental_ids_cannot_select_arbitrary_vault_labels() {
         Err(GpuCredentialError::InvalidRentalId)
     ));
 }
+
+#[test]
+fn endpoint_token_labels_only_yield_valid_rental_ids() {
+    assert_eq!(
+        rental_id_from_endpoint_token_label("gpu/rental/rental-123/endpoint-token"),
+        Some("rental-123")
+    );
+    for label in [
+        "gpu/provider/vast/api-key",
+        "gpu/rental/../../provider/vast/endpoint-token",
+        "gpu/rental/rental-123/other",
+    ] {
+        assert_eq!(rental_id_from_endpoint_token_label(label), None);
+    }
+}

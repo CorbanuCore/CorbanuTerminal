@@ -44,6 +44,9 @@ const GPT55_GUIDE_MARKER: &str = "vivid inner life";
 
 fn assert_standard_base(actual: &str) {
     assert_eq!(actual.trim_end(), STANDARD_BASE.trim_end());
+    assert!(actual.contains("corbanu vault auth-helper <label>"));
+    assert!(actual.contains("Never run the helper by itself"));
+    assert!(!actual.contains("whitelisted provider"));
 }
 
 fn remote_model(slug: &str, display: &str, priority: i32) -> ModelInfo {

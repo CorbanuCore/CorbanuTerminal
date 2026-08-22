@@ -91,6 +91,13 @@ pub trait SecretsBackend: Send + Sync {
     fn set(&self, scope: &SecretScope, name: &SecretName, value: &str) -> Result<()>;
     fn get(&self, scope: &SecretScope, name: &SecretName) -> Result<Option<String>>;
     fn delete(&self, scope: &SecretScope, name: &SecretName) -> Result<bool>;
+    fn delete_many(&self, entries: &[(SecretScope, SecretName)]) -> Result<usize> {
+        let mut deleted = 0;
+        for (scope, name) in entries {
+            deleted += usize::from(self.delete(scope, name)?);
+        }
+        Ok(deleted)
+    }
     fn list(&self, scope_filter: Option<&SecretScope>) -> Result<Vec<SecretListEntry>>;
 }
 
@@ -148,6 +155,10 @@ impl SecretsManager {
 
     pub fn delete(&self, scope: &SecretScope, name: &SecretName) -> Result<bool> {
         self.backend.delete(scope, name)
+    }
+
+    pub fn delete_many(&self, entries: &[(SecretScope, SecretName)]) -> Result<usize> {
+        self.backend.delete_many(entries)
     }
 
     pub fn list(&self, scope_filter: Option<&SecretScope>) -> Result<Vec<SecretListEntry>> {
@@ -242,6 +253,35 @@ mod tests {
 
         assert!(manager.delete(&scope, &name)?);
         assert_eq!(manager.get(&scope, &name)?, None);
+        Ok(())
+    }
+
+    #[test]
+    fn manager_deletes_multiple_local_secrets_in_one_operation() -> Result<()> {
+        let codex_home = tempfile::tempdir().expect("tempdir");
+        let keyring = Arc::new(MockKeyringStore::default());
+        let manager = SecretsManager::new_with_keyring_store(
+            codex_home.path().to_path_buf(),
+            SecretsBackendKind::Local,
+            keyring,
+        );
+        let scope = SecretScope::Global;
+        let first = SecretName::new("FIRST_TOKEN")?;
+        let second = SecretName::new("SECOND_TOKEN")?;
+        let missing = SecretName::new("MISSING_TOKEN")?;
+        manager.set(&scope, &first, "first")?;
+        manager.set(&scope, &second, "second")?;
+
+        assert_eq!(
+            manager.delete_many(&[
+                (scope.clone(), first.clone()),
+                (scope.clone(), second.clone()),
+                (scope.clone(), missing),
+            ])?,
+            2
+        );
+        assert_eq!(manager.get(&scope, &first)?, None);
+        assert_eq!(manager.get(&scope, &second)?, None);
         Ok(())
     }
 }

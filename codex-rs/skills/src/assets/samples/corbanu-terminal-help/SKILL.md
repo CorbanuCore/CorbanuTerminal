@@ -1,5 +1,5 @@
 ---
-name: pfterminal-help
+name: corbanu-terminal-help
 description: Help users operate Corbanu Terminal's product-specific features and slash commands. Use when a user asks how to configure providers or credentials, use the encrypted vault, create or restore a Solana wallet, buy or manage a Corbanu Plan, rent GPUs through Vast.ai or RunPod, choose rented models, spawn or supervise agent hierarchies, navigate panes, use Task Node, or troubleshoot Corbanu Terminal state and workflows. Focus on what to do in the TUI and what each action means, not source-code implementation.
 ---
 
@@ -42,6 +42,8 @@ Use bare `/vault` for the action menu:
 - `/vault credential add` must have no inline secret; Corbanu Terminal opens the secure modal.
 - Delete only when the user intends to remove that stored credential. Explain which provider or workflow will lose access.
 
+An operational credential stored through the masked vault flow is available to agent automation under its existing label; it does not need to be entered again through a provider-specific screen. At command execution time, the agent can attach `CREDENTIAL="$(corbanu vault auth-helper <label>)"` to the consuming command without displaying the value. This applies to API keys, bearer/basic/OAuth credentials, RPC and exchange keys, deployment credentials, and manual secrets. Seed phrases, crypto private keys, and keystores remain restricted to explicit user-controlled flows. Never tell a user that `manual-secret` metadata alone makes a stored credential unusable, and never require duplicate entry through an integration-specific flow when the user wants direct API automation.
+
 The vault and wallet are different. The vault stores service credentials; `/wallet` manages a signing key, on-chain balances, and Corbanu Plan linkage.
 
 ## Wallet and Corbanu Plan
@@ -70,7 +72,7 @@ Treat a durable payment receipt or refreshed plan state as confirmation. If sett
 
 ## GPU rentals
 
-`/gpu` rents third-party capacity; Corbanu Terminal does not provide a free GPU pool. The user needs a funded Vast.ai or RunPod account and its API key. For Vast.ai, adding the API key authorizes Corbanu Terminal to use that marketplace account; it does not add credit to the Vast balance. Configure the key in `/gpu`'s masked credential flow, then choose a verified recipe.
+`/gpu` rents third-party capacity; Corbanu Terminal does not provide a free GPU pool. The user needs a funded Vast.ai or RunPod account and its API key. Adding a key through `/gpu` authorizes the built-in rental workflow and does not add credit to the marketplace balance. Use `/gpu`'s masked credential flow when that integrated rental workflow lacks its canonical credential. A credential already stored under another vault label remains usable for direct API automation and does not need to be re-entered unless the user chooses the integrated `/gpu` workflow.
 
 The rental flow asks separately for:
 

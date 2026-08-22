@@ -184,7 +184,7 @@ mod tests {
         );
         assert!(
             paths
-                .binary_search_by(|probe| probe.as_str().cmp("pfterminal-help/SKILL.md"))
+                .binary_search_by(|probe| probe.as_str().cmp("corbanu-terminal-help/SKILL.md"))
                 .is_ok()
         );
         assert!(
@@ -196,7 +196,11 @@ mod tests {
         );
         assert!(
             paths
-                .binary_search_by(|probe| probe.as_str().cmp("pfterminal-help/agents/openai.yaml"))
+                .binary_search_by(|probe| {
+                    probe
+                        .as_str()
+                        .cmp("corbanu-terminal-help/agents/openai.yaml")
+                })
                 .is_ok()
         );
         assert!(
@@ -252,5 +256,18 @@ mod tests {
         assert!(tooling.contains("Install Corbanu Terminal; do not build a helper"));
         assert!(!skill.contains("`pfterminal tasknode"));
         assert!(!tooling.contains("cargo build -p codex-cli"));
+    }
+
+    #[test]
+    fn corbanu_terminal_help_treats_stored_operational_credentials_as_usable() {
+        let skill = SYSTEM_SKILLS_DIR
+            .get_file("corbanu-terminal-help/SKILL.md")
+            .and_then(|file| file.contents_utf8())
+            .expect("embedded Corbanu Terminal help skill");
+
+        assert!(skill.contains("corbanu vault auth-helper <label>"));
+        assert!(skill.contains("manual-secret` metadata alone"));
+        assert!(skill.contains("does not need to be re-entered"));
+        assert!(!skill.contains("Configure the key in `/gpu`"));
     }
 }

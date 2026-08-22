@@ -82,6 +82,14 @@ pub enum VaultError {
     /// The raw secret value was empty.
     #[error("secret value must not be empty")]
     EmptySecret,
+    /// The credential is intentionally excluded from generic automation.
+    #[error(
+        "credential labeled {label:?} has type {credential_type}, which cannot be used by vault auth-helper"
+    )]
+    ProgrammaticUseDenied {
+        label: String,
+        credential_type: CredentialType,
+    },
     /// An underlying storage/encryption error occurred.
     #[error(transparent)]
     Storage(#[from] anyhow::Error),
@@ -136,6 +144,27 @@ impl CredentialType {
             CredentialType::ExchangeKey => "exchange key",
             CredentialType::DeploymentKey => "deployment key",
             CredentialType::ManualSecret => "manual secret",
+        }
+    }
+
+    /// Whether this credential class may be resolved for use-time automation.
+    ///
+    /// Key custody material stays behind explicit user reveal/export flows. Other
+    /// credentials may be passed directly to a command without requiring a
+    /// provider-specific label or integration.
+    pub fn permits_programmatic_use(self) -> bool {
+        match self {
+            CredentialType::ApiKey
+            | CredentialType::BearerToken
+            | CredentialType::BasicAuth
+            | CredentialType::OauthClient
+            | CredentialType::RpcKey
+            | CredentialType::ExchangeKey
+            | CredentialType::DeploymentKey
+            | CredentialType::ManualSecret => true,
+            CredentialType::CryptoPrivateKey
+            | CredentialType::SeedPhrase
+            | CredentialType::KeystoreJson => false,
         }
     }
 }
@@ -376,6 +405,28 @@ impl Vault {
         })
     }
 
+    /// Delete several credentials in one encrypted-store transaction.
+    pub fn delete_many(&self, labels: &[String]) -> Result<usize, VaultError> {
+        let normalized = labels
+            .iter()
+            .map(|label| normalize_label(label))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.with_storage_lock(|| {
+            let mut index = self.load_index()?;
+            let mut secret_entries = Vec::with_capacity(normalized.len());
+            let mut removed_metadata = 0;
+            for label in &normalized {
+                removed_metadata += usize::from(index.credentials.remove(label).is_some());
+                secret_entries.push((VAULT_SCOPE.clone(), secret_name_for(label)?));
+            }
+            if removed_metadata > 0 {
+                self.save_index(&index)?;
+            }
+            let removed_secrets = self.secrets.delete_many(&secret_entries)?;
+            Ok(removed_metadata.max(removed_secrets))
+        })
+    }
+
     /// List metadata for all stored credentials (no secret material).
     pub fn list(&self) -> Result<Vec<VaultCredentialMeta>, VaultError> {
         self.with_storage_lock(|| {
@@ -408,6 +459,32 @@ impl Vault {
             let index = self.load_index()?;
             if !index.credentials.contains_key(&normalized) {
                 return Err(VaultError::NotFound { label: normalized });
+            }
+            self.read_secret(&normalized)?
+                .ok_or_else(|| VaultError::NotFound { label: normalized })
+        })
+    }
+
+    /// Resolve an operational credential for immediate programmatic use.
+    ///
+    /// The caller must keep the returned value out of model context, logs, and
+    /// persistent process state. Key custody material is rejected even when it
+    /// exists in the vault.
+    pub fn reveal_for_programmatic_use(&self, label: &str) -> Result<String, VaultError> {
+        let normalized = normalize_label(label)?;
+        self.with_storage_lock(|| {
+            let index = self.load_index()?;
+            let meta = index
+                .credentials
+                .get(&normalized)
+                .ok_or_else(|| VaultError::NotFound {
+                    label: normalized.clone(),
+                })?;
+            if !meta.credential_type.permits_programmatic_use() {
+                return Err(VaultError::ProgrammaticUseDenied {
+                    label: normalized,
+                    credential_type: meta.credential_type,
+                });
             }
             self.read_secret(&normalized)?
                 .ok_or_else(|| VaultError::NotFound { label: normalized })
