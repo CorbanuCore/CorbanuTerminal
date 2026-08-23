@@ -61,6 +61,13 @@ model routing, native retained agents, pane/session persistence, wallet and GPU
 operations, remote-control and Task Node bridges, encrypted credential storage,
 packaging, and branding—not just prompt text.
 
+## Development mandate
+
+Contributors and coding agents follow the same classified development and
+release workflow. Read the [Development Mandate](development-mandate.md) for
+the explicitly marked human-readable mirror of the repository's development
+skill.
+
 ## Repository layout
 
 The main implementation is under `codex-rs/`, inherited from the open-source Codex CLI Rust workspace.

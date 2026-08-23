@@ -93,6 +93,7 @@ nav:
       - Skills: skills.md
       - AGENTS.md: agents_md.md
   - Project:
+      - Development Mandate: development-mandate.md
       - Contributing: contributing.md
       - CI Coverage: ci.md
       - CLA: CLA.md
