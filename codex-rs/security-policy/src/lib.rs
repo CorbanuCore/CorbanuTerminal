@@ -10,6 +10,7 @@
 mod authorization;
 mod bounded;
 mod digest;
+mod grant;
 mod level;
 
 pub use authorization::ActorChain;
@@ -30,6 +31,9 @@ pub use authorization::permissive_decision;
 pub use bounded::BoundedText;
 pub use bounded::BoundedTextError;
 pub use bounded::MAX_POLICY_TEXT_BYTES;
+pub use grant::BoundedGrant;
+pub use grant::GrantScope;
+pub use grant::GrantValidationError;
 pub use level::SECURITY_SETTINGS_VERSION;
 pub use level::SecurityLevel;
 pub use level::SecuritySettings;
