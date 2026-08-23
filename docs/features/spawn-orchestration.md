@@ -1,8 +1,13 @@
-# `/spawn` orchestration
+# Agent orchestration
 
-Corbanu Terminal turns a flat set of agent tabs into a visible chain of command.
-The user works through one root pane while supervisors delegate bounded work to
-executors and report results upward.
+## The pain
+
+Delegation becomes untrustworthy when workers have no visible parent, durable
+mailbox, or supervising reviewer. Corbanu Terminal turns a flat set of agent
+tabs into a visible chain of command and can attach continuing supervision to
+existing work.
+
+## Product contract
 
 > **Product specification — “Shipping MVP — LIVE”**
 >
@@ -48,6 +53,19 @@ Direct commands are also available:
 
 Binding a Nazgul does not create a worker. It marks the pane through which the
 human supervises the hierarchy.
+
+## Attach persistent supervision
+
+Use `/orchestrate` when the crew or pane already exists and needs a continuing
+supervisory assignment:
+
+```text
+/orchestrate
+/orchestrate status
+```
+
+The guided flow can attach, pause, resume, extend, test or fire, and detach an
+assignment. `/orchestrate` manages the assignment; it does not create the crew.
 
 ## Inspect and resume work
 

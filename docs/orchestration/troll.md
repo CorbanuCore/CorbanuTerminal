@@ -1,5 +1,18 @@
 # Troll
 
+## The pain
+
+Executors need a supervisor who assigns bounded work, reviews evidence, and
+forces rework before reporting success upward.
+
+## Product contract
+
+Exact product-spec heading: **Shipping MVP — LIVE**
+
+Requirement excerpt: “Agent orchestration: Sauron → Nazgul → Troll → Orc
+orchestration, model-aware delegation, durable mailboxes, supervision, resume,
+and recovery.”
+
 Troll is the `/spawn` supervisor role. It acts as the engineering-manager /
 VP-of-engineering layer between the Nazgul and Orc executors.
 

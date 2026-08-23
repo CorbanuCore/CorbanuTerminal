@@ -1,8 +1,12 @@
 # OpenAI Codex account login
 
-Corbanu Terminal supports OpenAI Codex account authentication alongside
-vault-backed provider API keys. The two credential classes remain separate so
-routine account logout cannot erase unrelated provider credentials.
+## The pain
+
+Account login and provider API keys have different lifecycles, but a careless
+logout flow can erase both. Corbanu Terminal keeps OpenAI Codex account auth
+separate from vault-backed provider credentials.
+
+## Product contract
 
 > **Product specification — “Shipping MVP — LIVE”**
 >

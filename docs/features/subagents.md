@@ -1,8 +1,12 @@
 # Subagents
 
-Corbanu Terminal can delegate bounded work to child agents, exchange messages,
-wait for results, and inspect agent state. Subagents are a host-managed tool
-surface, not a claim made only in prompt text.
+## The pain
+
+Parallel work is dangerous when a parent cannot identify, message, bound, or
+wait for its children. Corbanu Terminal exposes subagents as a host-managed tool
+surface rather than a claim made only in prompt text.
+
+## Product contract
 
 > **Product specification — “Shipping MVP — LIVE”**
 >

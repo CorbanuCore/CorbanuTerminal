@@ -1,8 +1,12 @@
 # Claude Code headless panes
 
-Corbanu Terminal lets users keep provider-backed Claude Code sessions beside
-ordinary user and agent panes. The host owns pane selection, persistence,
-credential resolution, progress rendering, and artifacts.
+## The pain
+
+Claude sessions are hard to supervise when they live outside the terminal's
+pane, credential, and artifact system. Corbanu Terminal keeps provider-backed
+Claude Code sessions beside ordinary user and agent panes.
+
+## Product contract
 
 > **Product specification — “Shipping MVP — LIVE”**
 >

@@ -1,4 +1,21 @@
-# Authentication And Vault
+# Authentication and Vault
+
+## The pain
+
+Provider credentials become unsafe when users must paste secrets into chat or
+cannot tell account authentication from stored API keys. Corbanu Terminal keeps
+credential entry masked, storage encrypted, and metadata inspectable without
+revealing raw values.
+
+## Product contract
+
+| Field | Value |
+| --- | --- |
+| Status | **LIVE** |
+| Exact product-spec heading | **Shipping MVP — LIVE** |
+| Requirement excerpt | “Vault and credentials: Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat.” |
+
+## Credential surfaces
 
 Corbanu Terminal has three credential surfaces:
 

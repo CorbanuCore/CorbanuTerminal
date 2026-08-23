@@ -1,5 +1,18 @@
 # Orc
 
+## The pain
+
+Delegated execution fails when workers expand scope or report completion without
+concrete evidence.
+
+## Product contract
+
+Exact product-spec heading: **Shipping MVP — LIVE**
+
+Requirement excerpt: “Agent orchestration: Sauron → Nazgul → Troll → Orc
+orchestration, model-aware delegation, durable mailboxes, supervision, resume,
+and recovery.”
+
 Orc is the `/spawn` executor role. It performs assigned implementation,
 validation, review, or investigation work under a supervising Troll.
 

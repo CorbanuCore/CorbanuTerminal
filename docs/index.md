@@ -1,57 +1,46 @@
 # Corbanu Terminal
 
-Corbanu Terminal is a crypto-native AI services terminal based on the open-source
-Codex CLI. It keeps the local coding-agent runtime and adds first-class model
-providers, retained multi-agent orchestration, wallet/plan, GPU, Telegram,
-Task Node, encrypted-vault, and persistent-pane product surfaces.
+Corbanu Terminal is a trader-first, wallet-native agentic terminal built on the
+open-source Codex CLI. It keeps the local coding-agent runtime and makes model
+providers, retained orchestration, wallet and Plan, GPU compute, Telegram,
+Task Node identity, encrypted credentials, and persistent workspaces one
+coherent product.
 
 This site is the engineering front door. It is not a dump of internal notes. It
 points to the current code paths, docs, and packaging surfaces that define what
 has been integrated.
 
-## What Exists Now
+## What exists now
 
-| Area          | Current State                                                                                                           | Where To Read                                              |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| OpenAI/Claude | OpenAI Codex login, Claude Plan login, and direct Anthropic API-key routes.                                             | [Authentication And Vault](authentication.md)              |
-| DeepSeek      | Direct Responses API route for `deepseek-v4-flash` plus pinned OpenRouter `deepseek/deepseek-v4-flash-0731`.            | [Getting Started](getting-started.md)                      |
-| Kimi/Meta     | Kimi Code `k3`, OpenRouter Kimi K3, and Meta Muse Spark 1.1 provider routes.                                            | [Getting Started](getting-started.md)                      |
-| Ambient       | Built-in provider, API-key onboarding, Ambient GLM 5.2 default model, encrypted vault storage, and GLM request shaping. | [Ambient](integrations/ambient.md)                         |
-| Z.AI GLM 5.2  | Built-in Z.AI coding-plan provider, direct `glm-5.2` model selection, and vault-backed provider keys.                   | [Z.AI GLM 5.2](integrations/zai-glm-52.md)                 |
-| OpenRouter    | Built-in metered provider for GLM 5.2, MiniMax M3, Owl Alpha, and Gemini 3.5 Flash.                                     | [OpenRouter](integrations/openrouter.md)                   |
-| Baseten       | Built-in metered provider for GLM 5.2 through Baseten.                                                                  | [Baseten](integrations/baseten.md)                         |
-| Vercel        | Built-in metered provider for GLM 5.2 and GLM 5.2 Fast through Vercel AI Gateway.                                       | [Vercel](integrations/vercel.md)                           |
-| Vault         | Encrypted credential store for provider keys and manually-added secrets.                                                | [Authentication And Vault](authentication.md)              |
-| Panes         | User panes and Claude Code headless panes with provider-backed profiles and turn artifacts.                             | [Claude Headless Panes](features/claude-headless-panes.md) |
-| Spawn         | Managed Nazgul/Troll/Orc orchestration through `/spawn` and `/spawn status`.                                            | [Spawn Orchestration](features/spawn-orchestration.md)     |
-| `/tasknode`   | Slash command for Task Node task views, actions, evidence, task requests, rewards, and account status.                  | [`/tasknode` Slash Command](features/tasknode.md)          |
-| Wallet/plan   | SOL/USDC wallet lifecycle, backup/restore, balance, and Corbanu Plan purchase/recovery workflows.                       | [Slash Commands](slash_commands.md)                        |
-| GPU           | Qualified and experimental GPU recipes with pre-charge review, status, stop, and terminate workflows.                   | [Slash Commands](slash_commands.md)                        |
-| Telegram      | Local connector configuration, authorization, start/stop/status, and disconnect workflows.                              | [Slash Commands](slash_commands.md)                        |
-| Codex fork    | Product command aliases, npm packages, installer names, TUI branding, and model picker behavior.                        | [Codex Fork](integrations/codex-fork.md)                   |
-| Runtime       | Codex-derived local coding agent with tools, approvals, sandboxing, MCP, exec, and review modes.                        | [Runtime](exec.md)                                         |
-| Configuration | Provider and model defaults normalize Ambient/Z.AI sessions onto compatible GLM models.                                 | [Configuration](config.md)                                 |
+The [Feature Catalog](features/index.md) is the canonical inventory of finished
+product behavior.
 
-## Fast Reading Path
+| Area | Pain solved | Current capability | Read |
+| --- | --- | --- | --- |
+| Runtime | A local agent needs visible tools and authorization | Cross-platform Rust TUI, permissions, sandbox, review, extensions, and the `corbanu` command | [Runtime and extensions](features/runtime-extensions.md) |
+| Models | Provider access is fragmented | Unified provider authentication, model selection, usage, and status across hosted, cloud, local, Plan, and custom routes | [Models and providers](features/model-providers.md) |
+| Vault | Secrets should never be pasted into chat | Encrypted storage, masked entry, metadata-only inspection, and operational credential use | [Authentication and Vault](authentication.md) |
+| Orchestration | Delegated work needs hierarchy and supervision | Nazgul, Troll, and Orc roles; subagents; durable mailboxes; persistent assignments; resume and recovery | [Agent orchestration](features/spawn-orchestration.md) |
+| Workspaces | Long-running sessions are hard to track | User, Claude, and agent panes; retained state; approvals; background terminals | [Workspaces and panes](features/workspaces.md) |
+| Wallet | Custody and payment need explicit control | Local Solana wallet, SOL/USDC, scoped signing, backup/restore, and Plan ownership | [Wallet and Corbanu Plan](features/wallet-plan.md) |
+| Corbanu Plan | Inference payment and entitlement should be native | Wallet-purchased monthly x402 Plan, tier allowance, receipt, recovery, usage, and model routing | [Wallet and Corbanu Plan](features/wallet-plan.md) |
+| Compute | GPU rentals can overspend or continue billing | Vast.ai and RunPod budgets, readiness, stop, and provider-confirmed termination | [GPU rentals](features/gpu-rentals.md) |
+| Task Node | Tasks and identity should follow the agent | Tasks, evidence, requests, context, chat, rewards, balances, and Task Node-linked Nostr identity | [Task Node and identity](features/tasknode.md) |
+| Remote control | Users need bounded access away from the keyboard | Allowlisted Telegram connector with explicit workspace and authorization | [Telegram](features/telegram.md) |
+| Context | Long work and tangents need different persistence | Durable goals and memories; ephemeral side conversations; in-terminal skills and docs | [Context tools](features/context-tools.md) |
 
-1. Read the [Corbanu Terminal Product Specification](corbanu-product-spec.md)
-   for the shipping product, roadmap, ownership, delivery gates, and acceptance criteria.
-2. Read [Install And First Run](install.md) for binary setup, provider keys,
-   vault setup, and model selection.
-3. Read [Ambient](integrations/ambient.md) and
-   [Z.AI GLM 5.2](integrations/zai-glm-52.md) for the coding-plan provider
-   integrations.
-4. Read [OpenRouter](integrations/openrouter.md),
-   [Baseten](integrations/baseten.md), and [Vercel](integrations/vercel.md)
-   for metered provider integrations.
-5. Read [Codex Fork](integrations/codex-fork.md) for product-specific changes
-   from upstream Codex.
-6. Read [Configuration](config.md), [Authentication](authentication.md), and
-   [Slash Commands](slash_commands.md) for operator-facing behavior.
-7. Read [Features](features/index.md) for `/spawn`, `/tasknode`, `/panes`, and
-   runtime feature records.
-8. Read [Exec](exec.md), [Sandbox](sandbox.md), and [Skills](skills.md) for the
-   inherited runtime surfaces.
+## Fast reading path
+
+1. Start with the [Feature Catalog](features/index.md) for everything that is
+   live now.
+2. Read the [Product Specification](corbanu-product-spec.md) for product
+   boundaries, ownership, and explicitly labeled roadmap work.
+3. Use [Install and First Run](install.md), then
+   [Authentication and Vault](authentication.md).
+4. Keep the [Slash Command Reference](slash_commands.md) nearby for repeatable
+   TUI actions.
+5. Contributors and coding agents must read the
+   [Development Mandate](development-mandate.md).
 
 ## Core Claim
 

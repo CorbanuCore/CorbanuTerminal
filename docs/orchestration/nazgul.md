@@ -1,5 +1,18 @@
 # Nazgul
 
+## The pain
+
+Complex work drifts when no root orchestrator translates the human's objective
+into a coherent system and holds supervisors accountable.
+
+## Product contract
+
+Exact product-spec heading: **Shipping MVP — LIVE**
+
+Requirement excerpt: “Agent orchestration: Sauron → Nazgul → Troll → Orc
+orchestration, model-aware delegation, durable mailboxes, supervision, resume,
+and recovery.”
+
 Nazgul is the `/spawn` root role. It is the orchestrator pane the human talks
 to, and it supervises Trolls.
 
