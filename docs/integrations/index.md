@@ -1,6 +1,8 @@
 # Core Integrations
 
-Status: current v0.1.29 repository state as of 2026-08-12.
+This is the technical reference behind the live
+[Models and providers](../features/model-providers.md) feature. It records
+implementation boundaries and does not define separate product status.
 
 Corbanu Terminal is a Codex CLI fork with product-specific model provider,
 onboarding, packaging, and branding changes.
@@ -8,7 +10,8 @@ onboarding, packaging, and branding changes.
 The important boundary: Corbanu Terminal still uses the Codex execution engine, tool
 system, approval flows, sandboxing, and session mechanics, while adding OpenAI
 Codex, Claude Plan, Anthropic, Ambient, Kimi Code, Z.AI, DeepSeek, OpenRouter,
-Meta, Baseten, Vercel, and Corbanu Terminal Plan as first-class provider choices.
+Meta, Baseten, Vercel, Bedrock, Ollama, LM Studio, Corbanu Plan, and custom
+providers as first-class choices.
 
 ## What Exists Now
 
@@ -25,6 +28,10 @@ Meta, Baseten, Vercel, and Corbanu Terminal Plan as first-class provider choices
 | Meta provider | Built-in `meta` route using `MODEL_API_KEY` and Muse Spark 1.1. | `codex-rs/model-provider-info/src/lib.rs` |
 | Baseten provider | Built-in provider named `baseten`, using `BASETEN_API_KEY` and Baseten GLM 5.2. | `codex-rs/model-provider-info/src/lib.rs` |
 | Vercel provider | Built-in provider named `vercel`, using `AI_GATEWAY_API_KEY` and Vercel AI Gateway GLM 5.2 models. | `codex-rs/model-provider-info/src/lib.rs` |
+| Amazon Bedrock | Cloud-authenticated Bedrock models through the inherited provider route. | `codex-rs/model-provider-info/src/lib.rs`, `docs/config.md` |
+| Ollama and LM Studio | Local model-server routes configured against the operator's endpoint. | `codex-rs/model-provider-info/src/lib.rs`, `docs/config.md` |
+| Corbanu Plan | Wallet-linked prepaid inference credential, usage, and model routes. | `codex-rs/tui/src/chatwidget/wallet_menu.rs`, `codex-rs/tui/src/chatwidget/model_popups.rs` |
+| Custom providers | Operator-defined endpoints and wire configuration in `config.toml`. | `codex-rs/core/src/config/`, `docs/config.md` |
 | Provider key vault | Provider keys are stored in encrypted vault labels such as `provider/zai_api_key`. | `codex-rs/login/src/auth/provider_key_vault.rs`, `codex-rs/vault/` |
 | GLM request shaping | Ambient and Z.AI requests map Corbanu Terminal reasoning levels to provider-specific `reasoning_effort`, `enable_thinking`, and `emit_usage` fields. | `codex-rs/core/src/client.rs` |
 | Ambient/Z.AI input conversion | Responses-style turn items are flattened for Ambient/Z.AI string input, while hidden reasoning is not replayed. | `codex-rs/codex-api/src/common.rs` |

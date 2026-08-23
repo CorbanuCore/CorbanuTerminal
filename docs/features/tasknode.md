@@ -1,8 +1,13 @@
-# `/tasknode` slash command
+# Task Node and identity
 
-Task Node is Corbanu Terminal's task, evidence, verification, reward, balance,
-chat, context, and identity surface. The terminal workflow keeps that work
-inside the same interface as the coding and trading agent.
+## The pain
+
+Tasks, evidence, rewards, durable context, and identity lose value when they
+live in a separate application that the active agent cannot inspect. Corbanu
+Terminal makes Task Node a native terminal workflow while preserving its own
+session and authorization boundary.
+
+## Product contract
 
 > **Product specification — “Shipping MVP — LIVE”**
 >
@@ -91,8 +96,8 @@ Git credentials or imply deletion of the user's Task Node identity.
   information into Task Node evidence or chat.
 - Use Task Node session credentials only for Task Node requests.
 - Keep evidence submissions attributable and reviewable.
-- Require deterministic host authorization for any future action involving
-  money, signing, or disclosure.
+- Require deterministic host authorization for any action involving money,
+  signing, or disclosure.
 
 ## Main implementation
 

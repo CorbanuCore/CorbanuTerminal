@@ -55,12 +55,20 @@ nav:
       - Example Config: example-config.md
       - Slash Commands: slash_commands.md
   - Features:
-      - Overview: features/index.md
-      - Spawn Orchestration: features/spawn-orchestration.md
-      - "/tasknode Slash Command": features/tasknode.md
-      - Claude Headless Panes: features/claude-headless-panes.md
-      - Codex Account Login: features/codex-account-login.md
-      - Subagents: features/subagents.md
+      - Feature Catalog: features/index.md
+      - Models and Providers: features/model-providers.md
+      - Wallet and Corbanu Plan: features/wallet-plan.md
+      - GPU Rentals: features/gpu-rentals.md
+      - Workspaces and Panes: features/workspaces.md
+      - Agent Orchestration: features/spawn-orchestration.md
+      - Task Node and Identity: features/tasknode.md
+      - Telegram Remote Control: features/telegram.md
+      - Context Tools: features/context-tools.md
+      - Runtime and Extensions: features/runtime-extensions.md
+      - Detailed References:
+          - Claude Headless Panes: features/claude-headless-panes.md
+          - OpenAI Codex Account Login: features/codex-account-login.md
+          - Subagents: features/subagents.md
   - Orchestration:
       - Overview: orchestration/index.md
       - Nazgul: orchestration/nazgul.md

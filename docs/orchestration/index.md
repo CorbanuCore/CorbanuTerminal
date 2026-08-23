@@ -1,4 +1,20 @@
-# Orchestration Roles
+# Orchestration roles
+
+## The pain
+
+A hierarchy is only useful when every participant understands who owns product
+direction, supervision, execution, and evidence. These roles make that chain
+explicit.
+
+## Product contract
+
+Exact product-spec heading: **Shipping MVP — LIVE**
+
+Requirement excerpt: “Agent orchestration: Sauron → Nazgul → Troll → Orc
+orchestration, model-aware delegation, durable mailboxes, supervision, resume,
+and recovery.”
+
+## Hierarchy
 
 Corbanu Terminal `/spawn` uses a fixed role hierarchy:
 

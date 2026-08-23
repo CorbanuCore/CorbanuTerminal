@@ -73,6 +73,9 @@ installed packages.
 - Native pane orchestration and managed multi-agent workflows.
 - Post Fiat Task Node tasks, rewards, context, and chat through `/tasknode`.
 
+For the complete shipping inventory, see the
+[feature catalog](docs/features/index.md).
+
 ## Product and release governance
 
 Corbanu development is governed by:

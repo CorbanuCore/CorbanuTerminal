@@ -41,6 +41,13 @@ Corbanu Terminal currently ships these provider paths:
 | Meta API                  | Meta        | `muse-spark-1.1`                                                                                                 |
 | Metered GLM               | Baseten     | `zai-org/GLM-5.2`                                                                                                |
 | Metered GLM gateway       | Vercel      | `zai/glm-5.2`, `zai/glm-5.2-fast`                                                                                |
+| Wallet-funded inference   | Corbanu Plan | GLM 5.2, Kimi K2.7 Code, DeepSeek V4 Pro, Claude Fable 5                                                         |
+| Cloud model runtime       | Bedrock     | Models available to the configured AWS account                                                                   |
+| Local model runtime       | Ollama / LM Studio | Models served by the configured local endpoint                                                            |
+| Operator-defined endpoint | Custom      | Models declared in `config.toml`                                                                                  |
+
+See [Models and providers](features/model-providers.md) for the complete access
+and selection flow.
 
 Open `/model` to switch models. You can also start with a specific model:
 
