@@ -11,6 +11,8 @@ use codex_protocol::config_types::Personality;
 use codex_protocol::config_types::ServiceTier;
 use codex_protocol::config_types::TrustLevel;
 use codex_protocol::openai_models::ReasoningEffort;
+use codex_security_policy::SECURITY_SETTINGS_VERSION;
+use codex_security_policy::SecurityLevel;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -807,6 +809,21 @@ impl ConfigEditsBuilder {
 
     pub fn set_service_tier(mut self, service_tier: Option<String>) -> Self {
         self.edits.push(ConfigEdit::SetServiceTier { service_tier });
+        self
+    }
+
+    /// Persist the versioned security posture atomically.
+    pub fn set_security_level(mut self, level: SecurityLevel) -> Self {
+        self.edits.extend([
+            ConfigEdit::SetPath {
+                segments: vec!["security".to_string(), "version".to_string()],
+                value: value(i64::from(SECURITY_SETTINGS_VERSION)),
+            },
+            ConfigEdit::SetPath {
+                segments: vec!["security".to_string(), "level".to_string()],
+                value: value(level.as_str()),
+            },
+        ]);
         self
     }
 
