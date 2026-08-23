@@ -101,5 +101,5 @@ On the current shared docs host, the static Corbanu Terminal build is also publi
 under the existing authenticated L1 docs server:
 
 ```text
-http://5.223.45.94:8088/pfterminal/
+http://5.223.45.94:8088/terminal/
 ```

@@ -53,7 +53,7 @@ Corbanu Terminal already exists and is shipping. The roadmap expands this live, 
 
 | Area | Shipping capability |
 | --- | --- |
-| **Runtime** | Rust, Apache-2.0, Linux/macOS/Windows, the `corbanu` command, and legacy PFTerminal compatibility. |
+| **Runtime** | Rust, Apache-2.0, Linux/macOS/Windows, the `corbanu` command, and legacy `pfterminal` command and state compatibility. |
 | **Multi-provider inference** | OpenAI, Anthropic/Claude Plan, Kimi, Z.AI, DeepSeek, OpenRouter, Ambient, Meta, Baseten, Vercel, Bedrock, Ollama, LM Studio, Corbanu Plan, and custom providers. |
 | **Vault and credentials** | Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat. |
 | **Agent orchestration** | Sauron → Nazgul → Troll → Orc orchestration, model-aware delegation, durable mailboxes, supervision, resume, and recovery. |

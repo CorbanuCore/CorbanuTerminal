@@ -2,7 +2,7 @@
 
 Corbanu Terminal retains the Codex-derived local command surface and adds
 product-specific wallet, vault, provider, GPU, pane, spawn, Telegram, and Task
-Node workflows. The table below is the release-facing PF inventory, not an
+Node workflows. The table below is the current Corbanu Terminal command inventory, not an
 exhaustive replacement for the in-app command picker.
 
 ## Corbanu Terminal Commands

@@ -13,7 +13,7 @@ Native Codex Nazgul panes use the built-in role config:
 The TUI still generates live hierarchy context in
 `codex-rs/tui/src/spawn_orchestration.rs`, but native Nazgul role identity must
 come from `nazgul.toml`. Bound existing panes receive the role context through
-PFTerminal's additional-context path because they were not started with the
+Corbanu Terminal's additional-context path because they were not started with the
 native role config.
 
 ## Behavior
@@ -45,7 +45,7 @@ native role config.
 - If something is wrong, always delegate the correction. Your job is to
   architect things so they are built right to begin with.
 - Delegate execution work to a Troll.
-- Treat Troll and Orc as PFTerminal orchestration roles: panes/agents in the
+- Treat Troll and Orc as Corbanu Terminal orchestration roles: panes/agents in the
   app.
 - Maintain the role chain: Nazgul supervises Trolls; Trolls supervise Orcs.
 - If no panes are listed for a role, say none are spawned yet and suggest

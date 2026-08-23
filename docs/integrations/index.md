@@ -2,13 +2,13 @@
 
 Status: current v0.1.29 repository state as of 2026-08-12.
 
-PFTerminal is a Codex CLI fork with product-specific model provider,
+Corbanu Terminal is a Codex CLI fork with product-specific model provider,
 onboarding, packaging, and branding changes.
 
-The important boundary: PFTerminal still uses the Codex execution engine, tool
+The important boundary: Corbanu Terminal still uses the Codex execution engine, tool
 system, approval flows, sandboxing, and session mechanics, while adding OpenAI
 Codex, Claude Plan, Anthropic, Ambient, Kimi Code, Z.AI, DeepSeek, OpenRouter,
-Meta, Baseten, Vercel, and PFTerminal Plan as first-class provider choices.
+Meta, Baseten, Vercel, and Corbanu Terminal Plan as first-class provider choices.
 
 ## What Exists Now
 
@@ -26,11 +26,11 @@ Meta, Baseten, Vercel, and PFTerminal Plan as first-class provider choices.
 | Baseten provider | Built-in provider named `baseten`, using `BASETEN_API_KEY` and Baseten GLM 5.2. | `codex-rs/model-provider-info/src/lib.rs` |
 | Vercel provider | Built-in provider named `vercel`, using `AI_GATEWAY_API_KEY` and Vercel AI Gateway GLM 5.2 models. | `codex-rs/model-provider-info/src/lib.rs` |
 | Provider key vault | Provider keys are stored in encrypted vault labels such as `provider/zai_api_key`. | `codex-rs/login/src/auth/provider_key_vault.rs`, `codex-rs/vault/` |
-| GLM request shaping | Ambient and Z.AI requests map PFTerminal reasoning levels to provider-specific `reasoning_effort`, `enable_thinking`, and `emit_usage` fields. | `codex-rs/core/src/client.rs` |
+| GLM request shaping | Ambient and Z.AI requests map Corbanu Terminal reasoning levels to provider-specific `reasoning_effort`, `enable_thinking`, and `emit_usage` fields. | `codex-rs/core/src/client.rs` |
 | Ambient/Z.AI input conversion | Responses-style turn items are flattened for Ambient/Z.AI string input, while hidden reasoning is not replayed. | `codex-rs/codex-api/src/common.rs` |
 | Onboarding | Provider picker supports the account/plan and API-key routes listed above, with keys stored through the masked vault boundary. | `codex-rs/tui/src/onboarding/auth.rs`, `codex-rs/tui/src/chatwidget/provider_credentials.rs` |
-| Model picker | The PFTerminal model picker groups current routes by provider and preserves exact provider/model/effort identity. | `codex-rs/tui/src/chatwidget/model_popups.rs` |
-| Product branding | TUI, login prompts, installer messages, package names, and status surfaces use PFTerminal/Post Fiat Terminal branding. | `codex-rs/tui/`, `codex-rs/login/`, `codex-cli/`, `scripts/install/` |
+| Model picker | The Corbanu Terminal model picker groups current routes by provider and preserves exact provider/model/effort identity. | `codex-rs/tui/src/chatwidget/model_popups.rs` |
+| Product branding | TUI, login prompts, installer messages, package names, and status surfaces use Corbanu Terminal branding. | `codex-rs/tui/`, `codex-rs/login/`, `codex-cli/`, `scripts/install/` |
 
 ## Design line
 

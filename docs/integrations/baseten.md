@@ -39,13 +39,13 @@ The visible Baseten model is bundled in
 
 ## Model And Provider Selection
 
-PFTerminal maps the exact model `zai-org/GLM-5.2` to provider `baseten` in
+Corbanu Terminal maps the exact model `zai-org/GLM-5.2` to provider `baseten` in
 `codex-rs/tui/src/chatwidget/model_popups.rs`.
 
 Example:
 
 ```bash
-pfterminal -m zai-org/GLM-5.2
+corbanu -m zai-org/GLM-5.2
 ```
 
 ## Vault Behavior
