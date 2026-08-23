@@ -2997,6 +2997,51 @@
       },
       "type": "object"
     },
+    "SecurityLevel": {
+      "description": "User-facing Corbanu security posture.\n\nSerialized spellings are a persistence contract.",
+      "oneOf": [
+        {
+          "description": "Preserve all existing policy decisions exactly.",
+          "enum": [
+            "permissive"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Add deterministic protections around untrusted content and protected actions.",
+          "enum": [
+            "moderate"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Deny sensitive operations until covered by narrow human authority.",
+          "enum": [
+            "aggressive"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "SecuritySettings": {
+      "additionalProperties": false,
+      "description": "Versioned persisted settings for the security posture.",
+      "properties": {
+        "level": {
+          "$ref": "#/definitions/SecurityLevel"
+        },
+        "version": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "level",
+        "version"
+      ],
+      "type": "object"
+    },
     "SessionPickerViewMode": {
       "description": "Preferred layout for the resume/fork session picker.",
       "enum": [
@@ -5780,6 +5825,14 @@
         }
       ],
       "description": "Sandbox configuration to apply if `sandbox` is `WorkspaceWrite`."
+    },
+    "security": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/SecuritySettings"
+        }
+      ],
+      "description": "Versioned user-facing security posture. Missing legacy state resolves to Permissive when the effective runtime config is built."
     },
     "service_tier": {
       "description": "Optional explicit service tier request id for new turns (for example `default`, `priority`, or `flex`; legacy `fast` also works).",

@@ -190,6 +190,7 @@ pub use codex_config::LoaderOverrides;
 pub use codex_network_proxy::NetworkProxyAuditMetadata;
 use codex_sandboxing::compatibility_sandbox_policy_for_permission_profile;
 pub use codex_sandboxing::system_bwrap_warning;
+use codex_security_policy::SecurityLevel;
 pub use managed_features::ManagedFeatures;
 pub use network_proxy_spec::NetworkProxySpec;
 pub use network_proxy_spec::StartedNetworkProxy;
@@ -671,6 +672,9 @@ pub struct Config {
 
     /// Optionally specify the personality of the model
     pub personality: Option<Personality>,
+
+    /// User-facing security posture composed with the existing permission system.
+    pub security_level: SecurityLevel,
 
     /// Effective permission configuration for shell tool execution.
     pub permissions: Permissions,
@@ -3384,6 +3388,14 @@ impl Config {
             config_layer_stack.requirements(),
             &mut startup_warnings,
         );
+        let security_settings = cfg.security.clone().unwrap_or_default();
+        security_settings.validate().map_err(|err| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("invalid [security] configuration: {err}"),
+            )
+        })?;
+        let security_level = security_settings.level;
 
         // Destructure every field to ensure ConfigRequirements additions are
         // either applied above or handled while constructing the final Config.
@@ -4429,6 +4441,7 @@ impl Config {
             workspace_roots: workspace_roots.clone(),
             workspace_roots_explicit,
             startup_warnings,
+            security_level,
             permissions: Permissions {
                 approval_policy: constrained_approval_policy.value,
                 permission_profile_state,
