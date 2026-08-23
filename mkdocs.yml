@@ -56,15 +56,16 @@ nav:
       - Slash Commands: slash_commands.md
   - Features:
       - Feature Catalog: features/index.md
-      - Models and Providers: features/model-providers.md
-      - "/vault and Credentials": features/vault.md
-      - Wallet and Corbanu Plan: features/wallet-plan.md
-      - GPU Rentals: features/gpu-rentals.md
-      - Workspaces and Panes: features/workspaces.md
-      - Agent Orchestration: features/spawn-orchestration.md
-      - Task Node and Identity: features/tasknode.md
-      - Telegram Remote Control: features/telegram.md
-      - Context Tools: features/context-tools.md
+      - "/providers and /model": features/model-providers.md
+      - "/vault Credentials": features/vault.md
+      - "/wallet and Corbanu Plan": features/wallet-plan.md
+      - "/gpu Rentals": features/gpu-rentals.md
+      - "/panes and Workspaces": features/workspaces.md
+      - "/spawn Hierarchy": features/spawn-orchestration.md
+      - "/orchestrate Supervision": features/orchestrate.md
+      - "/tasknode and Identity": features/tasknode.md
+      - "/telegram Remote Control": features/telegram.md
+      - "Goals, Memories, Side Work, and Docs": features/context-tools.md
       - Runtime and Extensions: features/runtime-extensions.md
       - Detailed References:
           - Claude Headless Panes: features/claude-headless-panes.md

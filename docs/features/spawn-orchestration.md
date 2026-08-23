@@ -1,4 +1,4 @@
-# Agent orchestration
+# /spawn hierarchy
 
 ## The pain
 
@@ -57,15 +57,12 @@ human supervises the hierarchy.
 ## Attach persistent supervision
 
 Use `/orchestrate` when the crew or pane already exists and needs a continuing
-supervisory assignment:
+Manager → Worker assignment. `/orchestrate` manages that assignment; it does
+not create the crew.
 
-```text
-/orchestrate
-/orchestrate status
-```
-
-The guided flow can attach, pause, resume, extend, test or fire, and detach an
-assignment. `/orchestrate` manages the assignment; it does not create the crew.
+See [`/orchestrate` persistent supervision](orchestrate.md) for the guided
+flow, status view, pause/resume, extension, mandate preview, immediate mandate,
+and detach behavior.
 
 ## Inspect and resume work
 
@@ -97,3 +94,9 @@ or restarting.
 - `codex-rs/core/src/tools/handlers/multi_agents.rs`
 - `codex-rs/core/src/tools/handlers/multi_agents_spec.rs`
 - `codex-rs/core/src/agent/`
+
+## Related documentation
+
+- [`/orchestrate` persistent supervision](orchestrate.md)
+- [`/panes` and workspaces](workspaces.md)
+- [Nazgul, Troll, and Orc role details](../orchestration/index.md)

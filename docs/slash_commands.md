@@ -35,15 +35,15 @@ workflows. Use the command picker in the TUI for the complete active list.
 
 | Command | Purpose |
 | --- | --- |
-| `/panes` | Switch Corbanu Terminal, Claude Code, and spawned panes |
+| [`/panes`](features/workspaces.md) | Create or switch Corbanu Terminal, Claude Code, and managed crew panes |
 | `/agent` or `/subagents` | Inspect and switch native agent threads |
 | `/spawn` | Create or bind Nazgul, Troll, and Orc roles |
 | `/spawn status` | Show hierarchy and worker state |
 | `/spawn nazgul` | Bind an existing pane as the hierarchy root |
 | `/spawn troll` | Create a Troll under a valid parent |
 | `/spawn orc` | Create an Orc under a valid parent |
-| `/orchestrate` | Attach and manage persistent supervision |
-| `/orchestrate status` | Show active supervisory assignments |
+| [`/orchestrate`](features/orchestrate.md) | Attach and manage persistent Manager → Worker supervision |
+| [`/orchestrate status`](features/orchestrate.md#inspect-and-control-assignments) | Show and control active supervisory assignments |
 | `/ps` | List background terminals |
 | `/stop` | Stop all background terminals |
 

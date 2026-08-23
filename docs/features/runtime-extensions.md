@@ -59,4 +59,4 @@ sandbox.
 - [Execution policy](../execpolicy.md)
 - [Sandbox](../sandbox.md)
 - [Skills](../skills.md)
-- [Workspaces and panes](workspaces.md)
+- [`/panes` and workspaces](workspaces.md)

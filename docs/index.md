@@ -20,8 +20,8 @@ product behavior.
 | Runtime | A local agent needs visible tools and authorization | Cross-platform Rust TUI, permissions, sandbox, review, extensions, and the `corbanu` command | [Runtime and extensions](features/runtime-extensions.md) |
 | Models | Provider access is fragmented | Unified provider authentication, model selection, usage, and status across hosted, cloud, local, Plan, and custom routes | [Models and providers](features/model-providers.md) |
 | Vault | Secrets should never be pasted into chat | Encrypted storage, masked entry, metadata-only inspection, and operational credential use | [`/vault` and credentials](features/vault.md) |
-| Orchestration | Delegated work needs hierarchy and supervision | Nazgul, Troll, and Orc roles; subagents; durable mailboxes; persistent assignments; resume and recovery | [Agent orchestration](features/spawn-orchestration.md) |
-| Workspaces | Long-running sessions are hard to track | User, Claude, and agent panes; retained state; approvals; background terminals | [Workspaces and panes](features/workspaces.md) |
+| Orchestration | Delegated work needs hierarchy and supervision | Nazgul, Troll, and Orc roles; subagents; durable mailboxes; persistent assignments; resume and recovery | [`/spawn` hierarchy](features/spawn-orchestration.md) · [`/orchestrate` supervision](features/orchestrate.md) |
+| Workspaces | Long-running sessions are hard to track | User, Claude, and agent panes; retained state; approvals; background terminals | [`/panes` and workspaces](features/workspaces.md) |
 | Wallet | Custody and payment need explicit control | Local Solana wallet, SOL/USDC, scoped signing, backup/restore, and Plan ownership | [Wallet and Corbanu Plan](features/wallet-plan.md) |
 | Corbanu Plan | Inference payment and entitlement should be native | Wallet-purchased monthly x402 Plan, tier allowance, receipt, recovery, usage, and model routing | [Wallet and Corbanu Plan](features/wallet-plan.md) |
 | Compute | GPU rentals can overspend or continue billing | Vast.ai and RunPod budgets, readiness, stop, and provider-confirmed termination | [GPU rentals](features/gpu-rentals.md) |
