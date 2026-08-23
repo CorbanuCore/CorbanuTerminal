@@ -4149,6 +4149,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-security-policy"
+version = "0.1.35"
+dependencies = [
+ "pretty_assertions",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "codex-shell-command"
 version = "0.1.35"
 dependencies = [
