@@ -34,21 +34,23 @@ has been integrated.
 
 ## Fast Reading Path
 
-1. Read [Install And First Run](install.md) for binary setup, provider keys,
+1. Read the [Corbanu Terminal Product Specification](corbanu-product-spec.md)
+   for the shipping product, roadmap, ownership, delivery gates, and acceptance criteria.
+2. Read [Install And First Run](install.md) for binary setup, provider keys,
    vault setup, and model selection.
-2. Read [Ambient](integrations/ambient.md) and
+3. Read [Ambient](integrations/ambient.md) and
    [Z.AI GLM 5.2](integrations/zai-glm-52.md) for the coding-plan provider
    integrations.
-3. Read [OpenRouter](integrations/openrouter.md),
+4. Read [OpenRouter](integrations/openrouter.md),
    [Baseten](integrations/baseten.md), and [Vercel](integrations/vercel.md)
    for metered provider integrations.
-4. Read [Codex Fork](integrations/codex-fork.md) for product-specific changes
+5. Read [Codex Fork](integrations/codex-fork.md) for product-specific changes
    from upstream Codex.
-5. Read [Configuration](config.md), [Authentication](authentication.md), and
+6. Read [Configuration](config.md), [Authentication](authentication.md), and
    [Slash Commands](slash_commands.md) for operator-facing behavior.
-6. Read [Features](features/index.md) for `/spawn`, `/tasknode`, `/panes`, and
+7. Read [Features](features/index.md) for `/spawn`, `/tasknode`, `/panes`, and
    runtime feature records.
-7. Read [Exec](exec.md), [Sandbox](sandbox.md), and [Skills](skills.md) for the
+8. Read [Exec](exec.md), [Sandbox](sandbox.md), and [Skills](skills.md) for the
    inherited runtime surfaces.
 
 ## Core Claim

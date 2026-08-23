@@ -46,6 +46,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Corbanu Product Specification: corbanu-product-spec.md
   - Start Here:
       - Install: install.md
       - Getting Started: getting-started.md
