@@ -13,7 +13,7 @@ Exact product-spec heading: **Shipping MVP — LIVE**
 | Area | Status | Requirement excerpt | Canonical documentation |
 | --- | --- | --- | --- |
 | Runtime | **LIVE** | “Rust, Apache-2.0, Linux/macOS/Windows, the `corbanu` command, and legacy `pfterminal` command and state compatibility.” | [Runtime, permissions, and extensions](runtime-extensions.md) |
-| Multi-provider inference | **LIVE** | “OpenAI, Anthropic/Claude Plan, Kimi, Z.AI, DeepSeek, OpenRouter, Ambient, Meta, Baseten, Vercel, Bedrock, Ollama, LM Studio, Corbanu Plan, and custom providers.” | [Models and providers](model-providers.md) |
+| Multi-provider inference | **LIVE** | “OpenAI, Anthropic/Claude Plan, Kimi, Z.AI, DeepSeek, OpenRouter, Ambient, Meta, Baseten, Vercel, Bedrock, Ollama, LM Studio, Corbanu Plan, and custom providers.” | [`/providers`, account login, and `/model`](model-providers.md) |
 | Vault and credentials | **LIVE** | “Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat.” | [`/vault` and credentials](vault.md) |
 | Agent orchestration | **LIVE** | “Sauron → Nazgul → Troll → Orc orchestration, model-aware delegation, durable mailboxes, supervision, resume, and recovery.” | [`/spawn` hierarchy](spawn-orchestration.md) · [`/orchestrate` supervision](orchestrate.md) |
 | Workspaces | **LIVE** | “`/panes`, `/agent`, approvals, existing general sandboxing, review, MCP, skills, plugins, apps, connectors, and background terminals.” | [`/panes` and workspaces](workspaces.md) |
@@ -26,7 +26,7 @@ Exact product-spec heading: **Shipping MVP — LIVE**
 
 | Command surface | Finished user goal | Canonical documentation |
 | --- | --- | --- |
-| `/providers`, `/model`, `/usage`, `/status` | Authenticate inference routes, select the runtime, and inspect availability. | [Models and providers](model-providers.md) |
+| `/providers`, `/model`, `/usage`, `/status` | Authenticate account and credential routes, select the runtime, and inspect availability. | [`/providers`, account login, and `/model`](model-providers.md) |
 | `/vault` | Store and use operational credentials without placing values in chat. | [`/vault` and credentials](vault.md) |
 | `/panes`, `/agent`, `/subagents`, `/ps`, `/stop` | Create, switch, inspect, and safely distinguish panes, threads, and terminals. | [`/panes` and workspaces](workspaces.md) |
 | `/spawn` | Create or bind the Nazgul, Troll, and Orc hierarchy. | [`/spawn` hierarchy](spawn-orchestration.md) |
@@ -56,7 +56,6 @@ Exact product-spec heading: **Corbanu Plan — LIVE**
 These pages explain deeper parts of the live capability groups without creating
 additional product status:
 
-- [OpenAI Codex account login](codex-account-login.md)
 - [Claude Code headless panes](claude-headless-panes.md)
 - [Subagents](subagents.md)
 - [Nazgul, Troll, and Orc roles](../orchestration/index.md)

@@ -50,8 +50,10 @@ the provider's native login mechanism. Raw provider keys must not be inserted
 into prompts, visible chat history, pane transcripts, or model-readable
 metadata.
 
-Claude Plan uses Claude's own authentication. Vault-backed profiles use the
-credential label associated with that provider.
+Claude Plan uses Claude Code's own account authentication, managed from the
+same `/providers` feature as OpenAI Codex Account. See
+[`/providers`, account login, and `/model`](model-providers.md#account-backed-provider-login).
+Vault-backed profiles use the credential label associated with that provider.
 
 ## Failure and recovery
 

@@ -1,4 +1,4 @@
-# Models and providers
+# /providers, account login, and /model
 
 ## The pain
 
@@ -25,6 +25,43 @@ provider access and model selection behind one consistent TUI workflow.
 
 Adding a credential does not select that provider. Authentication and model
 selection are deliberately separate actions.
+
+## Account-backed provider login
+
+Account login is one access mode inside the provider feature. OpenAI Codex
+Account and Claude Plan are peers in `/providers`; neither is a standalone
+Corbanu Terminal feature.
+
+| Account route | What `/providers` shows | Authentication owner |
+| --- | --- | --- |
+| OpenAI Codex Account | Sign-in status, email, and plan when available | Corbanu Terminal's inherited Codex account manager |
+| Claude Plan | Claude Code installation and subscription sign-in status | Claude Code's native Claude account authentication |
+
+### OpenAI Codex Account
+
+1. Run `/providers`.
+2. Select **Provider: OpenAI Codex Account**.
+3. Open the displayed verification URL and enter the one-time device code.
+4. Return to Corbanu Terminal after sign-in completes.
+5. Run `/model` and select an OpenAI model.
+
+The same route is available from first-run onboarding or `corbanu login`.
+
+### Claude Plan
+
+Claude Code must be installed for this account route.
+
+1. Run `/providers`.
+2. Select **Provider: Claude Code Plan**.
+3. Open the displayed browser URL and sign in with the Claude subscription.
+4. Press Enter in Corbanu Terminal and paste the one-time authorization code
+   into the masked entry view.
+5. Wait for Corbanu Terminal to verify the Claude Code account status.
+6. Run `/model` and select a Claude Plan model.
+
+The one-time authorization code is handled by masked entry. It is not an API key
+and is not placed in chat. OpenAI and Claude account state remain independent;
+signing in to one route does not authenticate the other.
 
 ## Included providers
 
