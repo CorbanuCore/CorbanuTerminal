@@ -12,6 +12,7 @@ mod bounded;
 mod digest;
 mod grant;
 mod level;
+mod mandate;
 
 pub use authorization::ActorChain;
 pub use authorization::AuthorizationContext;
@@ -38,3 +39,9 @@ pub use level::SECURITY_SETTINGS_VERSION;
 pub use level::SecurityLevel;
 pub use level::SecuritySettings;
 pub use level::SecuritySettingsError;
+pub use mandate::ActionReceipt;
+pub use mandate::MandateError;
+pub use mandate::MandateOutcome;
+pub use mandate::ProtectedActionMandate;
+pub use mandate::ProtectedActionPreview;
+pub use mandate::ReplayLedger;
