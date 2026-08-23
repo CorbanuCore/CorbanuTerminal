@@ -14,7 +14,7 @@ Exact product-spec heading: **Shipping MVP — LIVE**
 | --- | --- | --- | --- |
 | Runtime | **LIVE** | “Rust, Apache-2.0, Linux/macOS/Windows, the `corbanu` command, and legacy `pfterminal` command and state compatibility.” | [Runtime, permissions, and extensions](runtime-extensions.md) |
 | Multi-provider inference | **LIVE** | “OpenAI, Anthropic/Claude Plan, Kimi, Z.AI, DeepSeek, OpenRouter, Ambient, Meta, Baseten, Vercel, Bedrock, Ollama, LM Studio, Corbanu Plan, and custom providers.” | [Models and providers](model-providers.md) |
-| Vault and credentials | **LIVE** | “Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat.” | [Authentication and Vault](../authentication.md) |
+| Vault and credentials | **LIVE** | “Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat.” | [`/vault` and credentials](vault.md) |
 | Agent orchestration | **LIVE** | “Sauron → Nazgul → Troll → Orc orchestration, model-aware delegation, durable mailboxes, supervision, resume, and recovery.” | [Agent orchestration](spawn-orchestration.md) |
 | Workspaces | **LIVE** | “`/panes`, `/agent`, approvals, existing general sandboxing, review, MCP, skills, plugins, apps, connectors, and background terminals.” | [Workspaces and panes](workspaces.md) |
 | Wallet and payments | **LIVE** | “Local Solana wallet, SOL and canonical USDC support, scoped signing, backup/restore, and Corbanu Plan purchase/recovery.” | [Wallet and Corbanu Plan](wallet-plan.md) |

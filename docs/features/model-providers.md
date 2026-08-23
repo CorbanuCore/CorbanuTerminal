@@ -26,15 +26,46 @@ provider access and model selection behind one consistent TUI workflow.
 Adding a credential does not select that provider. Authentication and model
 selection are deliberately separate actions.
 
-## Available provider routes
+## Included providers
 
-| Access class | Routes |
+Each included provider is listed explicitly below. A provider being included
+means Corbanu Terminal has a route for it; the current machine still needs the
+corresponding account, credential, entitlement, cloud configuration, or local
+server.
+
+| Provider | Route | Configure access |
+| --- | --- | --- |
+| OpenAI Codex Account | Built-in `openai` account route | Sign in with device code from `/providers` or `corbanu login`. |
+| Anthropic | Built-in `anthropic` API route | Add `ANTHROPIC_API_KEY` through `/providers` or the encrypted vault. |
+| Claude Plan | Built-in `claude-plan` account route | Use the Claude Code account login surfaced by `/providers`. |
+| Ambient | Built-in `ambient` API route | Add `AMBIENT_API_KEY` through `/providers` or the encrypted vault. |
+| Kimi Code | Built-in `kimi-code` API route | Add `KIMI_API_KEY` through `/providers` or the encrypted vault. |
+| Z.AI | Built-in `zai` API route | Add `ZAI_API_KEY` through `/providers` or the encrypted vault. |
+| DeepSeek | Built-in `deepseek` API route | Add `DEEPSEEK_API_KEY` through `/providers` or the encrypted vault. |
+| OpenRouter | Built-in `openrouter` gateway route | Add `OPENROUTER_API_KEY` through `/providers` or the encrypted vault. |
+| Meta | Built-in `meta` API route | Add `MODEL_API_KEY` through `/providers` or the encrypted vault. |
+| Baseten | Built-in `baseten` gateway route | Add `BASETEN_API_KEY` through `/providers` or the encrypted vault. |
+| Vercel AI Gateway | Built-in `vercel` gateway route | Add `AI_GATEWAY_API_KEY` through `/providers` or the encrypted vault. |
+| Amazon Bedrock | Built-in `amazon-bedrock` cloud route | Configure AWS credentials/profile or a managed Bedrock API key and region. |
+| Ollama | Built-in `ollama` local route | Run Ollama locally and select it as the local provider. |
+| LM Studio | Built-in `lmstudio` local route | Run LM Studio locally and select it as the local provider. |
+| Corbanu Plan | Wallet-linked `corbanu-plan` route | Buy or recover a Plan in `/wallet`; inspect status in `/providers`. |
+| Custom provider | Operator-defined compatible route | Add a `[model_providers.<id>]` entry in `config.toml`. |
+
+Some provider families have additional internal wire-protocol routes so the
+same provider can serve both Responses-, Chat Completions-, and
+Anthropic-compatible models. Those transport details do not create additional
+user-facing providers.
+
+## Which command to use
+
+| Command | Purpose |
 | --- | --- |
-| Account and plan | OpenAI Codex account, Claude Plan, Corbanu Plan |
-| Hosted provider | Anthropic, Kimi Code, Z.AI, DeepSeek, OpenRouter, Ambient, Meta, Baseten, Vercel AI Gateway |
-| Cloud | Amazon Bedrock |
-| Local | Ollama, LM Studio |
-| Operator-defined | Custom providers configured in `config.toml` |
+| `/providers` | Authenticate, replace a supported provider key, and inspect availability. |
+| `/vault` | Manage encrypted service credentials by label. |
+| `/model` | Select the active provider, model, and reasoning effort. |
+| `/usage` | Inspect allowance and reset information where the route reports it. |
+| `/status` | Confirm the provider/model active for the current session. |
 
 The authentication surface varies by provider. `/providers` handles supported
 account and masked API-key flows. Cloud, local, and custom routes use their
@@ -53,7 +84,8 @@ documented environment or configuration inputs.
 
 ## Related documentation
 
-- [Authentication and Vault](../authentication.md)
+- [`/vault` and credentials](vault.md)
+- [Authentication and account setup](../authentication.md)
 - [Configuration](../config.md)
 - [Corbanu Plan](wallet-plan.md)
 - [Provider integration references](../integrations/index.md)

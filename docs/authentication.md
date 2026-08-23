@@ -7,6 +7,10 @@ cannot tell account authentication from stored API keys. Corbanu Terminal keeps
 credential entry masked, storage encrypted, and metadata inspectable without
 revealing raw values.
 
+For the user-facing vault workflow, start with
+[`/vault` and credentials](features/vault.md). This page covers the deeper
+account, storage, migration, and logout behavior.
+
 ## Product contract
 
 | Field | Value |
