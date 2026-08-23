@@ -57,6 +57,7 @@ nav:
   - Features:
       - Feature Catalog: features/index.md
       - Models and Providers: features/model-providers.md
+      - "/vault and Credentials": features/vault.md
       - Wallet and Corbanu Plan: features/wallet-plan.md
       - GPU Rentals: features/gpu-rentals.md
       - Workspaces and Panes: features/workspaces.md
