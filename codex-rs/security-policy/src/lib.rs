@@ -1,8 +1,9 @@
 //! Deterministic security-level policy primitives for Corbanu Terminal.
 //!
 //! This crate is deliberately independent of runtime tool implementations. It
-//! defines the persisted security level and secret-free authorization contracts
-//! that enforcement boundaries compose with their existing decisions.
+//! defines the persisted security level and secret-free authorization,
+//! delegation, mandate, receipt, and revocation contracts that enforcement
+//! boundaries compose with their existing decisions.
 //!
 //! An `Allow` from this layer never overrides an existing deny. Callers must
 //! combine decisions with [`compose_existing_decision`].
@@ -13,6 +14,7 @@ mod digest;
 mod grant;
 mod level;
 mod mandate;
+mod revocation;
 
 pub use authorization::ActorChain;
 pub use authorization::AuthorizationContext;
@@ -45,3 +47,12 @@ pub use mandate::MandateOutcome;
 pub use mandate::ProtectedActionMandate;
 pub use mandate::ProtectedActionPreview;
 pub use mandate::ReplayLedger;
+pub use revocation::RevocationError;
+pub use revocation::RevocationEvent;
+pub use revocation::RevocationReason;
+pub use revocation::RevocationState;
+pub use revocation::RevocationTarget;
+
+#[cfg(test)]
+#[path = "security_policy_tests.rs"]
+mod tests;
