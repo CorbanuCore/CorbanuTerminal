@@ -73,6 +73,15 @@ installed packages.
 - Native pane orchestration and managed multi-agent workflows.
 - Post Fiat Task Node tasks, rewards, context, and chat through `/tasknode`.
 
+## Product and release governance
+
+Corbanu development is governed by:
+
+- the [product specification](docs/corbanu-product-spec.md);
+- the repository [development policy](AGENTS.md);
+- the [active-plan process and template](plans/README.md); and
+- the public [competitive benchmark tracker](benchmarks/README.md).
+
 ## First run
 
 Launch Corbanu Terminal in the workspace you want it to inspect:
