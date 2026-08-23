@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-08-23T17:49:29Z",
+  "captured_from_commit": "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb",
+  "plan": {
+    "path": "docs/plans/active/p0-security-levels.md",
+    "sha256": "cab83ae5045d568aa96604fcad935e3aa635ec4968b2f3cae81c21ec25dd90df"
+  },
+  "composition_contract": {
+    "rule": "final_allow = existing_allow && security_layer_allow",
+    "permissive_security_layer_allow": true,
+    "meaning": "Permissive adds neither authority nor restriction; every existing policy remains authoritative."
+  },
+  "surfaces": [
+    {
+      "id": "permission-profile",
+      "source": "codex-rs/core/src/config/mod.rs::Permissions",
+      "representative_existing_decision": "the resolved configured PermissionProfile remains authoritative",
+      "permissive_expected": "unchanged"
+    },
+    {
+      "id": "approval-policy",
+      "source": "codex-rs/protocol/src/protocol.rs::AskForApproval",
+      "representative_existing_decision": "on-request",
+      "permissive_expected": "on-request"
+    },
+    {
+      "id": "sandbox",
+      "source": "codex-rs/core/src/config/mod.rs::Permissions::legacy_sandbox_policy",
+      "representative_existing_decision": "workspace-write",
+      "permissive_expected": "workspace-write"
+    },
+    {
+      "id": "network",
+      "source": "codex-rs/core/src/config/mod.rs::Permissions::network_sandbox_policy",
+      "representative_existing_decision": "restricted",
+      "permissive_expected": "restricted"
+    },
+    {
+      "id": "vault-programmatic-api-key",
+      "source": "codex-rs/vault/src/lib.rs::CredentialType::permits_programmatic_use",
+      "representative_existing_decision": true,
+      "permissive_expected": true
+    },
+    {
+      "id": "vault-programmatic-private-key",
+      "source": "codex-rs/vault/src/lib.rs::CredentialType::permits_programmatic_use",
+      "representative_existing_decision": false,
+      "permissive_expected": false
+    },
+    {
+      "id": "agent-spawn-within-depth",
+      "source": "codex-rs/core/src/agent/registry.rs::exceeds_thread_spawn_depth_limit",
+      "representative_existing_decision": true,
+      "permissive_expected": true
+    },
+    {
+      "id": "agent-spawn-over-depth",
+      "source": "codex-rs/core/src/agent/registry.rs::exceeds_thread_spawn_depth_limit",
+      "representative_existing_decision": false,
+      "permissive_expected": false
+    }
+  ]
+}

@@ -3,6 +3,16 @@ use std::sync::Barrier;
 
 use chrono::Utc;
 use codex_keyring_store::tests::MockKeyringStore;
+use codex_security_policy::ActorChain;
+use codex_security_policy::AuthorizationContext;
+use codex_security_policy::AuthorizationRequest;
+use codex_security_policy::PolicyAction;
+use codex_security_policy::PolicyPrincipal;
+use codex_security_policy::PrincipalKind;
+use codex_security_policy::ProtectedResource;
+use codex_security_policy::ResourceKind;
+use codex_security_policy::compose_existing_decision;
+use codex_security_policy::permissive_decision;
 use pretty_assertions::assert_eq;
 
 use super::*;
@@ -22,6 +32,46 @@ fn api_key_entry(label: &str, secret: &str) -> AddCredential {
         notes: Some("primary key".to_string()),
         revocation_notes: Some("rotate at https://console.example.com".to_string()),
         secret: secret.to_string(),
+    }
+}
+
+#[test]
+fn permissive_security_composition_preserves_vault_programmatic_use_decisions() {
+    let human = PolicyPrincipal::new(PrincipalKind::Human, "human:jim").expect("human");
+    let request = AuthorizationRequest::new(
+        ActorChain::new(vec![human]).expect("actor chain"),
+        ProtectedResource::new(ResourceKind::VaultCredential, "vault:representative")
+            .expect("resource"),
+        PolicyAction::Use,
+        AuthorizationContext {
+            now_unix_seconds: 1,
+            destination: None,
+            quantity: None,
+            grant_id: None,
+        },
+    )
+    .expect("request");
+    let permissive = permissive_decision(&request).expect("Permissive decision");
+
+    for credential_type in [
+        CredentialType::ApiKey,
+        CredentialType::BearerToken,
+        CredentialType::BasicAuth,
+        CredentialType::OauthClient,
+        CredentialType::CryptoPrivateKey,
+        CredentialType::SeedPhrase,
+        CredentialType::KeystoreJson,
+        CredentialType::RpcKey,
+        CredentialType::ExchangeKey,
+        CredentialType::DeploymentKey,
+        CredentialType::ManualSecret,
+    ] {
+        let existing_allow = credential_type.permits_programmatic_use();
+        assert_eq!(
+            compose_existing_decision(existing_allow, &permissive),
+            existing_allow,
+            "Permissive changed the vault decision for {credential_type:?}"
+        );
     }
 }
 
