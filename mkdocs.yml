@@ -56,7 +56,7 @@ nav:
       - Slash Commands: slash_commands.md
   - Features:
       - Feature Catalog: features/index.md
-      - "/providers and /model": features/model-providers.md
+      - "/providers, Account Login, and /model": features/model-providers.md
       - "/vault Credentials": features/vault.md
       - "/wallet and Corbanu Plan": features/wallet-plan.md
       - "/gpu Rentals": features/gpu-rentals.md
@@ -69,7 +69,6 @@ nav:
       - Runtime and Extensions: features/runtime-extensions.md
       - Detailed References:
           - Claude Headless Panes: features/claude-headless-panes.md
-          - OpenAI Codex Account Login: features/codex-account-login.md
           - Subagents: features/subagents.md
   - Orchestration:
       - Overview: orchestration/index.md

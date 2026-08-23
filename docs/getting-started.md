@@ -46,8 +46,9 @@ Corbanu Terminal currently ships these provider paths:
 | Local model runtime       | Ollama / LM Studio | Models served by the configured local endpoint                                                            |
 | Operator-defined endpoint | Custom      | Models declared in `config.toml`                                                                                  |
 
-See [Models and providers](features/model-providers.md) for the complete access
-and selection flow.
+See
+[`/providers`, account login, and `/model`](features/model-providers.md)
+for the complete access and selection flow.
 
 Open `/model` to switch models. You can also start with a specific model:
 
