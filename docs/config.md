@@ -340,7 +340,7 @@ To keep the poller always on, install the user service:
 ```bash
 codex-rs/scripts/setup-telegram.sh --chat-id 21000038 --install-systemd
 systemctl --user daemon-reload
-systemctl --user enable --now pfterminal-telegram.service
+systemctl --user enable --now corbanu-terminal-telegram.service
 ```
 
 The setup script runs `corbanu telegram --health` before installing a managed
@@ -368,7 +368,7 @@ On macOS, install the checked-in LaunchAgent through the same setup script:
 
 ```bash
 codex-rs/scripts/setup-telegram.sh --chat-id 21000038 --install-launchd
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.postfiat.pfterminal.telegram.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/org.corbanu.terminal.telegram.plist
 ```
 
 On Windows, configure the connector first, verify it with

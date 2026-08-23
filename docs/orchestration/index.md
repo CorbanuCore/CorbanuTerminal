@@ -1,6 +1,6 @@
 # Orchestration Roles
 
-PFTerminal `/spawn` uses a fixed role hierarchy:
+Corbanu Terminal `/spawn` uses a fixed role hierarchy:
 
 ```text
 Nazgul -> Troll -> Orc
@@ -18,6 +18,5 @@ Orcs execute assigned work and report evidence.
 | [Troll](troll.md) | Supervisor, reviewer, and foreman over Orcs | Built-in role file plus runtime pane context |
 | [Orc](orc.md) | IC executor that performs assigned work | Built-in role file plus runtime pane context |
 
-See also [Spawn Orchestration](../features/spawn-orchestration.md) for the
-feature workflow and [Spawn Acceptance Evidence](../features/spawn-orchestration-acceptance.md)
-for live acceptance criteria.
+See [Spawn Orchestration](../features/spawn-orchestration.md) for the finished
+user workflow.

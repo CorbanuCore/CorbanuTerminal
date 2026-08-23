@@ -1,20 +1,13 @@
 # Features
 
-These pages document implemented Corbanu Terminal feature surfaces, acceptance
-evidence, or operational behavior. They are not current sprint commitments and
-not TBD backlog items.
+Corbanu Terminal documentation describes finished product behavior. Roadmap work
+belongs in the [product specification](../corbanu-product-spec.md) and active
+implementation plans belong under `plans/active/`.
 
-| Feature Area | Page |
-| ------------ | ---- |
-| `/spawn` orchestration | [Spawn Orchestration](spawn-orchestration.md) |
-| `/spawn` acceptance evidence | [Spawn Acceptance Evidence](spawn-orchestration-acceptance.md) |
-| `/tasknode` slash command | [`/tasknode` Slash Command](tasknode.md) |
-| `/panes` and Claude Code integration | [Claude Headless Panes](claude-headless-panes.md) |
-| Claude pane completion criteria | [Claude Code Completion Spec](claude-code-integration-completion-spec.md) |
-| OpenAI Codex account login | [Codex Account Login](codex-account-login.md) |
-| GLM 5.2 tool compatibility | [GLM 5.2 Tool Compatibility](glm-52-tool-compatibility.md) |
-| Provider hammer protection | [Provider Hammer Reduction](hammer-reduction-process.md) |
-| Tool-call runaway guard | [Tool-Call Runaway Guard](tool-call-runaway-remedy.md) |
-| Native provider performance | [Native Provider Performance](native-provider-performance.md) |
-| MkDocs terminal viewer | [MkDocs Terminal Viewer](../current-sprint/mkdocs-terminal-viewer.md) |
-| Subagents | [Subagents](subagents.md) |
+| Feature area | What exists now | Page |
+| --- | --- | --- |
+| Agent orchestration | Managed Nazgul, Troll, and Orc hierarchies with status and recovery | [Spawn Orchestration](spawn-orchestration.md) |
+| Task Node | Account linking, tasks, evidence, requests, context, chat, rewards, balances, and identity | [`/tasknode` Slash Command](tasknode.md) |
+| Claude panes | Persistent Claude Code headless panes selected through `/panes` | [Claude Headless Panes](claude-headless-panes.md) |
+| OpenAI account | Device-code login and credential-safe logout through `/providers` | [Codex Account Login](codex-account-login.md) |
+| Subagents | Bounded agent delegation, supervision, messaging, waiting, and status | [Subagents](subagents.md) |

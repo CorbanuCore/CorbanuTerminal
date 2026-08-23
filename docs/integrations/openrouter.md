@@ -1,6 +1,6 @@
 # OpenRouter Integration
 
-OpenRouter is a built-in metered provider for PFTerminal.
+OpenRouter is a built-in metered provider for Corbanu Terminal.
 
 ## Current Provider
 
@@ -50,21 +50,21 @@ distinct and must remain visible as such.
 
 ## Model And Provider Selection
 
-PFTerminal maps these model slugs to provider `openrouter` in
+Corbanu Terminal maps these model slugs to provider `openrouter` in
 `codex-rs/tui/src/chatwidget/model_popups.rs`.
 
 Examples:
 
 ```bash
-pfterminal -m deepseek/deepseek-v4-flash-0731
-pfterminal -m deepseek/deepseek-v4-pro-0813
-pfterminal -m deepseek/deepseek-v4-pro
-pfterminal -m moonshotai/kimi-k3
-pfterminal -m x-ai/grok-4.6
-pfterminal -m x-ai/grok-4.5
-pfterminal -m minimax/minimax-m3
-pfterminal -m openrouter/owl-alpha
-pfterminal -m google/gemini-3.5-flash
+corbanu -m deepseek/deepseek-v4-flash-0731
+corbanu -m deepseek/deepseek-v4-pro-0813
+corbanu -m deepseek/deepseek-v4-pro
+corbanu -m moonshotai/kimi-k3
+corbanu -m x-ai/grok-4.6
+corbanu -m x-ai/grok-4.5
+corbanu -m minimax/minimax-m3
+corbanu -m openrouter/owl-alpha
+corbanu -m google/gemini-3.5-flash
 ```
 
 ## Vault Behavior
