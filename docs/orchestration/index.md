@@ -34,5 +34,6 @@ Orcs execute assigned work and report evidence.
 | [Troll](troll.md) | Supervisor, reviewer, and foreman over Orcs | Built-in role file plus runtime pane context |
 | [Orc](orc.md) | IC executor that performs assigned work | Built-in role file plus runtime pane context |
 
-See [Spawn Orchestration](../features/spawn-orchestration.md) for the finished
-user workflow.
+See [`/spawn` hierarchy](../features/spawn-orchestration.md) and
+[`/orchestrate` persistent supervision](../features/orchestrate.md) for the
+finished user workflow.
