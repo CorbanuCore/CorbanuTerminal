@@ -27,6 +27,12 @@ is a source-and-design study for a layered TUI test harness. It is research,
 not QA evidence: tmux was unavailable on the research workstation, so the
 report did not execute the proposed test matrix.
 
+[`tmux-testing/tmuxPlan.html`](tmux-testing/tmuxPlan.html) turns that research
+into a bounded engineering work package with functional and non-functional
+requirements, implementation stages, required tests, and acceptance gates. It
+is a proposed Routine infrastructure change, not a completed product sprint or
+release artifact.
+
 ## Research tools
 
 [`tools/diarize_recording.py`](tools/diarize_recording.py) produced the working
