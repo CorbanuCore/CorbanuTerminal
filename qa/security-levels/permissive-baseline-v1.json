@@ -15,26 +15,43 @@
     {
       "id": "permission-profile",
       "source": "codex-rs/core/src/config/mod.rs::Permissions",
-      "representative_existing_decision": "the resolved configured PermissionProfile remains authoritative",
+      "representative_existing_decision": "resolved configured PermissionProfile",
       "permissive_expected": "unchanged"
     },
     {
       "id": "approval-policy",
       "source": "codex-rs/protocol/src/protocol.rs::AskForApproval",
-      "representative_existing_decision": "on-request",
-      "permissive_expected": "on-request"
+      "representative_existing_decision": [
+        "on-request",
+        "untrusted",
+        "never"
+      ],
+      "permissive_expected": "unchanged"
     },
     {
       "id": "sandbox",
       "source": "codex-rs/core/src/config/mod.rs::Permissions::legacy_sandbox_policy",
-      "representative_existing_decision": "workspace-write",
-      "permissive_expected": "workspace-write"
+      "representative_existing_decision": [
+        "read-only",
+        "workspace-write",
+        "danger-full-access"
+      ],
+      "permissive_expected": "unchanged"
     },
     {
       "id": "network",
       "source": "codex-rs/core/src/config/mod.rs::Permissions::network_sandbox_policy",
-      "representative_existing_decision": "restricted",
-      "permissive_expected": "restricted"
+      "representative_existing_decision": [
+        "restricted",
+        "enabled"
+      ],
+      "permissive_expected": "unchanged"
+    },
+    {
+      "id": "tool-existing-policy",
+      "source": "codex-rs/security-policy/src/security_policy.rs::compose_existing_decision",
+      "representative_existing_decision": false,
+      "permissive_expected": false
     },
     {
       "id": "vault-programmatic-api-key",
@@ -59,6 +76,74 @@
       "source": "codex-rs/core/src/agent/registry.rs::exceeds_thread_spawn_depth_limit",
       "representative_existing_decision": false,
       "permissive_expected": false
+    },
+    {
+      "id": "legacy-missing-security-state",
+      "source": "codex-rs/core/src/config/mod.rs::Config::load_from_base_config_with_overrides",
+      "representative_existing_decision": "security table absent",
+      "permissive_expected": "Permissive"
+    }
+  ],
+  "probes": [
+    {
+      "id": "config-policy-matrix",
+      "package": "codex-core",
+      "test_filter": "permissive_security_state_preserves_existing_policy_resolution",
+      "source": "codex-rs/core/src/config/config_tests.rs",
+      "function": "permissive_security_state_preserves_existing_policy_resolution",
+      "source_sha256": "f9dec0a6fcb192594d54a72d35e061f56e15aa0f3dbe3c35312f1df77ffc2920",
+      "covers": [
+        "permission-profile",
+        "approval-policy",
+        "sandbox",
+        "network"
+      ]
+    },
+    {
+      "id": "missing-config-default",
+      "package": "codex-core",
+      "test_filter": "missing_security_state_defaults_to_permissive",
+      "source": "codex-rs/core/src/config/config_tests.rs",
+      "function": "missing_security_state_defaults_to_permissive",
+      "source_sha256": "665090d13932e7d70e0d46e669287b3c7c5f55408b2f7c5b96ca1191cef67b69",
+      "covers": [
+        "legacy-missing-security-state"
+      ]
+    },
+    {
+      "id": "vault-credential-matrix",
+      "package": "codex-vault",
+      "test_filter": "permissive_security_composition_preserves_vault_programmatic_use_decisions",
+      "source": "codex-rs/vault/src/tests.rs",
+      "function": "permissive_security_composition_preserves_vault_programmatic_use_decisions",
+      "source_sha256": "ca8f7b9637cc76ece82fb3a1ff0ae925eed5d84100b536d71d2e1cbe807f3ec2",
+      "covers": [
+        "vault-programmatic-api-key",
+        "vault-programmatic-private-key"
+      ]
+    },
+    {
+      "id": "spawn-depth-matrix",
+      "package": "codex-core",
+      "test_filter": "permissive_security_composition_preserves_agent_spawn_depth_decisions",
+      "source": "codex-rs/core/src/agent/registry_tests.rs",
+      "function": "permissive_security_composition_preserves_agent_spawn_depth_decisions",
+      "source_sha256": "35911f7e3c2ec316adb0391982125c655f888e7c7ba60e93e515daf2e91fa336",
+      "covers": [
+        "agent-spawn-within-depth",
+        "agent-spawn-over-depth"
+      ]
+    },
+    {
+      "id": "composition-surface-matrix",
+      "package": "codex-security-policy",
+      "test_filter": "permissive_composition_preserves_every_frozen_surface_decision",
+      "source": "codex-rs/security-policy/src/security_policy_tests.rs",
+      "function": "permissive_composition_preserves_every_frozen_surface_decision",
+      "source_sha256": "77c990e00eefe0e3af47f5325e511f875dc71dc40dd7a4f9b0b915ec3a5ac32b",
+      "covers": [
+        "tool-existing-policy"
+      ]
     }
   ]
 }

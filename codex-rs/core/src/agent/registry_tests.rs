@@ -94,11 +94,19 @@ fn permissive_security_composition_preserves_agent_spawn_depth_decisions() {
     .expect("request");
     let permissive = permissive_decision(&request).expect("Permissive decision");
 
-    for (depth, max_depth) in [(1, 1), (2, 1)] {
+    for (depth, max_depth, expected_allow) in [
+        (0, 0, true),
+        (1, 0, false),
+        (1, 1, true),
+        (2, 1, false),
+        (2, 2, true),
+        (3, 2, false),
+    ] {
         let existing_allow = !exceeds_thread_spawn_depth_limit(depth, max_depth);
+        assert_eq!(existing_allow, expected_allow);
         assert_eq!(
             compose_existing_decision(existing_allow, &permissive),
-            existing_allow,
+            expected_allow,
             "Permissive changed spawn depth {depth} with max {max_depth}"
         );
     }
