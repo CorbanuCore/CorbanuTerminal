@@ -669,6 +669,84 @@ async fn spawn_agent_internal_treats_roles_as_profiles_and_enforces_structural_d
     );
 }
 
+#[tokio::test]
+async fn security_inheritance_flows_through_live_spawn_path() {
+    let harness = AgentControlHarness::new().await;
+    let (root_thread_id, root_thread) = harness.start_thread().await;
+    let control = root_thread.session.services.agent_control.clone();
+    let root_policy = control
+        .effective_security_policy()
+        .snapshot_for_agent(root_thread_id)
+        .expect("root security policy");
+
+    let child = control
+        .spawn_agent_with_metadata(
+            harness.config.clone(),
+            text_input("inherit policy"),
+            Some(role_spawn_source(
+                root_thread_id,
+                /*depth*/ 1,
+                "/root/security_child",
+                "worker",
+            )),
+            SpawnAgentOptions {
+                parent_thread_id: Some(root_thread_id),
+                parent_turn_id: Some("task:live-spawn".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("child spawn");
+    let child_policy = control
+        .effective_security_policy()
+        .snapshot_for_agent(child.thread_id)
+        .expect("child security policy");
+
+    assert_eq!(child_policy.level, root_policy.level);
+    assert_eq!(child_policy.session_id, root_policy.session_id);
+    assert_eq!(child_policy.task_id.as_str(), "task:live-spawn");
+    assert_eq!(
+        child_policy.revocation_generation,
+        root_policy.revocation_generation
+    );
+    assert_eq!(
+        child_policy.kill_switch_active,
+        root_policy.kill_switch_active
+    );
+    assert!(child_policy.actor_chain.extends(&root_policy.actor_chain));
+    assert_eq!(
+        child_policy
+            .actor_chain
+            .current_actor()
+            .map(|actor| actor.id.as_str()),
+        Some(format!("agent:{}", child.thread_id).as_str())
+    );
+
+    let controller = control
+        .trusted_security_controller()
+        .expect("root control retains trusted controller");
+    let confirmation = controller
+        .confirm_level_change(
+            codex_security_policy::SecurityLevel::Moderate,
+            codex_security_policy::RevocationState::new(),
+        )
+        .expect("human confirmation");
+    controller
+        .apply_confirmed_change(confirmation)
+        .expect("atomic active-session update");
+    for agent_id in [root_thread_id, child.thread_id] {
+        let updated = control
+            .effective_security_policy()
+            .snapshot_for_agent(agent_id)
+            .expect("updated policy");
+        assert_eq!(updated.epoch, 1);
+        assert_eq!(
+            updated.level,
+            codex_security_policy::SecurityLevel::Moderate
+        );
+    }
+}
+
 fn has_subagent_notification(history_items: &[ResponseItem]) -> bool {
     history_items.iter().any(|item| {
         let ResponseItem::Message { role, content, .. } = item else {
