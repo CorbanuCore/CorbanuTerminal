@@ -12,6 +12,9 @@ depends_on: "RW-TMUX-01 (completed)"
 stage_1_branch: "codex/tmux-failure-artifacts"
 stage_1_commit: "510beb079"
 stage_2_commit: "303ebfe10"
+reproduction_fix_commit: "1193aded2"
+process_cleanup_commit: "2683005ab"
+ci_trigger_fix_commit: "d4f1343dc"
 created: 2026-08-24
 updated: 2026-08-24
 ---
@@ -50,7 +53,7 @@ updated: 2026-08-24
 
 ## Code boundaries
 
-- Harness: `codex-rs/tui/tests/support/{tmux,tmux_artifacts,tmux_command,tmux_tests}.rs`.
+- Harness: `codex-rs/tui/tests/support/{tmux,tmux_artifacts,tmux_command,tmux_process,tmux_tests}.rs`.
 - Scenarios: `codex-rs/tui/tests/suite/{slash_dispatch,resize_reflow}.rs` and suite index.
 - CI/evidence: `.github/workflows/tmux-smoke.yml`; `qa/work-packages/evidence/RW-TMUX-02/RESULTS.md`.
 
@@ -81,8 +84,8 @@ Review staging: failure-artifact infrastructure lands first on `codex/tmux-failu
 - [x] Focused `tmux_smoke` set completes 20 local runs with no failure/leak and p95 7 seconds.
 - [x] `cargo insta pending-snapshots --manifest-path tui/Cargo.toml` reports none.
 - [x] GitHub Actions YAML parses and references valid actions and exact filters.
-- [ ] Final local autoreview reports no actionable issue.
-- [ ] `git diff --check` passes and the final tree is clean after commit.
+- [x] Final local autoreview reports no actionable issue.
+- [x] `git diff --check` passes and the final tree is clean after commit.
 
 ## Exit evidence
 
