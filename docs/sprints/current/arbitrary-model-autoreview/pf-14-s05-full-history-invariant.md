@@ -1,20 +1,20 @@
 ---
-sprint_id: "PF-13-S05"
+sprint_id: "PF-14-S05"
 title: "Fail-closed full-history invariant"
 status: draft
 plan_file: "docs/plans/proposed/arbitrary-model-autoreview.md"
-plan_feature: "PF-13"
+plan_feature: "PF-14"
 execution_order: 5
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-13-S04"
+depends_on: "PF-14-S04"
 created: 2026-08-24
 updated: 2026-08-24
 ---
 
-# PF-13-S05 — Fail-closed full-history invariant
+# PF-14-S05 — Fail-closed full-history invariant
 
 ## Execution mandate
 
@@ -24,7 +24,7 @@ updated: 2026-08-24
 ## Plan linkage
 
 - Plan: [Arbitrary-model Autoreview](../../../plans/proposed/arbitrary-model-autoreview.md)
-- Feature: `PF-13`
+- Feature: `PF-14`
 - Acceptance advanced: every runtime override paired with `fork_turns=all` is rejected before child creation.
 
 ## Code boundaries
@@ -42,7 +42,7 @@ updated: 2026-08-24
 
 ## Done
 
-- [x] Sprint record created and linked to PF-13.
+- [x] Sprint record created and linked to PF-14.
 
 ## Remaining
 

@@ -1,20 +1,20 @@
 ---
-sprint_id: "PF-13-S02"
+sprint_id: "PF-14-S02"
 title: "Review packet and secret gate"
 status: draft
 plan_file: "docs/plans/proposed/arbitrary-model-autoreview.md"
-plan_feature: "PF-13"
+plan_feature: "PF-14"
 execution_order: 2
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-13-S01"
+depends_on: "PF-14-S01"
 created: 2026-08-24
 updated: 2026-08-24
 ---
 
-# PF-13-S02 — Review packet and secret gate
+# PF-14-S02 — Review packet and secret gate
 
 ## Execution mandate
 
@@ -24,7 +24,7 @@ updated: 2026-08-24
 ## Plan linkage
 
 - Plan: [Arbitrary-model Autoreview](../../../plans/proposed/arbitrary-model-autoreview.md)
-- Feature: `PF-13`
+- Feature: `PF-14`
 - Acceptance advanced: a credential in any outgoing section refuses the send with zero provider calls.
 
 ## Code boundaries
@@ -41,7 +41,7 @@ updated: 2026-08-24
 
 ## Done
 
-- [x] Sprint record created and linked to PF-13.
+- [x] Sprint record created and linked to PF-14.
 
 ## Remaining
 
@@ -59,7 +59,7 @@ updated: 2026-08-24
 - [ ] Focused test: `cargo test -p codex-core autoreview_packet`
 - [ ] Adversarial test: `cargo test -p codex-core autoreview_secret_gate`
 - [ ] Integration test: provider mock asserts zero calls on every scan refusal.
-- [ ] TUI applicability resolved; refusal checkpoint recorded for PF-13-S07.
+- [ ] TUI applicability resolved; refusal checkpoint recorded for PF-14-S07.
 
 ## Exit evidence
 

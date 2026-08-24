@@ -127,7 +127,7 @@ work, not optional cleanup.
 
 | ID | Feature | User problem solved | Product contract |
 | --- | --- | --- | --- |
-| PF-13 | Arbitrary-model Autoreview | A user needs a hardened second-model review on any configured and authorized provider without manually transferring code or trusting model-selected routing | One explicit request produces one secret-scanned, isolated, exact-runtime, structured advisory review with visible status and no automatic edits |
+| PF-14 | Arbitrary-model Autoreview | A user needs a hardened second-model review on any configured and authorized provider without manually transferring code or trusting model-selected routing | One explicit request produces one secret-scanned, isolated, exact-runtime, structured advisory review with visible status and no automatic edits |
 
 ## Scope
 
@@ -185,7 +185,7 @@ work, not optional cleanup.
 
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
-| Jim Ricketts | UNALLOCATED | UNALLOCATED | UNALLOCATED | PF-13 implementation after activation |
+| Jim Ricketts | UNALLOCATED | UNALLOCATED | UNALLOCATED | PF-14 implementation after activation |
 
 ## Useful code references
 
@@ -213,13 +213,13 @@ Planned native boundaries:
 
 ## Sprint execution map
 
-All records map to the single PF-13 product feature. Each sprint owns one
+All records map to the single PF-14 product feature. Each sprint owns one
 mechanical code outcome and remains `draft` until this plan is activated and
 worktree coordinates are assigned.
 
 | Feature ID | Current sprint records | Completion evidence |
 | --- | --- | --- |
-| PF-13 | [PF-13-S01](../../sprints/current/arbitrary-model-autoreview/pf-13-s01-request-and-skill-contract.md)<br>[PF-13-S02](../../sprints/current/arbitrary-model-autoreview/pf-13-s02-review-packet-and-secret-gate.md)<br>[PF-13-S03](../../sprints/current/arbitrary-model-autoreview/pf-13-s03-core-provider-readiness.md)<br>[PF-13-S04](../../sprints/current/arbitrary-model-autoreview/pf-13-s04-exact-runtime-dispatch.md)<br>[PF-13-S05](../../sprints/current/arbitrary-model-autoreview/pf-13-s05-full-history-invariant.md)<br>[PF-13-S06](../../sprints/current/arbitrary-model-autoreview/pf-13-s06-isolated-review-runner.md)<br>[PF-13-S07](../../sprints/current/arbitrary-model-autoreview/pf-13-s07-tui-qualification-and-docs.md) | pending |
+| PF-14 | [PF-14-S01](../../sprints/current/arbitrary-model-autoreview/pf-14-s01-request-and-skill-contract.md)<br>[PF-14-S02](../../sprints/current/arbitrary-model-autoreview/pf-14-s02-review-packet-and-secret-gate.md)<br>[PF-14-S03](../../sprints/current/arbitrary-model-autoreview/pf-14-s03-core-provider-readiness.md)<br>[PF-14-S04](../../sprints/current/arbitrary-model-autoreview/pf-14-s04-exact-runtime-dispatch.md)<br>[PF-14-S05](../../sprints/current/arbitrary-model-autoreview/pf-14-s05-full-history-invariant.md)<br>[PF-14-S06](../../sprints/current/arbitrary-model-autoreview/pf-14-s06-isolated-review-runner.md)<br>[PF-14-S07](../../sprints/current/arbitrary-model-autoreview/pf-14-s07-tui-qualification-and-docs.md) | pending |
 
 ## Acceptance flows
 
@@ -299,10 +299,10 @@ Finished-feature documentation is created only after the candidate passes.
 
 | Item | Type | Owner | Needed by | State / decision |
 | --- | --- | --- | --- | --- |
-| Plan activation and exact worktree | authorization | Travis Good / Jim Ricketts | PF-13-S01 | pending |
-| TruffleHog version and distribution on supported platforms | implementation dependency | Jim Ricketts | PF-13-S02 | pin and fail closed if absent |
-| Operator provider allowlist and authentication | runtime precondition | user/operator | PF-13-S03 onward | never bypassed |
-| Upstream Autoreview source provenance | design dependency | Jim Ricketts | PF-13-S01 | pinned to `128a4ea6`; native implementation, no partial copy |
+| Plan activation and exact worktree | authorization | Travis Good / Jim Ricketts | PF-14-S01 | pending |
+| TruffleHog version and distribution on supported platforms | implementation dependency | Jim Ricketts | PF-14-S02 | pin and fail closed if absent |
+| Operator provider allowlist and authentication | runtime precondition | user/operator | PF-14-S03 onward | never bypassed |
+| Upstream Autoreview source provenance | design dependency | Jim Ricketts | PF-14-S01 | pinned to `128a4ea6`; native implementation, no partial copy |
 | Benchmark cadence | release gate | release owner | candidate release | run full campaign if this is a due third release |
 
 ## Release linkage

@@ -1,20 +1,20 @@
 ---
-sprint_id: "PF-13-S07"
+sprint_id: "PF-14-S07"
 title: "TUI qualification and finished documentation"
 status: draft
 plan_file: "docs/plans/proposed/arbitrary-model-autoreview.md"
-plan_feature: "PF-13"
+plan_feature: "PF-14"
 execution_order: 7
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-13-S06"
+depends_on: "PF-14-S06"
 created: 2026-08-24
 updated: 2026-08-24
 ---
 
-# PF-13-S07 — TUI qualification and finished documentation
+# PF-14-S07 — TUI qualification and finished documentation
 
 ## Execution mandate
 
@@ -24,7 +24,7 @@ updated: 2026-08-24
 ## Plan linkage
 
 - Plan: [Arbitrary-model Autoreview](../../../plans/proposed/arbitrary-model-autoreview.md)
-- Feature: `PF-13`
+- Feature: `PF-14`
 - Acceptance advanced: all plan acceptance flows pass in true TUI against both default live repositories.
 
 ## Code boundaries
@@ -41,7 +41,7 @@ updated: 2026-08-24
 
 ## Done
 
-- [x] Sprint record created and linked to PF-13.
+- [x] Sprint record created and linked to PF-14.
 
 ## Remaining
 

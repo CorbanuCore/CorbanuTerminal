@@ -1,20 +1,20 @@
 ---
-sprint_id: "PF-13-S04"
+sprint_id: "PF-14-S04"
 title: "Deterministic exact-runtime dispatch"
 status: draft
 plan_file: "docs/plans/proposed/arbitrary-model-autoreview.md"
-plan_feature: "PF-13"
+plan_feature: "PF-14"
 execution_order: 4
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-13-S03"
+depends_on: "PF-14-S03"
 created: 2026-08-24
 updated: 2026-08-24
 ---
 
-# PF-13-S04 — Deterministic exact-runtime dispatch
+# PF-14-S04 — Deterministic exact-runtime dispatch
 
 ## Execution mandate
 
@@ -24,7 +24,7 @@ updated: 2026-08-24
 ## Plan linkage
 
 - Plan: [Arbitrary-model Autoreview](../../../plans/proposed/arbitrary-model-autoreview.md)
-- Feature: `PF-13`
+- Feature: `PF-14`
 - Acceptance advanced: observed reviewer route exactly matches the explicit request.
 
 ## Code boundaries
@@ -42,7 +42,7 @@ updated: 2026-08-24
 
 ## Done
 
-- [x] Sprint record created and linked to PF-13.
+- [x] Sprint record created and linked to PF-14.
 
 ## Remaining
 
@@ -50,7 +50,7 @@ updated: 2026-08-24
 - [ ] Resolve and validate the complete runtime before choosing collaboration message encoding.
 - [ ] Select provider-native encoding only when source and target are compatible; otherwise select the plaintext mailbox adapter directly without a failed native call.
 - [ ] Route existing V2 spawn and Autoreview through the shared dispatcher while preserving graph, mailbox, and canonical task-name semantics.
-- [ ] Require PF-13-S03 readiness and runtime eligibility before dispatch; forbid model, provider, or service-tier fallback.
+- [ ] Require PF-14-S03 readiness and runtime eligibility before dispatch; forbid model, provider, or service-tier fallback.
 - [ ] Remove retry-only guidance that asks a model to infer transport after failure.
 - [ ] Prove OpenAI-parent to Anthropic, OpenRouter, Kimi, Z.AI, local, and custom configured targets preserves exact assignment bytes and creates one child.
 - [ ] Preserve same-provider native behavior and fail closed on unknown or mismatched provider/model pairs.
@@ -60,7 +60,7 @@ updated: 2026-08-24
 - [ ] Focused test: `cargo test -p codex-core spawn_agent_explicit_runtime_supports_required_multimodel_pairs`
 - [ ] Cross-provider test: `cargo test -p codex-core exact_runtime_dispatch`
 - [ ] Schema test: `cargo test -p codex-core openai_reserved_collaboration_schema`
-- [ ] TUI applicability resolved; exact route evidence is surfaced in PF-13-S07.
+- [ ] TUI applicability resolved; exact route evidence is surfaced in PF-14-S07.
 
 ## Exit evidence
 
