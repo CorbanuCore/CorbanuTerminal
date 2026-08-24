@@ -100,7 +100,35 @@ nav:
           - Workflow: sprints/index.md
           - Current Security Work:
               - Overview: sprints/current/p0-security-levels/index.md
-              - "PF-13-S01 — Vault-backed exact-host credential substitution": sprints/current/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md
+              - "Existing-commit reconciliation":
+                  - "PF-15-S01 — Security-level domain": sprints/current/p0-security-levels/pf-15-s01-security-level-domain-foundation.md
+                  - "PF-16-S01 — Authorization contract": sprints/current/p0-security-levels/pf-16-s01-authorization-decision-contract.md
+                  - "PF-17-S01 — Bounded grants": sprints/current/p0-security-levels/pf-17-s01-bounded-delegation-grants.md
+                  - "PF-18-S01 — Human mandates and receipts": sprints/current/p0-security-levels/pf-18-s01-human-mandates-and-receipts.md
+                  - "PF-19-S01 — Revocation contract": sprints/current/p0-security-levels/pf-19-s01-revocation-contract.md
+                  - "PF-20-S01 — Versioned persistence": sprints/current/p0-security-levels/pf-20-s01-versioned-security-persistence.md
+                  - "PF-21-S01 — Permissive baseline": sprints/current/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md
+              - "Runtime policy":
+                  - "PF-22-S01 — Policy and inheritance": sprints/current/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md
+              - "PF-13 — Credential boundary":
+                  - "PF-13-S01 — Capability and store": sprints/current/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md
+                  - "PF-13-S02 — Scoped vault resolver": sprints/current/p0-security-levels/pf-13-s02-scoped-vault-resolver.md
+                  - "PF-13-S03 — OpenAI exact-host substitution": sprints/current/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md
+                  - "PF-13-S04 — Lifecycle and bypass closure": sprints/current/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md
+                  - "PF-13-S05 — Adversarial qualification": sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md
+              - "Protected-surface enforcement":
+                  - "PF-23-S01 — Moderate enforcement": sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md
+                  - "PF-23-S02 — Aggressive deny and grant": sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md
+                  - "PF-23-S03 — Downgrade and recovery": sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md
+              - "Security TUI":
+                  - "PF-24-S01 — Command and profile view": sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md
+                  - "PF-24-S02 — Confirm, cancel, downgrade": sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md
+                  - "PF-25-S01 — Temporary grants": sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md
+                  - "PF-25-S02 — Revocation and kill switch": sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md
+              - "Qualification and release evidence":
+                  - "PF-26-S01 — Harnesses and crosswalk": sprints/current/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md
+                  - "PF-26-S02 — True-TUI and live repos": sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md
+                  - "PF-26-S03 — Human acceptance and docs": sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md
           - Current Autoreview Work:
               - Overview: sprints/current/arbitrary-model-autoreview/index.md
               - "PF-14 — Arbitrary-model Autoreview":
