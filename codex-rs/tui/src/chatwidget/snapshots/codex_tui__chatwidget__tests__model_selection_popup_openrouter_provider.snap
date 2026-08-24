@@ -1,6 +1,5 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
-assertion_line: 3385
 expression: popup
 ---
   Select Model and Effort
@@ -9,24 +8,24 @@ expression: popup
   OpenAI  Ambient  Kimi Code  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta  Vercel  Baseten
   [OpenRouter]
 
-  3. OpenRouter Gemini 3.5 Flash        Model: google/gemini-3.5-flash. OpenRouter: Gemini 3.5
-                                        Flash - $1.50/M input, $9.00/M output.
-  4. OpenRouter Grok 4.6                Model: x-ai/grok-4.6. OpenRouter: Grok 4.6 - $2.00/M
+  4. OpenRouter Ox Alpha                Model: stealth/ox-alpha. OpenRouter: Ox Alpha - $0/M
+                                        input, $0/M output.
+  5. OpenRouter Grok 4.6                Model: x-ai/grok-4.6. OpenRouter: Grok 4.6 - $2.00/M
                                         input, $0.50/M cached input, $6.00/M output; rates double
                                         above 200K prompt tokens.
-  5. OpenRouter Grok 4.5                Model: x-ai/grok-4.5. OpenRouter: Grok 4.5 - $2.00/M
+  6. OpenRouter Grok 4.5                Model: x-ai/grok-4.5. OpenRouter: Grok 4.5 - $2.00/M
                                         input, $6.00/M output.
-  6. OpenRouter DeepSeek V4 Pro         Model: deepseek/deepseek-v4-pro. OpenRouter: DeepSeek V4
+  7. OpenRouter DeepSeek V4 Pro         Model: deepseek/deepseek-v4-pro. OpenRouter: DeepSeek V4
                                         Pro - $0.435/M input, $0.87/M output.
-  7. OpenRouter DeepSeek V4 Pro 0813    Model: deepseek/deepseek-v4-pro-0813. OpenRouter: DeepSeek
+  8. OpenRouter DeepSeek V4 Pro 0813    Model: deepseek/deepseek-v4-pro-0813. OpenRouter: DeepSeek
                                         V4 Pro 0813 - $0.435/M input, $0.003625/M cached input,
                                         $0.87/M output.
-  8. OpenRouter DeepSeek V4 Flash 0731  Model: deepseek/deepseek-v4-flash-0731. OpenRouter:
+  9. OpenRouter DeepSeek V4 Flash 0731  Model: deepseek/deepseek-v4-flash-0731. OpenRouter:
                                         DeepSeek V4 Flash 0731 - $0.14/M input, $0.0028/M cached
                                         input, $0.28/M output.
-  9. OpenRouter Tencent Hy3 Free        Model: tencent/hy3:free. OpenRouter: Tencent Hy3 Free -
+  10. OpenRouter Tencent Hy3 Free       Model: tencent/hy3:free. OpenRouter: Tencent Hy3 Free -
                                         $0/M input, $0/M output.
-› 10. OpenRouter Kimi K3 (current)      Model: moonshotai/kimi-k3. OpenRouter: Kimi K3 - $3.00/M
+› 11. OpenRouter Kimi K3 (current)      Model: moonshotai/kimi-k3. OpenRouter: Kimi K3 - $3.00/M
                                         input, $0.30/M cached input, $15.00/M output.
 
   Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

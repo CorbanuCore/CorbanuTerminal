@@ -18,7 +18,7 @@ has been integrated.
 | Kimi/Meta     | Kimi Code `k3`, OpenRouter Kimi K3, and Meta Muse Spark 1.1 provider routes.                                            | [Getting Started](getting-started.md)                      |
 | Ambient       | Built-in provider, API-key onboarding, Ambient GLM 5.2 default model, encrypted vault storage, and GLM request shaping. | [Ambient](integrations/ambient.md)                         |
 | Z.AI GLM 5.2  | Built-in Z.AI coding-plan provider, direct `glm-5.2` model selection, and vault-backed provider keys.                   | [Z.AI GLM 5.2](integrations/zai-glm-52.md)                 |
-| OpenRouter    | Built-in metered provider for GLM 5.2, MiniMax M3, Owl Alpha, and Gemini 3.5 Flash.                                     | [OpenRouter](integrations/openrouter.md)                   |
+| OpenRouter    | Built-in metered provider for GLM 5.2, MiniMax M3, Owl Alpha, Ox Alpha, and Gemini 3.5 Flash.                           | [OpenRouter](integrations/openrouter.md)                   |
 | Baseten       | Built-in metered provider for GLM 5.2 through Baseten.                                                                  | [Baseten](integrations/baseten.md)                         |
 | Vercel        | Built-in metered provider for GLM 5.2 and GLM 5.2 Fast through Vercel AI Gateway.                                       | [Vercel](integrations/vercel.md)                           |
 | Vault         | Encrypted credential store for provider keys and manually-added secrets.                                                | [Authentication And Vault](authentication.md)              |
