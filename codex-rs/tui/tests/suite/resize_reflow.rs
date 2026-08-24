@@ -135,15 +135,11 @@ async fn tmux_repeated_resizes_do_not_push_composer_down() -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore = "requires tmux and a locally built codex binary; run with --ignored for manual resize smoke"]
-async fn tmux_width_resize_restore_keeps_visible_content_anchored() -> Result<()> {
-    if cfg!(windows) {
-        return Ok(());
-    }
+async fn tmux03_width_resize_restore_keeps_visible_content_anchored() -> Result<()> {
     skip_if_no_network!(Ok(()));
-    if Command::new("tmux").arg("-V").output().is_err() {
-        eprintln!("skipping resize smoke because tmux is unavailable");
+    if !TmuxServer::should_run("width resize smoke")? {
         return Ok(());
     }
 
@@ -156,94 +152,56 @@ async fn tmux_width_resize_restore_keeps_visible_content_anchored() -> Result<()
     write_config(codex_home.path(), &repo_root)?;
     write_auth(codex_home.path())?;
 
-    let session_name = format!("codex-resize-width-{}", std::process::id());
-    let _session = TmuxSession {
-        name: session_name.clone(),
-    };
-
     let prompt = "Send me a large paragraph of text for testing.";
-    let start_output = checked_output(
-        Command::new("tmux")
-            .arg("new-session")
-            .arg("-d")
-            .arg("-P")
-            .arg("-F")
-            .arg("#{pane_id}")
-            .arg("-x")
-            .arg("120")
-            .arg("-y")
-            .arg("40")
-            .arg("-s")
-            .arg(&session_name)
-            .arg("--")
-            .arg("env")
-            .arg(format!("CODEX_HOME={}", codex_home.path().display()))
-            .arg("OPENAI_API_KEY=dummy")
-            .arg(codex)
-            .arg("-c")
-            .arg("analytics.enabled=false")
-            .arg("-c")
-            .arg(&openai_base_url_config)
-            .arg("--no-alt-screen")
-            .arg("-C")
-            .arg(&repo_root)
-            .arg(prompt),
+    let tmux = TmuxServer::start("tmux03_width_resize_restore")?;
+    tmux.register_artifact("config.toml", codex_home.path().join("config.toml"));
+    tmux.register_artifact("codex-tui.log", codex_home.path().join("log/codex-tui.log"));
+    let session = tmux.new_session(
+        SessionSpec::new(
+            "codex-resize-width",
+            TerminalSize::new(/*columns*/ 120, /*rows*/ 40),
+            CommandSpec::new(codex)
+                .env("CODEX_HOME", codex_home.path())
+                .env("OPENAI_API_KEY", "dummy")
+                .arg("-c")
+                .arg("analytics.enabled=false")
+                .arg("-c")
+                .arg(&openai_base_url_config)
+                .arg("--no-alt-screen")
+                .arg("-C")
+                .arg(&repo_root)
+                .arg(prompt),
+        )
+        .current_dir(&repo_root),
     )?;
-    let codex_pane = stdout_text(&start_output).trim().to_string();
-    anyhow::ensure!(!codex_pane.is_empty(), "tmux did not report a pane id");
+    let codex_pane = session.primary_pane();
 
-    wait_for_capture_contains(
-        &codex_pane,
-        "resize reflow sentinel",
-        Duration::from_secs(/*secs*/ 15),
-    )?;
-    wait_for_capture_contains(
-        &codex_pane,
-        "gpt-5.4 default",
-        Duration::from_secs(/*secs*/ 15),
-    )?;
+    codex_pane.wait_stable_contains("resize reflow sentinel", Duration::from_secs(/*secs*/ 15))?;
+    codex_pane.wait_stable_contains("gpt-5.4 default", Duration::from_secs(/*secs*/ 15))?;
     let draft = "Notice where we are here in terms of y location.";
-    check(
-        Command::new("tmux")
-            .arg("send-keys")
-            .arg("-t")
-            .arg(&codex_pane)
-            .arg("-l")
-            .arg(draft),
-    )?;
+    codex_pane.send_literal(draft)?;
     let baseline_capture =
-        wait_for_capture_contains(&codex_pane, draft, Duration::from_secs(/*secs*/ 15))?;
+        codex_pane.wait_stable_contains(draft, Duration::from_secs(/*secs*/ 15))?;
     let baseline_row = last_composer_row(&baseline_capture).context("composer row before split")?;
     let baseline_history_row = first_row_containing(&baseline_capture, "resize reflow sentinel")
         .context("history row before split")?;
 
-    let split_output = checked_output(
-        Command::new("tmux")
-            .arg("split-window")
-            .arg("-d")
-            .arg("-P")
-            .arg("-F")
-            .arg("#{pane_id}")
-            .arg("-h")
-            .arg("-l")
-            .arg("40")
-            .arg("-t")
-            .arg(&codex_pane)
-            .arg("sleep")
-            .arg("30"),
+    let split_pane = session.split_horizontal(
+        codex_pane,
+        /*columns*/ 40,
+        CommandSpec::new("sleep").arg("30"),
     )?;
-    let split_pane = stdout_text(&split_output).trim().to_string();
-
-    sleep(Duration::from_millis(/*millis*/ 750));
-    check(
-        Command::new("tmux")
-            .arg("kill-pane")
-            .arg("-t")
-            .arg(&split_pane),
+    codex_pane.wait_stable_contains(draft, Duration::from_secs(/*secs*/ 15))?;
+    split_pane.close()?;
+    let restored_capture = codex_pane.wait_stable_until(
+        "composer and history rows to return after horizontal split",
+        Duration::from_secs(/*secs*/ 15),
+        |capture| {
+            last_composer_row(capture) == Some(baseline_row)
+                && first_row_containing(capture, "resize reflow sentinel")
+                    == Some(baseline_history_row)
+        },
     )?;
-
-    sleep(Duration::from_millis(/*millis*/ 1_000));
-    let restored_capture = capture_pane(&codex_pane)?;
     let restored_row =
         last_composer_row(&restored_capture).context("composer row after width restore")?;
     let restored_history_row = first_row_containing(&restored_capture, "resize reflow sentinel")

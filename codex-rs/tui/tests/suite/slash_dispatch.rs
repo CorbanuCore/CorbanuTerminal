@@ -44,12 +44,11 @@ fn tmux_smoke_single_enter_dispatches_slash_command_and_exits_cleanly() -> Resul
     let pane = session.primary_pane();
 
     pane.wait_stable_contains("Corbanu Terminal", Duration::from_secs(/*secs*/ 15))?;
-    pane.send_literal("/model")?;
-    pane.wait_stable_contains("/model", Duration::from_secs(/*secs*/ 5))?;
+    pane.send_literal("/status")?;
+    pane.wait_stable_contains("/status", Duration::from_secs(/*secs*/ 5))?;
     pane.send_key(TmuxKey::Enter)?;
-    pane.wait_stable_contains("Select Model and Effort", Duration::from_secs(/*secs*/ 15))?;
+    pane.wait_stable_contains("Permissions:", Duration::from_secs(/*secs*/ 15))?;
 
-    pane.send_key(TmuxKey::Escape)?;
     pane.send_literal("/exit")?;
     pane.wait_stable_contains("/exit", Duration::from_secs(/*secs*/ 5))?;
     pane.send_key(TmuxKey::Enter)?;
