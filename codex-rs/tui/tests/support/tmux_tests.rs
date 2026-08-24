@@ -14,10 +14,10 @@ fn server_or_skip(scenario: &str) -> Result<Option<TmuxServer>> {
 
 #[test]
 fn servers_are_isolated_and_cleanup_their_private_sessions() -> Result<()> {
-    let Some(first) = server_or_skip("server-isolation-first")? else {
+    let Some(first) = server_or_skip("servers_are_isolated")? else {
         return Ok(());
     };
-    let Some(second) = server_or_skip("server-isolation-second")? else {
+    let Some(second) = server_or_skip("servers_are_isolated")? else {
         return Ok(());
     };
     let first_socket_root = first.socket_root();
@@ -49,7 +49,7 @@ fn servers_are_isolated_and_cleanup_their_private_sessions() -> Result<()> {
 
 #[test]
 fn literal_text_is_distinct_from_named_enter_key() -> Result<()> {
-    let Some(server) = server_or_skip("literal-key-distinction")? else {
+    let Some(server) = server_or_skip("literal_text_is_distinct")? else {
         return Ok(());
     };
     let session = server.new_session(SessionSpec::new(
@@ -70,7 +70,7 @@ fn literal_text_is_distinct_from_named_enter_key() -> Result<()> {
 
 #[test]
 fn viewport_and_scrollback_are_captured_separately() -> Result<()> {
-    let Some(server) = server_or_skip("viewport-scrollback")? else {
+    let Some(server) = server_or_skip("viewport_and_scrollback")? else {
         return Ok(());
     };
     let session = server.new_session(SessionSpec::new(
@@ -97,7 +97,7 @@ fn command_failures_include_diagnostics_and_artifacts() -> Result<()> {
     }
     let artifact_root = tempfile::tempdir()?;
     let server = TmuxServer::start_with_artifact_root(
-        "command-failure",
+        "command_failures_include_diagnostics",
         artifact_root.path().to_path_buf(),
     )?;
     let artifact_dir = server.artifact_dir();
@@ -136,7 +136,7 @@ fn wait_failures_write_complete_redacted_artifacts() -> Result<()> {
     std::fs::write(&config, "model = \"test\"\n")?;
     std::fs::write(&candidate_log, "candidate fixture log\n")?;
     let server = TmuxServer::start_with_artifact_root(
-        "timeout-artifacts",
+        "wait_failures_write_complete",
         artifact_root.path().to_path_buf(),
     )?;
     server.register_artifact("config.toml", &config);
@@ -189,6 +189,11 @@ fn wait_failures_write_complete_redacted_artifacts() -> Result<()> {
         std::fs::read_to_string(artifact_dir.join("input-events.txt"))?,
         "literal bytes=2\nkey Enter"
     );
+    assert_eq!(
+        std::fs::read_to_string(artifact_dir.join("reproduce.sh"))?,
+        "CORBANU_TMUX_REQUIRED=1 just test -p codex-tui --test all \
+         wait_failures_write_complete"
+    );
     assert!(std::fs::read_to_string(artifact_dir.join("pane-metadata.txt"))?.contains("size=40x8"));
     Ok(())
 }
@@ -200,7 +205,7 @@ fn successful_session_does_not_emit_artifacts() -> Result<()> {
     }
     let artifact_root = tempfile::tempdir()?;
     let server = TmuxServer::start_with_artifact_root(
-        "successful-session",
+        "successful_session_does_not_emit",
         artifact_root.path().to_path_buf(),
     )?;
     let artifact_dir = server.artifact_dir();
@@ -219,8 +224,10 @@ fn panic_unwind_cleans_up_and_writes_artifacts() -> Result<()> {
         return Ok(());
     }
     let artifact_root = tempfile::tempdir()?;
-    let server =
-        TmuxServer::start_with_artifact_root("panic-cleanup", artifact_root.path().to_path_buf())?;
+    let server = TmuxServer::start_with_artifact_root(
+        "panic_unwind_cleans_up",
+        artifact_root.path().to_path_buf(),
+    )?;
     let socket_root = server.socket_root();
     let artifact_dir = server.artifact_dir();
     let result = catch_unwind(move || {

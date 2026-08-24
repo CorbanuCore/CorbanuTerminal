@@ -40,7 +40,7 @@ async fn tmux_smoke_split_preserves_fresh_session_composer_row_after_resize_refl
     write_auth(codex_home.path())?;
 
     let prompt = "Say hi.";
-    let tmux = TmuxServer::start("tmux-smoke-resize-reflow")?;
+    let tmux = TmuxServer::start("tmux_smoke_split_preserves")?;
     tmux.register_artifact("config.toml", codex_home.path().join("config.toml"));
     tmux.register_artifact("codex-tui.log", codex_home.path().join("log/codex-tui.log"));
     let session = tmux.new_session(
