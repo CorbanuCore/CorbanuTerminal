@@ -10,6 +10,10 @@ use crate::config::Config;
 use crate::config::RolloutBudgetConfig;
 use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::rollout_budget::RolloutBudget;
+use crate::security::EffectivePolicyView;
+use crate::security::PersistedHumanSecurityState;
+use crate::security::SecurityPolicyError;
+use crate::security::TrustedSecurityController;
 use crate::session::emit_subagent_session_started;
 use crate::session_prefix::format_inter_agent_completion_message;
 use crate::session_prefix::format_subagent_context_line;
@@ -41,6 +45,11 @@ use codex_protocol::protocol::ThreadHistoryMode;
 use codex_protocol::protocol::ThreadSource;
 use codex_protocol::protocol::TurnEnvironmentSelection;
 use codex_protocol::user_input::UserInput;
+use codex_security_policy::PolicyPrincipal;
+use codex_security_policy::PrincipalKind;
+use codex_security_policy::RevocationState;
+use codex_security_policy::SecurityLevel;
+use codex_security_policy::SecuritySettings;
 use codex_thread_store::LoadThreadHistoryParams;
 use codex_thread_store::ReadThreadParams;
 use serde::Deserialize;
@@ -142,6 +151,11 @@ pub(crate) struct AgentControl {
     /// Native terminal-result auto-processing policy, shared across the whole agent tree. This is
     /// lifecycle policy over Core turns, not a second mailbox or task queue.
     native_auto_loop_state_by_agent: Arc<Mutex<HashMap<ThreadId, NativeAutoLoopState>>>,
+    /// Read-only policy and child-inheritance capability shared by the agent tree.
+    security_policy: EffectivePolicyView,
+    /// Separate trusted mutation capability retained for the future human TUI
+    /// path. No model/tool-facing method exposes it.
+    trusted_security_controller: Option<TrustedSecurityController>,
 }
 
 impl AgentControl {
@@ -177,6 +191,48 @@ impl AgentControl {
 
     pub(crate) fn session_id(&self) -> SessionId {
         self.session_id
+    }
+
+    pub(crate) fn with_effective_security_policy(
+        mut self,
+        level: SecurityLevel,
+        root_thread_id: ThreadId,
+        is_non_root_agent: bool,
+    ) -> Result<Self, SecurityPolicyError> {
+        if is_non_root_agent {
+            if !self.security_policy.is_initialized()? {
+                return Err(SecurityPolicyError::RuntimeNotInitialized);
+            }
+            return Ok(self);
+        }
+
+        let human_authority = PolicyPrincipal::new(
+            PrincipalKind::Human,
+            format!("human:session:{}", self.session_id),
+        )?;
+        let persisted = PersistedHumanSecurityState::new(
+            SecuritySettings::new(level),
+            human_authority,
+            RevocationState::new(),
+        )?;
+        let controller = TrustedSecurityController::initialize(
+            &self.security_policy,
+            persisted,
+            root_thread_id,
+            self.session_id,
+        )?;
+        self.trusted_security_controller = Some(controller);
+        Ok(self)
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn effective_security_policy(&self) -> EffectivePolicyView {
+        self.security_policy.clone()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn trusted_security_controller(&self) -> Option<TrustedSecurityController> {
+        self.trusted_security_controller.clone()
     }
 
     pub(crate) fn rollout_budget(&self) -> &RolloutBudget {
@@ -542,6 +598,39 @@ impl AgentControl {
             last_task_message: None,
             last_result_message: None,
         });
+        self.ensure_thread_security_inheritance(thread_id, session_source);
+    }
+
+    fn ensure_thread_security_inheritance(
+        &self,
+        thread_id: ThreadId,
+        session_source: &SessionSource,
+    ) {
+        if self.security_policy.snapshot_for_agent(thread_id).is_ok() {
+            return;
+        }
+        let SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            parent_thread_id, ..
+        }) = session_source
+        else {
+            return;
+        };
+        let Ok(parent) = self.security_policy.snapshot_for_agent(*parent_thread_id) else {
+            warn!(
+                %thread_id,
+                %parent_thread_id,
+                "cannot restore child security binding without its parent binding"
+            );
+            return;
+        };
+        if let Err(error) = self.security_policy.inherit_child(
+            *parent_thread_id,
+            thread_id,
+            format!("task:restore:{thread_id}"),
+            parent.level,
+        ) {
+            warn!(%thread_id, %error, "failed to restore child security binding");
+        }
     }
 
     pub(crate) async fn restore_persisted_agent_subtree(

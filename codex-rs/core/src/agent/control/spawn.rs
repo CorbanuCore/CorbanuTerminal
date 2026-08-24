@@ -532,6 +532,8 @@ impl AgentControl {
             other => (other, AgentMetadata::default()),
         };
         let notification_source = session_source.clone();
+        let configured_child_security_level = config.security_level;
+        let security_task_id = options.parent_turn_id.clone();
 
         // The same `AgentControl` is sent to spawn the thread.
         let new_thread = match (session_source, options.fork_mode.as_ref(), inheritance) {
@@ -575,6 +577,24 @@ impl AgentControl {
             }
             (None, _, _) => Box::pin(state.spawn_new_thread(config.clone(), self.clone())).await?,
         };
+        if let Some(SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            parent_thread_id, ..
+        })) = notification_source.as_ref()
+        {
+            let task_id =
+                security_task_id.unwrap_or_else(|| format!("task:spawn:{}", new_thread.thread_id));
+            if let Err(error) = self.security_policy.inherit_child(
+                *parent_thread_id,
+                new_thread.thread_id,
+                task_id,
+                configured_child_security_level,
+            ) {
+                let _ = state.remove_thread(&new_thread.thread_id).await;
+                return Err(CodexErr::Fatal(format!(
+                    "failed to inherit effective security policy: {error}"
+                )));
+            }
+        }
         agent_metadata.agent_id = Some(new_thread.thread_id);
         reservation.commit(agent_metadata.clone());
         if let Some(residency_slot) = residency_slot {
