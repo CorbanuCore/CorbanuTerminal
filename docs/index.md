@@ -28,6 +28,7 @@ product behavior.
 | Task Node | Tasks and identity should follow the agent | Tasks, evidence, requests, context, chat, rewards, balances, and Task Node-linked Nostr identity | [Task Node and identity](features/tasknode.md) |
 | Remote control | Users need bounded access away from the keyboard | Allowlisted Telegram connector with explicit workspace and authorization | [Telegram](features/telegram.md) |
 | Context | Long work and tangents need different persistence | Durable goals and memories; ephemeral side conversations; in-terminal skills and docs | [Context tools](features/context-tools.md) |
+| Benchmarking | Green unit tests can hide degraded agent performance | Three-way release gates, visual website bakeoffs, synthetic coding tasks, and TUI/provider diagnostics | [Benchmarking](benchmarking/index.md) |
 
 ## Fast reading path
 
@@ -38,10 +39,12 @@ product behavior.
 3. Use [Install and First Run](install.md), then
    [Authentication and account setup](authentication.md) and
    [`/vault` and credentials](features/vault.md).
-4. Keep the [Slash Command Reference](slash_commands.md) nearby for repeatable
+4. Read [Benchmarking](benchmarking/index.md) to understand the release gate,
+   website bakeoff, coding task suites, and diagnostic harnesses.
+5. Keep the [Slash Command Reference](slash_commands.md) nearby for repeatable
    TUI actions.
-5. Contributors and coding agents must read the
-   [Development Mandate](development-mandate.md).
+6. Contributors and coding agents must read the
+   [Corbanu Terminal development skill](corbanu-terminal-development-skill.md).
 
 ## Core Claim
 
@@ -51,12 +54,12 @@ model routing, native retained agents, pane/session persistence, wallet and GPU
 operations, remote-control and Task Node bridges, encrypted credential storage,
 packaging, and branding—not just prompt text.
 
-## Development mandate
+## Development skill
 
 Contributors and coding agents follow the same classified development and
-release workflow. Read the [Development Mandate](development-mandate.md) for
-the explicitly marked human-readable mirror of the repository's development
-skill.
+release workflow. Read the
+[Corbanu Terminal development skill](corbanu-terminal-development-skill.md) for the explicitly
+marked human-readable mirror of the repository-loaded skill.
 
 ## Repository layout
 

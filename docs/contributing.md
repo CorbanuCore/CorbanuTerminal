@@ -1,7 +1,7 @@
 # Contributing
 
 Corbanu Terminal changes must preserve a coherent product, not merely compile.
-Before starting work, read the [Development Mandate](development-mandate.md),
+Before starting work, read the [Corbanu Terminal development skill](corbanu-terminal-development-skill.md),
 the repository-root `AGENTS.md`, and the relevant nested `AGENTS.md` files.
 
 ## Start with product intent
@@ -11,7 +11,10 @@ the repository-root `AGENTS.md`, and the relevant nested `AGENTS.md` files.
 - Classify the change as routine, bounded fix, product initiative, or release.
 - Use an active plan for a product initiative. At most two product initiatives
   may be active at once.
-- Record the implementation worktree, branch, base commit, owner, and scope.
+- Select one single-feature [current sprint](sprints/index.md). Do not implement
+  directly from plan prose.
+- Record the implementation worktree, branch, base commit, owner, and scope in
+  both the plan and the executable sprint.
 
 If the product specification does not authorize the outcome, obtain the
 required product decision before implementation.
@@ -19,6 +22,8 @@ required product decision before implementation.
 ## Keep changes focused
 
 - Work on one classified outcome at a time.
+- Work only the selected sprint's `Remaining` checklist; move verified items to
+  `Done` as evidence changes.
 - Preserve unrelated changes already present in the worktree.
 - Fix failed behavior at the responsible boundary instead of hard-coding the
   reported example.
@@ -34,13 +39,15 @@ non-interactive `exec` runs are supporting evidence, not substitutes.
 
 Release candidates additionally require live workflows in TensorCash and
 Isometric Game, named human acceptance, current user documentation, and the
-competitive benchmark gate when due.
+benchmark and coding-performance gate when due.
 
 ## Document only finished behavior
 
 User documentation explains the pain solved and the finished user flow.
-Unfinished product work belongs in the product specification or an active plan;
-raw release evidence belongs under `qa/release/<version>/`.
+Unfinished product contracts belong in the product specification or a plan.
+Mechanical work in progress belongs in `docs/sprints/current/`; raw release
+evidence belongs under `qa/release/<version>/`. Completed sprint records move to
+the excluded archive and leave the documentation navigation.
 
 Every feature page cites the exact product-spec heading and short requirement
 excerpt it implements.
@@ -51,6 +58,7 @@ A reviewable pull request includes:
 
 - the change class and product citation;
 - the plan link when required;
+- the sprint id, status, and exact worktree when required;
 - a focused explanation of the user outcome;
 - final-tree test results;
 - true-TUI and live-repository evidence when required;

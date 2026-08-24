@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Policy version | 1.1 |
+| Policy version | 1.2 |
 | Updated | 2026-08-23 |
 | Policy owner | Lead developer, as assigned in the [product roles table](docs/corbanu-product-spec.md#ownership-and-decision-rights) |
 | Product authority | The decision roles in the product specification |
@@ -24,16 +24,19 @@ they must not restate policy.
 | --- | --- |
 | Product outcomes, status, sequencing, and decision roles | [Product specification](docs/corbanu-product-spec.md) |
 | Change classification and repository-wide release rules | This file |
-| Active-plan limit and lifecycle | [Plan process](plans/README.md) |
-| Plan evidence fields | [Plan template](plans/PLAN_TEMPLATE.md) |
-| Competitive benchmark cadence, method, and ledger | [Benchmark tracker](benchmarks/README.md) |
+| Active-plan limit and lifecycle | [Plan process](docs/plans/index.md) |
+| Plan evidence fields | [Plan template](docs/plans/PLAN_TEMPLATE.md) |
+| Sprint lifecycle and execution rules | [Sprint process](docs/sprints/index.md) |
+| Sprint execution fields | [Sprint template](docs/sprints/SPRINT_TEMPLATE.md) |
+| Benchmark cadence, methods, performance matrix, and ledger | [Benchmark tracker](benchmarks/README.md) |
 | Shipped user guidance | `docs/` |
 | Release-candidate evidence and human sign-off | `qa/release/<version>/` |
 | Rust implementation conventions | [`codex-rs/AGENTS.md`](codex-rs/AGENTS.md) |
 
-The product specification defines **what**. An active plan defines **how** for a
-product initiative. Documentation describes **what is finished**. QA and
-benchmark artifacts prove the claims.
+The product specification defines **what**. A plan defines the feature contract,
+scope, sequencing, and acceptance model. A sprint defines one mechanical code
+execution unit for exactly one plan feature. Documentation describes **what is
+finished**. QA and benchmark artifacts prove the claims.
 
 ## Change classes
 
@@ -43,7 +46,7 @@ Classify work before editing. When uncertain, use the higher class.
 | --- | --- | --- |
 | **Routine** | Process text, internal cleanup, or implementation work that cannot change user-visible behavior, security, money, data disclosure, persistent state, or an external contract. | Task or change description; focused checks as applicable. |
 | **Bounded fix** | Restores already-authorized behavior without adding a user goal or changing a security, financial, data, persistence, or compatibility boundary. | Product-spec heading and a change record in the issue, PR, or release evidence. |
-| **Product initiative** | Adds or materially changes a user goal, interaction, authorization boundary, financial/data flow, persistent state, compatibility surface, or multiple-worktree workflow. | Active plan governed by `plans/README.md`. |
+| **Product initiative** | Adds or materially changes a user goal, interaction, authorization boundary, financial/data flow, persistent state, compatibility surface, or multiple-worktree workflow. | Active plan governed by `docs/plans/index.md` plus a current sprint governed by `docs/sprints/index.md` for implementation work. |
 | **Release** | Packages accepted routine work, bounded fixes, and product initiatives into a versioned candidate. It does not consume an active-plan slot. | `qa/release/<version>/` release record. |
 
 Urgent reliability and security repairs may proceed as bounded fixes while two
@@ -57,6 +60,30 @@ and a short requirement excerpt. Generated Markdown anchors are navigational,
 not identity; heading text plus the excerpt is the durable reference. If the
 product specification does not authorize the outcome, obtain a product decision
 before implementation.
+
+## Sprint execution
+
+Implementation of a product initiative starts from a sprint, never directly
+from plan prose.
+
+- A sprint maps to exactly one plan file and one feature identifier in that
+  plan. A sprint may depend on another sprint but may not implement two features.
+- A sprint is a tight execution mandate: exact code boundaries, ordered tasks,
+  tests, TUI applicability, exit evidence, and separate `Done` and `Remaining`
+  checkbox ledgers. It is not another product narrative.
+- A sprint does not authorize work. Its plan must be active, and the sprint must
+  be `ready` or `in_progress`, before implementation begins.
+- `ready` and `in_progress` sprints record the exact implementation worktree,
+  branch, and base commit. Those values must agree with the active plan.
+- A plan has at most one `in_progress` sprint. A sprint with dependencies cannot
+  become executable until every dependency is completed and archived.
+- Agents implement only the selected sprint's remaining checklist. New scope
+  goes back to the plan and sprint map before code changes.
+- A sprint becomes `completed` only after every task and required evidence item
+  is checked with final-tree evidence. Move completed or cancelled records to
+  `docs/sprints/archive/`; the archive is excluded from the documentation view.
+- Plans maintain a sprint execution map for every feature. Run
+  `python3 docs/sprints/check.py` before implementation handoff and in CI.
 
 ## Interactive product proof
 
@@ -109,12 +136,14 @@ evidence into a pass.
 A release may ship only when its record shows:
 
 1. included work is classified and linked to the product specification;
-2. the final tree passes applicable automated, integration, and snapshot tests;
-3. affected interactive flows pass true-TUI QA with keys sent;
-4. the release suite passes in both default live repositories;
-5. a named human tester accepts the affected flows;
-6. shipped-feature documentation matches the candidate; and
-7. the [competitive benchmark gate](benchmarks/README.md) is passing when due.
+2. every included product-initiative change is linked to a completed sprint and
+   its final-tree evidence;
+3. the final tree passes applicable automated, integration, and snapshot tests;
+4. affected interactive flows pass true-TUI QA with keys sent;
+5. the release suite passes in both default live repositories;
+6. a named human tester accepts the affected flows;
+7. shipped-feature documentation matches the candidate; and
+8. the [benchmark and performance gate](benchmarks/README.md) is passing when due.
 
 A missing required artifact, failed human acceptance, P0 security finding, or
 due benchmark that is failed or incomplete blocks shipment. There is no waiver
@@ -128,8 +157,9 @@ useful enough to present directly to a user.
 
 - Begin with the pain being solved, then explain the finished user flow.
 - Feature docs describe only behavior verified in a shipped build or accepted
-  release candidate. Put unfinished implementation work in active plans and raw
-  evidence under `qa/release/<version>/`.
+  release candidate. Put unfinished feature contracts in plans, current
+  execution mandates in `docs/sprints/current/`, and raw evidence under
+  `qa/release/<version>/`.
 - Each feature doc cites the exact product-spec heading and short requirement
   excerpt it implements; an optional anchor is only a navigation aid.
 - The product specification is the sole product-doc exception: it may describe
@@ -149,3 +179,5 @@ useful enough to present directly to a user.
 | Fixed local paths versus cross-platform support | Repository locations are inputs recorded by the plan/release record, never personal absolute paths in policy. |
 | Exact Markdown anchors versus durable product linkage | Heading text plus a requirement excerpt identifies the product decision; anchors are optional navigation. |
 | Missing competitor infrastructure versus benchmark success | A due run without all three auditable lanes is incomplete and blocks shipment, as does a Corbanu failure. Competitor task failure on a functioning lane is a valid result. |
+| Plan detail versus executable work | Plans own feature contracts and acceptance; sprints own mechanical code tasks. No product-initiative implementation starts without a single-feature current sprint. |
+| Completed sprints versus documentation clutter | Completed and cancelled sprint records move to the excluded archive. Current sprint navigation contains only unfinished work. |
