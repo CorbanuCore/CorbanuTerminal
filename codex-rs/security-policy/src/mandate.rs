@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use thiserror::Error;
 
+use crate::ActorChain;
 use crate::AuthorizationRequest;
 use crate::BoundedText;
 use crate::PolicyPrincipal;
@@ -73,6 +74,7 @@ pub struct ProtectedActionMandate {
     pub mandate_id: BoundedText,
     pub preview_digest: BoundedText,
     pub approver: PolicyPrincipal,
+    pub actor_chain: ActorChain,
     pub approved_at_unix_seconds: i64,
     pub expires_at_unix_seconds: i64,
 }
@@ -82,6 +84,7 @@ struct MandateBinding<'a> {
     schema_version: u32,
     preview_digest: &'a BoundedText,
     approver: &'a PolicyPrincipal,
+    actor_chain: &'a ActorChain,
     approved_at_unix_seconds: i64,
     expires_at_unix_seconds: i64,
 }
@@ -110,6 +113,7 @@ impl ProtectedActionMandate {
             mandate_id: BoundedText::new("pending")?,
             preview_digest,
             approver,
+            actor_chain: preview.request.subject.clone(),
             approved_at_unix_seconds,
             expires_at_unix_seconds: preview.expires_at_unix_seconds,
         };
@@ -126,6 +130,9 @@ impl ProtectedActionMandate {
         }
         if self.approver.kind != PrincipalKind::Human {
             return Err(MandateError::ApproverMustBeHuman);
+        }
+        if self.actor_chain.as_slice().first() != Some(&self.approver) {
+            return Err(MandateError::ApproverDoesNotOwnActorChain);
         }
         if self.approved_at_unix_seconds < 0
             || self.expires_at_unix_seconds <= self.approved_at_unix_seconds
@@ -150,7 +157,7 @@ impl ProtectedActionMandate {
         {
             return Ok(false);
         }
-        if preview.request.subject.as_slice().first() != Some(&self.approver) {
+        if preview.request.subject != self.actor_chain {
             return Ok(false);
         }
         Ok(self.preview_digest.as_str() == preview.digest()?)
@@ -161,6 +168,7 @@ impl ProtectedActionMandate {
             schema_version: self.schema_version,
             preview_digest: &self.preview_digest,
             approver: &self.approver,
+            actor_chain: &self.actor_chain,
             approved_at_unix_seconds: self.approved_at_unix_seconds,
             expires_at_unix_seconds: self.expires_at_unix_seconds,
         })

@@ -38,6 +38,13 @@ pub enum RevocationTarget {
     KillSwitch { active: bool },
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct RevocationOrder {
+    created_at_unix_seconds: i64,
+    event_id: BoundedText,
+}
+
 /// Human-originated invalidation event. No free-form reason or secret payload
 /// is accepted.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -121,6 +128,7 @@ impl RevocationEvent {
 #[serde(deny_unknown_fields)]
 pub struct RevocationState {
     pub schema_version: u32,
+    pub generation: u64,
     pub kill_switch_active: bool,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     revoked_grant_ids: BTreeSet<BoundedText>,
@@ -132,18 +140,22 @@ pub struct RevocationState {
     applied_event_ids: BTreeSet<BoundedText>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     all_authority_revoked_at_unix_seconds: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last_kill_switch_event: Option<RevocationOrder>,
 }
 
 impl RevocationState {
     pub fn new() -> Self {
         Self {
             schema_version: REVOCATION_SCHEMA_VERSION,
+            generation: 0,
             kill_switch_active: false,
             revoked_grant_ids: BTreeSet::new(),
             revoked_mandate_ids: BTreeSet::new(),
             revoked_actor_ids: BTreeSet::new(),
             applied_event_ids: BTreeSet::new(),
             all_authority_revoked_at_unix_seconds: None,
+            last_kill_switch_event: None,
         }
     }
 
@@ -151,9 +163,36 @@ impl RevocationState {
     pub fn apply(&mut self, event: &RevocationEvent) -> Result<bool, RevocationError> {
         self.validate()?;
         event.validate()?;
-        if !self.applied_event_ids.insert(event.event_id.clone()) {
+        if self.applied_event_ids.contains(&event.event_id) {
             return Ok(false);
         }
+
+        let next_generation = self
+            .generation
+            .checked_add(1)
+            .ok_or(RevocationError::GenerationOverflow)?;
+        let kill_switch_order =
+            matches!(&event.target, RevocationTarget::KillSwitch { .. }).then(|| RevocationOrder {
+                created_at_unix_seconds: event.created_at_unix_seconds,
+                event_id: event.event_id.clone(),
+            });
+        if let (Some(candidate), Some(previous)) =
+            (&kill_switch_order, &self.last_kill_switch_event)
+            && candidate <= previous
+        {
+            if matches!(&event.target, RevocationTarget::KillSwitch { active: true }) {
+                self.all_authority_revoked_at_unix_seconds = Some(
+                    self.all_authority_revoked_at_unix_seconds
+                        .map_or(event.created_at_unix_seconds, |previous| {
+                            previous.max(event.created_at_unix_seconds)
+                        }),
+                );
+            }
+            self.applied_event_ids.insert(event.event_id.clone());
+            self.generation = next_generation;
+            return Ok(false);
+        }
+
         match &event.target {
             RevocationTarget::Grant { grant_id } => {
                 self.revoked_grant_ids.insert(grant_id.clone());
@@ -174,6 +213,7 @@ impl RevocationState {
             }
             RevocationTarget::KillSwitch { active } => {
                 self.kill_switch_active = *active;
+                self.last_kill_switch_event = kill_switch_order;
                 if *active {
                     self.all_authority_revoked_at_unix_seconds = Some(
                         self.all_authority_revoked_at_unix_seconds
@@ -184,6 +224,8 @@ impl RevocationState {
                 }
             }
         }
+        self.applied_event_ids.insert(event.event_id.clone());
+        self.generation = next_generation;
         Ok(true)
     }
 
@@ -203,7 +245,11 @@ impl RevocationState {
     pub fn mandate_is_revoked(&self, mandate: &ProtectedActionMandate) -> bool {
         self.kill_switch_active
             || self.revoked_mandate_ids.contains(&mandate.mandate_id)
-            || self.revoked_actor_ids.contains(&mandate.approver.id)
+            || mandate
+                .actor_chain
+                .as_slice()
+                .iter()
+                .any(|actor| self.revoked_actor_ids.contains(&actor.id))
             || self
                 .all_authority_revoked_at_unix_seconds
                 .is_some_and(|revoked_at| mandate.approved_at_unix_seconds <= revoked_at)
@@ -215,6 +261,32 @@ impl RevocationState {
                 found: self.schema_version,
                 supported: REVOCATION_SCHEMA_VERSION,
             });
+        }
+        let applied_events = u64::try_from(self.applied_event_ids.len())
+            .map_err(|_| RevocationError::GenerationOverflow)?;
+        if self.generation != applied_events {
+            return Err(RevocationError::GenerationMismatch {
+                generation: self.generation,
+                applied_events,
+            });
+        }
+        if self
+            .all_authority_revoked_at_unix_seconds
+            .is_some_and(|timestamp| timestamp < 0)
+        {
+            return Err(RevocationError::CorruptStateTimestamp);
+        }
+        if let Some(last_event) = &self.last_kill_switch_event
+            && (last_event.created_at_unix_seconds < 0
+                || !self.applied_event_ids.contains(&last_event.event_id))
+        {
+            return Err(RevocationError::CorruptKillSwitchState);
+        }
+        if self.kill_switch_active
+            && (self.last_kill_switch_event.is_none()
+                || self.all_authority_revoked_at_unix_seconds.is_none())
+        {
+            return Err(RevocationError::CorruptKillSwitchState);
         }
         Ok(())
     }
@@ -234,6 +306,17 @@ pub enum RevocationError {
     NegativeTimestamp,
     #[error("revocation integrity digest does not match its bound fields")]
     IntegrityMismatch,
+    #[error("revocation generation overflowed")]
+    GenerationOverflow,
+    #[error("revocation generation {generation} does not match {applied_events} applied events")]
+    GenerationMismatch {
+        generation: u64,
+        applied_events: u64,
+    },
+    #[error("revocation state contains an invalid timestamp")]
+    CorruptStateTimestamp,
+    #[error("revocation state contains an invalid kill-switch history")]
+    CorruptKillSwitchState,
     #[error("unsupported revocation schema version {found}; supported version is {supported}")]
     UnsupportedSchemaVersion { found: u32, supported: u32 },
     #[error(transparent)]
