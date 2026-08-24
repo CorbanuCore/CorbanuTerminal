@@ -63,11 +63,16 @@ Corbanu Terminal already exists and is shipping. The roadmap expands this live, 
 | **Task Node and identity** | Tasks, evidence, verification, rewards, balances, chat, context, linked identity, and **live Task Node-linked Nostr identity**. |
 | **Remote and context** | Allowlisted Telegram; durable `/goal` and `/memories`; ephemeral `/side` and `/btw`; `/skills` and `/docs`. |
 
-## Live MVP versus the P0 financial sandbox
+## Live MVP versus the P0 security controls
 
-The shipping MVP already has a wallet, vault, scoped signing, approvals, and general workspace sandboxing. These are live product capabilities.
+The shipping MVP already has a wallet, vault, scoped signing, approvals, and
+general workspace sandboxing. These are live product capabilities.
 
-The new **P0 financial-agent security sandbox** is a separate, stricter policy and execution boundary for account access, order construction, approval, signing, broadcast, disclosure, and autonomous live-money behavior. It must be in place before broader live-money autonomy is enabled through Hyperliquid, brokerage-agent services, Post Fiat NAV, or other capital workflows.
+The new `/security` surface makes additional protection understandable and
+user-controlled. **Permissive preserves the shipping behavior and does not
+silently change existing policies.** Moderate and Aggressive add deterministic
+protections around untrusted content, sensitive data, credentials, tools, and
+financial actions.
 
 # Corbanu Plan — LIVE
 
@@ -99,7 +104,7 @@ The expansion roadmap must make the following one coherent trader product:
 - first-party reproducible backtesting;
 - first-party Hyperliquid support;
 - seamless use of existing brokerage-agent services;
-- deterministic permission profiles for research through constrained autonomy;
+- a clear `/security` surface with Permissive, Moderate, and Aggressive levels;
 - native Post Fiat NAV infrastructure;
 - a first-class Corbanu trollbox using live Task Node/Nostr identity;
 - wallet-funded inference, data, and financial tools;
@@ -130,45 +135,58 @@ The first interaction must be immediately useful. For example, “Corbanu, show 
 | **Travis Good — final product authority** | Owns all product decisions, priorities, gates, scope, and go/no-go decisions. |
 | **Alex Good — Head of Product** | Owns trading and backtesting skill creation; dataset business development, including Tiingo, Sharadar, and the desired EarningsCall.biz partnership; Stripe accounts; product financialization; commercial integrations; and related business-development execution. |
 | **Jim Ricketts — lead Corbanu Terminal developer** | Owns releases, technical implementation coordination, integration delivery, and implementation quality. |
-| **Additional full-time engineer — TBD** | Mandatory hire required for the product to advance. The person and assignment are TBD. |
 
 # Accountable sequencing
 
-The sequence is dependency order, not a claim that all later work must wait to begin. Security is the first item and begins immediately. No broader autonomous live-money integration may pass its release gate before sequence 1 and the combined 2026-10-08 gate pass.
+Security is the first implementation initiative and begins immediately. Other
+roadmap items have their own owners and plans; they are not dependencies or
+scope for the `/security` implementation plan.
 
-| Sequence | Capability or gate | Status | Priority | Delivery owner | Contributors / dependency | Deadline | Measurable definition of done |
+| Sequence | Capability or gate | Status | Priority | Delivery owner | Dependency | Deadline | Measurable definition of done |
 | ---: | --- | --- | --- | --- | --- | --- | --- |
-| **1** | **P0 financial-agent security sandbox** | TO BUILD | P0 | Lead developer | Additional engineer required; venue adapters must use the trusted policy boundary | **2026-10-08; work begins immediately** | All required profiles and deterministic controls are implemented outside the model; every listed critical attack-class regression passes; no critical security finding remains open; tamper-evident audit records contain no secrets; kill switch and revocation pass end-to-end tests. |
-| **2** | **Hire one additional full-time engineer** | TO ACQUIRE | P0 | Final product authority | Lead developer contributes technical role requirements; exact person TBD | **Immediate / before roadmap expansion** | One full-time engineer is hired and assigned to Corbanu Terminal. Until then, staffing remains a blocking dependency. |
-| **3** | **Native market-data gate: Tiingo and Sharadar** | TO ACQUIRE | P0 | Head of Product | Engineering implements native access; commercial state and fallback are TBD | **2026-10-08** | Tiingo and Sharadar equities datasets are commercially authorized and available natively to Terminal research and backtesting; source, timestamps, and dataset identity are recorded for replay; credentials remain outside model context. |
-| **4** | **2026-10-08 security-plus-market-data product gate** | PENDING | P0 | Final product authority | Depends on sequences 1 and 3 | **2026-10-08** | Binary pass only when both the financial-agent sandbox and native market-data definitions of done are satisfied. Failure blocks broader live-money autonomy and requires a revised plan. |
-| **5** | First-party backtesting skill | TO BUILD | P1 | Head of Product | Native data; engineering coordinates implementation and release | TBD after gate planning | A strategy can be replayed from recorded data version, code, parameters, model, and environment; required bias and cost controls are applied; machine-readable results promote to paper trading. |
-| **6** | First-party Hyperliquid skill | TO BUILD | P1 | Head of Product | Security gate; engineering coordinates implementation; venue review required | TBD after gate planning | Market/account reads and order lifecycle work in paper and approval-required modes; limits are enforced outside the model; credentials are never model-visible; every proposal and action is audited. Constrained autonomy remains blocked until separately approved. |
-| **7** | Existing brokerage-agent services | TO INTEGRATE | P1 | Head of Product | Security gate, provider authorization, compliance review, and engineering adapters | TBD | At least one approved existing brokerage-agent service is usable through native normalized account, position, order, fill, permission, limit, health, and audit surfaces; read-only is the default. Provider selection and fallback are TBD. |
-| **8** | Post Fiat NAV infrastructure | TO INTEGRATE | P1 | Head of Product | Security gate, Post Fiat capabilities, legal/compliance review, and engineering integration | TBD | Terminal can discover and inspect supported NAV products and complete every Post Fiat-supported subscription, monitoring, exit, redemption, or swap flow with visible proofs, settlement state, permissions, and audit records. |
-| **9** | Corbanu trollbox | TO BUILD | P1 | Lead developer | Live Task Node/Nostr identity; security sandbox for all social input | TBD | Real-time pseudonymous rooms, distinct human/agent identity, structured cards, moderation controls, consent-gated financial sharing, and untrusted-input treatment work end to end. |
-| **10** | EarningsCall.biz transcript partnership | TO ACQUIRE | P2 | Head of Product | Negotiation state and fallback TBD | TBD | If acquired, authorized real-time transcripts are available to research, alerts, rooms, and event backtests with source and timestamp provenance. |
-| **11** | USDAI preferred stablecoin partnership | TO ACQUIRE | P2 | Head of Product | Negotiation state and fallback TBD; legal/compliance review required | TBD | If acquired, approved USDAI flows are native where appropriate. Corbanu does not center a new native token. |
-| **12** | Per-wallet xAPI isolation | BUILT NOT LIVE | P2 | Lead developer | Merge, deployment, tenant-isolation review, accounting verification | TBD | The existing branch is merged and deployed; wallet isolation, encrypted tenant keys, capped refills, and cost attribution pass production verification. Until then, it must not be described as live. |
-| **13** | Upstream Codex parity | PRINCIPLE | CONTINUOUS | Lead developer | Continuous upstream review | Continuous | Relevant upstream harness improvements are assessed and adopted without regressions to Corbanu’s provider, wallet, security, trading, identity, or social layers. |
+| **1** | **`/security` levels and protected-action controls** | TO BUILD | P0 | Lead developer | Existing approval, vault, wallet, tool, and sandbox boundaries | **2026-10-08; work begins immediately** | The `/security` tab ships with Permissive, Moderate, and Aggressive. Permissive demonstrably preserves current behavior. Moderate and Aggressive enforce their documented controls outside the model. Critical attack-class regressions pass, no critical finding remains open, audit records contain no secrets, and downgrade, revocation, and kill-switch flows pass end to end. |
+| **2** | **Native market-data gate: Tiingo and Sharadar** | TO ACQUIRE | P0 | Head of Product | Commercial authorization and native engineering access | **2026-10-08** | Tiingo and Sharadar equities datasets are commercially authorized and available natively to Terminal research and backtesting; source, timestamps, and dataset identity are recorded for replay; credentials remain outside model context. |
+| **3** | First-party backtesting skill | TO BUILD | P1 | Head of Product | Native data | TBD | A strategy can be replayed from recorded data version, code, parameters, model, and environment; required bias and cost controls are applied; machine-readable results promote to paper trading. |
+| **4** | First-party Hyperliquid skill | TO BUILD | P1 | Head of Product | Protected-action controls and venue review | TBD | Market/account reads and order lifecycle work in paper and approval-required modes; limits are enforced outside the model; credentials are never model-visible; every proposal and action is audited. |
+| **5** | Existing brokerage-agent services | TO INTEGRATE | P1 | Head of Product | Protected-action controls, provider authorization, and compliance review | TBD | At least one approved existing brokerage-agent service is usable through native normalized account, position, order, fill, permission, limit, health, and audit surfaces; read-only is the default. |
+| **6** | Post Fiat NAV infrastructure | TO INTEGRATE | P1 | Head of Product | Protected-action controls, supported Post Fiat capabilities, and compliance review | TBD | Terminal can discover and inspect supported NAV products and complete supported transaction flows with visible proofs, settlement state, permissions, and audit records. |
+| **7** | Corbanu trollbox | TO BUILD | P1 | Lead developer | Live Task Node/Nostr identity and untrusted-input handling | TBD | Real-time pseudonymous rooms, distinct human/agent identity, structured cards, moderation controls, consent-gated financial sharing, and untrusted-input treatment work end to end. |
+| **8** | EarningsCall.biz transcript partnership | TO ACQUIRE | P2 | Head of Product | Commercial agreement | TBD | If acquired, authorized real-time transcripts are available with source and timestamp provenance. |
+| **9** | USDAI preferred stablecoin partnership | TO ACQUIRE | P2 | Head of Product | Commercial and compliance review | TBD | If acquired, approved USDAI flows are native where appropriate. Corbanu does not center a new native token. |
+| **10** | Per-wallet xAPI isolation | BUILT NOT LIVE | P2 | Lead developer | Merge, deployment, tenant-isolation review, and accounting verification | TBD | The existing branch is merged and deployed; wallet isolation, encrypted tenant keys, capped refills, and cost attribution pass production verification. |
+| **11** | Upstream Codex parity | PRINCIPLE | CONTINUOUS | Lead developer | Continuous upstream review and benchmark evidence | Continuous | Relevant upstream harness improvements are assessed and adopted without regressions to Corbanu-specific behavior. At least every three releases, the full checked-in coding benchmark catalog is run across the relevant production model set; correctness, end-to-end runtime, and spend are recorded, and a threshold regression blocks release. |
 
-# P0 financial-agent security sandbox
+# P0 `/security` levels
+
+## Product surface
+
+`/security` opens one focused tab showing the current security level, a short
+plain-English explanation, the protections that change at each level, and a
+confirmation step before applying a change.
+
+| Level | Product promise | Policy behavior |
+| --- | --- | --- |
+| **Permissive** | Preserve the Corbanu Terminal users have now. | Default for existing users. Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged. The tab explains that no additional security controls are active. |
+| **Moderate** | Add strong protection without making normal agent work painful. | Treat external content and tool output as untrusted; prevent secrets and protected financial data from entering model-visible context; require trusted credential resolution; separate proposal, approval, signing, and broadcast; show the expected effect before protected actions; record redacted audit events; support revocation and a kill switch. |
+| **Aggressive** | Minimize sensitive access and require the user to open every important door. | Includes Moderate, then defaults sensitive tools, account access, credential use, protected-data disclosure, financial actions, arbitrary egress, and clipboard/export paths to denied. The user grants narrow, expiring access; every sign or broadcast requires exact human approval; child agents inherit the level and cannot weaken it. |
+
+Permissive must be verified against the pre-feature candidate so selecting it
+does not silently tighten or loosen an existing policy. Moderate is the
+recommended level once qualified. Aggressive is an explicit lockdown posture,
+not a marketing label.
+
+Only the human can change the level through the TUI. Agents, prompts, project
+files, tools, hooks, plugins, connectors, MCP servers, and retrieved content
+cannot change or downgrade it. A confirmed change applies immediately to active
+and future agents, invalidates incompatible pending approvals, persists across
+restart, and produces a secret-free audit event.
 
 ## Release rule
 
-The financial-agent sandbox is the release gate for broader autonomous brokerage, Hyperliquid, NAV, and capital workflows. It must be deterministic policy around the model, not prompt text.
-
-No integration receives autonomous live-money permission merely because it supports signing or because a model judges an action safe. Research, paper trading, and carefully scoped approval-required integration work may proceed only within the applicable profile.
-
-## Permission profiles
-
-| Profile | Data access | Allowed financial action |
-| --- | --- | --- |
-| **Research** | Public and user-approved data | No account access or financial action. |
-| **Portfolio read-only** | Approved balances, positions, and history | No trading, signing, or broadcast. |
-| **Paper trading** | Approved data and simulated account | Simulation only. |
-| **Approval-required** | Approved live accounts and data | Agent drafts; user approves every order or signature. |
-| **Constrained autonomy** | Named accounts, venues, instruments, and limits | Execution only inside a signed policy envelope enforced outside the model. |
+Moderate and Aggressive controls must be deterministic policy around the model,
+not prompt text. A model may identify risk or propose an action, but cannot
+authorize itself, resolve a secret, change the security level, or bypass a
+protected-action decision.
 
 ## Required trust boundaries
 
@@ -243,7 +261,7 @@ A **reproducible backtest** is one that can be rerun from the recorded data vers
 - Read approved market and account data, positions, margin, funding, orders, and fills.
 - Draft, simulate, place, replace, and cancel orders.
 - Enforce leverage, notional, slippage, loss, venue, and instrument limits outside the model.
-- Support paper, approval-required, and constrained-autonomy profiles as separately gated.
+- Support paper, approval-required, and constrained-autonomy execution modes as separately gated.
 - Support builder or referral codes where applicable.
 - Never expose exchange credentials to the model.
 - Audit every proposed, approved, rejected, and executed action.
@@ -346,7 +364,7 @@ These are target expansion workflows, not claims that every step is live today.
 
 1. Discover a NAV strategy and inspect proofs, liquidity, privacy, and risk.
 2. Research or backtest it.
-3. Apply the financial-agent sandbox to every wallet or account action.
+3. Apply the active `/security` level and protected-action controls to every wallet or account action.
 4. Subscribe, swap, monitor, exit, or redeem through supported Post Fiat flows.
 5. Discuss the strategy through the trollbox without leaking holdings.
 
@@ -363,7 +381,7 @@ No commercial performance numbers have been supplied. The following metrics must
 | Paper-to-live funnel | Backtest-to-paper and paper-to-approved-live conversion | TBD |
 | Retention | Returning active traders and active Plan users | TBD |
 | Corbanu Plan | Purchases, renewal, usage, revenue, and model-level unit economics | TBD |
-| Execution | Proposed, approved, rejected, failed, and completed actions by profile | TBD |
+| Security adoption | Sessions and protected actions by Permissive, Moderate, and Aggressive | TBD |
 | Partnerships | Dataset, transcript, stablecoin, broker, and NAV integration readiness | Binary milestone status; commercial targets TBD |
 | Trollbox | Active identities, useful structured cards, moderation events, and consent violations | TBD; zero unauthorized financial disclosure is required |
 
@@ -371,8 +389,7 @@ No commercial performance numbers have been supplied. The following metrics must
 
 | Risk or dependency | Consequence | Required gate or mitigation | Owner |
 | --- | --- | --- | --- |
-| **Additional engineer not hired** | Product cannot advance at the required scope and sequence. | Hire is mandatory immediately and before roadmap expansion. Scope and schedule must be revisited if the role remains open. | Final product authority |
-| **Financial sandbox misses 2026-10-08** | Broader autonomous live-money integration remains blocked. | No exception based on model judgment; issue a revised plan and go/no-go decision. | Final product authority |
+| **`/security` controls miss 2026-10-08** | Moderate and Aggressive cannot be presented as available security levels. | Preserve Permissive behavior, do not ship incomplete controls, and issue a revised plan. | Final product authority |
 | **Tiingo or Sharadar unavailable** | The required native equities-data gate fails. | Negotiation state and fallback are TBD; resolve through the defined product decision process. | Head of Product |
 | **Other external partnership failure** | Transcript, stablecoin, brokerage, or NAV scope may be delayed or reduced. | Negotiation state and fallback must be recorded before commitment; no partner capability may be presented as live before deployment. | Head of Product |
 | **Data licensing or use restrictions** | Research, display, storage, or backtesting may be constrained. | Complete provider-rights review before production use; encode applicable storage, attribution, and redistribution rules. | Head of Product |
@@ -385,7 +402,6 @@ No commercial performance numbers have been supplied. The following metrics must
 
 ## Open decisions
 
-- Named additional full-time engineer: **TBD**
 - Post-gate release dates: **TBD**
 - Commercial KPI targets: **TBD**
 - Tiingo, Sharadar, EarningsCall.biz, USDAI, brokerage, and Post Fiat negotiation states: **TBD**
@@ -433,7 +449,7 @@ The complete trader product passes when a pseudonymous trader can:
 4. ask for an idea and run a reproducible backtest;
 5. discuss it in the trollbox under a Task Node-linked Nostr identity;
 6. promote it through paper trading;
-7. deploy it through the first-party Hyperliquid skill or an integrated existing brokerage-agent service under the selected permission profile; and
+7. deploy it through the first-party Hyperliquid skill or an integrated existing brokerage-agent service under the active `/security` level and explicit execution permissions; and
 8. use supported Post Fiat NAV infrastructure as a native Terminal capability.
 
 Throughout the loop, external content must be unable to prompt-inject the agent into revealing vault contents, exposing protected financial information, changing policy, bypassing approval, or moving money outside explicit deterministic limits.

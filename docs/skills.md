@@ -55,9 +55,11 @@ documented home-resolution rules.
 | `skill-installer` | Install curated or repository-hosted skills |
 | `tasknode-usage` | Use Task Node as an agent-side context and work ledger |
 
-Repository contributor skills such as
-`corbanu-terminal-development`, `test-tui`, and `remote-tests` are loaded
-from the source repository rather than shipped as user-facing system skills.
+Repository contributor skills are loaded from the source repository rather
+than shipped as user-facing system skills. The
+[`corbanu-terminal-development` skill](corbanu-terminal-development-skill.md) is rendered in
+this documentation for contributors; `test-tui` and `remote-tests` remain
+repository-loaded QA skills.
 
 ## Safety boundary
 

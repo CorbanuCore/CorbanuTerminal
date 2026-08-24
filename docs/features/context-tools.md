@@ -46,4 +46,4 @@ documentation so users and agents can inspect current product behavior without
 leaving the TUI.
 
 See [Skills](../skills.md) and the
-[Development Mandate](../development-mandate.md).
+[Corbanu Terminal development skill](../corbanu-terminal-development-skill.md).

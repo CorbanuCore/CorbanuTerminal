@@ -1,0 +1,110 @@
+{
+  "run_dir": "../runs/all-tasks-example",
+  "waves": 1,
+  "caps": {
+    "timeout_seconds": 1200,
+    "max_total_runs": 40
+  },
+  "agents": [
+    {
+      "name": "corbanu",
+      "kind": "corbanu",
+      "binary": "corbanu",
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.2",
+      "lane": "openrouter",
+      "required_env": ["OPENROUTER_API_KEY"]
+    },
+    {
+      "name": "hermes",
+      "kind": "hermes",
+      "binary": "hermes",
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.2",
+      "lane": "openrouter",
+      "required_env": ["OPENROUTER_API_KEY"]
+    },
+    {
+      "name": "kilo",
+      "kind": "kilo",
+      "binary": "kilo",
+      "provider": "openrouter",
+      "model": "openrouter/z-ai/glm-5.2",
+      "lane": "openrouter",
+      "required_env": ["OPENROUTER_API_KEY"]
+    }
+  ],
+  "tasks": [
+    {
+      "name": "eventforge",
+      "baseline": "../tasks/eventforge/baseline",
+      "prompt": "../tasks/eventforge/task_prompt.md",
+      "verifier": "../tasks/eventforge/verifier/verify.py",
+      "core_rel": "src/eventforge/core.py"
+    },
+    {
+      "name": "logtriage",
+      "baseline": "../tasks/logtriage/baseline",
+      "prompt": "../tasks/logtriage/task_prompt.md",
+      "verifier": "../tasks/logtriage/verifier/verify.py",
+      "core_rel": "src/logtriage/core.py"
+    },
+    {
+      "name": "rategate",
+      "baseline": "../tasks/rategate/baseline",
+      "prompt": "../tasks/rategate/task_prompt.md",
+      "verifier": "../tasks/rategate/verifier/verify.py",
+      "core_rel": "src/rategate/core.py"
+    },
+    {
+      "name": "chronoledger",
+      "baseline": "../tasks/chronoledger/baseline",
+      "prompt": "../tasks/chronoledger/task_prompt.md",
+      "verifier": "../tasks/chronoledger/verifier/verify.py",
+      "core_rel": "src/chronoledger/engine.py"
+    },
+    {
+      "name": "queryforge",
+      "baseline": "../tasks/queryforge/baseline",
+      "prompt": "../tasks/queryforge/task_prompt.md",
+      "verifier": "../tasks/queryforge/verifier/verify.py",
+      "core_rel": "src/queryforge/__init__.py"
+    },
+    {
+      "name": "toothpaste-site",
+      "baseline": "../tasks/toothpaste_site/baseline",
+      "prompt": "../tasks/toothpaste_site/task_prompt.md",
+      "verifier": "../tasks/toothpaste_site/verifier/verify.py"
+    },
+    {
+      "name": "apigate",
+      "baseline": "../tasks/apigate/bugged",
+      "prompt": "../tasks/apigate/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/apigate/verifier/verify.py"
+    },
+    {
+      "name": "confclerk",
+      "baseline": "../tasks/confclerk/bugged",
+      "prompt": "../tasks/confclerk/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/confclerk/verifier/verify.py"
+    },
+    {
+      "name": "pipeflow",
+      "baseline": "../tasks/pipeflow/bugged",
+      "prompt": "../tasks/pipeflow/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/pipeflow/verifier/verify.py"
+    },
+    {
+      "name": "queuecraft",
+      "baseline": "../tasks/queuecraft/bugged",
+      "prompt": "../tasks/queuecraft/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/queuecraft/verifier/verify.py"
+    },
+    {
+      "name": "textwright",
+      "baseline": "../tasks/textwright/bugged",
+      "prompt": "../tasks/textwright/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/textwright/verifier/verify.py"
+    }
+  ]
+}
