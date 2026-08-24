@@ -30,8 +30,9 @@ report did not execute the proposed test matrix.
 [`tmux-testing/tmuxPlan.html`](tmux-testing/tmuxPlan.html) turns that research
 into a bounded engineering work package with functional and non-functional
 requirements, implementation stages, required tests, and acceptance gates. It
-is a proposed Routine infrastructure change, not a completed product sprint or
-release artifact.
+is the umbrella plan for the ready
+[`RW-TMUX-01`](../qa/work-packages/RW-TMUX-01.md) Routine execution package,
+not a product sprint or release artifact.
 
 ## Research tools
 
