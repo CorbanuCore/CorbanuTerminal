@@ -5,20 +5,19 @@ use anyhow::Result;
 
 use super::*;
 
-fn server_or_skip() -> Result<Option<TmuxServer>> {
-    if !TmuxServer::is_available() {
-        eprintln!("skipping tmux harness test because tmux is unavailable");
+fn server_or_skip(scenario: &str) -> Result<Option<TmuxServer>> {
+    if !TmuxServer::should_run(scenario)? {
         return Ok(None);
     }
-    Ok(Some(TmuxServer::start()?))
+    Ok(Some(TmuxServer::start(scenario)?))
 }
 
 #[test]
 fn servers_are_isolated_and_cleanup_their_private_sessions() -> Result<()> {
-    let Some(first) = server_or_skip()? else {
+    let Some(first) = server_or_skip("server-isolation-first")? else {
         return Ok(());
     };
-    let Some(second) = server_or_skip()? else {
+    let Some(second) = server_or_skip("server-isolation-second")? else {
         return Ok(());
     };
     let first_socket_root = first.socket_root();
@@ -26,12 +25,12 @@ fn servers_are_isolated_and_cleanup_their_private_sessions() -> Result<()> {
     let first_session = first.new_session(SessionSpec::new(
         "isolation",
         TerminalSize::new(/*columns*/ 40, /*rows*/ 8),
-        command_for_shell("printf 'first\\n'; sleep 30"),
+        command_for_shell("printf 'first\n'; sleep 30"),
     ))?;
     let second_session = second.new_session(SessionSpec::new(
         "isolation",
         TerminalSize::new(/*columns*/ 40, /*rows*/ 8),
-        command_for_shell("printf 'second\\n'; sleep 30"),
+        command_for_shell("printf 'second\n'; sleep 30"),
     ))?;
 
     assert!(first.has_session(&first_session.name));
@@ -50,13 +49,13 @@ fn servers_are_isolated_and_cleanup_their_private_sessions() -> Result<()> {
 
 #[test]
 fn literal_text_is_distinct_from_named_enter_key() -> Result<()> {
-    let Some(server) = server_or_skip()? else {
+    let Some(server) = server_or_skip("literal-key-distinction")? else {
         return Ok(());
     };
     let session = server.new_session(SessionSpec::new(
         "input",
         TerminalSize::new(/*columns*/ 40, /*rows*/ 8),
-        command_for_shell("IFS= read -r line; printf 'LINE:%s\\n' \"$line\"; sleep 30"),
+        command_for_shell("IFS= read -r line; printf 'LINE:%s\n' \"$line\"; sleep 30"),
     ))?;
     let pane = session.primary_pane();
 
@@ -71,14 +70,14 @@ fn literal_text_is_distinct_from_named_enter_key() -> Result<()> {
 
 #[test]
 fn viewport_and_scrollback_are_captured_separately() -> Result<()> {
-    let Some(server) = server_or_skip()? else {
+    let Some(server) = server_or_skip("viewport-scrollback")? else {
         return Ok(());
     };
     let session = server.new_session(SessionSpec::new(
         "capture",
         TerminalSize::new(/*columns*/ 40, /*rows*/ 5),
         command_for_shell(
-            "printf 'old-line\\n'; i=1; while [ $i -le 12 ]; do printf 'line-%02d\\n' $i; i=$((i + 1)); done; sleep 30",
+            "printf 'old-line\n'; i=1; while [ $i -le 12 ]; do printf 'line-%02d\n' $i; i=$((i + 1)); done; sleep 30",
         ),
     ))?;
     let pane = session.primary_pane();
@@ -92,51 +91,138 @@ fn viewport_and_scrollback_are_captured_separately() -> Result<()> {
 }
 
 #[test]
-fn command_failures_include_diagnostics() -> Result<()> {
-    let Some(server) = server_or_skip()? else {
+fn command_failures_include_diagnostics_and_artifacts() -> Result<()> {
+    if !TmuxServer::should_run("command failure artifacts")? {
         return Ok(());
-    };
+    }
+    let artifact_root = tempfile::tempdir()?;
+    let server = TmuxServer::start_with_artifact_root(
+        "command-failure",
+        artifact_root.path().to_path_buf(),
+    )?;
+    let artifact_dir = server.artifact_dir();
     let mut command = server.command();
-    let error = checked_output(command.arg("display-message").arg("-t").arg("missing-pane"))
+    let error = server
+        .checked_output(
+            command.arg("display-message").arg("-t").arg("missing-pane"),
+            /*pane_id*/ None,
+        )
         .expect_err("missing pane should fail")
         .to_string();
 
-    assert!(error.contains("tmux command failed"));
-    assert!(error.contains("display-message"));
-    assert!(error.contains("status:"));
-    assert!(error.contains("stdout:"));
-    assert!(error.contains("stderr:"));
+    for expected in [
+        "tmux command failed",
+        "display-message",
+        "status:",
+        "stdout:",
+        "stderr:",
+        "reproduction:",
+    ] {
+        assert!(error.contains(expected));
+    }
+    assert!(artifact_dir.join("manifest.json").is_file());
     Ok(())
 }
 
 #[test]
-fn wait_failures_include_the_last_live_viewport() -> Result<()> {
-    let Some(server) = server_or_skip()? else {
+fn wait_failures_write_complete_redacted_artifacts() -> Result<()> {
+    if !TmuxServer::should_run("timeout artifacts")? {
         return Ok(());
-    };
+    }
+    let artifact_root = tempfile::tempdir()?;
+    let attachment_root = tempfile::tempdir()?;
+    let config = attachment_root.path().join("config.toml");
+    let candidate_log = attachment_root.path().join("candidate.log");
+    std::fs::write(&config, "model = \"test\"\n")?;
+    std::fs::write(&candidate_log, "candidate fixture log\n")?;
+    let server = TmuxServer::start_with_artifact_root(
+        "timeout-artifacts",
+        artifact_root.path().to_path_buf(),
+    )?;
+    server.register_artifact("config.toml", &config);
+    server.register_artifact("candidate.log", &candidate_log);
+    let artifact_dir = server.artifact_dir();
     let session = server.new_session(SessionSpec::new(
         "timeout",
         TerminalSize::new(/*columns*/ 40, /*rows*/ 8),
-        command_for_shell("printf 'visible-sentinel\\n'; sleep 30"),
+        CommandSpec::new("sh")
+            .env("OPENAI_API_KEY", "must-not-leak")
+            .arg("-c")
+            .arg("IFS= read -r line; printf 'visible:%s\\n' \"$line\"; sleep 30"),
     ))?;
-    let error = session
-        .primary_pane()
+    let pane = session.primary_pane();
+    pane.send_literal("ok")?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("visible:ok", Duration::from_secs(/*secs*/ 3))?;
+    let error = pane
         .wait_stable_contains("missing-sentinel", Duration::from_millis(/*millis*/ 250))
         .expect_err("missing sentinel should time out")
         .to_string();
 
     assert!(error.contains("missing-sentinel"));
     assert!(error.contains("last viewport:"));
-    assert!(error.contains("visible-sentinel"));
+    assert!(error.contains("visible:ok"));
+    let mut files = std::fs::read_dir(&artifact_dir)?
+        .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().to_string()))
+        .collect::<std::io::Result<Vec<_>>>()?;
+    files.sort();
+    assert_eq!(
+        files,
+        vec![
+            "candidate.log",
+            "command-log.txt",
+            "config.toml",
+            "dimensions.txt",
+            "input-events.txt",
+            "manifest.json",
+            "pane-metadata.txt",
+            "reason.txt",
+            "reproduce.sh",
+            "scrollback.txt",
+            "viewport.txt",
+        ]
+    );
+    let command_log = std::fs::read_to_string(artifact_dir.join("command-log.txt"))?;
+    assert!(command_log.contains("OPENAI_API_KEY=<redacted>"));
+    assert!(!command_log.contains("must-not-leak"));
+    assert_eq!(
+        std::fs::read_to_string(artifact_dir.join("input-events.txt"))?,
+        "literal bytes=2\nkey Enter"
+    );
+    assert!(std::fs::read_to_string(artifact_dir.join("pane-metadata.txt"))?.contains("size=40x8"));
     Ok(())
 }
 
 #[test]
-fn panic_unwind_cleans_up_the_private_server() -> Result<()> {
-    let Some(server) = server_or_skip()? else {
+fn successful_session_does_not_emit_artifacts() -> Result<()> {
+    if !TmuxServer::should_run("success artifact laziness")? {
         return Ok(());
-    };
+    }
+    let artifact_root = tempfile::tempdir()?;
+    let server = TmuxServer::start_with_artifact_root(
+        "successful-session",
+        artifact_root.path().to_path_buf(),
+    )?;
+    let artifact_dir = server.artifact_dir();
+    let _session = server.new_session(SessionSpec::new(
+        "success",
+        TerminalSize::new(/*columns*/ 40, /*rows*/ 8),
+        command_for_shell("sleep 30"),
+    ))?;
+    assert!(!artifact_dir.exists());
+    Ok(())
+}
+
+#[test]
+fn panic_unwind_cleans_up_and_writes_artifacts() -> Result<()> {
+    if !TmuxServer::should_run("panic cleanup artifacts")? {
+        return Ok(());
+    }
+    let artifact_root = tempfile::tempdir()?;
+    let server =
+        TmuxServer::start_with_artifact_root("panic-cleanup", artifact_root.path().to_path_buf())?;
     let socket_root = server.socket_root();
+    let artifact_dir = server.artifact_dir();
     let result = catch_unwind(move || {
         let _session = server
             .new_session(SessionSpec::new(
@@ -150,5 +236,10 @@ fn panic_unwind_cleans_up_the_private_server() -> Result<()> {
 
     assert!(result.is_err());
     assert!(!socket_root.exists());
+    assert!(artifact_dir.join("manifest.json").is_file());
+    assert!(
+        std::fs::read_to_string(artifact_dir.join("reason.txt"))?
+            .contains("panicked while tmux session was active")
+    );
     Ok(())
 }
