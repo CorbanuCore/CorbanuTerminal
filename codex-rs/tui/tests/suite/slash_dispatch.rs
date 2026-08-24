@@ -23,7 +23,7 @@ fn tmux_smoke_single_enter_dispatches_slash_command_and_exits_cleanly() -> Resul
     let codex_home = tempdir()?;
     write_test_config(codex_home.path(), &repo_root)?;
 
-    let tmux = TmuxServer::start("tmux-smoke-slash-dispatch")?;
+    let tmux = TmuxServer::start("tmux_smoke_single_enter")?;
     tmux.register_artifact("config.toml", codex_home.path().join("config.toml"));
     tmux.register_artifact("codex-tui.log", codex_home.path().join("log/codex-tui.log"));
     let session = tmux.new_session(
