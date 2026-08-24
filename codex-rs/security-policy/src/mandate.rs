@@ -145,7 +145,9 @@ impl ProtectedActionMandate {
     ) -> Result<bool, MandateError> {
         self.validate()?;
         preview.validate()?;
-        if now_unix_seconds < 0 || now_unix_seconds >= self.expires_at_unix_seconds {
+        if now_unix_seconds < self.approved_at_unix_seconds
+            || now_unix_seconds >= self.expires_at_unix_seconds
+        {
             return Ok(false);
         }
         if preview.request.subject.as_slice().first() != Some(&self.approver) {

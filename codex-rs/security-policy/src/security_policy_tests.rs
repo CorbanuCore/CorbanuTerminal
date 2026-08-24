@@ -394,9 +394,125 @@ fn mandate_binds_exact_preview_and_rejects_replay() {
         Err(MandateError::Replay)
     ));
 
+    assert!(
+        !mandate
+            .matches_preview(&preview, 109)
+            .expect("pre-approval use rejected")
+    );
+    assert!(
+        !mandate
+            .matches_preview(&preview, 180)
+            .expect("stale use rejected")
+    );
+    assert!(matches!(
+        ActionReceipt::complete(&mandate, &preview, MandateOutcome::Executed, 109),
+        Err(MandateError::PreviewMismatchOrExpired)
+    ));
+
     let receipt = ActionReceipt::complete(&mandate, &preview, MandateOutcome::Executed, 120)
         .expect("receipt");
     receipt.validate().expect("receipt integrity");
+    assert_eq!(
+        serde_json::to_value(&receipt).expect("serialize receipt"),
+        serde_json::json!({
+            "schema_version": receipt.schema_version,
+            "receipt_id": receipt.receipt_id,
+            "mandate_id": receipt.mandate_id,
+            "preview_digest": receipt.preview_digest,
+            "outcome": "executed",
+            "completed_at_unix_seconds": 120
+        })
+    );
+
+    let mut mutated_receipt = receipt;
+    mutated_receipt.completed_at_unix_seconds += 1;
+    assert!(matches!(
+        mutated_receipt.validate(),
+        Err(MandateError::ReceiptIntegrityMismatch)
+    ));
+}
+
+#[test]
+fn mandate_rejects_mutation_of_every_bound_preview_dimension() {
+    let original = preview();
+    let mandate = ProtectedActionMandate::approve(&original, human(), 110).expect("approve");
+    let mut variants = Vec::new();
+
+    let mut changed_subject = original.clone();
+    changed_subject.request.subject =
+        ActorChain::new(vec![human(), agent("agent:other")]).expect("changed subject");
+    variants.push(changed_subject);
+
+    let mut changed_resource = original.clone();
+    changed_resource.request.resource =
+        ProtectedResource::new(ResourceKind::FinancialAction, "account:other")
+            .expect("changed resource");
+    variants.push(changed_resource);
+
+    let mut changed_action = original.clone();
+    changed_action.request.action = PolicyAction::Sign;
+    variants.push(changed_action);
+
+    let mut changed_request_time = original.clone();
+    changed_request_time.request.context.now_unix_seconds += 1;
+    variants.push(changed_request_time);
+
+    let mut changed_session = original.clone();
+    changed_session.request.context.session_id = text("session:other");
+    variants.push(changed_session);
+
+    let mut changed_task = original.clone();
+    changed_task.request.context.task_id = text("task:other");
+    variants.push(changed_task);
+
+    let mut changed_purpose = original.clone();
+    changed_purpose.request.context.purpose = text("portfolio-disclosure");
+    variants.push(changed_purpose);
+
+    let mut changed_operation = original.clone();
+    changed_operation.request.context.operation = text("credential.reveal");
+    variants.push(changed_operation);
+
+    let mut changed_destination = original.clone();
+    changed_destination.request.context.destination = Some(text("venue:other"));
+    variants.push(changed_destination);
+
+    let mut changed_quantity = original.clone();
+    changed_quantity.request.context.quantity =
+        Some(QuantitativeLimit::new("USD", 501).expect("changed quantity"));
+    variants.push(changed_quantity);
+
+    let mut changed_grant = original.clone();
+    changed_grant.request.context.grant_id = Some(text("grant:other"));
+    variants.push(changed_grant);
+
+    let mut changed_expiry = original.clone();
+    changed_expiry.expires_at_unix_seconds -= 1;
+    variants.push(changed_expiry);
+
+    let mut changed_nonce = original.clone();
+    changed_nonce.nonce = text("preview-nonce-other");
+    variants.push(changed_nonce);
+
+    for variant in variants {
+        assert!(
+            !mandate
+                .matches_preview(&variant, 120)
+                .expect("mutated preview rejected")
+        );
+    }
+
+    let mut malformed = serde_json::to_value(&mandate).expect("serialize mandate");
+    malformed
+        .as_object_mut()
+        .expect("mandate object")
+        .insert("unexpected".to_string(), serde_json::Value::Bool(true));
+    assert!(serde_json::from_value::<ProtectedActionMandate>(malformed).is_err());
+    assert!(
+        !mandate
+            .matches_preview(&original, -1)
+            .expect("clock failure")
+    );
 }
 
 #[test]
