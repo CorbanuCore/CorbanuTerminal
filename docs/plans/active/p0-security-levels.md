@@ -70,7 +70,9 @@ the level.
 | Field | Value |
 | --- | --- |
 | Exact product-spec heading | **P0 `/security` levels** |
-| Requirement excerpt | “Permissive preserves the shipping behavior and does not silently change existing policies.” |
+| Plan requirement excerpt | “Permissive preserves the shipping behavior and does not silently change existing policies.” |
+| PF-13 trust-boundary heading | **Required trust boundaries** |
+| PF-13 requirement excerpt | “Permit agents to reference credentials only by label; resolve them solely inside the trusted execution boundary.” |
 | Product outcome advanced | One understandable control for agent security posture |
 | North-star criterion advanced | External content cannot silently gain sensitive access or change security policy |
 
@@ -176,30 +178,56 @@ before changing the implementation worktree, base, owner, or scope.
 | `codex-rs/config/src/config_toml.rs::ConfigToml` | Typed configuration and schema boundary |
 | `codex-rs/protocol/src/models.rs::PermissionProfile` | Existing low-level permission policy that `/security` composes without redefining |
 | `codex-rs/tui/src/bottom_pane/approval_overlay.rs` | Existing approval UI used for protected-action confirmation |
-| `codex-rs/vault/src/lib.rs::reveal_for_programmatic_use` | Credential-resolution boundary affected by Moderate and Aggressive |
-| `codex-rs/network-proxy/src/policy.rs` | Egress control used by Aggressive |
-| `codex-rs/security-policy/` (planned) | Small crate for level semantics and deterministic policy composition rather than adding the concept to `codex-core` |
+| `codex-rs/security-policy/src/lib.rs` | Existing feature-worktree crate exporting levels, actor chains, authorization requests, bounded grants, mandates, receipts, and revocation state |
+| `codex-rs/core/src/agent/{control,registry}.rs` | Human/agent/session/task identity and child inheritance supplied by the Core policy adapter |
+| `codex-rs/vault/src/lib.rs::reveal_for_programmatic_use` | Existing raw-secret helper boundary that PF-13-S04 must gate in Moderate and Aggressive |
+| `codex-rs/cli/src/main.rs::run_vault_auth_helper` | Existing supported CLI escape path preserved only for Permissive |
+| `codex-rs/network-proxy/src/credential_broker.rs::CredentialBroker` | Existing broker stores `real_value: String`; PF-13-S03 replaces that state on the capability route |
+| `codex-rs/network-proxy/src/credential_broker/providers/openai.rs` | First exact provider fixture: HTTPS `api.openai.com:443`, `POST /v1/*`, bearer authorization |
+| `codex-rs/network-proxy/src/policy.rs` | Existing egress control composed by Aggressive without overriding an existing denial |
+| `codex-rs/{Cargo.toml,Cargo.lock}`, repository-root `MODULE.bazel.lock`, and crate `BUILD.bazel` files | Dependency and Cargo/Bazel parity required in the sprint that changes each crate edge |
 
 ## Sprint execution map
 
-The first execution unit establishes the secret non-disclosure boundary before
-security-level UI or probabilistic content classification. It remains a draft
-until the delivery owner allocates an exact implementation worktree.
+This map covers every implementation and qualification unit currently required
+by the plan. All records use the allocated worktree, branch, and base commit.
+Code presence is not completion: PF-15 through PF-21 reconcile seven existing
+feature-worktree commits whose final-tree evidence has not yet been accepted.
+Only dependency-free PF-15-S01 is `ready`; every other record remains `draft`
+until its dependencies are completed and archived.
 
-| Feature ID | Plan feature | Current sprint mandate | Execution state |
+| Feature ID | Plan feature | Current sprint records | State |
 | --- | --- | --- | --- |
-| `PF-13` | Vault-backed egress capability boundary | [PF-13-S01 — Vault-backed exact-host credential substitution](../../sprints/current/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md) | Draft pending worktree allocation |
+| `PF-15` | Typed security-level domain | [PF-15-S01](../../sprints/current/p0-security-levels/pf-15-s01-security-level-domain-foundation.md) | Commit `a4f178fe15` present; reconciliation ready |
+| `PF-16` | Deterministic authorization request/decision | [PF-16-S01](../../sprints/current/p0-security-levels/pf-16-s01-authorization-decision-contract.md) | Commit `d183036cb0` present; evidence pending |
+| `PF-17` | Bounded grants and delegation | [PF-17-S01](../../sprints/current/p0-security-levels/pf-17-s01-bounded-delegation-grants.md) | Commit `d68c4dbc95` present; evidence pending |
+| `PF-18` | Human mandates and secret-free receipts | [PF-18-S01](../../sprints/current/p0-security-levels/pf-18-s01-human-mandates-and-receipts.md) | Commit `e22a35ccf2` present; evidence pending |
+| `PF-19` | Revocation and invalidation contract | [PF-19-S01](../../sprints/current/p0-security-levels/pf-19-s01-revocation-contract.md) | Commit `8a3b416c26` present; evidence pending |
+| `PF-20` | Versioned security persistence | [PF-20-S01](../../sprints/current/p0-security-levels/pf-20-s01-versioned-security-persistence.md) | Commit `0e3f2dfd92` present; evidence pending |
+| `PF-21` | Frozen Permissive compatibility | [PF-21-S01](../../sprints/current/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md) | Commit `220af8dae8` present; evidence pending |
+| `PF-22` | Effective runtime policy and agent inheritance | [PF-22-S01](../../sprints/current/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md) | draft |
+| `PF-13` | Vault-backed exact-host credential boundary | [S01](../../sprints/current/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md), [S02](../../sprints/current/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/current/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/current/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md) | draft |
+| `PF-23` | Moderate/Aggressive protected-surface enforcement | [S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), [S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md), [S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | draft |
+| `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
+| `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
+| `PF-26` | Harnesses, true-TUI/live-repository qualification, human acceptance, and finished docs | [S01](../../sprints/current/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md), [S02](../../sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md), [S03](../../sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | draft |
 
-`PF-13` proves that Corbanu can use a vault credential without placing its raw
-value in model-visible state. It is intentionally narrower than a general
-capability platform: the first slice binds one broker-supported HTTP credential
-to an exact actor, purpose, operation, destination, and lifetime, then resolves
-it only at the network transport boundary.
+### PF-13 integration contract
 
-Before implementation begins, the delivery owner must assign the exact
-worktree/branch/base commit to PF-13-S01, move it to `ready` or `in_progress`,
-and pass `python3 docs/sprints/check.py`. Plan prose does not substitute for the
-sprint record.
+PF-13 uses existing security primitives instead of defining a parallel
+capability system. `codex-security-policy` owns secret-free request, actor,
+grant, revocation, and receipt types. Core owns human/agent/session/task identity,
+policy composition, and the bounded capability lifecycle. Vault resolves an
+approved label only inside a zeroizing callback. The network proxy validates the
+transport and injects the credential only for `POST https://api.openai.com/v1/*`
+using the existing OpenAI bearer header; redirects and adjacent hosts fail.
+
+Permissive retains the shipping `vault auth-helper` and broker behavior.
+PF-13-S04 makes that raw-secret helper unavailable to agent execution under
+Moderate and Aggressive, which must use the brokered path. PF-13-S05 supplies
+canary and independent-review evidence before PF-23 composes the boundary into
+the security profiles. PF-26-S03 updates finished vault/authentication guidance
+only after candidate acceptance.
 
 ## Acceptance flows
 
@@ -228,27 +256,26 @@ sprint record.
 
 ## Implementation sequence
 
-1. **Freeze Permissive compatibility.** Capture representative current policy
-   snapshots and TUI workflows before adding level logic. These are the golden
-   baseline, not a reinterpreted expectation.
-2. **Add the security-level domain.** Introduce the typed enum, versioned
-   persistence, effective-policy composition, downgrade invalidation, child
-   inheritance, and audit event contract in a small dedicated crate. Define
-   typed authorization requests, decisions, bounded grants, actor chains,
-   protected-action mandates, receipts, and revocation events from the control
-   profile above.
-3. **Connect enforcement.** Place deterministic decision and enforcement points
-   at the existing content, vault, permission, approval, network, tool, and
-   agent-spawn boundaries. Reuse existing policy implementations rather than
-   duplicate them.
-4. **Build the TUI.** Add `/security`, the three-option tab, concise differences,
-   current-level display, confirmation/cancel, downgrade warning, temporary
-   grants, expiry, revocation, and kill-switch state with snapshots.
-5. **Qualify.** Produce the standards crosswalk, then run compatibility,
-   adversarial, mutation/replay, restart, concurrency, inheritance, true-TUI,
-   live-repository, and human acceptance on the final formatted candidate.
-6. **Document and release.** Publish finished user guidance only after
-   acceptance and link the release evidence before closing the plan.
+1. **Reconcile the existing foundation.** Execute PF-15 through PF-21 in
+   dependency order. Review the seven existing commits, correct them if needed,
+   collect final-tree evidence, and archive each record; code presence alone is
+   not acceptance.
+2. **Compose runtime authority.** PF-22 makes Core the source of effective policy
+   and child inheritance. PF-13 then builds the credential capability, scoped
+   vault resolver, exact OpenAI proxy path, bypass closure, and adversarial proof.
+3. **Connect protected surfaces.** PF-23 applies Moderate/Aggressive decisions at
+   content, vault, permission, approval, network, tool, and agent boundaries
+   without changing Permissive or overriding an existing denial.
+4. **Build the trusted TUI.** PF-24 implements profile view and transitions;
+   PF-25 implements narrow grants, revocation, kill switch, and recovery with
+   snapshots. Agents have no route to these human-origin events.
+5. **Qualify the final candidate.** PF-26-S01 produces deterministic harnesses
+   and the standards crosswalk. PF-26-S02 performs true-TUI success, failure,
+   recovery, and resume workflows in disposable TensorCash and Isometric Game
+   worktrees with actual keys sent.
+6. **Accept, document, and link release evidence.** PF-26-S03 obtains named human
+   acceptance, updates only finished security/vault/authentication guidance, and
+   records release and benchmark state before plan completion.
 
 ## Automated evidence
 
@@ -256,15 +283,17 @@ Run fix and formatting tools before the final affected tests.
 
 | Check | Final-tree command | Result | Artifact |
 | --- | --- | --- | --- |
-| Plan lifecycle | `python3 docs/plans/check.py` | pending | plan-check output |
-| Permissive compatibility | `python3 scripts/security-level-compat --baseline <commit> --candidate <binary> --output <dir>` | pending; harness is part of stage 1 | `qa/release/<version>/security/compatibility/` |
+| Plan and sprint lifecycle | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | pending | governance-check output |
+| Rust fix | `cd codex-rs && just fix -p <affected-project>` for every affected crate | pending; run before formatting/final tests | `qa/release/<version>/security/fix.txt` |
+| Permissive compatibility | `python3 scripts/security-level-compat --baseline <commit> --candidate <binary> --output <dir>` | pending; harness is PF-21/PF-26 work | `qa/release/<version>/security/compatibility/` |
 | Security policy | `cd codex-rs && just test -p codex-security-policy` | pending | `qa/release/<version>/security/policy-tests.txt` |
 | Config and core integration | `cd codex-rs && just test -p codex-config && just test -p codex-core` | pending | `qa/release/<version>/security/integration-tests.txt` |
 | Vault and network boundaries | `cd codex-rs && just test -p codex-vault && just test -p codex-network-proxy` | pending | `qa/release/<version>/security/boundary-tests.txt` |
 | TUI and snapshots | `cd codex-rs && just test -p codex-tui` | pending | `qa/release/<version>/security/tui-tests.txt` |
 | Adversarial matrix | `python3 scripts/security-level-adversarial --candidate <binary> --output <dir>` | pending; harness is part of stage 5 | `qa/release/<version>/security/adversarial/` |
 | Standards crosswalk | `python3 scripts/security-level-standards-check --manifest qa/release/<version>/security/standards-crosswalk.yaml` | pending; checker and manifest are part of stage 5 | `qa/release/<version>/security/standards-crosswalk.yaml` |
-| Formatting | `cd codex-rs && just fmt -- --check` | pending | `qa/release/<version>/security/fmt.txt` |
+| Formatting | `cd codex-rs && just fmt`, then inspect the diff | pending; precedes final affected tests | `qa/release/<version>/security/fmt.txt` |
+| Final affected tests | `cd codex-rs && just test -p <affected-project>` for each changed project; never direct `cargo test` | pending | `qa/release/<version>/security/final-tests.txt` |
 
 ## True-TUI evidence
 
@@ -299,15 +328,18 @@ before qualification.
 | Finished-feature doc | Product-spec citation present | Verified candidate |
 | --- | --- | --- |
 | `docs/features/security.md`, created only after acceptance | Must cite “P0 `/security` levels” and the Permissive requirement | pending |
+| `docs/features/vault.md` and `docs/authentication.md`, updated only after acceptance | Must distinguish Permissive helper behavior from Moderate/Aggressive broker-only resolution and cite “Required trust boundaries” | pending |
+| `docs/features/index.md` and `docs/slash_commands.md` | Must expose only candidate-verified `/security` behavior | pending |
 
 ## Dependencies, decisions, and blockers
 
 | Item | Owner | Needed by | State |
 | --- | --- | --- | --- |
-| Permissive golden baseline | Jim Ricketts | Stage 1 | Must be captured before implementation |
-| Moderate and Aggressive control matrix | Product authority | Stage 1 review | Defined in the product specification; any change requires a product decision |
-| Persistence and downgrade invalidation design | Jim Ricketts | Stage 2 | Pending implementation design |
-| Independent security reviewer | Release owner | Final qualification | Must be named before review |
+| Permissive golden baseline | Jim Ricketts | PF-21-S01 | Commit `220af8dae8` contains an initial manifest/tests; final reconciliation evidence is pending |
+| Existing security-policy commits | Jim Ricketts | PF-15 through PF-21 | Seven commits are present; none is accepted until its current sprint completes and archives |
+| Moderate and Aggressive control matrix | Product authority | PF-23 review | Defined in the product specification; any change requires a product decision |
+| Persistence and downgrade invalidation | Jim Ricketts | PF-20/PF-23 | Persistence code is present; transition and final evidence remain pending |
+| Independent security reviewer | Release owner | PF-13-S05 and final qualification | Must be named before either review completes |
 | Human tester | Release owner | Final qualification | Must be named before acceptance |
 
 ## Release linkage
@@ -321,6 +353,7 @@ before qualification.
 
 ## Completion
 
+- [x] Every currently required implementation unit is represented by a valid single-feature sprint.
 - [ ] Permissive compatibility is proven against the frozen pre-feature baseline.
 - [ ] Moderate and Aggressive match the product-spec control matrix.
 - [ ] Every adopted standards behavior is mapped to passing code, test, and TUI
