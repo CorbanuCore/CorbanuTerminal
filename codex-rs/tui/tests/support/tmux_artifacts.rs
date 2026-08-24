@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::Mutex;
 
 use anyhow::Context;
@@ -8,6 +9,46 @@ use anyhow::Result;
 use serde_json::json;
 
 const MAX_ATTACHMENT_BYTES: usize = 2 * 1024 * 1024;
+const MAX_CONTROL_TRANSCRIPT_BYTES: usize = 2 * 1024 * 1024;
+
+#[derive(Debug, Default)]
+pub(super) struct ControlTranscript {
+    state: Mutex<ControlTranscriptState>,
+}
+
+#[derive(Debug, Default)]
+struct ControlTranscriptState {
+    bytes: Vec<u8>,
+    error: Option<String>,
+}
+
+impl ControlTranscript {
+    pub(super) fn record_line(&self, line: &[u8]) {
+        let mut state = self.state.lock().expect("control transcript poisoned");
+        let remaining = MAX_CONTROL_TRANSCRIPT_BYTES.saturating_sub(state.bytes.len());
+        state
+            .bytes
+            .extend_from_slice(&line[..line.len().min(remaining)]);
+        if remaining > line.len() {
+            state.bytes.push(b'\n');
+        }
+    }
+
+    pub(super) fn record_error(&self, error: String) {
+        self.state
+            .lock()
+            .expect("control transcript poisoned")
+            .error = Some(error);
+    }
+
+    fn snapshot(&self) -> (String, Option<String>) {
+        let state = self.state.lock().expect("control transcript poisoned");
+        (
+            String::from_utf8_lossy(&state.bytes).to_string(),
+            state.error.clone(),
+        )
+    }
+}
 
 #[derive(Debug)]
 pub(super) struct FailureCapture {
@@ -31,6 +72,7 @@ struct ArtifactState {
     inputs: Vec<String>,
     dimensions: Vec<String>,
     attachments: Vec<(String, PathBuf)>,
+    control_transcript: Option<Arc<ControlTranscript>>,
     emitted: bool,
 }
 
@@ -90,8 +132,15 @@ impl ArtifactRecorder {
             .push((safe_name(label), path));
     }
 
+    pub(super) fn register_control_transcript(&self, transcript: Arc<ControlTranscript>) {
+        self.state
+            .lock()
+            .expect("artifact state poisoned")
+            .control_transcript = Some(transcript);
+    }
+
     pub(super) fn emit(&self, capture: FailureCapture) -> Result<PathBuf> {
-        let (commands, inputs, dimensions, attachments) = {
+        let (commands, inputs, dimensions, attachments, control_transcript) = {
             let mut state = self.state.lock().expect("artifact state poisoned");
             if state.emitted {
                 return Ok(self.directory.clone());
@@ -102,6 +151,7 @@ impl ArtifactRecorder {
                 state.inputs.clone(),
                 state.dimensions.clone(),
                 state.attachments.clone(),
+                state.control_transcript.clone(),
             )
         };
 
@@ -116,6 +166,26 @@ impl ArtifactRecorder {
         write(&self.directory, "dimensions.txt", &dimensions.join("\n"))?;
         write(&self.directory, "reproduce.sh", &self.reproduction)?;
 
+        let mut files = vec![
+            "reason.txt",
+            "viewport.txt",
+            "scrollback.txt",
+            "pane-metadata.txt",
+            "command-log.txt",
+            "input-events.txt",
+            "dimensions.txt",
+            "reproduce.sh",
+        ];
+        if let Some(transcript) = control_transcript {
+            let (contents, error) = transcript.snapshot();
+            write(&self.directory, "control-transcript.txt", &contents)?;
+            files.push("control-transcript.txt");
+            if let Some(error) = error {
+                write(&self.directory, "control-parser-error.txt", &error)?;
+                files.push("control-parser-error.txt");
+            }
+        }
+
         let attachment_labels = attachments
             .iter()
             .map(|(label, _)| label.as_str())
@@ -123,16 +193,7 @@ impl ArtifactRecorder {
         let manifest = serde_json::to_string_pretty(&json!({
             "schemaVersion": 1,
             "scenario": self.scenario,
-            "files": [
-                "reason.txt",
-                "viewport.txt",
-                "scrollback.txt",
-                "pane-metadata.txt",
-                "command-log.txt",
-                "input-events.txt",
-                "dimensions.txt",
-                "reproduce.sh"
-            ],
+            "files": files,
             "attachments": attachment_labels,
         }))?;
         write(&self.directory, "manifest.json", &manifest)?;
