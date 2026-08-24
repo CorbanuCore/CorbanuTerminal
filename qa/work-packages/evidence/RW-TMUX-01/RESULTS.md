@@ -1,6 +1,7 @@
 # RW-TMUX-01 verification results
 Date: 2026-08-24  
 Branch: `codex/tmux-harness-foundation`  
+Implementation: `72b72eedc`
 Status: completed
 ## Scope and results
 Changed only `tui/tests/all.rs`, `tui/tests/support/{mod,tmux,tmux_tests}.rs`,
