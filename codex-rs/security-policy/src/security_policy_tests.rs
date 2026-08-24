@@ -518,7 +518,7 @@ fn mandate_rejects_mutation_of_every_bound_preview_dimension() {
 #[test]
 fn revocation_and_kill_switch_are_idempotent_and_restart_safe() {
     let grant = grant();
-    let event = RevocationEvent::new(
+    let grant_event = RevocationEvent::new(
         human(),
         RevocationTarget::Grant {
             grant_id: grant.grant_id.clone(),
@@ -528,9 +528,27 @@ fn revocation_and_kill_switch_are_idempotent_and_restart_safe() {
     )
     .expect("revocation");
     let mut state = RevocationState::new();
-    assert!(state.apply(&event).expect("first apply"));
-    assert!(!state.apply(&event).expect("duplicate apply"));
+    assert!(state.apply(&grant_event).expect("first apply"));
+    assert_eq!(state.generation, 1);
+    assert!(!state.apply(&grant_event).expect("duplicate apply"));
+    assert_eq!(state.generation, 1);
     assert!(state.grant_is_revoked(&grant));
+
+    let approved_preview = preview();
+    let mandate =
+        ProtectedActionMandate::approve(&approved_preview, human(), 110).expect("mandate");
+    let actor_event = RevocationEvent::new(
+        human(),
+        RevocationTarget::Actor {
+            actor_id: text("agent:root"),
+        },
+        RevocationReason::RiskSignal,
+        155,
+    )
+    .expect("actor revocation");
+    assert!(state.apply(&actor_event).expect("revoke actor"));
+    assert_eq!(state.generation, 2);
+    assert!(state.mandate_is_revoked(&mandate));
 
     let kill_switch = RevocationEvent::new(
         human(),
@@ -539,12 +557,62 @@ fn revocation_and_kill_switch_are_idempotent_and_restart_safe() {
         160,
     )
     .expect("kill switch");
-    state.apply(&kill_switch).expect("activate kill switch");
+    assert!(state.apply(&kill_switch).expect("activate kill switch"));
+    assert_eq!(state.generation, 3);
 
     let serialized = serde_json::to_string(&state).expect("serialize state");
     let restored: RevocationState = serde_json::from_str(&serialized).expect("restore state");
+    restored.validate().expect("valid restored state");
+    assert_eq!(restored, state);
     assert!(restored.kill_switch_active);
     assert!(restored.grant_is_revoked(&grant));
+    assert!(restored.mandate_is_revoked(&mandate));
+}
+
+#[test]
+fn revocation_kill_switch_order_converges_and_corrupt_state_fails_closed() {
+    let enable = RevocationEvent::new(
+        human(),
+        RevocationTarget::KillSwitch { active: true },
+        RevocationReason::KillSwitch,
+        200,
+    )
+    .expect("enable event");
+    let disable = RevocationEvent::new(
+        human(),
+        RevocationTarget::KillSwitch { active: false },
+        RevocationReason::HumanRequest,
+        200,
+    )
+    .expect("disable event");
+    let (earlier, later) = if enable.event_id < disable.event_id {
+        (&enable, &disable)
+    } else {
+        (&disable, &enable)
+    };
+
+    let mut ordered = RevocationState::new();
+    assert!(ordered.apply(earlier).expect("earlier event"));
+    assert!(ordered.apply(later).expect("later event"));
+
+    let mut raced = RevocationState::new();
+    assert!(raced.apply(later).expect("later event first"));
+    assert!(!raced.apply(earlier).expect("stale event is a no-op"));
+    assert_eq!(raced, ordered);
+    assert_eq!(raced.generation, 2);
+
+    let mut unknown_target = serde_json::to_value(&enable).expect("serialize event");
+    unknown_target["target"]["kind"] = serde_json::Value::String("unknown".to_string());
+    assert!(serde_json::from_value::<RevocationEvent>(unknown_target).is_err());
+
+    let mut corrupt = serde_json::to_value(&raced).expect("serialize state");
+    corrupt["generation"] = serde_json::Value::from(0);
+    let corrupt_state =
+        serde_json::from_value::<RevocationState>(corrupt).expect("typed corrupt state");
+    assert!(matches!(
+        corrupt_state.validate(),
+        Err(RevocationError::GenerationMismatch { .. })
+    ));
 }
 
 #[test]
