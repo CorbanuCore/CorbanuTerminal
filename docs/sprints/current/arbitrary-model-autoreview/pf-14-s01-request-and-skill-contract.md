@@ -1,9 +1,9 @@
 ---
-sprint_id: "PF-13-S01"
+sprint_id: "PF-14-S01"
 title: "Explicit request and skill contract"
 status: draft
 plan_file: "docs/plans/proposed/arbitrary-model-autoreview.md"
-plan_feature: "PF-13"
+plan_feature: "PF-14"
 execution_order: 1
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
@@ -14,7 +14,7 @@ created: 2026-08-24
 updated: 2026-08-24
 ---
 
-# PF-13-S01 — Explicit request and skill contract
+# PF-14-S01 — Explicit request and skill contract
 
 ## Execution mandate
 
@@ -24,7 +24,7 @@ updated: 2026-08-24
 ## Plan linkage
 
 - Plan: [Arbitrary-model Autoreview](../../../plans/proposed/arbitrary-model-autoreview.md)
-- Feature: `PF-13`
+- Feature: `PF-14`
 - Acceptance advanced: missing provider/model opens host selection; no model guesses a route.
 
 ## Code boundaries
@@ -41,7 +41,7 @@ updated: 2026-08-24
 
 ## Done
 
-- [x] Sprint record created and linked to PF-13.
+- [x] Sprint record created and linked to PF-14.
 
 ## Remaining
 
@@ -56,7 +56,7 @@ updated: 2026-08-24
 
 - [ ] Focused test: `cargo test -p codex-core arbitrary_model_autoreview_request`
 - [ ] Integration test: `cargo test -p codex-core tool_spec_autoreview`
-- [ ] TUI applicability resolved; request-selection keys and checkpoints recorded for PF-13-S07.
+- [ ] TUI applicability resolved; request-selection keys and checkpoints recorded for PF-14-S07.
 
 ## Exit evidence
 

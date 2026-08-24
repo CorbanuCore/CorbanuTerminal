@@ -1,20 +1,20 @@
 ---
-sprint_id: "PF-13-S03"
+sprint_id: "PF-14-S03"
 title: "Shared Core provider readiness"
 status: draft
 plan_file: "docs/plans/proposed/arbitrary-model-autoreview.md"
-plan_feature: "PF-13"
+plan_feature: "PF-14"
 execution_order: 3
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-13-S01"
+depends_on: "PF-14-S01"
 created: 2026-08-24
 updated: 2026-08-24
 ---
 
-# PF-13-S03 — Shared Core provider readiness
+# PF-14-S03 — Shared Core provider readiness
 
 ## Execution mandate
 
@@ -24,7 +24,7 @@ updated: 2026-08-24
 ## Plan linkage
 
 - Plan: [Arbitrary-model Autoreview](../../../plans/proposed/arbitrary-model-autoreview.md)
-- Feature: `PF-13`
+- Feature: `PF-14`
 - Acceptance advanced: unauthorized or unauthenticated selection fails before child creation.
 
 ## Code boundaries
@@ -42,7 +42,7 @@ updated: 2026-08-24
 
 ## Done
 
-- [x] Sprint record created and linked to PF-13.
+- [x] Sprint record created and linked to PF-14.
 
 ## Remaining
 
@@ -59,7 +59,7 @@ updated: 2026-08-24
 - [ ] Focused test: `cargo test -p codex-core provider_readiness`
 - [ ] Spawn regression: `cargo test -p codex-core spawn_agent_provider`
 - [ ] TUI regression: `cargo test -p codex-tui native_spawn_provider`
-- [ ] TUI applicability resolved; missing-auth recovery keys recorded for PF-13-S07.
+- [ ] TUI applicability resolved; missing-auth recovery keys recorded for PF-14-S07.
 
 ## Exit evidence
 

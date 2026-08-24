@@ -1,20 +1,20 @@
 ---
-sprint_id: "PF-13-S06"
+sprint_id: "PF-14-S06"
 title: "Isolated bounded review runner"
 status: draft
 plan_file: "docs/plans/proposed/arbitrary-model-autoreview.md"
-plan_feature: "PF-13"
+plan_feature: "PF-14"
 execution_order: 6
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-13-S02, PF-13-S04, PF-13-S05"
+depends_on: "PF-14-S02, PF-14-S04, PF-14-S05"
 created: 2026-08-24
 updated: 2026-08-24
 ---
 
-# PF-13-S06 — Isolated bounded review runner
+# PF-14-S06 — Isolated bounded review runner
 
 ## Execution mandate
 
@@ -24,7 +24,7 @@ updated: 2026-08-24
 ## Plan linkage
 
 - Plan: [Arbitrary-model Autoreview](../../../plans/proposed/arbitrary-model-autoreview.md)
-- Feature: `PF-13`
+- Feature: `PF-14`
 - Acceptance advanced: exact-runtime success, malformed-result failure, cancellation, and durable result inspection.
 
 ## Code boundaries
@@ -42,7 +42,7 @@ updated: 2026-08-24
 
 ## Done
 
-- [x] Sprint record created and linked to PF-13.
+- [x] Sprint record created and linked to PF-14.
 
 ## Remaining
 
@@ -60,7 +60,7 @@ updated: 2026-08-24
 - [ ] Focused test: `cargo test -p codex-core arbitrary_model_autoreview_runner`
 - [ ] Isolation test: `cargo test -p codex-core autoreview_isolation`
 - [ ] Result test: `cargo test -p codex-core autoreview_report`
-- [ ] TUI applicability resolved; event checkpoints are consumed by PF-13-S07.
+- [ ] TUI applicability resolved; event checkpoints are consumed by PF-14-S07.
 
 ## Exit evidence
 
