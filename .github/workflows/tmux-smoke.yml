@@ -2,14 +2,8 @@ name: tmux smoke
 
 on:
   pull_request:
-    paths:
-      - "codex-rs/tui/tests/**"
-      - ".github/workflows/tmux-smoke.yml"
   push:
     branches: [main]
-    paths:
-      - "codex-rs/tui/tests/**"
-      - ".github/workflows/tmux-smoke.yml"
   workflow_dispatch:
 
 permissions:
