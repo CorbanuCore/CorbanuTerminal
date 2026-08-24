@@ -17,6 +17,10 @@ use super::tmux_artifacts::ArtifactRecorder;
 use super::tmux_artifacts::FailureCapture;
 pub(crate) use super::tmux_command::CommandSpec;
 use super::tmux_command::render_command;
+use super::tmux_process::TmuxProcesses;
+use super::tmux_process::is_running as process_is_running;
+use super::tmux_process::parse_report as parse_process_report;
+use super::tmux_process::wait_for_exit as wait_for_process_exit;
 
 static NEXT_SERVER_ID: AtomicU64 = AtomicU64::new(1);
 static NEXT_SESSION_ID: AtomicU64 = AtomicU64::new(1);
@@ -82,6 +86,7 @@ pub(crate) struct TmuxServer {
     socket_name: String,
     socket_dir: TempDir,
     artifacts: ArtifactRecorder,
+    processes: TmuxProcesses,
 }
 
 impl TmuxServer {
@@ -119,6 +124,7 @@ impl TmuxServer {
             socket_name: format!("codex-tui-test-{}-{id}", std::process::id()),
             socket_dir,
             artifacts: ArtifactRecorder::new(artifact_root, scenario, id),
+            processes: TmuxProcesses::default(),
         })
     }
 
@@ -131,7 +137,7 @@ impl TmuxServer {
             .arg("-d")
             .arg("-P")
             .arg("-F")
-            .arg("#{pane_id}")
+            .arg("#{pane_id}\t#{pane_pid}\t#{pid}")
             .arg("-x")
             .arg(spec.size.columns.to_string())
             .arg("-y")
@@ -145,8 +151,8 @@ impl TmuxServer {
         spec.command.append_to(&mut command);
 
         let output = self.checked_output(&mut command, /*pane_id*/ None)?;
-        let pane_id = stdout_text(&output).trim().to_string();
-        anyhow::ensure!(!pane_id.is_empty(), "tmux did not report a pane id");
+        let (pane_id, pane_pid, server_pid) = parse_process_report(&output, "pane")?;
+        self.processes.record(pane_pid, server_pid);
         self.artifacts.record_dimensions(format!(
             "{pane_id} {}x{} initial",
             spec.size.columns, spec.size.rows
@@ -157,6 +163,7 @@ impl TmuxServer {
             primary_pane: TmuxPane {
                 server: self,
                 id: pane_id,
+                pid: pane_pid,
             },
         })
     }
@@ -268,6 +275,7 @@ impl Drop for TmuxServer {
             );
         }
         let _ = self.command().arg("kill-server").output();
+        self.processes.wait_for_cleanup();
     }
 }
 
@@ -295,7 +303,7 @@ impl<'a> TmuxSession<'a> {
             .arg("-d")
             .arg("-P")
             .arg("-F")
-            .arg("#{pane_id}")
+            .arg("#{pane_id}\t#{pane_pid}\t#{pid}")
             .arg("-v")
             .arg("-l")
             .arg(rows.to_string())
@@ -307,21 +315,22 @@ impl<'a> TmuxSession<'a> {
         let output = self
             .server
             .checked_output(&mut command, Some(target.id.as_str()))?;
-        let pane_id = stdout_text(&output).trim().to_string();
-        anyhow::ensure!(!pane_id.is_empty(), "tmux did not report a split pane id");
+        let (pane_id, pane_pid, server_pid) = parse_process_report(&output, "split pane")?;
+        self.server.processes.record(pane_pid, server_pid);
         self.server
             .artifacts
             .record_dimensions(format!("{pane_id} split rows={rows}"));
         Ok(TmuxPane {
             server: self.server,
             id: pane_id,
+            pid: pane_pid,
         })
     }
 
     pub(crate) fn wait_for_exit(&self, timeout: Duration) -> Result<()> {
         let deadline = Instant::now() + timeout;
         while Instant::now() < deadline {
-            if !self.server.has_session(&self.name) {
+            if !self.server.has_session(&self.name) && !process_is_running(self.primary_pane.pid) {
                 return Ok(());
             }
             sleep(STABLE_CAPTURE_INTERVAL);
@@ -352,6 +361,7 @@ impl Drop for TmuxSession<'_> {
                 .arg(&self.name)
                 .output();
         }
+        wait_for_process_exit(self.primary_pane.pid, Duration::from_secs(/*secs*/ 2));
     }
 }
 
@@ -359,6 +369,7 @@ impl Drop for TmuxSession<'_> {
 pub(crate) struct TmuxPane<'a> {
     server: &'a TmuxServer,
     id: String,
+    pid: u32,
 }
 
 impl TmuxPane<'_> {
