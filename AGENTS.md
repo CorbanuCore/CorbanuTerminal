@@ -13,7 +13,9 @@ only repository-wide Corbanu rules. Rust implementation guidance is scoped to
 [`codex-rs/AGENTS.md`](codex-rs/AGENTS.md).
 
 Use the `corbanu-terminal-development` skill for product behavior, planning,
-interactive QA, documentation, benchmarks, and releases.
+interactive QA, documentation, benchmarks, and releases. Repository skills are
+edited in `.codex/skills/` and mirrored in `.agents/skills/` for agent
+portability; update both trees and run `python3 scripts/check_portable_skills.py`.
 
 ## Canonical sources
 
@@ -32,6 +34,7 @@ they must not restate policy.
 | Shipped user guidance | `docs/` |
 | Release-candidate evidence and human sign-off | `qa/release/<version>/` |
 | Rust implementation conventions | [`codex-rs/AGENTS.md`](codex-rs/AGENTS.md) |
+| Repository skills and portable mirror | `.codex/skills/`, mirrored byte-for-byte at `.agents/skills/` and checked by `scripts/check_portable_skills.py` |
 
 The product specification defines **what**. A plan defines the feature contract,
 scope, sequencing, and acceptance model. A sprint defines one mechanical code

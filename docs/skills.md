@@ -33,7 +33,7 @@ explicit user reference such as `$skill-name`.
 | --- | --- | --- |
 | Bundled system | `$CODEX_HOME/skills/.system/` | Installed with Corbanu Terminal |
 | User | `$HOME/.agents/skills/` | Available across repositories |
-| Repository | `<repo>/.agents/skills/` or repository-specific skill directory | Available in that project |
+| Repository | `<repo>/.agents/skills/` | Portable across compatible agents in that project |
 | Plugin | Installed plugin package | Available while the plugin is installed |
 
 A fresh Corbanu home normally uses `$HOME/.corbanu/skills/.system/`. An
@@ -55,8 +55,29 @@ documented home-resolution rules.
 | `skill-installer` | Install curated or repository-hosted skills |
 | `tasknode-usage` | Use Task Node as an agent-side context and work ledger |
 
-Repository contributor skills are loaded from the source repository rather
-than shipped as user-facing system skills. The
+## Portable repository bundle
+
+This repository checks every contributor skill into two agent-facing locations:
+
+| Location | Contract |
+| --- | --- |
+| `.codex/skills/` | Native Corbanu/Codex repository skill tree and editing source |
+| `.agents/skills/` | Complete agent-neutral portability mirror committed with the repository |
+
+The mirror contains every tracked contributor skill, including its scripts,
+references, assets, executable modes, and agent metadata. After changing a
+repository skill, update both paths and run:
+
+```bash
+python3 scripts/check_portable_skills.py
+```
+
+CI rejects a missing, extra, stale, or mode-mismatched portable file. Bundled
+system skills are not duplicated here because their portable source is already
+tracked under `codex-rs/skills/src/assets/samples/` and installed with Corbanu
+Terminal.
+
+The
 [`corbanu-terminal-development` skill](corbanu-terminal-development-skill.md) is rendered in
 this documentation for contributors; `test-tui` and `remote-tests` remain
 repository-loaded QA skills.

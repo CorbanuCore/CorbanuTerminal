@@ -9,12 +9,15 @@ changing which file agents load.
 
     The section between the **BEGIN DUPLICATED SKILL MIRROR** and
     **END DUPLICATED SKILL MIRROR** comments intentionally duplicates
-    `.codex/skills/corbanu-terminal-development/SKILL.md`.
+    `.codex/skills/corbanu-terminal-development/SKILL.md`. The same agent
+    source is mirrored at
+    `.agents/skills/corbanu-terminal-development/SKILL.md` for portability.
 
-    The skill file is the canonical agent-loading source. The fenced block
-    below reproduces that file verbatim, including its YAML metadata. Any
-    change to the duplicated block must update both files in the same commit.
-    If the copies diverge, follow the skill file and treat this page as
+    The `.codex` file is the canonical editing source. The fenced block below
+    reproduces it verbatim, including YAML metadata, while
+    `scripts/check_portable_skills.py` enforces the `.agents` copy. Any
+    change must update all three representations in the same commit. If the
+    documentation copy diverges, follow `.codex` and treat this page as
     defective.
 
 <!-- BEGIN DUPLICATED SKILL MIRROR -->
@@ -63,6 +66,7 @@ Use these sources together:
 
 - [Repository development policy](https://github.com/CorbanuCore/CorbanuTerminal/blob/main/AGENTS.md)
 - [Canonical development skill](https://github.com/CorbanuCore/CorbanuTerminal/blob/main/.codex/skills/corbanu-terminal-development/SKILL.md)
+- [Portable agent mirror](https://github.com/CorbanuCore/CorbanuTerminal/blob/main/.agents/skills/corbanu-terminal-development/SKILL.md)
 - [Product specification](corbanu-product-spec.md)
 - [Plan process](plans/index.md)
 - [Sprint process](sprints/index.md)
