@@ -351,12 +351,13 @@
 <body>
   <header>
     <div class="hero">
-      <p class="eyebrow">Proposed engineering work package</p>
+      <p class="eyebrow">Ready routine work package</p>
       <h1>Corbanu Terminal Testing Harness Plan</h1>
       <p class="hero-copy">A typed, isolated tmux driver for testing the terminal behavior that snapshots and process-level PTY tests cannot see: real keys, live viewports, resize and reflow, pane routing, interruption, and cleanup.</p>
       <div class="hero-meta">
-        <span><strong>Status:</strong> Proposed</span>
+        <span><strong>Status:</strong> Ready</span>
         <span><strong>Change class:</strong> Routine</span>
+        <span><strong>Execution record:</strong> RW-TMUX-01</span>
         <span><strong>Prepared:</strong> 24 August 2026</span>
         <span><strong>Recommended owner:</strong> Terminal engineering</span>
       </div>
@@ -366,6 +367,7 @@
   <nav aria-label="Document sections">
     <div>
       <a href="#decision">Decision</a>
+      <a href="#current-package">Current Package</a>
       <a href="#architecture">Architecture</a>
       <a href="#requirements">Requirements</a>
       <a href="#implementation">Implementation</a>
@@ -380,7 +382,7 @@
       <h2>Decision</h2>
       <p class="lead">Build the harness. Corbanu Terminal already has the constituent parts, but qualification still relies on ignored Rust tests, repeated shell commands, fixed sleeps, and manual interpretation of captures.</p>
       <div class="decision">
-        <strong>Recommendation:</strong> deliver a narrow first increment called <em>Typed tmux harness foundation</em>. Keep it in TUI test support until repeated consumers prove that a standalone crate is justified. Make it a prerequisite for interactive security settings and other new TUI workflows, but do not block the current vault substitution work, which has no TUI surface.
+        <strong>Recommendation:</strong> execute <em>RW-TMUX-01: Typed tmux harness foundation</em> as the narrow first increment. Keep it in TUI test support until repeated consumers prove that a standalone crate is justified. Make it a prerequisite for interactive security settings and other new TUI workflows, but do not block the current vault substitution work, which has no TUI surface.
       </div>
 
       <div class="grid">
@@ -400,6 +402,34 @@
 
       <h3>Governance position</h3>
       <p>This is internal test infrastructure that cannot itself change user-visible behavior, authorization, persistent state, or an external contract. It therefore fits the repository's <strong>Routine</strong> change class. Calling the work a sprint is useful for execution discipline, but it should not consume a governed product-plan slot unless product scope is added. Product-specific scenarios should be owned by the feature sprint that depends on the harness.</p>
+    </section>
+
+    <section id="current-package">
+      <h2>Current Work Package</h2>
+      <p class="lead"><a href="../../qa/work-packages/RW-TMUX-01.md">RW-TMUX-01</a> is the working non-product sprint. It is <strong>ready</strong>, has an exact worktree and base commit, and contains the authoritative implementation, verification, and evidence checklists.</p>
+      <div class="requirements">
+        <div>
+          <h3>Included now</h3>
+          <ul>
+            <li>Private typed support under <code>codex-rs/tui/tests/support/</code>.</li>
+            <li>Unique tmux socket, fixed-size session, immutable pane ids, and cleanup.</li>
+            <li>Literal/key separation, live viewport capture, bounded scrollback, and stable waits.</li>
+            <li>Migration of one existing split resize/reflow test.</li>
+            <li>Focused harness contract tests and a 20-run stability check.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Deferred deliberately</h3>
+          <ul>
+            <li>Single-Enter slash-command regression and CI gating.</li>
+            <li>Automatic on-disk artifact bundles.</li>
+            <li>Migration of the remaining ignored resize tests.</li>
+            <li>Control mode, multi-pane orchestration, and release-matrix adoption.</li>
+            <li>Any user-visible or security-policy change.</li>
+          </ul>
+        </div>
+      </div>
+      <p><strong>Allocated execution coordinates:</strong> <code>/Users/travisgood/Documents/ChatGPT/corbanu-tmux-harness</code> on <code>codex/tmux-harness-foundation</code>, based at <code>2e7bdcb8e4ec7070aaa383b00ac5c6f106c3b9c7</code>.</p>
     </section>
 
     <section id="architecture">
@@ -534,7 +564,7 @@ impl TmuxPane {
         </div>
       </div>
       <div class="phase">
-        <div class="phase-id">Step 5</div>
+        <div class="phase-id">Follow-on</div>
         <div>
           <h3>Migrate two representative workflows</h3>
           <p>Convert one ignored resize/reflow test and add one slash-command dispatch test. The command test must prove that literal command text followed by exactly one separate Enter opens the expected surface.</p>
@@ -542,7 +572,7 @@ impl TmuxPane {
         </div>
       </div>
       <div class="phase">
-        <div class="phase-id">Step 6</div>
+        <div class="phase-id">Follow-on</div>
         <div>
           <h3>Add the CI smoke lane</h3>
           <p>Install tmux on the designated Ubuntu job and run startup, slash dispatch, resize, and clean exit. Publish artifacts only on failure initially; record duration and flake data before expanding the gate.</p>
@@ -624,10 +654,12 @@ impl TmuxPane {
     </section>
 
     <section id="acceptance">
-      <h2>Acceptance Gates</h2>
+      <h2>Program Acceptance Gates</h2>
       <div class="gate">
         <strong>Recommended gate:</strong> the focused TUI test suite passes normally; the tmux smoke lane completes 50 consecutive repetitions with no failures, no leaked servers or child processes, and a measured p95 runtime below 30 seconds. The migrated test is no longer ignored in the tmux-equipped lane, and every induced failure produces the documented artifact bundle.
       </div>
+
+      <p>The current package has a smaller exit gate: one migrated resize test, focused and full <code>codex-tui</code> tests, 20 clean repetitions, private-server cleanup, and proof that the developer's default tmux server was untouched. The exact checklist lives in <a href="../../qa/work-packages/RW-TMUX-01.md">RW-TMUX-01</a>.</p>
 
       <h3>Definition of done</h3>
       <ul>
