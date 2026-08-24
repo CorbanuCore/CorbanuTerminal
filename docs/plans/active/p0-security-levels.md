@@ -192,8 +192,8 @@ before changing the implementation worktree, base, owner, or scope.
 This map covers every implementation and qualification unit currently required
 by the plan. All records use the allocated worktree, branch, and base commit.
 PF-15 through PF-22 are completed and archived with final-tree evidence.
-PF-13-S01 is the next dependency-complete sprint and is `ready`; later records
-remain `draft` until their dependencies are completed and archived.
+PF-13-S01 is the single sprint currently `in_progress`; later records remain
+`draft` until their dependencies are completed and archived.
 
 | Feature ID | Plan feature | Current sprint records | State |
 | --- | --- | --- | --- |
@@ -205,7 +205,7 @@ remain `draft` until their dependencies are completed and archived.
 | `PF-20` | Versioned security persistence | [PF-20-S01](../../sprints/archive/p0-security-levels/pf-20-s01-versioned-security-persistence.md) | Completed; implementation `0e3f2dfd92`, evidence `b1db9c103a` |
 | `PF-21` | Frozen Permissive compatibility | [PF-21-S01](../../sprints/archive/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md) | Completed; immutable harness `fcaa84dfb8`, evidence `8cd04a88a3` |
 | `PF-22` | Effective runtime policy and agent inheritance | [PF-22-S01](../../sprints/archive/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md) | Completed; runtime composition `9711bcd94c`, auxiliary inheritance fix `2a0f3abfd0`, evidence `00d1ea2039` |
-| `PF-13` | Vault-backed exact-host credential boundary | [S01](../../sprints/current/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md), [S02](../../sprints/current/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/current/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/current/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md) | S01 ready; S02-S05 draft |
+| `PF-13` | Vault-backed exact-host credential boundary | [S01](../../sprints/current/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md), [S02](../../sprints/current/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/current/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/current/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md) | S01 in_progress; S02-S05 draft |
 | `PF-23` | Moderate/Aggressive protected-surface enforcement | [S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), [S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md), [S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | draft |
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |

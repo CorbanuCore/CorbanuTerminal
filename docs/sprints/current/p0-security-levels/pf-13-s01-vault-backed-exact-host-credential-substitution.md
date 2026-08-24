@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-13-S01"
 title: "Typed credential capability and bounded store"
-status: ready
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 9
