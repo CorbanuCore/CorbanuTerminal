@@ -2,7 +2,7 @@
 work_package_id: "RW-TMUX-02"
 title: "Tmux failure artifacts, slash dispatch, and Ubuntu smoke lane"
 change_class: routine
-status: in_progress
+status: completed
 owner: "Terminal engineering"
 source_plan: "research/tmux-testing/tmuxPlan.html"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-tmux-harness"
@@ -10,6 +10,8 @@ branch: "codex/tmux-artifacts-slash-smoke"
 base_commit: "b7aff3e3bfbeebe7897f8ccb10c569ff18f9eff6"
 depends_on: "RW-TMUX-01 (completed)"
 stage_1_branch: "codex/tmux-failure-artifacts"
+stage_1_commit: "510beb079"
+stage_2_commit: "303ebfe10"
 created: 2026-08-24
 updated: 2026-08-24
 ---
@@ -63,31 +65,31 @@ Review staging: failure-artifact infrastructure lands first on `codex/tmux-failu
 
 ## Remaining
 
-- [ ] Add lazy, redacted artifact recording and automatic failure emission.
-- [ ] Cover timeout, command-failure, panic, redaction, and no-success-artifact contracts.
-- [ ] Add the real-TUI `/model` single-Enter regression and clean `/exit` proof.
-- [ ] Name the resize and slash scenarios as the focused `tmux_smoke` set.
-- [ ] Add Ubuntu hard tmux availability and failure-only artifact upload.
-- [ ] Update this ledger and final evidence from the exact final tree.
+- [x] Add lazy, redacted artifact recording and automatic failure emission.
+- [x] Cover timeout, command-failure, panic, redaction, and no-success-artifact contracts.
+- [x] Add the real-TUI `/model` single-Enter regression and clean `/exit` proof.
+- [x] Name the resize and slash scenarios as the focused `tmux_smoke` set.
+- [x] Add Ubuntu hard tmux availability and failure-only artifact upload.
+- [x] Update this ledger and final evidence from the exact final tree.
 
 ## Required tests
 
-- [ ] `cd codex-rs && just fix -p codex-tui`.
-- [ ] `cd codex-rs && just fmt`.
-- [ ] Artifact contract tests pass and inspect complete bundle contents.
-- [ ] `cd codex-rs && just test -p codex-tui --test all tmux --retries 0` passes.
-- [ ] Focused `tmux_smoke` set completes 20 local runs with no failure/leak and recorded durations.
-- [ ] `cargo insta pending-snapshots --manifest-path tui/Cargo.toml` reports none.
-- [ ] GitHub Actions YAML parses and references valid actions and exact filters.
+- [x] `cd codex-rs && just fix -p codex-tui`.
+- [x] `cd codex-rs && just fmt`.
+- [x] Artifact contract tests pass and inspect complete bundle contents.
+- [x] `cd codex-rs && just test -p codex-tui --test all tmux --retries 0` passes 9/9.
+- [x] Focused `tmux_smoke` set completes 20 local runs with no failure/leak and p95 7 seconds.
+- [x] `cargo insta pending-snapshots --manifest-path tui/Cargo.toml` reports none.
+- [x] GitHub Actions YAML parses and references valid actions and exact filters.
 - [ ] Final local autoreview reports no actionable issue.
 - [ ] `git diff --check` passes and the final tree is clean after commit.
 
 ## Exit evidence
 
-- [ ] Remaining/tests are complete or scoped out with a recorded reason.
-- [ ] Evidence records commit, commands, counts, durations, manifest, and cleanup.
-- [ ] No product source/docs, snapshots, live credentials, or release claims changed.
-- [ ] Status changes to `completed` before push.
+- [x] Remaining/tests are complete or scoped out with a recorded reason.
+- [x] Evidence records commit, commands, counts, durations, manifest, and cleanup.
+- [x] No product source/docs, snapshots, live credentials, or release claims changed.
+- [x] Status changes to `completed` before push.
 
 ## Follow-on queue
 
