@@ -96,4 +96,7 @@ Review staging: failure-artifact infrastructure lands first on `codex/tmux-failu
 
 ## Follow-on queue
 
-- `RW-TMUX-03`: control mode, multi-pane lifecycle, remaining resize migrations, and release-matrix adoption.
+- `RW-TMUX-03`: bounded control-mode parsing, one multi-pane lifecycle proof,
+  and migration of the ignored width-resize/restore scenario.
+- `RW-TMUX-04`: migrate the repeated-resize scenario and adopt the proven typed
+  support incrementally in the release matrix.
