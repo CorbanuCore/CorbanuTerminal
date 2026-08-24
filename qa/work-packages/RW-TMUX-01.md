@@ -8,6 +8,7 @@ source_plan: "research/tmux-testing/tmuxPlan.html"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-tmux-harness"
 branch: "codex/tmux-harness-foundation"
 base_commit: "2e7bdcb8e4ec7070aaa383b00ac5c6f106c3b9c7"
+implementation_commit: "72b72eedc"
 depends_on: "none"
 created: 2026-08-24
 updated: 2026-08-24
