@@ -49,7 +49,7 @@
     },
     {
       "id": "tool-existing-policy",
-      "source": "codex-rs/security-policy/src/security_policy.rs::compose_existing_decision",
+      "source": "codex-rs/security-policy/src/authorization.rs::compose_existing_decision",
       "representative_existing_decision": false,
       "permissive_expected": false
     },
