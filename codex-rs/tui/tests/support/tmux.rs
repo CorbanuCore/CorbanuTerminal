@@ -1,5 +1,5 @@
 use std::ffi::OsStr;
-use std::ffi::OsString;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::process::Output;
@@ -12,6 +12,11 @@ use std::time::Instant;
 use anyhow::Context;
 use anyhow::Result;
 use tempfile::TempDir;
+
+use super::tmux_artifacts::ArtifactRecorder;
+use super::tmux_artifacts::FailureCapture;
+pub(crate) use super::tmux_command::CommandSpec;
+use super::tmux_command::render_command;
 
 static NEXT_SERVER_ID: AtomicU64 = AtomicU64::new(1);
 static NEXT_SESSION_ID: AtomicU64 = AtomicU64::new(1);
@@ -32,53 +37,15 @@ impl TerminalSize {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TmuxKey {
     Enter,
+    Escape,
 }
 
 impl TmuxKey {
     fn name(self) -> &'static str {
         match self {
             Self::Enter => "Enter",
+            Self::Escape => "Escape",
         }
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct CommandSpec {
-    program: OsString,
-    args: Vec<OsString>,
-    env: Vec<(OsString, OsString)>,
-}
-
-impl CommandSpec {
-    pub(crate) fn new(program: impl Into<OsString>) -> Self {
-        Self {
-            program: program.into(),
-            args: Vec::new(),
-            env: Vec::new(),
-        }
-    }
-
-    pub(crate) fn arg(mut self, arg: impl Into<OsString>) -> Self {
-        self.args.push(arg.into());
-        self
-    }
-
-    pub(crate) fn env(mut self, key: impl Into<OsString>, value: impl Into<OsString>) -> Self {
-        self.env.push((key.into(), value.into()));
-        self
-    }
-
-    fn append_to(self, command: &mut Command) {
-        if !self.env.is_empty() {
-            command.arg("env");
-            for (key, value) in self.env {
-                let mut assignment = key;
-                assignment.push("=");
-                assignment.push(value);
-                command.arg(assignment);
-            }
-        }
-        command.arg(self.program).args(self.args);
     }
 }
 
@@ -114,6 +81,7 @@ impl SessionSpec {
 pub(crate) struct TmuxServer {
     socket_name: String,
     socket_dir: TempDir,
+    artifacts: ArtifactRecorder,
 }
 
 impl TmuxServer {
@@ -124,7 +92,23 @@ impl TmuxServer {
             .is_ok_and(|output| output.status.success())
     }
 
-    pub(crate) fn start() -> Result<Self> {
+    pub(crate) fn should_run(scenario: &str) -> Result<bool> {
+        if Self::is_available() {
+            return Ok(true);
+        }
+        anyhow::ensure!(
+            std::env::var_os("CORBANU_TMUX_REQUIRED").as_deref() != Some(OsStr::new("1")),
+            "tmux is required for {scenario} but is unavailable on PATH"
+        );
+        eprintln!("skipping {scenario} because tmux is unavailable");
+        Ok(false)
+    }
+
+    pub(crate) fn start(scenario: &str) -> Result<Self> {
+        Self::start_with_artifact_root(scenario, ArtifactRecorder::default_root())
+    }
+
+    fn start_with_artifact_root(scenario: &str, artifact_root: PathBuf) -> Result<Self> {
         anyhow::ensure!(Self::is_available(), "tmux is unavailable on PATH");
         let id = NEXT_SERVER_ID.fetch_add(1, Ordering::Relaxed);
         let socket_dir = tempfile::Builder::new()
@@ -134,6 +118,7 @@ impl TmuxServer {
         Ok(Self {
             socket_name: format!("codex-tui-test-{}-{id}", std::process::id()),
             socket_dir,
+            artifacts: ArtifactRecorder::new(artifact_root, scenario, id),
         })
     }
 
@@ -159,9 +144,13 @@ impl TmuxServer {
         command.arg("--");
         spec.command.append_to(&mut command);
 
-        let output = checked_output(&mut command)?;
+        let output = self.checked_output(&mut command, /*pane_id*/ None)?;
         let pane_id = stdout_text(&output).trim().to_string();
         anyhow::ensure!(!pane_id.is_empty(), "tmux did not report a pane id");
+        self.artifacts.record_dimensions(format!(
+            "{pane_id} {}x{} initial",
+            spec.size.columns, spec.size.rows
+        ));
         Ok(TmuxSession {
             server: self,
             name: session_name,
@@ -183,6 +172,15 @@ impl TmuxServer {
         self.socket_dir.path().to_path_buf()
     }
 
+    pub(crate) fn register_artifact(&self, label: &str, path: impl AsRef<Path>) {
+        self.artifacts
+            .register_attachment(label, path.as_ref().to_path_buf());
+    }
+
+    fn artifact_dir(&self) -> PathBuf {
+        self.artifacts.directory().to_path_buf()
+    }
+
     fn has_session(&self, session_name: &str) -> bool {
         self.command()
             .arg("has-session")
@@ -191,10 +189,84 @@ impl TmuxServer {
             .output()
             .is_ok_and(|output| output.status.success())
     }
+
+    fn checked_output(&self, command: &mut Command, pane_id: Option<&str>) -> Result<Output> {
+        let rendered = render_command(command);
+        self.artifacts.record_command(rendered.clone());
+        let output = command
+            .output()
+            .with_context(|| format!("failed to start tmux command: {rendered}"))?;
+        if output.status.success() {
+            return Ok(output);
+        }
+
+        let message = format!(
+            "tmux command failed: {rendered}\nstatus: {:?}\nstdout:\n{}\nstderr:\n{}",
+            output.status.code(),
+            stdout_text(&output),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let artifact = self.emit_failure(&message, pane_id);
+        anyhow::bail!(
+            "{message}\nreproduction: {}\nartifacts: {}",
+            self.artifacts.directory().join("reproduce.sh").display(),
+            artifact.display()
+        );
+    }
+
+    fn emit_failure(&self, reason: &str, pane_id: Option<&str>) -> PathBuf {
+        let capture = pane_id.map_or_else(String::new, |pane| {
+            self.capture_for_artifact(pane, &["capture-pane", "-p", "-t", pane])
+        });
+        let scrollback = pane_id.map_or_else(String::new, |pane| {
+            self.capture_for_artifact(pane, &["capture-pane", "-p", "-S", "-200", "-t", pane])
+        });
+        let metadata = pane_id.map_or_else(String::new, |pane| {
+            self.capture_for_artifact(
+                pane,
+                &[
+                    "display-message",
+                    "-p",
+                    "-t",
+                    pane,
+                    "#{pane_id}\tpid=#{pane_pid}\tsize=#{pane_width}x#{pane_height}\tcommand=#{pane_current_command}\tdead=#{pane_dead}\tstatus=#{pane_dead_status}",
+                ],
+            )
+        });
+        self.artifacts
+            .emit(FailureCapture {
+                reason: reason.to_string(),
+                viewport: capture,
+                scrollback,
+                pane_metadata: metadata,
+            })
+            .unwrap_or_else(|error| {
+                eprintln!("failed to write tmux artifacts: {error:#}");
+                self.artifacts.directory().to_path_buf()
+            })
+    }
+
+    fn capture_for_artifact(&self, pane_id: &str, args: &[&str]) -> String {
+        match self.command().args(args).output() {
+            Ok(output) if output.status.success() => stdout_text(&output),
+            Ok(output) => format!(
+                "artifact capture failed for pane {pane_id}: status={:?}\nstderr:\n{}",
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr)
+            ),
+            Err(error) => format!("artifact capture failed for pane {pane_id}: {error}"),
+        }
+    }
 }
 
 impl Drop for TmuxServer {
     fn drop(&mut self) {
+        if std::thread::panicking() {
+            self.emit_failure(
+                "test panicked while tmux server was active",
+                /*pane_id*/ None,
+            );
+        }
         let _ = self.command().arg("kill-server").output();
     }
 }
@@ -232,18 +304,45 @@ impl<'a> TmuxSession<'a> {
             .arg("--");
         command_spec.append_to(&mut command);
 
-        let output = checked_output(&mut command)?;
+        let output = self
+            .server
+            .checked_output(&mut command, Some(target.id.as_str()))?;
         let pane_id = stdout_text(&output).trim().to_string();
         anyhow::ensure!(!pane_id.is_empty(), "tmux did not report a split pane id");
+        self.server
+            .artifacts
+            .record_dimensions(format!("{pane_id} split rows={rows}"));
         Ok(TmuxPane {
             server: self.server,
             id: pane_id,
         })
     }
+
+    pub(crate) fn wait_for_exit(&self, timeout: Duration) -> Result<()> {
+        let deadline = Instant::now() + timeout;
+        while Instant::now() < deadline {
+            if !self.server.has_session(&self.name) {
+                return Ok(());
+            }
+            sleep(STABLE_CAPTURE_INTERVAL);
+        }
+
+        let reason = format!("timed out waiting for session {:?} to exit", self.name);
+        let artifact = self
+            .server
+            .emit_failure(&reason, Some(self.primary_pane.id.as_str()));
+        anyhow::bail!("{reason}; artifacts: {}", artifact.display());
+    }
 }
 
 impl Drop for TmuxSession<'_> {
     fn drop(&mut self) {
+        if std::thread::panicking() {
+            self.server.emit_failure(
+                "test panicked while tmux session was active",
+                Some(self.primary_pane.id.as_str()),
+            );
+        }
         if self.server.has_session(&self.name) {
             let _ = self
                 .server
@@ -264,8 +363,11 @@ pub(crate) struct TmuxPane<'a> {
 
 impl TmuxPane<'_> {
     pub(crate) fn send_literal(&self, text: &str) -> Result<()> {
+        self.server
+            .artifacts
+            .record_input(format!("literal bytes={}", text.len()));
         let mut command = self.server.command();
-        checked_output(
+        self.server.checked_output(
             command
                 .arg("send-keys")
                 .arg("-t")
@@ -273,37 +375,43 @@ impl TmuxPane<'_> {
                 .arg("-l")
                 .arg("--")
                 .arg(text),
+            Some(self.id.as_str()),
         )?;
         Ok(())
     }
 
     pub(crate) fn send_key(&self, key: TmuxKey) -> Result<()> {
+        self.server
+            .artifacts
+            .record_input(format!("key {}", key.name()));
         let mut command = self.server.command();
-        checked_output(
+        self.server.checked_output(
             command
                 .arg("send-keys")
                 .arg("-t")
                 .arg(&self.id)
                 .arg(key.name()),
+            Some(self.id.as_str()),
         )?;
         Ok(())
     }
 
     pub(crate) fn capture_viewport(&self) -> Result<String> {
         let mut command = self.server.command();
-        let output = checked_output(
+        let output = self.server.checked_output(
             command
                 .arg("capture-pane")
                 .arg("-p")
                 .arg("-t")
                 .arg(&self.id),
+            Some(self.id.as_str()),
         )?;
         Ok(stdout_text(&output))
     }
 
     pub(crate) fn capture_scrollback_tail(&self, lines: usize) -> Result<String> {
         let mut command = self.server.command();
-        let output = checked_output(
+        let output = self.server.checked_output(
             command
                 .arg("capture-pane")
                 .arg("-p")
@@ -311,6 +419,7 @@ impl TmuxPane<'_> {
                 .arg(format!("-{lines}"))
                 .arg("-t")
                 .arg(&self.id),
+            Some(self.id.as_str()),
         )?;
         Ok(stdout_text(&output))
     }
@@ -346,29 +455,22 @@ impl TmuxPane<'_> {
             sleep(STABLE_CAPTURE_INTERVAL);
         }
 
-        anyhow::bail!("timed out waiting for stable {description}; last viewport:\n{last_capture}");
+        let reason = format!("timed out waiting for stable {description}");
+        let artifact = self.server.emit_failure(&reason, Some(self.id.as_str()));
+        anyhow::bail!(
+            "{reason}; last viewport:\n{last_capture}\nartifacts: {}",
+            artifact.display()
+        );
     }
 
     pub(crate) fn close(self) -> Result<()> {
         let mut command = self.server.command();
-        checked_output(command.arg("kill-pane").arg("-t").arg(&self.id))?;
+        self.server.checked_output(
+            command.arg("kill-pane").arg("-t").arg(&self.id),
+            Some(self.id.as_str()),
+        )?;
         Ok(())
     }
-}
-
-fn checked_output(command: &mut Command) -> Result<Output> {
-    let rendered = format!("{command:?}");
-    let output = command
-        .output()
-        .with_context(|| format!("failed to start tmux command: {rendered}"))?;
-    anyhow::ensure!(
-        output.status.success(),
-        "tmux command failed: {rendered}\nstatus: {:?}\nstdout:\n{}\nstderr:\n{}",
-        output.status.code(),
-        stdout_text(&output),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    Ok(output)
 }
 
 fn stdout_text(output: &Output) -> String {
