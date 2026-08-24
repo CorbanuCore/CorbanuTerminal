@@ -10,6 +10,7 @@
 
 mod authorization;
 mod bounded;
+mod credential;
 mod digest;
 mod grant;
 mod level;
@@ -34,6 +35,15 @@ pub use authorization::permissive_decision;
 pub use bounded::BoundedText;
 pub use bounded::BoundedTextError;
 pub use bounded::MAX_POLICY_TEXT_BYTES;
+pub use credential::CAPABILITY_ID_HEX_LENGTH;
+pub use credential::CREDENTIAL_CAPABILITY_SCHEMA_VERSION;
+pub use credential::CapabilityId;
+pub use credential::CredentialCapabilityError;
+pub use credential::CredentialCapabilityRequest;
+pub use credential::CredentialDestination;
+pub use credential::CredentialHttpMethod;
+pub use credential::CredentialReference;
+pub use credential::CredentialTransport;
 pub use grant::BoundedGrant;
 pub use grant::GrantScope;
 pub use grant::GrantValidationError;
@@ -52,6 +62,10 @@ pub use revocation::RevocationEvent;
 pub use revocation::RevocationReason;
 pub use revocation::RevocationState;
 pub use revocation::RevocationTarget;
+
+#[cfg(test)]
+#[path = "credential_tests.rs"]
+mod credential_tests;
 
 #[cfg(test)]
 #[path = "security_policy_tests.rs"]
