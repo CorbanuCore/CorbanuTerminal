@@ -1,0 +1,1010 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "Security Comparative Analysis",
+    "description": "An opinionated, source-linked comparison of agentic harness security architectures and a proposed security model for Corbanu Terminal.",
+    "generatedAt": "2026-08-23T19:00:00Z",
+    "cards": [
+      {
+        "id": "systems_reviewed_card",
+        "dataset": "headline_metrics",
+        "sourceId": "assessment_method",
+        "metrics": [
+          {
+            "label": "Harnesses reviewed",
+            "field": "systems_reviewed",
+            "format": "number"
+          }
+        ]
+      },
+      {
+        "id": "leader_score_card",
+        "dataset": "headline_metrics",
+        "sourceId": "assessment_method",
+        "metrics": [
+          {
+            "label": "Highest observable posture",
+            "field": "leader_score",
+            "format": "number",
+            "unit": "/5"
+          }
+        ]
+      },
+      {
+        "id": "corbanu_current_card",
+        "dataset": "headline_metrics",
+        "sourceId": "assessment_method",
+        "metrics": [
+          {
+            "label": "Corbanu today",
+            "field": "corbanu_current",
+            "format": "number",
+            "unit": "/5"
+          }
+        ]
+      },
+      {
+        "id": "corbanu_target_card",
+        "dataset": "headline_metrics",
+        "sourceId": "assessment_method",
+        "metrics": [
+          {
+            "label": "Corbanu designed target",
+            "field": "corbanu_target",
+            "format": "number",
+            "unit": "/5"
+          }
+        ]
+      }
+    ],
+    "charts": [
+      {
+        "id": "overall_posture_chart",
+        "title": "Source-coded security posture score",
+        "subtitle": "OpenClaw leads observable implementations; Corbanu's target is aspirational and must be earned through enforcement.",
+        "type": "bar",
+        "dataset": "overall_scores",
+        "sourceId": "assessment_method",
+        "encodings": {
+          "x": {
+            "field": "harness",
+            "type": "nominal"
+          },
+          "y": {
+            "field": "overall",
+            "type": "quantitative",
+            "unit": "/5"
+          },
+          "color": {
+            "field": "status",
+            "type": "nominal"
+          },
+          "tooltip": [
+            {
+              "field": "overall"
+            },
+            {
+              "field": "evidence_confidence"
+            },
+            {
+              "field": "status"
+            }
+          ]
+        },
+        "options": {
+          "orientation": "horizontal",
+          "grouping": "grouped"
+        }
+      },
+      {
+        "id": "containment_boundary_scatter",
+        "title": "Containment and secret non-disclosure",
+        "subtitle": "Most harnesses are good at one axis or neither; very few make both properties first-class.",
+        "type": "scatter",
+        "dataset": "dimension_scores",
+        "sourceId": "assessment_method",
+        "encodings": {
+          "x": {
+            "field": "containment",
+            "type": "quantitative",
+            "unit": "/5"
+          },
+          "y": {
+            "field": "confidentiality",
+            "type": "quantitative",
+            "unit": "/5"
+          },
+          "color": {
+            "field": "status",
+            "type": "nominal"
+          },
+          "size": {
+            "field": "audit_admin",
+            "type": "quantitative"
+          },
+          "label": {
+            "field": "harness",
+            "type": "nominal"
+          },
+          "tooltip": [
+            {
+              "field": "harness"
+            },
+            {
+              "field": "tool_policy"
+            },
+            {
+              "field": "untrusted_input"
+            },
+            {
+              "field": "evidence_confidence"
+            }
+          ]
+        }
+      },
+      {
+        "id": "corbanu_gap_chart",
+        "title": "Corbanu current-to-target gap by security property",
+        "subtitle": "The largest missing layer is untrusted-input handling, followed by making the vault a true runtime capability boundary.",
+        "type": "bar",
+        "dataset": "corbanu_gap",
+        "sourceId": "assessment_method",
+        "encodings": {
+          "x": {
+            "field": "dimension",
+            "type": "nominal"
+          },
+          "y": {
+            "field": "score",
+            "type": "quantitative",
+            "unit": "/5"
+          },
+          "color": {
+            "field": "state",
+            "type": "nominal"
+          },
+          "tooltip": [
+            {
+              "field": "score"
+            },
+            {
+              "field": "gap"
+            }
+          ]
+        },
+        "options": {
+          "orientation": "horizontal",
+          "grouping": "grouped"
+        }
+      }
+    ],
+    "tables": [
+      {
+        "id": "dimension_score_table",
+        "title": "Architectural assessment by dimension",
+        "dataset": "dimension_scores",
+        "sourceId": "assessment_method",
+        "columns": [
+          {
+            "field": "harness",
+            "label": "Harness"
+          },
+          {
+            "field": "containment",
+            "label": "OS containment",
+            "format": "number"
+          },
+          {
+            "field": "tool_policy",
+            "label": "Tool policy",
+            "format": "number"
+          },
+          {
+            "field": "confidentiality",
+            "label": "Secret boundary",
+            "format": "number"
+          },
+          {
+            "field": "untrusted_input",
+            "label": "Untrusted input",
+            "format": "number"
+          },
+          {
+            "field": "audit_admin",
+            "label": "Audit/admin",
+            "format": "number"
+          },
+          {
+            "field": "overall",
+            "label": "Weighted score",
+            "format": "number"
+          },
+          {
+            "field": "evidence_confidence",
+            "label": "Evidence"
+          }
+        ],
+        "defaultSort": {
+          "field": "overall",
+          "direction": "desc"
+        }
+      },
+      {
+        "id": "comparative_summary_table",
+        "title": "Comparative implementation summary",
+        "dataset": "comparative_summary",
+        "sourceId": "assessment_method",
+        "columns": [
+          {
+            "field": "harness",
+            "label": "Harness"
+          },
+          {
+            "field": "permission_model",
+            "label": "Permission model"
+          },
+          {
+            "field": "containment",
+            "label": "Containment"
+          },
+          {
+            "field": "confidentiality_notes",
+            "label": "Secrets"
+          },
+          {
+            "field": "untrusted_input",
+            "label": "Untrusted input"
+          },
+          {
+            "field": "verdict",
+            "label": "Opinionated verdict"
+          },
+          {
+            "field": "evidence",
+            "label": "Evidence"
+          }
+        ],
+        "defaultSort": {
+          "field": "harness",
+          "direction": "asc"
+        }
+      },
+      {
+        "id": "security_modes_table",
+        "title": "Recommended Corbanu security-mode contract",
+        "dataset": "security_modes",
+        "sourceId": "assessment_method",
+        "columns": [
+          {
+            "field": "mode",
+            "label": "Mode"
+          },
+          {
+            "field": "approval_behavior",
+            "label": "Approvals and autonomy"
+          },
+          {
+            "field": "protected_data",
+            "label": "Protected data"
+          },
+          {
+            "field": "untrusted_content",
+            "label": "Untrusted content"
+          },
+          {
+            "field": "brokered_use",
+            "label": "Credential use"
+          },
+          {
+            "field": "non_negotiable",
+            "label": "Invariant"
+          }
+        ],
+        "defaultSort": {
+          "field": "mode",
+          "direction": "asc"
+        }
+      },
+      {
+        "id": "external_data_defense_table",
+        "title": "Two-plane defense for browsers and external data",
+        "dataset": "external_data_defenses",
+        "sourceId": "assessment_method",
+        "columns": [
+          {
+            "field": "attack_plane",
+            "label": "Attack plane"
+          },
+          {
+            "field": "threat",
+            "label": "Representative threat"
+          },
+          {
+            "field": "primary_boundary",
+            "label": "Primary boundary"
+          },
+          {
+            "field": "required_controls",
+            "label": "Required controls"
+          },
+          {
+            "field": "corbanu_posture",
+            "label": "Corbanu posture"
+          },
+          {
+            "field": "ambient_posture",
+            "label": "Ambient Desktop posture"
+          }
+        ],
+        "defaultSort": {
+          "field": "attack_plane",
+          "direction": "asc"
+        }
+      }
+    ],
+    "sources": [
+      {
+        "id": "assessment_method",
+        "label": "Comparative scoring model and reviewed evidence",
+        "path": "SecurityComparativeAnalysis.artifact.json",
+        "query": {
+          "engine": "SQLite",
+          "description": "Reviewed architecture scores and qualitative annotations from the report snapshot.",
+          "sql": "SELECT * FROM reviewed_scores ORDER BY overall DESC;",
+          "tables_used": [
+            "reviewed_scores"
+          ],
+          "filters": [
+            "Public source or official documentation reviewed at the pinned revisions listed in the report"
+          ],
+          "metric_definitions": [
+            "Overall = 25% OS containment + 15% tool policy + 30% confidentiality + 20% untrusted-input handling + 10% audit/administration.",
+            "Scores range from 0 to 5 and represent source-coded architectural maturity, not empirical breach rates."
+          ]
+        }
+      },
+      {
+        "id": "corbanu_transcript",
+        "label": "Corbanu working-session diarized transcript",
+        "path": "Working session - 2026_08_23 11_31 MST - Recording.diarized.md"
+      },
+      {
+        "id": "corbanu_vault_plan",
+        "label": "Corbanu agent vault access plan",
+        "href": "https://github.com/CorbanuCore/CorbanuTerminal/blob/f0e2119980d1653b8e2789baa97a723d26f7aad6/docs/current-sprint/agent-vault-access.md"
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# Security Comparative Analysis\n\n**Agentic harness security, the Corbanu vault, and the design of a defensible /security command**\n\nPrepared 23 August 2026 from the Corbanu working-session transcript, the Corbanu source tree, nine public harness repositories, Ambient Desktop, and official documentation for the two closed runtimes. This is an architectural comparison, not a penetration test or vendor certification."
+      },
+      {
+        "id": "headline_metrics_block",
+        "type": "metric-strip",
+        "cardIds": [
+          "systems_reviewed_card",
+          "leader_score_card",
+          "corbanu_current_card",
+          "corbanu_target_card"
+        ]
+      },
+      {
+        "id": "technical_summary",
+        "type": "markdown",
+        "body": "## Technical Summary\n\nCorbanu does **not** merely want three approval presets. The transcript describes a security system in which a user chooses **Permissive**, **Moderate**, or **Aggressive** through /security, the active level remains conspicuous and auditable, and that level composes filesystem, network, browser, tool, and data-handling policy. The decisive invariant is stronger than any approval setting: **the model must not receive protected secrets**. A deterministic host process should resolve a named capability, perform or broker a bounded action, and return only redacted results.\n\nThe current repository already has two valuable foundations: Codex-derived filesystem/network permission profiles, and an age-encrypted vault backed by the operating-system keyring. The missing connection is operational. Agents do not yet request vault capabilities as first-class actions, and the vault UX is still closer to secure storage than to a production credential broker. The plan for that bridge is [Agent Vault Access](https://github.com/CorbanuCore/CorbanuTerminal/blob/f0e2119980d1653b8e2789baa97a723d26f7aad6/docs/current-sprint/agent-vault-access.md).\n\n**Judgment:** the plan is directionally excellent, but the mode names will become dangerous theater unless every mode preserves hard invariants. Permissive may reduce prompts; it must never mean \"put plaintext secrets in the model context.\""
+      },
+      {
+        "id": "key_findings",
+        "type": "markdown",
+        "body": "## Key Findings\n\n1. **OpenClaw is the closest architectural precedent.** Its protected secret store, authenticated process-local sentinels, exact-host egress substitution, external-content wrappers, and sticky turn taint closely resemble the Corbanu destination. It is also candid about limitations: its shared store is not encrypted at rest and same-process memory remains in scope.\n2. **Kilo and Claude Code lead on shell confinement, not secret confidentiality.** Both combine permissions with Seatbelt/bubblewrap and network policy. Kilo fails closed when confinement cannot be established; Claude Code requires an explicit fail-closed setting to do the same. Both leave broad read access possible unless separately denied.\n3. **DeepSeek Harness has the cleanest control-plane semantics.** A permission preset records user intent but owns no enforcement; actual sandbox and approval services remain independent. Corbanu should copy that separation.\n4. **Hermes proves that credential swapping is practical.** Its iron-proxy gives a sandbox only a proxy token and substitutes the real credential at egress. Its default-on redaction and provider-env scrubbing are also worth borrowing.\n5. **Ambient Desktop is already on the same road.** It now has encrypted secret references, named-secret metadata, safe child environments, exact-value redaction, managed-secret path denials, and a broker fixture. The limitation is breadth: the broker is not yet a general capability surface, while OS containment remains partial across platforms.\n6. **Pi, OpenCode, Kimi Code, and ZCode emphasize user confirmation more than containment.** Confirmation helps honest users supervise honest tools. It is not a reliable defense against alternate access paths, child processes, approval fatigue, or prompt injection."
+      },
+      {
+        "id": "overall_chart_block",
+        "type": "chart",
+        "chartId": "overall_posture_chart"
+      },
+      {
+        "id": "overall_chart_reading",
+        "type": "markdown",
+        "sourceId": "assessment_method",
+        "body": "The weighted score is a source-coded architectural assessment, not an empirical breach rate. Secret non-disclosure receives 30% of the weight, OS containment 25%, untrusted-input handling 20%, tool policy 15%, and audit/administration 10%. Closed or poorly documented behavior is left unscored rather than rewarded for ambiguity. Corbanu's target appears in the chart as **planned**, not implemented; it should not be marketed as achieved until the broker, provenance, and enforcement tests exist."
+      },
+      {
+        "id": "scatter_block",
+        "type": "chart",
+        "chartId": "containment_boundary_scatter"
+      },
+      {
+        "id": "scatter_reading",
+        "type": "markdown",
+        "sourceId": "assessment_method",
+        "body": "The upper-right quadrant is the important one. A harness with strong sandboxing but plaintext credentials can still send secrets through an allowed provider or approved host. A harness with encrypted credentials but unsandboxed tools can often read the credential after resolution or inherit it through the environment. OpenClaw is the only reviewed implementation that makes both properties substantial, although its egress proxy is opt-in and limited to selected execution paths. Corbanu can surpass it by combining its encrypted vault with mandatory, scoped, expiring capability leases."
+      },
+      {
+        "id": "what_to_build",
+        "type": "markdown",
+        "body": "## What Corbanu Should Build\n\nThe /security command should select a **versioned policy bundle**, not mutate ad hoc booleans. Each bundle should resolve into independent controls: approval policy, filesystem sandbox, network policy, browser isolation, protected-data classes, credential lease policy, untrusted-source policy, subagent inheritance, retention, and audit verbosity. The durable event should record the requested bundle, the effective enforcement facts, and any degradation.\n\nAt the center should be a **Vault Capability Broker**. The model sees metadata such as \"github-production\" and a capability such as \"github.api.request\"; it never sees the token. The broker validates agent identity, task, purpose, destination, method, scope, security level, and expiry. It then either performs the action itself or injects an opaque lease/sentinel at the final transport boundary. Responses pass through exact-value and pattern redaction before entering tool output, logs, artifacts, or transcripts.\n\nA separate **Prompt Injection Firewall** should attach provenance to every external fragment: trusted user instruction, repository content, web content, browser text, document extraction, MCP result, email, or prior generated memory. Moderate and Aggressive modes should preserve taint through summaries, compaction, subagents, and memory writes. Detection may add risk signals, but a small classifier must never be the security boundary; deterministic capability restrictions must still hold when the classifier is wrong."
+      },
+      {
+        "id": "two_attack_planes",
+        "type": "markdown",
+        "body": "## Browsers and External Data: Two Different Attack Planes\n\nA browser-facing agent must survive two independent hazards. **Tool exploitation** attacks the browser, renderer, automation driver, downloader, parser, or native dependency itself: a malicious site may attempt a Chromium escape, filesystem reach-through, local-service access, or code execution in a document parser. The appropriate boundary is process and network containment. Browser acquisition should run in an ephemeral container or hardened sandbox, with a read-only base image, disposable profile, restricted mounts, no host IPC, no vault access, no inherited credentials, outbound destination policy, download quarantine, resource limits, and an explicit broker for any file promoted into the workspace. Ambient Desktop's Dockerized Scrapling design is therefore a valuable pattern for this half of the problem.\n\n**Prompt injection through untrusted data** attacks the agent's interpretation rather than the browser process. Perfectly benign HTML, search results, issue comments, documents, MCP responses, emails, or OCR output can contain instructions that try to override the user, disclose secrets, mutate code, or establish persistence. A container does not remove those instructions: it safely delivers them to the model. This requires a separate content-security pipeline that normalizes hostile encodings, strips executable markup and model-control tokens, applies authenticated source boundaries, records origin and trust, detects boundary-spoofing, and marks derived summaries and memories with persistent taint. High-impact actions following a tainted read must be re-authorized against deterministic policy.\n\n**Opinionated conclusion:** call these subsystems **Browser Isolation** and **External Content Firewall**, and report their health independently in the security inspector. Saying \"the browser is sandboxed\" when external text can still steer privileged tools is materially misleading. Likewise, sanitization without process isolation leaves parser and browser vulnerabilities with host-level impact. Corbanu needs both; Ambient currently has a serious start on isolation through Scrapling-in-Docker but no comparable end-to-end content sanitization, provenance, and taint boundary yet."
+      },
+      {
+        "id": "external_data_defense_table_block",
+        "type": "table",
+        "tableId": "external_data_defense_table"
+      },
+      {
+        "id": "sanitization_design_note",
+        "type": "markdown",
+        "body": "Sanitization must be defined carefully. Removing scripts and hidden markup reduces attack surface, but no transformer can reliably distinguish every malicious natural-language instruction from legitimate content. The firewall should therefore produce a safer **data representation**, not relabel the content as trusted. Provenance, taint, capability checks, least-privilege tools, the vault broker, and post-fetch action gates remain mandatory after sanitization. OpenClaw's randomized wrappers, forged-marker cleanup, special-token sanitization, suspicious-pattern monitoring, and turn taint are the strongest reviewed starting point; Corbanu should extend that model across compaction, subagents, memory, and every external connector."
+      },
+      {
+        "id": "corbanu_gap_block",
+        "type": "chart",
+        "chartId": "corbanu_gap_chart"
+      },
+      {
+        "id": "gap_reading",
+        "type": "markdown",
+        "sourceId": "assessment_method",
+        "body": "Corbanu's existing Codex permission machinery means containment and tool authorization start from a respectable base. The product gap is not another prompt dialog. It is the conversion of secret storage into mediated use, plus a provenance system that survives the entire agent lifecycle. Those two items should dominate the first security milestone."
+      },
+      {
+        "id": "security_modes_intro",
+        "type": "markdown",
+        "body": "## Recommended Security Modes\n\nThe names from the transcript are retained below, but their semantics are tightened. The modes should change convenience and autonomy while preserving non-negotiable protected-data invariants. I would also consider renaming **Aggressive** to **Hardened** before release; \"aggressive security\" sounds combative, while \"hardened\" describes an engineering property."
+      },
+      {
+        "id": "security_modes_table_block",
+        "type": "table",
+        "tableId": "security_modes_table"
+      },
+      {
+        "id": "vault_design",
+        "type": "markdown",
+        "body": "## The Vault Must Become an Execution Primitive\n\nCorbanu's [vault crate](https://github.com/CorbanuCore/CorbanuTerminal/blob/f0e2119980d1653b8e2789baa97a723d26f7aad6/codex-rs/vault/src/lib.rs) already encrypts records with age and keeps the passphrase in the OS keyring. Its [TUI command layer](https://github.com/CorbanuCore/CorbanuTerminal/blob/f0e2119980d1653b8e2789baa97a723d26f7aad6/codex-rs/tui/src/vault_command.rs) keeps raw values out of ordinary chat input. Those are sound storage and UX boundaries. They are not yet a general runtime boundary.\n\nThe next API should not be \"vault reveal.\" It should resemble \"capability.request(name, operation, destination, purpose)\" and return a lease identifier, a redacted result, or a structured denial. Raw reveal and export should remain human-only emergency operations. High-risk classes already identified by the vault, such as seed phrases and private keys, should be permanently ineligible for programmatic lease use.\n\nThe most useful design combination is: **OpenClaw sentinels + Hermes egress swapping + Corbanu encrypted storage + Codex permission profiles**. That is a defensible product architecture rather than a collection of warnings."
+      },
+      {
+        "id": "dimension_table_intro",
+        "type": "markdown",
+        "body": "## Comparative Scorecard\n\nScores use a 0-5 maturity scale. A five means the property is explicit, enforced in the reviewed runtime path, fail-closed where material, and covered by meaningful operational semantics. A three indicates a useful but incomplete control. A one indicates convention, prompts, or storage hygiene without a robust boundary. ZCode is omitted from numeric ranking because its core runtime source is unavailable and public documentation does not establish enough implementation detail."
+      },
+      {
+        "id": "dimension_table_block",
+        "type": "table",
+        "tableId": "dimension_score_table"
+      },
+      {
+        "id": "comparative_table_block",
+        "type": "table",
+        "tableId": "comparative_summary_table"
+      },
+      {
+        "id": "deepseek_profile",
+        "type": "markdown",
+        "body": "## DeepSeek Harness\n\nDeepSeek's public harness separates [permission presets](https://github.com/deepseek-ai/deepseek-harness/blob/b150a551b8d465e31e418e1b2eaf5e79bbb7d28e/docs/subsystems/permission-presets.md) from the services that enforce sandbox and approval decisions. Its [sandbox](https://github.com/deepseek-ai/deepseek-harness/blob/b150a551b8d465e31e418e1b2eaf5e79bbb7d28e/docs/subsystems/sandbox.md) supports read-only, workspace-write, and danger-full-access modes across platform backends and refuses silent unconfined fallback. Its [credential seam](https://github.com/deepseek-ai/deepseek-harness/blob/b150a551b8d465e31e418e1b2eaf5e79bbb7d28e/docs/subsystems/credentials.md) keeps values out of config and resolves references per operation, while the [subprocess seam](https://github.com/deepseek-ai/deepseek-harness/blob/b150a551b8d465e31e418e1b2eaf5e79bbb7d28e/docs/subsystems/subprocess.md) scrubs inherited credentials.\n\n**Verdict:** excellent control-plane design, but incomplete as a security-level model. Network is explicitly outside the sandbox vocabulary, credential resolution still exposes values to consumers, and session telemetry ships no universal redaction rules. Corbanu should borrow the intent/enforcement separation, not the gaps."
+      },
+      {
+        "id": "hermes_profile",
+        "type": "markdown",
+        "body": "## Hermes Agent\n\nHermes provides scoped credentials in [secret_scope.py](https://github.com/NousResearch/hermes-agent/blob/91e867631e9d2eb9fbd69edd4459475d38070979/agent/secret_scope.py), broad default-on output scrubbing in [redact.py](https://github.com/NousResearch/hermes-agent/blob/91e867631e9d2eb9fbd69edd4459475d38070979/agent/redact.py), and explicit file-tool blocks in [file_safety.py](https://github.com/NousResearch/hermes-agent/blob/91e867631e9d2eb9fbd69edd4459475d38070979/agent/file_safety.py). The standout is [iron_proxy.py](https://github.com/NousResearch/hermes-agent/blob/91e867631e9d2eb9fbd69edd4459475d38070979/agent/proxy_sources/iron_proxy.py): the sandbox receives a proxy token while the egress proxy substitutes the real provider credential only for configured hosts.\n\n**Verdict:** the proxy is first-rate inspiration, and Hermes is commendably explicit that file-tool denial is not a security boundary because shell access can bypass it. The local execution model still treats broad user credentials, including general AWS credentials, as intentionally inheritable. Corbanu should adopt the credential-swapping idea under a stricter default-deny lease policy."
+      },
+      {
+        "id": "kilo_profile",
+        "type": "markdown",
+        "body": "## Kilo Code\n\nKilo layers a provenance-aware allow/ask/deny rule engine over an optional [OS sandbox](https://github.com/Kilo-Org/kilocode/blob/ff74e2ea3fcd3a8fd43caf9751bbeaa3e30cead8/packages/kilo-docs/pages/getting-started/settings/sandboxing.md). The sandbox uses Seatbelt on macOS and bubblewrap on Linux, keeps project config from weakening global policy, protects .git and security configuration from writes, and offers a carefully validated host allowlist proxy. It fails closed when an enabled sandbox cannot be enforced.\n\n**Verdict:** best-in-class shell confinement among the fully open coding harnesses, but the documentation correctly states that it is a write boundary, not a privacy boundary. Reads remain broad, permission rules can be bypassed through alternate tools, and provider credentials are stored in a mode-0600 auth file rather than mediated as host capabilities. Corbanu should copy its policy monotonicity and network validation, then go further on protected data."
+      },
+      {
+        "id": "pi_profile",
+        "type": "markdown",
+        "body": "## Pi\n\nPi's [security document](https://github.com/earendil-works/pi/blob/a470b121bf683b4c2b9fc0b3a7c807de7e0cfe9c/packages/coding-agent/docs/security.md) is the most honest statement in the survey: project trust controls whether repository-local extensions and settings load, but Pi has no built-in sandbox and treats prompt injection as an expected local-agent risk. Its [auth storage](https://github.com/earendil-works/pi/blob/a470b121bf683b4c2b9fc0b3a7c807de7e0cfe9c/packages/coding-agent/src/core/auth-storage.ts) uses a locked, mode-0600 JSON file, and runtime credentials are ordinary in-memory values.\n\n**Verdict:** intellectually honest and extensible, but not a security architecture for unattended agents. Pi's refusal to pretend that a partial in-process sandbox is sufficient is admirable; Corbanu should preserve that candor while providing the OS and broker boundaries Pi deliberately leaves to deployments."
+      },
+      {
+        "id": "opencode_profile",
+        "type": "markdown",
+        "body": "## OpenCode\n\nOpenCode has a compact [permission rule engine](https://github.com/anomalyco/opencode/blob/b1ce938ebeb9ea184ec36573260424c76fbb8e14/packages/opencode/src/permission/index.ts) with last-match semantics and allow-once/always decisions. Its [auth service](https://github.com/anomalyco/opencode/blob/b1ce938ebeb9ea184ec36573260424c76fbb8e14/packages/opencode/src/auth/index.ts) stores API and OAuth credentials in mode-0600 auth JSON. Export tooling can redact transcripts, but the normal agent runtime has no corresponding universal secret broker or OS confinement layer.\n\n**Verdict:** a good interaction policy engine, not a robust hostile-input boundary. The source prompt itself warns that the environment is not sandboxed. Corbanu should not mistake OpenCode-style tool decisions for complete security."
+      },
+      {
+        "id": "kimi_profile",
+        "type": "markdown",
+        "body": "## Kimi Code\n\nKimi Code offers manual, auto, and yolo modes through an ordered [permission-policy service](https://github.com/MoonshotAI/kimi-code/blob/4e16f2a8696df4b4184958b3e71c70a6f1c3f0e3/packages/agent-core-v2/src/agent/permissionPolicy/permissionPolicyService.ts). Sensitive-file and Git-control-path policies force review, and the [permission gate](https://github.com/MoonshotAI/kimi-code/blob/4e16f2a8696df4b4184958b3e71c70a6f1c3f0e3/packages/agent-core-v2/src/agent/permissionGate/permissionGateService.ts) records policy decisions in telemetry. Logging applies structured key and pattern redaction, while OAuth tokens are stored as mode-0600 JSON. Bash still runs as a host process rather than through an observable OS sandbox.\n\n**Verdict:** a mature approval pipeline with good policy attribution and log hygiene, but weak containment and no demonstrated secret non-disclosure mechanism. Its ordered policy chain is worth studying; its yolo semantics should not be imported into /security."
+      },
+      {
+        "id": "claude_profile",
+        "type": "markdown",
+        "body": "## Claude Code\n\nClaude Code's core runtime is closed, so this assessment relies on official documentation and the public [settings examples](https://github.com/anthropics/claude-code/blob/45bdfa96ca415da92e62b6ca85a1d6e29adf3c44/examples/settings/README.md). Official [permissions](https://code.claude.com/docs/en/permissions) combine deny-first tool/path/domain rules with pre-tool hooks and managed policy. Official [sandboxing](https://code.claude.com/docs/en/sandboxing) uses Seatbelt or bubblewrap for Bash and child processes, plus a network proxy; however, sandboxing is disabled by default and ordinarily warns then runs unsandboxed unless fail-closed behavior is explicitly enabled.\n\n**Verdict:** strong enterprise policy and shell containment, weakened by permissive defaults, a Bash-only sandbox boundary, and an explicit unsandboxed escape hatch unless administrators disable it. Public evidence does not show a vault-style capability broker. Corbanu should copy managed monotonic policy and deny precedence, but make fail-closed behavior the normal meaning of Moderate and Aggressive."
+      },
+      {
+        "id": "openclaw_profile",
+        "type": "markdown",
+        "body": "## OpenClaw\n\nOpenClaw explicitly separates [sandbox, tool policy, and elevated execution](https://github.com/openclaw/openclaw/blob/6ce272c2a662f81b7779507335d91de4d61c589b/docs/gateway/sandbox-vs-tool-policy-vs-elevated.md). Its [secrets architecture](https://github.com/openclaw/openclaw/blob/6ce272c2a662f81b7779507335d91de4d61c589b/docs/gateway/secrets.md) supports SecretRefs, protected write-only values, process-local authenticated sentinels, exact-host egress substitution, expiry at run close, and fail-closed unknown sentinels. Its [external-content module](https://github.com/openclaw/openclaw/blob/6ce272c2a662f81b7779507335d91de4d61c589b/src/security/external-content.ts) wraps untrusted content with randomized boundaries, sanitizes forged markers and model special tokens, and records suspicious patterns; network results also taint the turn.\n\n**Verdict:** the survey's architectural leader and the most relevant inspiration. Its weaknesses matter: sandboxing and egress substitution are off by default, the shared secret store is plaintext in SQLite, destination binding cannot prevent a permitted service from reflecting a credential, and taint does not automatically prove a malicious instruction. Corbanu should borrow the machinery but choose safer defaults and stronger encrypted storage."
+      },
+      {
+        "id": "zcode_profile",
+        "type": "markdown",
+        "body": "## ZCode / ZAI Code\n\nZCode documents four [safety-confirmation modes](https://zcode.z.ai/en/docs/safety-confirm): Confirm Before Changes, Auto Edit, Plan, and Full Access, with allow-once, always-allow, reject, and always-reject decisions. Its [subagent documentation](https://zcode.z.ai/en/docs/subagents) exposes per-agent tool selection and a read-only Explore role. The public [ZAI coding plugins repository](https://github.com/zai-org/zai-coding-plugins/tree/0446d0bb0bc537d97d3ab3664c4b8b9c4a0e1254) does not contain the ZCode runtime.\n\n**Verdict:** a polished confirmation UX, but the core enforcement, credential custody, containment, and prompt-injection behavior are not publicly observable. It is therefore inappropriate to assign a numeric architecture score. Absence of evidence is not evidence of absence, but it is also not a basis for security confidence."
+      },
+      {
+        "id": "ambient_profile",
+        "type": "markdown",
+        "body": "## Ambient Desktop\n\nAmbient Desktop's current tree has moved substantially beyond its earlier prototype. [Secret references](https://github.com/AmbientCrypto/ambientCoder/blob/65e8665f5f52864ebd1777ad4d497d73d4d76884/src/main/security/secretReferenceStore.ts) keep encrypted values outside workspace metadata; the [named-secret store](https://github.com/AmbientCrypto/ambientCoder/blob/65e8665f5f52864ebd1777ad4d497d73d4d76884/src/main/security/namedSecretStore.ts) returns metadata and redacted evidence rather than secret values; [safeProcessEnv.ts](https://github.com/AmbientCrypto/ambientCoder/blob/65e8665f5f52864ebd1777ad4d497d73d4d76884/src/main/security/safeProcessEnv.ts) allowlists inherited environment variables; and [permissionPolicy.ts](https://github.com/AmbientCrypto/ambientCoder/blob/65e8665f5f52864ebd1777ad4d497d73d4d76884/src/main/permissions/permissionPolicy.ts) denies managed-secret and authority-state paths before honoring full access. Its deterministic workflow runtime also blocks raw process, filesystem, network, worker, and child-process imports and enforces call/time budgets.\n\n**Verdict:** the strongest home-grown corroboration of Corbanu's direction. The remaining weaknesses are material: the named-secret broker is currently a local fixture rather than a general agent capability, Linux and Windows process containment remain policy-only, some macOS Node-like commands degrade to policy-only, and there is no comparable implemented external-content wrapper or taint policy. Ambient should inspire implementation sequencing, not provide the final boundary unchanged."
+      },
+      {
+        "id": "implementation_sequence",
+        "type": "markdown",
+        "body": "## Recommended Implementation Sequence\n\n1. **Define the invariant contract first.** Protected secrets never enter model input, tool arguments visible to the model, transcript, shell environment, child inheritance, logs, or artifacts. Write integration tests before adding mode UI.\n2. **Introduce a capability registry and local lease broker.** Start with one provider API path and one browser-login path. Leases must bind agent, session, purpose, operation, destination, scope, issue time, expiry, and revocation state.\n3. **Make /security a monotonic policy resolver.** Project content may tighten but never weaken user or organization policy. Subagents inherit the stricter composition. If an advertised sandbox or broker is unavailable, Moderate and Aggressive fail closed.\n4. **Centralize redaction and safe environments.** Exact registered values plus conservative patterns should protect every model-visible output, diagnostic, export, and artifact. Child environments should be allowlists, not inherited dictionaries with a few deletions.\n5. **Add provenance before a classifier.** Wrap and label external content, preserve taint through compaction and memory, and gate high-impact actions after network-tainted reads. A local classifier may prioritize review, but cannot authorize anything.\n6. **Build a security inspector.** Show requested mode, effective sandbox backend, network posture, active leases, degraded controls, recent denials, and source-tainted turns. Users should not need to infer whether \"Moderate\" silently became permissive.\n7. **Only then polish the three-mode UX.** The UI should expose simple choices backed by inspectable facts, with migration and compatibility guidance for tools that cannot operate under the hardened boundary."
+      },
+      {
+        "id": "acceptance_criteria",
+        "type": "markdown",
+        "body": "## Acceptance Criteria\n\nA release should not claim the new security system until adversarial integration tests prove: a document or web page cannot cause a protected secret to appear in context; shell commands cannot recover vault plaintext or broker internals; leases are unusable outside their destination and expiry; a reflected or failed provider response is redacted; subagents cannot widen parent authority; mode changes and degradation are durable audit events; Moderate/Aggressive fail closed when enforcement is absent; and legacy plaintext credentials are detected and migrated or quarantined.\n\nThe most important negative test is simple: place a unique sentinel in the vault, expose hostile instructions through every supported untrusted source, and assert that the sentinel never appears in any model request, tool result, transcript, log, artifact, subprocess environment, or network destination outside its declared binding."
+      },
+      {
+        "id": "methodology",
+        "type": "markdown",
+        "body": "## Methodology and Limitations\n\nThe review inspected repository snapshots at the commits linked above on 23 August 2026. Each score reflects observable architecture and documented defaults, not marketing language. Public source was available for DeepSeek Harness, Hermes Agent, Kilo Code, Pi, OpenCode, Kimi Code, OpenClaw, and Ambient Desktop. Claude Code exposed settings examples and official documentation but not its core runtime. ZCode exposed product documentation and plugins but not the first-party agent implementation; it is therefore described but not numerically ranked.\n\nNo live exploitation, network interception, package audit, or platform-by-platform sandbox escape testing was performed. A high score means the reviewed design contains stronger layers and fail-closed semantics; it does not mean the implementation is vulnerability-free. The scoring model deliberately favors secret non-disclosure and hostile-input resilience because those are the differentiating requirements in the Corbanu transcript."
+      },
+      {
+        "id": "source_dossier",
+        "type": "markdown",
+        "body": "## Source Dossier\n\n**Corbanu:** [vault crate](https://github.com/CorbanuCore/CorbanuTerminal/blob/f0e2119980d1653b8e2789baa97a723d26f7aad6/codex-rs/vault/src/lib.rs), [vault TUI](https://github.com/CorbanuCore/CorbanuTerminal/blob/f0e2119980d1653b8e2789baa97a723d26f7aad6/codex-rs/tui/src/vault_command.rs), [agent vault plan](https://github.com/CorbanuCore/CorbanuTerminal/blob/f0e2119980d1653b8e2789baa97a723d26f7aad6/docs/current-sprint/agent-vault-access.md), [permission profiles](https://github.com/CorbanuCore/CorbanuTerminal/blob/f0e2119980d1653b8e2789baa97a723d26f7aad6/codex-rs/core/src/config/permissions.rs).\n\n**Competitors:** [DeepSeek security subsystems](https://github.com/deepseek-ai/deepseek-harness/tree/b150a551b8d465e31e418e1b2eaf5e79bbb7d28e/docs/subsystems), [Hermes proxy sources](https://github.com/NousResearch/hermes-agent/tree/91e867631e9d2eb9fbd69edd4459475d38070979/agent/proxy_sources), [Kilo sandbox package](https://github.com/Kilo-Org/kilocode/tree/ff74e2ea3fcd3a8fd43caf9751bbeaa3e30cead8/packages/kilo-sandbox), [Pi security](https://github.com/earendil-works/pi/blob/a470b121bf683b4c2b9fc0b3a7c807de7e0cfe9c/packages/coding-agent/docs/security.md), [OpenCode permissions](https://github.com/anomalyco/opencode/tree/b1ce938ebeb9ea184ec36573260424c76fbb8e14/packages/opencode/src/permission), [Kimi permission policies](https://github.com/MoonshotAI/kimi-code/tree/4e16f2a8696df4b4184958b3e71c70a6f1c3f0e3/packages/agent-core-v2/src/agent/permissionPolicy), [Claude Code security](https://code.claude.com/docs/en/security), [OpenClaw security code](https://github.com/openclaw/openclaw/tree/6ce272c2a662f81b7779507335d91de4d61c589b/src/security), [ZCode safety confirmation](https://zcode.z.ai/en/docs/safety-confirm), [Ambient security implementation](https://github.com/AmbientCrypto/ambientCoder/tree/65e8665f5f52864ebd1777ad4d497d73d4d76884/src/main/security)."
+      },
+      {
+        "id": "conclusion",
+        "type": "markdown",
+        "body": "## Conclusion\n\nCorbanu's proposed security levels can become a genuine product advantage because the repository already owns two unusually valuable assets: a mature permission substrate and an encrypted vault. The opportunity is to connect them through a capability broker and provenance-aware runtime, not to add another approval menu.\n\nMy strongest recommendation is uncompromising: **ship fewer protected capabilities, each with a real non-disclosure boundary, before shipping a broad mode that merely claims to be secure.** A small, testable broker for two credentialed actions will teach the architecture more than a polished /security screen wired to existing flags. Once the invariant is real, the three modes can safely trade friction for autonomy without trading away secrets."
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-08-23T19:00:00Z",
+    "status": "ready",
+    "datasets": {
+      "headline_metrics": [
+        {
+          "systems_reviewed": 10,
+          "leader_score": 4.28,
+          "corbanu_current": 2.8,
+          "corbanu_target": 4.7
+        }
+      ],
+      "overall_scores": [
+        {
+          "harness": "Corbanu target",
+          "overall": 4.7,
+          "status": "planned",
+          "evidence_confidence": "design target"
+        },
+        {
+          "harness": "OpenClaw",
+          "overall": 4.28,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "Claude Code",
+          "overall": 3.1,
+          "status": "observable",
+          "evidence_confidence": "medium"
+        },
+        {
+          "harness": "DeepSeek Harness",
+          "overall": 2.93,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "Hermes Agent",
+          "overall": 2.9,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "Kilo Code",
+          "overall": 2.85,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "Corbanu current",
+          "overall": 2.8,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "Ambient Desktop",
+          "overall": 2.75,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "Kimi Code",
+          "overall": 1.63,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "OpenCode",
+          "overall": 1.38,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "Pi",
+          "overall": 0.9,
+          "status": "observable",
+          "evidence_confidence": "high"
+        }
+      ],
+      "dimension_scores": [
+        {
+          "harness": "Corbanu target",
+          "containment": 4.5,
+          "tool_policy": 4.5,
+          "confidentiality": 5,
+          "untrusted_input": 4.5,
+          "audit_admin": 5,
+          "overall": 4.7,
+          "status": "planned",
+          "evidence_confidence": "design target"
+        },
+        {
+          "harness": "OpenClaw",
+          "containment": 4,
+          "tool_policy": 4.5,
+          "confidentiality": 4.5,
+          "untrusted_input": 4,
+          "audit_admin": 4.5,
+          "overall": 4.28,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "Claude Code",
+          "containment": 4.5,
+          "tool_policy": 4.5,
+          "confidentiality": 1.5,
+          "untrusted_input": 2.5,
+          "audit_admin": 3.5,
+          "overall": 3.1,
+          "status": "observable",
+          "evidence_confidence": "medium"
+        },
+        {
+          "harness": "DeepSeek Harness",
+          "containment": 4,
+          "tool_policy": 4.5,
+          "confidentiality": 2.5,
+          "untrusted_input": 1,
+          "audit_admin": 3,
+          "overall": 2.93,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "Hermes Agent",
+          "containment": 2.5,
+          "tool_policy": 2.5,
+          "confidentiality": 4.5,
+          "untrusted_input": 1,
+          "audit_admin": 3.5,
+          "overall": 2.9,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "Kilo Code",
+          "containment": 4.5,
+          "tool_policy": 4.5,
+          "confidentiality": 1.5,
+          "untrusted_input": 1.5,
+          "audit_admin": 3,
+          "overall": 2.85,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "Corbanu current",
+          "containment": 4,
+          "tool_policy": 4,
+          "confidentiality": 2.5,
+          "untrusted_input": 0.5,
+          "audit_admin": 3.5,
+          "overall": 2.8,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "Ambient Desktop",
+          "containment": 2,
+          "tool_policy": 4,
+          "confidentiality": 3.5,
+          "untrusted_input": 1,
+          "audit_admin": 4,
+          "overall": 2.75,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "Kimi Code",
+          "containment": 0.5,
+          "tool_policy": 4,
+          "confidentiality": 1.5,
+          "untrusted_input": 0.5,
+          "audit_admin": 3.5,
+          "overall": 1.63,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "OpenCode",
+          "containment": 0.5,
+          "tool_policy": 4,
+          "confidentiality": 1,
+          "untrusted_input": 0.5,
+          "audit_admin": 2.5,
+          "overall": 1.38,
+          "status": "observable",
+          "evidence_confidence": "high"
+        },
+        {
+          "harness": "Pi",
+          "containment": 0.5,
+          "tool_policy": 1.5,
+          "confidentiality": 1,
+          "untrusted_input": 0.5,
+          "audit_admin": 1.5,
+          "overall": 0.9,
+          "status": "observable",
+          "evidence_confidence": "high"
+        }
+      ],
+      "corbanu_gap": [
+        {
+          "dimension": "OS containment",
+          "state": "Current",
+          "score": 4,
+          "gap": 0.5
+        },
+        {
+          "dimension": "OS containment",
+          "state": "Target",
+          "score": 4.5,
+          "gap": 0.5
+        },
+        {
+          "dimension": "Tool policy",
+          "state": "Current",
+          "score": 4,
+          "gap": 0.5
+        },
+        {
+          "dimension": "Tool policy",
+          "state": "Target",
+          "score": 4.5,
+          "gap": 0.5
+        },
+        {
+          "dimension": "Secret boundary",
+          "state": "Current",
+          "score": 2.5,
+          "gap": 2.5
+        },
+        {
+          "dimension": "Secret boundary",
+          "state": "Target",
+          "score": 5,
+          "gap": 2.5
+        },
+        {
+          "dimension": "Untrusted input",
+          "state": "Current",
+          "score": 0.5,
+          "gap": 4
+        },
+        {
+          "dimension": "Untrusted input",
+          "state": "Target",
+          "score": 4.5,
+          "gap": 4
+        },
+        {
+          "dimension": "Audit and admin",
+          "state": "Current",
+          "score": 3.5,
+          "gap": 1.5
+        },
+        {
+          "dimension": "Audit and admin",
+          "state": "Target",
+          "score": 5,
+          "gap": 1.5
+        }
+      ],
+      "security_modes": [
+        {
+          "mode": "1. Permissive",
+          "approval_behavior": "Current Codex-like workflow; routine workspace actions may auto-approve.",
+          "protected_data": "Vault values remain non-model-visible; no raw secret handoff.",
+          "untrusted_content": "All external content labeled; warnings and audit retained.",
+          "brokered_use": "Brokered named capabilities allowed with destination and purpose binding.",
+          "non_negotiable": "Permissive changes friction, never secret exposure."
+        },
+        {
+          "mode": "2. Moderate",
+          "approval_behavior": "Scoped approvals; higher-risk network, browser, external-path, and mutation actions prompt.",
+          "protected_data": "Hard boundary for protected classes; raw reveal unavailable to agents.",
+          "untrusted_content": "Taint preserved; tainted turns cannot silently perform high-impact writes or disclosure.",
+          "brokered_use": "Short-lived leases with operation, destination, agent, session, and audit binding.",
+          "non_negotiable": "Missing enforcement fails closed rather than degrading silently."
+        },
+        {
+          "mode": "3. Aggressive / Hardened",
+          "approval_behavior": "Default deny outside narrow task capabilities; sensitive actions require exact review.",
+          "protected_data": "Protected-data disclosure denied; retention minimized.",
+          "untrusted_content": "External inputs isolated, classifier-assisted, provenance required through compaction and memory.",
+          "brokered_use": "Narrow, expiring, single-purpose references; broker may execute action instead of injecting a sentinel.",
+          "non_negotiable": "No bypass mode, no unsandboxed fallback, no authority widening by subagents or project config."
+        }
+      ],
+      "external_data_defenses": [
+        {
+          "attack_plane": "1. Tool/runtime exploitation",
+          "threat": "Browser escape, parser exploit, hostile download, localhost probing, or automation-driver compromise.",
+          "primary_boundary": "OS/container isolation plus outbound network policy.",
+          "required_controls": "Ephemeral container; read-only image; no host IPC, vault, credentials, or broad mounts; destination allowlist; quarantine; resource limits; brokered file promotion.",
+          "corbanu_posture": "Containerized Scrapling and explicit browser policy are part of the intended design; enforcement should fail closed in Moderate/Hardened modes.",
+          "ambient_posture": "Scrapling runs in Docker, materially reducing browser/runtime blast radius; overall cross-platform command containment remains partial."
+        },
+        {
+          "attack_plane": "2. Prompt injection in external data",
+          "threat": "Web text, documents, emails, MCP results, or comments impersonate instructions and induce disclosure, mutation, or persistence.",
+          "primary_boundary": "External Content Firewall plus deterministic capability policy.",
+          "required_controls": "Canonicalization; active-markup and control-token removal; authenticated source wrappers; provenance; spoof detection; sticky taint; action gates; audit; redaction.",
+          "corbanu_posture": "Discussed in the transcript and required in the target architecture, but not yet implemented as an end-to-end pipeline.",
+          "ambient_posture": "No comparable implemented sanitization, provenance, and sticky-taint pipeline found; Docker isolation does not address semantic injection."
+        }
+      ],
+      "comparative_summary": [
+        {
+          "harness": "Ambient Desktop",
+          "permission_model": "Full-access/workspace modes with shared policy classifier and scoped grants.",
+          "containment": "macOS partial Seatbelt; policy-only fallback on Linux/Windows and some Node-like commands.",
+          "confidentiality_notes": "Encrypted refs, safe env allowlist, centralized redaction, named-secret broker fixture.",
+          "untrusted_input": "Threat model exists; no comparable implemented wrapper/taint firewall found.",
+          "verdict": "Promising prototype; broker breadth and cross-platform containment remain unfinished.",
+          "evidence": "High; source available."
+        },
+        {
+          "harness": "Claude Code",
+          "permission_model": "Deny-first rules, hooks, permission modes, enterprise managed policy.",
+          "containment": "Seatbelt/bubblewrap for Bash; optional fail-closed setting; other tools use permissions.",
+          "confidentiality_notes": "No public evidence of a vault-style non-disclosure broker.",
+          "untrusted_input": "Documented analysis/sanitization plus sandbox impact reduction.",
+          "verdict": "Strong enterprise shell security, weaker defaults and limited public secret architecture.",
+          "evidence": "Medium; core runtime closed."
+        },
+        {
+          "harness": "Corbanu current",
+          "permission_model": "Codex-derived profiles, approvals, scoped filesystem/network requests.",
+          "containment": "Strong platform sandbox substrate with read-only/workspace/full profiles.",
+          "confidentiality_notes": "Encrypted vault and secure TUI exist, but agents do not use it as a capability system.",
+          "untrusted_input": "Prompt-injection firewall is planned, not implemented.",
+          "verdict": "Good foundation; the important product boundary is still missing.",
+          "evidence": "High; source and transcript available."
+        },
+        {
+          "harness": "DeepSeek Harness",
+          "permission_model": "Preset records intent; sandbox and approval services enforce independently.",
+          "containment": "Cross-platform filesystem sandbox; network out of scope; fail-closed when required.",
+          "confidentiality_notes": "Reference-based per-operation resolution and child-env scrubbing.",
+          "untrusted_input": "No first-class provenance/taint layer found.",
+          "verdict": "Cleanest policy architecture; incomplete confidentiality and network model.",
+          "evidence": "High; source available."
+        },
+        {
+          "harness": "Hermes Agent",
+          "permission_model": "Tool/file safety checks plus deployment-level environment controls.",
+          "containment": "Local shell is trusted; stronger isolation comes from containers or remote environments.",
+          "confidentiality_notes": "Scoped sources, extensive redaction, env scrubbing, and iron-proxy token swapping.",
+          "untrusted_input": "No general provenance/taint firewall found.",
+          "verdict": "Excellent secret-egress inspiration; permissive local trust remains a major caveat.",
+          "evidence": "High; source available."
+        },
+        {
+          "harness": "Kilo Code",
+          "permission_model": "Provenance-aware allow/ask/deny rules with saved decisions and hard vetoes.",
+          "containment": "Seatbelt/bubblewrap write and network boundary; disabled by default; reads broadly allowed.",
+          "confidentiality_notes": "Mode-0600 auth storage; no general non-disclosure broker.",
+          "untrusted_input": "Sandbox positioned as impact reduction; no classifier/taint system found.",
+          "verdict": "Best open shell confinement, explicitly not a privacy boundary.",
+          "evidence": "High; source available."
+        },
+        {
+          "harness": "Kimi Code",
+          "permission_model": "Ordered manual/auto/yolo policy pipeline with telemetry.",
+          "containment": "Host process execution; no reviewed OS sandbox path.",
+          "confidentiality_notes": "Mode-0600 token files and log redaction.",
+          "untrusted_input": "Sensitive-path prompts, but no provenance/taint firewall found.",
+          "verdict": "Mature approvals, weak isolation and secret non-disclosure.",
+          "evidence": "High; source available."
+        },
+        {
+          "harness": "OpenClaw",
+          "permission_model": "Independent sandbox, tool policy, session permissions, and elevated-exec gates.",
+          "containment": "Docker/Podman/SSH/OpenShell backends; off by default; gateway remains host-side.",
+          "confidentiality_notes": "SecretRefs, protected values, sentinels, exact-host egress proxy, exact-value redaction.",
+          "untrusted_input": "Randomized source wrappers, marker sanitization, suspicious-pattern monitoring, turn taint.",
+          "verdict": "Closest precedent and current architectural leader, with opt-in defaults and at-rest caveats.",
+          "evidence": "High; source available."
+        },
+        {
+          "harness": "OpenCode",
+          "permission_model": "Last-match allow/ask/deny rules with allow-once/always.",
+          "containment": "No general local OS sandbox observed.",
+          "confidentiality_notes": "Plaintext mode-0600 auth JSON; export redaction.",
+          "untrusted_input": "No first-class provenance/taint layer found.",
+          "verdict": "Useful policy UX, not a hostile-input security boundary.",
+          "evidence": "High; source available."
+        },
+        {
+          "harness": "Pi",
+          "permission_model": "Project trust for local resources; optional extension gates.",
+          "containment": "Explicitly no built-in sandbox.",
+          "confidentiality_notes": "Plaintext mode-0600 auth JSON and in-memory runtime keys.",
+          "untrusted_input": "Explicitly treated as expected local-agent risk.",
+          "verdict": "Honest and extensible, unsuitable alone for unattended sensitive work.",
+          "evidence": "High; source available."
+        },
+        {
+          "harness": "ZCode / ZAI Code",
+          "permission_model": "Four execution modes and allow/reject persistence; per-subagent tool selection.",
+          "containment": "Not established in public evidence.",
+          "confidentiality_notes": "Not established in public evidence.",
+          "untrusted_input": "Not established in public evidence.",
+          "verdict": "Good confirmation UX; architecture cannot be responsibly scored from available source.",
+          "evidence": "Low; runtime closed."
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "assessment_method",
+      "label": "Comparative scoring model and reviewed evidence",
+      "path": "SecurityComparativeAnalysis.artifact.json",
+      "query": {
+        "engine": "SQLite",
+        "description": "Reviewed architecture scores and qualitative annotations from the report snapshot.",
+        "sql": "SELECT * FROM reviewed_scores ORDER BY overall DESC;",
+        "tables_used": [
+          "reviewed_scores"
+        ],
+        "filters": [
+          "Public source or official documentation reviewed at the pinned revisions listed in the report"
+        ],
+        "metric_definitions": [
+          "Overall = 25% OS containment + 15% tool policy + 30% confidentiality + 20% untrusted-input handling + 10% audit/administration.",
+          "Scores range from 0 to 5 and represent source-coded architectural maturity, not empirical breach rates."
+        ]
+      }
+    },
+    {
+      "id": "corbanu_transcript",
+      "label": "Corbanu working-session diarized transcript",
+      "path": "Working session - 2026_08_23 11_31 MST - Recording.diarized.md"
+    },
+    {
+      "id": "corbanu_vault_plan",
+      "label": "Corbanu agent vault access plan",
+      "href": "https://github.com/CorbanuCore/CorbanuTerminal/blob/f0e2119980d1653b8e2789baa97a723d26f7aad6/docs/current-sprint/agent-vault-access.md"
+    }
+  ]
+}

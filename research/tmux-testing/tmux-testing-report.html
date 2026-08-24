@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex tmux Testing Research Report</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17202a;
+      --muted: #5a6472;
+      --paper: #fbfaf7;
+      --line: #d9dee7;
+      --blue: #2166a5;
+      --teal: #10806f;
+      --green: #4f8a38;
+      --amber: #b97410;
+      --red: #b94334;
+      --violet: #6b55a3;
+      --panel: #ffffff;
+      --code: #f3f6fa;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--paper);
+      color: var(--ink);
+      line-height: 1.55;
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    .hero {
+      min-height: 88vh;
+      display: grid;
+      align-items: center;
+      padding: 56px 28px 36px;
+      color: #f7fbff;
+      background:
+        linear-gradient(rgba(9, 21, 35, 0.78), rgba(9, 21, 35, 0.84)),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1600' height='1000' viewBox='0 0 1600 1000'%3E%3Crect width='1600' height='1000' fill='%23111d2c'/%3E%3Cg font-family='ui-monospace, SFMono-Regular, Menlo, monospace' font-size='28' fill='%233bd4aa' opacity='.42'%3E%3Ctext x='72' y='96'%3E$ tmux -L codex-test new-session -d -x 120 -y 40%3C/text%3E%3Ctext x='72' y='160'%3E%25output %251 resize reflow sentinel...%3C/text%3E%3Ctext x='72' y='224'%3E%25layout-change @1 b25f,120x40,0,0,1%3C/text%3E%3Ctext x='72' y='288'%3Esend-keys -l '/panes' Enter%3C/text%3E%3Ctext x='72' y='352'%3Ecapture-pane -p -t %251%3C/text%3E%3Ctext x='72' y='416'%3Ewait: composer row stable, transcript bounded%3C/text%3E%3Ctext x='72' y='480'%3Eartifact: 003-selection-before-enter.txt%3C/text%3E%3C/g%3E%3Cg stroke='%236aa9ff' stroke-width='4' fill='none' opacity='.55'%3E%3Crect x='880' y='150' width='520' height='340' rx='18'/%3E%3Cpath d='M880 224h520M1020 150v340M880 390h520'/%3E%3C/g%3E%3Cg fill='%23f2c94c' opacity='.9'%3E%3Ccircle cx='1018' cy='222' r='8'/%3E%3Ccircle cx='1398' cy='388' r='8'/%3E%3Ccircle cx='879' cy='489' r='8'/%3E%3C/g%3E%3C/svg%3E");
+      background-size: cover;
+      background-position: center;
+    }
+
+    .hero-inner,
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .eyebrow {
+      margin: 0 0 18px;
+      color: #b8e6db;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 980px;
+      font-size: clamp(44px, 8vw, 86px);
+      line-height: 0.98;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      max-width: 760px;
+      margin: 24px 0 0;
+      color: #dce9f4;
+      font-size: 20px;
+    }
+
+    main {
+      padding: 40px 28px 80px;
+    }
+
+    section {
+      margin: 48px 0;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 30px;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 26px 0 8px;
+      font-size: 19px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    .lead {
+      font-size: 20px;
+      color: #2f3b49;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin: 22px 0;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      box-shadow: 0 8px 24px rgba(36, 48, 66, 0.06);
+    }
+
+    .metric {
+      font-size: 34px;
+      font-weight: 800;
+      line-height: 1;
+      color: var(--blue);
+    }
+
+    .label {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .pill {
+      display: inline-block;
+      margin: 4px 6px 4px 0;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #eef4f8;
+      color: #31445a;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .diagram {
+      width: 100%;
+      min-height: 420px;
+      margin: 24px 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 780px;
+    }
+
+    th,
+    td {
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+    }
+
+    th {
+      background: #edf3f8;
+      color: #263746;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    code,
+    pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    :not(pre) > code {
+      padding: 1px 4px;
+      border-radius: 4px;
+      background: var(--code);
+      color: #213245;
+    }
+
+    pre {
+      overflow-x: auto;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #111827;
+      color: #f4f8ff;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    pre code {
+      display: block;
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      white-space: pre;
+    }
+
+    .callout {
+      border-left: 5px solid var(--teal);
+      padding: 16px 18px;
+      background: #edf8f6;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .risk {
+      border-left-color: var(--amber);
+      background: #fff6e8;
+    }
+
+    .status {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .bar {
+      height: 12px;
+      border-radius: 999px;
+      background: #e7ecf2;
+      overflow: hidden;
+      margin: 10px 0 2px;
+    }
+
+    .bar span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+    }
+
+    .ok span { background: var(--green); }
+    .watch span { background: var(--amber); }
+    .gap span { background: var(--red); }
+    .source-list li {
+      margin-bottom: 8px;
+    }
+
+    @media (max-width: 860px) {
+      .grid,
+      .status {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        min-height: 82vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">Research report - August 24, 2026</p>
+      <h1>Testing Codex effectively with tmux</h1>
+      <p>A practical strategy for turning ad hoc terminal QA into a reliable, artifact-rich test layer for Codex, PFTerminal, and other Ratatui-based flows.</p>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>Executive Recommendation</h2>
+      <p class="lead">Codex should use tmux as the system-level TUI test substrate, but not as the only test substrate. The strongest approach is a four-layer test stack: widget snapshots, PTY process tests, tmux viewport tests, and release-grade tmux matrices.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="metric">1</div>
+          <div class="label">Build a first-class Rust tmux driver instead of growing more shell helpers.</div>
+        </div>
+        <div class="card">
+          <div class="metric">2</div>
+          <div class="label">Keep captures small, named, and viewport-aware; store full scrollback only on failure.</div>
+        </div>
+        <div class="card">
+          <div class="metric">3</div>
+          <div class="label">Use tmux control mode for event streams, pane identity, resize fidelity, and future multi-pane orchestration tests.</div>
+        </div>
+      </div>
+      <div class="callout">
+        <strong>Bottom line:</strong> tmux is most valuable where ordinary unit tests lie: real resize/reflow, key translation, paste semantics, scrollback, alternate screen behavior, multi-pane dispatch, process cleanup, and transcript-visible state. Keep deterministic Ratatui snapshots for pure rendering and use tmux for end-to-end behavior.
+      </div>
+    </section>
+
+    <section>
+      <h2>Why tmux Fits Codex</h2>
+      <p>The Codex repository already has three important ingredients. First, it has many Ratatui snapshot tests for deterministic UI components. Second, <code>codex-utils-pty</code> exposes a reusable PTY abstraction with stdin, resize, exit, and output streams. Third, there is live tmux QA history in <code>qa/orchestrate_tui_matrix.sh</code> and ignored smoke tests under <code>codex-rs/tui/tests/suite/resize_reflow.rs</code>.</p>
+      <p>tmux adds a real multiplexer and terminal viewport around the app. The tmux manual describes sessions as collections of pseudo terminals with windows and panes, managed by a server process; this maps directly onto Codex's multi-pane and long-running task model. The command-line API gives Codex a way to create sessions, send keys, resize panes, capture the viewport, and kill the isolated server.</p>
+      <div class="status">
+        <div class="card">
+          <h3>Existing strengths</h3>
+          <span class="pill">mocked SSE</span>
+          <span class="pill">isolated CODEX_HOME</span>
+          <span class="pill">viewport polling</span>
+          <span class="pill">artifact folders</span>
+          <span class="pill">resize smoke tests</span>
+          <div class="bar ok"><span style="width: 74%"></span></div>
+          <p class="label">The repo already proves tmux is useful for release QA and regression discovery.</p>
+        </div>
+        <div class="card">
+          <h3>Current gaps</h3>
+          <span class="pill">ignored tests</span>
+          <span class="pill">shell duplication</span>
+          <span class="pill">sleep polling</span>
+          <span class="pill">text-only assertions</span>
+          <span class="pill">no local tmux installed here</span>
+          <div class="bar watch"><span style="width: 48%"></span></div>
+          <p class="label">The harness needs to become reusable, typed, and CI-aware.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Recommended Test Architecture</h2>
+      <svg class="diagram" viewBox="0 0 1120 430" role="img" aria-label="Layered tmux testing architecture diagram">
+        <rect width="1120" height="430" fill="#ffffff"/>
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#53657a"/>
+          </marker>
+        </defs>
+        <g font-family="Inter, system-ui, sans-serif">
+          <rect x="40" y="52" width="228" height="112" rx="8" fill="#edf3f8" stroke="#9ab3ca"/>
+          <text x="64" y="86" font-size="20" font-weight="700" fill="#17202a">Layer 1</text>
+          <text x="64" y="118" font-size="16" fill="#31445a">Ratatui snapshots</text>
+          <text x="64" y="143" font-size="13" fill="#5a6472">Pure render regression</text>
+
+          <rect x="320" y="52" width="228" height="112" rx="8" fill="#edf8f6" stroke="#77b9ad"/>
+          <text x="344" y="86" font-size="20" font-weight="700" fill="#17202a">Layer 2</text>
+          <text x="344" y="118" font-size="16" fill="#31445a">PTY harness</text>
+          <text x="344" y="143" font-size="13" fill="#5a6472">Raw process IO and resize</text>
+
+          <rect x="600" y="52" width="228" height="112" rx="8" fill="#fff6e8" stroke="#d5a14f"/>
+          <text x="624" y="86" font-size="20" font-weight="700" fill="#17202a">Layer 3</text>
+          <text x="624" y="118" font-size="16" fill="#31445a">tmux driver</text>
+          <text x="624" y="143" font-size="13" fill="#5a6472">Viewport, keys, panes</text>
+
+          <rect x="852" y="52" width="228" height="112" rx="8" fill="#f0eef8" stroke="#a99bd2"/>
+          <text x="876" y="86" font-size="20" font-weight="700" fill="#17202a">Layer 4</text>
+          <text x="876" y="118" font-size="16" fill="#31445a">Release matrix</text>
+          <text x="876" y="143" font-size="13" fill="#5a6472">Long workflows, artifacts</text>
+
+          <line x1="268" y1="108" x2="312" y2="108" stroke="#53657a" stroke-width="2" marker-end="url(#arrow)"/>
+          <line x1="548" y1="108" x2="592" y2="108" stroke="#53657a" stroke-width="2" marker-end="url(#arrow)"/>
+          <line x1="828" y1="108" x2="844" y2="108" stroke="#53657a" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <rect x="70" y="240" width="980" height="104" rx="8" fill="#111827"/>
+          <text x="102" y="278" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" fill="#d8f3dc">Codex tmux test driver</text>
+          <text x="102" y="310" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#9ee6cf">session.new -> wait.for_stable_grid -> keys.literal -> assert.viewport -> artifact.bundle</text>
+          <text x="102" y="336" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" fill="#f2c94c">failure output: capture, scrollback excerpt, pane formats, logs, layout JSON, mocked responses</text>
+
+          <line x1="714" y1="164" x2="714" y2="232" stroke="#53657a" stroke-width="2" marker-end="url(#arrow)"/>
+        </g>
+      </svg>
+      <p>The driver should live close to TUI integration tests, probably as a test-support module before it becomes a crate. It should expose <code>TmuxServer</code>, <code>TmuxSession</code>, and <code>TmuxPane</code> types with methods like <code>send_literal</code>, <code>send_key</code>, <code>capture_viewport</code>, <code>capture_scrollback_tail</code>, <code>resize_client</code>, <code>split</code>, <code>wait_until</code>, <code>wait_stable</code>, and <code>artifact</code>.</p>
+    </section>
+
+    <section>
+      <h2>Research Findings</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Finding</th>
+              <th>Evidence</th>
+              <th>Implication for Codex</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>tmux is scriptable enough to behave like a terminal Selenium layer.</td>
+              <td>David MacIver's tmux testing writeup identifies the primitives: unique server, detached session, capture current pane, send keys, and kill server.</td>
+              <td>Codex should formalize these primitives rather than rely on one-off shell scripts.</td>
+            </tr>
+            <tr>
+              <td>Control mode is the right upgrade path for precise automation.</td>
+              <td>The tmux wiki says control mode is text-only, parseable over SSH, returns command blocks, emits pane output notifications, and recommends IDs and formatted output.</td>
+              <td>Use shell commands for simple viewport tests; use control mode for multi-pane state, flow control, and event ordering.</td>
+            </tr>
+            <tr>
+              <td>Screen snapshots are appropriate but insufficient.</td>
+              <td>Ratatui's testing guide recommends fixed terminal sizes and snapshot review. Waleed Khan argues snapshots fit TUIs because many UI requirements are hard to express with ordinary assertions.</td>
+              <td>Keep snapshots for widgets and use tmux for full process behavior, key routing, scrollback, and resize.</td>
+            </tr>
+            <tr>
+              <td>TUI automation needs stability, not just sleeps.</td>
+              <td>Recent TUI testing research describes harnesses that wait for rendered grids to stabilize after each action and then record character-grid state.</td>
+              <td>Replace fixed sleeps with bounded polling plus stable-grid heuristics and failure artifacts.</td>
+            </tr>
+            <tr>
+              <td>Codex already has live tmux patterns worth preserving.</td>
+              <td><code>qa/orchestrate_tui_matrix.sh</code> isolates homes, starts fixed-size sessions, polls only the live viewport, records captures, and snapshots layout JSON.</td>
+              <td>Port the proven release-QA rules into reusable Rust support and keep the matrix as a high-level scenario layer.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Harness Design</h2>
+      <h3>Session isolation</h3>
+      <p>Every test should use a unique tmux socket name, session name, temporary <code>CODEX_HOME</code>, temporary workspace, and deterministic mocked model provider. Prefer <code>tmux -L codex-test-$PID-$RANDOM</code> or an explicit socket path so the test never touches the developer's default tmux server.</p>
+      <pre><code>tmux -L "$socket" new-session -d -P -F '#{pane_id}' \
+  -x 120 -y 40 -s "$session" -- \
+  env CODEX_HOME="$home" OPENAI_API_KEY=dummy \
+  "$codex" -c analytics.enabled=false -c "$mock_provider" --no-alt-screen -C "$repo" "$prompt"</code></pre>
+
+      <h3>Viewport assertions</h3>
+      <p>Assert against the live viewport by default. The existing matrix correctly avoids searching scrollback while waiting for dialogs because stale titles can satisfy a wait and send subsequent keys to the wrong surface. Full scrollback should be captured on timeout and as a named artifact, not used casually as the synchronization oracle.</p>
+
+      <h3>Control-mode assertions</h3>
+      <p>Use <code>tmux -C</code> or <code>tmux -CC</code> when tests need pane identity, output notifications, layout changes, or precise command boundaries. Parse <code>%begin</code>/<code>%end</code>/<code>%error</code> blocks, <code>%output</code>, <code>%layout-change</code>, <code>%pane-mode-changed</code>, <code>%pause</code>, and <code>%continue</code>. For command inspection, prefer <code>-F</code> formats and pane IDs over names or indexes.</p>
+
+      <h3>Artifact contract</h3>
+      <p>Each failure should emit a compact bundle: viewport capture, last N scrollback lines, tmux pane metadata from <code>list-panes -F</code>, tmux server/client logs when enabled, Codex logs, mock-provider transcript, test config, terminal size history, and a one-line reproduction command.</p>
+    </section>
+
+    <section>
+      <h2>What to Test With tmux</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Workflow</th>
+              <th>Primary assertions</th>
+              <th>Why tmux matters</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Startup and trust prompt</td>
+              <td>Prompt appears, Enter accepts, model/status line renders, composer is focused.</td>
+              <td>Exercises real initial terminal mode and first input routing.</td>
+            </tr>
+            <tr>
+              <td>Slash commands and pickers</td>
+              <td>One Enter dispatches, filter matches visible rows, Esc returns to composer, queued text survives.</td>
+              <td>Matches historical failures around sticky slash commands and picker routing.</td>
+            </tr>
+            <tr>
+              <td>Resize and split-pane reflow</td>
+              <td>Composer row and sentinel content remain anchored across vertical split, horizontal split, close, and repeated resize cycles.</td>
+              <td>Only a real terminal multiplexer reliably exposes viewport reflow bugs.</td>
+            </tr>
+            <tr>
+              <td>Long-running turn interruption</td>
+              <td>Esc, Ctrl-C, approvals, and background tasks leave no hung turn and no lost prompt.</td>
+              <td>End-to-end event handling and process state are hard to model with unit tests.</td>
+            </tr>
+            <tr>
+              <td>Multi-pane orchestration</td>
+              <td>Targeted task goes only to selected child; report returns to intended parent; Main remains responsive.</td>
+              <td>This is where tmux release QA already found high-impact routing defects.</td>
+            </tr>
+            <tr>
+              <td>Terminal-specific features</td>
+              <td>Shift-Enter, modifyOtherKeys, clipboard fallback, OSC/tmux passthrough, image disabling inside tmux.</td>
+              <td>Codex contains tmux-specific behavior that should be tested under tmux, not only by mocked env vars.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Implementation Plan</h2>
+      <div class="grid">
+        <div class="card">
+          <h3>Phase A: Extract</h3>
+          <p>Move common tmux helpers from shell/Rust smoke tests into <code>codex-rs/tui/tests/support/tmux.rs</code>. Keep it Unix-only, skip gracefully when tmux is missing, and make every command report stdout/stderr on failure.</p>
+        </div>
+        <div class="card">
+          <h3>Phase B: Stabilize</h3>
+          <p>Add stable-grid waits, named captures, panic-safe cleanup, unique sockets, and a fixed artifact schema. Convert one ignored resize smoke into a fast, deterministic ignored-by-default test that is trivial to run locally.</p>
+        </div>
+        <div class="card">
+          <h3>Phase C: Gate</h3>
+          <p>Add a tiny CI smoke lane on Linux with tmux installed: startup, one slash command, one resize, one clean exit. Keep longer orchestration matrices manual or nightly until flake rate is measured.</p>
+        </div>
+      </div>
+      <pre><code>pub struct TmuxHarness {
+    socket: String,
+    artifact_dir: PathBuf,
+}
+
+impl TmuxHarness {
+    pub fn new_session(&self, spec: SessionSpec) -> Result&lt;TmuxPane&gt;;
+    pub fn send_literal(&self, pane: &TmuxPane, text: &str) -> Result&lt;()&gt;;
+    pub fn send_key(&self, pane: &TmuxPane, key: TmuxKey) -> Result&lt;()&gt;;
+    pub fn capture_viewport(&self, pane: &TmuxPane, label: &str) -> Result&lt;Screen&gt;;
+    pub fn wait_until(&self, pane: &TmuxPane, condition: ScreenCondition) -> Result&lt;Screen&gt;;
+    pub fn split_and_restore(&self, pane: &TmuxPane, shape: SplitShape) -> Result&lt;()&gt;;
+}</code></pre>
+    </section>
+
+    <section>
+      <h2>Flake Controls</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Failure mode</th>
+              <th>Control</th>
+              <th>Default</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Wrong pane targeted by name or index</td>
+              <td>Capture <code>#{pane_id}</code> at creation and target by pane ID.</td>
+              <td>Required</td>
+            </tr>
+            <tr>
+              <td>Stale scrollback satisfies a wait</td>
+              <td>Poll visible viewport for synchronization; save scrollback for debugging.</td>
+              <td>Required</td>
+            </tr>
+            <tr>
+              <td>Race after key input</td>
+              <td>Wait for semantic text plus two identical captures 100-250 ms apart.</td>
+              <td>Required</td>
+            </tr>
+            <tr>
+              <td>Terminal size variance</td>
+              <td>Always create sessions with <code>-x</code>/<code>-y</code> and log every resize.</td>
+              <td>Required</td>
+            </tr>
+            <tr>
+              <td>Server leftovers</td>
+              <td>Use unique tmux socket/server and kill the server/session in <code>Drop</code>.</td>
+              <td>Required</td>
+            </tr>
+            <tr>
+              <td>Mock provider drift</td>
+              <td>Use <code>wiremock</code>/<code>core_test_support::responses</code> and assert captured response requests.</td>
+              <td>Required</td>
+            </tr>
+            <tr>
+              <td>Platform mismatch</td>
+              <td>Run tmux tests on Unix/Linux. Keep <code>codex-utils-pty</code> and ConPTY tests for Windows parity.</td>
+              <td>Required</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Local Repository Observations</h2>
+      <p><strong>tmux availability:</strong> this workstation did not have <code>tmux</code> on <code>PATH</code> during research, so I did not run the existing tmux smoke tests. The report is based on source inspection plus external documentation.</p>
+      <p><strong>Related research:</strong> the product/security working-session packet and its transcription tool are maintained separately under <code>research/</code>. They were not inputs to this tmux study.</p>
+      <p><strong>Most important local evidence:</strong></p>
+      <ul>
+        <li><code>qa/orchestrate_tui_matrix.sh</code> creates isolated artifact roots and current sessions, captures panes, polls live viewports, and stores pass tables.</li>
+        <li><code>codex-rs/tui/tests/suite/resize_reflow.rs</code> has ignored tmux smoke tests for split and width resize behavior, using mocked SSE responses and temporary homes.</li>
+        <li><code>codex-rs/utils/pty/README.md</code> documents the reusable PTY process abstraction that should remain the lower-level companion to tmux tests.</li>
+        <li><code>qa/evidence_20260703/status/tui_qa_findings.md</code> shows real tmux-driven QA caught routing, child-report, responsiveness, and slash-command issues that ordinary snapshots would likely miss.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Decision Matrix</h2>
+      <svg class="diagram" viewBox="0 0 1120 420" role="img" aria-label="Decision matrix comparing TUI testing options">
+        <rect width="1120" height="420" fill="#ffffff"/>
+        <g font-family="Inter, system-ui, sans-serif">
+          <line x1="120" y1="320" x2="1010" y2="320" stroke="#a7b3c2" stroke-width="2"/>
+          <line x1="120" y1="320" x2="120" y2="70" stroke="#a7b3c2" stroke-width="2"/>
+          <text x="458" y="374" font-size="16" fill="#5a6472">Real terminal fidelity</text>
+          <text x="28" y="212" font-size="16" fill="#5a6472" transform="rotate(-90 28 212)">Determinism and speed</text>
+
+          <circle cx="255" cy="124" r="42" fill="#2166a5" opacity=".9"/>
+          <text x="222" y="130" font-size="15" font-weight="700" fill="#fff">Snapshots</text>
+
+          <circle cx="470" cy="160" r="42" fill="#10806f" opacity=".9"/>
+          <text x="443" y="166" font-size="15" font-weight="700" fill="#fff">PTY</text>
+
+          <circle cx="705" cy="225" r="52" fill="#b97410" opacity=".9"/>
+          <text x="672" y="231" font-size="15" font-weight="700" fill="#fff">tmux</text>
+
+          <circle cx="865" cy="270" r="58" fill="#6b55a3" opacity=".9"/>
+          <text x="828" y="276" font-size="15" font-weight="700" fill="#fff">Matrix</text>
+
+          <text x="190" y="50" font-size="14" fill="#31445a">Fast and deterministic</text>
+          <text x="760" y="360" font-size="14" fill="#31445a">Faithful and slower</text>
+        </g>
+      </svg>
+      <p>Do not make tmux carry everything. The durable pattern is to choose the cheapest layer that can actually observe the bug class. Rendering defects belong in snapshots. Process IO belongs in PTY tests. Multiplexer and viewport behavior belongs in tmux. Long, cross-feature release qualification belongs in the matrix.</p>
+    </section>
+
+    <section>
+      <h2>Source Notes</h2>
+      <ul class="source-list">
+        <li><a href="https://github.com/tmux/tmux/wiki/Control-Mode">tmux Control Mode wiki</a>: text protocol, command blocks, pane output, notifications, flow control, and recommendation to use IDs and formats.</li>
+        <li><a href="https://man7.org/linux/man-pages/man1/tmux.1.html">tmux(1) manual on man7.org</a>: sessions, panes, control mode, <code>refresh-client -C</code>, and notifications.</li>
+        <li><a href="https://ratatui.rs/recipes/testing/snapshots/">Ratatui snapshot testing recipe</a>: fixed-size TestBackend and snapshot review workflow.</li>
+        <li><a href="https://blog.waleedkhan.name/testing-tui-apps/">Testing terminal user interface apps</a>: expect-style send/wait testing and timeout diagnostics.</li>
+        <li><a href="https://drmaciver.com/2015/05/using-tmux-to-test-your-console-applications/">Using tmux to test your console applications</a>: tmux as a robust virtual terminal controlled externally.</li>
+        <li><a href="https://arxiv.org/html/2608.03743v1">Can LLMs Test Terminal User Interfaces?</a>: modern TUI automation methodology with fixed terminal size, stable grid capture, input events, resize events, and coverage cautions.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

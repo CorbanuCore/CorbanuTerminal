@@ -9,7 +9,7 @@ activation_basis: "Accountable sequencing item 1 defines /security as P0 and imm
 target_release: "TBD — candidate qualified by 2026-10-08"
 deadline: 2026-10-08
 created: 2026-08-23
-updated: 2026-08-23
+updated: 2026-08-24
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
@@ -182,19 +182,24 @@ before changing the implementation worktree, base, owner, or scope.
 
 ## Sprint execution map
 
-This active plan predates the sprint execution contract. It is **not executable
-from the implementation sequence below** until its work is decomposed into
-single-feature records under `docs/sprints/current/p0-security-levels/` and each
-record is linked here.
+The first execution unit establishes the secret non-disclosure boundary before
+security-level UI or probabilistic content classification. It remains a draft
+until the delivery owner allocates an exact implementation worktree.
 
-| Plan feature | Current sprint mandates | Execution state |
-| --- | --- | --- |
-| `/security` levels | None yet | Blocked pending mechanical sprint decomposition |
+| Feature ID | Plan feature | Current sprint mandate | Execution state |
+| --- | --- | --- | --- |
+| `PF-13` | Vault-backed egress capability boundary | [PF-13-S01 — Vault-backed exact-host credential substitution](../../sprints/current/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md) | Draft pending worktree allocation |
 
-Before implementation resumes, the delivery owner must create the sprint map,
-assign the exact worktree/branch/base commit to the selected sprint, move that
-sprint to `ready` or `in_progress`, and pass `python3 docs/sprints/check.py`.
-Plan prose does not substitute for those records.
+`PF-13` proves that Corbanu can use a vault credential without placing its raw
+value in model-visible state. It is intentionally narrower than a general
+capability platform: the first slice binds one broker-supported HTTP credential
+to an exact actor, purpose, operation, destination, and lifetime, then resolves
+it only at the network transport boundary.
+
+Before implementation begins, the delivery owner must assign the exact
+worktree/branch/base commit to PF-13-S01, move it to `ready` or `in_progress`,
+and pass `python3 docs/sprints/check.py`. Plan prose does not substitute for the
+sprint record.
 
 ## Acceptance flows
 
