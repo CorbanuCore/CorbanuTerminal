@@ -189,6 +189,10 @@ impl QuantitativeLimit {
 #[serde(deny_unknown_fields)]
 pub struct AuthorizationContext {
     pub now_unix_seconds: i64,
+    pub session_id: BoundedText,
+    pub task_id: BoundedText,
+    pub purpose: BoundedText,
+    pub operation: BoundedText,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub destination: Option<BoundedText>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

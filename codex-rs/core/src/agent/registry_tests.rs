@@ -4,6 +4,7 @@ use codex_protocol::error::CodexErrorDetails;
 use codex_security_policy::ActorChain;
 use codex_security_policy::AuthorizationContext;
 use codex_security_policy::AuthorizationRequest;
+use codex_security_policy::BoundedText;
 use codex_security_policy::PolicyAction;
 use codex_security_policy::PolicyPrincipal;
 use codex_security_policy::PrincipalKind;
@@ -81,6 +82,10 @@ fn permissive_security_composition_preserves_agent_spawn_depth_decisions() {
         PolicyAction::Spawn,
         AuthorizationContext {
             now_unix_seconds: 1,
+            session_id: BoundedText::new("session:spawn-test").expect("session id"),
+            task_id: BoundedText::new("task:spawn-child").expect("task id"),
+            purpose: BoundedText::new("permissive-compatibility").expect("purpose"),
+            operation: BoundedText::new("agent.spawn").expect("operation"),
             destination: None,
             quantity: None,
             grant_id: None,

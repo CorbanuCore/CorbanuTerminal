@@ -6,6 +6,7 @@ use codex_keyring_store::tests::MockKeyringStore;
 use codex_security_policy::ActorChain;
 use codex_security_policy::AuthorizationContext;
 use codex_security_policy::AuthorizationRequest;
+use codex_security_policy::BoundedText;
 use codex_security_policy::PolicyAction;
 use codex_security_policy::PolicyPrincipal;
 use codex_security_policy::PrincipalKind;
@@ -45,6 +46,10 @@ fn permissive_security_composition_preserves_vault_programmatic_use_decisions() 
         PolicyAction::Use,
         AuthorizationContext {
             now_unix_seconds: 1,
+            session_id: BoundedText::new("session:vault-test").expect("session id"),
+            task_id: BoundedText::new("task:vault-use").expect("task id"),
+            purpose: BoundedText::new("permissive-compatibility").expect("purpose"),
+            operation: BoundedText::new("vault.use").expect("operation"),
             destination: None,
             quantity: None,
             grant_id: None,

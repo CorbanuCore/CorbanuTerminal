@@ -31,6 +31,10 @@ fn request(now_unix_seconds: i64) -> AuthorizationRequest {
         PolicyAction::Execute,
         AuthorizationContext {
             now_unix_seconds,
+            session_id: text("session:security-test"),
+            task_id: text("task:execute-paper-order"),
+            purpose: text("paper-trading-regression"),
+            operation: text("order.execute"),
             destination: Some(text("venue:paper")),
             quantity: Some(QuantitativeLimit::new("USD", 500).expect("valid quantity")),
             grant_id: None,
@@ -122,6 +126,59 @@ fn authorization_request_digest_is_deterministic_and_mutation_sensitive() {
         original.digest().expect("digest"),
         mutated.digest().expect("digest")
     );
+}
+
+#[test]
+fn authorization_digest_binds_session_task_purpose_and_operation() {
+    let original = request(100);
+    let mut variants = Vec::new();
+
+    let mut wrong_session = original.clone();
+    wrong_session.context.session_id = text("session:other");
+    variants.push(wrong_session);
+
+    let mut wrong_task = original.clone();
+    wrong_task.context.task_id = text("task:other");
+    variants.push(wrong_task);
+
+    let mut wrong_purpose = original.clone();
+    wrong_purpose.context.purpose = text("portfolio-disclosure");
+    variants.push(wrong_purpose);
+
+    let mut wrong_operation = original.clone();
+    wrong_operation.context.operation = text("credential.reveal");
+    variants.push(wrong_operation);
+
+    let original_digest = original.digest().expect("original digest");
+    for variant in variants {
+        assert_ne!(variant.digest().expect("variant digest"), original_digest);
+    }
+}
+
+#[test]
+fn authorization_requests_fail_closed_without_echoing_protected_values() {
+    let mut serialized = serde_json::to_value(request(100)).expect("serialize request");
+    serialized["resource"]["id"] = serde_json::Value::String("credential-canary".to_string());
+
+    for required_field in ["session_id", "task_id", "purpose", "operation"] {
+        let mut incomplete = serialized.clone();
+        incomplete["context"]
+            .as_object_mut()
+            .expect("context object")
+            .remove(required_field);
+        let error = serde_json::from_value::<AuthorizationRequest>(incomplete)
+            .expect_err("incomplete request must fail")
+            .to_string();
+        assert!(error.contains(required_field));
+        assert!(!error.contains("credential-canary"));
+    }
+
+    let mut invalid_time = request(100);
+    invalid_time.context.now_unix_seconds = -1;
+    assert!(matches!(
+        invalid_time.validate(),
+        Err(AuthorizationError::NegativeTimestamp)
+    ));
 }
 
 #[test]
