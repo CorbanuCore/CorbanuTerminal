@@ -51,9 +51,9 @@ contract. A sprint turns one feature into an exact code-and-evidence checklist.
 
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
-| [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | 0 | Blocked until the active plan is decomposed into single-feature sprints |
+| [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [1 draft sprint](current/p0-security-levels/index.md) | None until the sprint worktree is allocated and its status becomes `ready` |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
-| [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | [72 draft sprints](current/prompt-injection-firewall/index.md) | None until plan activation and sprint worktree allocation |
+| [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | The superseded 72-sprint decomposition is retained in the excluded archive |
 
 ## Machine check
 
