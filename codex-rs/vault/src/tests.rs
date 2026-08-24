@@ -58,23 +58,24 @@ fn permissive_security_composition_preserves_vault_programmatic_use_decisions() 
     .expect("request");
     let permissive = permissive_decision(&request).expect("Permissive decision");
 
-    for credential_type in [
-        CredentialType::ApiKey,
-        CredentialType::BearerToken,
-        CredentialType::BasicAuth,
-        CredentialType::OauthClient,
-        CredentialType::CryptoPrivateKey,
-        CredentialType::SeedPhrase,
-        CredentialType::KeystoreJson,
-        CredentialType::RpcKey,
-        CredentialType::ExchangeKey,
-        CredentialType::DeploymentKey,
-        CredentialType::ManualSecret,
+    for (credential_type, expected_allow) in [
+        (CredentialType::ApiKey, true),
+        (CredentialType::BearerToken, true),
+        (CredentialType::BasicAuth, true),
+        (CredentialType::OauthClient, true),
+        (CredentialType::CryptoPrivateKey, false),
+        (CredentialType::SeedPhrase, false),
+        (CredentialType::KeystoreJson, false),
+        (CredentialType::RpcKey, true),
+        (CredentialType::ExchangeKey, true),
+        (CredentialType::DeploymentKey, true),
+        (CredentialType::ManualSecret, true),
     ] {
         let existing_allow = credential_type.permits_programmatic_use();
+        assert_eq!(existing_allow, expected_allow);
         assert_eq!(
             compose_existing_decision(existing_allow, &permissive),
-            existing_allow,
+            expected_allow,
             "Permissive changed the vault decision for {credential_type:?}"
         );
     }

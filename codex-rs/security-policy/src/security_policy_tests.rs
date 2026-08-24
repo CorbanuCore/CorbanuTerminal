@@ -189,6 +189,7 @@ fn permissive_composition_preserves_every_frozen_surface_decision() {
         ("approval-policy", true),
         ("sandbox", true),
         ("network", false),
+        ("tool-existing-policy", false),
         ("vault-programmatic-api-key", true),
         ("vault-programmatic-private-key", false),
         ("agent-spawn-within-depth", true),
