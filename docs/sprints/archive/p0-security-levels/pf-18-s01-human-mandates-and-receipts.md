@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-18-S01"
 title: "Human mandates and receipts reconciliation"
-status: draft
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-18"
 execution_order: 4
@@ -34,32 +34,33 @@ updated: 2026-08-24
 
 ## Preconditions
 
-- [ ] PF-16-S01 is completed and archived.
-- [ ] Exact worktree coordinates match the plan.
-- [ ] Read `codex-rs/AGENTS.md` before corrective Rust work.
+- [x] PF-16-S01 is completed and archived.
+- [x] Exact worktree coordinates match the plan.
+- [x] Read `codex-rs/AGENTS.md` before corrective Rust work.
 
 ## Done
 
 - [x] Sprint record is linked to PF-18.
 - [x] Commit `e22a35ccf2` added human mandates, canonical action binding, replay state, and `ActionReceipt`.
+- [x] Reviewed canonical encoding, human-principal binding, expiry, replay state, and receipt redaction.
+- [x] Proved mutation of every approved action dimension invalidates the mandate.
+- [x] Corrective commit `4b438c46bb` closed pre-approval use and added duplicate, stale, malformed, clock-failure, and receipt-serialization cases.
+- [x] Recorded the final public API in evidence commit `cbad39a410`.
 
 ## Remaining
 
-- [ ] Review canonical encoding, human-principal binding, expiry, replay state, and receipt redaction.
-- [ ] Prove changing any approved action field invalidates the mandate.
-- [ ] Add or correct duplicate, stale, malformed, clock-failure, and receipt-serialization cases.
-- [ ] Record any corrective commit and final public API.
+None.
 
 ## Verification
 
-- [ ] Fix: `cd codex-rs && just fix -p codex-security-policy`.
-- [ ] Format: `cd codex-rs && just fmt`; then inspect the final diff.
-- [ ] Focused final-tree test: `cd codex-rs && just test -p codex-security-policy mandate`.
-- [ ] Regression: `cd codex-rs && just test -p codex-security-policy`.
-- [ ] TUI applicability: none; PF-25 owns trusted human interaction.
+- [x] Fix: `cd codex-rs && just fix -p codex-security-policy` passed.
+- [x] Format: `cd codex-rs && just fmt`; final diff inspected.
+- [x] Focused final-tree test: `cd codex-rs && just test -p codex-security-policy mandate` passed 2 tests.
+- [x] Regression: `cd codex-rs && just test -p codex-security-policy` passed 13 tests.
+- [x] TUI applicability: none; PF-25 owns trusted human interaction.
 
 ## Exit evidence
 
-- [ ] Commits and changed paths recorded.
-- [ ] Test output linked under `qa/security-levels/sprints/PF-18-S01/`.
-- [ ] Ledgers reflect reality and the completed record is archived.
+- [x] Original `e22a35ccf2`, corrective `4b438c46bb`, and evidence `cbad39a410` commits and paths recorded.
+- [x] Test output recorded at `qa/security-levels/sprints/PF-18-S01/evidence.md`.
+- [x] Ledgers reflect reality and the completed record is archived.

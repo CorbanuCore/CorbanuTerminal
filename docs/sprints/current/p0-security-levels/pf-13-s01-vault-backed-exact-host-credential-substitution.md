@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-13-S01"
 title: "Typed credential capability and bounded store"
-status: draft
+status: ready
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 9
@@ -36,9 +36,9 @@ updated: 2026-08-24
 
 ## Preconditions
 
-- [ ] PF-16-S01, PF-17-S01, PF-19-S01, and PF-22-S01 are completed and archived.
-- [ ] Read root, `codex-rs/AGENTS.md`, and `codex-rs/core/AGENTS.md`.
-- [ ] Exact worktree coordinates match the active plan.
+- [x] PF-16-S01, PF-17-S01, PF-19-S01, and PF-22-S01 are completed and archived.
+- [x] Read root, `codex-rs/AGENTS.md`, and `codex-rs/core/AGENTS.md`.
+- [x] Exact worktree coordinates match the active plan.
 
 ## Done
 
