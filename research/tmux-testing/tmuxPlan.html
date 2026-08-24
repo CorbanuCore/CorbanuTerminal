@@ -351,11 +351,11 @@
 <body>
   <header>
     <div class="hero">
-      <p class="eyebrow">Two increments complete · next package ready</p>
+      <p class="eyebrow">Three increments complete · follow-on scoped</p>
       <h1>Corbanu Terminal Testing Harness Plan</h1>
       <p class="hero-copy">A typed, isolated tmux driver for testing the terminal behavior that snapshots and process-level PTY tests cannot see: real keys, live viewports, resize and reflow, pane routing, interruption, and cleanup.</p>
       <div class="hero-meta">
-        <span><strong>Status:</strong> RW-TMUX-03 ready</span>
+        <span><strong>Status:</strong> RW-TMUX-03 completed</span>
         <span><strong>Change class:</strong> Routine</span>
         <span><strong>Execution record:</strong> RW-TMUX-03</span>
         <span><strong>Prepared:</strong> 24 August 2026</span>
@@ -367,7 +367,7 @@
   <nav aria-label="Document sections">
     <div>
       <a href="#decision">Decision</a>
-      <a href="#current-package">Current Package</a>
+      <a href="#current-package">Completed Package</a>
       <a href="#architecture">Architecture</a>
       <a href="#requirements">Requirements</a>
       <a href="#implementation">Implementation</a>
@@ -380,23 +380,23 @@
   <main>
     <section id="decision">
       <h2>Decision</h2>
-      <p class="lead">Continue the harness with a bounded control-mode increment. The typed foundation, lazy failure artifacts, slash-command regression, and Ubuntu smoke lane are complete; exact multi-pane event ordering and two direct-command resize tests remain.</p>
+      <p class="lead">The bounded control-mode increment is complete. The harness now observes exact multi-pane event ordering, captures bounded control transcripts on failure, and drives one formerly ignored width-resize scenario without fixed sleeps. One repeated-resize migration and release-matrix adoption remain.</p>
       <div class="decision">
-        <strong>Recommendation:</strong> execute <em>RW-TMUX-03: Tmux control mode and bounded multi-pane lifecycle</em>. Add a private <code>-C</code> parser, prove one two-pane lifecycle, and migrate one ignored width-resize test. Keep viewport capture as the rendering oracle and defer release-matrix adoption until this event layer is stable.
+        <strong>Recommendation:</strong> close <em>RW-TMUX-03: Tmux control mode and bounded multi-pane lifecycle</em> and preserve its deliberately narrow architecture. Use control mode for ordering and identity, retain viewport capture as the rendering oracle, and make RW-TMUX-04 prove the Ubuntu workflow on its first eligible run before adopting the driver in the release matrix.
       </div>
 
       <div class="grid">
         <div class="card">
-          <div class="metric">2</div>
-          <div class="label">Completed work packages now provide typed isolation, artifacts, real slash dispatch, and Ubuntu CI.</div>
-        </div>
-        <div class="card">
-          <div class="metric">2</div>
-          <div class="label">Ignored resize tests still use direct tmux commands, fixed sleeps, and the developer's default socket.</div>
+          <div class="metric">3</div>
+          <div class="label">Completed work packages now provide typed isolation, diagnostics, slash dispatch, control events, and one migrated resize path.</div>
         </div>
         <div class="card">
           <div class="metric">1</div>
-          <div class="label">Bounded next package: one parser, one multi-pane lifecycle, and one resize migration.</div>
+          <div class="label">Ignored repeated-resize test still uses direct tmux commands, fixed sleeps, and the developer's default socket.</div>
+        </div>
+        <div class="card">
+          <div class="metric">1</div>
+          <div class="label">Planned follow-on: repeated-resize migration, an eligible Ubuntu workflow run, and incremental release-matrix adoption.</div>
         </div>
       </div>
 
@@ -405,12 +405,12 @@
     </section>
 
     <section id="current-package">
-      <h2>Current Work Package</h2>
-      <p class="lead"><a href="../../qa/work-packages/RW-TMUX-03.md">RW-TMUX-03</a> is the next non-product sprint. It is <strong>ready</strong>, has exact implementation coordinates, and contains the authoritative scope, requirements, tests, and exit-evidence checklist.</p>
+      <h2>Completed Work Package</h2>
+      <p class="lead"><a href="../../qa/work-packages/RW-TMUX-03.md">RW-TMUX-03</a> is a completed non-product sprint. Its <a href="../../qa/work-packages/evidence/RW-TMUX-03/RESULTS.md">verification record</a> contains the final commands, measured runtimes, live qualification, cleanup proof, and the explicit Ubuntu follow-up.</p>
       <p><a href="../../qa/work-packages/RW-TMUX-01.md">RW-TMUX-01</a> completed the typed isolated foundation. <a href="../../qa/work-packages/RW-TMUX-02.md">RW-TMUX-02</a> completed lazy failure bundles, the single-Enter slash regression, deterministic process cleanup, and the required Ubuntu smoke lane.</p>
       <div class="requirements">
         <div>
-          <h3>Included now</h3>
+          <h3>Delivered</h3>
           <ul>
             <li>A private, bounded tmux <code>-C</code> transport and parser.</li>
             <li>Typed command blocks and output, layout, flow-control, window, and client-exit events.</li>
@@ -504,7 +504,7 @@
       </div>
 
       <h3>Target API trajectory</h3>
-      <p>The foundation types are implemented. RW-TMUX-03 adds a private control client and typed events; names below describe ownership and capability rather than freezing a public API.</p>
+      <p>The foundation types, private control client, and typed events are implemented. Names below describe ownership and capability rather than freezing a public API.</p>
       <pre><code>pub struct TmuxServer { /* unique socket and cleanup guard */ }
 pub struct TmuxSession { /* session identity and size history */ }
 pub struct TmuxPane { /* immutable pane id */ }
@@ -553,31 +553,31 @@ impl TmuxControlClient {
         <div class="phase-id">Complete</div>
         <div>
           <h3>RW-TMUX-02: diagnostics and smoke lane</h3>
-          <p>Lazy redacted failure bundles, exact reproduction commands, deterministic pane/server cleanup, a real single-Enter <code>/model</code> regression, and the required Ubuntu smoke workflow are complete.</p>
+          <p>Lazy redacted failure bundles, exact reproduction commands, deterministic pane/server cleanup, a real single-Enter slash-command regression, and the required Ubuntu smoke workflow are complete. The regression now uses deterministic <code>/status</code> output because the isolated fake-auth environment has no live model catalog.</p>
           <span class="tag">Artifacts landed</span><span class="tag">Ubuntu required</span>
         </div>
       </div>
       <div class="phase">
-        <div class="phase-id">TMUX-03A</div>
+        <div class="phase-id">Complete</div>
         <div>
           <h3>Add bounded control-mode parsing</h3>
-          <p>Separate line framing and tmux escape decoding from transport. Parse command blocks and required notifications into complete typed values, preserve unknown notifications within hard bounds, and attach parser failures and the bounded transcript to the existing lazy artifact bundle.</p>
+          <p>Line framing and tmux escape decoding are separated from transport. Command blocks and required notifications produce complete typed values, unknown notifications remain forward-compatible within hard bounds, and parser failures plus the bounded transcript join the existing lazy artifact bundle.</p>
           <span class="tag">256 KiB line cap</span><span class="tag">1,024 events / 4 MiB</span>
         </div>
       </div>
       <div class="phase">
-        <div class="phase-id">TMUX-03B</div>
+        <div class="phase-id">Complete</div>
         <div>
           <h3>Prove one multi-pane lifecycle</h3>
-          <p>Attach one <code>-C</code> client to the private server, create two panes, route unique markers by immutable ID, observe isolated output and layout change, close the secondary pane, then prove command completion and absence from <code>list-panes</code> before joined cleanup.</p>
+          <p>One <code>-C</code> client attaches to a private server, creates two panes, routes unique markers by immutable ID, observes isolated output and layout change, closes the secondary pane, and proves command completion plus absence from <code>list-panes</code> before joined cleanup.</p>
           <span class="tag">Event ordering</span><span class="tag">No leaked readers</span>
         </div>
       </div>
       <div class="phase">
-        <div class="phase-id">TMUX-03C</div>
+        <div class="phase-id">Complete</div>
         <div>
           <h3>Migrate one width-resize scenario</h3>
-          <p>Convert <code>tmux_width_resize_restore_keeps_visible_content_anchored</code> from direct commands and fixed sleeps to the typed harness. Preserve its composer/history anchoring contract and remove only that test's ignore marker.</p>
+          <p><code>tmux03_width_resize_restore_keeps_visible_content_anchored</code> now uses the typed harness and semantic waits while preserving its composer/history anchoring contract. Its ignore marker is removed; the repeated-resize test remains deferred.</p>
           <span class="tag">One migration</span><span class="tag">Viewport remains oracle</span>
         </div>
       </div>
@@ -585,7 +585,7 @@ impl TmuxControlClient {
         <div class="phase-id">TMUX-04</div>
         <div>
           <h3>Adopt proven support in the release matrix</h3>
-          <p>After TMUX-03 is stable, migrate the repeated-resize scenario and introduce the typed driver incrementally into <code>qa/orchestrate_tui_matrix.sh</code>. Preserve the matrix's product-level flow and evidence contract rather than rewriting it wholesale.</p>
+          <p>Migrate the repeated-resize scenario, prove the branch-added tmux workflow on its first eligible pull-request or main-branch run, and introduce the typed driver incrementally into <code>qa/orchestrate_tui_matrix.sh</code>. Preserve the matrix's product-level flow and evidence contract rather than rewriting it wholesale.</p>
           <span class="tag">Deferred</span><span class="tag">Incremental adoption</span>
         </div>
       </div>
@@ -679,7 +679,7 @@ impl TmuxControlClient {
         <strong>Recommended gate:</strong> the focused TUI test suite passes normally; the tmux smoke lane completes 50 consecutive repetitions with no failures, no leaked servers or child processes, and a measured p95 runtime below 30 seconds. The migrated test is no longer ignored in the tmux-equipped lane, and every induced failure produces the documented artifact bundle.
       </div>
 
-      <p>The current package has a smaller exit gate: parser fixture coverage, one ordered two-pane lifecycle, one migrated width-resize test, focused and full <code>codex-tui</code> tests, 20 clean repetitions of the two new scenarios, no leaked reader or tmux process, and p95 below 15 seconds after compilation. The exact checklist lives in <a href="../../qa/work-packages/RW-TMUX-03.md">RW-TMUX-03</a>.</p>
+      <p>RW-TMUX-03 passed its local exit gate: parser fixture coverage, one ordered two-pane lifecycle, one migrated width-resize test, all 22 required tmux tests, all 32 owning integration tests, 20 clean repetitions of the two TMUX-03 scenarios, no leaked reader or tmux process, and a measured p95 of 12.358 seconds after compilation. A real <code>just codex</code> session also rendered <code>/status</code> and exited cleanly. Ubuntu execution remains explicitly pending because this branch was neither a pull request nor a push to <code>main</code>, the workflow's two automatic triggers, and manual dispatch is unavailable before the workflow exists on the default branch. The exact record lives in <a href="../../qa/work-packages/evidence/RW-TMUX-03/RESULTS.md">the verification results</a>.</p>
 
       <h3>Definition of done</h3>
       <ul>
@@ -687,7 +687,7 @@ impl TmuxControlClient {
         <li>One product-neutral scenario proves pane-specific output, layout change, pane removal, command completion, and joined cleanup.</li>
         <li>The ignored width-resize test uses the typed harness and stable semantic waits without changing its anchoring contract.</li>
         <li>Control transcripts and parser errors join the existing lazy failure bundle without creating success artifacts.</li>
-        <li>The Ubuntu smoke lane remains below 30 seconds and all required reliability evidence is recorded.</li>
+        <li>Local reliability evidence is recorded; Ubuntu control-mode execution is a named post-registration CI follow-up.</li>
         <li>No release-matrix or product behavior change is hidden inside the test-support package.</li>
       </ul>
 
@@ -696,7 +696,7 @@ impl TmuxControlClient {
 
       <h3>Follow-on work</h3>
       <ol>
-        <li><strong>RW-TMUX-04:</strong> migrate the repeated-resize scenario and let the release matrix consume proven typed support incrementally while retaining its high-level product flows.</li>
+        <li><strong>RW-TMUX-04:</strong> migrate the repeated-resize scenario, verify the Ubuntu tmux workflow on an eligible run, and let the release matrix consume proven typed support incrementally while retaining its high-level product flows.</li>
         <li><strong>Feature qualification:</strong> add success, cancellation, recovery, resume, and authorization scenarios as their owning product sprints require them.</li>
       </ol>
     </section>

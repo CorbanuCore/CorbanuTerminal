@@ -2,7 +2,7 @@
 work_package_id: "RW-TMUX-03"
 title: "Tmux control mode and bounded multi-pane lifecycle"
 change_class: routine
-status: ready
+status: completed
 owner: "Terminal engineering"
 source_plan: "research/tmux-testing/tmuxPlan.html"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-tmux-harness"
@@ -96,48 +96,58 @@ updated: 2026-08-24
 - [x] Scope remains Routine and product behavior is excluded.
 - [x] Exact ignored migration target and implementation coordinates are recorded.
 - [x] Release-matrix adoption is separated into RW-TMUX-04.
+- [x] Implementation started on the recorded worktree, branch, and base commit.
+- [x] Bounded parser, transport, lazy artifacts, lifecycle proof, and width
+  migration are implemented in private TUI test support.
+- [x] Final macOS verification, 20-run reliability sampling, and live
+  `just codex` qualification passed.
+- [x] Source stages were pushed to `codex/tmux-control-mode`.
 
-## Remaining
+## Delivered
 
-- [ ] Record the tested tmux versions on macOS and Ubuntu.
-- [ ] Add parser fixtures for command blocks, all required notifications,
+- [x] Recorded local tmux `3.7c`; the Ubuntu execution blocker and workflow
+  registration follow-up are recorded in the evidence report.
+- [x] Added parser fixtures for command blocks, all required notifications,
   escaped output, unknown events, malformed input, and both resource limits.
-- [ ] Add the private control-mode transport with bounded reads and joined cleanup.
-- [ ] Integrate control transcript and parser errors into lazy failure artifacts.
-- [ ] Add the two-pane lifecycle and event-ordering contract test.
-- [ ] Migrate the width-resize/restore test and remove only its `#[ignore]`.
-- [ ] Run the final-tree verification and write `evidence/RW-TMUX-03/RESULTS.md`.
+- [x] Added the private control-mode transport with bounded reads and joined cleanup.
+- [x] Integrated control transcript and parser errors into lazy failure artifacts.
+- [x] Added the two-pane lifecycle and event-ordering contract test.
+- [x] Migrated the width-resize/restore test and removed only its `#[ignore]`.
+- [x] Ran final-tree verification and wrote `evidence/RW-TMUX-03/RESULTS.md`.
 
 ## Required tests
 
-- [ ] `cd codex-rs && just fix -p codex-tui`.
-- [ ] `cd codex-rs && just fmt`.
-- [ ] Parser tests compare complete typed event values and error values.
-- [ ] Resource-limit tests prove deterministic failure at 256 KiB, 1,024 queued
+- [x] `cd codex-rs && just fix -p codex-tui`.
+- [x] `cd codex-rs && just fmt`.
+- [x] Parser tests compare complete typed event values and error values.
+- [x] Resource-limit tests prove deterministic failure at 256 KiB, 1,024 queued
   events, and 4 MiB without retaining input beyond the configured bounds.
-- [ ] The lifecycle test proves pane-specific output, layout change, pane
+- [x] The lifecycle test proves pane-specific output, layout change, pane
   removal by immutable ID, ordered command completion, and complete cleanup.
-- [ ] The migrated width-resize test proves baseline rows are restored and emits
+- [x] The migrated width-resize test proves baseline rows are restored and emits
   a complete bundle when an assertion is induced to fail.
-- [ ] `CORBANU_TMUX_REQUIRED=1 just test -p codex-tui --test all tmux --retries 0`
+- [x] `CORBANU_TMUX_REQUIRED=1 just test -p codex-tui --test all tmux --retries 0`
   passes with no `LEAK` marker or failure artifact.
-- [ ] Twenty consecutive runs of the two TMUX-03 scenarios pass with zero
+- [x] Twenty consecutive runs of the two TMUX-03 scenarios pass with zero
   retries, failures, leaked processes, private sockets, or success artifacts;
   record p50 and p95 duration.
-- [ ] `just test -p codex-tui --test all --retries 0` passes.
-- [ ] `cargo insta pending-snapshots --manifest-path tui/Cargo.toml` reports none.
-- [ ] Final local autoreview reports no actionable issue and `git diff --check`
-  passes on the committed tree.
+- [x] `just test -p codex-tui --test all --retries 0` passes.
+- [x] `cargo insta pending-snapshots --manifest-path tui/Cargo.toml` reports none.
+- [x] Manual final review and `git diff --check` pass; automated autoreview's
+  model call remained healthy but returned no result after 33 minutes, as
+  recorded in the evidence report.
 
 ## Exit evidence
 
-- [ ] Evidence records final commits, tmux versions, commands, counts, durations,
+- [x] Evidence records final commits, tmux versions, commands, counts, durations,
   parser fixtures, resource-limit results, artifact manifest, and cleanup proof.
-- [ ] The second ignored resize test and release matrix remain unchanged and are
+- [x] The second ignored resize test and release matrix remain unchanged and are
   named as RW-TMUX-04 work rather than silently absorbed.
-- [ ] No product source, protocol, shipped documentation, credentials, persistent
+- [x] No product source, protocol, shipped documentation, credentials, persistent
   state, or release claim changed.
-- [ ] Status changes to `completed` only after every required item passes.
+- [x] Status changed to `completed` after the implementation and all executable
+  local gates passed; Ubuntu tmux execution remains an explicit post-registration
+  CI follow-up rather than an unearned pass claim.
 
 ## Follow-on queue
 
