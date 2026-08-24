@@ -4,10 +4,11 @@
 - Baseline commit: `3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb`
 - Original implementation: `220af8dae8`
 - Corrective implementation: `fcaa84dfb8`
-- Tested code tree: `fcaa84dfb86758ac8872fe1cc9a9d2a7533e49e6`
-- Baseline manifest SHA-256: `2effbae28c1479009179996f6748daa712c757e4b9404a0ae36bfc7b2325115a`
+- Source-reference correction: `3b5c820464`
+- Tested code tree: `2a0f3abfd0974841cc881d82b09796a6a9bf436e`
+- Baseline manifest SHA-256: `45d1f2bd96733381638bb62961ee59fb1c026bc05a6a78d03b560cb794406b8d`
 - Candidate: `corbanu 0.1.35`
-- Candidate SHA-256: `364fa6b33314f4f6b6aada25dbc79b679a9a6d1e292668994fff8c541596052f`
+- Candidate SHA-256: `6009a28516b7980192afd1f2c63d33f68b7abe7bd6da65555208f5bb3ca8bf18`
 - TUI applicability: deferred to PF-26-S02; this sprint freezes automated compatibility evidence.
 
 ## Review result
@@ -18,7 +19,7 @@ Corrective commit `fcaa84dfb8` adds a fail-closed compatibility harness and expa
 
 Permissive now has explicit adjacent-case coverage for the configured approval/sandbox/network matrix, absent security state, every vault credential type, agent spawn depths on both sides of each limit, and existing tool-policy denial. Every frozen surface retains the composition rule `final_allow = existing_allow && security_layer_allow` with an allow-neutral Permissive security decision.
 
-The harness report is [compatibility-report.json](harness/compatibility-report.json).
+Source-reference correction `3b5c820464` replaces a stale, nonexistent authorization source path with the actual `authorization.rs` boundary. The refreshed harness report is [compatibility-report.json](harness/compatibility-report.json).
 
 ## Final-tree commands
 
