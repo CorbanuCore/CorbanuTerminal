@@ -208,7 +208,31 @@ fn permissive_composition_preserves_every_frozen_surface_decision() {
 fn grant_integrity_expiry_and_exact_scope_are_enforced() {
     let grant = grant();
     assert!(grant.matches_request(&request(150)).expect("valid grant"));
+    assert!(!grant.matches_request(&request(99)).expect("not issued"));
     assert!(!grant.matches_request(&request(200)).expect("expired grant"));
+
+    let mut wrong_actor = request(150);
+    wrong_actor.subject =
+        ActorChain::new(vec![human(), agent("agent:other")]).expect("valid wrong actor");
+    assert!(!grant.matches_request(&wrong_actor).expect("actor mismatch"));
+
+    let mut wrong_action = request(150);
+    wrong_action.action = PolicyAction::Sign;
+    assert!(
+        !grant
+            .matches_request(&wrong_action)
+            .expect("action mismatch")
+    );
+
+    let mut wrong_resource = request(150);
+    wrong_resource.resource =
+        ProtectedResource::new(ResourceKind::FinancialAction, "account:other")
+            .expect("valid adjacent resource");
+    assert!(
+        !grant
+            .matches_request(&wrong_resource)
+            .expect("resource mismatch")
+    );
 
     let mut wrong_destination = request(150);
     wrong_destination.context.destination = Some(text("venue:other"));
@@ -281,13 +305,70 @@ fn derived_grants_can_only_narrow_scope_chain_and_expiry() {
     assert!(matches!(
         BoundedGrant::derive_child(
             &parent,
-            child_chain,
+            child_chain.clone(),
             broader_scope,
             120,
             180,
             text("broad-child-nonce"),
         ),
         Err(GrantValidationError::ScopeNotNarrower)
+    ));
+
+    let extra_asset_scope = GrantScope::new(
+        resource(),
+        [PolicyAction::Execute],
+        Some(text("venue:paper")),
+        BTreeMap::from([(text("BTC"), 1), (text("USD"), 250)]),
+    )
+    .expect("structurally valid scope");
+    assert!(matches!(
+        BoundedGrant::derive_child(
+            &parent,
+            child_chain.clone(),
+            extra_asset_scope,
+            120,
+            180,
+            text("extra-asset-child-nonce"),
+        ),
+        Err(GrantValidationError::ScopeNotNarrower)
+    ));
+
+    let extra_action_scope = GrantScope::new(
+        resource(),
+        [PolicyAction::Execute, PolicyAction::Sign],
+        Some(text("venue:paper")),
+        BTreeMap::from([(text("USD"), 250)]),
+    )
+    .expect("structurally valid scope");
+    assert!(matches!(
+        BoundedGrant::derive_child(
+            &parent,
+            child_chain.clone(),
+            extra_action_scope,
+            120,
+            180,
+            text("extra-action-child-nonce"),
+        ),
+        Err(GrantValidationError::ScopeNotNarrower)
+    ));
+
+    let narrow_scope = GrantScope::new(
+        resource(),
+        [PolicyAction::Execute],
+        Some(text("venue:paper")),
+        BTreeMap::from([(text("USD"), 250)]),
+    )
+    .expect("valid narrow scope");
+    assert!(matches!(
+        BoundedGrant::derive_child(
+            &parent,
+            child_chain,
+            narrow_scope,
+            99,
+            180,
+            text("pre-parent-child-nonce"),
+        ),
+        Err(GrantValidationError::IssuedBeforeParent)
     ));
 }
 

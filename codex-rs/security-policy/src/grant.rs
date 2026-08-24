@@ -80,13 +80,15 @@ impl GrantScope {
         {
             return false;
         }
-        parent
-            .quantitative_limits
-            .iter()
-            .all(|(asset, parent_max)| {
-                self.quantitative_limits
+        if parent.quantitative_limits.is_empty() {
+            return true;
+        }
+        !self.quantitative_limits.is_empty()
+            && self.quantitative_limits.iter().all(|(asset, child_max)| {
+                parent
+                    .quantitative_limits
                     .get(asset)
-                    .is_some_and(|child_max| child_max <= parent_max)
+                    .is_some_and(|parent_max| child_max <= parent_max)
             })
     }
 
@@ -178,6 +180,9 @@ impl BoundedGrant {
         if !scope.is_narrower_or_equal(&parent.scope) {
             return Err(GrantValidationError::ScopeNotNarrower);
         }
+        if issued_at_unix_seconds < parent.issued_at_unix_seconds {
+            return Err(GrantValidationError::IssuedBeforeParent);
+        }
         if expires_at_unix_seconds > parent.expires_at_unix_seconds {
             return Err(GrantValidationError::ExpiryNotNarrower);
         }
@@ -267,7 +272,9 @@ impl BoundedGrant {
         request
             .validate()
             .map_err(GrantValidationError::Authorization)?;
-        if self.is_expired_at(request.context.now_unix_seconds) {
+        if request.context.now_unix_seconds < self.issued_at_unix_seconds
+            || self.is_expired_at(request.context.now_unix_seconds)
+        {
             return Ok(false);
         }
         if self.actor_chain != request.subject || !self.scope.matches_request(request) {
@@ -319,6 +326,8 @@ pub enum GrantValidationError {
     ActorChainNotDescendant,
     #[error("derived grant scope must be equal to or narrower than its parent")]
     ScopeNotNarrower,
+    #[error("derived grant cannot be issued before its parent")]
+    IssuedBeforeParent,
     #[error("derived grant cannot expire later than its parent")]
     ExpiryNotNarrower,
     #[error("parent grant id and parent scope digest must both be present or absent")]
