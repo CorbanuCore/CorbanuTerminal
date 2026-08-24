@@ -98,6 +98,16 @@ nav:
   - Project:
       - Sprints:
           - Workflow: sprints/index.md
+          - Current Autoreview Work:
+              - Overview: sprints/current/arbitrary-model-autoreview/index.md
+              - "PF-13 — Arbitrary-model Autoreview":
+                  - "PF-13-S01 — Explicit request and skill contract": sprints/current/arbitrary-model-autoreview/pf-13-s01-request-and-skill-contract.md
+                  - "PF-13-S02 — Review packet and secret gate": sprints/current/arbitrary-model-autoreview/pf-13-s02-review-packet-and-secret-gate.md
+                  - "PF-13-S03 — Shared Core provider readiness": sprints/current/arbitrary-model-autoreview/pf-13-s03-core-provider-readiness.md
+                  - "PF-13-S04 — Deterministic exact-runtime dispatch": sprints/current/arbitrary-model-autoreview/pf-13-s04-exact-runtime-dispatch.md
+                  - "PF-13-S05 — Fail-closed full-history invariant": sprints/current/arbitrary-model-autoreview/pf-13-s05-full-history-invariant.md
+                  - "PF-13-S06 — Isolated bounded review runner": sprints/current/arbitrary-model-autoreview/pf-13-s06-isolated-review-runner.md
+                  - "PF-13-S07 — TUI qualification and finished documentation": sprints/current/arbitrary-model-autoreview/pf-13-s07-tui-qualification-and-docs.md
           - Current Prompt-Injection Work:
               - Overview: sprints/current/prompt-injection-firewall/index.md
               - "PF-01 — Secretless agent boundary":
@@ -191,6 +201,7 @@ nav:
           - P0 Security Levels: plans/active/p0-security-levels.md
           - Proposed Plans:
               - Overview: plans/proposed/index.md
+              - Arbitrary-model Autoreview: plans/proposed/arbitrary-model-autoreview.md
               - Prompt-Injection Firewall: plans/proposed/prompt-injection-firewall.md
           - Completed Plans: plans/completed/index.md
           - Cancelled Plans: plans/cancelled/index.md
