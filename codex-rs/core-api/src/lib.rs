@@ -109,5 +109,6 @@ pub use codex_protocol::protocol::SessionSource;
 pub use codex_protocol::protocol::TurnEnvironmentSelection;
 pub use codex_protocol::protocol::W3cTraceContext;
 pub use codex_protocol::user_input::UserInput;
+pub use codex_security_policy::SecurityLevel;
 pub use codex_state::SqliteConfig;
 pub use codex_utils_absolute_path::AbsolutePathBuf;
