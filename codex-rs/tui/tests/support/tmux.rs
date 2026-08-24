@@ -41,14 +41,12 @@ impl TerminalSize {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TmuxKey {
     Enter,
-    Escape,
 }
 
 impl TmuxKey {
     fn name(self) -> &'static str {
         match self {
             Self::Enter => "Enter",
-            Self::Escape => "Escape",
         }
     }
 }
@@ -85,8 +83,8 @@ impl SessionSpec {
 pub(crate) struct TmuxServer {
     socket_name: String,
     socket_dir: TempDir,
-    artifacts: ArtifactRecorder,
-    processes: TmuxProcesses,
+    pub(super) artifacts: ArtifactRecorder,
+    pub(super) processes: TmuxProcesses,
 }
 
 impl TmuxServer {
@@ -113,7 +111,7 @@ impl TmuxServer {
         Self::start_with_artifact_root(scenario, ArtifactRecorder::default_root())
     }
 
-    fn start_with_artifact_root(scenario: &str, artifact_root: PathBuf) -> Result<Self> {
+    pub(super) fn start_with_artifact_root(scenario: &str, artifact_root: PathBuf) -> Result<Self> {
         anyhow::ensure!(Self::is_available(), "tmux is unavailable on PATH");
         let id = NEXT_SERVER_ID.fetch_add(1, Ordering::Relaxed);
         let socket_dir = tempfile::Builder::new()
@@ -168,7 +166,7 @@ impl TmuxServer {
         })
     }
 
-    fn command(&self) -> Command {
+    pub(super) fn command(&self) -> Command {
         let mut command = Command::new("tmux");
         command.env("TMUX_TMPDIR", self.socket_dir.path());
         command.arg("-L").arg(&self.socket_name);
@@ -184,7 +182,7 @@ impl TmuxServer {
             .register_attachment(label, path.as_ref().to_path_buf());
     }
 
-    fn artifact_dir(&self) -> PathBuf {
+    pub(super) fn artifact_dir(&self) -> PathBuf {
         self.artifacts.directory().to_path_buf()
     }
 
@@ -197,7 +195,11 @@ impl TmuxServer {
             .is_ok_and(|output| output.status.success())
     }
 
-    fn checked_output(&self, command: &mut Command, pane_id: Option<&str>) -> Result<Output> {
+    pub(super) fn checked_output(
+        &self,
+        command: &mut Command,
+        pane_id: Option<&str>,
+    ) -> Result<Output> {
         let rendered = render_command(command);
         self.artifacts.record_command(rendered.clone());
         let output = command
@@ -221,7 +223,7 @@ impl TmuxServer {
         );
     }
 
-    fn emit_failure(&self, reason: &str, pane_id: Option<&str>) -> PathBuf {
+    pub(super) fn emit_failure(&self, reason: &str, pane_id: Option<&str>) -> PathBuf {
         let capture = pane_id.map_or_else(String::new, |pane| {
             self.capture_for_artifact(pane, &["capture-pane", "-p", "-t", pane])
         });
@@ -281,50 +283,14 @@ impl Drop for TmuxServer {
 
 #[derive(Debug)]
 pub(crate) struct TmuxSession<'a> {
-    server: &'a TmuxServer,
-    name: String,
+    pub(super) server: &'a TmuxServer,
+    pub(super) name: String,
     primary_pane: TmuxPane<'a>,
 }
 
 impl<'a> TmuxSession<'a> {
     pub(crate) fn primary_pane(&self) -> &TmuxPane<'a> {
         &self.primary_pane
-    }
-
-    pub(crate) fn split_vertical(
-        &self,
-        target: &TmuxPane<'a>,
-        rows: u16,
-        command_spec: CommandSpec,
-    ) -> Result<TmuxPane<'a>> {
-        let mut command = self.server.command();
-        command
-            .arg("split-window")
-            .arg("-d")
-            .arg("-P")
-            .arg("-F")
-            .arg("#{pane_id}\t#{pane_pid}\t#{pid}")
-            .arg("-v")
-            .arg("-l")
-            .arg(rows.to_string())
-            .arg("-t")
-            .arg(&target.id)
-            .arg("--");
-        command_spec.append_to(&mut command);
-
-        let output = self
-            .server
-            .checked_output(&mut command, Some(target.id.as_str()))?;
-        let (pane_id, pane_pid, server_pid) = parse_process_report(&output, "split pane")?;
-        self.server.processes.record(pane_pid, server_pid);
-        self.server
-            .artifacts
-            .record_dimensions(format!("{pane_id} split rows={rows}"));
-        Ok(TmuxPane {
-            server: self.server,
-            id: pane_id,
-            pid: pane_pid,
-        })
     }
 
     pub(crate) fn wait_for_exit(&self, timeout: Duration) -> Result<()> {
@@ -367,9 +333,9 @@ impl Drop for TmuxSession<'_> {
 
 #[derive(Debug)]
 pub(crate) struct TmuxPane<'a> {
-    server: &'a TmuxServer,
-    id: String,
-    pid: u32,
+    pub(super) server: &'a TmuxServer,
+    pub(super) id: String,
+    pub(super) pid: u32,
 }
 
 impl TmuxPane<'_> {
