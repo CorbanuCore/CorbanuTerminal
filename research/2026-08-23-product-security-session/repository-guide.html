@@ -1,0 +1,925 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Corbanu Terminal Repo Guide</title>
+  <style>
+    :root {
+      --ink: #141414;
+      --muted: #5e6368;
+      --line: #d8dedb;
+      --paper: #fbfcfa;
+      --panel: #ffffff;
+      --accent: #0b6f61;
+      --accent-2: #a7352a;
+      --accent-3: #264f82;
+      --soft: #edf6f2;
+      --warn: #fff6df;
+      --code: #f4f6f5;
+      --shadow: 0 8px 24px rgba(20, 20, 20, 0.07);
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(180deg, #f6f9f7 0, var(--paper) 380px),
+        var(--paper);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    code, pre {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+
+    code {
+      padding: 0.12rem 0.28rem;
+      border-radius: 5px;
+      background: var(--code);
+    }
+
+    pre {
+      overflow-x: auto;
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #111817;
+      color: #e9f1ef;
+    }
+
+    .shell {
+      color: #dff3eb;
+    }
+
+    .wrap {
+      width: min(1180px, calc(100vw - 36px));
+      margin: 0 auto;
+    }
+
+    header {
+      padding: 56px 0 28px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--accent);
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.78rem;
+    }
+
+    h1 {
+      max-width: 900px;
+      margin: 0;
+      font-size: clamp(2.2rem, 5vw, 5rem);
+      line-height: 0.98;
+      letter-spacing: 0;
+    }
+
+    .lede {
+      max-width: 830px;
+      margin: 22px 0 0;
+      color: #303433;
+      font-size: 1.12rem;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 0.25rem 0.65rem;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      color: #333837;
+      font-size: 0.9rem;
+      box-shadow: 0 2px 8px rgba(20, 20, 20, 0.04);
+    }
+
+    nav.toc {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: rgba(251, 252, 250, 0.92);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(10px);
+    }
+
+    nav.toc .wrap {
+      display: flex;
+      gap: 14px;
+      overflow-x: auto;
+      padding: 12px 0;
+      white-space: nowrap;
+    }
+
+    nav.toc a {
+      color: #303433;
+      font-size: 0.92rem;
+      text-decoration: none;
+    }
+
+    main {
+      padding: 34px 0 72px;
+    }
+
+    section {
+      margin: 0 0 42px;
+      padding-top: 8px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: clamp(1.45rem, 2.2vw, 2.3rem);
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 26px 0 10px;
+      font-size: 1.1rem;
+    }
+
+    p {
+      max-width: 850px;
+      margin: 0 0 12px;
+    }
+
+    ul, ol {
+      max-width: 900px;
+      margin: 10px 0 0;
+      padding-left: 1.3rem;
+    }
+
+    li {
+      margin: 0.35rem 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .card {
+      grid-column: span 4;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .card.wide { grid-column: span 6; }
+    .card.full { grid-column: 1 / -1; }
+
+    .card h3 {
+      margin-top: 0;
+    }
+
+    .note {
+      max-width: 900px;
+      padding: 14px 16px;
+      border: 1px solid #e7d59d;
+      border-radius: 8px;
+      background: var(--warn);
+    }
+
+    .callout {
+      max-width: 900px;
+      padding: 16px 18px;
+      border-left: 4px solid var(--accent);
+      background: var(--soft);
+      border-radius: 0 8px 8px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 6px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    th, td {
+      padding: 0.72rem 0.8rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #eef3f1;
+      font-size: 0.88rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .diagram {
+      margin: 18px 0;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      overflow-x: auto;
+    }
+
+    .flow {
+      min-width: 760px;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .node {
+      position: relative;
+      min-height: 82px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f9fbfa;
+    }
+
+    .node strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .node small {
+      display: block;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    .node.arrow::after {
+      content: "→";
+      position: absolute;
+      right: -16px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--accent);
+      font-weight: 800;
+      font-size: 1.35rem;
+    }
+
+    .layers {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      min-width: 720px;
+    }
+
+    .layer {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f9fbfa;
+    }
+
+    .layer b {
+      color: var(--accent-3);
+    }
+
+    .tree {
+      min-width: 720px;
+    }
+
+    .tree svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .svg-box {
+      fill: #f9fbfa;
+      stroke: #c9d3cf;
+      stroke-width: 1.2;
+      rx: 8;
+    }
+
+    .svg-root { fill: #e7f4ef; stroke: #0b6f61; }
+    .svg-next { fill: #fff4e3; stroke: #b56d19; }
+    .svg-text { fill: #141414; font-size: 14px; font-family: ui-sans-serif, system-ui, sans-serif; }
+    .svg-muted { fill: #59615e; font-size: 12px; font-family: ui-sans-serif, system-ui, sans-serif; }
+    .svg-line { stroke: #7d8985; stroke-width: 1.4; fill: none; marker-end: url(#arrow); }
+
+    .tag {
+      display: inline-block;
+      margin: 0.12rem 0.18rem 0.12rem 0;
+      padding: 0.15rem 0.42rem;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: #f6f8f7;
+      color: #39413e;
+      font-size: 0.84rem;
+    }
+
+    .path-list {
+      columns: 2 330px;
+      max-width: 1000px;
+      padding-left: 0;
+      list-style: none;
+    }
+
+    .path-list li {
+      break-inside: avoid;
+      margin: 0 0 0.55rem;
+    }
+
+    footer {
+      padding: 26px 0 42px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 760px) {
+      .wrap {
+        width: min(100vw - 24px, 1180px);
+      }
+
+      .card, .card.wide {
+        grid-column: 1 / -1;
+      }
+
+      header {
+        padding-top: 36px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <p class="eyebrow">Corbanu Terminal onboarding</p>
+      <h1>How to work in this repo without losing the product thread</h1>
+      <p class="lede">
+        This guide condenses the 2026-08-23 working session into a practical map for the
+        Corbanu Terminal repository: what lives where, how development should proceed, the
+        local conventions to respect, and the next agreed build direction.
+      </p>
+      <div class="meta">
+        <span class="pill">Scope: <code>repository root</code></span>
+        <span class="pill">Primary code: <code>codex-rs/</code></span>
+        <span class="pill">Product docs: <code>docs/</code></span>
+        <span class="pill">Created from working session notes</span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <div class="wrap">
+      <a href="#start">Start Here</a>
+      <a href="#map">Repo Map</a>
+      <a href="#workflow">Workflow</a>
+      <a href="#commands">Commands</a>
+      <a href="#conventions">Conventions</a>
+      <a href="#next">What We Build Next</a>
+      <a href="#links">Reference Links</a>
+    </div>
+  </nav>
+
+  <main class="wrap">
+    <section id="start">
+      <h2>Start Here</h2>
+      <div class="callout">
+        <p>
+          Corbanu Terminal is a product fork of OpenAI Codex CLI. The repo keeps the Codex
+          execution engine, tool loop, approvals, sandboxing, sessions, and app-server mechanics,
+          then layers Corbanu/PFTerminal product surfaces on top: providers, model picker, vault,
+          wallet, GPU routes, Task Node, Telegram, panes, and managed multi-agent orchestration.
+        </p>
+      </div>
+
+      <div class="grid">
+        <article class="card wide">
+          <h3>The mental model</h3>
+          <p>
+            Treat this as a terminal-native AI trading and engineering command center. It is not
+            a generic web assistant or a thin rebrand. The product contract is preserved through
+            working commands, exact provider/model identity, credential containment, visible panes,
+            and evidence-based completion.
+          </p>
+          <p>
+            Begin with the living product spec:
+            <a href="../../docs/pfterminal-spec.md">docs/pfterminal-spec.md</a>.
+          </p>
+        </article>
+
+        <article class="card wide">
+          <h3>The active spine</h3>
+          <p>
+            The active release and security work are tracked under
+            <a href="../../docs/current-sprint/index.md">docs/current-sprint/index.md</a>. The
+            current security workstream is narrow but important: agents and panes must use
+            provider credentials without seeing or inheriting raw long-lived secrets.
+          </p>
+          <p>
+            Read: <a href="../../docs/current-sprint/agent-vault-access.md">Agent Vault Access</a>.
+          </p>
+        </article>
+      </div>
+
+      <div class="diagram">
+        <div class="tree" aria-label="Corbanu Terminal product stack diagram">
+          <svg viewBox="0 0 960 360" role="img">
+            <defs>
+              <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L9,3 z" fill="#7d8985"></path>
+              </marker>
+            </defs>
+
+            <rect class="svg-box svg-root" x="345" y="20" width="270" height="62"></rect>
+            <text class="svg-text" x="480" y="46" text-anchor="middle">Corbanu Terminal Product</text>
+            <text class="svg-muted" x="480" y="66" text-anchor="middle">terminal-native, wallet-aware, provider-rich</text>
+
+            <path class="svg-line" d="M480 82 V115"></path>
+            <rect class="svg-box" x="335" y="115" width="290" height="62"></rect>
+            <text class="svg-text" x="480" y="141" text-anchor="middle">Codex Runtime Foundation</text>
+            <text class="svg-muted" x="480" y="161" text-anchor="middle">tool loop, sandbox, approvals, sessions, app server</text>
+
+            <path class="svg-line" d="M480 177 V210"></path>
+            <rect class="svg-box" x="45" y="220" width="180" height="72"></rect>
+            <rect class="svg-box" x="250" y="220" width="180" height="72"></rect>
+            <rect class="svg-box" x="455" y="220" width="180" height="72"></rect>
+            <rect class="svg-box" x="660" y="220" width="250" height="72"></rect>
+
+            <path class="svg-line" d="M480 210 H135 V220"></path>
+            <path class="svg-line" d="M480 210 H340 V220"></path>
+            <path class="svg-line" d="M480 210 H545 V220"></path>
+            <path class="svg-line" d="M480 210 H785 V220"></path>
+
+            <text class="svg-text" x="135" y="247" text-anchor="middle">TUI + Commands</text>
+            <text class="svg-muted" x="135" y="267" text-anchor="middle">/model /vault /spawn</text>
+
+            <text class="svg-text" x="340" y="247" text-anchor="middle">Providers</text>
+            <text class="svg-muted" x="340" y="267" text-anchor="middle">Ambient, Z.AI, OpenRouter</text>
+
+            <text class="svg-text" x="545" y="247" text-anchor="middle">Secrets</text>
+            <text class="svg-muted" x="545" y="267" text-anchor="middle">vault, leases, broker</text>
+
+            <text class="svg-text" x="785" y="247" text-anchor="middle">Product Surfaces</text>
+            <text class="svg-muted" x="785" y="267" text-anchor="middle">wallet, GPU, Task Node, Telegram, panes</text>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <section id="map">
+      <h2>Repo Map</h2>
+      <p>
+        The repo is large. Use this as the first-pass routing table before opening a file.
+        Prefer existing modules and typed boundaries over adding new behavior to central files.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Path</th>
+            <th>What lives there</th>
+            <th>When to touch it</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><a href="../../codex-rs/">codex-rs/</a></td>
+            <td>Rust workspace inherited from Codex and extended for Corbanu/PFTerminal.</td>
+            <td>Most product implementation work.</td>
+          </tr>
+          <tr>
+            <td><a href="../../codex-rs/tui/">codex-rs/tui/</a></td>
+            <td>Terminal UI, slash commands, panes, model picker, provider screens, onboarding surfaces.</td>
+            <td>Any visible terminal workflow or command behavior.</td>
+          </tr>
+          <tr>
+            <td><a href="../../codex-rs/core/">codex-rs/core/</a></td>
+            <td>Agent loop, context, tools, sessions, config, native agent mechanics.</td>
+            <td>Only when the runtime boundary truly belongs here. Resist adding new concepts to core.</td>
+          </tr>
+          <tr>
+            <td><a href="../../codex-rs/codex-api/">codex-rs/codex-api/</a></td>
+            <td>Provider wire adapters and request/response shaping.</td>
+            <td>Provider protocol differences, especially Chat Completions vs Responses-style shapes.</td>
+          </tr>
+          <tr>
+            <td><a href="../../codex-rs/model-provider-info/">codex-rs/model-provider-info/</a></td>
+            <td>Built-in provider constants and metadata.</td>
+            <td>Adding or correcting providers, auth modes, base URLs, capability flags.</td>
+          </tr>
+          <tr>
+            <td><a href="../../codex-rs/models-manager/models.json">codex-rs/models-manager/models.json</a></td>
+            <td>Bundled model catalog used by the picker and routing surfaces.</td>
+            <td>Adding or correcting model records, display names, billing/capability metadata.</td>
+          </tr>
+          <tr>
+            <td><a href="../../codex-rs/login/">codex-rs/login/</a>, <a href="../../codex-rs/vault/">vault/</a>, <a href="../../codex-rs/secrets/">secrets/</a></td>
+            <td>Account login, provider-key persistence, encrypted local secrets store.</td>
+            <td>Credential flows, vault labels, migration, redaction, key lookup order.</td>
+          </tr>
+          <tr>
+            <td><a href="../../codex-rs/app-server-protocol/">codex-rs/app-server-protocol/</a>, <a href="../../codex-rs/app-server/">app-server/</a></td>
+            <td>JSON-RPC API and app-server runtime.</td>
+            <td>Desktop/app integration, protocol payloads, thread APIs, account APIs.</td>
+          </tr>
+          <tr>
+            <td><a href="../../codex-rs/wallet/">codex-rs/wallet/</a>, <a href="../../codex-rs/gpu-market/">gpu-market/</a>, <a href="../../codex-rs/tasknode-session/">tasknode-session/</a>, <a href="../../codex-rs/telegram/">telegram/</a></td>
+            <td>Product-specific wallet, GPU rental, Task Node, and Telegram surfaces.</td>
+            <td>Feature work in those product domains.</td>
+          </tr>
+          <tr>
+            <td><a href="../../docs/">docs/</a></td>
+            <td>MkDocs content used by `/docs` and human repo navigation.</td>
+            <td>Existing product docs, feature evidence, current sprint notes. Do not dump general new docs here casually.</td>
+          </tr>
+          <tr>
+            <td><a href="../../scripts/">scripts/</a>, <a href="../../justfile">justfile</a></td>
+            <td>Release, package, benchmark, docs, and verification helpers.</td>
+            <td>Build/test tooling and product release automation.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>High-value reading path</h3>
+      <ol>
+        <li><a href="../../docs/pfterminal-spec.md">Product spec</a>: what Corbanu Terminal is and what must remain true.</li>
+        <li><a href="../../docs/slash_commands.md">Slash commands</a>: release-facing command inventory.</li>
+        <li><a href="../../docs/integrations/index.md">Core integrations</a>: providers, model picker, auth, and exact routing boundaries.</li>
+        <li><a href="../../docs/authentication.md">Authentication and vault</a>: current credential behavior.</li>
+        <li><a href="../../docs/current-sprint/index.md">Current sprint</a>: active release/security work.</li>
+        <li><a href="../../docs/features/index.md">Features index</a>: shipped surfaces and acceptance evidence.</li>
+      </ol>
+    </section>
+
+    <section id="workflow">
+      <h2>Development Workflow</h2>
+      <p>
+        The working session converged on a document-driven development loop. The plan says what
+        should exist. A sprint translates one feature into mechanical execution. TUI proof and
+        human acceptance decide whether the work is actually done.
+      </p>
+
+      <div class="diagram">
+        <div class="flow" aria-label="Development workflow diagram">
+          <div class="node arrow">
+            <strong>1. Product plan</strong>
+            <small>Describe the pain, user behavior, product contract, and code references.</small>
+          </div>
+          <div class="node arrow">
+            <strong>2. Sprint</strong>
+            <small>One feature only. Tight implementation steps, not flowing prose.</small>
+          </div>
+          <div class="node arrow">
+            <strong>3. Build</strong>
+            <small>Make scoped code changes in the owning modules.</small>
+          </div>
+          <div class="node arrow">
+            <strong>4. TUI proof</strong>
+            <small>Run the actual terminal workflow, preferably in tmux/panes.</small>
+          </div>
+          <div class="node">
+            <strong>5. Acceptance</strong>
+            <small>Human confirms the feature works; docs/evidence record the result.</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <article class="card wide">
+          <h3>Plans vs sprints</h3>
+          <p>
+            A plan can be broad and strategic. A sprint should be narrow, executable, and mapped
+            to exactly one feature. The agreed direction is to add a dedicated sprint workflow so
+            future agents work from concrete implementation contracts instead of oversized prose
+            plans.
+          </p>
+          <p>
+            Useful existing anchors:
+            <a href="../../docs/current-sprint/index.md">current sprint index</a> and
+            <a href="../../docs/current-sprint/PFTERMINAL-0.1.27-SPEC.md">0.1.27 convergence spec</a>.
+          </p>
+        </article>
+
+        <article class="card wide">
+          <h3>Interactive proof matters</h3>
+          <p>
+            A recurring failure mode is agents using non-interactive shell execution and then
+            claiming a TUI workflow works. For terminal features, proof should exercise the real
+            TUI: launch it, navigate it, create panes or agents if relevant, and capture evidence
+            before marking work complete.
+          </p>
+          <p>
+            See feature evidence such as
+            <a href="../../docs/features/spawn-orchestration-acceptance.md">spawn acceptance</a>.
+          </p>
+        </article>
+      </div>
+
+      <h3>Working in tmux</h3>
+      <p>
+        The working-session shorthand was: inspect sessions with <code>tmux ls</code>, attach with
+        <code>tmux attach -t &lt;name&gt;</code>, and detach with the tmux prefix then <code>d</code>
+        (usually <code>Ctrl-b</code>, then <code>d</code>; some setups use <code>Ctrl-a</code>).
+        Use tmux when coordinating Corbanu, docs, and agent panes side by side.
+      </p>
+    </section>
+
+    <section id="commands">
+      <h2>Command Surface</h2>
+      <p>
+        The release-facing commands are documented in
+        <a href="../../docs/slash_commands.md">docs/slash_commands.md</a>. These are the surfaces that
+        guide both implementation and QA.
+      </p>
+
+      <div class="grid">
+        <article class="card">
+          <h3>Providers and models</h3>
+          <p><span class="tag">/model</span><span class="tag">/providers</span></p>
+          <p>
+            Select exact provider/model routes and store provider credentials. Explicit routes
+            should run exactly or fail before inference and spend.
+          </p>
+        </article>
+
+        <article class="card">
+          <h3>Secrets</h3>
+          <p><span class="tag">/vault</span><span class="tag">/vault list</span><span class="tag">/vault credential add</span></p>
+          <p>
+            Provider keys belong in the encrypted vault. Raw secrets should not enter chat,
+            transcript, JSONL, pane artifacts, or model-visible context.
+          </p>
+        </article>
+
+        <article class="card">
+          <h3>Orchestration</h3>
+          <p><span class="tag">/spawn</span><span class="tag">/agent</span><span class="tag">/panes</span></p>
+          <p>
+            Managed Nazgul/Troll/Orc roles use Codex native agent mechanics while preserving
+            Corbanu role prompts, provider routes, panes, and visible hierarchy.
+          </p>
+        </article>
+
+        <article class="card">
+          <h3>Wallet and plans</h3>
+          <p><span class="tag">/wallet</span><span class="tag">/wallet status</span></p>
+          <p>
+            Wallet, plan purchase, balance, lock/unlock, and recovery flows are product-critical.
+          </p>
+        </article>
+
+        <article class="card">
+          <h3>GPU routes</h3>
+          <p><span class="tag">/gpu</span><span class="tag">/gpu status</span><span class="tag">/gpu terminate</span></p>
+          <p>
+            Browse, authorize, launch, inspect, reconcile, stop, or terminate GPU rentals with
+            explicit charge review.
+          </p>
+        </article>
+
+        <article class="card">
+          <h3>Docs, Task Node, Telegram</h3>
+          <p><span class="tag">/docs</span><span class="tag">/tasknode</span><span class="tag">/telegram</span></p>
+          <p>
+            These keep product context, external task workflows, and remote connector controls
+            inside the terminal.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section id="conventions">
+      <h2>Development Conventions</h2>
+      <p>
+        The repo-level <a href="../../AGENTS.md">AGENTS.md</a> is authoritative. This section is the
+        condensed version most useful while editing.
+      </p>
+
+      <div class="grid">
+        <article class="card wide">
+          <h3>Rust workflow</h3>
+          <ul>
+            <li>In <code>codex-rs/</code>, crate names are prefixed with <code>codex-</code>.</li>
+            <li>Use <code>just test -p &lt;crate&gt;</code>; do not run <code>cargo test</code> directly.</li>
+            <li>Run <code>just fmt</code> after code changes anywhere in the Rust repo.</li>
+            <li>Before finalizing larger Rust changes, run <code>just fix -p &lt;crate&gt;</code>.</li>
+            <li>If dependencies change, run <code>just bazel-lock-update</code> from the repo root.</li>
+            <li>If config schema types change, run <code>just write-config-schema</code>.</li>
+            <li>For app-server API shape changes, run <code>just write-app-server-schema</code> and <code>just test -p codex-app-server-protocol</code>.</li>
+          </ul>
+        </article>
+
+        <article class="card wide">
+          <h3>Code style</h3>
+          <ul>
+            <li>Collapse nested <code>if</code> statements when Clippy would ask for it.</li>
+            <li>Inline <code>format!</code> arguments when possible: <code>format!("hello {name}")</code>.</li>
+            <li>Prefer method references over redundant closures.</li>
+            <li>Prefer exhaustive <code>match</code> arms over wildcard arms where practical.</li>
+            <li>Avoid ambiguous bool or <code>Option</code> positional arguments; use clearer API shapes or exact argument comments.</li>
+            <li>New traits need doc comments and should prefer native RPITIT future returns over <code>async_trait</code>.</li>
+          </ul>
+        </article>
+
+        <article class="card wide">
+          <h3>Architecture discipline</h3>
+          <ul>
+            <li>Resist adding new concepts to <code>codex-core</code>; look for a better crate first.</li>
+            <li>Keep crate API surfaces small and prefer private modules with explicit public exports.</li>
+            <li>Avoid growing already-large TUI files; add focused modules for new behavior.</li>
+            <li>For MCP tool-call mutation, prefer <code>codex-rs/codex-mcp/src/mcp_connection_manager.rs</code>.</li>
+            <li>Do not call <code>reset_client_session</code> unless the incremental-check logic really requires it.</li>
+          </ul>
+        </article>
+
+        <article class="card wide">
+          <h3>Testing discipline</h3>
+          <ul>
+            <li>Agent logic changes need integration tests, preferably under <code>core/suite</code> using <code>test_codex</code>.</li>
+            <li>UI changes need <code>insta</code> snapshot coverage and accepted snapshots.</li>
+            <li>Use <code>pretty_assertions::assert_eq</code> and compare whole objects when possible.</li>
+            <li>Do not mutate process environment in tests when a passed dependency or flag will do.</li>
+            <li>For first-party binaries in tests, prefer <code>codex_utils_cargo_bin::cargo_bin</code>.</li>
+          </ul>
+        </article>
+      </div>
+
+      <div class="note">
+        <strong>Security guardrail:</strong> do not add or modify code related to
+        <code>CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR</code> or <code>CODEX_SANDBOX_ENV_VAR</code>.
+        The repo already uses those boundaries deliberately for sandbox-aware tests and execution.
+      </div>
+    </section>
+
+    <section id="next">
+      <h2>What We Agreed To Build Next</h2>
+      <p>
+        The working session produced two layers of next work: immediate security/process work and
+        later product expansion. The immediate work should be converted into proposed plans and
+        then one-feature sprints.
+      </p>
+
+      <div class="diagram">
+        <div class="layers" aria-label="Security architecture layers diagram">
+          <div class="layer">
+            <b>Security profiles</b>
+            <span><code>/security permissive</code>, <code>moderate</code>, and <code>aggressive</code> should be explicit modes, visible in the UX, and recorded in logs for later audit.</span>
+          </div>
+          <div class="layer">
+            <b>Secretless agents</b>
+            <span>Agents ask to use capabilities; Corbanu resolves vault credentials outside model context and never passes raw long-lived keys to shell-capable panes.</span>
+          </div>
+          <div class="layer">
+            <b>Brokered leases</b>
+            <span>A local lease broker gives panes short-lived scoped access to provider calls while keeping real provider keys inside the runtime boundary.</span>
+          </div>
+          <div class="layer">
+            <b>Prompt firewall</b>
+            <span>External text is treated as untrusted, cleaned, labeled by source, and optionally classified for hostile prompt-injection content before reaching the agent.</span>
+          </div>
+          <div class="layer">
+            <b>Sandboxed web</b>
+            <span>Browser/search interactions should be isolated through controlled providers or a sandboxed browser path such as Scrapling-style retrieval, not raw agent browser access.</span>
+          </div>
+          <div class="layer">
+            <b>Regression harness</b>
+            <span>Seed synthetic hostile data, fake secrets, and suspicious trading prompts, then prove transcripts, artifacts, logs, and tool outputs stay clean.</span>
+          </div>
+        </div>
+      </div>
+
+      <h3>Immediate plan candidates</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Plan</th>
+            <th>Build intent</th>
+            <th>Likely starting references</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Security mode UX and logging</td>
+            <td>Add or formalize permissive/moderate/aggressive security modes, make the current mode prominent, and inject it into logs/audit records.</td>
+            <td><a href="../../docs/current-sprint/agent-vault-access.md">agent vault access</a>, <a href="../../codex-rs/tui/">codex-rs/tui/</a>, <a href="../../codex-rs/config/">codex-rs/config/</a></td>
+          </tr>
+          <tr>
+            <td>Provider capability registry</td>
+            <td>Represent provider capability, vault label, transport, billing, and allowed use as typed data instead of prompt instructions or env-var folklore.</td>
+            <td><a href="../../codex-rs/model-provider-info/">model-provider-info</a>, <a href="../../codex-rs/models-manager/models.json">models.json</a>, <a href="../../codex-rs/login/src/auth/provider_key_vault.rs">provider_key_vault.rs</a></td>
+          </tr>
+          <tr>
+            <td>Vault lease broker</td>
+            <td>Let Claude panes/subagents use provider routes without inheriting raw keys. The model sees a lease token and local broker URL, not a provider secret.</td>
+            <td><a href="../../codex-rs/vault/">vault</a>, <a href="../../codex-rs/secrets/">secrets</a>, <a href="../../codex-rs/app-server/">app-server</a>, <a href="../../docs/features/claude-headless-panes.md">Claude panes</a></td>
+          </tr>
+          <tr>
+            <td>Prompt-injection firewall</td>
+            <td>Clean and label untrusted external text before it enters model context; evaluate lightweight classifiers or deterministic cleaning rules for hostile trading prompts.</td>
+            <td><a href="../../codex-rs/core/src/">core/src</a>, <a href="../../codex-rs/context-fragments/">context-fragments</a>, <a href="../../docs/sandbox.md">sandbox docs</a></td>
+          </tr>
+          <tr>
+            <td>Web/search isolation</td>
+            <td>Route web retrieval through explicit search/browser providers and a sandboxed browser pattern instead of letting agents directly operate an untrusted browser surface.</td>
+            <td><a href="../../codex-rs/core/src/tools/">core tools</a>, <a href="../../codex-rs/codex-mcp/">codex-mcp</a>, <a href="../../docs/current-sprint/agent-vault-access.md">security sprint</a></td>
+          </tr>
+          <tr>
+            <td>Sprint documents</td>
+            <td>Create a clear sprint contract: one sprint per feature, mechanical execution steps, evidence slots, and completion/cleanup rules.</td>
+            <td><a href="../../docs/current-sprint/index.md">current-sprint</a>, <a href="../../docs/features/index.md">features</a>, <a href="../../docs/TBD/index.md">TBD</a></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Product expansion ideas captured for later</h3>
+      <ul>
+        <li>Bundle useful market data with paid plans: Tiingo, Sharadar, and internally built Hyperliquid data feeds were discussed.</li>
+        <li>Consider plan add-ons or marketplace purchases for data feeds and other agent capabilities.</li>
+        <li>Add first-class integrations with brokerage agent services such as Robinhood and Interactive Brokers where they make sense.</li>
+        <li>Explore a wallet-linked public chat or Trollbox style surface, likely tied to PostFiat/Nostr identity primitives.</li>
+        <li>Integrate PostFiat/NAB portfolio publishing concepts as a later product surface.</li>
+        <li>Keep provider supply flexible: Ambient, Z.AI, OpenRouter, Akash, BitTensor-style routes, and other sources should be evaluated by quality, cost, privacy, and crypto-native payment fit.</li>
+      </ul>
+
+      <div class="note">
+        <strong>Important product tradeoff:</strong> privacy and broad provider supply can pull in
+        opposite directions. A Corbanu-operated provider router may improve supply and billing,
+        but it changes the privacy story. Treat that as an explicit product decision, not an
+        accidental implementation detail.
+      </div>
+    </section>
+
+    <section id="links">
+      <h2>Reference Links</h2>
+      <p>
+        These links are local to the repo. Open this HTML file from the repository root and they
+        should resolve directly.
+      </p>
+
+      <ul class="path-list">
+        <li><a href="../../AGENTS.md">AGENTS.md</a>: repo instructions and Rust conventions.</li>
+        <li><a href="../../README.md">README.md</a>: repository overview.</li>
+        <li><a href="../../docs/pfterminal-spec.md">docs/pfterminal-spec.md</a>: living product spec.</li>
+        <li><a href="../../docs/current-sprint/index.md">docs/current-sprint/index.md</a>: active work index.</li>
+        <li><a href="../../docs/current-sprint/agent-vault-access.md">docs/current-sprint/agent-vault-access.md</a>: current security sprint.</li>
+        <li><a href="../../docs/current-sprint/PFTERMINAL-0.1.27-SPEC.md">docs/current-sprint/PFTERMINAL-0.1.27-SPEC.md</a>: release/convergence contract.</li>
+        <li><a href="../../docs/slash_commands.md">docs/slash_commands.md</a>: command inventory.</li>
+        <li><a href="../../docs/authentication.md">docs/authentication.md</a>: auth and vault behavior.</li>
+        <li><a href="../../docs/integrations/index.md">docs/integrations/index.md</a>: provider integration map.</li>
+        <li><a href="../../docs/features/index.md">docs/features/index.md</a>: shipped feature evidence.</li>
+        <li><a href="../../docs/features/spawn-orchestration.md">docs/features/spawn-orchestration.md</a>: managed role orchestration.</li>
+        <li><a href="../../docs/features/claude-headless-panes.md">docs/features/claude-headless-panes.md</a>: Claude pane integration.</li>
+        <li><a href="../../docs/features/glm-52-tool-compatibility.md">docs/features/glm-52-tool-compatibility.md</a>: GLM compatibility evidence.</li>
+        <li><a href="../../codex-rs/tui/">codex-rs/tui/</a>: terminal UI implementation.</li>
+        <li><a href="../../codex-rs/core/">codex-rs/core/</a>: core agent/runtime implementation.</li>
+        <li><a href="../../codex-rs/model-provider-info/">codex-rs/model-provider-info/</a>: built-in providers.</li>
+        <li><a href="../../codex-rs/models-manager/models.json">codex-rs/models-manager/models.json</a>: model catalog.</li>
+        <li><a href="../../codex-rs/vault/">codex-rs/vault/</a>: vault crate.</li>
+        <li><a href="../../codex-rs/secrets/">codex-rs/secrets/</a>: managed secrets substrate.</li>
+        <li><a href="../../justfile">justfile</a>: local command runner.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      Generated as <code>repository-guide.html</code> from the 2026-08-23 working session and current repository docs.
+      Keep this guide as an onboarding map; the linked specs remain the source of truth.
+    </div>
+  </footer>
+</body>
+</html>
