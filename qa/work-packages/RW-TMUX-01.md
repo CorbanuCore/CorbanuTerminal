@@ -115,10 +115,14 @@ updated: 2026-08-24
   tmux` passes 7/7.
 - [x] Final owning integration binary: `cd codex-rs && just test -p codex-tui
   --test all` passes 17/17 with two intentional skips.
-- [x] Crate-wide command attempted twice: `cd codex-rs && just test -p
-  codex-tui` is blocked before execution by the host linker (`ld: B/BL out of
-  range`) while linking the oversized library test binary. This is unrelated
-  to the changed integration-test code and is recorded in the evidence.
+- [x] Crate-wide linker blocker resolved: Apple test constructors now use the
+  regular text section so the linker can insert branch islands for the large
+  `codex-tui` library test binary. An exact default-profile link and selected
+  test pass without linker overrides.
+- [x] Crate-wide execution audit: `cd codex-rs && just test -p codex-tui`
+  executes 3,821 tests: 3,780 passed and 41 failed, with 8 additional tests
+  skipped. The 37 stale UI snapshots and four macOS MkDocs path assertions are
+  unrelated baseline debt recorded in the evidence.
 - [x] Snapshot audit: `cd codex-rs && cargo insta pending-snapshots
   --manifest-path tui/Cargo.toml` reports no unintended pending snapshots.
 - [x] Stability: the migrated focused test completes 20 consecutive runs with
@@ -145,8 +149,9 @@ Record final evidence under `qa/work-packages/evidence/RW-TMUX-01/`:
 
 - [x] Every Remaining item is complete or explicitly removed through a recorded
   scope decision.
-- [x] Every applicable Verification item passes on the final tree; the unrelated
-  host linker limitation is recorded with the exact error.
+- [x] Every package-specific Verification item passes on the final tree; the
+  repaired host linker limitation and unrelated crate-wide baseline failures
+  are recorded with exact results.
 - [x] Evidence directory is complete and linked from this record:
   [RW-TMUX-01 results](evidence/RW-TMUX-01/RESULTS.md).
 - [x] No user-facing behavior, product documentation, or release claim changed.

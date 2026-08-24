@@ -17,6 +17,7 @@ use codex_core::config::ConfigBuilder;
 use codex_core::config::ConfigOverrides;
 pub use codex_core::test_support::TestCodexResponsesRequestKind;
 pub use codex_core::test_support::responses_metadata;
+#[cfg(target_os = "linux")]
 use codex_protocol::models::PermissionProfile;
 use codex_utils_absolute_path::AbsolutePathBuf;
 pub use codex_utils_absolute_path::test_support::PathBufExt;
@@ -50,18 +51,31 @@ pub use test_environment::test_target_os;
 static TEST_ARG0_PATH_ENTRY: OnceLock<Option<Arg0PathEntryGuard>> = OnceLock::new();
 static LINUX_SANDBOX_SKIP_REASON: OnceLock<Option<String>> = OnceLock::new();
 
-#[ctor(unsafe)]
+// Keep macOS test constructors in regular text so large test binaries can use branch islands.
+#[cfg_attr(
+    target_vendor = "apple",
+    ctor(unsafe, body(link_section = "__TEXT,__text,regular,pure_instructions"))
+)]
+#[cfg_attr(not(target_vendor = "apple"), ctor(unsafe))]
 fn enable_deterministic_unified_exec_process_ids_for_tests() {
     codex_core::test_support::set_thread_manager_test_mode(/*enabled*/ true);
     codex_core::test_support::set_deterministic_process_ids(/*enabled*/ true);
 }
 
-#[ctor(unsafe)]
+#[cfg_attr(
+    target_vendor = "apple",
+    ctor(unsafe, body(link_section = "__TEXT,__text,regular,pure_instructions"))
+)]
+#[cfg_attr(not(target_vendor = "apple"), ctor(unsafe))]
 fn configure_arg0_dispatch_for_test_binaries() {
     let _ = TEST_ARG0_PATH_ENTRY.get_or_init(codex_arg0::arg0_dispatch);
 }
 
-#[ctor(unsafe)]
+#[cfg_attr(
+    target_vendor = "apple",
+    ctor(unsafe, body(link_section = "__TEXT,__text,regular,pure_instructions"))
+)]
+#[cfg_attr(not(target_vendor = "apple"), ctor(unsafe))]
 fn configure_insta_workspace_root_for_snapshot_tests() {
     if std::env::var_os("INSTA_WORKSPACE_ROOT").is_some() {
         return;
