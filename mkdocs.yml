@@ -101,7 +101,6 @@ nav:
           - Current Security Work:
               - Overview: sprints/current/p0-security-levels/index.md
               - "PF-13 — Credential boundary":
-                  - "PF-13-S01 — Capability and store": sprints/current/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md
                   - "PF-13-S02 — Scoped vault resolver": sprints/current/p0-security-levels/pf-13-s02-scoped-vault-resolver.md
                   - "PF-13-S03 — OpenAI exact-host substitution": sprints/current/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md
                   - "PF-13-S04 — Lifecycle and bypass closure": sprints/current/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md

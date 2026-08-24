@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-13-S02"
 title: "Scoped vault resolver"
-status: draft
+status: ready
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 10
@@ -35,9 +35,9 @@ updated: 2026-08-24
 
 ## Preconditions
 
-- [ ] PF-13-S01 is completed and archived.
-- [ ] Read root and `codex-rs/AGENTS.md`.
-- [ ] Exact worktree coordinates match the active plan.
+- [x] PF-13-S01 is completed and archived.
+- [x] Read root and `codex-rs/AGENTS.md`.
+- [x] Exact worktree coordinates match the active plan.
 
 ## Done
 
