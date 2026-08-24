@@ -68,6 +68,7 @@ struct AgentSecurityBinding {
 struct EffectivePolicyState {
     persisted: PersistedHumanSecurityState,
     epoch: u64,
+    root_agent_id: ThreadId,
     agents: HashMap<ThreadId, AgentSecurityBinding>,
 }
 
@@ -162,6 +163,22 @@ impl EffectivePolicyView {
         Ok(snapshot)
     }
 
+    pub(crate) fn inherit_auxiliary_agent(
+        &self,
+        agent_id: ThreadId,
+        task_id: impl Into<String>,
+        configured_level: SecurityLevel,
+    ) -> Result<EffectivePolicySnapshot, SecurityPolicyError> {
+        let root_agent_id = {
+            let state = self.read_state()?;
+            state
+                .as_ref()
+                .ok_or(SecurityPolicyError::RuntimeNotInitialized)?
+                .root_agent_id
+        };
+        self.inherit_child(root_agent_id, agent_id, task_id, configured_level)
+    }
+
     pub(crate) fn inherit_child(
         &self,
         parent_id: ThreadId,
@@ -250,6 +267,7 @@ impl TrustedSecurityController {
         let proposed = EffectivePolicyState {
             persisted,
             epoch: 0,
+            root_agent_id,
             agents: HashMap::from([(root_agent_id, root_binding)]),
         };
         let mut guard = view

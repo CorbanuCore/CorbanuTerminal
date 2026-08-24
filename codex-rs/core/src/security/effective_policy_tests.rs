@@ -189,6 +189,19 @@ fn security_inheritance_preserves_authority_identity_and_revocation_state() {
         Some(format!("agent:{child_id}").as_str())
     );
 
+    let auxiliary_id = ThreadId::new();
+    let auxiliary = view
+        .inherit_auxiliary_agent(
+            auxiliary_id,
+            "task:guardian-review",
+            SecurityLevel::Moderate,
+        )
+        .expect("auxiliary agent");
+    assert_eq!(auxiliary.level, SecurityLevel::Moderate);
+    assert_eq!(auxiliary.session_id, child.session_id);
+    assert_eq!(auxiliary.actor_chain.as_slice().len(), 2);
+    assert_eq!(auxiliary.task_id.as_str(), "task:guardian-review");
+
     let grandchild_id = ThreadId::new();
     let grandchild = view
         .inherit_child(
