@@ -79,6 +79,7 @@ codex-cli/         npm CLI package
 scripts/install/   Standalone installer scripts
 sdk/               SDK surfaces
 docs/              MkDocs user-facing documentation
+research/          Internal transcripts, studies, and generated research reports
 ```
 
 ---
