@@ -24,10 +24,9 @@ use crate::support::tmux::TmuxServer;
 
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn tmux_split_preserves_fresh_session_composer_row_after_resize_reflow() -> Result<()> {
+async fn tmux_smoke_split_preserves_fresh_session_composer_row_after_resize_reflow() -> Result<()> {
     skip_if_no_network!(Ok(()));
-    if !TmuxServer::is_available() {
-        eprintln!("skipping resize smoke because tmux is unavailable");
+    if !TmuxServer::should_run("resize smoke")? {
         return Ok(());
     }
 
@@ -41,7 +40,9 @@ async fn tmux_split_preserves_fresh_session_composer_row_after_resize_reflow() -
     write_auth(codex_home.path())?;
 
     let prompt = "Say hi.";
-    let tmux = TmuxServer::start()?;
+    let tmux = TmuxServer::start("tmux-smoke-resize-reflow")?;
+    tmux.register_artifact("config.toml", codex_home.path().join("config.toml"));
+    tmux.register_artifact("codex-tui.log", codex_home.path().join("log/codex-tui.log"));
     let session = tmux.new_session(
         SessionSpec::new(
             "codex-resize-reflow-smoke",
