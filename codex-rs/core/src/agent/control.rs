@@ -197,13 +197,20 @@ impl AgentControl {
         mut self,
         level: SecurityLevel,
         root_thread_id: ThreadId,
-        is_non_root_agent: bool,
+        inherits_from_spawn_parent: bool,
     ) -> Result<Self, SecurityPolicyError> {
-        if is_non_root_agent {
-            if !self.security_policy.is_initialized()? {
-                return Err(SecurityPolicyError::RuntimeNotInitialized);
+        if self.security_policy.is_initialized()? {
+            if !inherits_from_spawn_parent {
+                self.security_policy.inherit_auxiliary_agent(
+                    root_thread_id,
+                    format!("task:auxiliary:{root_thread_id}"),
+                    level,
+                )?;
             }
             return Ok(self);
+        }
+        if inherits_from_spawn_parent {
+            return Err(SecurityPolicyError::RuntimeNotInitialized);
         }
 
         let human_authority = PolicyPrincipal::new(
