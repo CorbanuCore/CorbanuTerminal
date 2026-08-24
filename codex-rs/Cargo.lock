@@ -2894,6 +2894,7 @@ dependencies = [
  "which 8.0.0",
  "whoami 1.6.1",
  "wiremock",
+ "zeroize",
  "zstd",
 ]
 
