@@ -55,6 +55,13 @@ jobs:
           python3 -m unittest discover -s docs/sprints/tests -p 'test_*.py'
           python3 docs/sprints/check.py
 
+      - name: Validate portable agent skills
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest scripts.test_check_portable_skills
+          python3 scripts/check_portable_skills.py
+
       - name: Build Corbanu Terminal binaries
         shell: bash
         run: |
