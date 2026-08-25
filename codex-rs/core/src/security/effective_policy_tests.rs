@@ -10,6 +10,7 @@ use codex_security_policy::RevocationTarget;
 use codex_security_policy::SecurityLevel;
 use codex_security_policy::SecuritySettings;
 
+use super::effective_policy::EffectivePolicyInitialization;
 use super::effective_policy::EffectivePolicyView;
 use super::effective_policy::PersistedHumanSecurityState;
 use super::effective_policy::SecurityPolicyError;
@@ -18,6 +19,10 @@ use super::effective_policy::UntrustedPolicyOrigin;
 
 fn human() -> PolicyPrincipal {
     PolicyPrincipal::new(PrincipalKind::Human, "human:test-operator").expect("human")
+}
+
+fn agent(agent_id: ThreadId) -> PolicyPrincipal {
+    PolicyPrincipal::new(PrincipalKind::Agent, format!("agent:{agent_id}")).expect("agent")
 }
 
 fn initialized_policy(
@@ -35,8 +40,14 @@ fn initialized_policy(
     let persisted =
         PersistedHumanSecurityState::new(SecuritySettings::new(level), human(), revocations)
             .expect("persisted state");
-    let controller = TrustedSecurityController::initialize(&view, persisted, root_id, session_id)
-        .expect("initialize");
+    let controller = TrustedSecurityController::initialize(
+        &view,
+        persisted,
+        root_id,
+        session_id,
+        EffectivePolicyInitialization::Root,
+    )
+    .expect("initialize");
     (view, controller, root_id, session_id)
 }
 
@@ -59,6 +70,16 @@ fn effective_policy_composition_never_expands_existing_authority() {
         );
         assert!(policy.compose_existing_decision(true, true));
     }
+}
+
+#[test]
+fn root_policy_binding_includes_the_root_agent() {
+    let (view, _controller, root_id, _session_id) =
+        initialized_policy(SecurityLevel::Permissive, RevocationState::new());
+    let snapshot = view.snapshot_for_agent(root_id).expect("root snapshot");
+
+    assert_eq!(snapshot.actor_chain.as_slice(), &[human(), agent(root_id)]);
+    assert_eq!(snapshot.actor_chain.current_actor(), Some(&agent(root_id)));
 }
 
 #[test]
@@ -199,7 +220,7 @@ fn security_inheritance_preserves_authority_identity_and_revocation_state() {
         .expect("auxiliary agent");
     assert_eq!(auxiliary.level, SecurityLevel::Moderate);
     assert_eq!(auxiliary.session_id, child.session_id);
-    assert_eq!(auxiliary.actor_chain.as_slice().len(), 2);
+    assert_eq!(auxiliary.actor_chain.as_slice().len(), 3);
     assert_eq!(auxiliary.task_id.as_str(), "task:guardian-review");
 
     let grandchild_id = ThreadId::new();

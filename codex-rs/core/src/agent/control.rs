@@ -10,6 +10,7 @@ use crate::config::Config;
 use crate::config::RolloutBudgetConfig;
 use crate::environment_selection::TurnEnvironmentSnapshot;
 use crate::rollout_budget::RolloutBudget;
+use crate::security::EffectivePolicyInitialization;
 use crate::security::EffectivePolicyView;
 use crate::security::PersistedHumanSecurityState;
 use crate::security::SecurityPolicyError;
@@ -209,10 +210,6 @@ impl AgentControl {
             }
             return Ok(self);
         }
-        if inherits_from_spawn_parent {
-            return Err(SecurityPolicyError::RuntimeNotInitialized);
-        }
-
         let human_authority = PolicyPrincipal::new(
             PrincipalKind::Human,
             format!("human:session:{}", self.session_id),
@@ -227,6 +224,11 @@ impl AgentControl {
             persisted,
             root_thread_id,
             self.session_id,
+            if inherits_from_spawn_parent {
+                EffectivePolicyInitialization::DetachedSpawnedAgent
+            } else {
+                EffectivePolicyInitialization::Root
+            },
         )?;
         self.trusted_security_controller = Some(controller);
         Ok(self)

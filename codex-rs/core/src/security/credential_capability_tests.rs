@@ -13,6 +13,7 @@ use codex_security_policy::BoundedText;
 use codex_security_policy::CredentialDestination;
 use codex_security_policy::CredentialHttpMethod;
 use codex_security_policy::CredentialReference;
+use codex_security_policy::GrantContext;
 use codex_security_policy::GrantScope;
 use codex_security_policy::PolicyAction;
 use codex_security_policy::PolicyPrincipal;
@@ -132,6 +133,12 @@ fn request(
         GrantScope::new(
             authorization.resource.clone(),
             [PolicyAction::Use],
+            GrantContext::new(
+                authorization.context.session_id.clone(),
+                authorization.context.task_id.clone(),
+                authorization.context.purpose.clone(),
+                authorization.context.operation.clone(),
+            ),
             authorization.context.destination.clone(),
             BTreeMap::new(),
         )

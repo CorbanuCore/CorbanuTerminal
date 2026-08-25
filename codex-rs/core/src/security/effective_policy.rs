@@ -62,6 +62,7 @@ struct AgentSecurityBinding {
     session_id: BoundedText,
     task_id: BoundedText,
     minimum_level: SecurityLevel,
+    force_deny: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -93,6 +94,12 @@ pub(crate) struct EffectivePolicyView {
 #[derive(Clone)]
 pub(crate) struct TrustedSecurityController {
     shared: Arc<SharedEffectivePolicy>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EffectivePolicyInitialization {
+    Root,
+    DetachedSpawnedAgent,
 }
 
 #[derive(Clone, Debug)]
@@ -208,6 +215,7 @@ impl EffectivePolicyView {
             session_id: parent.session_id,
             task_id: BoundedText::new(task_id.into())?,
             minimum_level: parent.minimum_level.max(configured_minimum),
+            force_deny: parent.force_deny,
         };
         if let Some(existing) = state.agents.get(&child_id) {
             if existing != &binding {
@@ -256,13 +264,20 @@ impl TrustedSecurityController {
         persisted: PersistedHumanSecurityState,
         root_agent_id: ThreadId,
         session_id: SessionId,
+        initialization: EffectivePolicyInitialization,
     ) -> Result<Self, SecurityPolicyError> {
         persisted.validate()?;
+        let root_agent =
+            PolicyPrincipal::new(PrincipalKind::Agent, format!("agent:{root_agent_id}"))?;
         let root_binding = AgentSecurityBinding {
-            actor_chain: ActorChain::new(vec![persisted.human_authority.clone()])?,
+            actor_chain: ActorChain::new(vec![persisted.human_authority.clone(), root_agent])?,
             session_id: BoundedText::new(format!("session:{session_id}"))?,
             task_id: BoundedText::new(format!("task:{root_agent_id}"))?,
-            minimum_level: SecurityLevel::Permissive,
+            minimum_level: match initialization {
+                EffectivePolicyInitialization::Root => SecurityLevel::Permissive,
+                EffectivePolicyInitialization::DetachedSpawnedAgent => SecurityLevel::Aggressive,
+            },
+            force_deny: initialization == EffectivePolicyInitialization::DetachedSpawnedAgent,
         };
         let proposed = EffectivePolicyState {
             persisted,
@@ -377,7 +392,7 @@ fn snapshot(
         session_id: binding.session_id.clone(),
         task_id: binding.task_id.clone(),
         revocation_generation: state.persisted.revocations.generation,
-        kill_switch_active: state.persisted.revocations.kill_switch_active,
+        kill_switch_active: binding.force_deny || state.persisted.revocations.kill_switch_active,
     }
 }
 

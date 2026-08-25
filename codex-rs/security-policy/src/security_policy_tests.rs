@@ -47,6 +47,12 @@ fn scope(max_units: u64) -> GrantScope {
     GrantScope::new(
         resource(),
         [PolicyAction::Execute, PolicyAction::Export],
+        GrantContext::new(
+            text("session:security-test"),
+            text("task:execute-paper-order"),
+            text("paper-trading-regression"),
+            text("order.execute"),
+        ),
         Some(text("venue:paper")),
         BTreeMap::from([(text("USD"), max_units)]),
     )
@@ -235,6 +241,28 @@ fn grant_integrity_expiry_and_exact_scope_are_enforced() {
             .expect("resource mismatch")
     );
 
+    for (field, value) in [
+        ("session_id", "session:other"),
+        ("task_id", "task:other"),
+        ("purpose", "portfolio-disclosure"),
+        ("operation", "order.cancel"),
+    ] {
+        let mut wrong_context = request(150);
+        match field {
+            "session_id" => wrong_context.context.session_id = text(value),
+            "task_id" => wrong_context.context.task_id = text(value),
+            "purpose" => wrong_context.context.purpose = text(value),
+            "operation" => wrong_context.context.operation = text(value),
+            _ => unreachable!(),
+        }
+        assert!(
+            !grant
+                .matches_request(&wrong_context)
+                .expect("context mismatch"),
+            "grant matched the wrong {field}"
+        );
+    }
+
     let mut wrong_destination = request(150);
     wrong_destination.context.destination = Some(text("venue:other"));
     assert!(
@@ -280,6 +308,7 @@ fn derived_grants_can_only_narrow_scope_chain_and_expiry() {
     let child_scope = GrantScope::new(
         resource(),
         [PolicyAction::Execute],
+        parent.scope.context.clone(),
         Some(text("venue:paper")),
         BTreeMap::from([(text("USD"), 250)]),
     )
@@ -299,6 +328,7 @@ fn derived_grants_can_only_narrow_scope_chain_and_expiry() {
     let broader_scope = GrantScope::new(
         resource(),
         [PolicyAction::Execute],
+        parent.scope.context.clone(),
         Some(text("venue:paper")),
         BTreeMap::from([(text("USD"), 1_001)]),
     )
@@ -318,6 +348,7 @@ fn derived_grants_can_only_narrow_scope_chain_and_expiry() {
     let extra_asset_scope = GrantScope::new(
         resource(),
         [PolicyAction::Execute],
+        parent.scope.context.clone(),
         Some(text("venue:paper")),
         BTreeMap::from([(text("BTC"), 1), (text("USD"), 250)]),
     )
@@ -337,6 +368,7 @@ fn derived_grants_can_only_narrow_scope_chain_and_expiry() {
     let extra_action_scope = GrantScope::new(
         resource(),
         [PolicyAction::Execute, PolicyAction::Sign],
+        parent.scope.context.clone(),
         Some(text("venue:paper")),
         BTreeMap::from([(text("USD"), 250)]),
     )
@@ -356,6 +388,7 @@ fn derived_grants_can_only_narrow_scope_chain_and_expiry() {
     let narrow_scope = GrantScope::new(
         resource(),
         [PolicyAction::Execute],
+        parent.scope.context.clone(),
         Some(text("venue:paper")),
         BTreeMap::from([(text("USD"), 250)]),
     )
@@ -363,13 +396,35 @@ fn derived_grants_can_only_narrow_scope_chain_and_expiry() {
     assert!(matches!(
         BoundedGrant::derive_child(
             &parent,
-            child_chain,
+            child_chain.clone(),
             narrow_scope,
             99,
             180,
             text("pre-parent-child-nonce"),
         ),
         Err(GrantValidationError::IssuedBeforeParent)
+    ));
+
+    let mut adjacent_context = parent.scope.context.clone();
+    adjacent_context.operation = text("order.cancel");
+    let adjacent_context_scope = GrantScope::new(
+        resource(),
+        [PolicyAction::Execute],
+        adjacent_context,
+        Some(text("venue:paper")),
+        BTreeMap::from([(text("USD"), 250)]),
+    )
+    .expect("structurally valid adjacent context");
+    assert!(matches!(
+        BoundedGrant::derive_child(
+            &parent,
+            child_chain,
+            adjacent_context_scope,
+            120,
+            180,
+            text("adjacent-context-child-nonce"),
+        ),
+        Err(GrantValidationError::ScopeNotNarrower)
     ));
 }
 

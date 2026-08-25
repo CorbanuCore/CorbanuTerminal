@@ -15,9 +15,35 @@ use crate::PrincipalKind;
 use crate::ProtectedResource;
 use crate::digest::canonical_sha256;
 
-pub const GRANT_SCHEMA_VERSION: u32 = 1;
+pub const GRANT_SCHEMA_VERSION: u32 = 2;
 pub const MAX_GRANT_ACTIONS: usize = 16;
 pub const MAX_GRANT_LIMITS: usize = 16;
+
+/// Exact request context to which a temporary grant applies.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct GrantContext {
+    pub session_id: BoundedText,
+    pub task_id: BoundedText,
+    pub purpose: BoundedText,
+    pub operation: BoundedText,
+}
+
+impl GrantContext {
+    pub fn new(
+        session_id: BoundedText,
+        task_id: BoundedText,
+        purpose: BoundedText,
+        operation: BoundedText,
+    ) -> Self {
+        Self {
+            session_id,
+            task_id,
+            purpose,
+            operation,
+        }
+    }
+}
 
 /// Exact authority carried by a temporary grant.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -25,6 +51,7 @@ pub const MAX_GRANT_LIMITS: usize = 16;
 pub struct GrantScope {
     pub resource: ProtectedResource,
     pub actions: BTreeSet<PolicyAction>,
+    pub context: GrantContext,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub destination: Option<BoundedText>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -35,12 +62,14 @@ impl GrantScope {
     pub fn new(
         resource: ProtectedResource,
         actions: impl IntoIterator<Item = PolicyAction>,
+        context: GrantContext,
         destination: Option<BoundedText>,
         quantitative_limits: BTreeMap<BoundedText, u64>,
     ) -> Result<Self, GrantValidationError> {
         let scope = Self {
             resource,
             actions: actions.into_iter().collect(),
+            context,
             destination,
             quantitative_limits,
         };
@@ -72,7 +101,10 @@ impl GrantScope {
 
     /// Whether this scope grants no more authority than `parent`.
     pub fn is_narrower_or_equal(&self, parent: &Self) -> bool {
-        if self.resource != parent.resource || !self.actions.is_subset(&parent.actions) {
+        if self.resource != parent.resource
+            || !self.actions.is_subset(&parent.actions)
+            || self.context != parent.context
+        {
             return false;
         }
         if let Some(parent_destination) = &parent.destination
@@ -93,7 +125,13 @@ impl GrantScope {
     }
 
     fn matches_request(&self, request: &AuthorizationRequest) -> bool {
-        if self.resource != request.resource || !self.actions.contains(&request.action) {
+        if self.resource != request.resource
+            || !self.actions.contains(&request.action)
+            || self.context.session_id != request.context.session_id
+            || self.context.task_id != request.context.task_id
+            || self.context.purpose != request.context.purpose
+            || self.context.operation != request.context.operation
+        {
             return false;
         }
         if let Some(destination) = &self.destination

@@ -95,9 +95,24 @@ def extract_test_source(path: Path, function_name: str) -> str:
         raise CompatibilityError(
             f"probe function {function_name!r} is missing from {path}"
         )
+    attached_attributes = re.search(
+        r"(?m)(?P<attributes>(?:^[ \t]*#\[[^\]]*\][ \t]*\n)+)\Z",
+        text[: match.start()],
+    )
+    start = (
+        attached_attributes.start("attributes")
+        if attached_attributes is not None
+        else match.start()
+    )
     next_test = re.compile(r"(?m)^#\[(?:tokio::)?test\]\n").search(text, match.end())
     end = next_test.start() if next_test is not None else len(text)
-    return text[match.start() : end].rstrip() + "\n"
+    return text[start:end].rstrip() + "\n"
+
+
+def executed_test_count(result: CommandResult) -> int:
+    output = f"{result.stdout}\n{result.stderr}"
+    summary = re.search(r"Summary\s+\[[^\]]+\]\s+(\d+)\s+tests?\s+run:", output)
+    return int(summary.group(1)) if summary is not None else 0
 
 
 def probe_source_digest(repo_root: Path, probe: dict[str, Any]) -> str:
@@ -220,6 +235,35 @@ def candidate_identity(
     return identity, version
 
 
+def workspace_candidate_path(repo_root: Path) -> Path:
+    executable = "corbanu.exe" if os.name == "nt" else "corbanu"
+    return (repo_root / "codex-rs" / "target" / "debug" / executable).resolve()
+
+
+def build_workspace_candidate(repo_root: Path, candidate: Path) -> CommandResult:
+    expected = workspace_candidate_path(repo_root)
+    if candidate.resolve() != expected:
+        raise CompatibilityError(
+            f"--candidate must be the workspace binary built by this harness: {expected}"
+        )
+    result = run_command(
+        [
+            "cargo",
+            "build",
+            "--target-dir",
+            str(repo_root / "codex-rs" / "target"),
+            "-p",
+            "codex-cli",
+            "--bin",
+            "corbanu",
+        ],
+        cwd=repo_root / "codex-rs",
+    )
+    if result.returncode != 0:
+        raise CompatibilityError("candidate workspace build failed")
+    return result
+
+
 def write_report(output_dir: Path, report: dict[str, Any]) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     destination = output_dir / REPORT_NAME
@@ -246,6 +290,7 @@ def run_compatibility(
     manifest_bytes = manifest_path.read_bytes()
     manifest = json.loads(manifest_bytes)
     probes = validate_manifest(manifest, repo_root, baseline_commit)
+    build_result = build_workspace_candidate(repo_root, candidate)
     identity, version_result = candidate_identity(candidate, repo_root)
 
     source_commit = git_output(repo_root, ["rev-parse", "HEAD"])
@@ -261,6 +306,7 @@ def run_compatibility(
         "candidate": identity,
         "source_commit": source_commit,
         "source_dirty_paths": dirty_paths,
+        "candidate_build_command": build_result.as_json(),
         "candidate_version_command": version_result.as_json(),
         "probes": [],
     }
@@ -278,6 +324,7 @@ def run_compatibility(
                 "test",
                 "-p",
                 probe["package"],
+                "--lib",
                 probe["test_filter"],
             ]
             result = run_command(
@@ -285,7 +332,8 @@ def run_compatibility(
                 cwd=repo_root / "codex-rs",
                 env=environment,
             )
-            passed = result.returncode == 0
+            executed_tests = executed_test_count(result)
+            passed = result.returncode == 0 and executed_tests > 0
             all_passed &= passed
             report["probes"].append(
                 {
@@ -293,6 +341,7 @@ def run_compatibility(
                     "covers": probe["covers"],
                     "source_sha256": probe["source_sha256"],
                     "passed": passed,
+                    "executed_tests": executed_tests,
                     "result": result.as_json(),
                 }
             )

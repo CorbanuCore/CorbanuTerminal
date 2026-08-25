@@ -45,6 +45,7 @@ pub use credential::CredentialHttpMethod;
 pub use credential::CredentialReference;
 pub use credential::CredentialTransport;
 pub use grant::BoundedGrant;
+pub use grant::GrantContext;
 pub use grant::GrantScope;
 pub use grant::GrantValidationError;
 pub use level::SECURITY_SETTINGS_VERSION;

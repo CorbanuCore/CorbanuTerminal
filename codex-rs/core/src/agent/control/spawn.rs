@@ -211,11 +211,15 @@ impl AgentControl {
         initial_input: Vec<UserInput>,
         session_source: Option<SessionSource>,
     ) -> CodexResult<ThreadId> {
-        let spawned_agent = Box::pin(self.spawn_agent_internal(
+        let options = SpawnAgentOptions::default();
+        let control = self
+            .control_with_live_parent_security_policy(session_source.as_ref(), &options)
+            .await?;
+        let spawned_agent = Box::pin(control.spawn_agent_internal(
             config,
             SpawnInitialInput::UserInput(initial_input),
             session_source,
-            SpawnAgentOptions::default(),
+            options,
         ))
         .await?;
         Ok(spawned_agent.thread_id)
@@ -229,7 +233,10 @@ impl AgentControl {
         session_source: Option<SessionSource>,
         options: SpawnAgentOptions, // TODO(jif) drop with new fork.
     ) -> CodexResult<LiveAgent> {
-        Box::pin(self.spawn_agent_internal(
+        let control = self
+            .control_with_live_parent_security_policy(session_source.as_ref(), &options)
+            .await?;
+        Box::pin(control.spawn_agent_internal(
             config,
             SpawnInitialInput::UserInput(initial_input),
             session_source,
@@ -246,13 +253,59 @@ impl AgentControl {
         session_source: Option<SessionSource>,
         options: SpawnAgentOptions,
     ) -> CodexResult<LiveAgent> {
-        Box::pin(self.spawn_agent_internal(
+        let control = self
+            .control_with_live_parent_security_policy(session_source.as_ref(), &options)
+            .await?;
+        Box::pin(control.spawn_agent_internal(
             config,
             SpawnInitialInput::InterAgentCommunication(communication, context),
             session_source,
             options,
         ))
         .await
+    }
+
+    async fn control_with_live_parent_security_policy(
+        &self,
+        session_source: Option<&SessionSource>,
+        options: &SpawnAgentOptions,
+    ) -> CodexResult<Self> {
+        let parent_thread_id = options.parent_thread_id.or_else(|| {
+            session_source.and_then(|source| match source {
+                SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+                    parent_thread_id, ..
+                }) => Some(*parent_thread_id),
+                _ => None,
+            })
+        });
+        let Some(parent_thread_id) = parent_thread_id else {
+            return Ok(self.clone());
+        };
+        if self
+            .security_policy
+            .snapshot_for_agent(parent_thread_id)
+            .is_ok()
+        {
+            return Ok(self.clone());
+        }
+
+        let state = self.upgrade()?;
+        let parent_thread = state.get_thread(parent_thread_id).await?;
+        let parent_control = parent_thread.session.services.agent_control.clone();
+        parent_control
+            .security_policy
+            .snapshot_for_agent(parent_thread_id)
+            .map_err(|error| {
+                CodexErr::Fatal(format!(
+                    "live parent has no effective security policy: {error}"
+                ))
+            })?;
+
+        let mut control = self.clone();
+        control.session_id = parent_control.session_id;
+        control.security_policy = parent_control.security_policy;
+        control.trusted_security_controller = parent_control.trusted_security_controller;
+        Ok(control)
     }
 
     pub(crate) async fn ensure_v2_agent_loaded(

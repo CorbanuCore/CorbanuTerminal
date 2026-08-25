@@ -3,6 +3,7 @@
 pub(crate) mod credential_capability;
 mod effective_policy;
 
+pub(crate) use effective_policy::EffectivePolicyInitialization;
 pub(crate) use effective_policy::EffectivePolicyView;
 pub(crate) use effective_policy::PersistedHumanSecurityState;
 pub(crate) use effective_policy::SecurityPolicyError;
