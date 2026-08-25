@@ -17,11 +17,11 @@ SPEC.loader.exec_module(scanner)
 
 class ExactKeyScannerTests(unittest.TestCase):
     def test_detects_secret_across_chunk_boundary(self) -> None:
-        secret = b"benchmark-secret-value"
+        canary = b"benchmark-canary-value"
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "artifact.bin"
-            path.write_bytes(b"x" * (1024 * 1024 - 5) + secret + b"tail")
-            found, scanned = scanner.contains_secret(path, [secret])
+            path.write_bytes(b"x" * (1024 * 1024 - 5) + canary + b"tail")
+            found, scanned = scanner.contains_secret(path, [canary])
             self.assertTrue(found)
             self.assertGreaterEqual(scanned, 1024 * 1024)
 
