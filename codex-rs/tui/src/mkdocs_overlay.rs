@@ -754,8 +754,8 @@ impl MkDocsOverlay {
             self.list_scroll = position;
         } else {
             let rows = height.saturating_sub(1);
-            if rows > 0 && position >= self.list_scroll + rows {
-                self.list_scroll = position + 1 - rows;
+            if rows > 0 && position >= self.list_scroll.saturating_add(rows) {
+                self.list_scroll = position.saturating_add(1).saturating_sub(rows);
             }
         }
         let max_scroll = self
@@ -950,6 +950,38 @@ fn html_anchor_id(html: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::keymap::RuntimeKeymap;
+    use crate::mkdocs_viewer::MkDocsPage;
+
+    #[test]
+    fn unbounded_visibility_check_does_not_overflow_a_scrolled_large_site() {
+        let temp_dir = tempfile::tempdir().expect("create temp docs directory");
+        let page_path = temp_dir.path().join("page.md");
+        std::fs::write(&page_path, "# Page\n").expect("write page fixture");
+        let pages = (0..300)
+            .map(|index| MkDocsPage {
+                rel_path: format!("page-{index}.md").into(),
+                abs_path: page_path.clone(),
+                search_text: String::new(),
+            })
+            .collect();
+        let site = MkDocsSite {
+            title: "Large site".to_string(),
+            project_root: temp_dir.path().to_path_buf(),
+            config_path: temp_dir.path().join("mkdocs.yml"),
+            docs_dir: temp_dir.path().to_path_buf(),
+            pages,
+            selected_index: 0,
+        };
+        let keymap = RuntimeKeymap::defaults();
+        let mut overlay = MkDocsOverlay::new(site, keymap.pager, keymap.list);
+        overlay.selected_index = 250;
+        overlay.list_scroll = 32;
+
+        overlay.ensure_selected_visible();
+
+        assert_eq!(overlay.list_scroll, 0);
+    }
 
     #[test]
     fn extracts_structured_markdown_links_without_regex_routing() {
