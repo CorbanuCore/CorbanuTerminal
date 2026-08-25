@@ -217,7 +217,7 @@ fn parse_number(value: Option<&str>, name: &str) -> Result<u64> {
 }
 
 fn parse_notification(line: &[u8]) -> Result<ControlEvent> {
-    let (name, arguments) = split_once(line, b' ');
+    let (name, arguments) = split_once(line, /*separator*/ b' ');
     let name = std::str::from_utf8(name).context("tmux notification name was not UTF-8")?;
     match name {
         "%output" => parse_output(arguments),
@@ -250,7 +250,7 @@ fn parse_notification(line: &[u8]) -> Result<ControlEvent> {
 }
 
 fn parse_output(arguments: &[u8]) -> Result<ControlEvent> {
-    let (pane_id, data) = split_required(arguments, b' ', "%output")?;
+    let (pane_id, data) = split_required(arguments, /*separator*/ b' ', "%output")?;
     Ok(ControlEvent::Output {
         pane_id: ascii(pane_id, "%output pane id")?,
         data: decode_escaped(data)?,

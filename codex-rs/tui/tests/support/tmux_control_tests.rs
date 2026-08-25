@@ -85,7 +85,11 @@ fn unfinished_command_at_eof_fails_the_reader_queue() {
 #[test]
 fn parser_error_and_transcript_join_failure_bundle() -> anyhow::Result<()> {
     let root = tempfile::tempdir()?;
-    let recorder = ArtifactRecorder::new(root.path().to_path_buf(), "control_artifacts", 1);
+    let recorder = ArtifactRecorder::new(
+        root.path().to_path_buf(),
+        "control_artifacts",
+        /*id*/ 1,
+    );
     let transcript = Arc::new(ControlTranscript::default());
     transcript.record_line(b"%begin 1 1 0");
     transcript.record_error("invalid tmux octal escape".into());

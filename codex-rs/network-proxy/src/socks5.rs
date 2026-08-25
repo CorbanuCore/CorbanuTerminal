@@ -1052,6 +1052,8 @@ mod tests {
             enabled: true,
             mode: NetworkMode::Full,
             mitm: true,
+            // Keep this hook-routing test independent of runner-specific DNS interception.
+            allow_local_binding: true,
             mitm_hooks: vec![MitmHookConfig {
                 host: "api.github.com".to_string(),
                 matcher: MitmHookMatchConfig {
@@ -1087,6 +1089,8 @@ mod tests {
             enabled: true,
             mode: NetworkMode::Full,
             mitm: true,
+            // Keep this hook-routing test independent of runner-specific DNS interception.
+            allow_local_binding: true,
             mitm_hooks: vec![MitmHookConfig {
                 host: "api.github.com".to_string(),
                 matcher: MitmHookMatchConfig {

@@ -28,6 +28,7 @@ use codex_vault::AddCredential;
 use codex_vault::CredentialType;
 use codex_vault::Vault;
 use codex_vault::VaultError;
+use codex_vault::VaultKeyStorage;
 
 /// Prefix used for provider-key vault labels so they are namespaced apart from user-added
 /// credentials.
@@ -41,6 +42,9 @@ pub(crate) fn read_provider_key(
     provider_key_id: &str,
 ) -> std::io::Result<Option<String>> {
     let vault = Vault::new(codex_home.to_path_buf());
+    if vault.key_storage() == VaultKeyStorage::NotInitialized {
+        return super::manager::legacy_provider_key(codex_home, provider_key_id);
+    }
     read_provider_key_with_vault(codex_home, provider_key_id, vault)
 }
 
@@ -249,6 +253,18 @@ mod tests {
             "provider/ambient_api_key"
         );
         assert_eq!(provider_label("  ZAI_API_KEY  "), "provider/zai_api_key");
+    }
+
+    #[test]
+    fn reading_an_empty_home_does_not_initialize_the_vault() {
+        let parent = tempfile::tempdir().expect("tempdir");
+        let codex_home = parent.path().join("new-home");
+
+        assert_eq!(
+            read_provider_key(&codex_home, "AMBIENT_API_KEY").expect("read empty vault"),
+            None
+        );
+        assert!(!codex_home.exists());
     }
 
     /// Writes a provider key through the encrypted vault and reads it back via the vault resolver
