@@ -2843,6 +2843,7 @@ dependencies = [
  "codex-utils-pty",
  "codex-utils-stream-parser",
  "codex-utils-string",
+ "codex-vault",
  "codex-web-search-extension",
  "codex-windows-sandbox",
  "core_test_support",
@@ -4785,6 +4786,8 @@ dependencies = [
  "strum_macros 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
+ "tracing",
+ "tracing-test",
  "zeroize",
 ]
 

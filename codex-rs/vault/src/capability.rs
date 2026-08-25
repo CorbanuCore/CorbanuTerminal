@@ -1,0 +1,229 @@
+use std::fmt;
+use std::panic::AssertUnwindSafe;
+use std::panic::catch_unwind;
+
+use codex_security_policy::CapabilityId;
+use codex_security_policy::CredentialCapabilityError;
+use codex_security_policy::CredentialCapabilityRequest;
+use codex_security_policy::RevocationState;
+use thiserror::Error;
+use zeroize::Zeroizing;
+
+use super::Vault;
+use super::VaultError;
+
+/// Secret-free reference emitted by the trusted Core capability store after it
+/// has validated the opaque bearer and the complete requested authority.
+///
+/// This type deliberately implements neither serialization, cloning, nor
+/// display. Its debug form is redacted. The public constructor is a
+/// trusted-runtime boundary: callers must only invoke it after Core has
+/// authorized the corresponding opaque capability.
+pub struct VaultCredentialRef {
+    capability_id: CapabilityId,
+    request: CredentialCapabilityRequest,
+}
+
+impl VaultCredentialRef {
+    /// Convert a Core-authorized capability into the only reference accepted by
+    /// Vault::with_scoped_credential.
+    ///
+    /// This validates the secret-free request again. Runtime expiry and
+    /// revocation are revalidated immediately before vault access.
+    pub fn from_authorized(
+        capability_id: CapabilityId,
+        request: CredentialCapabilityRequest,
+    ) -> Result<Self, ScopedCredentialError> {
+        validate_binding(&request)?;
+        request.validate().map_err(map_capability_error)?;
+        Ok(Self {
+            capability_id,
+            request,
+        })
+    }
+
+    /// Public, non-authorizing identifier safe for audit and receipt linkage.
+    pub fn capability_id(&self) -> &CapabilityId {
+        &self.capability_id
+    }
+
+    /// Approved vault label. This is metadata, never credential material.
+    pub fn label(&self) -> &str {
+        self.request.credential.label.as_str()
+    }
+
+    /// Approved use scope. This is metadata, never credential material.
+    pub fn scope(&self) -> &str {
+        self.request.credential.scope.as_str()
+    }
+
+    fn validate_at(
+        &self,
+        now_unix_seconds: i64,
+        revocations: &RevocationState,
+    ) -> Result<(), ScopedCredentialError> {
+        validate_binding(&self.request)?;
+        self.request
+            .validate_at(now_unix_seconds, revocations)
+            .map_err(map_capability_error)
+    }
+}
+
+impl fmt::Debug for VaultCredentialRef {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("VaultCredentialRef(<redacted>)")
+    }
+}
+
+/// Stable callback outcomes that cannot carry credential material.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScopedCredentialCallbackError {
+    /// The trusted operation failed.
+    Failed,
+    /// The trusted operation was cancelled before completion.
+    Cancelled,
+}
+
+/// Stable, secret-free failures from scoped credential resolution.
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+pub enum ScopedCredentialError {
+    #[error("credential capability is invalid")]
+    InvalidCapability,
+    #[error("credential capability label does not match its authority")]
+    LabelMismatch,
+    #[error("credential capability scope does not match its authority")]
+    ScopeMismatch,
+    #[error("credential capability is expired or not yet valid")]
+    Expired,
+    #[error("credential capability is revoked or stale")]
+    Revoked,
+    #[error("credential is unavailable")]
+    NotFound,
+    #[error("credential type is not eligible for scoped use")]
+    CredentialTypeDenied,
+    #[error("credential storage is unavailable")]
+    Storage,
+    #[error("scoped credential callback failed")]
+    CallbackFailed,
+    #[error("scoped credential callback was cancelled")]
+    CallbackCancelled,
+    #[error("scoped credential callback panicked")]
+    CallbackPanicked,
+}
+
+impl Vault {
+    /// Resolve a Core-authorized credential only for the duration of one
+    /// trusted, synchronous callback.
+    ///
+    /// The callback cannot return a value and receives only a borrowed view.
+    /// The backing allocation is wrapped in Zeroizing before the storage lock is
+    /// released and is explicitly dropped before any outcome returns. Callback
+    /// errors are reduced to stable variants, and panic payloads are discarded
+    /// without formatting.
+    pub fn with_scoped_credential(
+        &self,
+        credential: &VaultCredentialRef,
+        now_unix_seconds: i64,
+        revocations: &RevocationState,
+        callback: impl FnOnce(&str) -> Result<(), ScopedCredentialCallbackError>,
+    ) -> Result<(), ScopedCredentialError> {
+        credential.validate_at(now_unix_seconds, revocations)?;
+        let secret = self.read_scoped_secret(credential.label())?;
+        let outcome = catch_unwind(AssertUnwindSafe(|| callback(secret.as_str())));
+        drop(secret);
+
+        match outcome {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(ScopedCredentialCallbackError::Failed)) => {
+                Err(ScopedCredentialError::CallbackFailed)
+            }
+            Ok(Err(ScopedCredentialCallbackError::Cancelled)) => {
+                Err(ScopedCredentialError::CallbackCancelled)
+            }
+            Err(_) => Err(ScopedCredentialError::CallbackPanicked),
+        }
+    }
+
+    fn read_scoped_secret(&self, label: &str) -> Result<Zeroizing<String>, ScopedCredentialError> {
+        let normalized =
+            super::normalize_label(label).map_err(|_| ScopedCredentialError::InvalidCapability)?;
+        self.with_storage_lock(|| {
+            let index = self.load_index()?;
+            let metadata =
+                index
+                    .credentials
+                    .get(&normalized)
+                    .ok_or_else(|| VaultError::NotFound {
+                        label: normalized.clone(),
+                    })?;
+            if !metadata.credential_type.permits_programmatic_use() {
+                return Err(VaultError::ProgrammaticUseDenied {
+                    label: normalized.clone(),
+                    credential_type: metadata.credential_type,
+                });
+            }
+            self.read_secret(&normalized)?
+                .map(Zeroizing::new)
+                .ok_or_else(|| VaultError::NotFound {
+                    label: normalized.clone(),
+                })
+        })
+        .map_err(map_vault_error)
+    }
+}
+
+fn validate_binding(request: &CredentialCapabilityRequest) -> Result<(), ScopedCredentialError> {
+    if request.authorization.resource.id != request.credential.label {
+        return Err(ScopedCredentialError::LabelMismatch);
+    }
+    if request.authorization.context.operation != request.credential.scope {
+        return Err(ScopedCredentialError::ScopeMismatch);
+    }
+    Ok(())
+}
+
+fn map_vault_error(error: VaultError) -> ScopedCredentialError {
+    match error {
+        VaultError::NotFound { .. } => ScopedCredentialError::NotFound,
+        VaultError::ProgrammaticUseDenied { .. } => ScopedCredentialError::CredentialTypeDenied,
+        VaultError::Storage(_) => ScopedCredentialError::Storage,
+        VaultError::CredentialExists { .. }
+        | VaultError::InvalidLabel(_)
+        | VaultError::EmptySecret => ScopedCredentialError::InvalidCapability,
+    }
+}
+
+fn map_capability_error(error: CredentialCapabilityError) -> ScopedCredentialError {
+    match error {
+        CredentialCapabilityError::CredentialAuthorityMismatch => {
+            ScopedCredentialError::LabelMismatch
+        }
+        CredentialCapabilityError::CredentialScopeMismatch => ScopedCredentialError::ScopeMismatch,
+        CredentialCapabilityError::ExpiredOrNotYetValid => ScopedCredentialError::Expired,
+        CredentialCapabilityError::StaleRevocationGeneration
+        | CredentialCapabilityError::Revoked
+        | CredentialCapabilityError::Revocation(_) => ScopedCredentialError::Revoked,
+        CredentialCapabilityError::UnsupportedSchemaVersion { .. }
+        | CredentialCapabilityError::NegativeTimestamp
+        | CredentialCapabilityError::InvalidExpiry
+        | CredentialCapabilityError::AuthorizationTimeMismatch
+        | CredentialCapabilityError::AgentActorRequired
+        | CredentialCapabilityError::DestinationMismatch
+        | CredentialCapabilityError::GrantMismatch
+        | CredentialCapabilityError::InvalidDestinationHost
+        | CredentialCapabilityError::NonCanonicalDestinationHost
+        | CredentialCapabilityError::InvalidDestinationPort
+        | CredentialCapabilityError::InvalidOriginPath
+        | CredentialCapabilityError::InvalidIdentifier(_)
+        | CredentialCapabilityError::InvalidCapabilityId
+        | CredentialCapabilityError::Authorization(_)
+        | CredentialCapabilityError::Grant(_)
+        | CredentialCapabilityError::Mandate(_)
+        | CredentialCapabilityError::BoundedText(_)
+        | CredentialCapabilityError::Serialization(_) => ScopedCredentialError::InvalidCapability,
+    }
+}
+
+#[cfg(test)]
+#[path = "capability_tests.rs"]
+mod tests;

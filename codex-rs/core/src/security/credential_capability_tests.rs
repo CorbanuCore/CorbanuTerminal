@@ -204,6 +204,9 @@ fn issued_capability_authorizes_only_the_complete_bound_request() {
             request: request.clone(),
         }
     );
+    let vault_reference = authorized.into_vault_ref().expect("vault reference");
+    assert_eq!(vault_reference.label(), "provider.openai");
+    assert_eq!(vault_reference.scope(), "responses.create");
     assert_eq!(
         capability.decision(),
         &request.decision().expect("matching decision")

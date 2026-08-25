@@ -9,6 +9,8 @@ use codex_security_policy::CapabilityId;
 use codex_security_policy::CredentialCapabilityError;
 use codex_security_policy::CredentialCapabilityRequest;
 use codex_security_policy::RevocationState;
+use codex_vault::ScopedCredentialError;
+use codex_vault::VaultCredentialRef;
 use rand::TryRngCore;
 use rand::rngs::OsRng;
 use sha2::Digest as _;
@@ -111,6 +113,14 @@ impl IssuedCredentialCapability {
 pub(crate) struct AuthorizedCredentialCapability {
     pub(crate) capability_id: CapabilityId,
     pub(crate) request: CredentialCapabilityRequest,
+}
+
+impl AuthorizedCredentialCapability {
+    /// Cross the trusted Core-to-vault boundary after opaque bearer
+    /// authorization has succeeded.
+    pub(crate) fn into_vault_ref(self) -> Result<VaultCredentialRef, ScopedCredentialError> {
+        VaultCredentialRef::from_authorized(self.capability_id, self.request)
+    }
 }
 
 #[derive(Clone, Debug)]

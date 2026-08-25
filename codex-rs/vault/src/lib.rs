@@ -50,6 +50,12 @@ use strum_macros::Display;
 use thiserror::Error;
 use zeroize::Zeroizing;
 
+mod capability;
+
+pub use capability::ScopedCredentialCallbackError;
+pub use capability::ScopedCredentialError;
+pub use capability::VaultCredentialRef;
+
 #[cfg(test)]
 mod tests;
 

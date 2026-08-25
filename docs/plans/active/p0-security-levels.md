@@ -15,9 +15,9 @@ product_spec:
   heading: "P0 /security levels"
   requirement_excerpt: "Permissive preserves the shipping behavior and does not silently change existing policies."
 implementation_worktrees:
-  - path: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-    branch: "feat/p0-security-levels"
-    base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+  - path: "/home/pfrpc/repos/CorbanuTerminal-pf13-s02"
+    branch: "feat/pf-13-s02-scoped-vault-resolver"
+    base_commit: "1bdc515bff48a4d9048dae7d06c6214e884265bc"
 ---
 
 # P0 `/security` levels
@@ -162,7 +162,7 @@ update; it cannot silently change Permissive or an accepted security level.
 
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
-| Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-security-levels` | `feat/p0-security-levels` | `7cc15ae0762664d6d01765de407329887da9f876` | Security-level model, persistence, policy composition, TUI, tests, and evidence |
+| Jim Ricketts | `/home/pfrpc/repos/CorbanuTerminal-pf13-s02` | `feat/pf-13-s02-scoped-vault-resolver` | `1bdc515bff48a4d9048dae7d06c6214e884265bc` | Security-level model, persistence, policy composition, TUI, tests, and evidence |
 
 Implementation does not occur in the documentation checkout. Update this plan
 before changing the implementation worktree, base, owner, or scope.
