@@ -14,7 +14,7 @@ class CiTimeoutBudgetTest(unittest.TestCase):
 
     def test_sdk_cold_build_has_release_headroom(self) -> None:
         sdk = self.workflow("sdk.yml")
-        self.assertRegex(sdk, r"(?ms)^  sdks:.*?^    timeout-minutes: 90$")
+        self.assertRegex(sdk, r"(?ms)^  sdks:.*?^    timeout-minutes: 180$")
 
     def test_linux_bazel_cold_build_jobs_have_release_headroom(self) -> None:
         bazel = self.workflow("bazel.yml")
@@ -22,7 +22,7 @@ class CiTimeoutBudgetTest(unittest.TestCase):
             with self.subTest(job=job):
                 self.assertRegex(
                     bazel,
-                    rf"(?ms)^  {re.escape(job)}:.*?^    timeout-minutes: 90$",
+                    rf"(?ms)^  {re.escape(job)}:.*?^    timeout-minutes: 180$",
                 )
 
     def test_argument_lint_platforms_have_release_headroom(self) -> None:
@@ -33,7 +33,7 @@ class CiTimeoutBudgetTest(unittest.TestCase):
                     rust_ci,
                     rf"(?m)^          - name: {platform}\n"
                     rf"            runner: .+\n"
-                    rf"            timeout_minutes: 90$",
+                    rf"            timeout_minutes: 180$",
                 )
 
 

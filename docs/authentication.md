@@ -1,18 +1,44 @@
-# Authentication And Vault
+# Authentication and Vault
+
+## The pain
+
+Provider credentials become unsafe when users must paste secrets into chat or
+cannot tell account authentication from stored API keys. Corbanu Terminal keeps
+credential entry masked, storage encrypted, and metadata inspectable without
+revealing raw values.
+
+For the user-facing vault workflow, start with
+[`/vault` and credentials](features/vault.md). This page covers the deeper
+account, storage, migration, and logout behavior.
+
+## Product contract
+
+| Field                      | Value                                                                                                                                                                                        |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status                     | **LIVE**                                                                                                                                                                                     |
+| Exact product-spec heading | **Shipping MVP — LIVE**                                                                                                                                                                      |
+| Vault excerpt              | “Vault and credentials: Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat.”                                      |
+| Provider excerpt           | “Multi-provider inference: OpenAI, Anthropic/Claude Plan, Kimi, Z.AI, DeepSeek, OpenRouter, Ambient, Meta, Baseten, Vercel, Bedrock, Ollama, LM Studio, Corbanu Plan, and custom providers.” |
+
+## Credential surfaces
 
 Corbanu Terminal has three credential surfaces:
 
-1. OpenAI Codex account login for the `openai` provider;
+1. account-backed provider login for OpenAI Codex Account and Claude Plan;
 2. provider API keys for Anthropic, Ambient, Kimi Code, Z.AI, DeepSeek,
    OpenRouter, Meta, Baseten, Vercel, and compatible providers; and
 3. the encrypted `/vault` credential store for provider keys and other
    user-managed secrets.
 
-OpenAI Codex account login uses device auth from `/providers` or the inherited
-`corbanu login` command. Provider keys entered through Corbanu Terminal onboarding
-or `/providers` are written to the vault.
+`/providers` is the common front door. OpenAI uses device authentication;
+Claude Plan uses Claude Code's native subscription login; supported API-key
+entries use masked entry and are written to the vault. See
+[`/providers`, account login, and `/model`](features/model-providers.md) for
+the complete user workflow.
 
-## OpenAI Codex Account
+## Account-backed providers
+
+### OpenAI Codex Account
 
 Use `/providers` and select:
 
@@ -38,6 +64,23 @@ set. With no override, Corbanu Terminal prefers an existing `$HOME/.corbanu`,
 reuses a lone `$HOME/.pfterminal` in place, and otherwise creates
 `$HOME/.corbanu`. This keeps account auth, vault data, sessions, and logs
 separate from a stock Codex install using `$HOME/.codex`.
+
+### Claude Plan
+
+Use `/providers` and select:
+
+```text
+Provider: Claude Code Plan
+```
+
+Corbanu Terminal starts Claude Code's subscription login, presents the browser
+URL, and opens masked entry for the one-time authorization code. It verifies
+the resulting Claude Code account before reporting the route as signed in.
+Claude Code must be installed; this route does not use an Anthropic API key or
+the generic credential vault.
+
+OpenAI and Claude account state have separate owners and lifecycles. Signing in
+or out of one does not authenticate or erase the other.
 
 ## Provider Keys
 
@@ -129,6 +172,7 @@ corbanu logout --all
 `corbanu logout` removes Codex/OpenAI account auth and preserves provider
 API keys in the vault. Use `corbanu logout --all` only when you also want to
 remove provider API keys from the vault and legacy provider auth storage.
+Neither command owns Claude Code's separate subscription account state.
 
 For API-key providers, use the onboarding picker, `/providers`, `/vault`, or
 the provider environment variables above. Claude Plan and Corbanu Plan are

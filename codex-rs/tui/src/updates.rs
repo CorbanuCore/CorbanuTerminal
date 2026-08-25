@@ -319,11 +319,11 @@ mod tests {
 
         let result = revalidated_upgrade_version(
             &config,
-            None,
+            /*action*/ None,
             "1.0.0",
             &format!("{}/releases/latest", server.uri()),
             &format!("{}/releases/tags", server.uri()),
-            None,
+            /*fallback_urls*/ None,
         )
         .await
         .expect("revalidate");
@@ -358,11 +358,11 @@ mod tests {
 
         let result = revalidated_upgrade_version(
             &config,
-            None,
+            /*action*/ None,
             "1.2.0",
             &format!("{}/releases/latest", server.uri()),
             &format!("{}/releases/tags", server.uri()),
-            None,
+            /*fallback_urls*/ None,
         )
         .await
         .expect("revalidate");
@@ -389,11 +389,11 @@ mod tests {
 
         let result = revalidated_upgrade_version(
             &config,
-            None,
+            /*action*/ None,
             "1.2.0",
             &format!("{}/releases/latest", server.uri()),
             &format!("{}/releases/tags", server.uri()),
-            None,
+            /*fallback_urls*/ None,
         )
         .await
         .expect("revalidate");
@@ -422,7 +422,7 @@ mod tests {
 
         let result = revalidated_upgrade_version(
             &config,
-            None,
+            /*action*/ None,
             "1.2.0",
             &format!("{}/canonical/releases/latest", server.uri()),
             &format!("{}/canonical/releases/tags", server.uri()),

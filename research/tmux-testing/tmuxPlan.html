@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Corbanu Terminal Testing Harness Plan</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #182126;
+      --muted: #5c686d;
+      --paper: #f7f8f5;
+      --panel: #ffffff;
+      --line: #d5dcd8;
+      --green: #156b52;
+      --green-soft: #e9f4ef;
+      --blue: #275d8c;
+      --blue-soft: #eaf1f7;
+      --amber: #9a5b08;
+      --amber-soft: #fff3df;
+      --red: #a33e32;
+      --code: #17222a;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.58;
+    }
+
+    a {
+      color: var(--blue);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    header {
+      color: #f7fbf9;
+      background: #122a24;
+      border-bottom: 6px solid #2b9674;
+    }
+
+    .hero {
+      max-width: 1120px;
+      min-height: 66vh;
+      margin: 0 auto;
+      padding: 72px 28px 52px;
+      display: grid;
+      align-content: center;
+    }
+
+    .eyebrow {
+      margin: 0 0 14px;
+      color: #9ed8c5;
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 900px;
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(42px, 7vw, 76px);
+      font-weight: 700;
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .hero-copy {
+      max-width: 790px;
+      margin: 24px 0 0;
+      color: #dbe9e4;
+      font-size: 20px;
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 24px;
+      margin-top: 34px;
+      color: #bbd2ca;
+      font-size: 14px;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      overflow-x: auto;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.96);
+    }
+
+    nav div {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 12px 28px;
+      display: flex;
+      gap: 20px;
+      white-space: nowrap;
+    }
+
+    nav a {
+      color: #36464b;
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 30px 28px 80px;
+    }
+
+    section {
+      margin: 48px 0;
+      scroll-margin-top: 64px;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 32px;
+      line-height: 1.16;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 24px 0 8px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    p { margin: 0 0 14px; }
+
+    .lead {
+      max-width: 900px;
+      color: #334247;
+      font-size: 20px;
+    }
+
+    .decision {
+      padding: 20px 22px;
+      border-left: 5px solid var(--green);
+      background: var(--green-soft);
+      font-size: 17px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin: 22px 0;
+    }
+
+    .card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .card h3 { margin-top: 0; }
+
+    .metric {
+      color: var(--green);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 38px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .label {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .architecture {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 24px 0;
+    }
+
+    .layer {
+      min-height: 170px;
+      padding: 18px;
+      border-top: 5px solid var(--blue);
+      background: var(--panel);
+      box-shadow: 0 6px 20px rgba(33, 50, 44, 0.06);
+    }
+
+    .layer:nth-child(2) { border-color: var(--green); }
+    .layer:nth-child(3) { border-color: var(--amber); }
+    .layer:nth-child(4) { border-color: #7356a1; }
+
+    .layer-number {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    table {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+    }
+
+    th {
+      background: #edf1ef;
+      color: #344348;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    code,
+    pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    :not(pre) > code {
+      padding: 1px 4px;
+      border-radius: 4px;
+      background: #edf1ef;
+      color: #26393f;
+    }
+
+    pre {
+      overflow-x: auto;
+      padding: 18px;
+      border-radius: 8px;
+      background: var(--code);
+      color: #e9f2ef;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    ul,
+    ol { padding-left: 24px; }
+
+    li { margin: 7px 0; }
+
+    .requirements {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .requirements > div {
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .requirements h3 { margin-top: 0; }
+
+    .phase {
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      gap: 18px;
+      padding: 20px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .phase:last-child { border-bottom: 1px solid var(--line); }
+
+    .phase-id {
+      color: var(--green);
+      font-weight: 800;
+    }
+
+    .phase h3 { margin-top: 0; }
+
+    .tag {
+      display: inline-block;
+      margin: 3px 5px 3px 0;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: var(--blue-soft);
+      color: #304f68;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .gate {
+      padding: 18px 20px;
+      border: 1px solid #e1c48f;
+      border-radius: 8px;
+      background: var(--amber-soft);
+    }
+
+    .out {
+      color: var(--red);
+      font-weight: 700;
+    }
+
+    footer {
+      padding: 28px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      background: #eef1ed;
+      text-align: center;
+      font-size: 13px;
+    }
+
+    @media (max-width: 820px) {
+      .grid,
+      .architecture,
+      .requirements { grid-template-columns: 1fr; }
+      .hero { min-height: 58vh; padding-top: 52px; }
+      .phase { grid-template-columns: 1fr; gap: 4px; }
+    }
+
+    @media print {
+      nav { display: none; }
+      header { color: var(--ink); background: #fff; border-color: var(--green); }
+      .hero-copy, .hero-meta, .eyebrow { color: var(--ink); }
+      .hero { min-height: auto; }
+      section { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <p class="eyebrow">Three increments complete · follow-on scoped</p>
+      <h1>Corbanu Terminal Testing Harness Plan</h1>
+      <p class="hero-copy">A typed, isolated tmux driver for testing the terminal behavior that snapshots and process-level PTY tests cannot see: real keys, live viewports, resize and reflow, pane routing, interruption, and cleanup.</p>
+      <div class="hero-meta">
+        <span><strong>Status:</strong> RW-TMUX-03 completed</span>
+        <span><strong>Change class:</strong> Routine</span>
+        <span><strong>Execution record:</strong> RW-TMUX-03</span>
+        <span><strong>Prepared:</strong> 24 August 2026</span>
+        <span><strong>Recommended owner:</strong> Terminal engineering</span>
+      </div>
+    </div>
+  </header>
+
+  <nav aria-label="Document sections">
+    <div>
+      <a href="#decision">Decision</a>
+      <a href="#current-package">Completed Package</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#requirements">Requirements</a>
+      <a href="#implementation">Implementation</a>
+      <a href="#tests">Tests</a>
+      <a href="#acceptance">Acceptance</a>
+      <a href="#sources">Sources</a>
+    </div>
+  </nav>
+
+  <main>
+    <section id="decision">
+      <h2>Decision</h2>
+      <p class="lead">The bounded control-mode increment is complete. The harness now observes exact multi-pane event ordering, captures bounded control transcripts on failure, and drives one formerly ignored width-resize scenario without fixed sleeps. One repeated-resize migration and release-matrix adoption remain.</p>
+      <div class="decision">
+        <strong>Recommendation:</strong> close <em>RW-TMUX-03: Tmux control mode and bounded multi-pane lifecycle</em> and preserve its deliberately narrow architecture. Use control mode for ordering and identity, retain viewport capture as the rendering oracle, and make RW-TMUX-04 prove the Ubuntu workflow on its first eligible run before adopting the driver in the release matrix.
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="metric">3</div>
+          <div class="label">Completed work packages now provide typed isolation, diagnostics, slash dispatch, control events, and one migrated resize path.</div>
+        </div>
+        <div class="card">
+          <div class="metric">1</div>
+          <div class="label">Ignored repeated-resize test still uses direct tmux commands, fixed sleeps, and the developer's default socket.</div>
+        </div>
+        <div class="card">
+          <div class="metric">1</div>
+          <div class="label">Planned follow-on: repeated-resize migration, an eligible Ubuntu workflow run, and incremental release-matrix adoption.</div>
+        </div>
+      </div>
+
+      <h3>Governance position</h3>
+      <p>This is internal test infrastructure that cannot itself change user-visible behavior, authorization, persistent state, or an external contract. It therefore fits the repository's <strong>Routine</strong> change class. Calling the work a sprint is useful for execution discipline, but it should not consume a governed product-plan slot unless product scope is added. Product-specific scenarios should be owned by the feature sprint that depends on the harness.</p>
+    </section>
+
+    <section id="current-package">
+      <h2>Completed Work Package</h2>
+      <p class="lead"><a href="../../qa/work-packages/RW-TMUX-03.md">RW-TMUX-03</a> is a completed non-product sprint. Its <a href="../../qa/work-packages/evidence/RW-TMUX-03/RESULTS.md">verification record</a> contains the final commands, measured runtimes, live qualification, cleanup proof, and the explicit Ubuntu follow-up.</p>
+      <p><a href="../../qa/work-packages/RW-TMUX-01.md">RW-TMUX-01</a> completed the typed isolated foundation. <a href="../../qa/work-packages/RW-TMUX-02.md">RW-TMUX-02</a> completed lazy failure bundles, the single-Enter slash regression, deterministic process cleanup, and the required Ubuntu smoke lane.</p>
+      <div class="requirements">
+        <div>
+          <h3>Delivered</h3>
+          <ul>
+            <li>A private, bounded tmux <code>-C</code> transport and parser.</li>
+            <li>Typed command blocks and output, layout, flow-control, window, and client-exit events.</li>
+            <li>One product-neutral two-pane lifecycle and routing scenario.</li>
+            <li>Migration of the ignored width-resize/restore test.</li>
+            <li>Parser limits, cleanup proof, and a 20-run stability gate.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Deferred deliberately</h3>
+          <ul>
+            <li>The second ignored repeated-resize scenario.</li>
+            <li>Adoption by <code>qa/orchestrate_tui_matrix.sh</code>.</li>
+            <li>Wholesale conversion of simple viewport tests to control mode.</li>
+            <li>A standalone harness crate or general terminal automation framework.</li>
+            <li>Product behavior, live providers, Windows tmux, or security-policy changes.</li>
+          </ul>
+        </div>
+      </div>
+      <p><strong>Allocated execution coordinates:</strong> <code>/Users/travisgood/Documents/ChatGPT/corbanu-tmux-harness</code> on <code>codex/tmux-control-mode</code>, based at <code>20ce0cae2a7efb54afb2d52b82719e064bdd5b9f</code>.</p>
+    </section>
+
+    <section id="architecture">
+      <h2>Testing Architecture</h2>
+      <p>Use the cheapest layer capable of observing the failure. tmux complements the existing layers; it does not replace them.</p>
+      <div class="architecture">
+        <div class="layer">
+          <div class="layer-number">Layer 1</div>
+          <h3>Ratatui snapshots</h3>
+          <p>Deterministic rendering, component states, wrapping, and visual regressions.</p>
+        </div>
+        <div class="layer">
+          <div class="layer-number">Layer 2</div>
+          <h3>PTY process tests</h3>
+          <p>Process startup, raw input/output, resize calls, exit, and Windows ConPTY parity.</p>
+        </div>
+        <div class="layer">
+          <div class="layer-number">Layer 3</div>
+          <h3>Typed tmux driver</h3>
+          <p>Live viewport, real key translation, panes, resize/reflow, interruption, and cleanup.</p>
+        </div>
+        <div class="layer">
+          <div class="layer-number">Layer 4</div>
+          <h3>Release matrix</h3>
+          <p>Long product workflows, live repositories, evidence collection, and human acceptance.</p>
+        </div>
+      </div>
+
+      <h3>Initial ownership boundary</h3>
+      <pre><code>codex-rs/tui/tests/
+  support/
+    mod.rs
+    tmux.rs          # server, session, pane, waits, captures, artifacts
+    tmux_tests.rs    # harness contract tests
+  suite/
+    resize_reflow.rs # first migrated product behavior test
+    slash_dispatch.rs</code></pre>
+      <p>Start here rather than introducing another workspace crate. Extract a crate only after another package needs the API or the module becomes independently substantial.</p>
+    </section>
+
+    <section id="requirements">
+      <h2>Program Requirements</h2>
+      <div class="requirements">
+        <div>
+          <h3>Functional</h3>
+          <ol>
+            <li>Create a unique tmux server, session, and pane at fixed dimensions.</li>
+            <li>Launch a selected Corbanu candidate with temporary home, workspace, logs, and deterministic mock provider.</li>
+            <li>Send literal text and named terminal keys through separate, typed methods.</li>
+            <li>Capture the live viewport separately from bounded scrollback.</li>
+            <li>Wait for semantic conditions and a stable character grid.</li>
+            <li>Resize clients, split and close panes, and retain stable pane identities.</li>
+            <li>Inspect pane process, dimensions, command status, and clean exit.</li>
+            <li>Emit a complete diagnostic bundle automatically on timeout or failure.</li>
+            <li>Terminate sessions, servers, and child processes on success, error, and panic.</li>
+          </ol>
+        </div>
+        <div>
+          <h3>Non-functional</h3>
+          <ol>
+            <li>Parallel-safe isolation using unique tmux sockets and temporary paths.</li>
+            <li>No live credentials, external network, or live model requirement.</li>
+            <li>Bounded polling; no unconditional sleeps in the reusable harness.</li>
+            <li>Errors include the failed command, status, stdout, stderr, and reproduction command.</li>
+            <li>No retries that conceal nondeterministic behavior.</li>
+            <li>Linux and macOS tmux support with PTY/ConPTY retained for Windows.</li>
+            <li>CI smoke runtime target below 30 seconds at the 95th percentile.</li>
+            <li>Artifact names and metadata remain stable enough for CI collection and comparison.</li>
+          </ol>
+        </div>
+      </div>
+
+      <h3>Target API trajectory</h3>
+      <p>The foundation types, private control client, and typed events are implemented. Names below describe ownership and capability rather than freezing a public API.</p>
+      <pre><code>pub struct TmuxServer { /* unique socket and cleanup guard */ }
+pub struct TmuxSession { /* session identity and size history */ }
+pub struct TmuxPane { /* immutable pane id */ }
+pub struct TmuxControlClient { /* bounded reader and joined cleanup */ }
+pub enum TmuxControlEvent { /* command, output, layout, flow, exit, unknown */ }
+
+impl TmuxServer {
+    pub fn start(spec: ServerSpec) -> Result&lt;Self&gt;;
+    pub fn new_session(&amp;self, spec: SessionSpec) -> Result&lt;TmuxSession&gt;;
+    pub fn attach_control(&amp;self) -> Result&lt;TmuxControlClient&gt;;
+}
+
+impl TmuxSession {
+    pub fn primary_pane(&amp;self) -> &amp;TmuxPane;
+    pub fn split(&amp;self, spec: SplitSpec) -> Result&lt;TmuxPane&gt;;
+    pub fn resize_client(&amp;self, size: TerminalSize) -> Result&lt;()&gt;;
+    pub fn wait_for_exit(&amp;self, timeout: Duration) -> Result&lt;ExitStatus&gt;;
+}
+
+impl TmuxPane {
+    pub fn send_literal(&amp;self, text: &amp;str) -> Result&lt;()&gt;;
+    pub fn send_key(&amp;self, key: TmuxKey) -> Result&lt;()&gt;;
+    pub fn capture_viewport(&amp;self, label: &amp;str) -> Result&lt;Screen&gt;;
+    pub fn capture_scrollback_tail(&amp;self, lines: usize) -> Result&lt;String&gt;;
+    pub fn wait_until(&amp;self, condition: ScreenCondition) -> Result&lt;Screen&gt;;
+    pub fn wait_stable(&amp;self, condition: ScreenCondition) -> Result&lt;Screen&gt;;
+}
+
+impl TmuxControlClient {
+    pub fn command(&amp;self, command: TmuxCommand, timeout: Duration) -> Result&lt;CommandResult&gt;;
+    pub fn wait_event(&amp;self, condition: EventCondition, timeout: Duration) -> Result&lt;TmuxControlEvent&gt;;
+}</code></pre>
+    </section>
+
+    <section id="implementation">
+      <h2>Implementation Sequence</h2>
+      <div class="phase">
+        <div class="phase-id">Complete</div>
+        <div>
+          <h3>RW-TMUX-01: typed foundation</h3>
+          <p>Private servers, fixed dimensions, immutable pane IDs, literal/key separation, stable viewport waits, bounded scrollback, split lifecycle, panic-safe cleanup, and the first migrated resize scenario are complete.</p>
+          <span class="tag">Foundation landed</span><span class="tag">20 clean repetitions</span>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-id">Complete</div>
+        <div>
+          <h3>RW-TMUX-02: diagnostics and smoke lane</h3>
+          <p>Lazy redacted failure bundles, exact reproduction commands, deterministic pane/server cleanup, a real single-Enter slash-command regression, and the required Ubuntu smoke workflow are complete. The regression now uses deterministic <code>/status</code> output because the isolated fake-auth environment has no live model catalog.</p>
+          <span class="tag">Artifacts landed</span><span class="tag">Ubuntu required</span>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-id">Complete</div>
+        <div>
+          <h3>Add bounded control-mode parsing</h3>
+          <p>Line framing and tmux escape decoding are separated from transport. Command blocks and required notifications produce complete typed values, unknown notifications remain forward-compatible within hard bounds, and parser failures plus the bounded transcript join the existing lazy artifact bundle.</p>
+          <span class="tag">256 KiB line cap</span><span class="tag">1,024 events / 4 MiB</span>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-id">Complete</div>
+        <div>
+          <h3>Prove one multi-pane lifecycle</h3>
+          <p>One <code>-C</code> client attaches to a private server, creates two panes, routes unique markers by immutable ID, observes isolated output and layout change, closes the secondary pane, and proves command completion plus absence from <code>list-panes</code> before joined cleanup.</p>
+          <span class="tag">Event ordering</span><span class="tag">No leaked readers</span>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-id">Complete</div>
+        <div>
+          <h3>Migrate one width-resize scenario</h3>
+          <p><code>tmux03_width_resize_restore_keeps_visible_content_anchored</code> now uses the typed harness and semantic waits while preserving its composer/history anchoring contract. Its ignore marker is removed; the repeated-resize test remains deferred.</p>
+          <span class="tag">One migration</span><span class="tag">Viewport remains oracle</span>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-id">TMUX-04</div>
+        <div>
+          <h3>Adopt proven support in the release matrix</h3>
+          <p>Migrate the repeated-resize scenario, prove the branch-added tmux workflow on its first eligible pull-request or main-branch run, and introduce the typed driver incrementally into <code>qa/orchestrate_tui_matrix.sh</code>. Preserve the matrix's product-level flow and evidence contract rather than rewriting it wholesale.</p>
+          <span class="tag">Deferred</span><span class="tag">Incremental adoption</span>
+        </div>
+      </div>
+    </section>
+
+    <section id="tests">
+      <h2>Required Tests</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Test</th>
+              <th>Proof</th>
+              <th>Failure evidence</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Unique server isolation</td>
+              <td>Two concurrent harness instances cannot list, capture, target, or kill each other's panes.</td>
+              <td>Both socket names, sessions, and pane listings.</td>
+            </tr>
+            <tr>
+              <td>Literal versus key input</td>
+              <td><code>send_literal("Enter")</code> types text; <code>send_key(TmuxKey::Enter)</code> emits the key.</td>
+              <td>Viewport before and after each input.</td>
+            </tr>
+            <tr>
+              <td>Stable-grid synchronization</td>
+              <td>A condition passes only after two consecutive identical live viewport captures.</td>
+              <td>Timestamped capture sequence.</td>
+            </tr>
+            <tr>
+              <td>Viewport versus scrollback</td>
+              <td>Text present only in stale scrollback cannot satisfy a live-screen wait.</td>
+              <td>Viewport and bounded scrollback shown together.</td>
+            </tr>
+            <tr>
+              <td>Resize identity</td>
+              <td>Resize and split operations retain the target pane ID and record every dimension change.</td>
+              <td>Layout and dimension timeline.</td>
+            </tr>
+            <tr>
+              <td>Timeout artifacts</td>
+              <td>An impossible condition returns a bounded error and writes every required artifact.</td>
+              <td>The generated artifact manifest.</td>
+            </tr>
+            <tr>
+              <td>Crash and panic cleanup</td>
+              <td>Candidate crash and unwinding leave no tmux server, session, or child process.</td>
+              <td>Post-cleanup process and socket checks.</td>
+            </tr>
+            <tr>
+              <td>Command diagnostics</td>
+              <td>A failed tmux invocation reports command, status, stdout, stderr, and reproduction syntax.</td>
+              <td>Structured error equality assertion.</td>
+            </tr>
+            <tr>
+              <td>Tool availability policy</td>
+              <td>Missing tmux skips clearly for opt-in local tests and hard-fails the dedicated CI lane.</td>
+              <td>Explicit policy message, never a silent pass.</td>
+            </tr>
+            <tr>
+              <td>Control protocol parser</td>
+              <td>Command blocks, escaped output, required notifications, unknown events, malformed input, and both hard limits produce complete typed values or structured errors.</td>
+              <td>Input fixture, parsed event or error, and bounded control transcript.</td>
+            </tr>
+            <tr>
+              <td>Multi-pane event lifecycle</td>
+              <td>Two immutable pane IDs receive isolated markers; layout change, command completion, pane removal, and reader cleanup are proved in order.</td>
+              <td>Typed event ledger, pane metadata, viewport, and process cleanup check.</td>
+            </tr>
+            <tr>
+              <td>Migrated resize workflow</td>
+              <td>Sentinel content and composer remain anchored across split, resize, restore, and clean exit.</td>
+              <td>Named captures and size history.</td>
+            </tr>
+            <tr>
+              <td>Single-Enter slash dispatch</td>
+              <td>Command text and one separate Enter open the expected command surface without fallback input.</td>
+              <td>Input event ledger and resulting viewport.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="acceptance">
+      <h2>Program Acceptance Gates</h2>
+      <div class="gate">
+        <strong>Recommended gate:</strong> the focused TUI test suite passes normally; the tmux smoke lane completes 50 consecutive repetitions with no failures, no leaked servers or child processes, and a measured p95 runtime below 30 seconds. The migrated test is no longer ignored in the tmux-equipped lane, and every induced failure produces the documented artifact bundle.
+      </div>
+
+      <p>RW-TMUX-03 passed its local exit gate: parser fixture coverage, one ordered two-pane lifecycle, one migrated width-resize test, all 22 required tmux tests, all 32 owning integration tests, 20 clean repetitions of the two TMUX-03 scenarios, no leaked reader or tmux process, and a measured p95 of 12.358 seconds after compilation. A real <code>just codex</code> session also rendered <code>/status</code> and exited cleanly. Ubuntu execution remains explicitly pending because this branch was neither a pull request nor a push to <code>main</code>, the workflow's two automatic triggers, and manual dispatch is unavailable before the workflow exists on the default branch. The exact record lives in <a href="../../qa/work-packages/evidence/RW-TMUX-03/RESULTS.md">the verification results</a>.</p>
+
+      <h3>Definition of done</h3>
+      <ul>
+        <li>The parser and transport are private sibling modules with bounded resources and complete contract tests.</li>
+        <li>One product-neutral scenario proves pane-specific output, layout change, pane removal, command completion, and joined cleanup.</li>
+        <li>The ignored width-resize test uses the typed harness and stable semantic waits without changing its anchoring contract.</li>
+        <li>Control transcripts and parser errors join the existing lazy failure bundle without creating success artifacts.</li>
+        <li>Local reliability evidence is recorded; Ubuntu control-mode execution is a named post-registration CI follow-up.</li>
+        <li>No release-matrix or product behavior change is hidden inside the test-support package.</li>
+      </ul>
+
+      <h3>Explicitly out of scope</h3>
+      <p><span class="out">Do not include in RW-TMUX-03:</span> a general terminal automation framework, a new workspace crate, migration of the repeated-resize scenario, changes to <code>qa/orchestrate_tui_matrix.sh</code>, wholesale control-mode conversion, Windows tmux support, pixel-image comparison, live-provider tests, or product-specific orchestration behavior.</p>
+
+      <h3>Follow-on work</h3>
+      <ol>
+        <li><strong>RW-TMUX-04:</strong> migrate the repeated-resize scenario, verify the Ubuntu tmux workflow on an eligible run, and let the release matrix consume proven typed support incrementally while retaining its high-level product flows.</li>
+        <li><strong>Feature qualification:</strong> add success, cancellation, recovery, resume, and authorization scenarios as their owning product sprints require them.</li>
+      </ol>
+    </section>
+
+    <section id="sources">
+      <h2>Repository Sources</h2>
+      <ul>
+        <li><a href="tmux-testing-report.html">Tmux testing research report</a>: architecture, external research, flake controls, and recommended API.</li>
+        <li><a href="../../AGENTS.md">Corbanu development policy</a>: true-TUI evidence and release qualification requirements.</li>
+        <li><a href="../../.codex/skills/test-tui/SKILL.md">TUI testing skill</a>: interactive startup, trace logging, log directory, and separate text/Enter guidance.</li>
+        <li><a href="../../codex-rs/tui/tests/suite/resize_reflow.rs">Existing resize/reflow smoke tests</a>: ignored tmux tests and current direct-command duplication.</li>
+        <li><a href="../../qa/orchestrate_tui_matrix.sh">Release TUI matrix</a>: existing workflows, captures, polling, and artifact conventions.</li>
+        <li><a href="../../qa/evidence_20260703/status/tui_qa_findings.md">Historical TUI QA findings</a>: defects discovered through real tmux interaction.</li>
+        <li><a href="../../codex-rs/utils/pty/README.md">PTY utility</a>: lower-level cross-platform process and terminal abstraction.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    Corbanu Terminal internal engineering plan. This document proposes work; it is not release evidence and does not claim shipped behavior.
+  </footer>
+</body>
+</html>

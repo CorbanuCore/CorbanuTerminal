@@ -22,24 +22,34 @@ installs to `.corbanu`. This keeps product state separate from stock Codex.
 
 These providers are compiled into Corbanu Terminal:
 
-| Provider id   | Display name | Base URL                                | Env key              | Wire API         |
-| ------------- | ------------ | --------------------------------------- | -------------------- | ---------------- |
-| `openai`      | OpenAI       | `https://chatgpt.com/backend-api/codex` | Account login        | Responses        |
-| `anthropic`   | Anthropic    | `https://api.anthropic.com/v1`          | `ANTHROPIC_API_KEY`  | Messages         |
-| `claude-plan` | Claude Plan  | Claude Code account route               | Claude Code login    | Messages         |
-| `ambient`     | Ambient      | `https://api.ambient.xyz/v1`            | `AMBIENT_API_KEY`    | Chat Completions |
-| `kimi-code`   | Kimi Code    | `https://api.kimi.com/coding/v1`        | `KIMI_API_KEY`       | Chat Completions |
-| `zai`         | Z.AI         | `https://api.z.ai/api/coding/paas/v4`   | `ZAI_API_KEY`        | Chat Completions |
-| `deepseek`    | DeepSeek     | `https://api.deepseek.com`              | `DEEPSEEK_API_KEY`   | Responses        |
-| `openrouter`  | OpenRouter   | `https://openrouter.ai/api/v1`          | `OPENROUTER_API_KEY` | Chat Completions |
-| `meta`        | Meta         | `https://api.meta.ai/v1`                | `MODEL_API_KEY`      | Responses        |
-| `baseten`     | Baseten      | `https://inference.baseten.co/v1`       | `BASETEN_API_KEY`    | Chat Completions |
-| `vercel`      | Vercel       | `https://ai-gateway.vercel.sh/v1`       | `AI_GATEWAY_API_KEY` | Responses        |
+| Provider id      | Display name   | Base URL                                | Env key              | Wire API         |
+| ---------------- | -------------- | --------------------------------------- | -------------------- | ---------------- |
+| `openai`         | OpenAI         | `https://chatgpt.com/backend-api/codex` | Account login        | Responses        |
+| `anthropic`      | Anthropic      | `https://api.anthropic.com/v1`          | `ANTHROPIC_API_KEY`  | Messages         |
+| `claude-plan`    | Claude Plan    | Claude Code account route               | Claude Code login    | Messages         |
+| `ambient`        | Ambient        | `https://api.ambient.xyz/v1`            | `AMBIENT_API_KEY`    | Chat Completions |
+| `kimi-code`      | Kimi Code      | `https://api.kimi.com/coding/v1`        | `KIMI_API_KEY`       | Chat Completions |
+| `zai`            | Z.AI           | `https://api.z.ai/api/coding/paas/v4`   | `ZAI_API_KEY`        | Chat Completions |
+| `deepseek`       | DeepSeek       | `https://api.deepseek.com`              | `DEEPSEEK_API_KEY`   | Responses        |
+| `openrouter`     | OpenRouter     | `https://openrouter.ai/api/v1`          | `OPENROUTER_API_KEY` | Chat Completions |
+| `meta`           | Meta           | `https://api.meta.ai/v1`                | `MODEL_API_KEY`      | Responses        |
+| `baseten`        | Baseten        | `https://inference.baseten.co/v1`       | `BASETEN_API_KEY`    | Chat Completions |
+| `vercel`         | Vercel         | `https://ai-gateway.vercel.sh/v1`       | `AI_GATEWAY_API_KEY` | Responses        |
+| `corbanu-plan`   | Corbanu Plan   | Corbanu Plan gateway                    | Plan credential      | Multiple         |
+| `amazon-bedrock` | Amazon Bedrock | AWS Bedrock endpoint                    | AWS or Bedrock auth  | Responses        |
+| `ollama`         | Ollama         | Configured local endpoint               | None                 | Responses        |
+| `lmstudio`       | LM Studio      | Configured local endpoint               | None                 | Responses        |
 
 OpenAI uses Codex account login from `/providers` or `corbanu login`.
 Provider API keys should normally be stored through onboarding, `/providers`,
-or `/vault`. Environment variables are supported for temporary sessions and
+or `/vault`. Corbanu Plan is activated or recovered through `/wallet`.
+Amazon Bedrock uses cloud authentication, while Ollama and LM Studio use local
+servers. Environment variables remain supported for temporary sessions and
 automation.
+
+Custom compatible providers can be added under `[model_providers.<id>]` in
+`config.toml`. See [Models and providers](features/model-providers.md) for the
+complete one-row-per-provider product inventory.
 
 ## Common Model Configs
 
@@ -340,7 +350,7 @@ To keep the poller always on, install the user service:
 ```bash
 codex-rs/scripts/setup-telegram.sh --chat-id 21000038 --install-systemd
 systemctl --user daemon-reload
-systemctl --user enable --now pfterminal-telegram.service
+systemctl --user enable --now corbanu-terminal-telegram.service
 ```
 
 The setup script runs `corbanu telegram --health` before installing a managed
@@ -368,7 +378,7 @@ On macOS, install the checked-in LaunchAgent through the same setup script:
 
 ```bash
 codex-rs/scripts/setup-telegram.sh --chat-id 21000038 --install-launchd
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/net.postfiat.pfterminal.telegram.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/org.corbanu.terminal.telegram.plist
 ```
 
 On Windows, configure the connector first, verify it with

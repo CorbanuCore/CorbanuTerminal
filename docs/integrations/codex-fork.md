@@ -25,9 +25,9 @@ Corbanu Terminal keeps upstream-compatible internal `codex` paths while adding p
 - `codex-rs/cli/Cargo.toml` defines `codex`, `corbanu`, and compatibility `pfterminal` binaries.
 - `codex-rs/cli/src/pfterminal_main.rs` currently includes the same implementation as `main.rs`.
 - `codex-cli/package.json` publishes `@corbanucore/terminal` with `corbanu` and compatibility `pfterminal` aliases; it does not claim the stock `codex` command.
-- `codex-cli/bin/codex.js` resolves the compatibility platform packages, prefers the bundled `corbanu` binary, and follows the Corbanu/PFTerminal home precedence.
+- `codex-cli/bin/codex.js` resolves the compatibility platform packages, prefers the bundled `corbanu` binary, and follows the Corbanu and legacy-home precedence.
 
-This keeps existing PFTerminal automation usable while making `corbanu` the primary product command.
+This keeps existing `pfterminal` automation usable while making `corbanu` the primary product command.
 
 ## Packaging And Installers
 

@@ -177,9 +177,13 @@ mod tests {
     #[test]
     fn find_codex_home_without_env_uses_default_home_dir() {
         let user_home = TempDir::new().expect("user home");
-        let resolved =
-            find_codex_home_from_env(None, None, None, Some(user_home.path().to_path_buf()))
-                .expect("default Corbanu home");
+        let resolved = find_codex_home_from_env(
+            /*corbanu_home_env*/ None,
+            /*pfterminal_home_env*/ None,
+            /*codex_home_env*/ None,
+            Some(user_home.path().to_path_buf()),
+        )
+        .expect("default Corbanu home");
         let expected = user_home.path().join(DEFAULT_HOME_DIR);
         let expected = AbsolutePathBuf::from_absolute_path(expected).expect("absolute home");
         assert_eq!(resolved, expected);
@@ -190,10 +194,10 @@ mod tests {
         let pfterminal_home = TempDir::new().expect("PFTerminal home");
         let codex_home = TempDir::new().expect("Codex home");
         let resolved = find_codex_home_from_env(
-            None,
+            /*corbanu_home_env*/ None,
             pfterminal_home.path().to_str(),
             codex_home.path().to_str(),
-            None,
+            /*user_home*/ None,
         )
         .expect("resolve preferred home");
         let expected = AbsolutePathBuf::from_absolute_path(
@@ -215,7 +219,7 @@ mod tests {
             corbanu_home.path().to_str(),
             pfterminal_home.path().to_str(),
             codex_home.path().to_str(),
-            None,
+            /*user_home*/ None,
         )
         .expect("resolve Corbanu home");
         let expected = AbsolutePathBuf::from_absolute_path(
@@ -231,9 +235,13 @@ mod tests {
         let legacy_home = user_home.path().join(LEGACY_HOME_DIR);
         fs::create_dir(&legacy_home).expect("legacy home");
 
-        let resolved =
-            find_codex_home_from_env(None, None, None, Some(user_home.path().to_path_buf()))
-                .expect("resolve legacy home");
+        let resolved = find_codex_home_from_env(
+            /*corbanu_home_env*/ None,
+            /*pfterminal_home_env*/ None,
+            /*codex_home_env*/ None,
+            Some(user_home.path().to_path_buf()),
+        )
+        .expect("resolve legacy home");
         assert_eq!(resolved.as_path(), legacy_home);
     }
 
@@ -247,9 +255,13 @@ mod tests {
         let sentinel = legacy_home.join("vault-sentinel");
         fs::write(&sentinel, "preserve").expect("legacy sentinel");
 
-        let resolved =
-            find_codex_home_from_env(None, None, None, Some(user_home.path().to_path_buf()))
-                .expect("resolve Corbanu home");
+        let resolved = find_codex_home_from_env(
+            /*corbanu_home_env*/ None,
+            /*pfterminal_home_env*/ None,
+            /*codex_home_env*/ None,
+            Some(user_home.path().to_path_buf()),
+        )
+        .expect("resolve Corbanu home");
         assert_eq!(resolved.as_path(), corbanu_home);
         assert_eq!(fs::read_to_string(sentinel).expect("sentinel"), "preserve");
     }

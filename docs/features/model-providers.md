@@ -1,0 +1,128 @@
+# /providers, account login, and /model
+
+## The pain
+
+Using several inference providers normally means juggling credentials, model
+names, privacy boundaries, and separate usage dashboards. Corbanu Terminal puts
+provider access and model selection behind one consistent TUI workflow.
+
+## Product contract
+
+| Field | Value |
+| --- | --- |
+| Status | **LIVE** |
+| Exact product-spec heading | **Shipping MVP — LIVE** |
+| Requirement excerpt | “Multi-provider inference: OpenAI, Anthropic/Claude Plan, Kimi, Z.AI, DeepSeek, OpenRouter, Ambient, Meta, Baseten, Vercel, Bedrock, Ollama, LM Studio, Corbanu Plan, and custom providers.” |
+
+## User flow
+
+1. Run `/providers`.
+2. Sign in to an account-backed provider or add an API key through masked entry.
+3. Run `/model`.
+4. Select the provider, model, and reasoning effort.
+5. Use `/usage` for allowance and reset information.
+6. Use `/status` to confirm the active model, permissions, and session state.
+
+Adding a credential does not select that provider. Authentication and model
+selection are deliberately separate actions.
+
+## Account-backed provider login
+
+Account login is one access mode inside the provider feature. OpenAI Codex
+Account and Claude Plan are peers in `/providers`; neither is a standalone
+Corbanu Terminal feature.
+
+| Account route | What `/providers` shows | Authentication owner |
+| --- | --- | --- |
+| OpenAI Codex Account | Sign-in status, email, and plan when available | Corbanu Terminal's inherited Codex account manager |
+| Claude Plan | Claude Code installation and subscription sign-in status | Claude Code's native Claude account authentication |
+
+### OpenAI Codex Account
+
+1. Run `/providers`.
+2. Select **Provider: OpenAI Codex Account**.
+3. Open the displayed verification URL and enter the one-time device code.
+4. Return to Corbanu Terminal after sign-in completes.
+5. Run `/model` and select an OpenAI model.
+
+The same route is available from first-run onboarding or `corbanu login`.
+
+### Claude Plan
+
+Claude Code must be installed for this account route.
+
+1. Run `/providers`.
+2. Select **Provider: Claude Code Plan**.
+3. Open the displayed browser URL and sign in with the Claude subscription.
+4. Press Enter in Corbanu Terminal and paste the one-time authorization code
+   into the masked entry view.
+5. Wait for Corbanu Terminal to verify the Claude Code account status.
+6. Run `/model` and select a Claude Plan model.
+
+The one-time authorization code is handled by masked entry. It is not an API key
+and is not placed in chat. OpenAI and Claude account state remain independent;
+signing in to one route does not authenticate the other.
+
+## Included providers
+
+Each included provider is listed explicitly below. A provider being included
+means Corbanu Terminal has a route for it; the current machine still needs the
+corresponding account, credential, entitlement, cloud configuration, or local
+server.
+
+| Provider | Route | Configure access |
+| --- | --- | --- |
+| OpenAI Codex Account | Built-in `openai` account route | Sign in with device code from `/providers` or `corbanu login`. |
+| Anthropic | Built-in `anthropic` API route | Add `ANTHROPIC_API_KEY` through `/providers` or the encrypted vault. |
+| Claude Plan | Built-in `claude-plan` account route | Use the Claude Code account login surfaced by `/providers`. |
+| Ambient | Built-in `ambient` API route | Add `AMBIENT_API_KEY` through `/providers` or the encrypted vault. |
+| Kimi Code | Built-in `kimi-code` API route | Add `KIMI_API_KEY` through `/providers` or the encrypted vault. |
+| Z.AI | Built-in `zai` API route | Add `ZAI_API_KEY` through `/providers` or the encrypted vault. |
+| DeepSeek | Built-in `deepseek` API route | Add `DEEPSEEK_API_KEY` through `/providers` or the encrypted vault. |
+| OpenRouter | Built-in `openrouter` gateway route | Add `OPENROUTER_API_KEY` through `/providers` or the encrypted vault. |
+| Meta | Built-in `meta` API route | Add `MODEL_API_KEY` through `/providers` or the encrypted vault. |
+| Baseten | Built-in `baseten` gateway route | Add `BASETEN_API_KEY` through `/providers` or the encrypted vault. |
+| Vercel AI Gateway | Built-in `vercel` gateway route | Add `AI_GATEWAY_API_KEY` through `/providers` or the encrypted vault. |
+| Amazon Bedrock | Built-in `amazon-bedrock` cloud route | Configure AWS credentials/profile or a managed Bedrock API key and region. |
+| Ollama | Built-in `ollama` local route | Run Ollama locally and select it as the local provider. |
+| LM Studio | Built-in `lmstudio` local route | Run LM Studio locally and select it as the local provider. |
+| Corbanu Plan | Wallet-linked `corbanu-plan` route | Buy or recover a Plan in `/wallet`; inspect status in `/providers`. |
+| Custom provider | Operator-defined compatible route | Add a `[model_providers.<id>]` entry in `config.toml`. |
+
+Some provider families have additional internal wire-protocol routes so the
+same provider can serve both Responses-, Chat Completions-, and
+Anthropic-compatible models. Those transport details do not create additional
+user-facing providers.
+
+## Which command to use
+
+| Command | Purpose |
+| --- | --- |
+| `/providers` | Authenticate, replace a supported provider key, and inspect availability. |
+| `/vault` | Manage encrypted service credentials by label. |
+| `/model` | Select the active provider, model, and reasoning effort. |
+| `/usage` | Inspect allowance and reset information where the route reports it. |
+| `/status` | Confirm the provider/model active for the current session. |
+
+The authentication surface varies by provider. `/providers` handles supported
+account and masked API-key flows. Cloud, local, and custom routes use their
+documented environment or configuration inputs.
+
+## Operational boundaries
+
+- A listed provider is not necessarily authenticated on the current machine.
+- A configured credential does not guarantee that every model is enabled for
+  the current account or plan.
+- Corbanu Terminal preserves the exact provider/model identity when routing a
+  turn.
+- Provider privacy, retention, billing, and jurisdictional rules still apply.
+- Use the privacy label shown for Corbanu Plan models before sending sensitive
+  strategy or financial context.
+
+## Related documentation
+
+- [`/vault` and credentials](vault.md)
+- [Authentication and account setup](../authentication.md)
+- [Configuration](../config.md)
+- [Corbanu Plan](wallet-plan.md)
+- [Provider integration references](../integrations/index.md)

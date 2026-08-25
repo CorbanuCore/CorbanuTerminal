@@ -1,0 +1,4 @@
+interface:
+  display_name: "Corbanu Terminal Development"
+  short_description: "Build and release Corbanu with real TUI proof"
+  default_prompt: "Use $corbanu-terminal-development to implement a Corbanu Terminal change under the repository product, plan, QA, benchmark, and release rules."

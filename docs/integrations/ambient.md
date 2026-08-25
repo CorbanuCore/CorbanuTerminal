@@ -1,6 +1,6 @@
 # Ambient Integration
 
-Ambient is currently the default PFTerminal provider path.
+Ambient is currently the default Corbanu Terminal provider path.
 
 ## Current Provider
 
@@ -37,13 +37,13 @@ Ambient's visible default model is bundled in `codex-rs/models-manager/models.js
 | Listed in picker | yes |
 | Parallel tool calls | yes |
 
-The bundled model uses PFTerminal base instructions instead of upstream Codex-only phrasing.
+The bundled model uses Corbanu Terminal base instructions instead of upstream Codex-only phrasing.
 
 `ambient/large` remains bundled as a hidden compatibility model with a `131072` token context window.
 
 ## Request Behavior
 
-Ambient uses the Chat Completions style provider surface. PFTerminal applies GLM-specific request shaping in `codex-rs/core/src/client.rs`:
+Ambient uses the Chat Completions style provider surface. Corbanu Terminal applies GLM-specific request shaping in `codex-rs/core/src/client.rs`:
 
 - `medium` or default effort maps to provider `reasoning_effort=high`.
 - `xhigh`, `high`, or custom deep/max aliases map to `reasoning_effort=max`.
@@ -51,7 +51,7 @@ Ambient uses the Chat Completions style provider surface. PFTerminal applies GLM
 - Ambient/Z.AI requests set `emit_usage=true`.
 - Strict function-tool wrapper metadata is removed for GLM compatibility while preserving the JSON schema.
 
-For Responses-style code paths, PFTerminal keeps only function tools for Ambient/Z.AI and avoids OpenAI-only metadata such as prompt cache keys and encrypted reasoning includes.
+For Responses-style code paths, Corbanu Terminal keeps only function tools for Ambient/Z.AI and avoids OpenAI-only metadata such as prompt cache keys and encrypted reasoning includes.
 
 ## Input Conversion
 

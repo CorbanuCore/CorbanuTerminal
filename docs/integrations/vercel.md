@@ -1,6 +1,6 @@
 # Vercel Integration
 
-Vercel is a built-in metered provider path through Vercel AI Gateway. PFTerminal
+Vercel is a built-in metered provider path through Vercel AI Gateway. Corbanu Terminal
 only exposes the Vercel GLM 5.2 models requested for this integration.
 
 ## Current Provider
@@ -35,18 +35,18 @@ The visible Vercel models are bundled in
 | `zai/glm-5.2-fast` | `Vercel GLM 5.2 Fast` | `Vercel: GLM 5.2 Fast - $3.00/M input, $0.50/M cached input, $10.25/M output.` |
 
 Both entries use a `1048576` token context window, are listed in `/model`, and
-do not expose PFTerminal reasoning-effort controls.
+do not expose Corbanu Terminal reasoning-effort controls.
 
 ## Model And Provider Selection
 
-PFTerminal maps the exact models `zai/glm-5.2` and `zai/glm-5.2-fast` to
+Corbanu Terminal maps the exact models `zai/glm-5.2` and `zai/glm-5.2-fast` to
 provider `vercel` in `codex-rs/tui/src/chatwidget/model_popups.rs`.
 
 Examples:
 
 ```bash
-pfterminal -m zai/glm-5.2
-pfterminal -m zai/glm-5.2-fast
+corbanu -m zai/glm-5.2
+corbanu -m zai/glm-5.2-fast
 ```
 
 ## Vault Behavior

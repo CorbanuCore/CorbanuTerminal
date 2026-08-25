@@ -19,8 +19,8 @@ fn output(binary: &str, args: &[&str], home_env: Option<(&str, &TempDir)>) -> Re
 
 #[test]
 fn primary_and_legacy_entrypoints_report_the_same_version() -> Result<()> {
-    let corbanu = output("corbanu", &["--version"], None)?;
-    let pfterminal = output("pfterminal", &["--version"], None)?;
+    let corbanu = output("corbanu", &["--version"], /*home_env*/ None)?;
+    let pfterminal = output("pfterminal", &["--version"], /*home_env*/ None)?;
 
     assert_eq!(corbanu, pfterminal.replace("pfterminal", "corbanu"));
     assert!(corbanu.contains(env!("CARGO_PKG_VERSION")));
@@ -29,7 +29,7 @@ fn primary_and_legacy_entrypoints_report_the_same_version() -> Result<()> {
 
 #[test]
 fn corbanu_help_uses_the_new_primary_command() -> Result<()> {
-    let help = output("corbanu", &["--help"], None)?;
+    let help = output("corbanu", &["--help"], /*home_env*/ None)?;
 
     assert!(help.contains("Corbanu Terminal CLI"));
     assert!(help.contains("corbanu [OPTIONS]"));
@@ -58,8 +58,8 @@ fn debug_aliases_report_the_same_version() -> Result<()> {
 
 #[test]
 fn corbanu_acp_reports_the_new_launcher_and_terminal() -> Result<()> {
-    let version = output("corbanu-acp", &["--version"], None)?;
-    let help = output("corbanu-acp", &["--help"], None)?;
+    let version = output("corbanu-acp", &["--version"], /*home_env*/ None)?;
+    let help = output("corbanu-acp", &["--help"], /*home_env*/ None)?;
 
     assert!(version.contains(&format!("corbanu-acp {}", env!("CARGO_PKG_VERSION"))));
     assert!(version.contains("corbanu:"));

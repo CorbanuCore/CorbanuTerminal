@@ -1,6 +1,22 @@
-# Orchestration Roles
+# Orchestration roles
 
-PFTerminal `/spawn` uses a fixed role hierarchy:
+## The pain
+
+A hierarchy is only useful when every participant understands who owns product
+direction, supervision, execution, and evidence. These roles make that chain
+explicit.
+
+## Product contract
+
+Exact product-spec heading: **Shipping MVP — LIVE**
+
+Requirement excerpt: “Agent orchestration: Sauron → Nazgul → Troll → Orc
+orchestration, model-aware delegation, durable mailboxes, supervision, resume,
+and recovery.”
+
+## Hierarchy
+
+Corbanu Terminal `/spawn` uses a fixed role hierarchy:
 
 ```text
 Nazgul -> Troll -> Orc
@@ -18,6 +34,6 @@ Orcs execute assigned work and report evidence.
 | [Troll](troll.md) | Supervisor, reviewer, and foreman over Orcs | Built-in role file plus runtime pane context |
 | [Orc](orc.md) | IC executor that performs assigned work | Built-in role file plus runtime pane context |
 
-See also [Spawn Orchestration](../features/spawn-orchestration.md) for the
-feature workflow and [Spawn Acceptance Evidence](../features/spawn-orchestration-acceptance.md)
-for live acceptance criteria.
+See [`/spawn` hierarchy](../features/spawn-orchestration.md) and
+[`/orchestrate` persistent supervision](../features/orchestrate.md) for the
+finished user workflow.

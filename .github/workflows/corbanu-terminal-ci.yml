@@ -46,6 +46,22 @@ jobs:
           python3 scripts/install/test_corbanu_release_contract.py
           python3 -m unittest discover -s scripts/codex_package -p 'test_*.py'
 
+      - name: Validate product plan and sprint lifecycles
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s docs/plans/tests -p 'test_*.py'
+          python3 docs/plans/check.py
+          python3 -m unittest discover -s docs/sprints/tests -p 'test_*.py'
+          python3 docs/sprints/check.py
+
+      - name: Validate portable agent skills
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest scripts.test_check_portable_skills
+          python3 scripts/check_portable_skills.py
+
       - name: Build Corbanu Terminal binaries
         shell: bash
         run: |
