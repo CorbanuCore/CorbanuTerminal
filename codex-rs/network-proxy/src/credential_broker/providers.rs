@@ -89,6 +89,10 @@ pub(super) fn credential_providers() -> impl Iterator<Item = &'static Credential
     CREDENTIAL_PROVIDERS.iter().copied()
 }
 
+pub(super) fn openai_provider() -> &'static CredentialProvider {
+    &openai::PROVIDER
+}
+
 fn shaped_dummy_value(real_value: &str, prefix: &str, minimum_len: usize) -> String {
     let target_len = real_value.len().max(minimum_len).max(prefix.len() + 16);
     let mut rng = rand::rng();

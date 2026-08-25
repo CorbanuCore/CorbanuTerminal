@@ -2805,6 +2805,7 @@ dependencies = [
  "codex-http-client",
  "codex-image-generation-extension",
  "codex-install-context",
+ "codex-keyring-store",
  "codex-login",
  "codex-mcp",
  "codex-memories-read",
@@ -3833,6 +3834,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "clap",
+ "codex-security-policy",
  "codex-utils-absolute-path",
  "codex-utils-home-dir",
  "codex-utils-rustls-provider",
@@ -3861,6 +3863,7 @@ dependencies = [
  "tracing",
  "url",
  "windows-sys 0.52.0",
+ "zeroize",
 ]
 
 [[package]]

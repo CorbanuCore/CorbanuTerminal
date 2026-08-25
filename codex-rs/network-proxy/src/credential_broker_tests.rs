@@ -1,8 +1,29 @@
 use super::*;
 
+use codex_security_policy::ActorChain;
+use codex_security_policy::AuthorizationContext;
+use codex_security_policy::AuthorizationRequest;
+use codex_security_policy::BoundedGrant;
+use codex_security_policy::BoundedText;
+use codex_security_policy::CapabilityId;
+use codex_security_policy::CredentialCapabilityRequest;
+use codex_security_policy::CredentialDestination;
+use codex_security_policy::CredentialHttpMethod;
+use codex_security_policy::CredentialReference;
+use codex_security_policy::GrantContext;
+use codex_security_policy::GrantScope;
+use codex_security_policy::PolicyAction;
+use codex_security_policy::PolicyPrincipal;
+use codex_security_policy::PrincipalKind;
+use codex_security_policy::ProtectedResource;
+use codex_security_policy::ResourceKind;
+use codex_security_policy::RevocationState;
 use pretty_assertions::assert_eq;
 use rama_http::HeaderValue;
 use rama_http::header::AUTHORIZATION;
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 fn env_map<const N: usize>(entries: [(&str, &str); N]) -> HashMap<String, String> {
     entries
@@ -217,4 +238,376 @@ fn github_enterprise_credentials_bind_to_gh_host() {
     assert_eq!(authorization(&headers), Some("Bearer ghp-enterprise-real"));
     assert!(broker.host_requires_mitm("github.example.com"));
     assert!(!broker.host_requires_mitm("api.github.com"));
+}
+
+const SCOPED_SECRET: &str = "sk-scoped-canary-never-retained";
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct UseSnapshot {
+    scheme: String,
+    host: String,
+    port: u16,
+    method: String,
+    path: String,
+    capability_id: String,
+    actors: Vec<String>,
+    session_id: String,
+    task_id: String,
+}
+
+#[derive(Clone, Copy)]
+enum ResolverOutcome {
+    Success,
+    Expired,
+    Revoked,
+}
+
+struct TestResolver {
+    outcome: ResolverOutcome,
+    requests: Mutex<Vec<UseSnapshot>>,
+}
+
+impl TestResolver {
+    fn new(outcome: ResolverOutcome) -> Self {
+        Self {
+            outcome,
+            requests: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn requests(&self) -> Vec<UseSnapshot> {
+        self.requests.lock().expect("requests lock").clone()
+    }
+}
+
+impl ScopedCredentialResolver for TestResolver {
+    fn resolve(
+        &self,
+        request: &ScopedCredentialUse<'_>,
+        callback: &mut dyn FnMut(&str) -> Result<(), ScopedCredentialCallbackError>,
+    ) -> Result<(), ScopedCredentialResolverError> {
+        self.requests
+            .lock()
+            .expect("requests lock")
+            .push(UseSnapshot {
+                scheme: request.scheme.to_string(),
+                host: request.host.to_string(),
+                port: request.port,
+                method: request.method.to_string(),
+                path: request.path.to_string(),
+                capability_id: request.capability_id.as_str().to_string(),
+                actors: request
+                    .authority
+                    .actor_chain()
+                    .as_slice()
+                    .iter()
+                    .map(|actor| actor.id.as_str().to_string())
+                    .collect(),
+                session_id: request
+                    .authority
+                    .authorization
+                    .context
+                    .session_id
+                    .as_str()
+                    .to_string(),
+                task_id: request
+                    .authority
+                    .authorization
+                    .context
+                    .task_id
+                    .as_str()
+                    .to_string(),
+            });
+        match self.outcome {
+            ResolverOutcome::Success => {
+                callback(SCOPED_SECRET).map_err(|ScopedCredentialCallbackError::Failed| {
+                    ScopedCredentialResolverError::CallbackFailed
+                })
+            }
+            ResolverOutcome::Expired => Err(ScopedCredentialResolverError::Expired),
+            ResolverOutcome::Revoked => Err(ScopedCredentialResolverError::Revoked),
+        }
+    }
+}
+
+fn bounded(value: &str) -> BoundedText {
+    BoundedText::new(value).expect("bounded text")
+}
+
+fn scoped_authority() -> CredentialCapabilityRequest {
+    let human = PolicyPrincipal::new(PrincipalKind::Human, "human:owner").expect("human principal");
+    let actors = ActorChain::new(vec![
+        human.clone(),
+        PolicyPrincipal::new(PrincipalKind::Agent, "agent:root").expect("agent principal"),
+    ])
+    .expect("actor chain");
+    let revocations = RevocationState::new();
+    let destination = CredentialDestination::https("api.openai.com", 443).expect("destination");
+    let credential =
+        CredentialReference::new("provider.openai", "responses.create").expect("credential");
+    let authorization = AuthorizationRequest::new(
+        actors.clone(),
+        ProtectedResource::new(ResourceKind::VaultCredential, "provider.openai").expect("resource"),
+        PolicyAction::Use,
+        AuthorizationContext {
+            now_unix_seconds: 100,
+            session_id: bounded("session:scoped-proxy"),
+            task_id: bounded("task:scoped-proxy"),
+            purpose: bounded("model-inference"),
+            operation: credential.scope.clone(),
+            destination: Some(destination.authority().expect("authority")),
+            quantity: None,
+            grant_id: None,
+        },
+    )
+    .expect("authorization");
+    let grant = BoundedGrant::issue(
+        human,
+        actors,
+        GrantScope::new(
+            authorization.resource.clone(),
+            [PolicyAction::Use],
+            GrantContext::new(
+                authorization.context.session_id.clone(),
+                authorization.context.task_id.clone(),
+                authorization.context.purpose.clone(),
+                authorization.context.operation.clone(),
+            ),
+            authorization.context.destination.clone(),
+            BTreeMap::new(),
+        )
+        .expect("grant scope"),
+        90,
+        200,
+        bounded("scoped-proxy-grant"),
+    )
+    .expect("grant");
+    CredentialCapabilityRequest::new(
+        authorization,
+        grant,
+        credential,
+        CredentialHttpMethod::Post,
+        destination,
+        "/v1/responses",
+        100,
+        180,
+        &revocations,
+        None,
+    )
+    .expect("credential authority")
+}
+
+fn scoped_broker(
+    outcome: ResolverOutcome,
+) -> (CredentialBroker, HashMap<String, String>, Arc<TestResolver>) {
+    let broker = CredentialBroker::new(/*enabled*/ true);
+    let resolver = Arc::new(TestResolver::new(outcome));
+    let route = ScopedCredentialRoute::new(
+        CapabilityId::from_sha256_hex("d".repeat(64)).expect("capability id"),
+        scoped_authority(),
+        resolver.clone(),
+    )
+    .expect("scoped route");
+    broker
+        .install_scoped_openai_route(route)
+        .expect("install scoped route");
+    let mut env = env_map([
+        ("OPENAI_API_KEY", "sk-raw-value-must-not-be-retained"),
+        ("GH_TOKEN", "ghp-permissive-still-works"),
+    ]);
+    broker.virtualize_child_env(&mut env);
+    (broker, env, resolver)
+}
+
+#[test]
+fn scoped_openai_route_injects_once_and_passes_complete_context() {
+    let (broker, env, resolver) = scoped_broker(ResolverOutcome::Success);
+    let dummy = env.get("OPENAI_API_KEY").expect("scoped dummy").to_string();
+    assert_ne!(dummy, "sk-raw-value-must-not-be-retained");
+    assert!(broker.host_requires_mitm("api.openai.com"));
+
+    let mut headers = headers_with_bearer(&dummy);
+    broker
+        .inject_request_headers_for_request(
+            "https",
+            "API.OPENAI.COM",
+            443,
+            "POST",
+            "/v1/responses",
+            &mut headers,
+        )
+        .expect("scoped injection");
+    assert_eq!(
+        authorization(&headers),
+        Some("Bearer sk-scoped-canary-never-retained")
+    );
+    assert_eq!(
+        resolver.requests(),
+        vec![UseSnapshot {
+            scheme: "https".to_string(),
+            host: "api.openai.com".to_string(),
+            port: 443,
+            method: "POST".to_string(),
+            path: "/v1/responses".to_string(),
+            capability_id: "d".repeat(64),
+            actors: vec!["human:owner".to_string(), "agent:root".to_string()],
+            session_id: "session:scoped-proxy".to_string(),
+            task_id: "task:scoped-proxy".to_string(),
+        }]
+    );
+
+    headers = headers_with_bearer(&dummy);
+    assert_eq!(
+        broker
+            .inject_request_headers_for_request(
+                "https",
+                "api.openai.com",
+                443,
+                "POST",
+                "/v1/responses",
+                &mut headers,
+            )
+            .expect_err("redirect or retry reuse must fail"),
+        ScopedCredentialInjectionError::AlreadyUsed
+    );
+}
+
+#[test]
+fn scoped_openai_denial_matrix_fails_before_resolution() {
+    macro_rules! assert_denied {
+        ($scheme:expr, $host:expr, $port:expr, $method:expr, $path:expr, $authorization:expr, $expected:expr) => {{
+            let (broker, env, resolver) = scoped_broker(ResolverOutcome::Success);
+            let dummy = env.get("OPENAI_API_KEY").expect("dummy");
+            let mut headers = match $authorization {
+                None => headers_with_bearer(dummy),
+                Some("") => HeaderMap::new(),
+                Some(value) => {
+                    let mut headers = HeaderMap::new();
+                    headers.insert(
+                        AUTHORIZATION,
+                        HeaderValue::from_str(value).expect("authorization"),
+                    );
+                    headers
+                }
+            };
+            let error = broker
+                .inject_request_headers_for_request(
+                    $scheme,
+                    $host,
+                    $port,
+                    $method,
+                    $path,
+                    &mut headers,
+                )
+                .expect_err("denial case");
+            assert_eq!(error, $expected);
+            assert!(resolver.requests().is_empty());
+            assert!(!format!("{error:?} {error}").contains(SCOPED_SECRET));
+        }};
+    }
+
+    assert_denied!(
+        "http",
+        "api.openai.com",
+        443,
+        "POST",
+        "/v1/responses",
+        None,
+        ScopedCredentialInjectionError::SchemeDenied
+    );
+    for host in ["api.openai.com.evil.example", "sub.api.openai.com"] {
+        assert_denied!(
+            "https",
+            host,
+            443,
+            "POST",
+            "/v1/responses",
+            None,
+            ScopedCredentialInjectionError::HostDenied
+        );
+    }
+    assert_denied!(
+        "https",
+        "api.openai.com",
+        8443,
+        "POST",
+        "/v1/responses",
+        None,
+        ScopedCredentialInjectionError::PortDenied
+    );
+    assert_denied!(
+        "https",
+        "api.openai.com",
+        443,
+        "GET",
+        "/v1/responses",
+        None,
+        ScopedCredentialInjectionError::MethodDenied
+    );
+    for path in ["/v1/chat/completions", "/v1/responses?redirect=true"] {
+        assert_denied!(
+            "https",
+            "api.openai.com",
+            443,
+            "POST",
+            path,
+            None,
+            ScopedCredentialInjectionError::PathDenied
+        );
+    }
+    assert_denied!(
+        "https",
+        "api.openai.com",
+        443,
+        "POST",
+        "/v1/responses",
+        Some(""),
+        ScopedCredentialInjectionError::MissingReference
+    );
+    assert_denied!(
+        "https",
+        "api.openai.com",
+        443,
+        "POST",
+        "/v1/responses",
+        Some("Bearer sk-explicit"),
+        ScopedCredentialInjectionError::AuthorizationConflict
+    );
+}
+
+#[test]
+fn scoped_openai_stale_authority_and_unsupported_route_fail_closed() {
+    for outcome in [ResolverOutcome::Expired, ResolverOutcome::Revoked] {
+        let (broker, env, resolver) = scoped_broker(outcome);
+        let mut headers = headers_with_bearer(env.get("OPENAI_API_KEY").expect("dummy"));
+        assert_eq!(
+            broker
+                .inject_request_headers_for_request(
+                    "https",
+                    "api.openai.com",
+                    443,
+                    "POST",
+                    "/v1/responses",
+                    &mut headers,
+                )
+                .expect_err("stale route"),
+            ScopedCredentialInjectionError::ResolutionFailed
+        );
+        assert_eq!(resolver.requests().len(), 1);
+        assert!(!authorization(&headers).is_some_and(|value| value.contains(SCOPED_SECRET)));
+    }
+
+    let resolver = Arc::new(TestResolver::new(ResolverOutcome::Success));
+    let mut wrong_host = scoped_authority();
+    wrong_host.destination =
+        CredentialDestination::https("adjacent.openai.com", 443).expect("adjacent destination");
+    assert_eq!(
+        ScopedCredentialRoute::new(
+            CapabilityId::from_sha256_hex("e".repeat(64)).expect("capability id"),
+            wrong_host,
+            resolver,
+        )
+        .expect_err("invalid mutated host"),
+        ScopedCredentialRouteError::InvalidAuthority
+    );
 }

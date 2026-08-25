@@ -173,6 +173,7 @@ pub(crate) mod agent_roles;
 mod auth_keyring;
 pub mod edit;
 mod managed_features;
+mod network_proxy_credential;
 mod network_proxy_spec;
 mod otel;
 mod permission_profile_catalog;

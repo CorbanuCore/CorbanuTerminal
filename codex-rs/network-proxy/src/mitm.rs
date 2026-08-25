@@ -5,6 +5,7 @@ use crate::mitm_hook::MitmHookActions;
 use crate::policy::normalize_host;
 use crate::reasons::REASON_METHOD_NOT_ALLOWED;
 use crate::reasons::REASON_MITM_HOOK_DENIED;
+use crate::reasons::REASON_POLICY_DENIED;
 use crate::responses::blocked_text_response;
 use crate::responses::text_response;
 use crate::runtime::HostBlockDecision;
@@ -37,6 +38,7 @@ use rama_http::Request;
 use rama_http::Response;
 use rama_http::StatusCode;
 use rama_http::Uri;
+use rama_http::header::AUTHORIZATION;
 use rama_http::header::HOST;
 use rama_http::layer::remove_header::RemoveRequestHeaderLayer;
 use rama_http::layer::remove_header::RemoveResponseHeaderLayer;
@@ -295,10 +297,26 @@ async fn forward_request(req: Request, request_ctx: &MitmRequestContext) -> Resu
     let log_path = path_for_log(req.uri());
 
     let (mut parts, body) = req.into_parts();
-    request_ctx
+    if request_ctx
         .policy
         .app_state
-        .inject_request_credentials(&target_host, &mut parts.headers);
+        .scoped_credential_route_enabled()
+        && hook_actions_touch_authorization(hook_actions.as_ref())
+    {
+        warn!("scoped credential request denied: authorization hook collision");
+        return Ok(blocked_text_response(REASON_POLICY_DENIED));
+    }
+    if let Err(error) = request_ctx.policy.app_state.inject_request_credentials(
+        "https",
+        &target_host,
+        target_port,
+        &method,
+        &path,
+        &mut parts.headers,
+    ) {
+        warn!("scoped credential request denied: {error}");
+        return Ok(blocked_text_response(REASON_POLICY_DENIED));
+    }
     apply_mitm_hook_actions(&mut parts.headers, hook_actions.as_ref());
     let authority = authority_header_value(&target_host, target_port);
     parts.uri = build_https_uri(&authority, &path)?;
@@ -465,6 +483,16 @@ async fn evaluate_mitm_policy(
     }
 
     Ok(MitmPolicyDecision::Allow { hook_actions })
+}
+
+fn hook_actions_touch_authorization(actions: Option<&MitmHookActions>) -> bool {
+    actions.is_some_and(|actions| {
+        actions.strip_request_headers.contains(&AUTHORIZATION)
+            || actions
+                .inject_request_headers
+                .iter()
+                .any(|header| header.name == AUTHORIZATION)
+    })
 }
 
 fn apply_mitm_hook_actions(headers: &mut HeaderMap, actions: Option<&MitmHookActions>) {

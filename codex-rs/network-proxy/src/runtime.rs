@@ -3,6 +3,9 @@ use crate::config::NetworkMode;
 use crate::config::NetworkProxyConfig;
 use crate::config::ValidatedUnixSocketPath;
 use crate::credential_broker::CredentialBroker;
+use crate::credential_broker::ScopedCredentialInjectionError;
+use crate::credential_broker::ScopedCredentialRoute;
+use crate::credential_broker::ScopedCredentialRouteError;
 use crate::mitm::MitmState;
 use crate::mitm_hook::HookEvaluation;
 use crate::mitm_hook::MitmHooksByHost;
@@ -414,12 +417,45 @@ impl NetworkProxyState {
         &self.audit_metadata
     }
 
+    pub fn install_scoped_credential_route(
+        &self,
+        route: ScopedCredentialRoute,
+    ) -> Result<(), ScopedCredentialRouteError> {
+        self.credential_broker.install_scoped_openai_route(route)
+    }
+
+    pub fn scoped_credential_route_enabled(&self) -> bool {
+        self.credential_broker.scoped_openai_enabled()
+    }
+
+    pub fn scoped_credential_route_matches_host(&self, host: &str) -> bool {
+        self.credential_broker.scoped_openai_matches_host(host)
+    }
+
     pub fn virtualize_child_credentials(&self, env: &mut HashMap<String, String>) {
         self.credential_broker.virtualize_child_env(env);
     }
 
-    pub fn inject_request_credentials(&self, host: &str, headers: &mut rama_http::HeaderMap) {
+    pub fn inject_legacy_request_credentials(
+        &self,
+        host: &str,
+        headers: &mut rama_http::HeaderMap,
+    ) {
         self.credential_broker.inject_request_headers(host, headers);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn inject_request_credentials(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        method: &str,
+        path: &str,
+        headers: &mut rama_http::HeaderMap,
+    ) -> Result<(), ScopedCredentialInjectionError> {
+        self.credential_broker
+            .inject_request_headers_for_request(scheme, host, port, method, path, headers)
     }
 
     pub async fn plaintext_credential_injection_enabled(&self) -> Result<bool> {

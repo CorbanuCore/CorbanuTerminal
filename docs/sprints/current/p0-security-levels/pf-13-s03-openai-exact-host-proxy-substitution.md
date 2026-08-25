@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-13-S03"
 title: "OpenAI exact-host proxy substitution"
-status: ready
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 11
@@ -36,7 +36,7 @@ updated: 2026-08-25
 ## Preconditions
 
 - [x] PF-13-S02 is completed and archived.
-- [ ] Read root, `codex-rs/AGENTS.md`, and `codex-rs/core/AGENTS.md`.
+- [x] Read root, `codex-rs/AGENTS.md`, and `codex-rs/core/AGENTS.md`.
 - [x] Exact worktree coordinates match the active plan.
 
 ## Done

@@ -1,10 +1,17 @@
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicI64;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
+use crate::config::NetworkProxySpec;
+use codex_keyring_store::tests::MockKeyringStore;
+use codex_network_proxy::NetworkProxyAuditMetadata;
+use codex_network_proxy::NetworkProxyConfig;
+use codex_protocol::models::PermissionProfile;
 use codex_security_policy::ActorChain;
 use codex_security_policy::AuthorizationContext;
 use codex_security_policy::AuthorizationRequest;
@@ -24,6 +31,12 @@ use codex_security_policy::RevocationEvent;
 use codex_security_policy::RevocationReason;
 use codex_security_policy::RevocationState;
 use codex_security_policy::RevocationTarget;
+use codex_vault::AddCredential;
+use codex_vault::CredentialType;
+use codex_vault::Vault;
+use http::HeaderMap;
+use http::HeaderValue;
+use http::header::AUTHORIZATION;
 use pretty_assertions::assert_eq;
 
 use super::*;
@@ -462,4 +475,86 @@ fn clock_entropy_collision_and_lock_failures_are_fail_closed() {
         poisoned.len(),
         Err(CredentialCapabilityStoreError::StorePoisoned)
     ));
+}
+
+#[test]
+fn network_proxy_spec_resolves_authorized_openai_credential_only_at_injection() {
+    let revocations = RevocationState::new();
+    let clock = TestClock::new(100);
+    let store = store(4, clock.clone());
+    let request = standard_request(&revocations);
+    let capability = store
+        .issue(request.clone(), &revocations)
+        .expect("issue capability");
+    let authorized = store
+        .authorize(&capability, &request, &revocations)
+        .expect("authorize capability");
+
+    let directory = tempfile::tempdir().expect("vault directory");
+    let vault = Arc::new(Vault::new_with_keyring_store(
+        directory.path().to_path_buf(),
+        Arc::new(MockKeyringStore::default()),
+    ));
+    vault
+        .add(AddCredential {
+            label: "provider.openai".to_string(),
+            credential_type: CredentialType::BearerToken,
+            provider: Some("openai".to_string()),
+            notes: None,
+            revocation_notes: None,
+            secret: "sk-core-scoped-canary".to_string(),
+        })
+        .expect("add scoped credential");
+
+    let mut config = NetworkProxyConfig {
+        enabled: true,
+        mitm: true,
+        ..NetworkProxyConfig::default()
+    };
+    config.set_credential_broker_enabled(/*enabled*/ true);
+    let spec = NetworkProxySpec::from_config_and_constraints(
+        config,
+        None,
+        &PermissionProfile::workspace_write(),
+    )
+    .expect("network proxy spec");
+    let state = spec
+        .build_state_with_scoped_openai_credential_and_clock(
+            NetworkProxyAuditMetadata::default(),
+            authorized,
+            vault,
+            Arc::new(RwLock::new(revocations)),
+            clock,
+        )
+        .expect("scoped network proxy state");
+
+    let mut env = HashMap::from([(
+        "OPENAI_API_KEY".to_string(),
+        "sk-untrusted-environment-value".to_string(),
+    )]);
+    state.virtualize_child_credentials(&mut env);
+    let dummy = env.get("OPENAI_API_KEY").expect("scoped dummy").to_string();
+    assert_ne!(dummy, "sk-untrusted-environment-value");
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&format!("Bearer {dummy}")).expect("dummy header"),
+    );
+    state
+        .inject_request_credentials(
+            "https",
+            "api.openai.com",
+            443,
+            "POST",
+            "/v1/responses",
+            &mut headers,
+        )
+        .expect("scoped credential injection");
+    assert_eq!(
+        headers
+            .get(AUTHORIZATION)
+            .and_then(|value| value.to_str().ok()),
+        Some("Bearer sk-core-scoped-canary")
+    );
 }
