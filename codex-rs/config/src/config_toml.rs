@@ -59,6 +59,7 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::protocol::AskForApproval;
+use codex_security_policy::SecuritySettings;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_path::normalize_for_path_comparison;
 use schemars::JsonSchema;
@@ -192,6 +193,10 @@ pub struct ConfigToml {
     /// been escalated. This does not disable separate safety checks such as
     /// ARC.
     pub approvals_reviewer: Option<ApprovalsReviewer>,
+
+    /// Versioned user-facing security posture. Missing legacy state resolves
+    /// to Permissive when the effective runtime config is built.
+    pub security: Option<SecuritySettings>,
 
     /// Optional policy instructions for the guardian auto-reviewer.
     #[serde(default)]
@@ -1112,5 +1117,42 @@ command = "   "
                 "model_providers.amazon-bedrock: provider auth.command must not be empty"
             )
         );
+    }
+
+    #[test]
+    fn security_settings_round_trip_stable_values() {
+        let config: ConfigToml = toml::from_str(
+            r#"
+[security]
+version = 1
+level = "moderate"
+"#,
+        )
+        .expect("security settings should deserialize");
+        let security = config.security.expect("security settings");
+        assert_eq!(security.version, 1);
+        assert_eq!(
+            security.level,
+            codex_security_policy::SecurityLevel::Moderate
+        );
+
+        let serialized = toml::to_string(&security).expect("serialize settings");
+        let restored: SecuritySettings = toml::from_str(&serialized).expect("restore settings");
+        assert_eq!(restored, security);
+    }
+
+    #[test]
+    fn security_settings_reject_unknown_or_corrupt_explicit_state() {
+        for invalid in [
+            "[security]\nversion = 1\nlevel = \"unknown\"\n",
+            "security = \"aggressive\"\n",
+            "[security]\nversion = 1\nlevel = 7\n",
+            "[security]\nversion = 1\nlevel = \"moderate\"\nunexpected = true\n",
+        ] {
+            assert!(
+                toml::from_str::<ConfigToml>(invalid).is_err(),
+                "explicit invalid state should fail: {invalid}"
+            );
+        }
     }
 }

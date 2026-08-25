@@ -77,6 +77,58 @@ fn set_service_tier_preserves_unknown_service_tier() {
 }
 
 #[test]
+fn set_security_level_persists_versioned_settings_and_preserves_other_config() {
+    let tmp = tempdir().expect("tmpdir");
+    let codex_home = tmp.path();
+    let config_path = codex_home.join(CONFIG_TOML_FILE);
+    std::fs::write(&config_path, "model = \"gpt-5.6-sol\"\n").expect("seed config");
+
+    ConfigEditsBuilder::new(codex_home)
+        .set_security_level(SecurityLevel::Moderate)
+        .apply_blocking()
+        .expect("persist moderate security level");
+
+    let contents = std::fs::read_to_string(&config_path).expect("read config");
+    let parsed: codex_config::config_toml::ConfigToml =
+        toml::from_str(&contents).expect("typed config");
+    assert_eq!(parsed.model.as_deref(), Some("gpt-5.6-sol"));
+    assert_eq!(
+        parsed.security,
+        Some(codex_security_policy::SecuritySettings::new(
+            SecurityLevel::Moderate
+        ))
+    );
+
+    ConfigEditsBuilder::new(codex_home)
+        .set_security_level(SecurityLevel::Aggressive)
+        .apply_blocking()
+        .expect("persist aggressive security level");
+    let updated: codex_config::config_toml::ConfigToml =
+        toml::from_str(&std::fs::read_to_string(&config_path).expect("read updated config"))
+            .expect("typed updated config");
+    assert_eq!(
+        updated.security,
+        Some(codex_security_policy::SecuritySettings::new(
+            SecurityLevel::Aggressive
+        ))
+    );
+
+    ConfigEditsBuilder::new(codex_home)
+        .set_security_level(SecurityLevel::Permissive)
+        .apply_blocking()
+        .expect("persist permissive security level");
+    let restored: codex_config::config_toml::ConfigToml =
+        toml::from_str(&std::fs::read_to_string(&config_path).expect("read restored config"))
+            .expect("typed restored config");
+    assert_eq!(
+        restored.security,
+        Some(codex_security_policy::SecuritySettings::new(
+            SecurityLevel::Permissive
+        ))
+    );
+}
+
+#[test]
 fn builder_with_edits_applies_custom_paths() {
     let tmp = tempdir().expect("tmpdir");
     let codex_home = tmp.path();

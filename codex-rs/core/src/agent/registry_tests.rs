@@ -1,6 +1,17 @@
 use super::*;
 use codex_protocol::AgentPath;
 use codex_protocol::error::CodexErrorDetails;
+use codex_security_policy::ActorChain;
+use codex_security_policy::AuthorizationContext;
+use codex_security_policy::AuthorizationRequest;
+use codex_security_policy::BoundedText;
+use codex_security_policy::PolicyAction;
+use codex_security_policy::PolicyPrincipal;
+use codex_security_policy::PrincipalKind;
+use codex_security_policy::ProtectedResource;
+use codex_security_policy::ResourceKind;
+use codex_security_policy::compose_existing_decision;
+use codex_security_policy::permissive_decision;
 use pretty_assertions::assert_eq;
 use std::collections::HashSet;
 
@@ -60,6 +71,45 @@ fn thread_spawn_depth_increments_and_enforces_limit() {
         child_depth,
         /*max_depth*/ 1
     ));
+}
+
+#[test]
+fn permissive_security_composition_preserves_agent_spawn_depth_decisions() {
+    let human = PolicyPrincipal::new(PrincipalKind::Human, "human:jim").expect("human");
+    let request = AuthorizationRequest::new(
+        ActorChain::new(vec![human]).expect("actor chain"),
+        ProtectedResource::new(ResourceKind::AgentSpawn, "agent:child").expect("resource"),
+        PolicyAction::Spawn,
+        AuthorizationContext {
+            now_unix_seconds: 1,
+            session_id: BoundedText::new("session:spawn-test").expect("session id"),
+            task_id: BoundedText::new("task:spawn-child").expect("task id"),
+            purpose: BoundedText::new("permissive-compatibility").expect("purpose"),
+            operation: BoundedText::new("agent.spawn").expect("operation"),
+            destination: None,
+            quantity: None,
+            grant_id: None,
+        },
+    )
+    .expect("request");
+    let permissive = permissive_decision(&request).expect("Permissive decision");
+
+    for (depth, max_depth, expected_allow) in [
+        (0, 0, true),
+        (1, 0, false),
+        (1, 1, true),
+        (2, 1, false),
+        (2, 2, true),
+        (3, 2, false),
+    ] {
+        let existing_allow = !exceeds_thread_spawn_depth_limit(depth, max_depth);
+        assert_eq!(existing_allow, expected_allow);
+        assert_eq!(
+            compose_existing_decision(existing_allow, &permissive),
+            expected_allow,
+            "Permissive changed spawn depth {depth} with max {max_depth}"
+        );
+    }
 }
 
 #[test]

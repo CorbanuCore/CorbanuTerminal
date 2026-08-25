@@ -63,6 +63,7 @@ codex-rollout = { workspace = true }
 codex-rollout-trace = { workspace = true }
 codex-rmcp-client = { workspace = true }
 codex-sandboxing = { workspace = true }
+codex-security-policy = { workspace = true }
 codex-skills = { workspace = true }
 codex-state = { workspace = true }
 codex-terminal-detection = { workspace = true }
@@ -123,6 +124,7 @@ url = { workspace = true }
 uuid = { workspace = true, features = ["serde", "v4", "v5", "v7"] }
 which = { workspace = true }
 whoami = { workspace = true }
+zeroize = { workspace = true }
 
 # Build OpenSSL from source for musl builds.
 [target.x86_64-unknown-linux-musl.dependencies]

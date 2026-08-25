@@ -25,5 +25,6 @@ zeroize = { workspace = true }
 
 [dev-dependencies]
 codex-keyring-store = { workspace = true }
+codex-security-policy = { workspace = true }
 pretty_assertions = { workspace = true }
 tempfile = { workspace = true }

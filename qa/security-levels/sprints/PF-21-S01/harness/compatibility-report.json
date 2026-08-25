@@ -1,0 +1,134 @@
+{
+  "baseline_commit": "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb",
+  "baseline_manifest": {
+    "path": "qa/security-levels/permissive-baseline-v1.json",
+    "sha256": "45d1f2bd96733381638bb62961ee59fb1c026bc05a6a78d03b560cb794406b8d"
+  },
+  "candidate": {
+    "path": "/home/pfrpc/repos/CorbanuTerminal-security-levels/codex-rs/target/debug/corbanu",
+    "sha256": "6009a28516b7980192afd1f2c63d33f68b7abe7bd6da65555208f5bb3ca8bf18",
+    "version": "corbanu 0.1.35"
+  },
+  "candidate_version_command": {
+    "command": [
+      "/home/pfrpc/repos/CorbanuTerminal-security-levels/codex-rs/target/debug/corbanu",
+      "--version"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "corbanu 0.1.35\n"
+  },
+  "probes": [
+    {
+      "covers": [
+        "permission-profile",
+        "approval-policy",
+        "sandbox",
+        "network"
+      ],
+      "id": "config-policy-matrix",
+      "passed": true,
+      "result": {
+        "command": [
+          "just",
+          "test",
+          "-p",
+          "codex-core",
+          "permissive_security_state_preserves_existing_policy_resolution"
+        ],
+        "returncode": 0,
+        "stderr": "RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast \"$@\"\nwarning: function `append_chat_messages_for_response_item` is never used\n    --> core/src/client.rs:3524:4\n     |\n3524 | fn append_chat_messages_for_response_item(\n     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     |\n     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nwarning: function `test_claude_plan_model_info` is never used\n    --> core/src/client_tests.rs:1222:4\n     |\n1222 | fn test_claude_plan_model_info() -> ModelInfo {\n     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: function `count_cache_control_markers` is never used\n    --> core/src/client_tests.rs:1269:4\n     |\n1269 | fn count_cache_control_markers(value: &serde_json::Value) -> usize {\n     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: function `test_vercel_model_info` is never used\n    --> core/src/client_tests.rs:1283:4\n     |\n1283 | fn test_vercel_model_info() -> ModelInfo {\n     |    ^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: function `test_openrouter_gemini_model_info` is never used\n    --> core/src/client_tests.rs:1314:4\n     |\n1314 | fn test_openrouter_gemini_model_info() -> ModelInfo {\n     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: function `test_openrouter_anthropic_model_info` is never used\n    --> core/src/client_tests.rs:1347:4\n     |\n1347 | fn test_openrouter_anthropic_model_info() -> ModelInfo {\n     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: method `submit_inter_agent_communication` is never used\n   --> core/src/agent/control.rs:415:14\n    |\n161 | impl AgentControl {\n    | ----------------- method in this implementation\n...\n415 |     async fn submit_inter_agent_communication(\n    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: `codex-core` (lib test) generated 7 warnings\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.64s\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n Nextest run ID 6f8541c0-4412-4ab7-b4f8-ae694e05d222 with nextest profile: local\n    Starting 1 test across 4 binaries (3377 tests skipped)\n        PASS [   0.033s] (1/1) codex-core config::tests::permissive_security_state_preserves_existing_policy_resolution\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     Summary [   0.046s] 1 test run: 1 passed, 3377 skipped\n",
+        "stdout": ""
+      },
+      "source_sha256": "f9dec0a6fcb192594d54a72d35e061f56e15aa0f3dbe3c35312f1df77ffc2920"
+    },
+    {
+      "covers": [
+        "legacy-missing-security-state"
+      ],
+      "id": "missing-config-default",
+      "passed": true,
+      "result": {
+        "command": [
+          "just",
+          "test",
+          "-p",
+          "codex-core",
+          "missing_security_state_defaults_to_permissive"
+        ],
+        "returncode": 0,
+        "stderr": "RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast \"$@\"\nwarning: function `append_chat_messages_for_response_item` is never used\n    --> core/src/client.rs:3524:4\n     |\n3524 | fn append_chat_messages_for_response_item(\n     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     |\n     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nwarning: function `test_claude_plan_model_info` is never used\n    --> core/src/client_tests.rs:1222:4\n     |\n1222 | fn test_claude_plan_model_info() -> ModelInfo {\n     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: function `count_cache_control_markers` is never used\n    --> core/src/client_tests.rs:1269:4\n     |\n1269 | fn count_cache_control_markers(value: &serde_json::Value) -> usize {\n     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: function `test_vercel_model_info` is never used\n    --> core/src/client_tests.rs:1283:4\n     |\n1283 | fn test_vercel_model_info() -> ModelInfo {\n     |    ^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: function `test_openrouter_gemini_model_info` is never used\n    --> core/src/client_tests.rs:1314:4\n     |\n1314 | fn test_openrouter_gemini_model_info() -> ModelInfo {\n     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: function `test_openrouter_anthropic_model_info` is never used\n    --> core/src/client_tests.rs:1347:4\n     |\n1347 | fn test_openrouter_anthropic_model_info() -> ModelInfo {\n     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: method `submit_inter_agent_communication` is never used\n   --> core/src/agent/control.rs:415:14\n    |\n161 | impl AgentControl {\n    | ----------------- method in this implementation\n...\n415 |     async fn submit_inter_agent_communication(\n    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: `codex-core` (lib test) generated 7 warnings\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.80s\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n Nextest run ID 392b0057-6475-413f-8d99-5550d7be4e9e with nextest profile: local\n    Starting 1 test across 4 binaries (3377 tests skipped)\n        PASS [   0.035s] (1/1) codex-core config::tests::missing_security_state_defaults_to_permissive\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     Summary [   0.052s] 1 test run: 1 passed, 3377 skipped\n",
+        "stdout": ""
+      },
+      "source_sha256": "665090d13932e7d70e0d46e669287b3c7c5f55408b2f7c5b96ca1191cef67b69"
+    },
+    {
+      "covers": [
+        "vault-programmatic-api-key",
+        "vault-programmatic-private-key"
+      ],
+      "id": "vault-credential-matrix",
+      "passed": true,
+      "result": {
+        "command": [
+          "just",
+          "test",
+          "-p",
+          "codex-vault",
+          "permissive_security_composition_preserves_vault_programmatic_use_decisions"
+        ],
+        "returncode": 0,
+        "stderr": "RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast \"$@\"\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.58s\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n Nextest run ID 92b89b98-3a89-463b-94a4-3fd246234591 with nextest profile: local\n    Starting 1 test across 1 binary (22 tests skipped)\n        PASS [   0.006s] (1/1) codex-vault tests::permissive_security_composition_preserves_vault_programmatic_use_decisions\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     Summary [   0.007s] 1 test run: 1 passed, 22 skipped\n",
+        "stdout": ""
+      },
+      "source_sha256": "ca8f7b9637cc76ece82fb3a1ff0ae925eed5d84100b536d71d2e1cbe807f3ec2"
+    },
+    {
+      "covers": [
+        "agent-spawn-within-depth",
+        "agent-spawn-over-depth"
+      ],
+      "id": "spawn-depth-matrix",
+      "passed": true,
+      "result": {
+        "command": [
+          "just",
+          "test",
+          "-p",
+          "codex-core",
+          "permissive_security_composition_preserves_agent_spawn_depth_decisions"
+        ],
+        "returncode": 0,
+        "stderr": "RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast \"$@\"\nwarning: function `append_chat_messages_for_response_item` is never used\n    --> core/src/client.rs:3524:4\n     |\n3524 | fn append_chat_messages_for_response_item(\n     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n     |\n     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default\n\nwarning: function `test_claude_plan_model_info` is never used\n    --> core/src/client_tests.rs:1222:4\n     |\n1222 | fn test_claude_plan_model_info() -> ModelInfo {\n     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: function `count_cache_control_markers` is never used\n    --> core/src/client_tests.rs:1269:4\n     |\n1269 | fn count_cache_control_markers(value: &serde_json::Value) -> usize {\n     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: function `test_vercel_model_info` is never used\n    --> core/src/client_tests.rs:1283:4\n     |\n1283 | fn test_vercel_model_info() -> ModelInfo {\n     |    ^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: function `test_openrouter_gemini_model_info` is never used\n    --> core/src/client_tests.rs:1314:4\n     |\n1314 | fn test_openrouter_gemini_model_info() -> ModelInfo {\n     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: function `test_openrouter_anthropic_model_info` is never used\n    --> core/src/client_tests.rs:1347:4\n     |\n1347 | fn test_openrouter_anthropic_model_info() -> ModelInfo {\n     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: method `submit_inter_agent_communication` is never used\n   --> core/src/agent/control.rs:415:14\n    |\n161 | impl AgentControl {\n    | ----------------- method in this implementation\n...\n415 |     async fn submit_inter_agent_communication(\n    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n\nwarning: `codex-core` (lib test) generated 7 warnings\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.65s\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n Nextest run ID 003d6d38-e332-46fb-aa79-3397f6d38dce with nextest profile: local\n    Starting 1 test across 4 binaries (3377 tests skipped)\n        PASS [   0.023s] (1/1) codex-core agent::registry::tests::permissive_security_composition_preserves_agent_spawn_depth_decisions\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     Summary [   0.036s] 1 test run: 1 passed, 3377 skipped\n",
+        "stdout": ""
+      },
+      "source_sha256": "35911f7e3c2ec316adb0391982125c655f888e7c7ba60e93e515daf2e91fa336"
+    },
+    {
+      "covers": [
+        "tool-existing-policy"
+      ],
+      "id": "composition-surface-matrix",
+      "passed": true,
+      "result": {
+        "command": [
+          "just",
+          "test",
+          "-p",
+          "codex-security-policy",
+          "permissive_composition_preserves_every_frozen_surface_decision"
+        ],
+        "returncode": 0,
+        "stderr": "RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast \"$@\"\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n Nextest run ID fe733cb6-f3de-4eca-93ce-32b6a992dd40 with nextest profile: local\n    Starting 1 test across 1 binary (13 tests skipped)\n        PASS [   0.006s] (1/1) codex-security-policy tests::permissive_composition_preserves_every_frozen_surface_decision\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n     Summary [   0.006s] 1 test run: 1 passed, 13 skipped\n",
+        "stdout": ""
+      },
+      "source_sha256": "77c990e00eefe0e3af47f5325e511f875dc71dc40dd7a4f9b0b915ec3a5ac32b"
+    }
+  ],
+  "schema_version": 1,
+  "source_commit": "2a0f3abfd0974841cc881d82b09796a6a9bf436e",
+  "source_dirty_paths": [
+    "?? .tasknode-m1-evidence.md"
+  ],
+  "status": "passed"
+}
