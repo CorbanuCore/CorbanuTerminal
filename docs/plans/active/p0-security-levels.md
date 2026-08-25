@@ -9,15 +9,15 @@ activation_basis: "Accountable sequencing item 1 defines /security as P0 and imm
 target_release: "TBD — candidate qualified by 2026-10-08"
 deadline: 2026-10-08
 created: 2026-08-23
-updated: 2026-08-24
+updated: 2026-08-25
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
   requirement_excerpt: "Permissive preserves the shipping behavior and does not silently change existing policies."
 implementation_worktrees:
-  - path: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
+  - path: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
     branch: "feat/p0-security-levels"
-    base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
+    base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
 ---
 
 # P0 `/security` levels
@@ -162,7 +162,7 @@ update; it cannot silently change Permissive or an accepted security level.
 
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
-| Jim Ricketts | `/home/pfrpc/repos/CorbanuTerminal-security-levels` | `feat/p0-security-levels` | `3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb` | Security-level model, persistence, policy composition, TUI, tests, and evidence |
+| Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-security-levels` | `feat/p0-security-levels` | `7cc15ae0762664d6d01765de407329887da9f876` | Security-level model, persistence, policy composition, TUI, tests, and evidence |
 
 Implementation does not occur in the documentation checkout. Update this plan
 before changing the implementation worktree, base, owner, or scope.
@@ -190,23 +190,21 @@ before changing the implementation worktree, base, owner, or scope.
 ## Sprint execution map
 
 This map covers every implementation and qualification unit currently required
-by the plan. All records use the allocated worktree, branch, and base commit.
-Code presence is not completion: PF-15 through PF-21 reconcile seven existing
-feature-worktree commits whose final-tree evidence has not yet been accepted.
-Only dependency-free PF-15-S01 is `ready`; every other record remains `draft`
-until its dependencies are completed and archived.
+by the plan. PF-15 through PF-22 and PF-13-S01 are completed and archived with
+final-tree evidence. PF-13-S02 is the sole `ready` sprint; later records remain
+`draft` until their dependencies are completed and archived.
 
 | Feature ID | Plan feature | Current sprint records | State |
 | --- | --- | --- | --- |
-| `PF-15` | Typed security-level domain | [PF-15-S01](../../sprints/current/p0-security-levels/pf-15-s01-security-level-domain-foundation.md) | Commit `a4f178fe15` present; reconciliation ready |
-| `PF-16` | Deterministic authorization request/decision | [PF-16-S01](../../sprints/current/p0-security-levels/pf-16-s01-authorization-decision-contract.md) | Commit `d183036cb0` present; evidence pending |
-| `PF-17` | Bounded grants and delegation | [PF-17-S01](../../sprints/current/p0-security-levels/pf-17-s01-bounded-delegation-grants.md) | Commit `d68c4dbc95` present; evidence pending |
-| `PF-18` | Human mandates and secret-free receipts | [PF-18-S01](../../sprints/current/p0-security-levels/pf-18-s01-human-mandates-and-receipts.md) | Commit `e22a35ccf2` present; evidence pending |
-| `PF-19` | Revocation and invalidation contract | [PF-19-S01](../../sprints/current/p0-security-levels/pf-19-s01-revocation-contract.md) | Commit `8a3b416c26` present; evidence pending |
-| `PF-20` | Versioned security persistence | [PF-20-S01](../../sprints/current/p0-security-levels/pf-20-s01-versioned-security-persistence.md) | Commit `0e3f2dfd92` present; evidence pending |
-| `PF-21` | Frozen Permissive compatibility | [PF-21-S01](../../sprints/current/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md) | Commit `220af8dae8` present; evidence pending |
-| `PF-22` | Effective runtime policy and agent inheritance | [PF-22-S01](../../sprints/current/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md) | draft |
-| `PF-13` | Vault-backed exact-host credential boundary | [S01](../../sprints/current/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md), [S02](../../sprints/current/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/current/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/current/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md) | draft |
+| `PF-15` | Typed security-level domain | `qa/security-levels/sprints/PF-15-S01/evidence.md` | completed |
+| `PF-16` | Deterministic authorization request/decision | `qa/security-levels/sprints/PF-16-S01/evidence.md` | completed |
+| `PF-17` | Bounded grants and delegation | `qa/security-levels/sprints/PF-17-S01/evidence.md` | completed |
+| `PF-18` | Human mandates and secret-free receipts | `qa/security-levels/sprints/PF-18-S01/evidence.md` | completed |
+| `PF-19` | Revocation and invalidation contract | `qa/security-levels/sprints/PF-19-S01/evidence.md` | completed |
+| `PF-20` | Versioned security persistence | `qa/security-levels/sprints/PF-20-S01/evidence.md` | completed |
+| `PF-21` | Frozen Permissive compatibility | `qa/security-levels/sprints/PF-21-S01/evidence.md` | completed |
+| `PF-22` | Effective runtime policy and agent inheritance | `qa/security-levels/sprints/PF-22-S01/evidence.md` | completed |
+| `PF-13` | Vault-backed exact-host credential boundary | S01: `qa/security-levels/sprints/PF-13-S01/evidence.md`; [S02](../../sprints/current/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/current/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/current/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md) | in progress; S02 ready |
 | `PF-23` | Moderate/Aggressive protected-surface enforcement | [S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), [S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md), [S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | draft |
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |

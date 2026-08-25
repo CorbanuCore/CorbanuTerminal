@@ -6,12 +6,12 @@ plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-26"
 execution_order: 22
 owner: "Jim Ricketts"
-worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
+worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"
-base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
+base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
 depends_on: "PF-26-S01"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-25
 ---
 
 # PF-26-S02 — True-TUI and live-repository qualification
