@@ -5,14 +5,14 @@ These are the current mechanical records for the active
 Each sprint links exactly one feature. Work only from one record's
 **Remaining** checklist; completed records move to the excluded archive.
 
-PF-15 through PF-22 and PF-13-S01 are completed and archived with final-tree
-evidence. PF-13-S02 is the sole `ready` sprint. All later records are `draft`
-and cannot execute until their listed dependencies are completed and archived.
+PF-15 through PF-22 and PF-13-S01 through PF-13-S02 are completed and
+archived with final-tree evidence. PF-13-S03 is the sole `ready` sprint. All
+later records are `draft` and cannot execute until their listed dependencies are
+completed and archived.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
-| 10 | [PF-13-S02](pf-13-s02-scoped-vault-resolver.md) | Zeroizing vault resolver | ready | PF-13-S01 |
-| 11 | [PF-13-S03](pf-13-s03-openai-exact-host-proxy-substitution.md) | Exact OpenAI proxy substitution | draft | PF-13-S02 |
+| 11 | [PF-13-S03](pf-13-s03-openai-exact-host-proxy-substitution.md) | Exact OpenAI proxy substitution | ready | PF-13-S02 |
 | 12 | [PF-13-S04](pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md) | Lifecycle and bypass closure | draft | PF-13-S03 |
 | 13 | [PF-13-S05](pf-13-s05-credential-boundary-adversarial-qualification.md) | Credential adversarial proof | draft | PF-13-S04 |
 | 14 | [PF-23-S01](pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) | Moderate enforcement | draft | PF-13-S05, PF-22-S01 |
