@@ -8,12 +8,12 @@ task-specific instructions that load only when their trigger matches the work.
 
 ## Product contract
 
-| Field | Value |
-| --- | --- |
-| Status | **LIVE** |
-| Exact product-spec heading | **Shipping MVP — LIVE** |
-| Requirement excerpt | “Remote and context: Allowlisted Telegram; durable `/goal` and `/memories`; ephemeral `/side` and `/btw`; `/skills` and `/docs`.” |
-| Related excerpt | “Workspaces: `/panes`, `/agent`, approvals, existing general sandboxing, review, MCP, skills, plugins, apps, connectors, and background terminals.” |
+| Field                      | Value                                                                                                                                               |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status                     | **LIVE**                                                                                                                                            |
+| Exact product-spec heading | **Shipping MVP — LIVE**                                                                                                                             |
+| Requirement excerpt        | “Remote and context: Allowlisted Telegram; durable `/goal` and `/memories`; ephemeral `/side` and `/btw`; `/skills` and `/docs`.”                   |
+| Related excerpt            | “Workspaces: `/panes`, `/agent`, approvals, existing general sandboxing, review, MCP, skills, plugins, apps, connectors, and background terminals.” |
 
 ## Browse skills
 
@@ -29,12 +29,12 @@ explicit user reference such as `$skill-name`.
 
 ## Skill locations
 
-| Layer | Location | Scope |
-| --- | --- | --- |
-| Bundled system | `$CODEX_HOME/skills/.system/` | Installed with Corbanu Terminal |
-| User | `$HOME/.agents/skills/` | Available across repositories |
-| Repository | `<repo>/.agents/skills/` | Portable across compatible agents in that project |
-| Plugin | Installed plugin package | Available while the plugin is installed |
+| Layer          | Location                      | Scope                                             |
+| -------------- | ----------------------------- | ------------------------------------------------- |
+| Bundled system | `$CODEX_HOME/skills/.system/` | Installed with Corbanu Terminal                   |
+| User           | `$HOME/.agents/skills/`       | Available across repositories                     |
+| Repository     | `<repo>/.agents/skills/`      | Portable across compatible agents in that project |
+| Plugin         | Installed plugin package      | Available while the plugin is installed           |
 
 A fresh Corbanu home normally uses `$HOME/.corbanu/skills/.system/`. An
 upgraded installation may continue using the legacy state home selected by the
@@ -42,26 +42,26 @@ documented home-resolution rules.
 
 ## Bundled system skills
 
-| Skill | Purpose |
-| --- | --- |
-| `corbanu-terminal-help` | Operate Corbanu providers, vault, wallet, Plan, GPU, panes, orchestration, and Task Node |
-| `frontend-design` | Build production browser interfaces |
-| `imagegen` | Generate or edit raster images |
-| `openai-docs` | Use official OpenAI and Codex documentation |
-| `plugin-creator` | Create and update plugins |
-| `postfiat-l1-development` | Develop and review the Post Fiat L1 workspace |
-| `review-agent` | Perform structured review work |
-| `skill-creator` | Create and improve skills |
-| `skill-installer` | Install curated or repository-hosted skills |
-| `tasknode-usage` | Use Task Node as an agent-side context and work ledger |
+| Skill                     | Purpose                                                                                  |
+| ------------------------- | ---------------------------------------------------------------------------------------- |
+| `corbanu-terminal-help`   | Operate Corbanu providers, vault, wallet, Plan, GPU, panes, orchestration, and Task Node |
+| `frontend-design`         | Build production browser interfaces                                                      |
+| `imagegen`                | Generate or edit raster images                                                           |
+| `openai-docs`             | Use official OpenAI and Codex documentation                                              |
+| `plugin-creator`          | Create and update plugins                                                                |
+| `postfiat-l1-development` | Develop and review the Post Fiat L1 workspace                                            |
+| `review-agent`            | Perform structured review work                                                           |
+| `skill-creator`           | Create and improve skills                                                                |
+| `skill-installer`         | Install curated or repository-hosted skills                                              |
+| `tasknode-usage`          | Use Task Node as an agent-side context and work ledger                                   |
 
 ## Portable repository bundle
 
 This repository checks every contributor skill into two agent-facing locations:
 
-| Location | Contract |
-| --- | --- |
-| `.codex/skills/` | Native Corbanu/Codex repository skill tree and editing source |
+| Location          | Contract                                                                |
+| ----------------- | ----------------------------------------------------------------------- |
+| `.codex/skills/`  | Native Corbanu/Codex repository skill tree and editing source           |
 | `.agents/skills/` | Complete agent-neutral portability mirror committed with the repository |
 
 The mirror contains every tracked contributor skill, including its scripts,

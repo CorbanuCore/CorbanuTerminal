@@ -28,23 +28,23 @@ in the encrypted vault, not in the chat transcript.
 
 Corbanu Terminal currently ships these provider paths:
 
-| Use case                  | Provider    | Current release-visible model examples                                                                           |
-| ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
-| OpenAI Codex account      | OpenAI      | `gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra`                                                                   |
-| Claude subscription       | Claude Plan | `claude-opus-5-plan`, `claude-fable-5-plan`                                                                      |
-| Direct Claude API         | Anthropic   | `claude-opus-5`, `claude-fable-5`                                                                                |
-| Ambient coding plan       | Ambient     | `z-ai/glm-5.2`, `moonshotai/kimi-k2.7-code`                                                                      |
-| Kimi coding plan          | Kimi Code   | `k3`                                                                                                             |
-| Z.AI coding plan          | Z.AI        | `glm-5.2`                                                                                                        |
-| Direct DeepSeek Responses | DeepSeek    | `deepseek-v4-flash` (DeepSeek V4 Flash 0731)                                                                     |
-| Metered model gateway     | OpenRouter  | `deepseek/deepseek-v4-flash-0731`, `deepseek/deepseek-v4-pro`, `moonshotai/kimi-k3`, and other catalogued routes |
-| Meta API                  | Meta        | `muse-spark-1.1`                                                                                                 |
-| Metered GLM               | Baseten     | `zai-org/GLM-5.2`                                                                                                |
-| Metered GLM gateway       | Vercel      | `zai/glm-5.2`, `zai/glm-5.2-fast`                                                                                |
-| Wallet-funded inference   | Corbanu Plan | GLM 5.2, Kimi K2.7 Code, DeepSeek V4 Pro, Claude Fable 5                                                         |
-| Cloud model runtime       | Bedrock     | Models available to the configured AWS account                                                                   |
-| Local model runtime       | Ollama / LM Studio | Models served by the configured local endpoint                                                            |
-| Operator-defined endpoint | Custom      | Models declared in `config.toml`                                                                                  |
+| Use case                  | Provider           | Current release-visible model examples                                                                           |
+| ------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| OpenAI Codex account      | OpenAI             | `gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra`                                                                   |
+| Claude subscription       | Claude Plan        | `claude-opus-5-plan`, `claude-fable-5-plan`                                                                      |
+| Direct Claude API         | Anthropic          | `claude-opus-5`, `claude-fable-5`                                                                                |
+| Ambient coding plan       | Ambient            | `z-ai/glm-5.2`, `moonshotai/kimi-k2.7-code`                                                                      |
+| Kimi coding plan          | Kimi Code          | `k3`                                                                                                             |
+| Z.AI coding plan          | Z.AI               | `glm-5.2`                                                                                                        |
+| Direct DeepSeek Responses | DeepSeek           | `deepseek-v4-flash` (DeepSeek V4 Flash 0731)                                                                     |
+| Metered model gateway     | OpenRouter         | `deepseek/deepseek-v4-flash-0731`, `deepseek/deepseek-v4-pro`, `moonshotai/kimi-k3`, and other catalogued routes |
+| Meta API                  | Meta               | `muse-spark-1.1`                                                                                                 |
+| Metered GLM               | Baseten            | `zai-org/GLM-5.2`                                                                                                |
+| Metered GLM gateway       | Vercel             | `zai/glm-5.2`, `zai/glm-5.2-fast`                                                                                |
+| Wallet-funded inference   | Corbanu Plan       | GLM 5.2, Kimi K2.7 Code, DeepSeek V4 Pro, Claude Fable 5                                                         |
+| Cloud model runtime       | Bedrock            | Models available to the configured AWS account                                                                   |
+| Local model runtime       | Ollama / LM Studio | Models served by the configured local endpoint                                                                   |
+| Operator-defined endpoint | Custom             | Models declared in `config.toml`                                                                                 |
 
 See
 [`/providers`, account login, and `/model`](features/model-providers.md)
@@ -84,20 +84,20 @@ Provider API keys stored through onboarding use labels such as
 
 ## Useful Slash Commands
 
-| Command      | Purpose                                                                  |
-| ------------ | ------------------------------------------------------------------------ |
-| `/model`     | Select provider model and reasoning/effort mode                          |
-| `/providers` | Add or replace provider credentials and manage account routes            |
-| `/vault`     | Add, inspect, or delete credentials without exposing raw secrets to chat |
-| [`/panes`](features/workspaces.md) | Create or switch persistent native, Claude, and managed crew panes |
-| [`/spawn`](features/spawn-orchestration.md) | Create or bind retained Nazgul/Troll/Orc agents |
-| [`/orchestrate`](features/orchestrate.md) | Attach persistent Manager → Worker supervision |
-| `/wallet`    | Manage the local SOL/USDC wallet and Corbanu Plans                       |
-| `/gpu`       | Inspect, rent, stop, or terminate supported GPU capacity                 |
-| `/telegram`  | Configure and control the Telegram connector                             |
-| `/tasknode`  | Link and use Task Node tasks, context, chat, balances, and rewards       |
-| `/docs`      | Open these packaged docs inside any advertised pane                      |
-| `/status`    | Inspect current model/provider/session state                             |
+| Command                                     | Purpose                                                                  |
+| ------------------------------------------- | ------------------------------------------------------------------------ |
+| `/model`                                    | Select provider model and reasoning/effort mode                          |
+| `/providers`                                | Add or replace provider credentials and manage account routes            |
+| `/vault`                                    | Add, inspect, or delete credentials without exposing raw secrets to chat |
+| [`/panes`](features/workspaces.md)          | Create or switch persistent native, Claude, and managed crew panes       |
+| [`/spawn`](features/spawn-orchestration.md) | Create or bind retained Nazgul/Troll/Orc agents                          |
+| [`/orchestrate`](features/orchestrate.md)   | Attach persistent Manager → Worker supervision                           |
+| `/wallet`                                   | Manage the local SOL/USDC wallet and Corbanu Plans                       |
+| `/gpu`                                      | Inspect, rent, stop, or terminate supported GPU capacity                 |
+| `/telegram`                                 | Configure and control the Telegram connector                             |
+| `/tasknode`                                 | Link and use Task Node tasks, context, chat, balances, and rewards       |
+| `/docs`                                     | Open these packaged docs inside any advertised pane                      |
+| `/status`                                   | Inspect current model/provider/session state                             |
 
 ## Verify Setup
 
