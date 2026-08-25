@@ -1,6 +1,6 @@
 # RW-TMUX-01 verification results
-Date: 2026-08-24  
-Branch: `codex/tmux-harness-foundation`  
+Date: 2026-08-24
+Branch: `codex/tmux-harness-foundation`
 Implementation: `72b72eedc`
 Status: completed
 ## Scope and results
