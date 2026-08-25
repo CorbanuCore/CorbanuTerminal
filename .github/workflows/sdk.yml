@@ -45,9 +45,9 @@ jobs:
     runs-on: ubuntu-24.04
     # Fork and secretless PRs build locally instead of using BuildBuddy remote
     # execution. A cold local Bazel build can exceed ten minutes before the SDK
-    # tests begin. Cold builds have crossed the former 30-minute ceiling, so
-    # keep enough headroom for the build plus the SDK process-spawn matrix.
-    timeout-minutes: 90
+    # tests begin. Cold builds now compile V8 transitively and can exceed 90
+    # minutes, so keep enough headroom for the build and SDK process matrix.
+    timeout-minutes: 180
     environment:
       name: bazel
       deployment: false
