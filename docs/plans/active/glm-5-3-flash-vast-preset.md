@@ -137,7 +137,7 @@ per-rental bearer credential.
 
 ## Implementation sequence
 
-1. Retain the immutable vLLM TP4/H200 recipe and add the experimental TP2/B300 FP8 profile with generalized launch/hardware regressions.
+1. Retain the immutable vLLM TP4/H200 recipe and add the experimental TP2/B300 FP8 profile with generalized launch/hardware regressions; live-canary argument-parser failures require a launch-revision bump and a generalized correction before benchmarking.
 2. Add a reproducible mixed-context concurrency workload and update the `/gpu` catalog snapshot.
 3. Build the final candidate and drive selection/cancellation through the true tmux TUI harness.
 4. With user-approved spend limits and duration, rent on Vast, monitor READY, exercise the authenticated OpenAI-compatible API, sweep 4–256 streams, and record cleanup state.
@@ -186,7 +186,7 @@ Run fix and formatting tools before the final affected tests.
 
 | Item | Type | Owner | Needed by | State / decision |
 | --- | --- | --- | --- | --- |
-| Runtime choice | decision | implementation owner | recipe | vLLM selected because its official recipe is current and model-specific |
+| Runtime choice | decision | implementation owner | recipe | vLLM selected because its official recipe is current and model-specific; the live B300 canary is authoritative for accepted CLI flags |
 | GPU topology | decision | implementation owner | recipe | retain four-H200 TP4 and add two-B300 TP2; 64 attention heads and 288 routed experts divide cleanly by both |
 | Context limit | decision | implementation owner | recipe | H200 remains 65,536; B300 starts at 131,072 with FP8 KV cache and is validated empirically |
 | Benchmark traffic | decision | implementation owner | live qualification | closed-loop concurrency sweep at 4–256 streams; 50% 1K/2K, 25% 8K/6K, 12.5% 32K/8K, and 12.5% 96K/20K input/output-token buckets, averaging 6K requested output tokens |

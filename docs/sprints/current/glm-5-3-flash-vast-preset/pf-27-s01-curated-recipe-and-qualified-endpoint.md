@@ -52,6 +52,7 @@ updated: 2026-08-26
 
 ## Remaining
 
+- [ ] Correct the live-canary runtime boundary by removing the unsupported vLLM logging flag and bumping both GLM-5.3 launch revisions.
 - [ ] With exact user-approved limits, provision through `/gpu`, wait for READY, run the authenticated benchmark sweep, and terminate with provider confirmation.
 
 ## Verification
