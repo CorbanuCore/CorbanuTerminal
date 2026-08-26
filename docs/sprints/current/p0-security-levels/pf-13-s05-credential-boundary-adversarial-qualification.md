@@ -42,27 +42,27 @@ updated: 2026-08-26
 ## Done
 
 - [x] Sprint record defines one bounded qualification outcome.
+- [x] Generated a unique canary and exercised one authorized OpenAI request without printing or persisting the value.
+- [x] Scanned exact outgoing request capture, model context, tool payloads, child environment, logs, audit, errors, receipts, crash output, and artifacts.
+- [x] Exercised malformed, forged, expired, revoked, replayed, wrong-actor/purpose/operation/method/host/scope, redirect, concurrent-use, and revocation-race cases.
+- [x] Proved bounded-store cleanup and absence of additional provider network round trips.
 
 ## Remaining
 
-- [ ] Generate a unique canary and exercise one authorized OpenAI request without printing or persisting the value.
-- [ ] Scan exact outgoing request capture, model context, tool payloads, child environment, logs, audit, errors, receipts, crash output, and artifacts.
-- [ ] Exercise malformed, forged, expired, revoked, replayed, wrong-actor/purpose/operation/method/host/scope, redirect, concurrent-use, and revocation-race cases.
-- [ ] Prove bounded-store cleanup and absence of additional provider network round trips.
 - [ ] Run Linux locally and attach CI evidence for macOS and Windows without weakening host checks.
 - [ ] Obtain independent security review of raw-secret reachability and record findings/corrections.
 
 ## Verification
 
-- [ ] Fix and format all affected crates before the final run; inspect the final diff.
+- [x] Fix and format all affected crates before the final run; inspect the final diff.
 - [ ] Final affected tests: `cd codex-rs && just test -p codex-security-policy && just test -p codex-vault && just test -p codex-network-proxy && just test -p codex-core`.
-- [ ] Canary: `python3 scripts/security-credential-canary --candidate <binary> --output qa/security-levels/sprints/PF-13-S05/`.
+- [x] Canary: `python3 scripts/security-credential-canary --candidate <binary> --output qa/security-levels/sprints/PF-13-S05/`.
 - [ ] Reviewer, commit, commands, platform results, and canary digest are recorded.
-- [ ] TUI applicability: none; PF-26-S02 consumes this boundary in true-TUI workflows.
+- [x] TUI applicability: none; PF-26-S02 consumes this boundary in true-TUI workflows.
 
 ## Exit evidence
 
-- [ ] Final candidate commit and artifact manifest recorded.
-- [ ] Canary absent from every unauthorized/model-visible surface.
+- [x] Final candidate commit and artifact manifest recorded.
+- [x] Canary absent from every unauthorized/model-visible surface.
 - [ ] Independent security review passes with no open P0 finding.
 - [ ] Ledgers reflect reality and the completed record is archived.
