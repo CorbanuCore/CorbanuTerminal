@@ -164,6 +164,7 @@ fn built_in_glm_5_3_recipe_pins_hopper_safe_vllm_tp4_contract() {
     assert!(launch.contains("--reasoning-parser glm45"));
     assert!(launch.contains("--api-key \"$PFT_ENDPOINT_TOKEN\""));
     assert!(!launch.contains("--kv-cache-dtype fp8"));
+    assert!(!launch.contains("--disable-log-requests"));
     assert!(!launch.contains("--api-key="));
 }
 
@@ -211,6 +212,7 @@ fn built_in_glm_5_3_b300_recipe_pins_blackwell_fp8_tp2_contract() {
     assert!(launch.contains("--kv-cache-dtype fp8"));
     assert!(launch.contains("--api-key \"$PFT_ENDPOINT_TOKEN\""));
     assert!(!launch.contains("--no-enable-flashinfer-autotune"));
+    assert!(!launch.contains("--disable-log-requests"));
     assert!(!launch.contains("--api-key="));
 }
 

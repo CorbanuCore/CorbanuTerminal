@@ -23,13 +23,13 @@ expression: rendered
                                                                     capacity
   5. Rent zai-org/GLM-5.3-Flash · 4× NVIDIA H200                    glm-5.3-flash-4xh200 rev glm-
                                                                     5.3-flash-vllm-dedicated-
-                                                                    20260826-4xh200-r1 · qualified
+                                                                    20260826-4xh200-r2 · qualified
                                                                     · 4× NVIDIA H200 · Select to
                                                                     search compatible capacity
   6. Rent zai-org/GLM-5.3-Flash · 2× NVIDIA B300                    glm-5.3-flash-fp8-2xb300-
                                                                     experimental rev glm-5.3-
                                                                     flash-vllm-dedicated-20260826-
-                                                                    2xb300-r1 · experimental · 2×
+                                                                    2xb300-r2 · experimental · 2×
                                                                     NVIDIA B300 · Select to search
                                                                     compatible capacity
   7. Rent zai-org/GLM-5.2-FP8 · 8× NVIDIA H200                      glm-5.2-fp8-8xh200 rev glm-

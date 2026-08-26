@@ -5,7 +5,7 @@ use crate::RecipeStability;
 pub(crate) fn glm_5_3_flash_recipe() -> GpuRecipe {
     GpuRecipe {
         id: "glm-5.3-flash-4xh200".to_string(),
-        revision: "glm-5.3-flash-vllm-dedicated-20260826-4xh200-r1".to_string(),
+        revision: "glm-5.3-flash-vllm-dedicated-20260826-4xh200-r2".to_string(),
         model_id: "zai-org/GLM-5.3-Flash".to_string(),
         served_model_id: "zai-org/GLM-5.3-Flash".to_string(),
         wire_api: "chat".to_string(),
@@ -65,7 +65,7 @@ pub(crate) fn glm_5_3_flash_recipe() -> GpuRecipe {
                 "--host 0.0.0.0 --port 8000 --tensor-parallel-size 4 ",
                 "--max-model-len 65536 --max-num-seqs 4 --gpu-memory-utilization 0.90 ",
                 "--no-enable-flashinfer-autotune --tool-call-parser glm47 ",
-                "--reasoning-parser glm45 --enable-auto-tool-choice --disable-log-requests ",
+                "--reasoning-parser glm45 --enable-auto-tool-choice ",
                 "--api-key \"$PFT_ENDPOINT_TOKEN\""
             )
             .to_string(),
@@ -85,7 +85,7 @@ pub(crate) fn glm_5_3_flash_recipe() -> GpuRecipe {
 pub(crate) fn glm_5_3_flash_b300_recipe() -> GpuRecipe {
     GpuRecipe {
         id: "glm-5.3-flash-fp8-2xb300-experimental".to_string(),
-        revision: "glm-5.3-flash-vllm-dedicated-20260826-2xb300-r1".to_string(),
+        revision: "glm-5.3-flash-vllm-dedicated-20260826-2xb300-r2".to_string(),
         model_id: "zai-org/GLM-5.3-Flash".to_string(),
         served_model_id: "zai-org/GLM-5.3-Flash".to_string(),
         wire_api: "chat".to_string(),
@@ -148,7 +148,7 @@ pub(crate) fn glm_5_3_flash_b300_recipe() -> GpuRecipe {
                 "--max-model-len 131072 --max-num-seqs 256 --max-num-batched-tokens 32768 ",
                 "--gpu-memory-utilization 0.95 --kv-cache-dtype fp8 ",
                 "--tool-call-parser glm47 --reasoning-parser glm45 ",
-                "--enable-auto-tool-choice --disable-log-requests ",
+                "--enable-auto-tool-choice ",
                 "--api-key \"$PFT_ENDPOINT_TOKEN\""
             )
             .to_string(),
