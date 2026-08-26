@@ -141,18 +141,19 @@ Run fix and formatting tools before the final affected tests.
 
 | Check | Final-tree command | Result | Artifact |
 | --- | --- | --- | --- |
-| Focused | `cd codex-rs && just test -p codex-gpu-market recipe` | pending | sprint evidence |
-| Integration | `cd codex-rs && just test -p codex-gpu-market` | pending | sprint evidence |
-| Snapshot | `cd codex-rs && just test -p codex-tui gpu_menu` | pending | reviewed `insta` snapshot |
-| Governance | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | pending | sprint evidence |
+| Focused | `cd codex-rs && just test -p codex-gpu-market recipe` | 11 passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
+| Integration | `cd codex-rs && just test -p codex-gpu-market` | 76 passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
+| Snapshot | `cd codex-rs && just test -p codex-tui gpu_menu` | 9 passed | reviewed `insta` snapshot and [evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
+| Governance | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
 
 ## True-TUI evidence
 
 | Flow | Candidate binary | Test repo/worktree | Keys/actions | Visible checkpoints | Result | Artifact |
 | --- | --- | --- | --- | --- | --- | --- |
-| Primary | final formatted candidate | this implementation worktree | `/gpu`, Enter, select GLM preset | 4× H200 preset; limit prompts; offer/final confirmation | pending | sprint evidence |
-| Failure/cancel | final formatted candidate | this implementation worktree | `/gpu`, Enter, select preset, Esc before confirmation | returns without provider create | pending | sprint evidence |
-| Recovery/resume | final formatted candidate | this implementation worktree | restart; `/gpu status`, Enter | durable rental/readiness/spend state | pending | live rental evidence |
+| Catalog selection | `c0f2e02e4a` | this implementation worktree | `/gpu`, Enter | qualified 4× H200 preset visible | passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
+| Failure/cancel | `c0f2e02e4a` | this implementation worktree | `/gpu`, Enter, Esc | menu dismissed without provider search/create | passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
+| Primary live rental | final candidate | this implementation worktree | limits, offer, final confirmation | READY and authenticated completion | pending | live rental evidence |
+| Recovery/resume | final candidate | this implementation worktree | restart; `/gpu status`, Enter | durable rental/readiness/spend state | pending | live rental evidence |
 
 ## Live-repository applicability
 

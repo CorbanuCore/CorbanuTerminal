@@ -42,29 +42,29 @@ updated: 2026-08-26
 ## Done
 
 - [x] Sprint record created and linked to one active plan feature.
+- [x] Added a verified vLLM recipe pinned to the GLM-5.3 checkpoint and dedicated serving-image digests.
+- [x] Required TP4 H200/NVLink topology, Hopper-safe KV behavior, bounded capacity/deadlines, and scoped endpoint authentication.
+- [x] Added catalog, immutable-manifest, hardware/launch, credential, snapshot, and true-tmux regressions.
+- [x] Built and qualified the real `/gpu` selection/cancel flow without a provider search or create.
 
 ## Remaining
 
-- [ ] Add a verified vLLM recipe pinned to the GLM-5.3 checkpoint and dedicated serving-image digests.
-- [ ] Require TP4 H200/NVLink topology, BF16 KV behavior, bounded context/concurrency, capacity, deadlines, and scoped endpoint authentication.
-- [ ] Add generalized regressions for catalog order, immutable manifest, TP/GPU sizing, Hopper launch flags, and absence of embedded credentials.
-- [ ] Update and review the `/gpu` catalog snapshot.
-- [ ] Build the final candidate and exercise select/cancel through the true tmux TUI harness.
 - [ ] With exact user-approved limits, provision through `/gpu`, wait for READY, call the authenticated endpoint, and terminate with provider confirmation.
 
 ## Verification
 
-- [ ] Fix: `cd codex-rs && just fix -p codex-gpu-market && just fix -p codex-tui`.
-- [ ] Format: `cd codex-rs && just fmt`; inspect the final diff.
-- [ ] Focused: `cd codex-rs && just test -p codex-gpu-market recipe`.
-- [ ] Integration: `cd codex-rs && just test -p codex-gpu-market`.
-- [ ] Snapshot: `cd codex-rs && just test -p codex-tui gpu_menu`; review intended snapshot changes.
-- [ ] Governance: `python3 docs/plans/check.py && python3 docs/sprints/check.py`.
-- [ ] TUI: actual `/gpu` keys show the preset and cancel without a provider create.
+- [x] Fix: `cd codex-rs && just fix -p codex-gpu-market && just fix -p codex-tui`.
+- [x] Format: `cd codex-rs && just fmt`; inspected the final diff.
+- [x] Focused: `cd codex-rs && just test -p codex-gpu-market recipe` — 11 passed.
+- [x] Integration: `cd codex-rs && just test -p codex-gpu-market` — 76 passed.
+- [x] Snapshot: `cd codex-rs && just test -p codex-tui gpu_menu` — 9 passed; intended snapshot reviewed.
+- [x] Governance: `python3 docs/plans/check.py && python3 docs/sprints/check.py`.
+- [x] TUI: actual `/gpu` keys showed the preset and cancelled without a provider create.
+- [ ] Live: bounded Vast rental reaches READY, serves one authenticated completion, and terminates with provider confirmation.
 
 ## Exit evidence
 
-- [ ] Implementation commit and changed paths recorded.
-- [ ] Final-tree commands and reviewed snapshot recorded under `qa/gpu-rentals/sprints/PF-27-S01/`.
+- [x] Implementation commit `c0f2e02e4a` and changed paths recorded.
+- [x] Final-tree commands and reviewed snapshot recorded under `qa/gpu-rentals/sprints/PF-27-S01/`.
 - [ ] Live rental records endpoint readiness and provider-confirmed termination without secrets.
 - [ ] Ledgers reflect reality and completed record moves to `docs/sprints/archive/glm-5-3-flash-vast-preset/`.
