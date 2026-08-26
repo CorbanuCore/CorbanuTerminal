@@ -1,5 +1,8 @@
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::fmt::Write as _;
+use std::fs;
+use std::io::Write as _;
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
@@ -39,7 +42,11 @@ use http::HeaderMap;
 use http::HeaderValue;
 use http::header::AUTHORIZATION;
 use pretty_assertions::assert_eq;
+use sha2::Digest as _;
+use sha2::Sha256;
 use tracing_test::traced_test;
+use uuid::Uuid;
+use walkdir::WalkDir;
 
 use super::*;
 
@@ -197,6 +204,24 @@ fn store(
 ) -> CredentialCapabilityStore<TestClock, CounterEntropy> {
     CredentialCapabilityStore::with_sources(capacity, clock, CounterEntropy::default())
         .expect("store")
+}
+
+fn sha256_hex(value: &[u8]) -> String {
+    let digest = Sha256::digest(value);
+    let mut encoded = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        write!(&mut encoded, "{byte:02x}").expect("encode digest");
+    }
+    encoded
+}
+
+fn assert_canary_absent(surface: &str, value: &[u8], canary: &str) {
+    assert!(
+        !value
+            .windows(canary.len())
+            .any(|candidate| candidate == canary.as_bytes()),
+        "credential canary escaped into {surface}"
+    );
 }
 
 #[test]
@@ -531,17 +556,29 @@ fn clock_entropy_collision_and_lock_failures_are_fail_closed() {
 
 #[test]
 #[traced_test]
-fn credential_authority_network_proxy_spec_resolves_only_at_injection_and_emits_receipt() {
+fn credential_authority_unique_canary_is_confined_to_one_outgoing_request() {
+    let canary = format!("sk-pf13-{}", Uuid::new_v4());
+    let canary_sha256 = sha256_hex(canary.as_bytes());
     let revocations = RevocationState::new();
     let clock = TestClock::new(100);
     let store = store(4, clock.clone());
     let request = standard_request(&revocations);
+    let model_context = serde_json::to_string(&request).expect("serialize authority");
     let capability = store
         .issue(request.clone(), &revocations)
         .expect("issue capability");
+    let capability_debug = format!("{capability:?}");
     let authorized = store
         .consume(&capability, &request, &revocations)
         .expect("authorize capability");
+    let authorized_debug = format!("{authorized:?}");
+    let tool_payload = serde_json::json!({
+        "capability_id": capability.capability_id().as_str(),
+        "authority": request,
+    })
+    .to_string();
+    let audit_payload =
+        serde_json::to_string(&NetworkProxyAuditMetadata::default()).expect("serialize audit");
 
     let directory = tempfile::tempdir().expect("vault directory");
     let vault = Arc::new(Vault::new_with_keyring_store(
@@ -555,9 +592,32 @@ fn credential_authority_network_proxy_spec_resolves_only_at_injection_and_emits_
             provider: Some("openai".to_string()),
             notes: None,
             revocation_notes: None,
-            secret: "sk-core-scoped-canary".to_string(),
+            secret: canary.clone(),
         })
         .expect("add scoped credential");
+
+    let crash_capability = store
+        .issue(standard_request(&revocations), &revocations)
+        .expect("issue crash capability");
+    let crash_reference = store
+        .consume(
+            &crash_capability,
+            &standard_request(&revocations),
+            &revocations,
+        )
+        .expect("authorize crash capability")
+        .into_vault_ref()
+        .expect("crash vault reference");
+    let crash_error = vault
+        .with_scoped_credential(&crash_reference, 100, &revocations, |_| {
+            panic!("credential canary callback crash")
+        })
+        .expect_err("callback panic must be contained");
+    assert_eq!(
+        crash_error,
+        codex_vault::ScopedCredentialError::CallbackPanicked
+    );
+    let crash_output = format!("{crash_error:?}: {crash_error}");
 
     let mut config = NetworkProxyConfig {
         enabled: true,
@@ -575,19 +635,23 @@ fn credential_authority_network_proxy_spec_resolves_only_at_injection_and_emits_
         .build_state_with_scoped_openai_credential_and_clock(
             NetworkProxyAuditMetadata::default(),
             authorized,
-            vault,
+            Arc::clone(&vault),
             Arc::new(RwLock::new(revocations)),
             clock,
         )
         .expect("scoped network proxy state");
 
-    let mut env = HashMap::from([(
+    let mut child_env = HashMap::from([(
         "OPENAI_API_KEY".to_string(),
         "sk-untrusted-environment-value".to_string(),
     )]);
-    state.virtualize_child_credentials(&mut env);
-    let dummy = env.get("OPENAI_API_KEY").expect("scoped dummy").to_string();
+    state.virtualize_child_credentials(&mut child_env);
+    let dummy = child_env
+        .get("OPENAI_API_KEY")
+        .expect("scoped dummy")
+        .to_string();
     assert_ne!(dummy, "sk-untrusted-environment-value");
+    assert_ne!(dummy, canary);
 
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -604,18 +668,90 @@ fn credential_authority_network_proxy_spec_resolves_only_at_injection_and_emits_
             &mut headers,
         )
         .expect("scoped credential injection");
-    assert_eq!(
-        headers
-            .get(AUTHORIZATION)
-            .and_then(|value| value.to_str().ok()),
-        Some("Bearer sk-core-scoped-canary")
+    let outgoing_authorization = headers
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .expect("outgoing authorization");
+    assert_eq!(outgoing_authorization, format!("Bearer {canary}"));
+    let provider_request_count = 1;
+    headers.remove(AUTHORIZATION);
+
+    let mut replay_headers = HeaderMap::new();
+    replay_headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&format!("Bearer {dummy}")).expect("dummy header"),
     );
+    let replay_error = state
+        .inject_request_credentials(
+            "https",
+            "api.openai.com",
+            443,
+            "POST",
+            "/v1/responses",
+            &mut replay_headers,
+        )
+        .expect_err("replay must fail before another provider request");
+    assert_eq!(replay_error, ScopedCredentialInjectionError::AlreadyUsed);
+
+    for (surface, value) in [
+        ("model_context", model_context),
+        ("tool_payload", tool_payload),
+        (
+            "child_environment",
+            serde_json::to_string(&child_env).expect("serialize child environment"),
+        ),
+        ("audit", audit_payload),
+        ("errors", format!("{replay_error:?}: {replay_error}")),
+        ("crash_output", crash_output),
+        ("capability_debug", capability_debug),
+        ("authorized_debug", authorized_debug),
+    ] {
+        assert_canary_absent(surface, value.as_bytes(), &canary);
+    }
+
+    for entry in WalkDir::new(directory.path()) {
+        let entry = entry.expect("walk vault artifact");
+        if entry.file_type().is_file() {
+            let bytes = fs::read(entry.path()).expect("read vault artifact");
+            assert_canary_absent("vault_artifact", &bytes, &canary);
+        }
+    }
+
     assert!(logs_contain("scoped credential action receipt"));
     assert!(logs_contain(capability.capability_id().as_str()));
     assert!(logs_contain("responses.create"));
     assert!(logs_contain("https://api.openai.com:443"));
     assert!(!logs_contain("provider.openai"));
-    assert!(!logs_contain("sk-core-scoped-canary"));
+    logs_assert(|lines: &[&str]| {
+        if lines.iter().any(|line| line.contains(&canary)) {
+            Err("credential canary escaped into tracing logs".to_string())
+        } else {
+            Ok(())
+        }
+    });
+
+    let result = serde_json::json!({
+        "canary_sha256": canary_sha256,
+        "outgoing_request_count": provider_request_count,
+        "raw_secret_observations": 1,
+        "scanned_surfaces": [
+            "exact_outgoing_request_capture",
+            "model_context",
+            "tool_payloads",
+            "child_environment",
+            "logs",
+            "audit",
+            "errors",
+            "receipts",
+            "crash_output",
+            "vault_artifacts"
+        ]
+    });
+    writeln!(
+        std::io::stdout().lock(),
+        "CORBANU_SECURITY_CREDENTIAL_CANARY {result}"
+    )
+    .expect("write canary result");
 }
 
 #[test]
