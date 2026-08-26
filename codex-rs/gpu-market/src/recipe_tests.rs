@@ -173,7 +173,7 @@ fn built_in_glm_5_3_recipe_pins_hopper_safe_vllm_tp4_contract() {
 fn built_in_glm_5_3_b300_recipe_pins_blackwell_fp8_tp2_contract() {
     let catalog = RecipeCatalog::default();
     let recipe = catalog
-        .get("glm-5.3-flash-fp8-2xb300-experimental")
+        .get("glm-5.3-flash-fp8-2xb300")
         .expect("GLM-5.3-Flash B300 recipe");
     RecipeCatalog::new(vec![recipe.clone()]).expect("valid built-in GLM-5.3 B300 manifest");
 
@@ -195,7 +195,7 @@ fn built_in_glm_5_3_b300_recipe_pins_blackwell_fp8_tp2_contract() {
             2,
             131_072,
             256,
-            RecipeStability::Experimental,
+            RecipeStability::Qualified,
         )
     );
     assert!(recipe.hardware.requires_high_bandwidth_interconnect);
@@ -221,10 +221,7 @@ fn built_in_glm_5_3_b300_recipe_pins_blackwell_fp8_tp2_contract() {
 #[test]
 fn built_in_glm_recipes_publish_endpoint_phase_only_after_authenticated_local_readiness() {
     let catalog = RecipeCatalog::default();
-    for id in [
-        "glm-5.3-flash-4xh200",
-        "glm-5.3-flash-fp8-2xb300-experimental",
-    ] {
+    for id in ["glm-5.3-flash-4xh200", "glm-5.3-flash-fp8-2xb300"] {
         let recipe = catalog.get(id).expect("GLM-5.3 recipe");
         let launch = recipe.launch_command.join(" ");
         let syntax = std::process::Command::new("bash")
@@ -264,7 +261,7 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
         [
             "deepseek-flash-2xh200",
             "glm-5.3-flash-4xh200",
-            "glm-5.3-flash-fp8-2xb300-experimental",
+            "glm-5.3-flash-fp8-2xb300",
             "glm-5.2-fp8-8xh200",
             "huihui-deepseek-v4-flash-q4k-2xh200-experimental",
             "huihui-glm-5.2-iq1m-2xh200-experimental"
@@ -284,7 +281,7 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
         [
             RecipeStability::Qualified,
             RecipeStability::Qualified,
-            RecipeStability::Experimental,
+            RecipeStability::Qualified,
             RecipeStability::Qualified,
             RecipeStability::Experimental,
             RecipeStability::Experimental,

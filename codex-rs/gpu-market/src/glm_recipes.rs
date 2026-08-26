@@ -92,7 +92,7 @@ pub(crate) fn glm_5_3_flash_recipe() -> GpuRecipe {
 
 pub(crate) fn glm_5_3_flash_b300_recipe() -> GpuRecipe {
     GpuRecipe {
-        id: "glm-5.3-flash-fp8-2xb300-experimental".to_string(),
+        id: "glm-5.3-flash-fp8-2xb300".to_string(),
         revision: "glm-5.3-flash-vllm-dedicated-20260826-2xb300-r4".to_string(),
         model_id: "zai-org/GLM-5.3-Flash".to_string(),
         served_model_id: "zai-org/GLM-5.3-Flash".to_string(),
@@ -176,7 +176,7 @@ pub(crate) fn glm_5_3_flash_b300_recipe() -> GpuRecipe {
         inference_port: 8000,
         chat_encoding: "glm-5.3-tokenizer-template".to_string(),
         probe_contract: "pfterminal-openai-v1".to_string(),
-        stability: RecipeStability::Experimental,
+        stability: RecipeStability::Qualified,
         manifest_verified: true,
     }
 }

@@ -95,14 +95,13 @@ fn tmux_gpu_menu_lists_glm_5_3_h200_and_b300_presets_then_cancels() -> Result<()
     pane.send_literal("/gpu")?;
     pane.wait_stable_contains("/gpu", Duration::from_secs(/*secs*/ 5))?;
     pane.send_key(TmuxKey::Enter)?;
-    let menu = pane.wait_stable_contains(
-        "Rent zai-org/GLM-5.3-Flash · 2× NVIDIA B300",
-        Duration::from_secs(/*secs*/ 15),
-    )?;
+    let menu =
+        pane.wait_stable_contains("2xb300-r4 · qualified", Duration::from_secs(/*secs*/ 15))?;
     assert!(menu.contains("Rent zai-org/GLM-5.3-Flash · 4× NVIDIA H200"));
+    assert!(menu.contains("Rent zai-org/GLM-5.3-Flash · 2× NVIDIA B300"));
     assert!(menu.contains("glm-5.3-flash-4xh200"));
-    assert!(menu.contains("glm-5.3-flash-fp8-2xb300-experimental"));
-    assert!(menu.contains("qualified"));
+    assert!(menu.contains("glm-5.3-flash-fp8-2xb300"));
+    assert!(!menu.contains("glm-5.3-flash-fp8-2xb300-experimental"));
     assert!(menu.contains("experimental"));
 
     pane.send_key(TmuxKey::Escape)?;
