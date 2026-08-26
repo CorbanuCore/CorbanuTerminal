@@ -137,7 +137,7 @@ per-rental bearer credential.
 
 ## Implementation sequence
 
-1. Retain the immutable vLLM TP4/H200 recipe and add the experimental TP2/B300 FP8 profile with generalized launch/hardware regressions; live-canary argument-parser failures require a launch-revision bump and a generalized correction before benchmarking.
+1. Retain the immutable vLLM TP4/H200 recipe and add the experimental TP2/B300 FP8 profile with generalized launch/hardware regressions; live-canary argument-parser or multimodal-initialization failures require a launch-revision bump and a generalized text-endpoint correction before benchmarking.
 2. Add a reproducible mixed-context concurrency workload and update the `/gpu` catalog snapshot.
 3. Build the final candidate and drive selection/cancellation through the true tmux TUI harness.
 4. With user-approved spend limits and duration, rent on Vast, monitor READY, exercise the authenticated OpenAI-compatible API, sweep 4–256 streams, and record cleanup state.

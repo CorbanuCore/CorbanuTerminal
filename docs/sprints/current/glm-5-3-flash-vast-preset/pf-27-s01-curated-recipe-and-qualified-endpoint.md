@@ -49,10 +49,10 @@ updated: 2026-08-26
 - [x] Added the experimental native-FP8 TP2/B300 recipe with CUDA 13, FP8 KV cache, 131,072-token context, and a 256-request scheduler bound.
 - [x] Added and validated the deterministic mixed-context 4–256 stream benchmark harness.
 - [x] Updated and reviewed catalog, manifest, launch, snapshot, and forced true-tmux regressions.
+- [x] Corrected the live-canary argument boundary by removing the unsupported vLLM logging flag and bumping both GLM-5.3 launch revisions in commit `67399f3106`.
 
 ## Remaining
-
-- [ ] Correct the live-canary runtime boundary by removing the unsupported vLLM logging flag and bumping both GLM-5.3 launch revisions.
+- [ ] Correct the multimodal-initialization boundary for the text-only endpoint with vLLM's supported language-model-only mode and another immutable launch revision.
 - [ ] With exact user-approved limits, provision through `/gpu`, wait for READY, run the authenticated benchmark sweep, and terminate with provider confirmation.
 
 ## Verification
