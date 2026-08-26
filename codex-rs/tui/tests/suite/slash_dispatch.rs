@@ -56,6 +56,61 @@ fn tmux_smoke_single_enter_dispatches_slash_command_and_exits_cleanly() -> Resul
     Ok(())
 }
 
+#[test]
+fn tmux_gpu_menu_lists_glm_5_3_flash_tp4_and_cancels_without_renting() -> Result<()> {
+    if !TmuxServer::should_run("GLM-5.3 GPU menu")? {
+        return Ok(());
+    }
+
+    let repo_root = codex_utils_cargo_bin::repo_root()?;
+    let codex = codex_binary(&repo_root)?;
+    let codex_home = tempdir()?;
+    let log_dir = tempdir()?;
+    write_test_config(codex_home.path(), &repo_root)?;
+
+    let tmux = TmuxServer::start("tmux_gpu_menu_glm_5_3_flash")?;
+    tmux.register_artifact("config.toml", codex_home.path().join("config.toml"));
+    tmux.register_artifact("codex-tui.log", log_dir.path().join("codex-tui.log"));
+    let session = tmux.new_session(
+        SessionSpec::new(
+            "codex-gpu-menu-glm53",
+            TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
+            CommandSpec::new(codex)
+                .env("CODEX_HOME", codex_home.path())
+                .env("OPENAI_API_KEY", "tmux-gpu-menu-test")
+                .env("RUST_LOG", "trace")
+                .arg("-c")
+                .arg("analytics.enabled=false")
+                .arg("-c")
+                .arg(format!("log_dir={}", log_dir.path().display()))
+                .arg("--no-alt-screen")
+                .arg("-C")
+                .arg(&repo_root),
+        )
+        .current_dir(&repo_root),
+    )?;
+    let pane = session.primary_pane();
+
+    pane.wait_stable_contains("Corbanu Terminal", Duration::from_secs(/*secs*/ 15))?;
+    pane.send_literal("/gpu")?;
+    pane.wait_stable_contains("/gpu", Duration::from_secs(/*secs*/ 5))?;
+    pane.send_key(TmuxKey::Enter)?;
+    let menu = pane.wait_stable_contains(
+        "Rent zai-org/GLM-5.3-Flash · 4× NVIDIA H200",
+        Duration::from_secs(/*secs*/ 15),
+    )?;
+    assert!(menu.contains("glm-5.3-flash-4xh200"));
+    assert!(menu.contains("qualified"));
+
+    pane.send_key(TmuxKey::Escape)?;
+    pane.wait_stable_until(
+        "GPU menu dismissal",
+        Duration::from_secs(/*secs*/ 5),
+        |capture| !capture.contains("Rent zai-org/GLM-5.3-Flash"),
+    )?;
+    Ok(())
+}
+
 fn codex_binary(repo_root: &Path) -> Result<PathBuf> {
     if let Ok(path) = codex_utils_cargo_bin::cargo_bin("codex") {
         return Ok(path);

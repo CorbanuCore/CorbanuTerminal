@@ -1,0 +1,83 @@
+use crate::GpuRecipe;
+use crate::HardwareRequirements;
+use crate::RecipeStability;
+
+pub(crate) fn glm_5_3_flash_recipe() -> GpuRecipe {
+    GpuRecipe {
+        id: "glm-5.3-flash-4xh200".to_string(),
+        revision: "glm-5.3-flash-vllm-dedicated-20260826-4xh200-r1".to_string(),
+        model_id: "zai-org/GLM-5.3-Flash".to_string(),
+        served_model_id: "zai-org/GLM-5.3-Flash".to_string(),
+        wire_api: "chat".to_string(),
+        model_revision: "3f1971b7b5f7a528c9c4ef6212c8785298a8c24a".to_string(),
+        image: "vllm/vllm-openai@sha256:2c6da6c6f16ed15c91e412d896dba13701f25fe1861eaec9ddaa4db34d1d21c4"
+            .to_string(),
+        runtime: "vllm".to_string(),
+        serving_runtime_version:
+            "glm53-flash@sha256:2c6da6c6f16ed15c91e412d896dba13701f25fe1861eaec9ddaa4db34d1d21c4"
+                .to_string(),
+        license_id: "MIT".to_string(),
+        requires_huggingface_token: false,
+        minimum_driver_version: "570.26".to_string(),
+        gpu_architectures: vec!["sm_90".to_string()],
+        weight_format: "fp8".to_string(),
+        hardware: HardwareRequirements {
+            gpu_model: "NVIDIA H200".to_string(),
+            gpu_count: 4,
+            minimum_vram_mib_per_gpu: 130_000,
+            minimum_host_ram_mib: 512 * 1024,
+            minimum_disk_gib: 600,
+            requires_high_bandwidth_interconnect: true,
+            allowed_cuda_versions: vec!["13.0".to_string()],
+        },
+        tensor_parallel_size: 4,
+        maximum_context_tokens: 65_536,
+        maximum_concurrent_requests: 4,
+        expected_download_bytes: 329_000_000_000,
+        model_weight_bytes: 328_326_771_576,
+        kv_cache_reserve_bytes: 120_000_000_000,
+        workspace_reserve_bytes: 64_000_000_000,
+        launch_command: vec![
+            "bash".to_string(),
+            "-lc".to_string(),
+            concat!(
+                "set -euo pipefail; ",
+                "pft_phase() { printf '%s\\n' \"$1\" > /tmp/pfterminal-provision-phase.new; ",
+                "mv /tmp/pfterminal-provision-phase.new /tmp/pfterminal-provision-phase; }; ",
+                "pft_phase hardware_check; printf 'PFTERMINAL_RUNTIME_GATE=begin\\n'; ",
+                "test \"$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)\" -eq 4; ",
+                "nvidia-smi --query-gpu=name --format=csv,noheader | ",
+                "awk 'index($0, \"H200\") == 0 { exit 1 }'; ",
+                "printf 'PFTERMINAL_RUNTIME_GATE=gpu-identity-ok\\n'; ",
+                "driver=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1); ",
+                "test \"$(printf '%s\\n' 570.26 \"$driver\" | sort -V | head -1)\" = 570.26; ",
+                "printf 'PFTERMINAL_RUNTIME_GATE=driver-ok\\n'; ",
+                "nvidia-smi topo -m | awk '",
+                "$1 ~ /^GPU[0-9]+$/ { row++; for (i=2; i<=5; i++) ",
+                "if ((i == row + 1 && $i != \"X\") || (i != row + 1 && $i !~ /^NV[0-9]+$/)) ",
+                "exit 1 } END { exit row != 4 }'; ",
+                "printf 'PFTERMINAL_RUNTIME_GATE=nvlink-ok\\n'; ",
+                "pft_phase runtime_setup; vllm --version; ",
+                "printf 'PFTERMINAL_RUNTIME_GATE=runtime-ok\\n'; pft_phase model_download; ",
+                "exec vllm serve zai-org/GLM-5.3-Flash ",
+                "--revision 3f1971b7b5f7a528c9c4ef6212c8785298a8c24a ",
+                "--served-model-name zai-org/GLM-5.3-Flash ",
+                "--host 0.0.0.0 --port 8000 --tensor-parallel-size 4 ",
+                "--max-model-len 65536 --max-num-seqs 4 --gpu-memory-utilization 0.90 ",
+                "--no-enable-flashinfer-autotune --tool-call-parser glm47 ",
+                "--reasoning-parser glm45 --enable-auto-tool-choice --disable-log-requests ",
+                "--api-key \"$PFT_ENDPOINT_TOKEN\""
+            )
+            .to_string(),
+        ],
+        environment_allowlist: vec!["PFT_ENDPOINT_TOKEN".to_string()],
+        startup_deadline_ms: 120 * 60 * 1_000,
+        download_deadline_ms: 90 * 60 * 1_000,
+        probe_deadline_ms: 20 * 60 * 1_000,
+        inference_port: 8000,
+        chat_encoding: "glm-5.3-tokenizer-template".to_string(),
+        probe_contract: "pfterminal-openai-v1".to_string(),
+        stability: RecipeStability::Qualified,
+        manifest_verified: true,
+    }
+}

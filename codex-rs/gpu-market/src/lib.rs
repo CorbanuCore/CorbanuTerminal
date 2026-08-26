@@ -3,6 +3,7 @@
 mod controller;
 mod credential;
 mod gguf_recipes;
+mod glm_recipes;
 mod market;
 mod provider;
 mod provider_http;

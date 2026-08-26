@@ -135,6 +135,39 @@ fn built_in_deepseek_recipe_is_a_validated_runtime_specific_manifest() {
 }
 
 #[test]
+fn built_in_glm_5_3_recipe_pins_hopper_safe_vllm_tp4_contract() {
+    let catalog = RecipeCatalog::default();
+    let recipe = catalog
+        .get("glm-5.3-flash-4xh200")
+        .expect("GLM-5.3-Flash recipe");
+    RecipeCatalog::new(vec![recipe.clone()]).expect("valid built-in GLM-5.3 manifest");
+
+    let launch = recipe.launch_command.join(" ");
+    assert_eq!(recipe.runtime, "vllm");
+    assert_eq!(
+        recipe.model_revision,
+        "3f1971b7b5f7a528c9c4ef6212c8785298a8c24a"
+    );
+    assert_eq!(recipe.hardware.gpu_model, "NVIDIA H200");
+    assert_eq!(recipe.hardware.gpu_count, 4);
+    assert_eq!(recipe.tensor_parallel_size, 4);
+    assert_eq!(recipe.maximum_context_tokens, 65_536);
+    assert_eq!(recipe.maximum_concurrent_requests, 4);
+    assert!(recipe.hardware.requires_high_bandwidth_interconnect);
+    assert!(launch.contains("nvidia-smi topo -m"));
+    assert!(launch.contains("exit row != 4"));
+    assert!(launch.contains("PFTERMINAL_RUNTIME_GATE=nvlink-ok"));
+    assert!(launch.contains("--tensor-parallel-size 4"));
+    assert!(launch.contains("--max-model-len 65536"));
+    assert!(launch.contains("--no-enable-flashinfer-autotune"));
+    assert!(launch.contains("--tool-call-parser glm47"));
+    assert!(launch.contains("--reasoning-parser glm45"));
+    assert!(launch.contains("--api-key \"$PFT_ENDPOINT_TOKEN\""));
+    assert!(!launch.contains("--kv-cache-dtype fp8"));
+    assert!(!launch.contains("--api-key="));
+}
+
+#[test]
 fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
     let catalog = RecipeCatalog::default();
     let ids = catalog
@@ -147,6 +180,7 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
         ids,
         [
             "deepseek-flash-2xh200",
+            "glm-5.3-flash-4xh200",
             "glm-5.2-fp8-8xh200",
             "huihui-deepseek-v4-flash-q4k-2xh200-experimental",
             "huihui-glm-5.2-iq1m-2xh200-experimental"
@@ -164,6 +198,7 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
             .map(|recipe| recipe.stability)
             .collect::<Vec<_>>(),
         [
+            RecipeStability::Qualified,
             RecipeStability::Qualified,
             RecipeStability::Qualified,
             RecipeStability::Experimental,
