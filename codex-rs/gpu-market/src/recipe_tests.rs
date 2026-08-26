@@ -168,6 +168,53 @@ fn built_in_glm_5_3_recipe_pins_hopper_safe_vllm_tp4_contract() {
 }
 
 #[test]
+fn built_in_glm_5_3_b300_recipe_pins_blackwell_fp8_tp2_contract() {
+    let catalog = RecipeCatalog::default();
+    let recipe = catalog
+        .get("glm-5.3-flash-fp8-2xb300-experimental")
+        .expect("GLM-5.3-Flash B300 recipe");
+    RecipeCatalog::new(vec![recipe.clone()]).expect("valid built-in GLM-5.3 B300 manifest");
+
+    let launch = recipe.launch_command.join(" ");
+    assert_eq!(
+        (
+            recipe.runtime.as_str(),
+            recipe.hardware.gpu_model.as_str(),
+            recipe.hardware.gpu_count,
+            recipe.tensor_parallel_size,
+            recipe.maximum_context_tokens,
+            recipe.maximum_concurrent_requests,
+            recipe.stability,
+        ),
+        (
+            "vllm",
+            "NVIDIA B300",
+            2,
+            2,
+            131_072,
+            256,
+            RecipeStability::Experimental,
+        )
+    );
+    assert!(recipe.hardware.requires_high_bandwidth_interconnect);
+    assert_eq!(recipe.hardware.allowed_cuda_versions, ["13.0"]);
+    assert_eq!(recipe.gpu_architectures, ["sm_103"]);
+    assert!(launch.contains("--query-gpu=compute_cap"));
+    assert!(launch.contains("awk '$1 != \"10.3\" { exit 1 }'"));
+    assert!(launch.contains("580.65.06"));
+    assert!(launch.contains("exit row != 2"));
+    assert!(launch.contains("--tensor-parallel-size 2"));
+    assert!(launch.contains("--max-model-len 131072"));
+    assert!(launch.contains("--max-num-seqs 256"));
+    assert!(launch.contains("--max-num-batched-tokens 32768"));
+    assert!(launch.contains("--gpu-memory-utilization 0.95"));
+    assert!(launch.contains("--kv-cache-dtype fp8"));
+    assert!(launch.contains("--api-key \"$PFT_ENDPOINT_TOKEN\""));
+    assert!(!launch.contains("--no-enable-flashinfer-autotune"));
+    assert!(!launch.contains("--api-key="));
+}
+
+#[test]
 fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
     let catalog = RecipeCatalog::default();
     let ids = catalog
@@ -181,6 +228,7 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
         [
             "deepseek-flash-2xh200",
             "glm-5.3-flash-4xh200",
+            "glm-5.3-flash-fp8-2xb300-experimental",
             "glm-5.2-fp8-8xh200",
             "huihui-deepseek-v4-flash-q4k-2xh200-experimental",
             "huihui-glm-5.2-iq1m-2xh200-experimental"
@@ -200,6 +248,7 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
         [
             RecipeStability::Qualified,
             RecipeStability::Qualified,
+            RecipeStability::Experimental,
             RecipeStability::Qualified,
             RecipeStability::Experimental,
             RecipeStability::Experimental,
