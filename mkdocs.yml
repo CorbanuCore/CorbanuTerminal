@@ -101,7 +101,6 @@ nav:
           - Current Security Work:
               - Overview: sprints/current/p0-security-levels/index.md
               - "PF-13 — Credential boundary":
-                  - "PF-13-S04 — Lifecycle and bypass closure": sprints/current/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md
                   - "PF-13-S05 — Adversarial qualification": sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md
               - "Protected-surface enforcement":
                   - "PF-23-S01 — Moderate enforcement": sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md

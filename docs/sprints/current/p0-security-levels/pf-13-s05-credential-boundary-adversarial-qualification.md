@@ -1,17 +1,17 @@
 ---
 sprint_id: "PF-13-S05"
 title: "Credential boundary adversarial qualification"
-status: draft
+status: ready
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 13
 owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+worktree: "/home/pfrpc/repos/CorbanuTerminal-pf13-s02"
+branch: "feat/pf-13-s02-scoped-vault-resolver"
+base_commit: "1bdc515bff48a4d9048dae7d06c6214e884265bc"
 depends_on: "PF-13-S04"
 created: 2026-08-24
-updated: 2026-08-25
+updated: 2026-08-26
 ---
 
 # PF-13-S05 — Credential boundary adversarial qualification
@@ -35,9 +35,9 @@ updated: 2026-08-25
 
 ## Preconditions
 
-- [ ] PF-13-S04 is completed and archived.
+- [x] PF-13-S04 is completed and archived.
 - [ ] A named independent security reviewer is recorded before acceptance.
-- [ ] Exact worktree coordinates match the active plan.
+- [x] Exact worktree coordinates match the active plan.
 
 ## Done
 

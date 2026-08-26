@@ -5,15 +5,14 @@ These are the current mechanical records for the active
 Each sprint links exactly one feature. Work only from one record's
 **Remaining** checklist; completed records move to the excluded archive.
 
-PF-15 through PF-22 and PF-13-S01 through PF-13-S03 are completed and
-archived with final-tree evidence. PF-13-S04 is the sole `in_progress` sprint.
-All later records are `draft` and cannot execute until their listed dependencies are
-completed and archived.
+PF-15 through PF-22 and PF-13-S01 through PF-13-S04 are completed and
+archived with final-tree evidence. PF-13-S05 is the sole `ready` sprint. All
+later records are `draft` and cannot execute until their listed dependencies
+are completed and archived.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
-| 12 | [PF-13-S04](pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md) | Lifecycle and bypass closure | in progress | PF-13-S03 |
-| 13 | [PF-13-S05](pf-13-s05-credential-boundary-adversarial-qualification.md) | Credential adversarial proof | draft | PF-13-S04 |
+| 13 | [PF-13-S05](pf-13-s05-credential-boundary-adversarial-qualification.md) | Credential adversarial proof | ready | PF-13-S04 |
 | 14 | [PF-23-S01](pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) | Moderate enforcement | draft | PF-13-S05, PF-22-S01 |
 | 15 | [PF-23-S02](pf-23-s02-aggressive-deny-and-grant-enforcement.md) | Aggressive deny/grant | draft | PF-17-S01, PF-23-S01 |
 | 16 | [PF-23-S03](pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | Downgrade/restart/inheritance | draft | PF-19-S01, PF-20-S01, PF-23-S02 |
