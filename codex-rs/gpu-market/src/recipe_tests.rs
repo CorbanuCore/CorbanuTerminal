@@ -219,6 +219,38 @@ fn built_in_glm_5_3_b300_recipe_pins_blackwell_fp8_tp2_contract() {
 }
 
 #[test]
+fn built_in_glm_recipes_publish_endpoint_phase_only_after_authenticated_local_readiness() {
+    let catalog = RecipeCatalog::default();
+    for id in [
+        "glm-5.3-flash-4xh200",
+        "glm-5.3-flash-fp8-2xb300-experimental",
+    ] {
+        let recipe = catalog.get(id).expect("GLM-5.3 recipe");
+        let launch = recipe.launch_command.join(" ");
+        let syntax = std::process::Command::new("bash")
+            .args(["-n", "-c", launch.as_str()])
+            .status()
+            .expect("bash syntax check");
+        assert!(syntax.success(), "invalid launch shell for {id}");
+        let server = launch.find("vllm serve").expect("supervised vLLM server");
+        let local_probe = launch
+            .find("pft_model_ready && break")
+            .expect("authenticated local readiness loop");
+        let endpoint_phase = launch
+            .find("pft_phase endpoint_probing")
+            .expect("endpoint phase publication");
+
+        assert!(server < local_probe);
+        assert!(local_probe < endpoint_phase);
+        assert!(launch.contains("Authorization: Bearer %s"));
+        assert!(launch.contains("curl -fsS --max-time 2 --config -"));
+        assert!(launch.contains("trap 'kill \"$server_pid\""));
+        assert!(launch.contains("wait \"$server_pid\"; status=$?"));
+        assert!(!launch.contains("exec vllm serve"));
+    }
+}
+
+#[test]
 fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
     let catalog = RecipeCatalog::default();
     let ids = catalog
