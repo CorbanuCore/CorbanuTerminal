@@ -123,6 +123,17 @@ def prompt_text(repetitions: int, request_id: str) -> str:
     )
 
 
+def delta_has_generated_token(delta: Any) -> bool:
+    """Recognize generated stream fields without depending on one SDK schema revision."""
+    if hasattr(delta, "model_dump"):
+        fields = delta.model_dump(exclude_none=True)
+    elif isinstance(delta, dict):
+        fields = delta
+    else:
+        fields = vars(delta)
+    return any(value for name, value in fields.items() if name != "role")
+
+
 async def tokenize_count(
     client: Any,
     root_url: str,
@@ -203,11 +214,7 @@ async def run_request(
                         usage = chunk.usage
                     if first_token_at is None and chunk.choices:
                         delta = chunk.choices[0].delta
-                        if (
-                            getattr(delta, "content", None)
-                            or getattr(delta, "reasoning_content", None)
-                            or getattr(delta, "tool_calls", None)
-                        ):
+                        if delta_has_generated_token(delta):
                             first_token_at = time.perf_counter()
             finished = time.perf_counter()
             if usage is None:
