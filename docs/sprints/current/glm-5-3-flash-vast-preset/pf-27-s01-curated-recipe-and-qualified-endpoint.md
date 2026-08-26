@@ -53,6 +53,7 @@ updated: 2026-08-26
 - [x] Corrected multimodal initialization for the text endpoint with vLLM's language-model-only mode and immutable `r3` launch revisions in commit `ca22482a8b`.
 
 ## Remaining
+- [ ] Correct the GLM phase-publication boundary so the supervised vLLM process publishes `endpoint_probing` only after an authenticated local model check and receives wrapper shutdown signals.
 - [ ] With exact user-approved limits, provision through `/gpu`, wait for READY, run the authenticated benchmark sweep, and terminate with provider confirmation.
 
 ## Verification
