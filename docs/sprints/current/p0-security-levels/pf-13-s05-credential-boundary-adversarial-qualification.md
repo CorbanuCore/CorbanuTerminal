@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-13-S05"
 title: "Credential boundary adversarial qualification"
-status: ready
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 13

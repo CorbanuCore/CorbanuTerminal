@@ -191,7 +191,7 @@ before changing the implementation worktree, base, owner, or scope.
 
 This map covers every implementation and qualification unit currently required
 by the plan. PF-15 through PF-22 and PF-13-S01 through PF-13-S04 are
-completed and archived with final-tree evidence. PF-13-S05 is the sole `ready`
+completed and archived with final-tree evidence. PF-13-S05 is the sole `in_progress`
 sprint; later records remain `draft` until their dependencies are completed and
 archived.
 
@@ -205,7 +205,7 @@ archived.
 | `PF-20` | Versioned security persistence | `qa/security-levels/sprints/PF-20-S01/evidence.md` | completed |
 | `PF-21` | Frozen Permissive compatibility | `qa/security-levels/sprints/PF-21-S01/evidence.md` | completed |
 | `PF-22` | Effective runtime policy and agent inheritance | `qa/security-levels/sprints/PF-22-S01/evidence.md` | completed |
-| `PF-13` | Vault-backed exact-host credential boundary | S01: `qa/security-levels/sprints/PF-13-S01/evidence.md`; S02: `qa/security-levels/sprints/PF-13-S02/evidence.md`; S03: `qa/security-levels/sprints/PF-13-S03/evidence.md`; S04: `qa/security-levels/sprints/PF-13-S04/evidence.md`; [S05](../../sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md) | in progress; S05 ready |
+| `PF-13` | Vault-backed exact-host credential boundary | S01: `qa/security-levels/sprints/PF-13-S01/evidence.md`; S02: `qa/security-levels/sprints/PF-13-S02/evidence.md`; S03: `qa/security-levels/sprints/PF-13-S03/evidence.md`; S04: `qa/security-levels/sprints/PF-13-S04/evidence.md`; [S05](../../sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md) | in progress; S05 in progress |
 | `PF-23` | Moderate/Aggressive protected-surface enforcement | [S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), [S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md), [S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | draft |
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
