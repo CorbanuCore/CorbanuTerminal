@@ -1,0 +1,103 @@
+{
+  "model": "zai-org/GLM-5.3-Flash",
+  "model_revision": "3f1971b7b5f7a528c9c4ef6212c8785298a8c24a",
+  "concurrency": 4,
+  "requests": [
+    {
+      "request_id": "c004-r0000",
+      "bucket": "medium",
+      "target_input_tokens": 8192,
+      "target_output_tokens": 6000,
+      "input_tokens": 8193,
+      "output_tokens": 6000,
+      "ttft_ms": 11337.03863993287,
+      "tpot_ms": 11.938794185507593,
+      "e2el_ms": 82957.86495879292,
+      "error": null
+    },
+    {
+      "request_id": "c004-r0001",
+      "bucket": "large",
+      "target_input_tokens": 32768,
+      "target_output_tokens": 8000,
+      "input_tokens": 32768,
+      "output_tokens": 8000,
+      "ttft_ms": 11573.459509760141,
+      "tpot_ms": 11.215236997817483,
+      "e2el_ms": 101284.14025530219,
+      "error": null
+    },
+    {
+      "request_id": "c004-r0002",
+      "bucket": "short",
+      "target_input_tokens": 1024,
+      "target_output_tokens": 2000,
+      "input_tokens": 1025,
+      "output_tokens": 2000,
+      "ttft_ms": 3968.2616479694843,
+      "tpot_ms": 12.67757882858408,
+      "e2el_ms": 29310.74172630906,
+      "error": null
+    },
+    {
+      "request_id": "c004-r0003",
+      "bucket": "medium",
+      "target_input_tokens": 8192,
+      "target_output_tokens": 6000,
+      "input_tokens": 8193,
+      "output_tokens": 6000,
+      "ttft_ms": 11334.850702434778,
+      "tpot_ms": 11.938876239388838,
+      "e2el_ms": 82956.16926252842,
+      "error": null
+    },
+    {
+      "request_id": "c004-r0004",
+      "bucket": "long",
+      "target_input_tokens": 96000,
+      "target_output_tokens": 20000,
+      "input_tokens": 96001,
+      "output_tokens": 20000,
+      "ttft_ms": 18841.02141112089,
+      "tpot_ms": 7.374121096834396,
+      "e2el_ms": 166316.069226712,
+      "error": null
+    },
+    {
+      "request_id": "c004-r0005",
+      "bucket": "short",
+      "target_input_tokens": 1024,
+      "target_output_tokens": 2000,
+      "input_tokens": 1025,
+      "output_tokens": 2000,
+      "ttft_ms": 417.1484261751175,
+      "tpot_ms": 9.066024686155348,
+      "e2el_ms": 18540.131773799658,
+      "error": null
+    },
+    {
+      "request_id": "c004-r0006",
+      "bucket": "short",
+      "target_input_tokens": 1024,
+      "target_output_tokens": 2000,
+      "input_tokens": 1025,
+      "output_tokens": 2000,
+      "ttft_ms": 632.9311318695545,
+      "tpot_ms": 8.965085301102848,
+      "e2el_ms": 18554.136648774147,
+      "error": null
+    },
+    {
+      "request_id": "c004-r0007",
+      "bucket": "short",
+      "target_input_tokens": 1024,
+      "target_output_tokens": 2000,
+      "input_tokens": 1025,
+      "output_tokens": 2000,
+      "ttft_ms": 458.45651626586914,
+      "tpot_ms": 7.830428666788796,
+      "e2el_ms": 16111.483421176672,
+      "error": null
+    }
+  ]
+}

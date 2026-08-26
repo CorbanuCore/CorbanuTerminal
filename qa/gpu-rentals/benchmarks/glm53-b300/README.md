@@ -1,7 +1,7 @@
 # GLM-5.3-Flash 2×B300 mixed-concurrency benchmark
 
 This directory contains the reproducible qualification workload for the
-experimental native-FP8 2×B300 preset. It measures authenticated streaming
+qualified native-FP8 2×B300 preset. It measures authenticated streaming
 chat inference at 4, 8, 16, 32, 64, 128, and 256 concurrent requests.
 
 ## Workload
@@ -81,3 +81,15 @@ The live rental must be created through the product's bounded /gpu confirmation
 flow. Record the approved hourly, total-spend, and duration caps before
 confirmation; after the sweep, terminate through /gpu and verify the provider
 reports no remaining billable instance.
+
+## Qualified live result
+
+The 2026-08-26 Vast run is preserved under
+`results/20260826-vast-48809614/`. All 1,016 requests completed with zero
+failures. Aggregate output throughput increased from 245.36 tok/s at four
+streams to 2,662.88 tok/s at 256 streams; per-stream throughput declined from
+61.34 to 10.40 tok/s. The 256-stream mixed workload reached 99.9–100% KV-cache
+occupancy and queued work without OOM, eviction, preemption, or short output.
+Treat 256 as a validated stress ceiling rather than a production target with
+memory headroom. See `summary.json` for all timing percentiles and
+`qa/gpu-rentals/sprints/PF-27-S01/evidence.md` for rental and cleanup evidence.

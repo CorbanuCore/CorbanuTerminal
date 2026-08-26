@@ -44,6 +44,22 @@ already have its canonical credential.
 
 Setup and model loading consume rental time.
 
+## Curated GLM-5.3-Flash presets
+
+`/gpu` includes two authenticated `zai-org/GLM-5.3-Flash` choices:
+
+| Preset | Intended use | Bound |
+| --- | --- | --- |
+| 4× NVIDIA H200 | qualified Hopper deployment | 65,536-token context; 4 requests |
+| 2× NVIDIA B300 | qualified native-FP8 deployment and capacity testing | 131,072-token context; up to 256 requests |
+
+Both require allocation-local high-bandwidth GPU interconnect, use immutable
+model and runtime revisions, and publish the endpoint only after authenticated
+readiness succeeds. The B300 preset completed the repository's mixed-context
+4–256 stream qualification with zero failed requests. At 256 streams it reached
+full KV-cache occupancy, so that level is a stress ceiling rather than a
+production recommendation with headroom.
+
 ## Monitor and clean up
 
 Use `/gpu` or `/gpu status` as the authoritative cross-process view of

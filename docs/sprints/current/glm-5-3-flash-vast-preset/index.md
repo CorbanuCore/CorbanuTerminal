@@ -1,12 +1,15 @@
 # GLM-5.3-Flash Vast GPU preset sprint
 
-This is the current mechanical record for the active
+The implementation sprint for the active
 [GLM-5.3-Flash Vast GPU preset](../../../plans/active/glm-5-3-flash-vast-preset.md)
-plan.
+plan is complete. There are no current implementation sprints.
 
-| Order | Sprint | Outcome | Status | Depends on |
-| ---: | --- | --- | --- | --- |
-| 1 | [PF-27-S01](pf-27-s01-curated-recipe-and-qualified-endpoint.md) | Curated H200/B300 recipes and qualified B300 concurrency evidence | in progress | none |
+| Completed sprint | Outcome | Status |
+| --- | --- | --- |
+| [PF-27-S01](../../archive/glm-5-3-flash-vast-preset/pf-27-s01-curated-recipe-and-qualified-endpoint.md) | Curated H200/B300 recipes and qualified B300 concurrency evidence | completed |
+
+Product-owner review and any later release linkage remain plan-level work, not
+an executable implementation sprint.
 
 ## Machine check
 

@@ -48,7 +48,7 @@ and can waste billable provisioning time.
 
 The user opens `/gpu`, configures the Vast API key through masked Vault entry,
 and selects a hardware-specific GLM-5.3-Flash preset. Corbanu offers the
-qualified four-H200 profile and an experimental two-B300 FP8 profile, collects
+qualified four-H200 and two-B300 FP8 profiles, collects
 hourly and total spend limits plus duration, shows compatible offers, and
 performs the existing final billable confirmation. Each immutable vLLM recipe
 starts an authenticated OpenAI-compatible server, validates the hardware and
@@ -73,7 +73,7 @@ per-rental bearer credential.
 ### In
 
 - Retain the immutable four-H200 GLM-5.3-Flash vLLM recipe in the curated `/gpu` catalog.
-- Add an experimental two-B300 native-FP8 recipe using the same pinned model and dedicated runtime image.
+- Add and live-qualify a two-B300 native-FP8 recipe using the same pinned model and dedicated runtime image.
 - Require allocation-local high-bandwidth interconnect for both hardware profiles.
 - Pin the Hugging Face checkpoint and dedicated vLLM image by digest.
 - Bound the H200 profile for Hopper BF16 KV-cache headroom and the B300 profile for a 131,072-token, 256-stream Blackwell FP8-KV evaluation.
@@ -100,7 +100,7 @@ per-rental bearer credential.
 - Three-way tensor parallelism is never selected for this 64-head model; the presets allocate TP4 on H200 and TP2 on B300.
 - H200 uses BF16 KV cache; the launch must not request FP8 KV cache on Hopper.
 - B300 uses the official recipe's Blackwell FP8 KV-cache path and requires CUDA 13 plus driver 580.65.06 or newer.
-- The B300 preset remains experimental until live evidence establishes successful request counts, aggregate output throughput, per-stream throughput, and latency across the declared sweep.
+- The B300 preset can be qualified only after live evidence establishes successful request counts, aggregate output throughput, per-stream throughput, latency, and provider-confirmed cleanup across the declared sweep; that gate passed on 2026-08-26.
 - READY is the only state that makes the endpoint selectable through `/model`.
 - Stop-serving never claims billing stopped; only provider-confirmed termination does.
 
@@ -125,7 +125,7 @@ per-rental bearer credential.
 
 | Feature ID | Plan feature | Current sprint records | State |
 | --- | --- | --- | --- |
-| `PF-27` | Curated GLM-5.3-Flash H200/B300 recipes, qualified endpoint, and B300 concurrency evidence | [PF-27-S01](../../sprints/current/glm-5-3-flash-vast-preset/pf-27-s01-curated-recipe-and-qualified-endpoint.md) | in progress |
+| `PF-27` | Curated GLM-5.3-Flash H200/B300 recipes, qualified endpoint, and B300 concurrency evidence | [PF-27-S01](../../sprints/archive/glm-5-3-flash-vast-preset/pf-27-s01-curated-recipe-and-qualified-endpoint.md) | completed |
 
 ## Acceptance flows
 
@@ -137,7 +137,7 @@ per-rental bearer credential.
 
 ## Implementation sequence
 
-1. Retain the immutable vLLM TP4/H200 recipe and add the experimental TP2/B300 FP8 profile with generalized launch/hardware regressions; live-canary argument-parser, multimodal-initialization, or phase-publication failures require a launch-revision bump and a generalized text-endpoint lifecycle correction before benchmarking.
+1. Retain the immutable vLLM TP4/H200 recipe and add a TP2/B300 FP8 candidate with generalized launch/hardware regressions; correct live-canary argument-parser, multimodal-initialization, and phase-publication failures before benchmarking, then promote only after the live gate passes.
 2. Add a reproducible mixed-context concurrency workload and update the `/gpu` catalog snapshot.
 3. Build the final candidate and drive selection/cancellation through the true tmux TUI harness.
 4. With user-approved spend limits and duration, rent on Vast, monitor READY, exercise the authenticated OpenAI-compatible API, sweep 4–256 streams, and record cleanup state.
@@ -149,8 +149,8 @@ Run fix and formatting tools before the final affected tests.
 | Check | Final-tree command | Result | Artifact |
 | --- | --- | --- | --- |
 | Focused | `cd codex-rs && just test -p codex-gpu-market recipe` | 12 passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
-| Integration | `cd codex-rs && just test -p codex-gpu-market` | 77 passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
-| Workload | `python3 qa/gpu-rentals/benchmarks/glm53-b300/run_mixed_sweep.py --validate-only` | seven levels; weighted output exactly 6,000 tokens | [benchmark README](../../../qa/gpu-rentals/benchmarks/glm53-b300/README.md) |
+| Integration | `cd codex-rs && just test -p codex-gpu-market` | 78 passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
+| Workload | validation, unit tests, and live mixed sweep | 1,016/1,016 requests; zero failures; weighted output exactly 6,000 tokens | [benchmark results](../../../qa/gpu-rentals/benchmarks/glm53-b300/results/20260826-vast-48809614/summary.json) |
 | Snapshot | `cd codex-rs && just test -p codex-tui gpu_menu` | 9 passed | reviewed `insta` snapshot and [evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
 | Governance | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
 
@@ -158,10 +158,10 @@ Run fix and formatting tools before the final affected tests.
 
 | Flow | Candidate binary | Test repo/worktree | Keys/actions | Visible checkpoints | Result | Artifact |
 | --- | --- | --- | --- | --- | --- | --- |
-| Catalog selection | `64034f2e8a` | this implementation worktree | `/gpu`, Enter | qualified 4×H200 and experimental 2×B300 presets visible | passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
-| Failure/cancel | `64034f2e8a` | this implementation worktree | `/gpu`, Enter, Esc | menu dismissed without provider search/create | passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
-| Primary live rental | final candidate | this implementation worktree | limits, offer, final confirmation | READY and authenticated completion | pending | live rental evidence |
-| Recovery/resume | final candidate | this implementation worktree | restart; `/gpu status`, Enter | durable rental/readiness/spend state | pending | live rental evidence |
+| Catalog selection | `a50f24527a` | this implementation worktree | `/gpu`, Enter | qualified 4×H200 and 2×B300 presets visible | passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
+| Failure/cancel | `a50f24527a` | this implementation worktree | `/gpu`, Enter, Esc | qualified catalog shown; menu dismissed without provider search/create | passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
+| Primary live rental | `e29e769c74` plus benchmark fix `d4b20009f3` | this implementation worktree | $16/hour, $125 total, 480 minutes; offer; final confirmation | READY; authenticated contract; 4–256 sweep | passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
+| Recovery/resume | same candidate | this implementation worktree | rotate endpoint token; restart controller; `/gpu`; terminate | fresh tunnel and READY; provider-confirmed absence; token removed | passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
 
 ## Live-repository applicability
 
@@ -174,13 +174,13 @@ Run fix and formatting tools before the final affected tests.
 
 | Tester | Date | Candidate version/commit | Flow | Result | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| Product owner | pending | pending | Select preset, approve bounded Vast rental, call endpoint, terminate | pending | live rental evidence |
+| Product owner | 2026-08-26 | `a50f24527a` | Approved bounded Vast rental; final result review | implementation flow passed; final initiative acceptance pending review | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
 
 ## Documentation
 
 | Finished-feature doc | Product-spec citation present | Verified candidate |
 | --- | --- | --- |
-| `docs/features/gpu-rentals.md` | yes | pending update after qualification |
+| `docs/features/gpu-rentals.md` | yes | updated with H200/B300 preset bounds and 256-stream stress-ceiling guidance |
 
 ## Dependencies, decisions, and blockers
 
@@ -190,23 +190,23 @@ Run fix and formatting tools before the final affected tests.
 | GPU topology | decision | implementation owner | recipe | retain four-H200 TP4 and add two-B300 TP2; 64 attention heads and 288 routed experts divide cleanly by both |
 | Context limit | decision | implementation owner | recipe | H200 remains 65,536; B300 starts at 131,072 with FP8 KV cache and is validated empirically |
 | Benchmark traffic | decision | implementation owner | live qualification | closed-loop concurrency sweep at 4–256 streams; 50% 1K/2K, 25% 8K/6K, 12.5% 32K/8K, and 12.5% 96K/20K input/output-token buckets, averaging 6K requested output tokens |
-| Spend and duration | financial authorization | product owner | live rental | pending exact hourly cap, total cap, and duration through `/gpu` |
-| Vast availability | external dependency | Vast.ai | live rental | verified 2×B300/NVLink inventory observed on 2026-08-26; revalidate immediately before confirmation because offers are volatile |
+| Spend and duration | financial authorization | product owner | live rental | approved $16/hour, $125 total, and 480 minutes; terminated at an estimated $28.3518 |
+| Vast availability | external dependency | Vast.ai | live rental | verified 2×B300/NVLink resource `48809614` qualified and then provider-confirmed absent; unrelated instances remained untouched |
 | Candidate release | release dependency | product owner | plan close | TBD |
 
 ## Release linkage
 
 - Release record: pending under `qa/release/`
 - Benchmark tracker row: not due until a release candidate is named
-- Remaining blocker: live bounded rental, endpoint qualification, termination evidence, and human acceptance
+- Remaining blocker: product-owner review of the completed evidence and any later release linkage
 
 ## Completion
 
-- [ ] Product linkage, scope, invariants, and worktrees are current.
-- [ ] Every implementation unit is represented by a valid single-feature sprint.
-- [ ] Required final-tree automated evidence passes.
-- [ ] Required true-TUI and live-repository evidence passes.
+- [x] Product linkage, scope, invariants, and worktrees are current.
+- [x] Every implementation unit is represented by a valid single-feature sprint.
+- [x] Required final-tree automated evidence passes.
+- [x] Required true-TUI and live-repository evidence passes.
 - [ ] Human acceptance passes.
-- [ ] Finished documentation matches the candidate.
+- [x] Finished documentation matches the candidate.
 - [ ] Release and benchmark records are linked.
 - [ ] No hard release gate remains pending.
