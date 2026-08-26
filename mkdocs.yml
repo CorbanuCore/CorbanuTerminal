@@ -139,6 +139,7 @@ nav:
           - Plan Template: plans/PLAN_TEMPLATE.md
       - Corbanu Terminal Development Skill: corbanu-terminal-development-skill.md
       - Contributing: contributing.md
+      - Tmux TUI Harness: tmuxHarness.md
       - CI Coverage: ci.md
       - License: license.md
 
