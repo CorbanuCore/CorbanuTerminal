@@ -28,7 +28,7 @@ The machine source of truth is the front matter in each lifecycle directory.
 | Slot | Initiative | Priority | Deadline | Owner |
 | ---: | --- | --- | --- | --- |
 | 1 of 2 | [P0 `/security` levels](active/p0-security-levels.md) | P0 | 2026-10-08 | Jim Ricketts |
-| 2 of 2 | Available | — | — | — |
+| 2 of 2 | [GLM-5.3-Flash Vast GPU preset](active/glm-5-3-flash-vast-preset.md) | P1 | continuous | Jim Ricketts |
 
 Run `python3 docs/plans/check.py` to validate lifecycle placement, required active
 metadata, and the two-plan limit. CI runs the same check.
