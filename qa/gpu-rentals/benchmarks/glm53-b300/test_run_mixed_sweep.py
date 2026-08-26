@@ -7,6 +7,7 @@ import importlib.util
 import sys
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
 
@@ -53,6 +54,18 @@ class DeltaHasGeneratedTokenTests(unittest.TestCase):
                 SimpleNamespace(role="assistant", future_generated_field="token")
             )
         )
+
+    def test_summary_csv_uses_repository_native_lf_lines(self) -> None:
+        with TemporaryDirectory() as directory:
+            result_dir = Path(directory)
+            MODULE.write_outputs(
+                result_dir,
+                [{"concurrency": 4, "completed": 8, "failed": 0}],
+                {},
+            )
+            csv_bytes = (result_dir / "summary.csv").read_bytes()
+        self.assertNotIn(b"\r\n", csv_bytes)
+        self.assertEqual(csv_bytes.count(b"\n"), 2)
 
 
 if __name__ == "__main__":

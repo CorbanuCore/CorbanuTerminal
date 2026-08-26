@@ -328,7 +328,9 @@ def write_outputs(
 
     if summaries:
         with (result_dir / "summary.csv").open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=list(summaries[0]))
+            writer = csv.DictWriter(
+                handle, fieldnames=list(summaries[0]), lineterminator="\n"
+            )
             writer.writeheader()
             writer.writerows(summaries)
 
