@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-13-S04"
 title: "Credential authority lifecycle and raw-secret bypass closure"
-status: ready
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 12
@@ -11,7 +11,7 @@ branch: "feat/pf-13-s02-scoped-vault-resolver"
 base_commit: "1bdc515bff48a4d9048dae7d06c6214e884265bc"
 depends_on: "PF-13-S03"
 created: 2026-08-24
-updated: 2026-08-25
+updated: 2026-08-26
 ---
 
 # PF-13-S04 — Credential authority lifecycle and raw-secret bypass closure
@@ -36,7 +36,7 @@ updated: 2026-08-25
 ## Preconditions
 
 - [x] PF-13-S03 is completed and archived.
-- [ ] Read root, `codex-rs/AGENTS.md`, and `codex-rs/core/AGENTS.md`.
+- [x] Read root, `codex-rs/AGENTS.md`, and `codex-rs/core/AGENTS.md`.
 - [x] Exact worktree coordinates match the active plan.
 
 ## Done

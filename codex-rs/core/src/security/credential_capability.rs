@@ -131,8 +131,8 @@ struct StoredCapability {
 /// Hard-bounded concurrent lifecycle store for opaque credential capabilities.
 ///
 /// The store never holds a credential value. It binds bearer entropy to one
-/// complete secret-free request and revalidates time and revocation state on
-/// every use.
+/// complete secret-free request, revalidates time and revocation state, and
+/// atomically removes valid authority before returning it for one use.
 pub(crate) struct CredentialCapabilityStore<C = SystemCredentialClock, E = OsCredentialEntropy> {
     entries: RwLock<HashMap<CapabilityId, StoredCapability>>,
     capacity: usize,
@@ -208,7 +208,7 @@ where
         Err(CredentialCapabilityStoreError::TokenCollision)
     }
 
-    pub(crate) fn authorize(
+    pub(crate) fn consume(
         &self,
         capability: &IssuedCredentialCapability,
         presented_request: &CredentialCapabilityRequest,
@@ -231,9 +231,11 @@ where
         if &stored.request != presented_request {
             return Err(CredentialCapabilityStoreError::AuthorityMismatch);
         }
+        let request = stored.request.clone();
+        entries.remove(capability.capability_id());
         Ok(AuthorizedCredentialCapability {
             capability_id: capability.capability_id.clone(),
-            request: stored.request.clone(),
+            request,
         })
     }
 

@@ -249,7 +249,12 @@ fn assert_programmatic_use_round_trip(credential_type: CredentialType, label: &s
         })
         .unwrap();
 
-    assert_eq!(vault.reveal_for_programmatic_use(label).unwrap(), secret);
+    assert_eq!(
+        vault
+            .reveal_for_programmatic_use(label, SecurityLevel::Permissive)
+            .unwrap(),
+        secret
+    );
 }
 
 #[test]
@@ -265,6 +270,45 @@ fn programmatic_use_accepts_api_keys_under_arbitrary_labels() {
 #[test]
 fn programmatic_use_accepts_deployment_credentials_under_arbitrary_labels() {
     assert_programmatic_use_round_trip(CredentialType::DeploymentKey, "hosting/deploy");
+}
+
+#[test]
+fn programmatic_use_denies_raw_export_outside_permissive_without_reading_the_label() {
+    let (_dir, _keyring, vault) = test_vault();
+    let label = "provider.openai";
+    let secret = "RAW-EXPORT-CANARY";
+    vault
+        .add(AddCredential {
+            label: label.to_string(),
+            credential_type: CredentialType::ApiKey,
+            provider: Some("openai".to_string()),
+            notes: None,
+            revocation_notes: None,
+            secret: secret.to_string(),
+        })
+        .expect("add credential");
+
+    for level in [SecurityLevel::Moderate, SecurityLevel::Aggressive] {
+        let error = vault
+            .reveal_for_programmatic_use(label, level)
+            .expect_err("protected level must deny raw export");
+        assert!(matches!(
+            error,
+            VaultError::ProgrammaticUseSecurityLevelDenied {
+                level: denied_level
+            } if denied_level == level
+        ));
+        let message = format!("{error:?} {error}");
+        assert!(!message.contains(label));
+        assert!(!message.contains(secret));
+    }
+
+    assert_eq!(
+        vault
+            .reveal_for_programmatic_use(label, SecurityLevel::Permissive)
+            .expect("permissive compatibility"),
+        secret
+    );
 }
 
 #[test]
@@ -287,7 +331,7 @@ fn programmatic_use_rejects_key_custody_material_without_deleting_it() {
             .unwrap();
 
         let error = vault
-            .reveal_for_programmatic_use(&label)
+            .reveal_for_programmatic_use(&label, SecurityLevel::Permissive)
             .expect_err("key custody material must require explicit user access");
         assert!(matches!(
             error,

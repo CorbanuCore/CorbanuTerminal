@@ -185,7 +185,10 @@ fn validate_binding(request: &CredentialCapabilityRequest) -> Result<(), ScopedC
 fn map_vault_error(error: VaultError) -> ScopedCredentialError {
     match error {
         VaultError::NotFound { .. } => ScopedCredentialError::NotFound,
-        VaultError::ProgrammaticUseDenied { .. } => ScopedCredentialError::CredentialTypeDenied,
+        VaultError::ProgrammaticUseDenied { .. }
+        | VaultError::ProgrammaticUseSecurityLevelDenied { .. } => {
+            ScopedCredentialError::CredentialTypeDenied
+        }
         VaultError::Storage(_) => ScopedCredentialError::Storage,
         VaultError::CredentialExists { .. }
         | VaultError::InvalidLabel(_)

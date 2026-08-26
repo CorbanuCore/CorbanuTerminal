@@ -53,6 +53,7 @@ pub use level::SecurityLevel;
 pub use level::SecuritySettings;
 pub use level::SecuritySettingsError;
 pub use mandate::ActionReceipt;
+pub use mandate::CredentialUseReceiptMetadata;
 pub use mandate::MandateError;
 pub use mandate::MandateOutcome;
 pub use mandate::ProtectedActionMandate;

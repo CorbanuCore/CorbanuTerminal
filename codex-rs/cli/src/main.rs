@@ -2454,6 +2454,9 @@ async fn run_vault_auth_helper(
     config_overrides: CliConfigOverrides,
     command: VaultAuthHelperCommand,
 ) -> anyhow::Result<()> {
+    // Read the persisted posture without CLI overrides so an agent cannot
+    // downgrade the raw-export gate with `-c security.level=...`.
+    let persisted_config = ConfigBuilder::default().build().await?;
     let cli_kv_overrides = config_overrides
         .parse_overrides()
         .map_err(anyhow::Error::msg)?;
@@ -2461,8 +2464,9 @@ async fn run_vault_auth_helper(
         .cli_overrides(cli_kv_overrides)
         .build()
         .await?;
+    let security_level = persisted_config.security_level.max(config.security_level);
     let vault = codex_vault::Vault::new(config.codex_home.to_path_buf());
-    let secret = vault.reveal_for_programmatic_use(&command.label)?;
+    let secret = vault.reveal_for_programmatic_use(&command.label, security_level)?;
     std::io::stdout().write_all(secret.as_bytes())?;
     Ok(())
 }

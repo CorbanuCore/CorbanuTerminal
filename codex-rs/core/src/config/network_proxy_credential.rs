@@ -9,8 +9,12 @@ use codex_network_proxy::ScopedCredentialResolver;
 use codex_network_proxy::ScopedCredentialResolverError;
 use codex_network_proxy::ScopedCredentialRoute;
 use codex_network_proxy::ScopedCredentialUse;
+use codex_security_policy::ActionReceipt;
+use codex_security_policy::BoundedText;
 use codex_security_policy::CredentialCapabilityRequest;
 use codex_security_policy::CredentialTransport;
+use codex_security_policy::DecisionReason;
+use codex_security_policy::MandateOutcome;
 use codex_security_policy::RevocationState;
 use codex_vault::ScopedCredentialCallbackError as VaultCredentialCallbackError;
 use codex_vault::ScopedCredentialError as VaultCredentialError;
@@ -36,6 +40,10 @@ where
         request: &ScopedCredentialUse<'_>,
         callback: &mut dyn FnMut(&str) -> Result<(), ProxyCredentialCallbackError>,
     ) -> Result<(), ScopedCredentialResolverError> {
+        let now = self
+            .clock
+            .now_unix_seconds()
+            .map_err(|_| ScopedCredentialResolverError::Unavailable)?;
         if request.capability_id != self.credential.capability_id()
             || request.authority != &self.authority
             || request.scheme != "https"
@@ -45,26 +53,105 @@ where
             || request.method != self.authority.method.as_str()
             || request.path != self.authority.path.as_str()
         {
+            self.emit_receipt(now, MandateOutcome::Denied, DecisionReason::ScopeMismatch)?;
             return Err(ScopedCredentialResolverError::Denied);
         }
 
-        let now = self
-            .clock
-            .now_unix_seconds()
-            .map_err(|_| ScopedCredentialResolverError::Unavailable)?;
-        let revocations = self
-            .revocations
-            .read()
-            .map_err(|_| ScopedCredentialResolverError::Unavailable)?
-            .clone();
-        self.vault
-            .with_scoped_credential(&self.credential, now, &revocations, |secret| {
-                callback(secret).map_err(|ProxyCredentialCallbackError::Failed| {
-                    VaultCredentialCallbackError::Failed
+        // Hold the current-revocation read guard through the trusted callback.
+        // A concurrent revocation therefore linearizes either before resolution
+        // (and denies it) or after this already-started one-shot use completes.
+        let result = with_current_revocations(&self.revocations, |revocations| {
+            self.vault
+                .with_scoped_credential(&self.credential, now, revocations, |secret| {
+                    callback(secret).map_err(|ProxyCredentialCallbackError::Failed| {
+                        VaultCredentialCallbackError::Failed
+                    })
                 })
-            })
-            .map_err(map_vault_credential_error)
+        })?;
+        let (outcome, reason) = receipt_outcome(result);
+        self.emit_receipt(now, outcome, reason)?;
+        result.map_err(map_vault_credential_error)
     }
+}
+
+impl<C> VaultNetworkCredentialResolver<C> {
+    fn emit_receipt(
+        &self,
+        completed_at_unix_seconds: i64,
+        outcome: MandateOutcome,
+        policy_reason: DecisionReason,
+    ) -> Result<(), ScopedCredentialResolverError> {
+        let destination = self
+            .authority
+            .destination
+            .authority()
+            .map_err(|_| ScopedCredentialResolverError::Unavailable)?;
+        let authority_digest = BoundedText::new(
+            self.authority
+                .digest()
+                .map_err(|_| ScopedCredentialResolverError::Unavailable)?,
+        )
+        .map_err(|_| ScopedCredentialResolverError::Unavailable)?;
+        let receipt = ActionReceipt::complete_credential_use(
+            self.credential.capability_id().clone(),
+            policy_reason,
+            self.authority.authorization.context.operation.clone(),
+            destination,
+            authority_digest,
+            outcome,
+            completed_at_unix_seconds,
+        )
+        .map_err(|_| ScopedCredentialResolverError::Unavailable)?;
+        let metadata = receipt
+            .credential_use
+            .as_ref()
+            .ok_or(ScopedCredentialResolverError::Unavailable)?;
+        tracing::info!(
+            receipt_id = %receipt.receipt_id,
+            capability_id = %metadata.capability_id.as_str(),
+            policy_reason = ?metadata.policy_reason,
+            operation = %metadata.operation,
+            destination = %metadata.destination,
+            outcome = ?receipt.outcome,
+            "scoped credential action receipt"
+        );
+        Ok(())
+    }
+}
+
+fn receipt_outcome(result: Result<(), VaultCredentialError>) -> (MandateOutcome, DecisionReason) {
+    match result {
+        Ok(()) => (MandateOutcome::Executed, DecisionReason::MatchingGrant),
+        Err(VaultCredentialError::Expired) => {
+            (MandateOutcome::Denied, DecisionReason::ExpiredGrant)
+        }
+        Err(VaultCredentialError::Revoked) => (MandateOutcome::Denied, DecisionReason::Revoked),
+        Err(
+            VaultCredentialError::InvalidCapability
+            | VaultCredentialError::LabelMismatch
+            | VaultCredentialError::ScopeMismatch,
+        ) => (MandateOutcome::Denied, DecisionReason::ScopeMismatch),
+        Err(VaultCredentialError::CallbackCancelled) => {
+            (MandateOutcome::Cancelled, DecisionReason::MatchingGrant)
+        }
+        Err(
+            VaultCredentialError::NotFound
+            | VaultCredentialError::CredentialTypeDenied
+            | VaultCredentialError::Storage
+            | VaultCredentialError::CallbackFailed
+            | VaultCredentialError::CallbackPanicked,
+        ) => (MandateOutcome::Failed, DecisionReason::MatchingGrant),
+    }
+}
+
+fn with_current_revocations<T>(
+    revocations: &RwLock<RevocationState>,
+    operation: impl FnOnce(&RevocationState) -> T,
+) -> Result<T, ScopedCredentialResolverError> {
+    let revocations = revocations
+        .read()
+        .map_err(|_| ScopedCredentialResolverError::Unavailable)?;
+    Ok(operation(&revocations))
 }
 
 fn map_vault_credential_error(error: VaultCredentialError) -> ScopedCredentialResolverError {
@@ -144,3 +231,7 @@ impl NetworkProxySpec {
         Ok(state)
     }
 }
+
+#[cfg(test)]
+#[path = "network_proxy_credential_tests.rs"]
+mod tests;

@@ -11,6 +11,7 @@ use crate::config::NetworkProxySpec;
 use codex_keyring_store::tests::MockKeyringStore;
 use codex_network_proxy::NetworkProxyAuditMetadata;
 use codex_network_proxy::NetworkProxyConfig;
+use codex_network_proxy::ScopedCredentialInjectionError;
 use codex_protocol::models::PermissionProfile;
 use codex_security_policy::ActorChain;
 use codex_security_policy::AuthorizationContext;
@@ -38,6 +39,7 @@ use http::HeaderMap;
 use http::HeaderValue;
 use http::header::AUTHORIZATION;
 use pretty_assertions::assert_eq;
+use tracing_test::traced_test;
 
 use super::*;
 
@@ -198,7 +200,7 @@ fn store(
 }
 
 #[test]
-fn issued_capability_authorizes_only_the_complete_bound_request() {
+fn issued_capability_is_consumed_only_for_the_complete_bound_request() {
     let revocations = RevocationState::new();
     let clock = TestClock::new(100);
     let store = store(4, clock);
@@ -207,7 +209,7 @@ fn issued_capability_authorizes_only_the_complete_bound_request() {
         .issue(request.clone(), &revocations)
         .expect("issue capability");
     let authorized = store
-        .authorize(&capability, &request, &revocations)
+        .consume(&capability, &request, &revocations)
         .expect("authorize exact request");
 
     assert_eq!(
@@ -227,7 +229,65 @@ fn issued_capability_authorizes_only_the_complete_bound_request() {
     let debug = format!("{capability:?}");
     assert!(debug.contains("CapabilityToken(<redacted>)"));
     assert!(!debug.contains("model-inference"));
-    assert_eq!(store.len().expect("length"), 1);
+    assert_eq!(store.len().expect("length"), 0);
+    assert!(matches!(
+        store.consume(&capability, &request, &revocations),
+        Err(CredentialCapabilityStoreError::UnknownCapability)
+    ));
+}
+
+#[test]
+fn concurrent_duplicate_consumption_allows_exactly_one_use() {
+    let revocations = Arc::new(RevocationState::new());
+    let request = Arc::new(standard_request(&revocations));
+    let store = Arc::new(store(4, TestClock::new(100)));
+    let capability = Arc::new(
+        store
+            .issue(request.as_ref().clone(), &revocations)
+            .expect("issue capability"),
+    );
+    let barrier = Arc::new(std::sync::Barrier::new(8));
+    let mut workers = Vec::new();
+
+    for _ in 0..8 {
+        let revocations = Arc::clone(&revocations);
+        let request = Arc::clone(&request);
+        let store = Arc::clone(&store);
+        let capability = Arc::clone(&capability);
+        let barrier = Arc::clone(&barrier);
+        workers.push(std::thread::spawn(move || {
+            barrier.wait();
+            store.consume(&capability, &request, &revocations).is_ok()
+        }));
+    }
+
+    assert_eq!(
+        workers
+            .into_iter()
+            .map(|worker| worker.join().expect("worker"))
+            .filter(|success| *success)
+            .count(),
+        1
+    );
+    assert_eq!(store.len().expect("length"), 0);
+}
+
+#[test]
+fn capability_authority_does_not_survive_runtime_restart() {
+    let revocations = RevocationState::new();
+    let request = standard_request(&revocations);
+    let original_store = store(4, TestClock::new(100));
+    let capability = original_store
+        .issue(request.clone(), &revocations)
+        .expect("issue capability");
+    let restarted_store = store(4, TestClock::new(100));
+
+    assert!(matches!(
+        restarted_store.consume(&capability, &request, &revocations),
+        Err(CredentialCapabilityStoreError::UnknownCapability)
+    ));
+    assert_eq!(original_store.len().expect("original length"), 1);
+    assert_eq!(restarted_store.len().expect("restarted length"), 0);
 }
 
 #[test]
@@ -313,7 +373,7 @@ fn adjacent_actor_purpose_operation_method_host_path_and_scope_fail() {
 
     for variant in variants {
         assert!(matches!(
-            store.authorize(&capability, &variant, &revocations),
+            store.consume(&capability, &variant, &revocations),
             Err(CredentialCapabilityStoreError::AuthorityMismatch)
         ));
     }
@@ -334,7 +394,7 @@ fn forged_bearer_and_public_id_alone_cannot_authorize() {
     };
 
     assert!(matches!(
-        store.authorize(&forged, &request, &revocations),
+        store.consume(&forged, &request, &revocations),
         Err(CredentialCapabilityStoreError::ForgedCapability)
     ));
     assert!(issued.capability_id().as_str().len() == 64);
@@ -351,11 +411,7 @@ fn expiry_and_revocation_remove_authority_before_reuse() {
         .expect("issue capability");
 
     clock.set(180);
-    assert!(
-        store
-            .authorize(&capability, &request, &revocations)
-            .is_err()
-    );
+    assert!(store.consume(&capability, &request, &revocations).is_err());
     assert_eq!(store.purge(&revocations).expect("purge expired"), 1);
     assert_eq!(store.len().expect("length"), 0);
 
@@ -375,11 +431,7 @@ fn expiry_and_revocation_remove_authority_before_reuse() {
     .expect("revocation");
     revocations.apply(&event).expect("apply");
     clock.set(111);
-    assert!(
-        store
-            .authorize(&capability, &request, &revocations)
-            .is_err()
-    );
+    assert!(store.consume(&capability, &request, &revocations).is_err());
     assert_eq!(store.purge(&revocations).expect("purge revoked"), 1);
 }
 
@@ -478,7 +530,8 @@ fn clock_entropy_collision_and_lock_failures_are_fail_closed() {
 }
 
 #[test]
-fn network_proxy_spec_resolves_authorized_openai_credential_only_at_injection() {
+#[traced_test]
+fn credential_authority_network_proxy_spec_resolves_only_at_injection_and_emits_receipt() {
     let revocations = RevocationState::new();
     let clock = TestClock::new(100);
     let store = store(4, clock.clone());
@@ -487,7 +540,7 @@ fn network_proxy_spec_resolves_authorized_openai_credential_only_at_injection() 
         .issue(request.clone(), &revocations)
         .expect("issue capability");
     let authorized = store
-        .authorize(&capability, &request, &revocations)
+        .consume(&capability, &request, &revocations)
         .expect("authorize capability");
 
     let directory = tempfile::tempdir().expect("vault directory");
@@ -557,4 +610,103 @@ fn network_proxy_spec_resolves_authorized_openai_credential_only_at_injection() 
             .and_then(|value| value.to_str().ok()),
         Some("Bearer sk-core-scoped-canary")
     );
+    assert!(logs_contain("scoped credential action receipt"));
+    assert!(logs_contain(capability.capability_id().as_str()));
+    assert!(logs_contain("responses.create"));
+    assert!(logs_contain("https://api.openai.com:443"));
+    assert!(!logs_contain("provider.openai"));
+    assert!(!logs_contain("sk-core-scoped-canary"));
+}
+
+#[test]
+#[traced_test]
+fn credential_authority_revocation_before_resolve_denies_without_vault_access() {
+    let initial_revocations = RevocationState::new();
+    let clock = TestClock::new(100);
+    let store = store(4, clock.clone());
+    let request = standard_request(&initial_revocations);
+    let capability = store
+        .issue(request.clone(), &initial_revocations)
+        .expect("issue capability");
+    let authorized = store
+        .consume(&capability, &request, &initial_revocations)
+        .expect("consume capability");
+
+    let revocations = Arc::new(RwLock::new(initial_revocations));
+    revocations
+        .write()
+        .expect("revocation state")
+        .apply(
+            &RevocationEvent::new(
+                human(),
+                RevocationTarget::Grant {
+                    grant_id: request.grant.grant_id,
+                },
+                RevocationReason::HumanRequest,
+                101,
+            )
+            .expect("revocation event"),
+        )
+        .expect("apply revocation");
+    clock.set(102);
+
+    let directory = tempfile::tempdir().expect("vault directory");
+    let vault = Arc::new(Vault::new_with_keyring_store(
+        directory.path().to_path_buf(),
+        Arc::new(MockKeyringStore::default()),
+    ));
+    let mut config = NetworkProxyConfig {
+        enabled: true,
+        mitm: true,
+        ..NetworkProxyConfig::default()
+    };
+    config.set_credential_broker_enabled(/*enabled*/ true);
+    let spec = NetworkProxySpec::from_config_and_constraints(
+        config,
+        None,
+        &PermissionProfile::workspace_write(),
+    )
+    .expect("network proxy spec");
+    let state = spec
+        .build_state_with_scoped_openai_credential_and_clock(
+            NetworkProxyAuditMetadata::default(),
+            authorized,
+            vault,
+            revocations,
+            clock,
+        )
+        .expect("scoped network proxy state");
+
+    let mut env = HashMap::new();
+    state.virtualize_child_credentials(&mut env);
+    let dummy = env.get("OPENAI_API_KEY").expect("scoped dummy");
+    let expected_authorization = format!("Bearer {dummy}");
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&expected_authorization).expect("dummy header"),
+    );
+    assert_eq!(
+        state
+            .inject_request_credentials(
+                "https",
+                "api.openai.com",
+                443,
+                "POST",
+                "/v1/responses",
+                &mut headers,
+            )
+            .expect_err("revoked capability"),
+        ScopedCredentialInjectionError::ResolutionFailed
+    );
+    assert_eq!(
+        headers
+            .get(AUTHORIZATION)
+            .and_then(|value| value.to_str().ok()),
+        Some(expected_authorization.as_str())
+    );
+    assert!(logs_contain("scoped credential action receipt"));
+    assert!(logs_contain("Revoked"));
+    assert!(!logs_contain("provider.openai"));
+    assert!(!logs_contain("sk-revoked-canary"));
 }
