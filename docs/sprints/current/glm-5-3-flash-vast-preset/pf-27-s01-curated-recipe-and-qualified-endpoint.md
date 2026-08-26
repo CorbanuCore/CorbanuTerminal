@@ -18,26 +18,26 @@ updated: 2026-08-26
 
 ## Execution mandate
 
-- Deliver: a preconfigured authenticated GLM-5.3-Flash vLLM preset for four connected H200s and a qualified Vast endpoint.
-- Excludes: unauthenticated ingress, direct provider scripts, spend-confirmation bypass, SGLang, and changes to other recipes.
+- Deliver: authenticated GLM-5.3-Flash vLLM presets for four connected H200s and two connected B300s, plus a reproducible B300 4–256 stream qualification.
+- Excludes: unauthenticated ingress, provider-create bypass, spend-confirmation bypass, SGLang, NVFP4 artifacts, and changes to unrelated recipes.
 
 ## Plan linkage
 
 - Plan: [GLM-5.3-Flash Vast GPU preset](../../../plans/active/glm-5-3-flash-vast-preset.md)
 - Feature: `PF-27`
-- Acceptance advanced: select one preset, approve bounded spend, reach READY, call the endpoint, and terminate without an orphan charge.
+- Acceptance advanced: select the B300 preset, approve bounded spend, reach READY, run the mixed-context 4–256 stream sweep, and terminate without an orphan charge.
 
 ## Code boundaries
 
 - Existing: `gpu-market/src/recipe.rs::RecipeCatalog`; `tui/src/chatwidget/gpu_menu.rs`
-- Planned: GLM-5.3 recipe constructor and catalog/snapshot regressions
-- Tests: `gpu-market/src/recipe_tests.rs`; `tui/src/chatwidget/gpu_menu_tests.rs`; reviewed snapshots
+- Planned: B300 GLM-5.3 recipe constructor, mixed-traffic benchmark artifact, and catalog/snapshot regressions
+- Tests: `gpu-market/src/recipe_tests.rs`; `tui/src/chatwidget/gpu_menu_tests.rs`; true-tmux slash dispatch; reviewed snapshots
 
 ## Preconditions
 
-- [ ] Read root, Rust, TUI, repository development, and true-TUI instructions.
-- [ ] Worktree, branch, and base commit match the active plan.
-- [ ] Official model/runtime artifacts and Hopper constraints are pinned.
+- [x] Read root, Rust, TUI, repository development, and true-TUI instructions.
+- [x] Worktree, branch, and base commit match the active plan.
+- [x] Official model/runtime artifacts plus Hopper and Blackwell constraints are pinned.
 
 ## Done
 
@@ -49,7 +49,10 @@ updated: 2026-08-26
 
 ## Remaining
 
-- [ ] With exact user-approved limits, provision through `/gpu`, wait for READY, call the authenticated endpoint, and terminate with provider confirmation.
+- [ ] Add the experimental native-FP8 TP2/B300 recipe with CUDA 13, FP8 KV cache, 131,072-token context, and 256-request scheduler bound.
+- [ ] Add deterministic mixed-context benchmark inputs and result aggregation for 4, 8, 16, 32, 64, 128, and 256 closed-loop streams.
+- [ ] Update and review catalog, manifest, launch, and true-tmux regressions.
+- [ ] With exact user-approved limits, provision through `/gpu`, wait for READY, run the authenticated benchmark sweep, and terminate with provider confirmation.
 
 ## Verification
 
@@ -60,11 +63,11 @@ updated: 2026-08-26
 - [x] Snapshot: `cd codex-rs && just test -p codex-tui gpu_menu` — 9 passed; intended snapshot reviewed.
 - [x] Governance: `python3 docs/plans/check.py && python3 docs/sprints/check.py`.
 - [x] TUI: actual `/gpu` keys showed the preset and cancelled without a provider create.
-- [ ] Live: bounded Vast rental reaches READY, serves one authenticated completion, and terminates with provider confirmation.
+- [ ] Live: bounded Vast B300 rental reaches READY, completes the secret-free 4–256 stream matrix, and terminates with provider confirmation.
 
 ## Exit evidence
 
 - [x] Implementation commit `c0f2e02e4a` and changed paths recorded.
 - [x] Final-tree commands and reviewed snapshot recorded under `qa/gpu-rentals/sprints/PF-27-S01/`.
-- [ ] Live rental records endpoint readiness and provider-confirmed termination without secrets.
+- [ ] Live rental records endpoint readiness, per-stream/aggregate throughput and latency, and provider-confirmed termination without secrets.
 - [ ] Ledgers reflect reality and completed record moves to `docs/sprints/archive/glm-5-3-flash-vast-preset/`.

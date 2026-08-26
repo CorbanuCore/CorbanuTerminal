@@ -6,7 +6,7 @@ plan.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
-| 1 | [PF-27-S01](pf-27-s01-curated-recipe-and-qualified-endpoint.md) | Curated TP4/H200 recipe and qualified Vast endpoint | in progress | none |
+| 1 | [PF-27-S01](pf-27-s01-curated-recipe-and-qualified-endpoint.md) | Curated H200/B300 recipes and qualified B300 concurrency evidence | in progress | none |
 
 ## Machine check
 

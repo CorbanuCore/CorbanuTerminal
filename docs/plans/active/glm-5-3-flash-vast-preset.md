@@ -47,14 +47,17 @@ and can waste billable provisioning time.
 ## Product intent and ideal flow
 
 The user opens `/gpu`, configures the Vast API key through masked Vault entry,
-and selects a GLM-5.3-Flash preset. Corbanu requests four connected H200s,
-collects hourly and total spend limits plus duration, shows compatible offers,
-and performs the existing final billable confirmation. The immutable vLLM
-recipe starts an authenticated OpenAI-compatible server, validates the hardware
-and runtime, downloads the pinned checkpoint, and exposes the endpoint only
-after readiness succeeds. Failure remains visible and recoverable; termination
-continues until Vast confirms billing has stopped. A ready endpoint appears in
-`/model` and can be called with its distinct per-rental bearer credential.
+and selects a hardware-specific GLM-5.3-Flash preset. Corbanu offers the
+qualified four-H200 profile and an experimental two-B300 FP8 profile, collects
+hourly and total spend limits plus duration, shows compatible offers, and
+performs the existing final billable confirmation. Each immutable vLLM recipe
+starts an authenticated OpenAI-compatible server, validates the hardware and
+runtime, downloads the pinned checkpoint, and exposes the endpoint only after
+readiness succeeds. The B300 profile supports a controlled 4–256 stream
+benchmark with mixed short and long contexts. Failure remains visible and
+recoverable; termination continues until Vast confirms billing has stopped. A
+ready endpoint appears in `/model` and can be called with its distinct
+per-rental bearer credential.
 
 ## Product linkage
 
@@ -69,10 +72,12 @@ continues until Vast confirms billing has stopped. A ready endpoint appears in
 
 ### In
 
-- Add an immutable GLM-5.3-Flash vLLM recipe to the curated `/gpu` catalog.
-- Require four allocation-local NVIDIA H200 GPUs with high-bandwidth interconnect.
+- Retain the immutable four-H200 GLM-5.3-Flash vLLM recipe in the curated `/gpu` catalog.
+- Add an experimental two-B300 native-FP8 recipe using the same pinned model and dedicated runtime image.
+- Require allocation-local high-bandwidth interconnect for both hardware profiles.
 - Pin the Hugging Face checkpoint and dedicated vLLM image by digest.
-- Bound context and concurrency for Hopper BF16 KV-cache headroom.
+- Bound the H200 profile for Hopper BF16 KV-cache headroom and the B300 profile for a 131,072-token, 256-stream Blackwell FP8-KV evaluation.
+- Measure the B300 profile at 4, 8, 16, 32, 64, 128, and 256 closed-loop streams with a deterministic mixed-context workload averaging 6,000 requested output tokens.
 - Preserve Vault-backed Vast rental authentication and per-rental endpoint authentication.
 - Add catalog, manifest, hardware, launch, and TUI regression evidence.
 - Use the normal price, total-spend, duration, offer, final-confirmation, readiness, and termination flow for a live rental.
@@ -92,8 +97,10 @@ continues until Vast confirms billing has stopped. A ready endpoint appears in
 - The marketplace key remains Vault-backed and never enters recipe arguments, logs, chat, or endpoint authentication.
 - Every rental gets a distinct generated endpoint token and readiness probes authenticate with it.
 - The model revision and serving image are immutable; mutable tags cannot pass recipe validation.
-- Three-way tensor parallelism is never selected for this 64-head model; the preset allocates TP4.
+- Three-way tensor parallelism is never selected for this 64-head model; the presets allocate TP4 on H200 and TP2 on B300.
 - H200 uses BF16 KV cache; the launch must not request FP8 KV cache on Hopper.
+- B300 uses the official recipe's Blackwell FP8 KV-cache path and requires CUDA 13 plus driver 580.65.06 or newer.
+- The B300 preset remains experimental until live evidence establishes successful request counts, aggregate output throughput, per-stream throughput, and latency across the declared sweep.
 - READY is the only state that makes the endpoint selectable through `/model`.
 - Stop-serving never claims billing stopped; only provider-confirmed termination does.
 
@@ -118,22 +125,22 @@ continues until Vast confirms billing has stopped. A ready endpoint appears in
 
 | Feature ID | Plan feature | Current sprint records | State |
 | --- | --- | --- | --- |
-| `PF-27` | Curated GLM-5.3-Flash TP4/H200 recipe and qualified Vast endpoint | [PF-27-S01](../../sprints/current/glm-5-3-flash-vast-preset/pf-27-s01-curated-recipe-and-qualified-endpoint.md) | in progress |
+| `PF-27` | Curated GLM-5.3-Flash H200/B300 recipes, qualified endpoint, and B300 concurrency evidence | [PF-27-S01](../../sprints/current/glm-5-3-flash-vast-preset/pf-27-s01-curated-recipe-and-qualified-endpoint.md) | in progress |
 
 ## Acceptance flows
 
 | Flow | Starting state | User action | Expected visible result | Pass criterion |
 | --- | --- | --- | --- | --- |
-| Primary success | Vast key exists; no GLM rental | Select GLM preset, enter limits/duration, choose offer, confirm | TP4 H200 rental progresses to READY and appears in `/model` | Authenticated chat completion succeeds through the returned base URL |
+| Primary success | Vast key exists; no GLM rental | Select the B300 GLM preset, enter limits/duration, choose offer, confirm | TP2 B300 rental progresses to READY and appears in `/model` | Authenticated completion succeeds and the 4–256 stream sweep records secret-free results |
 | Failure/cancel | Preset selected before billable confirmation | Cancel or reject an invalid/over-limit offer | No provider create request and no rental charge | TUI returns safely and state contains no new billable rental |
 | Recovery/resume | Provisioning or readiness is pending/degraded | Restart, open `/gpu status`, then terminate if needed | Durable stage/spend state resumes; termination remains pending until Vast confirms | No orphan endpoint token or false billing-stopped claim |
 
 ## Implementation sequence
 
-1. Add the immutable vLLM TP4/H200 recipe and generalized launch/hardware regressions.
-2. Update and review the `/gpu` catalog snapshot; build the final candidate.
-3. Drive success and cancellation through the true tmux TUI harness.
-4. With user-approved spend limits and duration, rent on Vast, monitor READY, exercise the authenticated OpenAI-compatible API, and record cleanup state.
+1. Retain the immutable vLLM TP4/H200 recipe and add the experimental TP2/B300 FP8 profile with generalized launch/hardware regressions.
+2. Add a reproducible mixed-context concurrency workload and update the `/gpu` catalog snapshot.
+3. Build the final candidate and drive selection/cancellation through the true tmux TUI harness.
+4. With user-approved spend limits and duration, rent on Vast, monitor READY, exercise the authenticated OpenAI-compatible API, sweep 4–256 streams, and record cleanup state.
 
 ## Automated evidence
 
@@ -179,10 +186,11 @@ Run fix and formatting tools before the final affected tests.
 | Item | Type | Owner | Needed by | State / decision |
 | --- | --- | --- | --- | --- |
 | Runtime choice | decision | implementation owner | recipe | vLLM selected because its official recipe is current and model-specific |
-| GPU count | decision | implementation owner | recipe | four H200s; 64 heads do not support TP3 and official guidance includes TP4 |
-| Context limit | decision | implementation owner | recipe | 65,536 tokens to preserve Hopper BF16 KV-cache headroom |
+| GPU topology | decision | implementation owner | recipe | retain four-H200 TP4 and add two-B300 TP2; 64 attention heads and 288 routed experts divide cleanly by both |
+| Context limit | decision | implementation owner | recipe | H200 remains 65,536; B300 starts at 131,072 with FP8 KV cache and is validated empirically |
+| Benchmark traffic | decision | implementation owner | live qualification | closed-loop concurrency sweep at 4–256 streams; 50% 1K/2K, 25% 8K/6K, 12.5% 32K/8K, and 12.5% 96K/20K input/output-token buckets, averaging 6K requested output tokens |
 | Spend and duration | financial authorization | product owner | live rental | pending exact hourly cap, total cap, and duration through `/gpu` |
-| Vast availability | external dependency | Vast.ai | live rental | pending marketplace search and compatible connected 4×H200 offer |
+| Vast availability | external dependency | Vast.ai | live rental | verified 2×B300/NVLink inventory observed on 2026-08-26; revalidate immediately before confirmation because offers are volatile |
 | Candidate release | release dependency | product owner | plan close | TBD |
 
 ## Release linkage
