@@ -46,28 +46,29 @@ updated: 2026-08-26
 - [x] Required TP4 H200/NVLink topology, Hopper-safe KV behavior, bounded capacity/deadlines, and scoped endpoint authentication.
 - [x] Added catalog, immutable-manifest, hardware/launch, credential, snapshot, and true-tmux regressions.
 - [x] Built and qualified the real `/gpu` selection/cancel flow without a provider search or create.
+- [x] Added the experimental native-FP8 TP2/B300 recipe with CUDA 13, FP8 KV cache, 131,072-token context, and a 256-request scheduler bound.
+- [x] Added and validated the deterministic mixed-context 4–256 stream benchmark harness.
+- [x] Updated and reviewed catalog, manifest, launch, snapshot, and forced true-tmux regressions.
 
 ## Remaining
 
-- [ ] Add the experimental native-FP8 TP2/B300 recipe with CUDA 13, FP8 KV cache, 131,072-token context, and 256-request scheduler bound.
-- [ ] Add deterministic mixed-context benchmark inputs and result aggregation for 4, 8, 16, 32, 64, 128, and 256 closed-loop streams.
-- [ ] Update and review catalog, manifest, launch, and true-tmux regressions.
 - [ ] With exact user-approved limits, provision through `/gpu`, wait for READY, run the authenticated benchmark sweep, and terminate with provider confirmation.
 
 ## Verification
 
 - [x] Fix: `cd codex-rs && just fix -p codex-gpu-market && just fix -p codex-tui`.
 - [x] Format: `cd codex-rs && just fmt`; inspected the final diff.
-- [x] Focused: `cd codex-rs && just test -p codex-gpu-market recipe` — 11 passed.
-- [x] Integration: `cd codex-rs && just test -p codex-gpu-market` — 76 passed.
+- [x] Focused: `cd codex-rs && just test -p codex-gpu-market recipe` — 12 passed.
+- [x] Integration: `cd codex-rs && just test -p codex-gpu-market` — 77 passed.
+- [x] Benchmark contract: `python3 qa/gpu-rentals/benchmarks/glm53-b300/run_mixed_sweep.py --validate-only` — all seven levels and the exact 6,000-token weighted output validated.
 - [x] Snapshot: `cd codex-rs && just test -p codex-tui gpu_menu` — 9 passed; intended snapshot reviewed.
 - [x] Governance: `python3 docs/plans/check.py && python3 docs/sprints/check.py`.
-- [x] TUI: actual `/gpu` keys showed the preset and cancelled without a provider create.
+- [x] TUI: forced true-tmux `/gpu` keys showed both presets and cancelled without a provider create.
 - [ ] Live: bounded Vast B300 rental reaches READY, completes the secret-free 4–256 stream matrix, and terminates with provider confirmation.
 
 ## Exit evidence
 
-- [x] Implementation commit `c0f2e02e4a` and changed paths recorded.
+- [x] H200 implementation commit `c0f2e02e4a` and B300 implementation commit `64034f2e8a` recorded.
 - [x] Final-tree commands and reviewed snapshot recorded under `qa/gpu-rentals/sprints/PF-27-S01/`.
 - [ ] Live rental records endpoint readiness, per-stream/aggregate throughput and latency, and provider-confirmed termination without secrets.
 - [ ] Ledgers reflect reality and completed record moves to `docs/sprints/archive/glm-5-3-flash-vast-preset/`.

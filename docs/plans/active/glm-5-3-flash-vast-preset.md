@@ -148,8 +148,9 @@ Run fix and formatting tools before the final affected tests.
 
 | Check | Final-tree command | Result | Artifact |
 | --- | --- | --- | --- |
-| Focused | `cd codex-rs && just test -p codex-gpu-market recipe` | 11 passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
-| Integration | `cd codex-rs && just test -p codex-gpu-market` | 76 passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
+| Focused | `cd codex-rs && just test -p codex-gpu-market recipe` | 12 passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
+| Integration | `cd codex-rs && just test -p codex-gpu-market` | 77 passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
+| Workload | `python3 qa/gpu-rentals/benchmarks/glm53-b300/run_mixed_sweep.py --validate-only` | seven levels; weighted output exactly 6,000 tokens | [benchmark README](../../../qa/gpu-rentals/benchmarks/glm53-b300/README.md) |
 | Snapshot | `cd codex-rs && just test -p codex-tui gpu_menu` | 9 passed | reviewed `insta` snapshot and [evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
 | Governance | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
 
@@ -157,8 +158,8 @@ Run fix and formatting tools before the final affected tests.
 
 | Flow | Candidate binary | Test repo/worktree | Keys/actions | Visible checkpoints | Result | Artifact |
 | --- | --- | --- | --- | --- | --- | --- |
-| Catalog selection | `c0f2e02e4a` | this implementation worktree | `/gpu`, Enter | qualified 4× H200 preset visible | passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
-| Failure/cancel | `c0f2e02e4a` | this implementation worktree | `/gpu`, Enter, Esc | menu dismissed without provider search/create | passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
+| Catalog selection | `64034f2e8a` | this implementation worktree | `/gpu`, Enter | qualified 4×H200 and experimental 2×B300 presets visible | passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
+| Failure/cancel | `64034f2e8a` | this implementation worktree | `/gpu`, Enter, Esc | menu dismissed without provider search/create | passed | [PF-27-S01 evidence](../../../qa/gpu-rentals/sprints/PF-27-S01/evidence.md) |
 | Primary live rental | final candidate | this implementation worktree | limits, offer, final confirmation | READY and authenticated completion | pending | live rental evidence |
 | Recovery/resume | final candidate | this implementation worktree | restart; `/gpu status`, Enter | durable rental/readiness/spend state | pending | live rental evidence |
 
