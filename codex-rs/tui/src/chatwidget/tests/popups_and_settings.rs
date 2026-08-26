@@ -30,6 +30,7 @@ use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
+use codex_model_provider_info::ZAI_GLM_5_3_FLASH_MODEL;
 use codex_protocol::openai_models::ReasoningEffort;
 use pretty_assertions::assert_eq;
 
@@ -3383,6 +3384,38 @@ async fn model_selection_popup_openrouter_provider_snapshot() {
 
     let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 32);
     assert_chatwidget_snapshot!("model_selection_popup_openrouter_provider", popup);
+}
+
+#[tokio::test]
+async fn model_selection_popup_zai_provider_includes_glm_5_3_flash_snapshot() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some(ZAI_GLM_5_3_FLASH_MODEL)).await;
+    chat.thread_id = Some(ThreadId::new());
+    let presets = chat
+        .model_catalog
+        .try_list_models()
+        .expect("model catalog should load");
+    chat.open_all_models_popup(presets);
+
+    let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 24);
+    assert_chatwidget_snapshot!("model_selection_popup_zai_glm_5_3_flash", popup);
+    assert!(popup.contains("[Z.AI]"));
+    assert!(popup.contains("Z.AI GLM 5.3 Flash (current)"));
+    assert!(popup.contains("Z.AI GLM 5.3"));
+
+    chat.handle_key_event(KeyEvent::from(KeyCode::Enter));
+    let (model, purpose) = loop {
+        match rx.try_recv().expect("Z.AI reasoning event") {
+            AppEvent::OpenReasoningPopup { model, purpose } => break (model, purpose),
+            AppEvent::SettingsSelectionClosed => continue,
+            event => panic!("unexpected event: {event:?}"),
+        }
+    };
+    assert_eq!(model.model, ZAI_GLM_5_3_FLASH_MODEL);
+    assert_eq!(
+        model.provider_id.as_deref(),
+        Some(codex_model_provider_info::ZAI_PROVIDER_ID)
+    );
+    assert_eq!(purpose, ModelSelectionPurpose::Session);
 }
 
 #[tokio::test]

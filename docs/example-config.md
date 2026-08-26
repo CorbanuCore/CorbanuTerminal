@@ -29,7 +29,7 @@ export AMBIENT_API_KEY="..."
 
 ```toml
 model_provider = "zai"
-model = "glm-5.2"
+model = "glm-5.3-flash"
 ```
 
 Temporary shell fallback:

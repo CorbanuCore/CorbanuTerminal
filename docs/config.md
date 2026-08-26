@@ -80,7 +80,7 @@ Z.AI:
 
 ```toml
 model_provider = "zai"
-model = "glm-5.2"
+model = "glm-5.3-flash"
 ```
 
 OpenRouter pinned DeepSeek Flash:

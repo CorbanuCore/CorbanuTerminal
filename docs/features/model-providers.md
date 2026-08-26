@@ -77,7 +77,7 @@ server.
 | Claude Plan | Built-in `claude-plan` account route | Use the Claude Code account login surfaced by `/providers`. |
 | Ambient | Built-in `ambient` API route | Add `AMBIENT_API_KEY` through `/providers` or the encrypted vault. |
 | Kimi Code | Built-in `kimi-code` API route | Add `KIMI_API_KEY` through `/providers` or the encrypted vault. |
-| Z.AI | Built-in `zai` API route | Add `ZAI_API_KEY` through `/providers` or the encrypted vault. |
+| Z.AI | Built-in `zai` Coding Plan route for `glm-5.3-flash`, `glm-5.3`, and legacy `glm-5.2` | Add `ZAI_API_KEY` through `/providers` or the encrypted vault. |
 | DeepSeek | Built-in `deepseek` API route | Add `DEEPSEEK_API_KEY` through `/providers` or the encrypted vault. |
 | OpenRouter | Built-in `openrouter` gateway route | Add `OPENROUTER_API_KEY` through `/providers` or the encrypted vault. |
 | Meta | Built-in `meta` API route | Add `MODEL_API_KEY` through `/providers` or the encrypted vault. |

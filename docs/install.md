@@ -173,7 +173,7 @@ to use.
 | Anthropic    | `anthropic`   | `ANTHROPIC_API_KEY`  | `claude-opus-5`, `claude-fable-5`                                                    |
 | Ambient      | `ambient`     | `AMBIENT_API_KEY`    | `z-ai/glm-5.2`, `moonshotai/kimi-k2.7-code`                                          |
 | Kimi Code    | `kimi-code`   | `KIMI_API_KEY`       | `k3`                                                                                 |
-| Z.AI         | `zai`         | `ZAI_API_KEY`        | `glm-5.2`                                                                            |
+| Z.AI         | `zai`         | `ZAI_API_KEY`        | `glm-5.3-flash`, `glm-5.3`, `glm-5.2`                                                 |
 | DeepSeek     | `deepseek`    | `DEEPSEEK_API_KEY`   | `deepseek-v4-flash`                                                                  |
 | OpenRouter   | `openrouter`  | `OPENROUTER_API_KEY` | `deepseek/deepseek-v4-flash-0731`, `moonshotai/kimi-k3`, and other catalogued routes |
 | Meta         | `meta`        | `MODEL_API_KEY`      | `muse-spark-1.1`                                                                     |
@@ -257,7 +257,7 @@ Use `/model` in the TUI or pass `-m` at startup.
 corbanu -m gpt-5.6-luna                         # OpenAI Codex account
 corbanu -m claude-opus-5                        # direct Anthropic API
 corbanu -m k3                                   # Kimi Code
-corbanu -m glm-5.2                              # Z.AI GLM 5.2
+corbanu -m glm-5.3-flash                        # Z.AI GLM 5.3 Flash
 corbanu -m deepseek-v4-flash                    # direct DeepSeek Responses API
 corbanu -m deepseek/deepseek-v4-flash-0731     # pinned OpenRouter route
 corbanu -m muse-spark-1.1                       # Meta
@@ -284,7 +284,9 @@ Current visible model metadata:
 | `deepseek/deepseek-v4-pro`            | OpenRouter              | OpenRouter DeepSeek V4 Pro route                          |
 | `moonshotai/kimi-k3`                  | OpenRouter              | Metered Kimi K3 route                                     |
 | `muse-spark-1.1`                      | Meta                    | Meta API route                                            |
-| `glm-5.2` and provider-specific slugs | Multiple                | Ambient, Z.AI, Baseten, Vercel, and OpenRouter GLM routes |
+| `glm-5.3-flash`                       | Z.AI                    | GLM Coding Plan route with native image input             |
+| `glm-5.3`                             | Z.AI                    | GLM Coding Plan frontier route                            |
+| `glm-5.2` and provider-specific slugs | Multiple                | Ambient, Z.AI, Baseten, Vercel, and OpenRouter routes |
 
 ## Basic Verification
 

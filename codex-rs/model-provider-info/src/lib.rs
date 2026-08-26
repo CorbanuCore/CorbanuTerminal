@@ -142,6 +142,7 @@ const ZAI_ANTHROPIC_PROVIDER_NAME: &str = "Z.AI Anthropic";
 pub const ZAI_ANTHROPIC_PROVIDER_ID: &str = "zai-anthropic";
 pub const ZAI_ANTHROPIC_BASE_URL: &str = "https://api.z.ai/api/anthropic/v1";
 pub const ZAI_DEFAULT_MODEL: &str = "glm-5.2";
+pub const ZAI_GLM_5_3_FLASH_MODEL: &str = "glm-5.3-flash";
 pub const ZAI_API_KEY_ENV_VAR: &str = "ZAI_API_KEY";
 const OPENROUTER_PROVIDER_NAME: &str = "OpenRouter";
 pub const OPENROUTER_PROVIDER_ID: &str = "openrouter";

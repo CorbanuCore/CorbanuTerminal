@@ -35,7 +35,7 @@ Corbanu Terminal currently ships these provider paths:
 | Direct Claude API         | Anthropic          | `claude-opus-5`, `claude-fable-5`                                                                                |
 | Ambient coding plan       | Ambient            | `z-ai/glm-5.2`, `moonshotai/kimi-k2.7-code`                                                                      |
 | Kimi coding plan          | Kimi Code          | `k3`                                                                                                             |
-| Z.AI coding plan          | Z.AI               | `glm-5.2`                                                                                                        |
+| Z.AI coding plan          | Z.AI               | `glm-5.3-flash`, `glm-5.3`, `glm-5.2`                                                                            |
 | Direct DeepSeek Responses | DeepSeek           | `deepseek-v4-flash` (DeepSeek V4 Flash 0731)                                                                     |
 | Metered model gateway     | OpenRouter         | `deepseek/deepseek-v4-flash-0731`, `deepseek/deepseek-v4-pro`, `moonshotai/kimi-k3`, and other catalogued routes |
 | Meta API                  | Meta               | `muse-spark-1.1`                                                                                                 |

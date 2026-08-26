@@ -84,7 +84,7 @@ nav:
   - Integrations:
       - Overview: integrations/index.md
       - Ambient: integrations/ambient.md
-      - Z.AI GLM 5.2: integrations/zai-glm-52.md
+      - Z.AI GLM Coding Plan: integrations/zai-glm-52.md
       - OpenRouter: integrations/openrouter.md
       - Baseten: integrations/baseten.md
       - Vercel: integrations/vercel.md

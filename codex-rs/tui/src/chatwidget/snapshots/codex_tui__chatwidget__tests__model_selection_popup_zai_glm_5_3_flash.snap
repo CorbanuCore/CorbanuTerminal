@@ -1,0 +1,21 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+assertion_line: 3400
+expression: popup
+---
+  Select Model and Effort
+  Z.AI coding plan
+
+  OpenAI  Ambient  Kimi Code  [Z.AI]  DeepSeek  Claude Plan  Anthropic  Meta  Vercel  Baseten
+  OpenRouter
+
+  1. Z.AI GLM 5.3                  Model: glm-5.3. GLM 5.3 through the legacy Z.AI Coding Plan: 3x
+                                   quota during weekday peak hours (06:00-10:00 UTC) and 1x off-
+                                   peak.
+  2. Z.AI GLM 5.2                  Model: glm-5.2. GLM 5.2 through the Z.AI Coding Plan: 3x burn
+                                   during 06:00-10:00 UTC, normally 2x off-peak, with promotional
+                                   1x off-peak burn through September 30, 2026.
+› 3. Z.AI GLM 5.3 Flash (current)  Model: glm-5.3-flash. GLM 5.3 Flash through the Z.AI Coding
+                                   Plan with 3x the GLM 5.3 quota and native image input.
+
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

@@ -646,6 +646,7 @@ async fn chatgpt_cache_does_not_evict_pfterminal_provider_models() {
     assert!(slugs.contains(&"gpt-5.5"));
     assert!(slugs.contains(&"z-ai/glm-5.2"));
     assert!(slugs.contains(&"moonshotai/kimi-k2.7-code"));
+    assert!(slugs.contains(&"glm-5.3-flash"));
     assert!(slugs.contains(&"glm-5.3"));
     assert!(slugs.contains(&"glm-5.2"));
     assert!(slugs.contains(&"z-ai/glm-5.2"));
@@ -1779,6 +1780,70 @@ fn bundled_models_json_contains_ambient_and_zai_models() {
     assert!(ambient_default.supports_parallel_tool_calls);
     assert_standard_base(&ambient_default.base_instructions);
     assert!(!ambient_default.used_fallback_model_metadata);
+
+    let zai_glm_5_3_flash = response
+        .models
+        .iter()
+        .find(|model| model.slug == "glm-5.3-flash")
+        .expect("bundled models.json should include Z.AI GLM 5.3 Flash");
+
+    assert_eq!(
+        (
+            zai_glm_5_3_flash.display_name.as_str(),
+            zai_glm_5_3_flash.context_window,
+            zai_glm_5_3_flash.max_output_tokens,
+            zai_glm_5_3_flash.default_reasoning_level.clone(),
+            zai_glm_5_3_flash.chat_completions.reasoning_protocol,
+            zai_glm_5_3_flash.chat_completions.reasoning_effort_protocol,
+            zai_glm_5_3_flash.input_modalities.clone(),
+        ),
+        (
+            "Z.AI GLM 5.3 Flash",
+            Some(1_000_000),
+            Some(128_000),
+            Some(ReasoningEffort::Max),
+            ChatReasoningProtocol::PreservedRequired,
+            ChatReasoningEffortProtocol::LowHighMaxRequiredDefaultMax,
+            vec![InputModality::Text, InputModality::Image],
+        )
+    );
+    assert_eq!(
+        zai_glm_5_3_flash
+            .supported_reasoning_levels
+            .iter()
+            .map(|level| level.effort.clone())
+            .collect::<Vec<_>>(),
+        vec![
+            ReasoningEffort::Low,
+            ReasoningEffort::High,
+            ReasoningEffort::Max,
+        ]
+    );
+    assert_eq!(
+        zai_glm_5_3_flash
+            .orchestration
+            .as_ref()
+            .and_then(ModelOrchestrationMetadata::billing),
+        Some(&ModelBilling::PlanSchedule {
+            off_peak_relative_burn_millis: 334,
+            peak_relative_burn_millis: 1_000,
+            peak_start_utc_hour: 6,
+            peak_end_utc_hour: 10,
+            peak_weekdays: Some(codex_protocol::openai_models::WeekdaySet::weekdays_only()),
+            promotional_off_peak_relative_burn_millis: None,
+            promotion_valid_through_utc: None,
+        })
+    );
+    assert_eq!(
+        ModelPreset::from(zai_glm_5_3_flash.clone())
+            .provider_id
+            .as_deref(),
+        Some("zai")
+    );
+    assert_eq!(zai_glm_5_3_flash.visibility, ModelVisibility::List);
+    assert!(zai_glm_5_3_flash.supports_parallel_tool_calls);
+    assert_standard_base(&zai_glm_5_3_flash.base_instructions);
+    assert!(!zai_glm_5_3_flash.used_fallback_model_metadata);
 
     let zai_glm_5_3 = response
         .models
