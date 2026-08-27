@@ -23,8 +23,13 @@ updated: 2026-08-27
 - Deliver: Provide an ephemeral containment and egress backend for unauthenticated public-web acquisition.
 - Excludes: Authenticated login, new search providers, content sanitization, host-browser automation, and public tool activation.
 
+Scheduling: approved parallel browser lane with PF-29 content and, when eligible,
+PF-28 confidentiality after PF-27/PF-26-S01. No dependency on PF-13-S05; allocate
+a distinct worktree/branch within the three-slot cap. This record remains draft.
+
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 security levels](../../../plans/active/p0-security-levels.md).
 - Feature: `PF-30`; see the plan's adopted contract and requirement traceability.
 - Acceptance advanced: Provide an ephemeral containment and egress backend for unauthenticated public-web acquisition.
@@ -37,11 +42,13 @@ updated: 2026-08-27
 
 ## Preconditions
 
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
 - [ ] Listed dependencies are completed and archived.
 - [ ] Read applicable root and nested AGENTS instructions; plan remains active.
 - [ ] Allocate exact owner/worktree/branch/base and literal write scope in the plan; check lane/slot conflicts.
 - [ ] Select and record the pinned backend/runtime and Linux/macOS/Windows support/fail-closed matrix before readiness.
 - [ ] Record actual backend integration/dependency files in write_scope before readiness; shared registrations land serially.
+- [ ] Confirm PF-27 owns shared Cargo/Bazel/module/test registrations; do not edit content adapters or shared manifests concurrently with another lane.
 
 ## Done
 
@@ -58,10 +65,12 @@ updated: 2026-08-27
 
 ## Verification
 
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] Run `just fix -p <affected-crate>` and `just fmt` in `codex-rs` before final tests.
 - [ ] Run focused and affected integration tests with `just test -p <affected-crate>`; never direct `cargo test`.
 - [ ] Record exact dependency commits, candidate, commands, artifacts, and missing coverage; no pass by code presence.
 - [ ] Run real backend probes and early PF-26 isolation fixtures, not only mocked policy tests.
+- [ ] Prove the backend conforms to PF-27 native adapter contracts without requiring PF-29 implementation; S02 owns the content/facade join.
 - [ ] TUI applicability: none; this internal backend is not exposed until PF-30-S02.
 
 ## Exit evidence

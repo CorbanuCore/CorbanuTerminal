@@ -25,6 +25,7 @@ updated: 2026-08-27
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 security levels](../../../plans/active/p0-security-levels.md).
 - Feature: `PF-29`; see the plan's adopted contract and requirement traceability.
 - Acceptance advanced: Preserve source taint across derivation and supply deterministic context for post-read action checks.
@@ -37,6 +38,7 @@ updated: 2026-08-27
 
 ## Preconditions
 
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
 - [ ] Listed dependencies are completed and archived.
 - [ ] Read applicable root and nested AGENTS instructions; plan remains active.
 - [ ] Allocate exact owner/worktree/branch/base and literal write scope in the plan; check lane/slot conflicts.
@@ -52,9 +54,11 @@ updated: 2026-08-27
 - [ ] Treat missing, corrupt, or unknown lineage as untrusted for protected use; generated text cannot clear its own taint.
 - [ ] Supply immutable current taint and authority epoch to PF-23 action checks; a pre-fetch approval cannot authorize a changed post-fetch action.
 - [ ] Test multi-hop derivation, memory replay, restart, child narrowing, and spoofed trust resets while preserving Permissive.
+- [ ] Verify upstream context adapters retain lineage across transport reconnect and resumed native children; no trust reset from replayed summaries or reviewer output.
 
 ## Verification
 
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] Run `just fix -p <affected-crate>` and `just fmt` in `codex-rs` before final tests.
 - [ ] Run focused and affected integration tests with `just test -p <affected-crate>`; never direct `cargo test`.
 - [ ] Record exact dependency commits, candidate, commands, artifacts, and missing coverage; no pass by code presence.

@@ -25,6 +25,7 @@ updated: 2026-08-27
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-13`
 - Acceptance advanced: authorized use succeeds while every unauthorized or observable surface remains secret-free.
@@ -63,6 +64,7 @@ fixes return to an authorized implementation sprint and require affected reruns.
 
 ## Verification
 
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [x] Fix and format all affected crates before the final run; inspect the final diff.
 - [ ] Final affected tests: `cd codex-rs && just test -p codex-security-policy && just test -p codex-vault && just test -p codex-network-proxy && just test -p codex-core`.
 - [x] Canary: `python3 scripts/security-credential-canary --candidate <binary> --output qa/security-levels/sprints/PF-13-S05/`.

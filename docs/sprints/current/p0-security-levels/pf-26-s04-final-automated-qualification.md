@@ -25,6 +25,7 @@ updated: 2026-08-27
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 security levels](../../../plans/active/p0-security-levels.md).
 - Feature: `PF-26`; see the plan's adopted contract and requirement traceability.
 - Acceptance advanced: Qualify one frozen integrated candidate with full automated, adversarial, platform, and standards evidence.
@@ -37,6 +38,7 @@ updated: 2026-08-27
 
 ## Preconditions
 
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
 - [ ] Listed dependencies are completed and archived.
 - [ ] Read applicable root and nested AGENTS instructions; plan remains active.
 - [ ] Allocate exact owner/worktree/branch/base and literal write scope in the plan; check lane/slot conflicts.
@@ -50,12 +52,15 @@ updated: 2026-08-27
 - [ ] Pin version, candidate commit/binary digests, dependency commits, environment, and exact baseline; reject stale or mixed-candidate evidence.
 - [ ] Run complete affected suites including codex-core, security-policy, config, vault, network-proxy, and tui; no filtering around failures.
 - [ ] Run compatibility, all-source/all-sink canaries, protected-action/race/taint fixtures, and real browser isolation/egress probes.
+- [ ] Audit every upstream-touch row and ingress adapter against the final candidate; run native schema/child/history/transport-recovery contracts and separate non-secret task-integrity assertions.
+- [ ] Record verified upstream and fork SHAs, per-adapter retain/adapt/remove disposition, exact commands and evidence; unresolved compatibility cannot be marked qualified.
 - [ ] Collect Linux/macOS/Windows results for promised controls; record backend support versus fail-closed unavailable behavior explicitly.
 - [ ] Complete the versioned standards/design-requirement crosswalk with no missing applicable case or unsupported security claim.
 - [ ] Obtain independent security review with no open critical finding; return fixes to owning sprints and requalify the resulting candidate.
 
 ## Verification
 
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] Verify formatting/fixes precede final tests; any later runtime change invalidates affected candidate evidence.
 - [ ] Run `python3 scripts/security-level-compat --baseline <commit> --candidate <binary> --output <dir>`.
 - [ ] Run `python3 scripts/security-level-adversarial --candidate <binary> --output <dir>`.

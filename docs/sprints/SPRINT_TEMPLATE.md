@@ -41,6 +41,7 @@ updated: YYYY-MM-DD
 - [ ] Dependencies are completed.
 - [ ] Worktree, branch, and base commit are exact and match the plan.
 - [ ] Lane and literal write scopes are allocated; active-slot and collision checks pass.
+- [ ] Plan upstream-touch rows cover this sprint; verified baseline, adapter ownership, and exact contract tests are resolved.
 
 ## Done
 
@@ -57,6 +58,7 @@ updated: YYYY-MM-DD
 - [ ] Integration test: `<final-tree command>`
 - [ ] TUI applicability resolved; if applicable, keys and checkpoints recorded.
 - [ ] Integrated interfaces and candidate commit match dependency evidence.
+- [ ] Upstream adapter contracts pass; retained/adapted/removed patches and compatibility evidence are recorded in the plan.
 
 ## Exit evidence
 

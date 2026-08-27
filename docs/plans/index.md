@@ -64,6 +64,8 @@ activate when it records:
 - owner, target release, and exact implementation worktree paths, branches, and
   base commits;
 - useful code references;
+- an upstream-touch record under the [upstream integration contract](upstream-integration.md),
+  including verified baseline, adapter ownership, and compatibility evidence;
 - a sprint execution map that assigns every implementation unit to exactly one
   plan feature;
 - a hard dependency graph, requirement-to-evidence traceability, and, when

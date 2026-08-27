@@ -34,7 +34,8 @@ harness work need not wait for all enforcement code.
 
 ## Integration checkpoints
 
-1. PF-27 lands shared schemas and module seams; PF-26-S01 builds early fixtures.
+1. PF-27 resolves the upstream-touch baseline and lands shared schemas/module,
+   manifest, and test-registration seams; PF-26-S01 builds early fixtures.
 2. PF-28 confidentiality, PF-29 content, and PF-30 browser backend are separate
    lanes; PF-30-S02 joins isolated acquisition with PF-29-S01 ingress.
 3. PF-23-S01 joins the protected boundaries. PF-23-S02 enforcement and S03
@@ -45,6 +46,14 @@ harness work need not wait for all enforcement code.
    proof in both live repositories; S03 records human/docs/release acceptance.
    Platform/repository runs can overlap at one candidate, not substitute
    different lane commits for integrated evidence.
+
+Browser parallelism is the approved scheduling intent, not an active allocation:
+prioritize PF-30-S01 alongside PF-29 after their shared prerequisites. Add PF-28
+when eligible and a slot is free. PF-13-S05 still consumes a slot while active.
+PF-30-S02 joins the content contract later; shared facade changes serialize.
+Every lane consumes the plan's upstream-touch record and adapter tests. The
+remote Linux/tmux report is tracked separately under `qa/reliability/` and is not
+evidence that a reconnect fix or security guarantee has been delivered.
 
 ## Machine check
 

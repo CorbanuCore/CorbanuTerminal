@@ -33,6 +33,9 @@ contract. A sprint turns one feature into an exact code-and-evidence checklist.
   worktree, branch, and 40-character base commit matching that plan.
 - Executable dependencies must already be completed and archived.
 - A sprint never grants authority beyond its active plan.
+- New or amended implementation records link their plan's upstream-touch rows
+  and resolve the [upstream integration contract](../plans/upstream-integration.md)
+  before readiness; adapter evidence is part of completion.
 
 ## Bounded concurrency
 
@@ -101,3 +104,7 @@ The checker validates lifecycle placement, one-feature linkage, plan backlinks,
 required checkbox ledgers, line limits, status authorization, exact plan/worktree
 agreement, dependency completion and cycles, bounded active slots, lane/path/
 branch collisions, and archive completion.
+
+The checker does not validate upstream ancestry or semantic adapter compatibility.
+The integration owner reviews that evidence under the upstream contract; a
+passing structural check is not an upstream-qualification pass.

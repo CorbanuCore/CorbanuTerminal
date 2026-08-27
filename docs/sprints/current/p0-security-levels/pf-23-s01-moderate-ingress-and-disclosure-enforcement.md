@@ -25,6 +25,7 @@ updated: 2026-08-27
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-23`
 - Acceptance advanced: normal analysis continues while hostile instructions cannot gain authority or protected data.
@@ -37,6 +38,7 @@ updated: 2026-08-27
 
 ## Preconditions
 
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
 - [ ] Every listed dependency is completed and archived.
 - [ ] Read root, `codex-rs/AGENTS.md`, and `codex-rs/core/AGENTS.md`.
 - [ ] Exact worktree coordinates match the active plan.
@@ -56,10 +58,12 @@ updated: 2026-08-27
 - [ ] Deny vault enumeration/extraction, protected-financial-data disclosure, policy mutation, approval bypass, and value transfer without matching authority.
 - [ ] Preserve non-protected analysis and existing Permissive behavior.
 - [ ] Add paraphrase and adjacent-case regressions; literal prompt matching is not the primary router.
+- [ ] Test non-secret task hijacking at the protected-action boundary; report semantic failure separately and do not infer task integrity from a passing leak scan.
 - [ ] Emit stable secret-free decisions and audit metadata.
 
 ## Verification
 
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] Fix: `cd codex-rs && just fix -p codex-core`.
 - [ ] Format: `cd codex-rs && just fmt`; then inspect the final diff.
 - [ ] Focused tests: `cd codex-rs && just test -p codex-core protected_surface`.

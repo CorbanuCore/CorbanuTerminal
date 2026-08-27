@@ -42,6 +42,7 @@ Plan lifecycle: `docs/plans/index.md`
 | Delivery owner | Jim Ricketts |
 | Deadline | **2026-10-08** |
 | Scope amendment | Travis Good, 2026-08-27: preserve Permissive, adopt stronger guarantees only for Moderate/Aggressive, separately scope browser isolation, and permit bounded independent sprint concurrency |
+| Integration amendment | Travis Good, 2026-08-27: require upstream separation and compatibility evidence, explicitly schedule the browser lane in parallel, and tighten injection/task-integrity coverage; no new runtime sprint activated by this documentation update |
 
 This amendment is approved product-initiative planning plus routine process/
 validator work, not runtime implementation or release acceptance. The design
@@ -276,6 +277,24 @@ executable only after dependencies, allocation, and concurrency checks pass.
   handle. Missing backend visibly denies acquisition; never fall back. Backend
   selection and supported-platform matrix must be recorded before S01 is ready.
 
+### Injection methods and limits
+
+OpenClaw is a design/fixture source, not a runtime dependency or certification.
+PF-29-S01 records source, license, and pinned revision before adapting its
+source-labelled wrappers, randomized delimiters, normalization, and model-control
+token handling. Reference: [external-content.ts at 6ce272c2](https://github.com/openclaw/openclaw/blob/6ce272c2a662f81b7779507335d91de4d61c589b/src/security/external-content.ts).
+Host-issued typed provenance, not the marker text, establishes source identity.
+No detector result grants authority; forced misses must still preserve the
+deterministic confidentiality and protected-action boundaries.
+
+PF-29 owns a source inventory with concrete adapter, support/denial state, owner,
+fixture ID, and evidence for each file/web/document/MCP/connector/email/memory/
+delegation path. PF-26 measures task hijacking (including test weakening and
+misleading review output) separately from exfiltration. Benign quotations and
+legitimate instructions provide false-positive controls. Semantic task failure
+must be reported even when no secret leaks; no promise of perfect model obedience
+is made. Browser containment does not confer trust on retrieved prose.
+
 ### Requirement traceability
 
 All stronger-mode rows below implement **Required trust boundaries** (“External
@@ -294,6 +313,8 @@ or financial actions”), plus the expanded heading cited above.
 | Browser containment, egress, quarantine, recovery | PF-30-S01–S02 | pending; separate feature | Platform backend matrix, escape/bypass/redirect tests and true-PTY recovery |
 | Inspector and trusted controls | PF-24; PF-25 | pending | Effective facts, separate health, exact grants, revoke/kill, actual-key proof |
 | Early attacks plus final integrated qualification | PF-26-S01; S04; S02; S03 | pending | Source/sink crosswalk, full tests, two live repos, independent and human acceptance |
+| Complete ingress inventory and non-secret task hijacking | PF-29-S01; PF-26-S01/S04; PF-23-S01 | pending | Every adapter supported or denied; separate task-integrity and authority assertions, benign controls, forced detector misses |
+| Upstream separation and compatibility | PF-27-S01; each consumer; PF-26-S04/S02 | pending | Verified upstream baseline, touch record, adapter contracts, integrated Core/platform/TUI evidence |
 | Browser login or additional credential providers | No current sprint | deferred | Separate product decision; no implied support |
 | Classifier training, hosted detection, Agent Sweep | Proposed firewall plan only | excluded | Not prerequisites and not claimed shipped |
 
@@ -326,6 +347,52 @@ is serialized through a contract/integration prerequisite. No implementation
 may start under `ready`, and blocked work retains its slot. Final integration
 records dependency commits and reruns all affected proof; prior lane success is
 supporting evidence, not a substitute for final-tree acceptance.
+
+Approved scheduling intent: prioritize PF-30-S01 as a parallel browser lane
+alongside PF-29 content and PF-28 confidentiality once all three are eligible.
+PF-30-S01 does not wait for PF-13-S05 or completion of PF-29. If PF-13 remains
+active, it consumes one of the three slots; browser plus content can use the
+other two, with confidentiality queued. PF-30-S02 waits for its ingress contract
+and serializes any shared facade/registration changes. Jim Ricketts allocates
+actual independent worktrees/branches and backend support before readiness;
+draft status does not mean a browser implementation has started.
+
+### Upstream-touch record
+
+Owner: Jim Ricketts. Follow the [upstream integration contract](../upstream-integration.md).
+Canonical upstream: `https://github.com/openai/codex.git`. Verified upstream SHA:
+**unresolved**; this checkout is shallow and only has the fork's origin remote.
+The inspected fork HEAD is `12bf62444bcab7c5eea6d25b23aa301993fcb0ab`, not an
+upstream baseline. Resolve ancestry before PF-27 readiness. No upstream update
+candidate is selected or qualified by this amendment.
+
+Paths below are under `codex-rs/`; exact files, commands, and artifacts are
+resolved in each sprint before readiness. These are planned boundaries, not
+claims that every named adapter already exists.
+
+| Feature / sprint | Upstream touch and native seam | Product boundary / reason | Contract proof and upgrade disposition |
+| --- | --- | --- | --- |
+| PF-13-S05 | Existing broker/provider request adapters; inventory from S01–S04 commits | `vault/`, `security-policy/`; trusted exact credential use | Preserve pinned canary evidence; full-Core triage/Windows follow-up/independent review remain pending; inventory before upstream acceptance |
+| PF-27-S01 | `protocol/src/lib.rs`, Core/TUI module registration | Typed security integration contracts; one registration owner | Schema/version/unknown-origin/epoch tests; publish retained/adapted seam decisions |
+| PF-28-S01 | Provider/output serialization and child environments; enumerate all literal hooks | Core confidentiality module consuming vault broker | Exact outgoing-byte, reflected-error, log/export/environment canaries; no duplicate scanner policy |
+| PF-29-S01 | `core/src/mcp_tool_call.rs`, `core/src/session/inject.rs`, `core/src/tools/handlers/read_file.rs` | `core/src/security/ingress/`; native ingestion adapters | Source coverage, forged markers, unsupported-path denial; update adapter inventory on upstream drift |
+| PF-29-S02 | `core/src/compact.rs`, `core/src/compact_remote.rs`, `core/src/memories/`, `core/src/agent/control.rs`, `core/src/rollout/`, `core/src/session/rollout_reconstruction.rs` | `core/src/security/taint/`; lineage at native persistence/child seams | Compaction, delegation, memory, restart/resume retain taint and current authority |
+| PF-30-S01/S02 | `network-proxy/src/browser_policy.rs`, existing web facade and tool registration | `core/src/security/browser_isolation/`; containment behind existing web API | Real platform containment/egress probes and no unsafe fallback; shared manifest/registration edits land before parallel consumers |
+| PF-23-S01/S02/S03 | `core/src/tools/router.rs` and recorded lifecycle hooks | Security protected-surface policy; one deterministic decision path | Native dispatch/post-read epochs/grants/revocation/reconnect; no transport-specific bypass |
+| PF-24/PF-25 | Native TUI command/event/overlay registration | Separate security views; no TUI-owned authorization | Wire/UI compatibility, cancel/downgrade/revoke, true-PTY evidence |
+| PF-26 | Existing adapters are read-only; fixture and evidence paths in sprint scopes | Independent test harness, not another policy engine | Exact final candidate, complete Core and affected suites, platform matrix, two live-repo TUI flows |
+
+PF-27 resolves shared manifest/lockfile and test-registration ownership before
+consumers become ready; add exact paths to its write scope if needed. Each
+consumer links its row, fills exact contract commands, and records patch
+disposition on upstream changes. PF-26-S04 audits all rows on the integrated
+candidate. Passing plan/sprint structure checks is not upstream qualification.
+
+PF-14 remains proposed. Its packet, provider-readiness, and child-runtime work
+must reuse these contracts; shared Core files serialize across plans. The remote
+Linux/tmux reconnect investigation is separate routine diagnosis, tracked in
+`qa/reliability/2026-08-27-linux-tmux-reconnect.md`; no transport fix or timeout
+change is hidden inside this security plan.
 
 ### PF-13 integration contract
 

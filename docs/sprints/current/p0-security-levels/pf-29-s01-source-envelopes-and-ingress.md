@@ -25,6 +25,7 @@ updated: 2026-08-27
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 security levels](../../../plans/active/p0-security-levels.md).
 - Feature: `PF-29`; see the plan's adopted contract and requirement traceability.
 - Acceptance advanced: Attach non-forgeable host provenance to supported external inputs before model ingestion.
@@ -37,6 +38,7 @@ updated: 2026-08-27
 
 ## Preconditions
 
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
 - [ ] Listed dependencies are completed and archived.
 - [ ] Read applicable root and nested AGENTS instructions; plan remains active.
 - [ ] Allocate exact owner/worktree/branch/base and literal write scope in the plan; check lane/slot conflicts.
@@ -48,6 +50,8 @@ updated: 2026-08-27
 ## Remaining
 
 - [ ] Map repository/files, web/browser/document extraction, tool/MCP/connector/email output, prior memory, and delegated results to host-issued source envelopes.
+- [ ] Publish every concrete ingress adapter's owner, supported/denied state, fixture ID, and result; fail coverage checks for unclassified paths.
+- [ ] Record pinned OpenClaw source/license and adapted wrapper/normalization fixtures; implement natively and keep typed host provenance authoritative over marker text.
 - [ ] Record unsupported ingress paths and disable their stronger-mode use until a local adapter can enforce the contract.
 - [ ] Normalize hostile encodings, executable/hidden markup, and model-control tokens; reject forged source delimiters without promoting sanitized text to trusted instructions.
 - [ ] Retain origin, digest, trust class, and derivation identifiers in bounded model context and secret-free audit metadata.
@@ -56,10 +60,12 @@ updated: 2026-08-27
 
 ## Verification
 
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] Run `just fix -p <affected-crate>` and `just fmt` in `codex-rs` before final tests.
 - [ ] Run focused and affected integration tests with `just test -p <affected-crate>`; never direct `cargo test`.
 - [ ] Record exact dependency commits, candidate, commands, artifacts, and missing coverage; no pass by code presence.
 - [ ] Run source-coverage fixtures with hostile text and forced detector misses; no classifier is the trust boundary.
+- [ ] Exercise benign quotations and non-secret task-hijacking cases; distinguish normalization failures, task corruption, and authority violations.
 - [ ] TUI applicability: true-PTY hostile-file/MCP ingestion, visible rejection, and retry with separate prompt/Enter actions.
 
 ## Exit evidence

@@ -25,6 +25,7 @@ updated: 2026-08-27
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-26`
 - Acceptance advanced: success, cancel/failure, recovery, and resume work end to end; Corbanu exec is not accepted proof.
@@ -38,6 +39,7 @@ updated: 2026-08-27
 
 ## Preconditions
 
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
 - [ ] Every listed dependency is completed and archived.
 - [ ] Final formatted candidate binary/version/commit is recorded.
 - [ ] Both disposable live-repository worktrees are resolved and safe for chaotic edits.
@@ -79,6 +81,8 @@ updated: 2026-08-27
 
 ## Verification
 
+- [ ] Include remote Linux/tmux detach/reattach and provider-recovery proof with synthetic actions; preserve taint/epochs and verify no duplicate execution without assuming SSH caused provider failure.
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] TensorCash success, failure/cancel, and recovery artifacts pass.
 - [ ] Isometric Game success, failure/cancel, and restart/resume artifacts pass.
 - [ ] Candidate binary hash matches the automated-evidence candidate.

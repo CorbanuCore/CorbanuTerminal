@@ -138,6 +138,7 @@ nav:
           - Sprint Template: sprints/SPRINT_TEMPLATE.md
       - Plans:
           - Plan Process: plans/index.md
+          - Upstream Integration Contract: plans/upstream-integration.md
           - Active Plans: plans/active/index.md
           - P0 Security Levels: plans/active/p0-security-levels.md
           - Proposed Plans:

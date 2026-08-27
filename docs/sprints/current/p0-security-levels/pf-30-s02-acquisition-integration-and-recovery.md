@@ -25,6 +25,7 @@ updated: 2026-08-27
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 security levels](../../../plans/active/p0-security-levels.md).
 - Feature: `PF-30`; see the plan's adopted contract and requirement traceability.
 - Acceptance advanced: Route stronger-mode public acquisition through isolation and untrusted-content handling with visible recovery.
@@ -37,9 +38,11 @@ updated: 2026-08-27
 
 ## Preconditions
 
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
 - [ ] Listed dependencies are completed and archived.
 - [ ] Read applicable root and nested AGENTS instructions; plan remains active.
 - [ ] Allocate exact owner/worktree/branch/base and literal write scope in the plan; check lane/slot conflicts.
+- [ ] Serialize shared web-tool/schema registration against all active lanes; consume PF-29 ingress without modifying its implementation.
 
 ## Done
 
@@ -56,10 +59,12 @@ updated: 2026-08-27
 
 ## Verification
 
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] Run `just fix -p <affected-crate>` and `just fmt` in `codex-rs` before final tests.
 - [ ] Run focused and affected integration tests with `just test -p <affected-crate>`; never direct `cargo test`.
 - [ ] Record exact dependency commits, candidate, commands, artifacts, and missing coverage; no pass by code presence.
 - [ ] Run backend/platform and facade bypass fixtures against the real integrated runtime.
+- [ ] Verify native web facade request/result compatibility and that isolated acquisition returns untrusted data, never new tool authority.
 - [ ] TUI applicability: required in disposable TensorCash and Isometric Game worktrees; send actual keys for success/cancel/failure/recovery/resume.
 
 ## Exit evidence

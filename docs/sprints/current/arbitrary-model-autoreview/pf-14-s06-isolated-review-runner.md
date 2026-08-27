@@ -6,12 +6,14 @@ plan_file: "docs/plans/proposed/arbitrary-model-autoreview.md"
 plan_feature: "PF-14"
 execution_order: 6
 owner: "Jim Ricketts"
+lane: "autoreview"
+write_scope: "UNALLOCATED"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-14-S02, PF-14-S04, PF-14-S05"
+depends_on: "PF-14-S02, PF-14-S04, PF-14-S05, PF-29-S02"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-27
 ---
 
 # PF-14-S06 — Isolated bounded review runner
@@ -23,6 +25,7 @@ updated: 2026-08-24
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/proposed/arbitrary-model-autoreview.md#native-lifecycle-and-upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [Arbitrary-model Autoreview](../../../plans/proposed/arbitrary-model-autoreview.md)
 - Feature: `PF-14`
 - Acceptance advanced: exact-runtime success, malformed-result failure, cancellation, and durable result inspection.
@@ -36,6 +39,8 @@ updated: 2026-08-24
 
 ## Preconditions
 
+- [ ] Allocate literal implementation/test/registration scopes and check cross-plan collisions before readiness.
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
 - [ ] Plan is active.
 - [ ] Dependencies are completed.
 - [ ] Worktree, branch, and base commit are exact and match the plan.
@@ -54,13 +59,16 @@ updated: 2026-08-24
 - [ ] Merge packet reports deterministically, deduplicate identical findings, retain packet provenance, and never turn parse failure into “no findings.”
 - [ ] Persist redacted request metadata and report for inspection without packet contents, auth values, or raw provider payloads.
 - [ ] Prove the runner cannot read or mutate repository files and that cancellation prevents remaining provider calls.
+- [ ] Consume PF-29 derived lineage; reviewer findings remain untrusted on return/resume and cannot authorize follow-on tools, policy changes, or auto-application.
 
 ## Verification
 
-- [ ] Focused test: `cargo test -p codex-core arbitrary_model_autoreview_runner`
-- [ ] Isolation test: `cargo test -p codex-core autoreview_isolation`
-- [ ] Result test: `cargo test -p codex-core autoreview_report`
-- [ ] TUI applicability resolved; event checkpoints are consumed by PF-14-S07.
+- [ ] Run fix/format before final tests; execute Rust commands below from `codex-rs`.
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
+- [ ] Focused test: `just test -p codex-core arbitrary_model_autoreview_runner`
+- [ ] Isolation test: `just test -p codex-core autoreview_isolation`
+- [ ] Result test: `just test -p codex-core autoreview_report`
+- [ ] If this sprint changes an interactive path, complete its actual-key success/failure/recovery proof before completion; otherwise record why internal-only. S07 repeats integrated proof.
 
 ## Exit evidence
 

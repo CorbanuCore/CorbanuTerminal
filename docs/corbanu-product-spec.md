@@ -2,7 +2,7 @@
 title: Corbanu Terminal Product Specification
 document_type: product_spec
 status: living
-updated: 2026-08-22
+updated: 2026-08-27
 status_labels:
   - live
   - built_not_live
@@ -46,6 +46,17 @@ Marketing language belongs in this positioning section. Delivery requirements be
 7. **Upstream velocity:** Maintain continuous Codex parity without removing Corbanu-specific behavior.
 8. **One product:** Identity, data, inference, skills, execution, NAV, and social must feel native to one Terminal.
 9. **Deterministic authorization:** A model deciding that an action looks safe is never authorization.
+
+## Upstream compatibility — CONTINUOUS
+
+Status: **PRINCIPLE; qualification evidence required, not a current certification**.
+Product decision: Travis Good, 2026-08-27. Corbanu-specific capabilities must
+remain separable from native Codex lifecycle and provider interfaces so upstream
+improvements can be adopted without losing product behavior or weakening security.
+Upgrade acceptance includes regression evidence for affected native delegation,
+transport recovery, context persistence, and authorization boundaries, not merely
+a conflict-free merge. The [upstream integration contract](plans/upstream-integration.md)
+owns the engineering process and evidence fields.
 
 # Shipping MVP — LIVE
 
@@ -224,6 +235,8 @@ The release suite must cover:
 
 - direct and indirect prompt injection;
 - tool-output and retrieved-content injection;
+- task hijacking through repository instructions, misleading review output, or
+  requests to weaken tests, including attacks containing no secret canary;
 - vault, seed, credential, and financial-data extraction;
 - confused-deputy attacks;
 - malicious plugins, connectors, and MCP servers;
@@ -260,6 +273,12 @@ The security inspector distinguishes the requested level from effective
 enforcement and displays Browser Isolation and External Content Firewall health
 separately. Unavailable controls cannot be represented as active protection.
 These contracts do not change Permissive or weaken any release evidence gate.
+
+The acceptance model distinguishes semantic model mistakes from deterministic
+authority violations. Wrappers, sanitization, and detectors reduce exposure;
+they do not guarantee the model never follows malicious text. A task-hijacking
+test must report both task integrity and policy outcomes, rather than treating
+absence of a secret leak as proof that the task remained intact.
 
 # Trader capabilities
 

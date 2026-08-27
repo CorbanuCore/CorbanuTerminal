@@ -25,6 +25,7 @@ updated: 2026-08-27
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-25`
 - Acceptance advanced: revocation immediately dominates grants, mandates, approvals, cached decisions, and resumed work.
@@ -37,6 +38,7 @@ updated: 2026-08-27
 
 ## Preconditions
 
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
 - [ ] Every listed dependency is completed and archived.
 - [ ] Read root, Rust, Core, TUI, and TUI style instructions.
 - [ ] Exact worktree coordinates match the active plan.
@@ -57,6 +59,7 @@ updated: 2026-08-27
 
 ## Verification
 
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] Fix: `cd codex-rs && just fix -p codex-tui && just fix -p codex-core`.
 - [ ] Format: `cd codex-rs && just fmt`; then inspect the final diff.
 - [ ] Tests: `cd codex-rs && just test -p codex-tui security_revocation && just test -p codex-core security_recovery`.

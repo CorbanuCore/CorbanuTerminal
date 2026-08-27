@@ -2,7 +2,7 @@
 
 | Field             | Value                                                                                                                    |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Policy version    | 1.3                                                                                                                      |
+| Policy version    | 1.4                                                                                                                      |
 | Updated           | 2026-08-27                                                                                                               |
 | Policy owner      | Lead developer, as assigned in the [product roles table](docs/corbanu-product-spec.md#ownership-and-decision-rights)     |
 | Product authority | The decision roles in the product specification                                                                          |
@@ -28,6 +28,7 @@ they must not restate policy.
 | Change classification and repository-wide release rules    | This file                                                                                                       |
 | Active-plan limit and lifecycle                            | [Plan process](docs/plans/index.md)                                                                             |
 | Plan evidence fields                                       | [Plan template](docs/plans/PLAN_TEMPLATE.md)                                                                    |
+| Upstream integration boundaries and qualification           | [Upstream integration contract](docs/plans/upstream-integration.md)                                             |
 | Sprint lifecycle and execution rules                       | [Sprint process](docs/sprints/index.md)                                                                         |
 | Sprint execution fields                                    | [Sprint template](docs/sprints/SPRINT_TEMPLATE.md)                                                              |
 | Benchmark cadence, methods, performance matrix, and ledger | [Benchmark tracker](benchmarks/README.md)                                                                       |

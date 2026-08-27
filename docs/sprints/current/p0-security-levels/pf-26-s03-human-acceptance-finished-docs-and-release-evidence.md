@@ -25,6 +25,7 @@ updated: 2026-08-27
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-26`
 - Acceptance advanced: users receive accurate security/vault guidance only after the final candidate passes required evidence.
@@ -37,6 +38,7 @@ updated: 2026-08-27
 
 ## Preconditions
 
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
 - [ ] Every listed dependency is completed and archived.
 - [ ] A named human tester and independent security reviewer are recorded.
 - [ ] Candidate version/commit and benchmark state are fixed.
@@ -58,6 +60,7 @@ updated: 2026-08-27
 
 ## Verification
 
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] Documentation build: `mkdocs build --strict`.
 - [ ] Governance: `python3 docs/plans/check.py && python3 docs/sprints/check.py`.
 - [ ] Human record matches the final candidate commit and required flows.

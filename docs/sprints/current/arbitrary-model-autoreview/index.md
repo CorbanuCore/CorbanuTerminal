@@ -11,18 +11,23 @@ completed and archived.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
-| 1 | [PF-14-S01](pf-14-s01-request-and-skill-contract.md) | Explicit skill and typed request | draft | — |
-| 2 | [PF-14-S02](pf-14-s02-review-packet-and-secret-gate.md) | Complete packet and fail-closed scan | draft | `PF-14-S01` |
-| 3 | [PF-14-S03](pf-14-s03-core-provider-readiness.md) | Shared Core auth readiness | draft | `PF-14-S01` |
+| 1 | [PF-14-S01](pf-14-s01-request-and-skill-contract.md) | Explicit skill and typed request | draft | `PF-27-S01` |
+| 2 | [PF-14-S02](pf-14-s02-review-packet-and-secret-gate.md) | Complete packet and fail-closed scan | draft | `PF-14-S01, PF-28-S01, PF-29-S01` |
+| 3 | [PF-14-S03](pf-14-s03-core-provider-readiness.md) | Shared Core auth readiness | draft | `PF-14-S01, PF-13-S05, PF-27-S01` |
 | 4 | [PF-14-S04](pf-14-s04-exact-runtime-dispatch.md) | Deterministic cross-provider dispatch | draft | `PF-14-S03` |
 | 5 | [PF-14-S05](pf-14-s05-full-history-invariant.md) | Fail-closed full-history inheritance | draft | `PF-14-S04` |
-| 6 | [PF-14-S06](pf-14-s06-isolated-review-runner.md) | Isolated bounded reviewer and report | draft | `PF-14-S02, PF-14-S04, PF-14-S05` |
+| 6 | [PF-14-S06](pf-14-s06-isolated-review-runner.md) | Isolated bounded reviewer and report | draft | `PF-14-S02, PF-14-S04, PF-14-S05, PF-29-S02` |
 | 7 | [PF-14-S07](pf-14-s07-tui-qualification-and-docs.md) | Qualified TUI flow and finished docs | draft | `PF-14-S06` |
 
 Work only from one sprint's **Remaining** checklist. Completed records move to
 `docs/sprints/archive/arbitrary-model-autoreview/` and leave MkDocs navigation.
 
 ## Machine check
+
+The plan's upstream-touch record and security prerequisites apply to every
+sprint. Native `spawn_agent` remains the child lifecycle; legacy external-process
+orchestration is not the proposed Autoreview runtime. Work can overlap the
+security browser lane only after activation and cross-plan write-scope checks.
 
 ```bash
 python3 docs/sprints/check.py --json

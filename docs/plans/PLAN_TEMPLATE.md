@@ -83,6 +83,21 @@ failure, recovery, resume, and return use.>
 | --- | --- |
 |  |  |
 
+## Upstream-touch record
+
+Complete the fields required by the [upstream integration contract](upstream-integration.md).
+Use repository-relative literal paths; unresolved fields block affected readiness.
+
+| Baseline field | Value / evidence |
+| --- | --- |
+| Canonical upstream URL and verified full SHA | pending |
+| Fork base and candidate SHA | pending |
+| Proposed upstream update SHA, if applicable | pending |
+
+| Feature / sprint | Upstream files and native interface | Product-owned boundary / reason | Integration owner | Contract tests / artifact | Upgrade disposition |
+| --- | --- | --- | --- | --- | --- |
+|  |  |  |  | pending | pending |
+
 ## Sprint execution map
 
 Every implementation sprint must link exactly one feature in this plan. Link
