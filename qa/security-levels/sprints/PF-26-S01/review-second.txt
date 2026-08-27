@@ -1,0 +1,7 @@
+autoreview findings: 1
+[P2] Uppercase hex canary leaks are treated as clean
+scripts/security_level_capture.py:30
+`scan_surfaces()` relies on `canary_forms()` to decide whether a captured sink leaked the synthetic canary, but the only hex representation added is `canary.hex()`, which is lowercase. A host capture containing the same canary bytes rendered as uppercase hex would not match any scanned form, so the adversarial checker can mark confidentiality as passed even though the canary was exposed in a normal hex encoding. Include case-insensitive hex coverage, at minimum the uppercase hex form, before accepting confidentiality results.
+
+overall: patch is incorrect (0.8)
+The harness can still convert incomplete confidentiality proof into a pass because it misses a common hex representation of the canary. That violates the stated fail-closed evidence-checking goal for this patch.

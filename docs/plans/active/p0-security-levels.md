@@ -239,7 +239,7 @@ concurrent workers use distinct branches and non-overlapping write scopes.
 This map covers every implementation and qualification unit currently required
 by the plan. PF-15 through PF-22 and PF-13-S01 through PF-13-S04 are
 completed and archived with final-tree evidence. PF-13-S05 continues qualification;
-PF-27-S01 is completed and archived from its separate contracts allocation. Other drafts become executable
+PF-27-S01 and PF-26-S01 are completed and archived from their separate contracts/harness allocations. Other drafts become executable
 only after dependencies, allocation, and concurrency checks pass.
 
 | Feature ID | Plan feature | Current sprint records | State |
@@ -256,7 +256,7 @@ only after dependencies, allocation, and concurrency checks pass.
 | `PF-23` | Moderate/Aggressive protected-surface enforcement | [S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), [S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md), [S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | draft |
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
-| `PF-26` | Early harnesses, final automated qualification, true-TUI/live-repository proof, and acceptance | [S01](../../sprints/current/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md), [S04](../../sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md), [S02](../../sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md), [S03](../../sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | S01 in_progress; S04/S02/S03 dependency-gated drafts |
+| `PF-26` | Early harnesses, final automated qualification, true-TUI/live-repository proof, and acceptance | [S01 completion evidence](../../../qa/security-levels/sprints/PF-26-S01/evidence.md), [S04](../../sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md), [S02](../../sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md), [S03](../../sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | S01 completed; S04/S02/S03 dependency-gated drafts; feature not complete |
 | `PF-27` | Shared security integration contracts | [S01 completion evidence](../../../qa/security-levels/sprints/PF-27-S01/evidence.md) | completed; native consumers remain separately gated |
 | `PF-28` | Cross-surface confidentiality | [S01](../../sprints/current/p0-security-levels/pf-28-s01-confidentiality-and-safe-environments.md) | draft |
 | `PF-29` | External Content Firewall | [S01](../../sprints/current/p0-security-levels/pf-29-s01-source-envelopes-and-ingress.md), [S02](../../sprints/current/p0-security-levels/pf-29-s02-derived-taint-and-action-context.md) | draft |
@@ -343,7 +343,7 @@ may run together under the sprint-process rules, never all rows automatically.
 | --- | --- | --- |
 | qualification | PF-13-S05 | Mac triage, Windows follow-up, and independent review may run together against pinned evidence |
 | contracts | PF-27-S01 | Completed and archived; shared contracts available to eligible consumers, PF-13 qualification unchanged |
-| harness | PF-26-S01 | Active isolated allocation after archived PF-21/PF-27; accompanies PF-13 qualification without native code writes |
+| harness | PF-26-S01 | Completed and archived; frozen fixtures/checkers available, native product evidence pending; PF-13 unchanged |
 | confidentiality | PF-28-S01 | After PF-13-S05, PF-27, and early harness |
 | content | PF-29-S01 then S02 | After PF-27 and early harness; independent of browser backend construction |
 | browser | PF-30-S01 then S02 | S01 after PF-27/harness; S02 joins S01 and PF-29-S01 ingress contract |
@@ -402,6 +402,11 @@ disposition on upstream changes. PF-26-S04 audits all rows on the integrated
 candidate. Passing plan/sprint structure checks is not upstream qualification.
 
 #### PF-26-S01 execution contract
+
+S01 is completed at code commit `bed9c5bfeece2414cbf7e3f54af09fcb646959ed`, with
+39 harness tests, six existing credential-canary tests and a clean Autoreview.
+[Evidence and handoff](../../../qa/security-levels/sprints/PF-26-S01/evidence.md)
+retain pending product results; the remaining three PF-26 sprints are not complete.
 
 The harness base is the pushed PF-27 completion commit
 `cb808c30c0058c101597ab2ada3da16238565c5e`; its inherited upstream ancestry is

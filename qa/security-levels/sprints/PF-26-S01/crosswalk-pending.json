@@ -1,0 +1,626 @@
+{
+  "adapters": [
+    {
+      "id": "native-dispatch-authority",
+      "owners": [
+        "PF-23-S01",
+        "PF-23-S02",
+        "PF-25"
+      ],
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      }
+    },
+    {
+      "id": "provider-wire-separation",
+      "owners": [
+        "PF-24-S02",
+        "PF-25",
+        "PF-29-S01"
+      ],
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      }
+    },
+    {
+      "id": "host-provenance",
+      "owners": [
+        "PF-29-S01",
+        "PF-30-S02"
+      ],
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      }
+    },
+    {
+      "id": "context-lineage",
+      "owners": [
+        "PF-29-S02"
+      ],
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      }
+    },
+    {
+      "id": "post-read-revocation",
+      "owners": [
+        "PF-23-S03",
+        "PF-25",
+        "PF-29-S02"
+      ],
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      }
+    },
+    {
+      "id": "cancel-resume-incarnation",
+      "owners": [
+        "PF-23-S03",
+        "PF-24",
+        "PF-25",
+        "PF-29-S02"
+      ],
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      }
+    },
+    {
+      "id": "independent-health",
+      "owners": [
+        "PF-24",
+        "PF-28",
+        "PF-29",
+        "PF-30"
+      ],
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      }
+    }
+  ],
+  "candidate": null,
+  "catalog_sha256": "4a232b44eb12d94de0304508766da0ed1ed0583c4daaaf553a304abfdd8b3cf3",
+  "controls": [
+    {
+      "adapters": [
+        "native-dispatch-authority"
+      ],
+      "attacks": [
+        "forced-classifier-miss",
+        "child-privilege"
+      ],
+      "behavior": "Deterministic subject/resource/action/context check; existing deny stays deny",
+      "boundary": "codex-rs/core/src/security/protected_surface.rs",
+      "id": "authzen-1.0",
+      "owner": "PF-23-S01",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "adapters": [
+        "native-dispatch-authority",
+        "post-read-revocation"
+      ],
+      "attacks": [
+        "child-privilege",
+        "approval-mutation"
+      ],
+      "behavior": "Narrow scoped grants and delegation preserve actor and expiry",
+      "boundary": "codex-rs/core/src/security/aggressive.rs",
+      "id": "rfc9396-8693",
+      "owner": "PF-23-S02",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "adapters": [
+        "post-read-revocation",
+        "cancel-resume-incarnation"
+      ],
+      "attacks": [
+        "revocation-race",
+        "reconnect-replay"
+      ],
+      "behavior": "Revoke, kill and restart invalidate stale authority durably",
+      "boundary": "codex-rs/core/src/security/transition.rs",
+      "id": "caep-invalidation",
+      "owner": "PF-23-S03",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "adapters": [
+        "provider-wire-separation",
+        "native-dispatch-authority"
+      ],
+      "attacks": [
+        "approval-mutation",
+        "duplicate-action",
+        "review-output-injection"
+      ],
+      "behavior": "Trusted exact preview, bound approval, secret-free receipt; mutation/replay denied",
+      "boundary": "codex-rs/core/src/security/ui_events.rs",
+      "id": "ap2-0.2",
+      "owner": "PF-25-S02",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "adapters": [
+        "host-provenance"
+      ],
+      "attacks": [
+        "task-hijack",
+        "test-weakening",
+        "benign-control"
+      ],
+      "behavior": "Agent Goal Hijack: source text cannot replace the user's task",
+      "boundary": "codex-rs/core/src/security/ingress/mod.rs",
+      "id": "owasp-asi01",
+      "owner": "PF-29-S01",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "adapters": [
+        "native-dispatch-authority"
+      ],
+      "attacks": [
+        "forced-classifier-miss",
+        "reflected-error"
+      ],
+      "behavior": "Tool Misuse: deny unauthorized tool actions independently of detection",
+      "boundary": "codex-rs/core/src/security/protected_surface.rs",
+      "id": "owasp-asi02",
+      "owner": "PF-23-S01",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "adapters": [
+        "native-dispatch-authority"
+      ],
+      "attacks": [
+        "child-privilege",
+        "forged-provenance"
+      ],
+      "behavior": "Identity and Privilege Abuse: no forged identity or wider child grants",
+      "boundary": "codex-rs/core/src/security/aggressive.rs",
+      "id": "owasp-asi03",
+      "owner": "PF-23-S02",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "adapters": [
+        "host-provenance"
+      ],
+      "attacks": [
+        "supply-chain-instruction"
+      ],
+      "behavior": "Agentic Supply Chain: dependency, plugin and MCP text remains untrusted",
+      "boundary": "codex-rs/core/src/security/ingress/mod.rs",
+      "id": "owasp-asi04",
+      "owner": "PF-29-S01",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "adapters": [
+        "independent-health"
+      ],
+      "attacks": [
+        "browser-containment",
+        "supply-chain-instruction"
+      ],
+      "behavior": "Unexpected Code Execution: contain acquired content and deny privileged execution",
+      "boundary": "codex-rs/core/src/security/browser_isolation/mod.rs",
+      "id": "owasp-asi05",
+      "owner": "PF-30-S01",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "adapters": [
+        "context-lineage"
+      ],
+      "attacks": [
+        "lineage-laundering",
+        "forged-provenance"
+      ],
+      "behavior": "Memory and Context Poisoning: derived and restored context retains ancestry",
+      "boundary": "codex-rs/core/src/security/taint/mod.rs",
+      "id": "owasp-asi06",
+      "owner": "PF-29-S02",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "adapters": [
+        "context-lineage",
+        "provider-wire-separation"
+      ],
+      "attacks": [
+        "review-output-injection",
+        "wire-forgery",
+        "child-privilege"
+      ],
+      "behavior": "Inter-Agent Communication: native child/review output cannot forge authority",
+      "boundary": "codex-rs/core/src/security/taint/mod.rs",
+      "id": "owasp-asi07",
+      "owner": "PF-29-S02",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "adapters": [
+        "independent-health"
+      ],
+      "attacks": [
+        "health-cascade",
+        "backend-unavailable"
+      ],
+      "behavior": "Cascading Failures: unavailable controls block protected work without fallback",
+      "boundary": "codex-rs/core/src/security/recovery.rs",
+      "id": "owasp-asi08",
+      "owner": "PF-23-S03",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "adapters": [
+        "provider-wire-separation",
+        "cancel-resume-incarnation"
+      ],
+      "attacks": [
+        "review-output-injection",
+        "wire-forgery",
+        "approval-mutation"
+      ],
+      "behavior": "Human-Agent Trust: model/provider assertions are not human confirmation",
+      "boundary": "codex-rs/core/src/security/ui_events.rs",
+      "id": "owasp-asi09",
+      "owner": "PF-25-S01",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "adapters": [
+        "post-read-revocation"
+      ],
+      "attacks": [
+        "child-privilege",
+        "revocation-race",
+        "duplicate-action"
+      ],
+      "behavior": "Rogue Agents: revoke or kill delegated authority before further side effects",
+      "boundary": "codex-rs/core/src/security/transition.rs",
+      "id": "owasp-asi10",
+      "owner": "PF-23-S03",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "adapters": [
+        "host-provenance"
+      ],
+      "attacks": [
+        "forced-classifier-miss",
+        "reflected-error"
+      ],
+      "behavior": "All source/sink pairs retain canary confidentiality, including reflected errors",
+      "boundary": "codex-rs/core/src/security/confidentiality/mod.rs",
+      "id": "confidentiality",
+      "owner": "PF-28-S01",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    },
+    {
+      "adapters": [
+        "independent-health"
+      ],
+      "attacks": [
+        "browser-containment",
+        "backend-unavailable"
+      ],
+      "behavior": "Real platform containment and constrained egress; unavailable fails closed",
+      "boundary": "codex-rs/core/src/security/browser_isolation/mod.rs",
+      "id": "browser-isolation",
+      "owner": "PF-30-S01",
+      "results": {
+        "adversarial": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "automated": {
+          "evidence": null,
+          "status": "pending"
+        },
+        "tui": {
+          "evidence": null,
+          "status": "pending"
+        }
+      }
+    }
+  ],
+  "ingresses": [
+    {
+      "id": "file",
+      "owner": "PF-29-S01",
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      },
+      "support": "pending"
+    },
+    {
+      "id": "web",
+      "owner": "PF-30-S02",
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      },
+      "support": "pending"
+    },
+    {
+      "id": "document",
+      "owner": "PF-29-S01",
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      },
+      "support": "pending"
+    },
+    {
+      "id": "tool",
+      "owner": "PF-29-S01",
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      },
+      "support": "pending"
+    },
+    {
+      "id": "mcp",
+      "owner": "PF-29-S01",
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      },
+      "support": "pending"
+    },
+    {
+      "id": "connector",
+      "owner": "PF-29-S01",
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      },
+      "support": "pending"
+    },
+    {
+      "id": "email",
+      "owner": "PF-29-S01",
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      },
+      "support": "pending"
+    },
+    {
+      "id": "memory",
+      "owner": "PF-29-S02",
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      },
+      "support": "pending"
+    },
+    {
+      "id": "delegated",
+      "owner": "PF-29-S02",
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      },
+      "support": "pending"
+    },
+    {
+      "id": "unknown",
+      "owner": "PF-29-S01",
+      "result": {
+        "evidence": null,
+        "status": "pending"
+      },
+      "support": "pending"
+    }
+  ],
+  "schema_version": 1,
+  "standards_review_date": "2026-08-23"
+}

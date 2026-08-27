@@ -4,7 +4,9 @@ These records execute the [active P0 plan](../../../plans/active/p0-security-lev
 PF-15 through PF-22 and PF-13-S01 through S04 remain completed and archived.
 PF-13-S05 remains `in_progress`. PF-27-S01 is completed and archived;
 [shared-contract completion evidence](../../../../qa/security-levels/sprints/PF-27-S01/evidence.md)
-is available to eligible consumers.
+is available to eligible consumers. PF-26-S01 is also completed and archived;
+[early harness evidence](../../../../qa/security-levels/sprints/PF-26-S01/evidence.md)
+provides fixtures, not final product qualification.
 
 The plan permits up to three independent active lanes under the
 [sprint concurrency contract](../../index.md#bounded-concurrency).
@@ -16,7 +18,6 @@ harness work need not wait for all enforcement code.
 | Priority | Sprint | Lane | Status | Hard dependencies |
 | ---: | --- | --- | --- | --- |
 | 13 | [PF-13-S05](pf-13-s05-credential-boundary-adversarial-qualification.md) | qualification | in_progress | PF-13-S04 |
-| 15 | [PF-26-S01](pf-26-s01-security-harnesses-and-standards-crosswalk.md) | harness | draft | PF-21-S01, PF-27-S01 |
 | 16 | [PF-28-S01](pf-28-s01-confidentiality-and-safe-environments.md) | confidentiality | draft | PF-13-S05, PF-27-S01, PF-26-S01 |
 | 17 | [PF-29-S01](pf-29-s01-source-envelopes-and-ingress.md) | content | draft | PF-27-S01, PF-26-S01 |
 | 18 | [PF-29-S02](pf-29-s02-derived-taint-and-action-context.md) | content | draft | PF-29-S01 |
@@ -36,8 +37,9 @@ harness work need not wait for all enforcement code.
 ## Integration checkpoints
 
 1. PF-27 completed the upstream baseline and shared schemas/module, manifest,
-   and test-registration seams. PF-26-S01 is the next harness workstream;
-   PF-24-S01 is also dependency-eligible, but neither is activated by this record.
+   and test-registration seams. PF-26-S01 completed the early fixture/checker
+   handoff. PF-29-S01, PF-30-S01 and PF-24-S01 have satisfied dependencies;
+   each still needs its own allocation/readiness checks before activation.
 2. PF-28 confidentiality, PF-29 content, and PF-30 browser backend are separate
    lanes; PF-30-S02 joins isolated acquisition with PF-29-S01 ingress.
 3. PF-23-S01 joins the protected boundaries. PF-23-S02 enforcement and S03
