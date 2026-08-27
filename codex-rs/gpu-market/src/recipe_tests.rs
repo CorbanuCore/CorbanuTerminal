@@ -219,9 +219,70 @@ fn built_in_glm_5_3_b300_recipe_pins_blackwell_fp8_tp2_contract() {
 }
 
 #[test]
+fn built_in_qwen_3_8_27b_recipe_pins_hopper_fp8_tp2_contract() {
+    let catalog = RecipeCatalog::default();
+    let recipe = catalog
+        .get("qwen3.8-27b-fp8-2xh200-experimental")
+        .expect("Qwen3.8-27B recipe");
+    RecipeCatalog::new(vec![recipe.clone()]).expect("valid built-in Qwen3.8-27B manifest");
+
+    let launch = recipe.launch_command.join(" ");
+    assert_eq!(
+        (
+            recipe.runtime.as_str(),
+            recipe.hardware.gpu_model.as_str(),
+            recipe.hardware.gpu_count,
+            recipe.tensor_parallel_size,
+            recipe.maximum_context_tokens,
+            recipe.maximum_concurrent_requests,
+            recipe.stability,
+        ),
+        (
+            "vllm",
+            "NVIDIA H200",
+            2,
+            2,
+            262_144,
+            256,
+            RecipeStability::Experimental,
+        )
+    );
+    assert_eq!(
+        recipe.model_revision,
+        "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a"
+    );
+    assert_eq!(
+        recipe.image,
+        "vllm/vllm-openai@sha256:61fc8a896b0a4fbbbdc063bc4b0dbc25ce98e02b5050c24aeb7830ac02039b14"
+    );
+    assert_eq!(recipe.license_id, "Apache-2.0");
+    assert_eq!(recipe.gpu_architectures, ["sm_90"]);
+    assert_eq!(recipe.hardware.allowed_cuda_versions, ["13.0"]);
+    assert!(recipe.hardware.requires_high_bandwidth_interconnect);
+    assert!(launch.contains("index($0, \"H200\") == 0"));
+    assert!(launch.contains("570.26"));
+    assert!(launch.contains("exit row != 2"));
+    assert!(launch.contains("--tensor-parallel-size 2"));
+    assert!(launch.contains("--max-model-len 262144"));
+    assert!(launch.contains("--max-num-seqs 256"));
+    assert!(launch.contains("--max-num-batched-tokens 32768"));
+    assert!(launch.contains("--gpu-memory-utilization 0.95"));
+    assert!(launch.contains("--kv-cache-dtype fp8"));
+    assert!(launch.contains("--language-model-only"));
+    assert!(launch.contains("--reasoning-parser qwen3"));
+    assert!(launch.contains("--tool-call-parser qwen3_coder"));
+    assert!(launch.contains("--api-key \"$PFT_ENDPOINT_TOKEN\""));
+    assert!(!launch.contains("--api-key="));
+}
+
+#[test]
 fn built_in_glm_recipes_publish_endpoint_phase_only_after_authenticated_local_readiness() {
     let catalog = RecipeCatalog::default();
-    for id in ["glm-5.3-flash-4xh200", "glm-5.3-flash-fp8-2xb300"] {
+    for id in [
+        "glm-5.3-flash-4xh200",
+        "glm-5.3-flash-fp8-2xb300",
+        "qwen3.8-27b-fp8-2xh200-experimental",
+    ] {
         let recipe = catalog.get(id).expect("GLM-5.3 recipe");
         let launch = recipe.launch_command.join(" ");
         let syntax = std::process::Command::new("bash")
@@ -262,6 +323,7 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
             "deepseek-flash-2xh200",
             "glm-5.3-flash-4xh200",
             "glm-5.3-flash-fp8-2xb300",
+            "qwen3.8-27b-fp8-2xh200-experimental",
             "glm-5.2-fp8-8xh200",
             "huihui-deepseek-v4-flash-q4k-2xh200-experimental",
             "huihui-glm-5.2-iq1m-2xh200-experimental"
@@ -282,6 +344,7 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
             RecipeStability::Qualified,
             RecipeStability::Qualified,
             RecipeStability::Qualified,
+            RecipeStability::Experimental,
             RecipeStability::Qualified,
             RecipeStability::Experimental,
             RecipeStability::Experimental,

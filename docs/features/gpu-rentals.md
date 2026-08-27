@@ -60,6 +60,14 @@ readiness succeeds. The B300 preset completed the repository's mixed-context
 full KV-cache occupancy, so that level is a stress ceiling rather than a
 production recommendation with headroom.
 
+## Experimental Qwen3.8-27B preset
+
+`/gpu` also lists an experimental authenticated `Qwen/Qwen3.8-27B-FP8`
+deployment on 2× connected NVIDIA H200. It serves the text language model with
+vLLM v0.28.0, FP8 weights and FP8 KV cache, a 262,144-token context bound, up
+to 256 concurrent requests, and Qwen3 reasoning/tool-call parsers. The preset
+has not yet completed live qualification.
+
 ## Monitor and clean up
 
 Use `/gpu` or `/gpu status` as the authoritative cross-process view of

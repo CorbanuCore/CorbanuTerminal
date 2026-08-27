@@ -102,6 +102,8 @@ fn tmux_gpu_menu_lists_glm_5_3_h200_and_b300_presets_then_cancels() -> Result<()
     assert!(menu.contains("glm-5.3-flash-4xh200"));
     assert!(menu.contains("glm-5.3-flash-fp8-2xb300"));
     assert!(!menu.contains("glm-5.3-flash-fp8-2xb300-experimental"));
+    assert!(menu.contains("Rent Qwen/Qwen3.8-27B-FP8 · 2× NVIDIA H200"));
+    assert!(menu.contains("qwen3.8-27b-fp8-2xh200-experimental"));
     assert!(menu.contains("experimental"));
 
     pane.send_key(TmuxKey::Escape)?;
