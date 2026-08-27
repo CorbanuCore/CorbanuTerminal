@@ -219,6 +219,65 @@ fn built_in_glm_5_3_b300_recipe_pins_blackwell_fp8_tp2_contract() {
 }
 
 #[test]
+fn built_in_glm_5_3_nvfp4_b200_recipe_pins_experimental_blackwell_contract() {
+    let catalog = RecipeCatalog::default();
+    let recipe = catalog
+        .get("glm-5.3-flash-nvfp4-2xb200-experimental")
+        .expect("GLM-5.3-Flash NVFP4 recipe");
+    RecipeCatalog::new(vec![recipe.clone()]).expect("valid GLM-5.3-Flash NVFP4 manifest");
+
+    let launch = recipe.launch_command.join(" ");
+    assert_eq!(
+        (
+            recipe.model_id.as_str(),
+            recipe.model_revision.as_str(),
+            recipe.runtime.as_str(),
+            recipe.hardware.gpu_model.as_str(),
+            recipe.hardware.gpu_count,
+            recipe.tensor_parallel_size,
+            recipe.maximum_context_tokens,
+            recipe.maximum_concurrent_requests,
+            recipe.stability,
+        ),
+        (
+            "LibertAIDAI/GLM-5.3-Flash-NVFP4",
+            "aa28e1f54130286c95fee10d0705c74ce8743734",
+            "vllm",
+            "NVIDIA B200",
+            2,
+            2,
+            131_072,
+            64,
+            RecipeStability::Experimental,
+        )
+    );
+    assert_eq!(
+        recipe.image,
+        "vllm/vllm-openai@sha256:2e771fa615452282cc331eb418b3ef21636fce355bea0491fca89e6d362ab703"
+    );
+    assert_eq!(recipe.weight_format, "nvfp4-a16");
+    assert_eq!(recipe.gpu_architectures, ["sm_100"]);
+    assert_eq!(recipe.hardware.allowed_cuda_versions, ["13.0"]);
+    assert!(recipe.hardware.requires_high_bandwidth_interconnect);
+    assert!(launch.contains("awk '$1 != \"10.0\" { exit 1 }'"));
+    assert!(launch.contains("580.65.06"));
+    assert!(launch.contains("exit row != 2"));
+    assert!(launch.contains("VLLM_ENGINE_READY_TIMEOUT_S=3600"));
+    assert!(launch.contains("--tensor-parallel-size 2"));
+    assert!(launch.contains("--max-model-len 131072"));
+    assert!(launch.contains("--max-num-seqs 64"));
+    assert!(launch.contains("--max-num-batched-tokens 32768"));
+    assert!(launch.contains("--gpu-memory-utilization 0.95"));
+    assert!(launch.contains("--kv-cache-dtype fp8"));
+    assert!(launch.contains("--tool-call-parser glm47"));
+    assert!(launch.contains("--reasoning-parser glm45"));
+    assert!(launch.contains("--api-key \"$PFT_ENDPOINT_TOKEN\""));
+    assert!(launch.contains("--language-model-only"));
+    assert!(!launch.contains("--disable-log-requests"));
+    assert!(!launch.contains("--api-key="));
+}
+
+#[test]
 fn built_in_qwen_3_8_27b_recipe_pins_hopper_fp8_tp2_contract() {
     let catalog = RecipeCatalog::default();
     let recipe = catalog
@@ -281,6 +340,7 @@ fn built_in_glm_recipes_publish_endpoint_phase_only_after_authenticated_local_re
     for id in [
         "glm-5.3-flash-4xh200",
         "glm-5.3-flash-fp8-2xb300",
+        "glm-5.3-flash-nvfp4-2xb200-experimental",
         "qwen3.8-27b-fp8-2xh200-experimental",
     ] {
         let recipe = catalog.get(id).expect("GLM-5.3 recipe");
@@ -323,6 +383,7 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
             "deepseek-flash-2xh200",
             "glm-5.3-flash-4xh200",
             "glm-5.3-flash-fp8-2xb300",
+            "glm-5.3-flash-nvfp4-2xb200-experimental",
             "qwen3.8-27b-fp8-2xh200-experimental",
             "glm-5.2-fp8-8xh200",
             "huihui-deepseek-v4-flash-q4k-2xh200-experimental",
@@ -344,6 +405,7 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
             RecipeStability::Qualified,
             RecipeStability::Qualified,
             RecipeStability::Qualified,
+            RecipeStability::Experimental,
             RecipeStability::Experimental,
             RecipeStability::Qualified,
             RecipeStability::Experimental,

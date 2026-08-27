@@ -52,7 +52,7 @@ contract. A sprint turns one feature into an exact code-and-evidence checklist.
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
 | [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [14 current sprints](current/p0-security-levels/index.md) | PF-13-S02 is ready; PF-15 through PF-22 and PF-13-S01 are completed and archived |
-| [GLM-5.3-Flash Vast GPU preset](../plans/active/glm-5-3-flash-vast-preset.md) | Active | [0 current sprints](current/glm-5-3-flash-vast-preset/index.md) | PF-27-S01 is completed and archived; product-owner evidence review remains |
+| [GLM-5.3-Flash Vast GPU preset](../plans/active/glm-5-3-flash-vast-preset.md) | Active | [1 current sprint](current/glm-5-3-flash-vast-preset/index.md) | PF-27-S02 is in progress for the bounded NVFP4 B200 evaluation |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
 | [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | The superseded 72-sprint decomposition is retained in the excluded archive |
 

@@ -9,7 +9,7 @@ activation_basis: "User request on 2026-08-26 to add a preconfigured /gpu settin
 target_release: "TBD"
 deadline: "continuous"
 created: 2026-08-26
-updated: 2026-08-26
+updated: 2026-08-27
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Shipping MVP — LIVE"
@@ -48,9 +48,9 @@ and can waste billable provisioning time.
 
 The user opens `/gpu`, configures the Vast API key through masked Vault entry,
 and selects a hardware-specific GLM-5.3-Flash preset. Corbanu offers the
-qualified four-H200 and two-B300 FP8 profiles, collects
-hourly and total spend limits plus duration, shows compatible offers, and
-performs the existing final billable confirmation. Each immutable vLLM recipe
+qualified four-H200 and two-B300 FP8 profiles plus an experimental two-B200
+NVFP4 evaluation profile, collects hourly and total spend limits plus duration,
+shows compatible offers, and performs the existing final billable confirmation. Each immutable vLLM recipe
 starts an authenticated OpenAI-compatible server, validates the hardware and
 runtime, downloads the pinned checkpoint, and exposes the endpoint only after
 readiness succeeds. The B300 profile supports a controlled 4–256 stream
@@ -74,6 +74,8 @@ per-rental bearer credential.
 
 - Retain the immutable four-H200 GLM-5.3-Flash vLLM recipe in the curated `/gpu` catalog.
 - Add and live-qualify a two-B300 native-FP8 recipe using the same pinned model and dedicated runtime image.
+- Add an immutable experimental two-B200 NVFP4 evaluation recipe for `LibertAIDAI/GLM-5.3-Flash-NVFP4` using its dedicated x86_64 CUDA 13 vLLM image.
+- Re-run the existing GLM coding and website tasks against the isolated NVFP4 route and collect a matched mixed-context serving sweep.
 - Require allocation-local high-bandwidth interconnect for both hardware profiles.
 - Pin the Hugging Face checkpoint and dedicated vLLM image by digest.
 - Bound the H200 profile for Hopper BF16 KV-cache headroom and the B300 profile for a 131,072-token, 256-stream Blackwell FP8-KV evaluation.
@@ -89,6 +91,7 @@ per-rental bearer credential.
 - Claiming the checkpoint's one-million-token maximum on four H200s.
 - Adding an unauthenticated public port, a second rental controller, or direct ad hoc Vast scripts.
 - Adding SGLang support for this preset while vLLM has the current model-specific deployment recipe.
+- Treating the third-party NVFP4 checkpoint as quality-equivalent to the source before matched eval evidence exists.
 - Changing existing GLM-5.2, DeepSeek, RunPod, or model-selection behavior.
 
 ## Invariants
@@ -100,6 +103,8 @@ per-rental bearer credential.
 - Three-way tensor parallelism is never selected for this 64-head model; the presets allocate TP4 on H200 and TP2 on B300.
 - H200 uses BF16 KV cache; the launch must not request FP8 KV cache on Hopper.
 - B300 uses the official recipe's Blackwell FP8 KV-cache path and requires CUDA 13 plus driver 580.65.06 or newer.
+- The NVFP4 route remains experimental, pins model revision `aa28e1f54130286c95fee10d0705c74ce8743734` and image digest `sha256:2e771fa615452282cc331eb418b3ef21636fce355bea0491fca89e6d362ab703`, and requires two NVLinked B200s.
+- NVFP4 quality and throughput are reported as observations, not promoted claims; coding, website, and serving-load results remain separate.
 - The B300 preset can be qualified only after live evidence establishes successful request counts, aggregate output throughput, per-stream throughput, latency, and provider-confirmed cleanup across the declared sweep; that gate passed on 2026-08-26.
 - READY is the only state that makes the endpoint selectable through `/model`.
 - Stop-serving never claims billing stopped; only provider-confirmed termination does.
@@ -125,13 +130,14 @@ per-rental bearer credential.
 
 | Feature ID | Plan feature | Current sprint records | State |
 | --- | --- | --- | --- |
-| `PF-27` | Curated GLM-5.3-Flash H200/B300 recipes, qualified endpoint, and B300 concurrency evidence | [PF-27-S01](../../sprints/archive/glm-5-3-flash-vast-preset/pf-27-s01-curated-recipe-and-qualified-endpoint.md) | completed |
+| `PF-27` | Curated GLM-5.3-Flash H200/B300 recipes, qualified endpoint, and matched quantization evaluation | [PF-27-S01](../../sprints/archive/glm-5-3-flash-vast-preset/pf-27-s01-curated-recipe-and-qualified-endpoint.md); [PF-27-S02](../../sprints/current/glm-5-3-flash-vast-preset/pf-27-s02-nvfp4-b200-evaluation.md) | S01 completed; S02 in progress |
 
 ## Acceptance flows
 
 | Flow | Starting state | User action | Expected visible result | Pass criterion |
 | --- | --- | --- | --- | --- |
 | Primary success | Vast key exists; no GLM rental | Select the B300 GLM preset, enter limits/duration, choose offer, confirm | TP2 B300 rental progresses to READY and appears in `/model` | Authenticated completion succeeds and the 4–256 stream sweep records secret-free results |
+| NVFP4 evaluation | Compatible B200 offer exists; fresh limits approved | Select the experimental B200 NVFP4 preset and confirm the bounded offer | Authenticated NVFP4 endpoint reaches READY | Existing three coding tasks, website task, and mixed sweep preserve isolated secret-free results |
 | Failure/cancel | Preset selected before billable confirmation | Cancel or reject an invalid/over-limit offer | No provider create request and no rental charge | TUI returns safely and state contains no new billable rental |
 | Recovery/resume | Provisioning or readiness is pending/degraded | Restart, open `/gpu status`, then terminate if needed | Durable stage/spend state resumes; termination remains pending until Vast confirms | No orphan endpoint token or false billing-stopped claim |
 
@@ -141,6 +147,7 @@ per-rental bearer credential.
 2. Add a reproducible mixed-context concurrency workload and update the `/gpu` catalog snapshot.
 3. Build the final candidate and drive selection/cancellation through the true tmux TUI harness.
 4. With user-approved spend limits and duration, rent on Vast, monitor READY, exercise the authenticated OpenAI-compatible API, sweep 4–256 streams, and record cleanup state.
+5. Pin the third-party NVFP4 checkpoint and dedicated image in an experimental two-B200 recipe, then repeat the existing GLM coding, website, and serving-load evaluations under a fresh bounded rental and record provider-confirmed cleanup.
 
 ## Automated evidence
 
@@ -190,7 +197,8 @@ Run fix and formatting tools before the final affected tests.
 | GPU topology | decision | implementation owner | recipe | retain four-H200 TP4 and add two-B300 TP2; 64 attention heads and 288 routed experts divide cleanly by both |
 | Context limit | decision | implementation owner | recipe | H200 remains 65,536; B300 starts at 131,072 with FP8 KV cache and is validated empirically |
 | Benchmark traffic | decision | implementation owner | live qualification | closed-loop concurrency sweep at 4–256 streams; 50% 1K/2K, 25% 8K/6K, 12.5% 32K/8K, and 12.5% 96K/20K input/output-token buckets, averaging 6K requested output tokens |
-| Spend and duration | financial authorization | product owner | live rental | approved $16/hour, $125 total, and 480 minutes; terminated at an estimated $28.3518 |
+| Spend and duration | financial authorization | product owner | live rental | original FP8 run approved $16/hour, $125 total, and 480 minutes; terminated at an estimated $28.3518; NVFP4 run awaits fresh exact caps |
+| NVFP4 evaluation scope | decision | product owner | PF-27-S02 | User requested the same GLM-5.3-Flash evals against the newly published NVFP4 checkpoint on 2026-08-27 |
 | Vast availability | external dependency | Vast.ai | live rental | verified 2×B300/NVLink resource `48809614` qualified and then provider-confirmed absent; unrelated instances remained untouched |
 | Candidate release | release dependency | product owner | plan close | TBD |
 

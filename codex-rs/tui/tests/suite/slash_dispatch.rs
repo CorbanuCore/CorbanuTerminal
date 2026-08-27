@@ -57,7 +57,7 @@ fn tmux_smoke_single_enter_dispatches_slash_command_and_exits_cleanly() -> Resul
 }
 
 #[test]
-fn tmux_gpu_menu_lists_glm_5_3_h200_and_b300_presets_then_cancels() -> Result<()> {
+fn tmux_gpu_menu_lists_glm_5_3_fp8_and_nvfp4_presets_then_cancels() -> Result<()> {
     if !TmuxServer::should_run("GLM-5.3 GPU menu")? {
         return Ok(());
     }
@@ -96,11 +96,13 @@ fn tmux_gpu_menu_lists_glm_5_3_h200_and_b300_presets_then_cancels() -> Result<()
     pane.wait_stable_contains("/gpu", Duration::from_secs(/*secs*/ 5))?;
     pane.send_key(TmuxKey::Enter)?;
     let menu =
-        pane.wait_stable_contains("2xb300-r4 · qualified", Duration::from_secs(/*secs*/ 15))?;
+        pane.wait_stable_contains("GLM-5.3-Flash-NVFP4", Duration::from_secs(/*secs*/ 15))?;
     assert!(menu.contains("Rent zai-org/GLM-5.3-Flash · 4× NVIDIA H200"));
     assert!(menu.contains("Rent zai-org/GLM-5.3-Flash · 2× NVIDIA B300"));
+    assert!(menu.contains("Rent LibertAIDAI/GLM-5.3-Flash-NVFP4 · 2× NVIDIA B200"));
     assert!(menu.contains("glm-5.3-flash-4xh200"));
     assert!(menu.contains("glm-5.3-flash-fp8-2xb300"));
+    assert!(menu.contains("glm-5.3-flash-nvfp4-2xb200-experimental"));
     assert!(!menu.contains("glm-5.3-flash-fp8-2xb300-experimental"));
     assert!(menu.contains("Rent Qwen/Qwen3.8-27B-FP8 · 2× NVIDIA H200"));
     assert!(menu.contains("qwen3.8-27b-fp8-2xh200-experimental"));
@@ -110,7 +112,7 @@ fn tmux_gpu_menu_lists_glm_5_3_h200_and_b300_presets_then_cancels() -> Result<()
     pane.wait_stable_until(
         "GPU menu dismissal",
         Duration::from_secs(/*secs*/ 5),
-        |capture| !capture.contains("Rent zai-org/GLM-5.3-Flash"),
+        |capture| !capture.contains("Rent LibertAIDAI/GLM-5.3-Flash-NVFP4"),
     )?;
     Ok(())
 }

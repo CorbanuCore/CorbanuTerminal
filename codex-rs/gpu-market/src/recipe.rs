@@ -83,6 +83,7 @@ impl Default for RecipeCatalog {
                 deepseek_flash_recipe(/*gpu_count*/ 2),
                 crate::glm_recipes::glm_5_3_flash_recipe(),
                 crate::glm_recipes::glm_5_3_flash_b300_recipe(),
+                crate::glm_recipes::glm_5_3_flash_nvfp4_b200_recipe(),
                 crate::qwen_recipes::qwen_3_8_27b_recipe(),
                 glm_5_2_recipe(),
                 crate::gguf_recipes::huihui_deepseek_v4_flash_recipe(),

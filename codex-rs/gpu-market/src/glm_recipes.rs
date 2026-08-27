@@ -90,6 +90,97 @@ pub(crate) fn glm_5_3_flash_recipe() -> GpuRecipe {
     }
 }
 
+pub(crate) fn glm_5_3_flash_nvfp4_b200_recipe() -> GpuRecipe {
+    GpuRecipe {
+        id: "glm-5.3-flash-nvfp4-2xb200-experimental".to_string(),
+        revision: "glm-5.3-flash-nvfp4-vllm-dedicated-20260827-2xb200-r1".to_string(),
+        model_id: "LibertAIDAI/GLM-5.3-Flash-NVFP4".to_string(),
+        served_model_id: "LibertAIDAI/GLM-5.3-Flash-NVFP4".to_string(),
+        wire_api: "chat".to_string(),
+        model_revision: "aa28e1f54130286c95fee10d0705c74ce8743734".to_string(),
+        image: "vllm/vllm-openai@sha256:2e771fa615452282cc331eb418b3ef21636fce355bea0491fca89e6d362ab703"
+            .to_string(),
+        runtime: "vllm".to_string(),
+        serving_runtime_version:
+            "glm53-flash-x86_64-cu130@sha256:2e771fa615452282cc331eb418b3ef21636fce355bea0491fca89e6d362ab703"
+                .to_string(),
+        license_id: "MIT".to_string(),
+        requires_huggingface_token: false,
+        minimum_driver_version: "580.65.06".to_string(),
+        gpu_architectures: vec!["sm_100".to_string()],
+        weight_format: "nvfp4-a16".to_string(),
+        hardware: HardwareRequirements {
+            gpu_model: "NVIDIA B200".to_string(),
+            gpu_count: 2,
+            minimum_vram_mib_per_gpu: 175_000,
+            minimum_host_ram_mib: 480 * 1024,
+            minimum_disk_gib: 400,
+            requires_high_bandwidth_interconnect: true,
+            allowed_cuda_versions: vec!["13.0".to_string()],
+        },
+        tensor_parallel_size: 2,
+        maximum_context_tokens: 131_072,
+        maximum_concurrent_requests: 64,
+        expected_download_bytes: 194_660_206_040,
+        model_weight_bytes: 194_660_206_040,
+        kv_cache_reserve_bytes: 80_000_000_000,
+        workspace_reserve_bytes: 48_000_000_000,
+        launch_command: vec![
+            "bash".to_string(),
+            "-lc".to_string(),
+            concat!(
+                "set -euo pipefail; ",
+                "pft_phase() { printf '%s\n' \"$1\" > /tmp/pfterminal-provision-phase.new; ",
+                "mv /tmp/pfterminal-provision-phase.new /tmp/pfterminal-provision-phase; }; ",
+                "pft_model_ready() { printf 'header = \"Authorization: Bearer %s\"\n' \"$PFT_ENDPOINT_TOKEN\" | ",
+                "curl -fsS --max-time 2 --config - http://127.0.0.1:8000/v1/models >/dev/null; }; ",
+                "pft_phase hardware_check; printf 'PFTERMINAL_RUNTIME_GATE=begin\n'; ",
+                "test \"$(nvidia-smi --query-gpu=name --format=csv,noheader | wc -l)\" -eq 2; ",
+                "nvidia-smi --query-gpu=name --format=csv,noheader | ",
+                "awk 'index($0, \"B200\") == 0 { exit 1 }'; ",
+                "nvidia-smi --query-gpu=compute_cap --format=csv,noheader | ",
+                "awk '$1 != \"10.0\" { exit 1 }'; ",
+                "printf 'PFTERMINAL_RUNTIME_GATE=gpu-identity-ok\n'; ",
+                "driver=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1); ",
+                "test \"$(printf '%s\n' 580.65.06 \"$driver\" | sort -V | head -1)\" = 580.65.06; ",
+                "printf 'PFTERMINAL_RUNTIME_GATE=driver-ok\n'; ",
+                "nvidia-smi topo -m | awk '",
+                "$1 ~ /^GPU[0-9]+$/ { row++; for (i=2; i<=3; i++) ",
+                "if ((i == row + 1 && $i != \"X\") || (i != row + 1 && $i !~ /^NV[0-9]+$/)) ",
+                "exit 1 } END { exit row != 2 }'; ",
+                "printf 'PFTERMINAL_RUNTIME_GATE=nvlink-ok\n'; ",
+                "pft_phase runtime_setup; vllm --version; ",
+                "printf 'PFTERMINAL_RUNTIME_GATE=runtime-ok\n'; pft_phase model_download; ",
+                "VLLM_ENGINE_READY_TIMEOUT_S=3600 vllm serve LibertAIDAI/GLM-5.3-Flash-NVFP4 ",
+                "--revision aa28e1f54130286c95fee10d0705c74ce8743734 ",
+                "--served-model-name LibertAIDAI/GLM-5.3-Flash-NVFP4 ",
+                "--host 0.0.0.0 --port 8000 --tensor-parallel-size 2 ",
+                "--max-model-len 131072 --max-num-seqs 64 --max-num-batched-tokens 32768 ",
+                "--gpu-memory-utilization 0.95 --kv-cache-dtype fp8 ",
+                "--language-model-only --tool-call-parser glm47 --reasoning-parser glm45 ",
+                "--enable-auto-tool-choice ",
+                "--api-key \"$PFT_ENDPOINT_TOKEN\" & server_pid=$!; ",
+                "trap 'kill \"$server_pid\" 2>/dev/null || true' TERM INT EXIT; ",
+                "for i in $(seq 1 3600); do kill -0 \"$server_pid\"; ",
+                "pft_model_ready && break; sleep 2; done; kill -0 \"$server_pid\"; ",
+                "pft_model_ready; printf 'PFTERMINAL_RUNTIME_GATE=server-ok\n'; ",
+                "pft_phase endpoint_probing; set +e; wait \"$server_pid\"; status=$?; ",
+                "trap - TERM INT EXIT; exit \"$status\""
+            )
+            .to_string(),
+        ],
+        environment_allowlist: vec!["PFT_ENDPOINT_TOKEN".to_string()],
+        startup_deadline_ms: 120 * 60 * 1_000,
+        download_deadline_ms: 90 * 60 * 1_000,
+        probe_deadline_ms: 20 * 60 * 1_000,
+        inference_port: 8000,
+        chat_encoding: "glm-5.3-tokenizer-template".to_string(),
+        probe_contract: "pfterminal-openai-v1".to_string(),
+        stability: RecipeStability::Experimental,
+        manifest_verified: true,
+    }
+}
+
 pub(crate) fn glm_5_3_flash_b300_recipe() -> GpuRecipe {
     GpuRecipe {
         id: "glm-5.3-flash-fp8-2xb300".to_string(),

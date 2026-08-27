@@ -1,5 +1,6 @@
 ---
 source: tui/src/chatwidget/gpu_menu_tests.rs
+assertion_line: 152
 expression: rendered
 ---
   GPU rentals
@@ -31,16 +32,14 @@ expression: rendered
                                                                     20260826-2xb300-r4 · qualified
                                                                     · 2× NVIDIA B300 · Select to
                                                                     search compatible capacity
-  7. Rent zai-org/GLM-5.2-FP8 · 8× NVIDIA H200                      glm-5.2-fp8-8xh200 rev glm-
-                                                                    5.2-fp8-sglang-v0.5.15-post1-
-                                                                    r1 · qualified · 8× NVIDIA
-                                                                    H200 · Select to search
-                                                                    compatible capacity
-  8. Rent huihui-ai/Huihui-DeepSeek-V4-Flash-abliterated-ds4-GGUF … huihui-deepseek-v4-flash-q4k-
-                                                                    2xh200-experimental rev
-                                                                    huihui-deepseek-v4-flash-q4k-
-                                                                    ds4-tp2-r4 · experimental · 2×
-                                                                    NVIDIA H200 · Select to search
-                                                                    compatible capacity
+  7. Rent LibertAIDAI/GLM-5.3-Flash-NVFP4 · 2× NVIDIA B200          glm-5.3-flash-nvfp4-2xb200-
+                                                                    experimental rev glm-5.3-
+                                                                    flash-nvfp4-vllm-dedicated-
+                                                                    20260827-2xb200-r1 ·
+                                                                    experimental · 2× NVIDIA B200
+                                                                    · Select to search compatible
+                                                                    capacity
+  8. Rent Qwen/Qwen3.8-27B-FP8 · 2× NVIDIA H200                     qwen3.8-27b-fp8-2xh200-
+                                                                    experimental rev qwen38-27b-
 
   Press enter to confirm or esc to go back
