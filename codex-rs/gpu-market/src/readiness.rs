@@ -245,7 +245,9 @@ impl GpuEndpointProber {
                         }
                     }
                 }],
-                "tool_choice": {"type": "function", "function": {"name": "readiness_probe"}}
+                "tool_choice": {"type": "function", "function": {"name": "readiness_probe"}},
+                "temperature": 0,
+                "max_tokens": 4_096
             }))
             .send()
             .await?;
@@ -340,10 +342,12 @@ fn chat_body(model_id: &str, prompt: &str, stream: bool) -> Value {
         "model": model_id,
         "messages": [{"role": "user", "content": prompt}],
         "stream": stream,
-        // Reasoning models can legitimately spend a short budget before
-        // emitting final content. The readiness contract must prove a usable
-        // answer, not mistake a truncated reasoning prefix for incompatibility.
-        "max_tokens": 256
+        // Reasoning models can legitimately spend a substantial budget before
+        // emitting final content. Keep the qualification request deterministic
+        // and large enough to prove a usable answer rather than mistaking a
+        // truncated reasoning prefix for incompatibility.
+        "temperature": 0,
+        "max_tokens": if stream { 256 } else { 4_096 }
     })
 }
 

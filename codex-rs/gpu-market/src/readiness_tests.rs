@@ -229,5 +229,14 @@ fn readiness_chat_budget_allows_reasoning_models_to_reach_final_content() {
         /*stream*/ false,
     );
 
-    assert_eq!(body["max_tokens"], 256);
+    assert_eq!(body["temperature"], 0);
+    assert_eq!(body["max_tokens"], 4_096);
+
+    let streaming = chat_body(
+        "pinned/model",
+        "Stream two short words.",
+        /*stream*/ true,
+    );
+    assert_eq!(streaming["temperature"], 0);
+    assert_eq!(streaming["max_tokens"], 256);
 }
