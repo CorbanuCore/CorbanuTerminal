@@ -1,0 +1,103 @@
+{
+  "model": "Qwen/Qwen3.8-27B-FP8",
+  "model_revision": "017b9c7af6b5689d5dd426a76e0bc077eb5ca20a",
+  "concurrency": 4,
+  "requests": [
+    {
+      "request_id": "c004-r0000",
+      "bucket": "medium",
+      "target_input_tokens": 8192,
+      "target_output_tokens": 6000,
+      "input_tokens": 8193,
+      "output_tokens": 6000,
+      "ttft_ms": 816.0732463002205,
+      "tpot_ms": 10.064773753367378,
+      "e2el_ms": 61194.65099275112,
+      "error": null
+    },
+    {
+      "request_id": "c004-r0001",
+      "bucket": "large",
+      "target_input_tokens": 32768,
+      "target_output_tokens": 8000,
+      "input_tokens": 32769,
+      "output_tokens": 8000,
+      "ttft_ms": 2438.8977251946926,
+      "tpot_ms": 9.706357243672388,
+      "e2el_ms": 80080.04931733012,
+      "error": null
+    },
+    {
+      "request_id": "c004-r0002",
+      "bucket": "short",
+      "target_input_tokens": 1024,
+      "target_output_tokens": 2000,
+      "input_tokens": 1025,
+      "output_tokens": 2000,
+      "ttft_ms": 419.3735085427761,
+      "tpot_ms": 9.089643427316638,
+      "e2el_ms": 18589.570719748735,
+      "error": null
+    },
+    {
+      "request_id": "c004-r0003",
+      "bucket": "medium",
+      "target_input_tokens": 8192,
+      "target_output_tokens": 6000,
+      "input_tokens": 8193,
+      "output_tokens": 6000,
+      "ttft_ms": 2326.6790956258774,
+      "tpot_ms": 9.812569778811875,
+      "e2el_ms": 61192.28519871831,
+      "error": null
+    },
+    {
+      "request_id": "c004-r0004",
+      "bucket": "long",
+      "target_input_tokens": 96000,
+      "target_output_tokens": 20000,
+      "input_tokens": 96001,
+      "output_tokens": 20000,
+      "ttft_ms": 6201.032735407352,
+      "tpot_ms": 9.179971482573261,
+      "e2el_ms": 189791.28241539001,
+      "error": null
+    },
+    {
+      "request_id": "c004-r0005",
+      "bucket": "short",
+      "target_input_tokens": 1024,
+      "target_output_tokens": 2000,
+      "input_tokens": 1025,
+      "output_tokens": 2000,
+      "ttft_ms": 391.85676723718643,
+      "tpot_ms": 9.41493195584561,
+      "e2el_ms": 19212.30574697256,
+      "error": null
+    },
+    {
+      "request_id": "c004-r0006",
+      "bucket": "short",
+      "target_input_tokens": 1024,
+      "target_output_tokens": 2000,
+      "input_tokens": 1025,
+      "output_tokens": 2000,
+      "ttft_ms": 490.7802604138851,
+      "tpot_ms": 9.404237582914348,
+      "e2el_ms": 19289.851188659668,
+      "error": null
+    },
+    {
+      "request_id": "c004-r0007",
+      "bucket": "short",
+      "target_input_tokens": 1024,
+      "target_output_tokens": 2000,
+      "input_tokens": 1025,
+      "output_tokens": 2000,
+      "ttft_ms": 404.17657420039177,
+      "tpot_ms": 9.199114425993967,
+      "e2el_ms": 18793.206311762333,
+      "error": null
+    }
+  ]
+}

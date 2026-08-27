@@ -398,3 +398,47 @@ fn serializes_flex_service_tier_when_set() {
         Some("flex")
     );
 }
+
+#[test]
+fn chat_system_messages_are_coalesced_into_one_leading_message() {
+    let message = |role: &str, text: &str| codex_api::ChatMessage {
+        role: role.to_string(),
+        content: Some(codex_api::ChatMessageContent::text(text.to_string())),
+        reasoning_content: None,
+        tool_call_id: None,
+        tool_calls: Vec::new(),
+    };
+    let mut messages = vec![
+        message("system", "base"),
+        message("user", "first"),
+        message("system", "environment"),
+        message("assistant", "reply"),
+        message("system", "permissions"),
+        message("user", "second"),
+    ];
+
+    coalesce_chat_system_messages(&mut messages);
+
+    let roles: Vec<&str> = messages
+        .iter()
+        .map(|message| message.role.as_str())
+        .collect();
+    assert_eq!(roles, ["system", "user", "assistant", "user"]);
+    assert_eq!(
+        match &messages[0].content {
+            Some(codex_api::ChatMessageContent::Text(text)) => text.as_str(),
+            _ => panic!("expected text system message"),
+        },
+        "base\n\nenvironment\n\npermissions"
+    );
+    let user_text: Vec<&str> = messages
+        .iter()
+        .skip(1)
+        .filter(|message| message.role == "user")
+        .map(|message| match &message.content {
+            Some(codex_api::ChatMessageContent::Text(text)) => text.as_str(),
+            _ => panic!("expected text user message"),
+        })
+        .collect();
+    assert_eq!(user_text, ["first", "second"]);
+}

@@ -141,6 +141,7 @@ use crate::attestation::X_OAI_ATTESTATION_HEADER;
 use crate::client_common::Prompt;
 use crate::client_common::ResponseEvent;
 use crate::client_common::ResponseStream;
+use crate::client_common::coalesce_chat_system_messages;
 use crate::client_common::retain_latest_contextual_developer_fragments;
 use crate::feedback_tags;
 use crate::responses_metadata::CodexResponsesMetadata;
@@ -1580,6 +1581,9 @@ impl ModelClient {
             &mut skipped_tool_call_ids,
             model_info.chat_completions.reasoning_protocol,
         );
+        if !self.state.provider.info().is_openai() {
+            coalesce_chat_system_messages(&mut messages);
+        }
 
         // GLM chat streams proper tool calls when OpenAI's `strict` function
         // flag is omitted. Keep the JSON schema, but drop that

@@ -1,0 +1,42 @@
+{
+  "run_dir": "../runs/qwen38-27b-gpu-20260827",
+  "waves": 1,
+  "caps": {
+    "timeout_seconds": 1800,
+    "max_total_runs": 9
+  },
+  "agents": [
+    {
+      "name": "corbanu",
+      "kind": "corbanu",
+      "binary": "corbanu-debug",
+      "provider": "gpu-gpu-7491fa47-b2cd-403f-b928-9433e9e8d7e0",
+      "model": "Qwen/Qwen3.8-27B-FP8",
+      "lane": "qwen38-gpu",
+      "required_env": []
+    }
+  ],
+  "tasks": [
+    {
+      "name": "eventforge",
+      "baseline": "../tasks/eventforge/baseline",
+      "prompt": "../tasks/eventforge/task_prompt.md",
+      "verifier": "../tasks/eventforge/verifier/verify.py",
+      "core_rel": "src/eventforge/core.py"
+    },
+    {
+      "name": "logtriage",
+      "baseline": "../tasks/logtriage/baseline",
+      "prompt": "../tasks/logtriage/task_prompt.md",
+      "verifier": "../tasks/logtriage/verifier/verify.py",
+      "core_rel": "src/logtriage/core.py"
+    },
+    {
+      "name": "queuecraft",
+      "baseline": "../tasks/queuecraft/bugged",
+      "prompt": "../tasks/queuecraft/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/queuecraft/verifier/verify.py",
+      "core_rel": null
+    }
+  ]
+}

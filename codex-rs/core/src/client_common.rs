@@ -98,6 +98,61 @@ pub(crate) fn retain_latest_contextual_developer_fragments(items: &mut Vec<Respo
     });
 }
 
+/// Coalesce system messages into one leading Chat Completions message.
+///
+/// OpenAI's Chat Completions contract accepts system/developer context at any
+/// position and in multiple messages, and some OpenAI-compatible gateways do
+/// as well. Other compatible chat templates (for example Qwen3.8) accept only
+/// a single system message at the beginning. Preserve audit history in
+/// Responses form, but serialize the already-normalized wire messages in the
+/// stricter shape.
+pub(crate) fn coalesce_chat_system_messages(messages: &mut Vec<codex_api::ChatMessage>) {
+    let original = std::mem::take(messages);
+    let mut system_texts = Vec::new();
+    let mut rest = Vec::with_capacity(original.len());
+    for message in original {
+        if message.role == "system" {
+            match message.content {
+                Some(codex_api::ChatMessageContent::Text(text)) => {
+                    if !text.trim().is_empty() {
+                        system_texts.push(text);
+                    }
+                }
+                Some(other) => {
+                    // Preserve non-text system payloads by placing a non-empty
+                    // system message at the boundary rather than dropping data.
+                    rest.push(codex_api::ChatMessage {
+                        role: "system".to_string(),
+                        content: Some(other),
+                        reasoning_content: message.reasoning_content,
+                        tool_call_id: message.tool_call_id,
+                        tool_calls: message.tool_calls,
+                    });
+                }
+                None => {}
+            }
+        } else {
+            rest.push(message);
+        }
+    }
+
+    if system_texts.is_empty() {
+        *messages = rest;
+        return;
+    }
+    let merged = codex_api::ChatMessage {
+        role: "system".to_string(),
+        content: Some(codex_api::ChatMessageContent::text(
+            system_texts.join("\n\n"),
+        )),
+        reasoning_content: None,
+        tool_call_id: None,
+        tool_calls: Vec::new(),
+    };
+    messages.push(merged);
+    messages.extend(rest);
+}
+
 fn strip_image_details(items: &mut [ResponseItem]) {
     for item in items {
         match item {
