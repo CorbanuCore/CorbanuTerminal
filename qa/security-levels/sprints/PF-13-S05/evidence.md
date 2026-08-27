@@ -2,17 +2,24 @@
 
 - Date: 2026-08-26 UTC
 - Status: in progress
-- Product requirement: `docs/corbanu-product-spec.md`, **Required trust boundaries** — “Permit agents to reference credentials only by label; resolve them solely inside the trusted execution boundary.”
+- Product requirement: `docs/corbanu-product-spec.md`, **Required trust boundaries** — “Credentials are referenced by label and resolved only inside a trusted execution boundary.”
 - Harness implementation commit: `27b738ab8d6289b2dc27fc45549fddc2622f6bc7`
 - Linux report commit: `24ba535698e7b25cb8cf1c7d7e06689603731dcb`
-- Tested source commit: `27b738ab8d6289b2dc27fc45549fddc2622f6bc7`
-- Candidate SHA-256: `24968f6e12106c37268f3193aa2495591b5000f2e819bdc47dcf71e361eb5f7f`
-- Report SHA-256: `9dc2886639055d19fb0a015b805c3ca2d4d60e88ab162f35568e6845c2f83f56`
+- Cross-platform workflow run: `32933578147` at `55025dd42a869221b023fd783d52038b4b7c092f`
+- Local macOS tested source commit: `55025dd42a869221b023fd783d52038b4b7c092f`
+- Local macOS candidate SHA-256: `b4db4cf7b3f1f70465e25028e51f0ac7553427ad5be7dbc3b0a7e47dc68ed8f1`
+- Local macOS report SHA-256: `6105fef2834e179ea955f9758f896005fb368a3228f87d3e3f840d75ef999ed5`
+- Local macOS Core JUnit SHA-256 (gzip): `c2fdeb23c5e2c86dcc8cd636e25377c5ab20ce45ad83d96e25cb30b09a1476dd`
 - TUI applicability: none; this sprint changes no interactive surface.
 
 ## Current result
 
-The Linux qualification passed from a clean source tree. The harness generated a
+The credential canary passed on Linux, macOS, and Windows, including a separate
+local macOS reproduction from the clean branch tip. The complete macOS Core
+suite remains failed with 135 failures. Windows follow-up testing on another
+machine and independent security review remain pending.
+
+The harness generated a
 fresh credential canary inside the Rust test process, stored it through the
 encrypted Vault path, consumed a complete Core credential capability, and
 resolved it only inside the trusted proxy injection callback. The exact
@@ -25,8 +32,11 @@ environment, audit metadata, errors, receipt logs, contained panic output, and
 Vault files. The harness additionally scans every subprocess capture and the
 serialized report for credential-shaped material.
 
-The machine-readable report is
-`qa/security-levels/sprints/PF-13-S05/credential-canary-report.json`. It binds
+The Linux machine-readable report is
+`qa/security-levels/sprints/PF-13-S05/credential-canary-report.json`; the local
+macOS report is
+`qa/security-levels/sprints/PF-13-S05/credential-canary-report-macos.json`.
+Each report binds
 the candidate identity, clean source commit, host identity, exact commands,
 named expected tests, executed counts, source-file digests, surface coverage,
 and canary digest.
@@ -64,6 +74,22 @@ PASS — 41 tests executed across six probe groups:
        Core revocation linearization 1, CLI raw-export 3.
 ```
 
+### Local macOS reproduction
+
+```text
+python3 scripts/security-credential-canary \
+  --candidate codex-rs/target/debug/corbanu \
+  --output /tmp/corbanu-pf13-report.1MMKeo
+PASS — Darwin arm64, Python 3.12.5, Darwin 24.6.0.
+PASS — source commit 55025dd42a869221b023fd783d52038b4b7c092f; source_dirty_paths was empty.
+PASS — canary SHA-256 b0498cfb332b8f658a546451e88eac1153f2742f6e8d5330198872cfaa4f8041.
+PASS — outgoing_request_count=1 and raw_secret_observations=1.
+PASS — 41 tests executed across all six probe groups; every command returned 0.
+
+python3 -m unittest scripts.test_security_credential_canary
+PASS — 6 tests passed.
+```
+
 ## Formatting and regression verification
 
 ```text
@@ -96,22 +122,78 @@ PASS — no whitespace errors.
 
 No Cargo manifests, Cargo/Bazel locks, or crate dependency edges changed.
 
+### Complete Core suite on macOS
+
+The explicitly approved complete Core suite had one blocked build attempt and
+two full executions from source commit
+`55025dd42a869221b023fd783d52038b4b7c092f`. The initial attempt used the
+repository command without linker overrides:
+
+```text
+cd codex-rs && just test -p codex-core
+BLOCKED BEFORE EXECUTION — Apple ld 1053.12 could not link the monolithic
+core/tests/all.rs binary: B/BL out of range (maximum +/-128 MiB).
+```
+
+The Rust 1.95 toolchain's bundled `ld64.lld` successfully linked the same
+complete test selection. No test filter, feature exclusion, or source change
+was applied:
+
+```text
+llvm_link_dir="$(rustc --print sysroot)/lib/rustlib/aarch64-apple-darwin/bin/gcc-ld"
+PATH="$llvm_link_dir:$PATH" RUSTFLAGS="-C link-arg=-fuse-ld=lld" \
+  just test -p codex-core
+FAIL — 3,396 tests executed: 3,261 passed and 135 failed; 19 ignored tests were
+outside execution. Nextest retried each failure once and returned exit 100.
+```
+
+The result reproduced on a second full execution on macOS 15.6.1 arm64 with
+Rust 1.95.0 and nextest 0.9.143 (run ID
+`816bc19b-e502-4618-ab6c-b4fda8a30e6c`). The JUnit report records 12
+failures in the `codex-core` unit binary and 123 in the `codex-core::all`
+integration binary. Fifty-two failures cite unavailable companion binaries
+such as `target/debug/codex` or `target/debug/test_stdio_server`; 66 failed test
+names are code-mode cases, with at least one reproduced in isolation. These
+groups overlap and are classifications, not an attribution of root cause.
+
+All 13 credential-named Core tests passed in the complete run, including
+`credential_authority_unique_canary_is_confined_to_one_outgoing_request`.
+That scoped result supports the credential boundary, but the complete Core
+gate remains failed until the broader failures are triaged and a clean full
+rerun passes. The complete machine-readable report is
+`qa/security-levels/sprints/PF-13-S05/core-nextest-macos-junit.xml.gz`.
+
 ## Cross-platform enforcement
 
 `.github/workflows/credential-boundary-canary.yml` runs the identical
 fail-closed harness on Ubuntu 24.04, macOS 15, and Windows 2022. The harness
 accepts only Linux, Darwin, or Windows and has no flag that skips host checks.
-Each job uploads its complete report as a commit-bound artifact.
+Each job uploads its complete report as a commit-bound artifact. Workflow run
+`32933578147` passed all three jobs at exact source commit
+`55025dd42a869221b023fd783d52038b4b7c092f`:
 
-Linux evidence is present above. macOS and Windows workflow results have not yet
-been produced and therefore remain an acceptance gate.
+| Host | Result | Artifact | Artifact SHA-256 |
+| --- | --- | --- | --- |
+| Linux | Passed | `credential-boundary-canary-Linux-55025dd42a869221b023fd783d52038b4b7c092f` | `354fe60b7cba53bf96f35e574e633d25702069d349ef34c9578dd2c7a0801c04` |
+| macOS | Passed | `credential-boundary-canary-macOS-55025dd42a869221b023fd783d52038b4b7c092f` | `ed8a36d98ca7c049fc350e367dfc45579b964fe94d68c3650703df5c9b132272` |
+| Windows | Passed | `credential-boundary-canary-Windows-55025dd42a869221b023fd783d52038b4b7c092f` | `33a9df2f03c00e6a5700583aa7a72c6462a4a6714e9e7ddd6878d08043326a18` |
+
+The hosted macOS report itself has SHA-256
+`3883577572583f7ece9ec3de7feede5caad2879579e3b6c4a4f2823d3b30474b`.
+
+### Windows handoff
+
+Per the user's 2026-08-26 direction, another machine will handle the remaining
+Windows testing. That follow-up is not complete and is not replaced by the
+hosted Windows canary result above. The receiving tester should record the
+exact source commit, Windows host/toolchain, commands, results, and artifacts
+before closing this item. No Windows test was run on this macOS machine.
 
 ## Remaining acceptance gates
 
-- Attach passing macOS and Windows reports from the credential-boundary canary workflow.
 - Name an independent security reviewer and record the raw-secret reachability review and any corrections.
-- Obtain explicit approval for, then run, the repository-policy-gated complete
-  `just test -p codex-core` suite. The focused Core qualification tests passed,
-  but this is not represented as the complete Core suite.
+- Triage the 135 complete-Core failures recorded above, correct or establish
+  the required test prerequisites, and record a clean complete rerun.
+- Collect the remaining Windows test evidence from the separate machine.
 - After those gates pass, update the final candidate/evidence coordinates and
   archive PF-13-S05. The sprint remains `in_progress` until then.

@@ -18,6 +18,9 @@ implementation_worktrees:
   - path: "/home/pfrpc/repos/CorbanuTerminal-pf13-s02"
     branch: "feat/pf-13-s02-scoped-vault-resolver"
     base_commit: "1bdc515bff48a4d9048dae7d06c6214e884265bc"
+  - path: "/Users/travisgood/Documents/ChatGPT/corbanu-pf13-s02"
+    branch: "feat/pf-13-s02-scoped-vault-resolver"
+    base_commit: "1bdc515bff48a4d9048dae7d06c6214e884265bc"
 ---
 
 # P0 `/security` levels
@@ -72,7 +75,7 @@ the level.
 | Exact product-spec heading | **P0 `/security` levels** |
 | Plan requirement excerpt | “Permissive preserves the shipping behavior and does not silently change existing policies.” |
 | PF-13 trust-boundary heading | **Required trust boundaries** |
-| PF-13 requirement excerpt | “Permit agents to reference credentials only by label; resolve them solely inside the trusted execution boundary.” |
+| PF-13 requirement excerpt | “Credentials are referenced by label and resolved only inside a trusted execution boundary.” |
 | Product outcome advanced | One understandable control for agent security posture |
 | North-star criterion advanced | External content cannot silently gain sensitive access or change security policy |
 
@@ -163,6 +166,7 @@ update; it cannot silently change Permissive or an accepted security level.
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
 | Jim Ricketts | `/home/pfrpc/repos/CorbanuTerminal-pf13-s02` | `feat/pf-13-s02-scoped-vault-resolver` | `1bdc515bff48a4d9048dae7d06c6214e884265bc` | Security-level model, persistence, policy composition, TUI, tests, and evidence |
+| Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-pf13-s02` | `feat/pf-13-s02-scoped-vault-resolver` | `1bdc515bff48a4d9048dae7d06c6214e884265bc` | macOS qualification, complete Core regression, and evidence reconciliation |
 
 Implementation does not occur in the documentation checkout. Update this plan
 before changing the implementation worktree, base, owner, or scope.

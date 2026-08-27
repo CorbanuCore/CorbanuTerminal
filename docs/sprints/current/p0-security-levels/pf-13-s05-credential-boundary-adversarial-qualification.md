@@ -6,7 +6,7 @@ plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 13
 owner: "Jim Ricketts"
-worktree: "/home/pfrpc/repos/CorbanuTerminal-pf13-s02"
+worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-pf13-s02"
 branch: "feat/pf-13-s02-scoped-vault-resolver"
 base_commit: "1bdc515bff48a4d9048dae7d06c6214e884265bc"
 depends_on: "PF-13-S04"
@@ -46,11 +46,14 @@ updated: 2026-08-26
 - [x] Scanned exact outgoing request capture, model context, tool payloads, child environment, logs, audit, errors, receipts, crash output, and artifacts.
 - [x] Exercised malformed, forged, expired, revoked, replayed, wrong-actor/purpose/operation/method/host/scope, redirect, concurrent-use, and revocation-race cases.
 - [x] Proved bounded-store cleanup and absence of additional provider network round trips.
+- [x] Ran Linux locally and attached passing commit-bound CI evidence for macOS and Windows without weakening host checks.
+- [x] Ran the approved complete Core suite on macOS and preserved its failing JUnit report without claiming a pass.
 
 ## Remaining
 
-- [ ] Run Linux locally and attach CI evidence for macOS and Windows without weakening host checks.
 - [ ] Obtain independent security review of raw-secret reachability and record findings/corrections.
+- [ ] Triage the 135 complete-Core failures and record a clean full rerun; all 13 credential-named tests already pass.
+- [ ] Collect the remaining Windows test evidence from the separate machine; the hosted canary pass does not close this follow-up.
 
 ## Verification
 
