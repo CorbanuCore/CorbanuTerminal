@@ -76,6 +76,15 @@ pub(super) fn mcp_init_error_display(
     config: Option<&McpServerConfig>,
     error: &StartupOutcomeError,
 ) -> String {
+    // Authentication failures are actionable without the transport's full HTTP
+    // or OAuth payload. In particular, managed MCP providers may return a JSON
+    // token-expiry body that is useful classification signal but noise in the
+    // terminal.
+    if error.is_authentication_required() {
+        return format!(
+            "MCP client for `{server_name}` requires authentication. Sign in again to reconnect."
+        );
+    }
     if let Some(McpServerTransportConfig::StreamableHttp {
         url,
         bearer_token_env_var,

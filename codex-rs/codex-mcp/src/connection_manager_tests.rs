@@ -65,6 +65,7 @@ use rmcp::model::ServerCapabilities;
 use rmcp::model::ServerInfo;
 use rmcp::model::Tool;
 use rmcp::service::RequestContext;
+use rmcp::transport::auth::AuthError;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io;
@@ -2941,6 +2942,18 @@ fn mcp_init_error_display_prompts_for_login_when_auth_required() {
     );
 
     assert_eq!(expected, display);
+}
+
+#[test]
+fn mcp_init_error_display_omits_expired_token_transport_body() {
+    let err: StartupOutcomeError = anyhow::Error::new(AuthError::TokenExpired).into();
+
+    let display = mcp_init_error_display("codex_apps", /*config*/ None, &err);
+
+    assert_eq!(
+        display,
+        "MCP client for `codex_apps` requires authentication. Sign in again to reconnect."
+    );
 }
 
 #[test]
