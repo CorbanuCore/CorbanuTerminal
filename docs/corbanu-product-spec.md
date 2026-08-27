@@ -262,6 +262,25 @@ downloads remain quarantined until an explicitly approved promotion. Missing
 isolation denies the affected acquisition path rather than falling back to the
 host browser. Authenticated browser login is not part of this initial feature.
 
+Runtime setup decision: Travis Good, 2026-08-27. Support Windows, Linux, and
+macOS with containerized Scrapling. Reuse an installed Podman or Docker runtime
+without replacing it or changing its global configuration; prefer Podman when
+installing a runtime for the first time. Selecting Moderate (also called
+“medium” in discussion) or Aggressive checks isolation readiness. Pull the
+pinned image if absent, start the Corbanu service if stopped, and recover a
+stalled Corbanu-owned service with bounded restart attempts and a fresh health
+test. Never restart unrelated workloads or silently downgrade protection.
+
+If no runtime exists, offer a Corbanu-guided installation, then image setup and
+end-to-end verification. Explain downloads, disk/VM requirements, and host
+changes before consent. Prefer rootless operation; installation or VM/WSL
+prerequisites may still require elevation. Only the operating system's trusted
+authentication surface accepts the user's password. Corbanu, agents, chat,
+transcripts, logs, and configuration must not collect or retain that password.
+Cancellation, failed setup, or failed health checks leave acquisition denied
+and the missing protection visible. Permissive triggers none of this setup.
+Mac/Linux qualification precedes the Windows run; all three remain required.
+
 External content remains untrusted after extraction or sanitization. Source
 provenance and taint survive summaries, compaction, children, memory, and resume;
 deterministic policy rechecks protected actions after untrusted reads. A

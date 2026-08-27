@@ -48,6 +48,7 @@ updated: 2026-08-27
 ## Done
 
 - [x] Sprint record is linked only to PF-26.
+- [x] Travis Good named himself as human tester on 2026-08-27; no acceptance recorded. Independent security reviewer will be a user-selected model; exact provider/model remains pending and is separate from routine Autoreview.
 
 ## Remaining
 

@@ -7,10 +7,10 @@ plan_feature: "PF-29"
 execution_order: 17
 owner: "Jim Ricketts"
 lane: "content"
-write_scope: "codex-rs/core/src/security/ingress, codex-rs/core/src/mcp_tool_call.rs, codex-rs/core/src/session/inject.rs, codex-rs/core/src/tools/handlers/read_file.rs"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+write_scope: "codex-rs/core/src/security/ingress, codex-rs/core/src/mcp_tool_call.rs, codex-rs/core/src/session/inject.rs"
+worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-pf29-s01"
+branch: "codex/pf-29-untrusted-ingress"
+base_commit: "9fc9c9106c8afd38aff48d0e5ad4a5f2552b723c"
 depends_on: "PF-27-S01, PF-26-S01"
 created: 2026-08-27
 updated: 2026-08-27
@@ -32,7 +32,7 @@ updated: 2026-08-27
 
 ## Code boundaries
 
-- Existing (paths below `codex-rs/`): `core/src/mcp_tool_call.rs`; `core/src/session/inject.rs`; `core/src/tools/handlers/read_file.rs`.
+- Existing (paths below `codex-rs/`): `core/src/mcp_tool_call.rs`; `core/src/session/inject.rs`. The previously proposed `core/src/tools/handlers/read_file.rs` does not exist at this baseline; inventory concrete tool/file/context hooks and amend this scope before readiness.
 - Planned: `core/src/security/ingress/` source adapters and normalized-content tests.
 - Tests: sibling unit/integration regressions and the PF-26 fixture matrix.
 
@@ -46,6 +46,8 @@ updated: 2026-08-27
 ## Done
 
 - [x] Approved feature contract decomposed into this single-feature draft.
+- [x] Allocated independent branch/worktree from pushed PF-26/PF-27 base. Readiness still requires native adapter inventory; allocation does not authorize code.
+- [x] Verified OpenClaw `external-content.ts` at `6ce272c2a662f81b7779507335d91de4d61c589b` and its MIT license on 2026-08-27; no code copied or dependency added. Include attribution if adapting implementation/fixtures.
 
 ## Remaining
 

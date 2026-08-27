@@ -11,7 +11,7 @@ write_scope: "qa/release"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-26-S01, PF-23-S02, PF-23-S03, PF-25-S01, PF-25-S02, PF-28-S01, PF-29-S02, PF-30-S02"
+depends_on: "PF-26-S01, PF-23-S02, PF-23-S03, PF-25-S01, PF-25-S02, PF-28-S01, PF-29-S02, PF-30-S02, PF-30-S03"
 created: 2026-08-27
 updated: 2026-08-27
 ---
@@ -55,8 +55,10 @@ updated: 2026-08-27
 - [ ] Audit every upstream-touch row and ingress adapter against the final candidate; run native schema/child/history/transport-recovery contracts and separate non-secret task-integrity assertions.
 - [ ] Record verified upstream and fork SHAs, per-adapter retain/adapt/remove disposition, exact commands and evidence; unresolved compatibility cannot be marked qualified.
 - [ ] Collect Linux/macOS/Windows results for promised controls; record backend support versus fail-closed unavailable behavior explicitly.
+- [ ] Verify PF-30-S03 runtime reuse, missing-engine/image setup, stopped/stalled owned-service recovery, elevation/cancel, secret-free authentication handling, and no Permissive setup on the final candidate.
 - [ ] Complete the versioned standards/design-requirement crosswalk with no missing applicable case or unsupported security claim.
 - [ ] Obtain independent security review with no open critical finding; return fixes to owning sprints and requalify the resulting candidate.
+- [ ] Record Travis's selected independent reviewer provider/model and exact reviewed candidate; routine Autoreview is supporting evidence, not a substitute for that selection or Travis's human acceptance.
 
 ## Verification
 

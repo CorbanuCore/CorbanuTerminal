@@ -1,16 +1,16 @@
 ---
 sprint_id: "PF-30-S01"
 title: "Isolated public-web acquisition runtime"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-30"
 execution_order: 19
 owner: "Jim Ricketts"
 lane: "browser"
 write_scope: "codex-rs/core/src/security/browser_isolation, codex-rs/network-proxy/src/browser_policy.rs"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-pf30-s01"
+branch: "codex/pf-30-isolated-runtime"
+base_commit: "9fc9c9106c8afd38aff48d0e5ad4a5f2552b723c"
 depends_on: "PF-27-S01, PF-26-S01"
 created: 2026-08-27
 updated: 2026-08-27
@@ -20,12 +20,13 @@ updated: 2026-08-27
 
 ## Execution mandate
 
-- Deliver: Provide an ephemeral containment and egress backend for unauthenticated public-web acquisition.
+- Deliver: Provide an ephemeral containment and egress backend, including internal runtime-selection and bounded service-readiness policy, for unauthenticated public-web acquisition.
 - Excludes: Authenticated login, new search providers, content sanitization, host-browser automation, and public tool activation.
 
 Scheduling: approved parallel browser lane with PF-29 content and, when eligible,
 PF-28 confidentiality after PF-27/PF-26-S01. No dependency on PF-13-S05; allocate
-a distinct worktree/branch within the three-slot cap. This record remains draft.
+a distinct worktree/branch within the three-slot cap. Allocated and started on
+2026-08-27. PF-29 remains allocated but draft until its native inventory resolves.
 
 ## Plan linkage
 
@@ -42,21 +43,23 @@ a distinct worktree/branch within the three-slot cap. This record remains draft.
 
 ## Preconditions
 
-- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
-- [ ] Listed dependencies are completed and archived.
-- [ ] Read applicable root and nested AGENTS instructions; plan remains active.
-- [ ] Allocate exact owner/worktree/branch/base and literal write scope in the plan; check lane/slot conflicts.
-- [ ] Select and record the pinned backend/runtime and Linux/macOS/Windows support/fail-closed matrix before readiness.
-- [ ] Record actual backend integration/dependency files in write_scope before readiness; shared registrations land serially.
-- [ ] Confirm PF-27 owns shared Cargo/Bazel/module/test registrations; do not edit content adapters or shared manifests concurrently with another lane.
+- [x] Plan upstream baseline, adapter ownership, and exact contract tests resolved in the runtime record linked below.
+- [x] PF-27-S01 and PF-26-S01 completed and archived at the allocated base.
+- [x] Root/Rust/Core instructions read; active plan and two-slot use checked.
+- [x] Exact owner/worktree/branch/base and literal write scope allocated in the plan.
+- [x] Podman/Docker backend, Scrapling source/image pins and all-platform pending matrix recorded.
+- [x] Existing registered module boundaries used; no dependency/manifest changes authorized in this first stage.
+- [x] PF-27 registrations consumed; content adapters and shared manifests excluded.
 
 ## Done
 
 - [x] Approved feature contract decomposed into this single-feature draft.
+- [x] Recorded user runtime/installation decisions and non-mutating Mac/Linux preflight in `qa/security-levels/sprints/PF-30-S01/runtime-selection.md`.
 
 ## Remaining
 
 - [ ] Implement the selected container or hardened-sandbox adapter with a pinned runtime, disposable profile, read-only base, and resource limits.
+- [ ] Preserve existing engine selection; plan install/start/pull/restart/verify actions, bound recovery, and reject unowned service collisions. S03 owns actual installer consent/elevation UI.
 - [ ] Exclude host IPC, vault, credential inheritance, host profiles, and unrestricted mounts; limit outputs to bounded acquisition data.
 - [ ] Enforce destinations at URL, DNS/IP, redirect, and connection boundaries; deny private/link-local/metadata endpoints and rebinding bypasses.
 - [ ] Quarantine downloads and expose a bounded, explicitly approved file-promotion interface; no direct workspace write.

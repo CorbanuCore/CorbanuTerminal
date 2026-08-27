@@ -11,7 +11,7 @@ write_scope: "codex-rs/tui/src/app/config_persistence.rs, codex-rs/tui/src/botto
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-23-S02, PF-23-S03, PF-24-S01"
+depends_on: "PF-23-S02, PF-23-S03, PF-24-S01, PF-30-S03"
 created: 2026-08-24
 updated: 2026-08-27
 ---
@@ -55,6 +55,7 @@ updated: 2026-08-27
 - [ ] Preserve unavailable placeholders until each view lands; do not expose an unimplemented action or accept self-declared human provenance.
 
 - [ ] Show exact profile differences before confirmation and a protection-removal warning for downgrades.
+- [ ] Invoke PF-30-S03's setup/readiness UI for Moderate/Aggressive; display missing protection and deny acquisition after cancellation/failure without silently reverting to Permissive. Keep engine/installer policy in PF-30.
 - [ ] Send one typed human-origin transition event; expose no model/tool route to the event.
 - [ ] On Enter, call the Core transition API and show success or actionable failure; on Esc, restore the prior state.
 - [ ] Keep the view open/recoverable after persistence failure and reflect the effective level only after commit.

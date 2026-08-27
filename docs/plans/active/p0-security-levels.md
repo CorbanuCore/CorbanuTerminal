@@ -29,6 +29,12 @@ implementation_worktrees:
   - path: "/Users/travisgood/Documents/ChatGPT/corbanu-pf26-s01"
     branch: "codex/pf-26-security-harnesses"
     base_commit: "cb808c30c0058c101597ab2ada3da16238565c5e"
+  - path: "/Users/travisgood/Documents/ChatGPT/corbanu-pf30-s01"
+    branch: "codex/pf-30-isolated-runtime"
+    base_commit: "9fc9c9106c8afd38aff48d0e5ad4a5f2552b723c"
+  - path: "/Users/travisgood/Documents/ChatGPT/corbanu-pf29-s01"
+    branch: "codex/pf-29-untrusted-ingress"
+    base_commit: "9fc9c9106c8afd38aff48d0e5ad4a5f2552b723c"
 ---
 
 # P0 `/security` levels
@@ -52,6 +58,8 @@ Plan lifecycle: `docs/plans/index.md`
 | PF-27 activation | Travis Good, 2026-08-27: “Please start work on PF-27”; isolated contracts lane allocated below, leaving PF-13 qualification unchanged |
 | PF-27 completion | Travis Good, 2026-08-27: “Got it, please finish PF-27”; full shared-contract sprint completed with evidence below; no consumer activation or release authorization |
 | PF-26 activation | Travis Good, 2026-08-27: ensure PF-27 is pushed, then complete PF-26; activate dependency-ready S01 in the isolated harness lane. S04/S02/S03 remain gated by their recorded dependencies and human acceptance. |
+| Browser/content activation | Travis Good, 2026-08-27: approve pushing PF-26-S01 and starting PF-30/PF-29 in parallel; allocate the two worktrees below. PF-13 qualification retains the third slot. |
+| Runtime and acceptance decision | Travis Good, 2026-08-27: reuse Podman/Docker; prefer Podman for new installs; guide setup and recover only owned Scrapling services in stronger modes; require all three OSes, Mac/Linux first. Independent reviewer is a user-selected model (provider/model pending); human tester is Travis Good (acceptance pending). |
 
 The scope/integration amendments approved product-initiative planning plus routine
 process/validator work; the later PF-27 activation starts only its allocated sprint,
@@ -204,6 +212,8 @@ update; it cannot silently change Permissive or an accepted security level.
 | Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-pf13-s02` | `feat/pf-13-s02-scoped-vault-resolver` | `1bdc515bff48a4d9048dae7d06c6214e884265bc` | macOS qualification, complete Core regression, and evidence reconciliation |
 | Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-pf27-s01` | `codex/pf-27-shared-security-contracts` | `ea7d4bec720098f6e0994fcfcc59e272108f7e70` | PF-27 shared security contracts; Codex implementation, separate from PF-13 candidate |
 | Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-pf26-s01` | `codex/pf-26-security-harnesses` | `cb808c30c0058c101597ab2ada3da16238565c5e` | PF-26-S01 Python harnesses, fixtures and evidence only; no native runtime or PF-13 edits |
+| Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-pf30-s01` | `codex/pf-30-isolated-runtime` | `9fc9c9106c8afd38aff48d0e5ad4a5f2552b723c` | PF-30-S01 browser backend; shared planning updates serialized here |
+| Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-pf29-s01` | `codex/pf-29-untrusted-ingress` | `9fc9c9106c8afd38aff48d0e5ad4a5f2552b723c` | PF-29-S01 source ingress and bounded context; no browser or shared manifest edits |
 
 Implementation does not occur in the documentation checkout. Update this plan
 before changing the implementation worktree, base, owner, or scope.
@@ -256,11 +266,11 @@ only after dependencies, allocation, and concurrency checks pass.
 | `PF-23` | Moderate/Aggressive protected-surface enforcement | [S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), [S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md), [S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | draft |
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
-| `PF-26` | Early harnesses, final automated qualification, true-TUI/live-repository proof, and acceptance | [S01 completion evidence](../../../qa/security-levels/sprints/PF-26-S01/evidence.md), [S04](../../sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md), [S02](../../sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md), [S03](../../sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | S01 completed; S04/S02/S03 dependency-gated drafts; feature not complete |
-| `PF-27` | Shared security integration contracts | [S01 completion evidence](../../../qa/security-levels/sprints/PF-27-S01/evidence.md) | completed; native consumers remain separately gated |
+| `PF-26` | Early harnesses, final automated qualification, true-TUI/live-repository proof, and acceptance | [S01 completion evidence](https://github.com/CorbanuCore/CorbanuTerminal/blob/9fc9c9106c8afd38aff48d0e5ad4a5f2552b723c/qa/security-levels/sprints/PF-26-S01/evidence.md), [S04](../../sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md), [S02](../../sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md), [S03](../../sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | S01 completed; S04/S02/S03 dependency-gated drafts; feature not complete |
+| `PF-27` | Shared security integration contracts | [S01 completion evidence](https://github.com/CorbanuCore/CorbanuTerminal/blob/cb808c30c0058c101597ab2ada3da16238565c5e/qa/security-levels/sprints/PF-27-S01/evidence.md) | completed; native consumers remain separately gated |
 | `PF-28` | Cross-surface confidentiality | [S01](../../sprints/current/p0-security-levels/pf-28-s01-confidentiality-and-safe-environments.md) | draft |
-| `PF-29` | External Content Firewall | [S01](../../sprints/current/p0-security-levels/pf-29-s01-source-envelopes-and-ingress.md), [S02](../../sprints/current/p0-security-levels/pf-29-s02-derived-taint-and-action-context.md) | draft |
-| `PF-30` | Browser Isolation (separate feature) | [S01](../../sprints/current/p0-security-levels/pf-30-s01-isolated-acquisition-runtime.md), [S02](../../sprints/current/p0-security-levels/pf-30-s02-acquisition-integration-and-recovery.md) | draft |
+| `PF-29` | External Content Firewall | [S01](../../sprints/current/p0-security-levels/pf-29-s01-source-envelopes-and-ingress.md), [S02](../../sprints/current/p0-security-levels/pf-29-s02-derived-taint-and-action-context.md) | S01 allocated; readiness inventory pending; S02 draft |
+| `PF-30` | Browser Isolation (separate feature) | [S01](../../sprints/current/p0-security-levels/pf-30-s01-isolated-acquisition-runtime.md), [S02](../../sprints/current/p0-security-levels/pf-30-s02-acquisition-integration-and-recovery.md), [S03](../../sprints/current/p0-security-levels/pf-30-s03-runtime-setup-and-recovery-tui.md) | S01 in progress; S02/S03 dependency-gated drafts |
 
 ### Adopted feature contracts
 
@@ -288,6 +298,38 @@ only after dependencies, allocation, and concurrency checks pass.
   in stronger modes. Return PF-29 source envelopes, not a privileged browser
   handle. Missing backend visibly denies acquisition; never fall back. Backend
   selection and supported-platform matrix must be recorded before S01 is ready.
+
+### Browser runtime lifecycle decision
+
+Implements **Moderate/Aggressive isolation and content provenance**, “Reuse an
+installed Podman or Docker runtime without replacing it or changing its global
+configuration.” The installation, consent, and effective-health flow is PF-30,
+not a new security level or an extension of PF-14 arbitrary-model review.
+
+- Preserve a previously selected runtime. With one installed engine, use it;
+  with both, prefer a usable Podman unless the user already chose Docker. An
+  installed but unavailable engine needs recovery, not silent replacement.
+- Pin the Scrapling OCI digest and platform manifests, not `latest`; pin new
+  installers and verify their hashes/signatures. Do not upgrade existing engines
+  automatically. Verify capabilities and record the actual engine version.
+- Check before stronger-mode acquisition and after resume. Pull missing images,
+  start stopped owned services, and retry stalled owned services only within a
+  bounded recovery budget. Revalidate ownership, image/configuration identity,
+  containment, and a real acquisition probe before reporting healthy.
+- Installation, VM creation, elevation, and download costs require a trusted
+  user-facing consent flow. Do not pipe shell installers from the network or
+  accept passwords in application-owned input, captured PTYs, models, or logs.
+  OS authentication cancellation is ordinary failure, never permission to bypass.
+- No global Docker/Podman context changes, daemon restart, unrelated container
+  removal, host mounts, or registry credentials copied into the worker. A
+  running container is not sufficient proof of isolation or content-firewall health.
+- S01 implements internal lifecycle/containment; S02 joins the web facade and
+  ingress; S03 adds native setup/recovery UX after S02 and PF-24-S01. PF-24-S02
+  consumes that setup contract before completing level transitions. PF-26-S04
+  explicitly waits for S03. Public support for all three OSes remains pending.
+
+Pinned inputs, preflight findings, commands, platform matrix, and limits:
+repository file `qa/security-levels/sprints/PF-30-S01/runtime-selection.md`.
 
 ### Injection methods and limits
 
@@ -322,7 +364,8 @@ or financial actions”), plus the expanded heading cited above.
 | Secret-free sinks, reflected errors, safe child env | PF-28-S01 | pending; PF-13 evidence reused, not generalized | Canary absent from model requests, tool results, logs, exports, artifacts, environments, and unbound network |
 | Provenance and sanitization without trust elevation | PF-29-S01 | pending | Forged markers and supported-source coverage matrix |
 | Sticky taint and post-read action checks | PF-29-S02; PF-23-S01 | pending | Compaction, memory, child, resume, unknown-origin and action regressions |
-| Browser containment, egress, quarantine, recovery | PF-30-S01–S02 | pending; separate feature | Platform backend matrix, escape/bypass/redirect tests and true-PTY recovery |
+| Browser containment, egress, quarantine, recovery | PF-30-S01–S03 | pending; separate feature | Platform backend matrix, escape/bypass/redirect tests and true-PTY recovery |
+| Existing runtime reuse, installation consent, password-free application handling | PF-30-S01/S03; PF-24-S02 | pending | Mac/Linux/Windows installed/missing/stopped/stalled/cancel/elevation/verification flows; unchanged Permissive |
 | Inspector and trusted controls | PF-24; PF-25 | pending | Effective facts, separate health, exact grants, revoke/kill, actual-key proof |
 | Early attacks plus final integrated qualification | PF-26-S01; S04; S02; S03 | pending | Source/sink crosswalk, full tests, two live repos, independent and human acceptance |
 | Complete ingress inventory and non-secret task hijacking | PF-29-S01; PF-26-S01/S04; PF-23-S01 | pending | Every adapter supported or denied; separate task-integrity and authority assertions, benign controls, forced detector misses |
@@ -346,7 +389,7 @@ may run together under the sprint-process rules, never all rows automatically.
 | harness | PF-26-S01 | Completed and archived; frozen fixtures/checkers available, native product evidence pending; PF-13 unchanged |
 | confidentiality | PF-28-S01 | After PF-13-S05, PF-27, and early harness |
 | content | PF-29-S01 then S02 | After PF-27 and early harness; independent of browser backend construction |
-| browser | PF-30-S01 then S02 | S01 after PF-27/harness; S02 joins S01 and PF-29-S01 ingress contract |
+| browser | PF-30-S01 then S02 then S03 | S01 after PF-27/harness; S02 joins ingress; S03 joins PF-24-S01 inspector for setup UX |
 | enforcement | PF-23-S01 then S02 | S01 joins confidentiality, derived taint, browser integration, and shared contracts |
 | lifecycle | PF-23-S03 | After PF-23-S01; can overlap S02 using the completed epoch/dispatch interface |
 | inspector | PF-24-S01 then S02 | S01 after PF-27; S02 waits for both enforcement variants and lifecycle |
@@ -366,8 +409,11 @@ PF-30-S01 does not wait for PF-13-S05 or completion of PF-29. If PF-13 remains
 active, it consumes one of the three slots; browser plus content can use the
 other two, with confidentiality queued. PF-30-S02 waits for its ingress contract
 and serializes any shared facade/registration changes. Jim Ricketts allocates
-actual independent worktrees/branches and backend support before readiness;
-draft status does not mean a browser implementation has started.
+actual independent worktrees/branches and backend support before readiness.
+The 2026-08-27 allocation above starts PF-30-S01; PF-29-S01's native-adapter
+inventory must finish before readiness. Its allocated branch does not by itself
+authorize code. Shared planning changes originate in the browser worktree and
+are integrated into the content worktree before its activation.
 
 ### Upstream-touch record
 
@@ -386,11 +432,12 @@ claims that every named adapter already exists.
 | Feature / sprint | Upstream touch and native seam | Product boundary / reason | Contract proof and upgrade disposition |
 | --- | --- | --- | --- |
 | PF-13-S05 | Existing broker/provider request adapters; inventory from S01–S04 commits | `vault/`, `security-policy/`; trusted exact credential use | Preserve pinned canary evidence; full-Core triage/Windows follow-up/independent review remain pending; inventory before upstream acceptance |
-| PF-27-S01 | `protocol/src/lib.rs`, Core/TUI/network module registration and existing Core policy snapshot | Typed security integration contracts; one registration owner | Completed contract/epoch/native-inheritance tests on macOS; [retained/adapted seam decisions](../../../qa/security-levels/sprints/PF-27-S01/consumer-contracts.md); native consumer qualification remains pending |
+| PF-27-S01 | `protocol/src/lib.rs`, Core/TUI/network module registration and existing Core policy snapshot | Typed security integration contracts; one registration owner | Completed contract/epoch/native-inheritance tests on macOS; [retained/adapted seam decisions](https://github.com/CorbanuCore/CorbanuTerminal/blob/cb808c30c0058c101597ab2ada3da16238565c5e/qa/security-levels/sprints/PF-27-S01/consumer-contracts.md); native consumer qualification remains pending |
 | PF-28-S01 | Provider/output serialization and child environments; enumerate all literal hooks | Core confidentiality module consuming vault broker | Exact outgoing-byte, reflected-error, log/export/environment canaries; no duplicate scanner policy |
-| PF-29-S01 | `core/src/mcp_tool_call.rs`, `core/src/session/inject.rs`, `core/src/tools/handlers/read_file.rs` | `core/src/security/ingress/`; native ingestion adapters | Source coverage, forged markers, unsupported-path denial; update adapter inventory on upstream drift |
+| PF-29-S01 | `core/src/mcp_tool_call.rs`, `core/src/session/inject.rs`; remaining native adapter inventory pending | `core/src/security/ingress/`; native ingestion adapters | The old `core/src/tools/handlers/read_file.rs` is absent at this baseline; resolve concrete tool/file/context hooks before readiness, not a placeholder implementation |
 | PF-29-S02 | `core/src/compact.rs`, `core/src/compact_remote.rs`, `core/src/memories/`, `core/src/agent/control.rs`, `core/src/rollout/`, `core/src/session/rollout_reconstruction.rs` | `core/src/security/taint/`; lineage at native persistence/child seams | Compaction, delegation, memory, restart/resume retain taint and current authority |
 | PF-30-S01/S02 | `network-proxy/src/browser_policy.rs`, existing web facade and tool registration | `core/src/security/browser_isolation/`; containment behind existing web API | Real platform containment/egress probes and no unsafe fallback; shared manifest/registration edits land before parallel consumers |
+| PF-30-S03 | Native TUI security view/event adapters, exact registrations allocated before readiness | Browser-owned runtime setup coordinator; OS authentication remains outside application input | Setup/cancel/retry/resume/elevation and existing-runtime preservation; no provider/history schema changes; serialize shared TUI registration |
 | PF-23-S01/S02/S03 | `core/src/tools/router.rs` and recorded lifecycle hooks | Security protected-surface policy; one deterministic decision path | Native dispatch/post-read epochs/grants/revocation/reconnect; no transport-specific bypass |
 | PF-24/PF-25 | Native TUI command/event/overlay registration | Separate security views; no TUI-owned authorization | Wire/UI compatibility, cancel/downgrade/revoke, true-PTY evidence |
 | PF-26 | Existing adapters are read-only; fixture and evidence paths in sprint scopes | Independent test harness, not another policy engine | Exact final candidate, complete Core and affected suites, platform matrix, two live-repo TUI flows |
@@ -405,7 +452,7 @@ candidate. Passing plan/sprint structure checks is not upstream qualification.
 
 S01 is completed at code commit `bed9c5bfeece2414cbf7e3f54af09fcb646959ed`, with
 39 harness tests, six existing credential-canary tests and a clean Autoreview.
-[Evidence and handoff](../../../qa/security-levels/sprints/PF-26-S01/evidence.md)
+[Evidence and handoff](https://github.com/CorbanuCore/CorbanuTerminal/blob/9fc9c9106c8afd38aff48d0e5ad4a5f2552b723c/qa/security-levels/sprints/PF-26-S01/evidence.md)
 retain pending product results; the remaining three PF-26 sprints are not complete.
 
 The harness base is the pushed PF-27 completion commit
@@ -601,7 +648,7 @@ before qualification.
 
 | Tester | Date | Candidate version/commit | Flow | Result | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| Named by release owner | pending | pending | Understand levels without explanation; preserve Permissive; use Moderate and Aggressive; cancel and downgrade safely | pending | `qa/release/<version>/security/human-acceptance.md` |
+| Travis Good | pending | pending | Understand levels; preserve Permissive; set up/recover isolation; use Moderate/Aggressive; cancel and downgrade safely | pending; tester named, not signed off | `qa/release/<version>/security/human-acceptance.md` |
 
 ## Documentation
 
@@ -619,9 +666,9 @@ before qualification.
 | Existing security-policy commits | Jim Ricketts | Downstream integration | PF-15 through PF-22 completed and archived; preserve evidence |
 | Moderate and Aggressive control matrix | Product authority | PF-23 review | Defined in the product specification; any change requires a product decision |
 | Persistence and downgrade invalidation | Jim Ricketts | PF-20/PF-23 | Persistence code is present; transition and final evidence remain pending |
-| Independent security reviewer | Release owner | PF-13-S05 and final qualification | Must be named before either review completes |
-| Human tester | Release owner | Final qualification | Must be named before acceptance |
-| Browser backend/platform matrix | Jim Ricketts | PF-30-S01 readiness | Select pinned containment backend and record supported Linux/macOS/Windows behavior; unsupported acquisition fails closed |
+| Independent security reviewer | Travis Good / release owner | PF-13-S05 and final qualification | User-selected model; exact provider/model pending. Separate from routine Autoreview; no silent substitution or PF-14 activation |
+| Human tester | Travis Good | Final qualification | Named 2026-08-27; final-candidate acceptance pending |
+| Browser backend/platform matrix | Jim Ricketts | PF-30-S01/S03 | Podman preferred, existing Docker preserved; pinned Scrapling inputs and all-platform pending matrix in S01 record; Mac/Linux before Windows |
 | Lane allocation and shared files | Jim Ricketts | Each sprint readiness | Draft coordinates are UNALLOCATED; serialize shared-file changes and check the three-slot limit |
 | Scope reconciliation | Travis Good | This amendment | Approved 2026-08-27; stronger guarantees only in Moderate/Aggressive; browser isolation is PF-30 |
 
