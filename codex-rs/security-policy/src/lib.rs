@@ -8,6 +8,7 @@
 //! An `Allow` from this layer never overrides an existing deny. Callers must
 //! combine decisions with [`compose_existing_decision`].
 
+mod action_context;
 mod authorization;
 mod bounded;
 mod credential;
@@ -18,6 +19,11 @@ mod level;
 mod mandate;
 mod provenance;
 mod revocation;
+
+pub use action_context::ActionContext;
+pub use action_context::ActionContextError;
+pub use action_context::AuthorityEpoch;
+pub use action_context::EpochBoundGrant;
 
 pub use authorization::ActorChain;
 pub use authorization::AuthorizationContext;
@@ -82,6 +88,10 @@ pub use revocation::RevocationTarget;
 #[cfg(test)]
 #[path = "provenance_tests.rs"]
 mod provenance_tests;
+
+#[cfg(test)]
+#[path = "action_context_tests.rs"]
+mod action_context_tests;
 
 #[cfg(test)]
 #[path = "credential_tests.rs"]
