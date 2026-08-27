@@ -2,19 +2,20 @@
 
 These records execute the [active P0 plan](../../../plans/active/p0-security-levels.md).
 PF-15 through PF-22 and PF-13-S01 through S04 remain completed and archived.
-PF-13-S05 and PF-27-S01 are `in_progress` in separate qualification/contracts lanes.
+PF-13-S05 remains `in_progress`. PF-27-S01 is completed and archived;
+[shared-contract completion evidence](../../../../qa/security-levels/sprints/PF-27-S01/evidence.md)
+is available to eligible consumers.
 
 The plan permits up to three independent active lanes under the
 [sprint concurrency contract](../../index.md#bounded-concurrency).
 Drafts need completed dependencies, allocated worktrees/branches/base commits,
 and disjoint write scopes before activation. Display priority is not a
-dependency: PF-27 can overlap PF-13 qualification; read-only inspector and early
+dependency: PF-27 completed independently of PF-13 qualification; read-only inspector and early
 harness work need not wait for all enforcement code.
 
 | Priority | Sprint | Lane | Status | Hard dependencies |
 | ---: | --- | --- | --- | --- |
 | 13 | [PF-13-S05](pf-13-s05-credential-boundary-adversarial-qualification.md) | qualification | in_progress | PF-13-S04 |
-| 14 | [PF-27-S01](pf-27-s01-shared-security-contracts.md) | contracts | in_progress | PF-17-S01, PF-19-S01, PF-20-S01, PF-22-S01 |
 | 15 | [PF-26-S01](pf-26-s01-security-harnesses-and-standards-crosswalk.md) | harness | draft | PF-21-S01, PF-27-S01 |
 | 16 | [PF-28-S01](pf-28-s01-confidentiality-and-safe-environments.md) | confidentiality | draft | PF-13-S05, PF-27-S01, PF-26-S01 |
 | 17 | [PF-29-S01](pf-29-s01-source-envelopes-and-ingress.md) | content | draft | PF-27-S01, PF-26-S01 |
@@ -34,8 +35,9 @@ harness work need not wait for all enforcement code.
 
 ## Integration checkpoints
 
-1. PF-27 resolves the upstream-touch baseline and lands shared schemas/module,
-   manifest, and test-registration seams; PF-26-S01 builds early fixtures.
+1. PF-27 completed the upstream baseline and shared schemas/module, manifest,
+   and test-registration seams. PF-26-S01 is the next harness workstream;
+   PF-24-S01 is also dependency-eligible, but neither is activated by this record.
 2. PF-28 confidentiality, PF-29 content, and PF-30 browser backend are separate
    lanes; PF-30-S02 joins isolated acquisition with PF-29-S01 ingress.
 3. PF-23-S01 joins the protected boundaries. PF-23-S02 enforcement and S03

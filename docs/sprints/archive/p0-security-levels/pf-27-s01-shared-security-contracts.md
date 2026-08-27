@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-27-S01"
 title: "Shared security integration contracts"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 14
@@ -49,27 +49,28 @@ updated: 2026-08-27
 - [x] Recorded upstream ancestry, consumer footprints, dependency direction, and contract-test commands in the plan.
 - [x] Inventoried existing policy/grant/revocation/persistence types; reuse recorded in `qa/security-levels/sprints/PF-27-S01/evidence.md`.
 - [x] Defined versioned requested/effective inspector facts and independent control health; first slice passes all 29 policy tests, including 8 new contract regressions.
+- [x] Landed serial shared registration and protocol → existing security-policy Cargo edge; Bazel lock regeneration passed without a lockfile change. No backend dependency selected.
+- [x] Defined host-issued identity, source kinds, sticky bounded taint, and unknown-origin denial.
+- [x] Defined immutable action context and issuance-epoch grant checks; Core runtime incarnation rejects stale authority after restart/resume.
+- [x] Registered Core/TUI seams and transition/grant/revoke intents; only the existing trusted controller mints non-wire confirmation capabilities. Receipt/consumption does not mutate policy.
+- [x] Published consumer contracts and exact reserved ownership for PF-23/24/25/28/29/30; unavailable controls never imply protection.
+- [x] Added schema/version, spoofing, non-widening, post-read, expiry, revocation, and native inheritance regressions; Permissive remains unchanged.
+- [x] Published seven conformance fixture definitions and verified every referenced contract test passed; native consumer qualification remains pending under its own sprints.
 
 ## Remaining
 
-- [ ] Land shared module/test registration and any selected backend Cargo/Bazel manifest/lock changes serially; allocate exact paths before edits so browser/content/confidentiality consumers are disjoint.
-- [ ] Define host-issued source identity, source kinds, sticky derived-taint context, and unknown-origin deny semantics.
-- [ ] Define immutable action context and authority-epoch interfaces for grant matching, invalidation, and resume.
-- [ ] Register shared Core/TUI module seams and typed human-only transition/grant/revoke events; payloads cannot self-authenticate as human.
-- [ ] Publish consumer contracts for PF-23/24/25/28/29/30 and record file ownership; unavailable implementations report unavailable, never protected.
-- [ ] Add schema/serialization/unknown-version, authority spoofing, and non-widening contract tests; preserve Permissive.
-- [ ] Define adapter conformance fixtures for native dispatch, provider schemas, context lineage, cancellation, and resume; assign consumers without creating a second policy or agent lifecycle.
+- None.
 
 ## Verification
 
-- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
-- [ ] Run `just fix -p <affected-crate>` and `just fmt` in `codex-rs` before final tests.
-- [ ] Run focused and affected integration tests with `just test -p <affected-crate>`; never direct `cargo test`.
-- [ ] Record exact dependency commits, candidate, commands, artifacts, and missing coverage; no pass by code presence.
-- [ ] TUI applicability: none; schemas and unavailable module seams do not expose a user interaction.
+- [x] Recorded verified inherited upstream baseline and retained/adapted seam decisions; no new upstream upgrade or native backend qualification claimed.
+- [x] Ran scoped `just fix`, `just fmt`, and `just fmt-check` before final affected tests.
+- [x] Final candidate: policy 39, protocol 281, network-proxy 214, Core security 26, Core inheritance 3, TUI state 2 tests passed. Core/TUI filters are explicit in evidence; not a full-workspace claim.
+- [x] Exact candidate/dependencies, commands, JUnit artifacts, source fingerprints, and clean full-sprint Autoreview recorded in `qa/security-levels/sprints/PF-27-S01/evidence.md`.
+- [x] TUI/live-repository applicability: none; no command, key handler, rendering, or native consumer is activated. Actual-key proof remains required for downstream interactive sprints.
 
 ## Exit evidence
 
-- [ ] Final candidate and dependency commits, commands, platform results, and artifact paths recorded.
-- [ ] Applicable actual-key proof is linked; no missing test is relabeled a pass.
-- [ ] Ledgers reflect reality; completed record is archived and plan evidence linked.
+- [x] Code candidate `faa8ed6d39bf30db1b2fe982a69661a108e00a71`; macOS arm64 results and dependency commits recorded; later closure commits change only evidence/navigation.
+- [x] No actual-key flow applies to this contract-only sprint; Linux/Windows, native containment, human acceptance, and release gates are explicitly not claimed.
+- [x] Completed record archived; plan points to completion evidence. PF-13 qualification is unchanged; no dependent sprint was activated.

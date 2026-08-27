@@ -47,6 +47,7 @@ Plan lifecycle: `docs/plans/index.md`
 | Scope amendment | Travis Good, 2026-08-27: preserve Permissive, adopt stronger guarantees only for Moderate/Aggressive, separately scope browser isolation, and permit bounded independent sprint concurrency |
 | Integration amendment | Travis Good, 2026-08-27: require upstream separation and compatibility evidence, explicitly schedule the browser lane in parallel, and tighten injection/task-integrity coverage; no new runtime sprint activated by this documentation update |
 | PF-27 activation | Travis Good, 2026-08-27: “Please start work on PF-27”; isolated contracts lane allocated below, leaving PF-13 qualification unchanged |
+| PF-27 completion | Travis Good, 2026-08-27: “Got it, please finish PF-27”; full shared-contract sprint completed with evidence below; no consumer activation or release authorization |
 
 The scope/integration amendments approved product-initiative planning plus routine
 process/validator work; the later PF-27 activation starts only its allocated sprint,
@@ -233,7 +234,7 @@ concurrent workers use distinct branches and non-overlapping write scopes.
 This map covers every implementation and qualification unit currently required
 by the plan. PF-15 through PF-22 and PF-13-S01 through PF-13-S04 are
 completed and archived with final-tree evidence. PF-13-S05 continues qualification;
-PF-27-S01 has a separate contracts allocation. Other drafts become executable
+PF-27-S01 is completed and archived from its separate contracts allocation. Other drafts become executable
 only after dependencies, allocation, and concurrency checks pass.
 
 | Feature ID | Plan feature | Current sprint records | State |
@@ -251,7 +252,7 @@ only after dependencies, allocation, and concurrency checks pass.
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
 | `PF-26` | Early harnesses, final automated qualification, true-TUI/live-repository proof, and acceptance | [S01](../../sprints/current/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md), [S04](../../sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md), [S02](../../sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md), [S03](../../sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | draft |
-| `PF-27` | Shared security integration contracts | [S01](../../sprints/current/p0-security-levels/pf-27-s01-shared-security-contracts.md) | in progress; policy/health contract slice first |
+| `PF-27` | Shared security integration contracts | [S01 completion evidence](../../../qa/security-levels/sprints/PF-27-S01/evidence.md) | completed; native consumers remain separately gated |
 | `PF-28` | Cross-surface confidentiality | [S01](../../sprints/current/p0-security-levels/pf-28-s01-confidentiality-and-safe-environments.md) | draft |
 | `PF-29` | External Content Firewall | [S01](../../sprints/current/p0-security-levels/pf-29-s01-source-envelopes-and-ingress.md), [S02](../../sprints/current/p0-security-levels/pf-29-s02-derived-taint-and-action-context.md) | draft |
 | `PF-30` | Browser Isolation (separate feature) | [S01](../../sprints/current/p0-security-levels/pf-30-s01-isolated-acquisition-runtime.md), [S02](../../sprints/current/p0-security-levels/pf-30-s02-acquisition-integration-and-recovery.md) | draft |
@@ -336,7 +337,7 @@ may run together under the sprint-process rules, never all rows automatically.
 | Lane | Work | Hard handoff / allowed overlap |
 | --- | --- | --- |
 | qualification | PF-13-S05 | Mac triage, Windows follow-up, and independent review may run together against pinned evidence |
-| contracts | PF-27-S01 | Existing PF-17/19/20/22 foundations suffice; may overlap PF-13 qualification with disjoint files |
+| contracts | PF-27-S01 | Completed and archived; shared contracts available to eligible consumers, PF-13 qualification unchanged |
 | harness | PF-26-S01 | After PF-27; fixtures and runner construction can accompany feature work |
 | confidentiality | PF-28-S01 | After PF-13-S05, PF-27, and early harness |
 | content | PF-29-S01 then S02 | After PF-27 and early harness; independent of browser backend construction |
@@ -380,7 +381,7 @@ claims that every named adapter already exists.
 | Feature / sprint | Upstream touch and native seam | Product boundary / reason | Contract proof and upgrade disposition |
 | --- | --- | --- | --- |
 | PF-13-S05 | Existing broker/provider request adapters; inventory from S01–S04 commits | `vault/`, `security-policy/`; trusted exact credential use | Preserve pinned canary evidence; full-Core triage/Windows follow-up/independent review remain pending; inventory before upstream acceptance |
-| PF-27-S01 | `protocol/src/lib.rs`, Core/TUI module registration | Typed security integration contracts; one registration owner | Schema/version/unknown-origin/epoch tests; publish retained/adapted seam decisions |
+| PF-27-S01 | `protocol/src/lib.rs`, Core/TUI/network module registration and existing Core policy snapshot | Typed security integration contracts; one registration owner | Completed contract/epoch/native-inheritance tests on macOS; [retained/adapted seam decisions](../../../qa/security-levels/sprints/PF-27-S01/consumer-contracts.md); native consumer qualification remains pending |
 | PF-28-S01 | Provider/output serialization and child environments; enumerate all literal hooks | Core confidentiality module consuming vault broker | Exact outgoing-byte, reflected-error, log/export/environment canaries; no duplicate scanner policy |
 | PF-29-S01 | `core/src/mcp_tool_call.rs`, `core/src/session/inject.rs`, `core/src/tools/handlers/read_file.rs` | `core/src/security/ingress/`; native ingestion adapters | Source coverage, forged markers, unsupported-path denial; update adapter inventory on upstream drift |
 | PF-29-S02 | `core/src/compact.rs`, `core/src/compact_remote.rs`, `core/src/memories/`, `core/src/agent/control.rs`, `core/src/rollout/`, `core/src/session/rollout_reconstruction.rs` | `core/src/security/taint/`; lineage at native persistence/child seams | Compaction, delegation, memory, restart/resume retain taint and current authority |
@@ -397,7 +398,7 @@ candidate. Passing plan/sprint structure checks is not upstream qualification.
 
 #### PF-27 execution contract
 
-Jim Ricketts owns shared registration; PF-27 starts with a reviewable policy-only
+Jim Ricketts owns shared registration; PF-27 landed a reviewable policy-only
 slice in `security-policy/src/integration.rs` and `integration_tests.rs`, registered
 in `security-policy/src/lib.rs`. Reuse `SecurityLevel`/`SecuritySettings`,
 `AuthorizationRequest`, `BoundedGrant`, and `RevocationState`; do not introduce a
@@ -405,9 +406,9 @@ second policy, persistence, or agent-lifecycle implementation. Dependency direct
 is runtime/inspector adapters → protocol contracts → security-policy primitives,
 never policy → Core/TUI/provider implementations.
 
-The first slice has no new dependencies, manifests, installation, or runtime
-activation. Core/TUI/protocol registrations remain serial PF-27 work, not consumer
-edits. Expand literal write scope before any required manifest/lockfile or extra
+The first slice had no new dependencies, manifests, installation, or runtime
+activation. Core/TUI/protocol registrations subsequently landed serially in PF-27,
+not in consumer work. Expand literal write scope before any further manifest/lockfile or extra
 registration file is changed. PF-23 consumes policy/action epochs; PF-24/25 consume
 inspector facts and trusted requests; PF-28 consumes confidentiality health;
 PF-29 owns source/taint producers; PF-30 owns browser-health producers. Their native
@@ -418,9 +419,9 @@ Commands from `codex-rs`: `just fix -p codex-security-policy`, `just fmt`, then
 `just test -p codex-protocol`, `just test -p codex-core security::`, and
 `just test -p codex-tui security::` after the corresponding scoped fixes/formatting;
 new fixture names and broader affected tests are recorded with those adapters.
-These commands are requirements, not results. Evidence and remaining contract
-work: `qa/security-levels/sprints/PF-27-S01/evidence.md`. All dependent sprints
-remain gated on completed, archived PF-27 and their other prerequisites.
+Final command results, code candidate, source hashes, and consumer fixture definitions
+are recorded in `qa/security-levels/sprints/PF-27-S01/evidence.md`. PF-27 is completed
+and archived; dependent sprints still need their other prerequisites and allocations.
 
 PF-27 completion allocation: the contracts lane also owns
 `security-policy/src/{provenance,action_context}.rs` and sibling tests,
