@@ -51,16 +51,16 @@ updated: 2026-08-27
 - [x] Proved bounded-store cleanup and absence of additional provider network round trips.
 - [x] Ran Linux locally and attached passing commit-bound CI evidence for macOS and Windows without weakening host checks.
 - [x] Ran the approved complete Core suite on macOS and preserved its failing JUnit report without claiming a pass.
+- [x] Re-ran the complete PF-13 credential qualification on Windows 2022 at the clean current branch tip and committed its machine-readable report.
 
 ## Remaining
 
 - [ ] Obtain independent security review of raw-secret reachability and record findings/corrections.
 - [ ] Triage the 135 complete-Core failures and record a clean full rerun; all 13 credential-named tests already pass.
-- [ ] Collect the remaining Windows test evidence from the separate machine; the hosted canary pass does not close this follow-up.
 
-Mac failure triage, separate-machine Windows testing, and independent review may
-run concurrently within this sprint. Pin each result to its candidate; runtime
-fixes return to an authorized implementation sprint and require affected reruns.
+Mac failure triage and independent review may run concurrently within this
+sprint. Pin each result to its candidate; runtime fixes return to an authorized
+implementation sprint and require affected reruns.
 
 ## Verification
 

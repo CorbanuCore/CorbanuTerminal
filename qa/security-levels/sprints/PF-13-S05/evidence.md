@@ -1,11 +1,16 @@
 # PF-13-S05 credential-boundary qualification evidence
 
-- Date: 2026-08-26 UTC
+- Date: 2026-08-27 UTC
 - Status: in progress
 - Product requirement: `docs/corbanu-product-spec.md`, **Required trust boundaries** — “Credentials are referenced by label and resolved only inside a trusted execution boundary.”
 - Harness implementation commit: `27b738ab8d6289b2dc27fc45549fddc2622f6bc7`
 - Linux report commit: `24ba535698e7b25cb8cf1c7d7e06689603731dcb`
-- Cross-platform workflow run: `32933578147` at `55025dd42a869221b023fd783d52038b4b7c092f`
+- Original cross-platform workflow run: `32933578147` at `55025dd42a869221b023fd783d52038b4b7c092f`
+- Windows follow-up workflow run: `33111412618` at `ea7d4bec720098f6e0994fcfcc59e272108f7e70`
+- Windows candidate SHA-256: `f829e89081ead67b9d9fdabc1841759725983a8630dcb4affaf885dd7f0d9720`
+- Windows downloaded-report SHA-256: `1636dc2a60be433139a0e4dcdc1c177c47df57634bc05522295528839c97bd21`
+- Windows committed-report SHA-256: `23d6861b78552d363e422bf9712f1fd43c970c13bc3c95de810bf8e903b5376b`
+- Windows uploaded-artifact SHA-256: `c9c17fd5c626df315512ce496f16acf00eb9024fc87ee45ad3b441f20917271b`
 - Local macOS tested source commit: `55025dd42a869221b023fd783d52038b4b7c092f`
 - Local macOS candidate SHA-256: `b4db4cf7b3f1f70465e25028e51f0ac7553427ad5be7dbc3b0a7e47dc68ed8f1`
 - Local macOS report SHA-256: `6105fef2834e179ea955f9758f896005fb368a3228f87d3e3f840d75ef999ed5`
@@ -15,9 +20,9 @@
 ## Current result
 
 The credential canary passed on Linux, macOS, and Windows, including a separate
-local macOS reproduction from the clean branch tip. The complete macOS Core
-suite remains failed with 135 failures. Windows follow-up testing on another
-machine and independent security review remain pending.
+local macOS reproduction and a fresh Windows 2022 follow-up from the clean
+current branch tip. The complete macOS Core suite remains failed with 135
+failures, and independent security review remains pending.
 
 The harness generated a
 fresh credential canary inside the Rust test process, stored it through the
@@ -35,11 +40,12 @@ serialized report for credential-shaped material.
 The Linux machine-readable report is
 `qa/security-levels/sprints/PF-13-S05/credential-canary-report.json`; the local
 macOS report is
-`qa/security-levels/sprints/PF-13-S05/credential-canary-report-macos.json`.
-Each report binds
-the candidate identity, clean source commit, host identity, exact commands,
-named expected tests, executed counts, source-file digests, surface coverage,
-and canary digest.
+`qa/security-levels/sprints/PF-13-S05/credential-canary-report-macos.json`; and
+the Windows report is
+`qa/security-levels/sprints/PF-13-S05/credential-canary-report-windows.json`.
+Each report binds the candidate identity, clean source commit, host identity,
+exact commands, named expected tests, executed counts, source-file digests,
+surface coverage, and canary digest.
 
 ## Adversarial matrix
 
@@ -181,19 +187,45 @@ Each job uploads its complete report as a commit-bound artifact. Workflow run
 The hosted macOS report itself has SHA-256
 `3883577572583f7ece9ec3de7feede5caad2879579e3b6c4a4f2823d3b30474b`.
 
-### Windows handoff
+### Windows 2022 follow-up
 
-Per the user's 2026-08-26 direction, another machine will handle the remaining
-Windows testing. That follow-up is not complete and is not replaced by the
-hosted Windows canary result above. The receiving tester should record the
-exact source commit, Windows host/toolchain, commands, results, and artifacts
-before closing this item. No Windows test was run on this macOS machine.
+The user requested the remaining Windows validation on 2026-08-27. Workflow
+run [`33111412618`](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/33111412618)
+executed the unmodified PF-13 qualification on a fresh GitHub-hosted Windows
+2022 AMD64 machine at exact clean source commit
+`ea7d4bec720098f6e0994fcfcc59e272108f7e70` with Python 3.12.10 and Rust
+1.95.0 (`x86_64-pc-windows-msvc`).
+
+```text
+python -m unittest scripts.test_security_credential_canary
+PASS — 6 tests passed.
+
+python scripts/security-credential-canary \
+  --candidate codex-rs/target/debug/corbanu.exe \
+  --output credential-canary-artifacts/Windows
+PASS — status=passed; source_dirty_paths was empty.
+PASS — corbanu 0.1.35; candidate SHA-256 f829e89081ead67b9d9fdabc1841759725983a8630dcb4affaf885dd7f0d9720.
+PASS — canary SHA-256 82844eed824c3a07cf29c8e3d2129f125adc25e7c60d3fae0d8da669a2e759c3.
+PASS — outgoing_request_count=1 and raw_secret_observations=1.
+PASS — 41 tests executed across all six probe groups; every command returned 0.
+```
+
+The committed report is
+`qa/security-levels/sprints/PF-13-S05/credential-canary-report-windows.json`
+(SHA-256 `23d6861b78552d363e422bf9712f1fd43c970c13bc3c95de810bf8e903b5376b`
+after normalizing the downloaded report's CRLF line endings; the downloaded
+report SHA-256 was `1636dc2a60be433139a0e4dcdc1c177c47df57634bc05522295528839c97bd21`).
+The commit-bound uploaded artifact is
+`credential-boundary-canary-Windows-ea7d4bec720098f6e0994fcfcc59e272108f7e70`
+(artifact ID `9663966064`, uploaded-archive SHA-256
+`c9c17fd5c626df315512ce496f16acf00eb9024fc87ee45ad3b441f20917271b`).
+This closes the Windows follow-up; it does not claim that the independent
+security review or the broader complete-Core gate has passed.
 
 ## Remaining acceptance gates
 
 - Name an independent security reviewer and record the raw-secret reachability review and any corrections.
 - Triage the 135 complete-Core failures recorded above, correct or establish
   the required test prerequisites, and record a clean complete rerun.
-- Collect the remaining Windows test evidence from the separate machine.
 - After those gates pass, update the final candidate/evidence coordinates and
   archive PF-13-S05. The sprint remains `in_progress` until then.

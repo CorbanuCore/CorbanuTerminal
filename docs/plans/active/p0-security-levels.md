@@ -329,7 +329,7 @@ may run together under the sprint-process rules, never all rows automatically.
 
 | Lane | Work | Hard handoff / allowed overlap |
 | --- | --- | --- |
-| qualification | PF-13-S05 | Mac triage, Windows follow-up, and independent review may run together against pinned evidence |
+| qualification | PF-13-S05 | Mac triage and independent review may run together against pinned evidence; Windows follow-up completed at `ea7d4bec72` |
 | contracts | PF-27-S01 | Existing PF-17/19/20/22 foundations suffice; may overlap PF-13 qualification with disjoint files |
 | harness | PF-26-S01 | After PF-27; fixtures and runner construction can accompany feature work |
 | confidentiality | PF-28-S01 | After PF-13-S05, PF-27, and early harness |
@@ -372,7 +372,7 @@ claims that every named adapter already exists.
 
 | Feature / sprint | Upstream touch and native seam | Product boundary / reason | Contract proof and upgrade disposition |
 | --- | --- | --- | --- |
-| PF-13-S05 | Existing broker/provider request adapters; inventory from S01–S04 commits | `vault/`, `security-policy/`; trusted exact credential use | Preserve pinned canary evidence; full-Core triage/Windows follow-up/independent review remain pending; inventory before upstream acceptance |
+| PF-13-S05 | Existing broker/provider request adapters; inventory from S01–S04 commits | `vault/`, `security-policy/`; trusted exact credential use | Preserve pinned canary evidence; Windows follow-up passed; full-Core triage and independent review remain pending; inventory before upstream acceptance |
 | PF-27-S01 | `protocol/src/lib.rs`, Core/TUI module registration | Typed security integration contracts; one registration owner | Schema/version/unknown-origin/epoch tests; publish retained/adapted seam decisions |
 | PF-28-S01 | Provider/output serialization and child environments; enumerate all literal hooks | Core confidentiality module consuming vault broker | Exact outgoing-byte, reflected-error, log/export/environment canaries; no duplicate scanner policy |
 | PF-29-S01 | `core/src/mcp_tool_call.rs`, `core/src/session/inject.rs`, `core/src/tools/handlers/read_file.rs` | `core/src/security/ingress/`; native ingestion adapters | Source coverage, forged markers, unsupported-path denial; update adapter inventory on upstream drift |
@@ -442,8 +442,8 @@ only after candidate acceptance.
 ## Implementation sequence
 
 1. **Preserve accepted foundations; finish PF-13 qualification.** Complete Mac
-   Core failure triage, the separate-machine Windows follow-up, and independent
-   review. No completed foundation is reopened merely to rename its scope.
+   Core failure triage and independent review. The Windows follow-up passed at
+   `ea7d4bec72`. No completed foundation is reopened merely to rename its scope.
 2. **Land shared contracts and early harnesses.** PF-27 defines integration
    seams; PF-26-S01 supplies hostile-source fixtures and test runners. The
    read-only PF-24-S01 inspector can proceed against those status contracts.
