@@ -7,7 +7,7 @@ plan_feature: "PF-30"
 execution_order: 19
 owner: "Jim Ricketts"
 lane: "browser"
-write_scope: "codex-rs/core/src/security/browser_isolation, codex-rs/network-proxy/src/browser_policy.rs"
+write_scope: "codex-rs/browser-isolation, codex-rs/core/src/security/browser_isolation, codex-rs/network-proxy/src/browser_policy.rs, codex-rs/network-proxy/src/browser_policy_tests.rs, codex-rs/Cargo.toml, codex-rs/Cargo.lock, codex-rs/core/Cargo.toml, MODULE.bazel.lock"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-pf30-s01"
 branch: "codex/pf-30-isolated-runtime"
 base_commit: "9fc9c9106c8afd38aff48d0e5ad4a5f2552b723c"
@@ -38,7 +38,8 @@ a distinct worktree/branch within the three-slot cap. Allocated and started on
 ## Code boundaries
 
 - Existing (paths below `codex-rs/`): `network-proxy/src/policy.rs` as a read-only composition reference.
-- Planned: `core/src/security/browser_isolation/`; `network-proxy/src/browser_policy.rs`.
+- Planned: `browser-isolation/` crate (engine, broker, worker, quarantine, lifecycle and tests); thin `core/src/security/browser_isolation/` adapter; `network-proxy/src/browser_policy.rs` and sibling tests.
+- Serial registrations: workspace `Cargo.toml`/`Cargo.lock`, `core/Cargo.toml`, `MODULE.bazel.lock`; new crate `BUILD.bazel` includes the fixed worker/build recipe as compile data. No PF-29 or public tool changes.
 - Tests: sibling unit/integration regressions and the PF-26 fixture matrix.
 
 ## Preconditions
@@ -48,13 +49,20 @@ a distinct worktree/branch within the three-slot cap. Allocated and started on
 - [x] Root/Rust/Core instructions read; active plan and two-slot use checked.
 - [x] Exact owner/worktree/branch/base and literal write scope allocated in the plan.
 - [x] Podman/Docker backend, Scrapling source/image pins and all-platform pending matrix recorded.
-- [x] Existing registered module boundaries used; no dependency/manifest changes authorized in this first stage.
-- [x] PF-27 registrations consumed; content adapters and shared manifests excluded.
+- [x] Exact full-sprint crate/manifest/lockfile scope amended before implementation, with S01 serial ownership; PF-29 remains draft.
+- [x] Existing PF-27 module registrations consumed; content adapters and shared TUI/protocol files excluded.
 
 ## Done
 
 - [x] Approved feature contract decomposed into this single-feature draft.
 - [x] Recorded user runtime/installation decisions and non-mutating Mac/Linux preflight in `qa/security-levels/sprints/PF-30-S01/runtime-selection.md`.
+- [x] User requested end-to-end S01 implementation and selected Fable High; Autoreview must use `--engine claude --model claude-fable-5 --thinking high` without fallback.
+
+Reviewable stages: (1) crate registration and connection policy; (2) engine
+selection, pinned image recipe and owned-container lifecycle; (3) bounded broker,
+Scrapling worker and quarantine; (4) Core health/epoch adapter and final real
+backend probes. Keep each code stage below 500 changed lines where practical;
+review/test each independently and review the final integrated candidate.
 
 ## Remaining
 

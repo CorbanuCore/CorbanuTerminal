@@ -59,7 +59,8 @@ Plan lifecycle: `docs/plans/index.md`
 | PF-27 completion | Travis Good, 2026-08-27: “Got it, please finish PF-27”; full shared-contract sprint completed with evidence below; no consumer activation or release authorization |
 | PF-26 activation | Travis Good, 2026-08-27: ensure PF-27 is pushed, then complete PF-26; activate dependency-ready S01 in the isolated harness lane. S04/S02/S03 remain gated by their recorded dependencies and human acceptance. |
 | Browser/content activation | Travis Good, 2026-08-27: approve pushing PF-26-S01 and starting PF-30/PF-29 in parallel; allocate the two worktrees below. PF-13 qualification retains the third slot. |
-| Runtime and acceptance decision | Travis Good, 2026-08-27: reuse Podman/Docker; prefer Podman for new installs; guide setup and recover only owned Scrapling services in stronger modes; require all three OSes, Mac/Linux first. Independent reviewer is a user-selected model (provider/model pending); human tester is Travis Good (acceptance pending). |
+| Runtime and acceptance decision | Travis Good, 2026-08-27: reuse Podman/Docker; prefer Podman for new installs; guide setup and recover only owned Scrapling services in stronger modes; require all three OSes, Mac/Linux first. Human tester is Travis Good (acceptance pending). |
+| S01 implementation and reviewer | Travis Good, 2026-08-27: implement PF-30-S01 end to end; reviewer is Fable High (`claude-fable-5`, high effort). No fallback reviewer; Windows instructions follow Mac/Linux qualification. |
 
 The scope/integration amendments approved product-initiative planning plus routine
 process/validator work; the later PF-27 activation starts only its allocated sprint,
@@ -331,6 +332,21 @@ not a new security level or an extension of PF-14 arbitrary-model review.
 Pinned inputs, preflight findings, commands, platform matrix, and limits:
 repository file `qa/security-levels/sprints/PF-30-S01/runtime-selection.md`.
 
+S01 implementation allocation: keep containment/lifecycle/worker code in the
+new `codex-rs/browser-isolation/` crate and a thin adapter in the already-reserved
+Core browser module. The network-proxy browser policy composes existing policy
+and adds connection-pinned public-address validation. The worker has no network
+interface except loopback; all acquisition HTTP flows cross a bounded stdio
+broker. Browser content cannot acquire host sockets or runtime credentials.
+
+The pinned upstream image requires a fixed local derivative recipe to expose
+packaged browser binaries to an unprivileged UID; no package installation occurs
+in that build. Pin the recipe hash/base digest, record the resulting platform
+image ID, and run only that ID. No registry publication or floating-tag trust.
+Serial shared-file owner is S01 for `codex-rs/Cargo.toml`, `Cargo.lock`,
+`core/Cargo.toml`, and `MODULE.bazel.lock`; PF-29 stays draft during registration.
+Record all files and reviewable implementation stages in S01 before edits.
+
 ### Injection methods and limits
 
 OpenClaw is a design/fixture source, not a runtime dependency or certification.
@@ -436,7 +452,7 @@ claims that every named adapter already exists.
 | PF-28-S01 | Provider/output serialization and child environments; enumerate all literal hooks | Core confidentiality module consuming vault broker | Exact outgoing-byte, reflected-error, log/export/environment canaries; no duplicate scanner policy |
 | PF-29-S01 | `core/src/mcp_tool_call.rs`, `core/src/session/inject.rs`; remaining native adapter inventory pending | `core/src/security/ingress/`; native ingestion adapters | The old `core/src/tools/handlers/read_file.rs` is absent at this baseline; resolve concrete tool/file/context hooks before readiness, not a placeholder implementation |
 | PF-29-S02 | `core/src/compact.rs`, `core/src/compact_remote.rs`, `core/src/memories/`, `core/src/agent/control.rs`, `core/src/rollout/`, `core/src/session/rollout_reconstruction.rs` | `core/src/security/taint/`; lineage at native persistence/child seams | Compaction, delegation, memory, restart/resume retain taint and current authority |
-| PF-30-S01/S02 | `network-proxy/src/browser_policy.rs`, existing web facade and tool registration | `core/src/security/browser_isolation/`; containment behind existing web API | Real platform containment/egress probes and no unsafe fallback; shared manifest/registration edits land before parallel consumers |
+| PF-30-S01/S02 | `network-proxy/src/browser_policy.rs`, Core browser adapter and Cargo dependency; S02 owns web facade/tool registration | `browser-isolation/` crate owns worker/host broker/lifecycle; Core remains thin | Real platform containment/egress and cancel/resume/independent-health tests; S01 serially owns workspace/Cargo/Bazel registration before PF-29 activation |
 | PF-30-S03 | Native TUI security view/event adapters, exact registrations allocated before readiness | Browser-owned runtime setup coordinator; OS authentication remains outside application input | Setup/cancel/retry/resume/elevation and existing-runtime preservation; no provider/history schema changes; serialize shared TUI registration |
 | PF-23-S01/S02/S03 | `core/src/tools/router.rs` and recorded lifecycle hooks | Security protected-surface policy; one deterministic decision path | Native dispatch/post-read epochs/grants/revocation/reconnect; no transport-specific bypass |
 | PF-24/PF-25 | Native TUI command/event/overlay registration | Separate security views; no TUI-owned authorization | Wire/UI compatibility, cancel/downgrade/revoke, true-PTY evidence |
@@ -666,7 +682,7 @@ before qualification.
 | Existing security-policy commits | Jim Ricketts | Downstream integration | PF-15 through PF-22 completed and archived; preserve evidence |
 | Moderate and Aggressive control matrix | Product authority | PF-23 review | Defined in the product specification; any change requires a product decision |
 | Persistence and downgrade invalidation | Jim Ricketts | PF-20/PF-23 | Persistence code is present; transition and final evidence remain pending |
-| Independent security reviewer | Travis Good / release owner | PF-13-S05 and final qualification | User-selected model; exact provider/model pending. Separate from routine Autoreview; no silent substitution or PF-14 activation |
+| Independent security reviewer | Travis Good / release owner | PF-13-S05 and final qualification | Fable High: `claude-fable-5`, high effort, selected 2026-08-27. Review result pending; no silent substitution or PF-14 activation |
 | Human tester | Travis Good | Final qualification | Named 2026-08-27; final-candidate acceptance pending |
 | Browser backend/platform matrix | Jim Ricketts | PF-30-S01/S03 | Podman preferred, existing Docker preserved; pinned Scrapling inputs and all-platform pending matrix in S01 record; Mac/Linux before Windows |
 | Lane allocation and shared files | Jim Ricketts | Each sprint readiness | Draft coordinates are UNALLOCATED; serialize shared-file changes and check the three-slot limit |
