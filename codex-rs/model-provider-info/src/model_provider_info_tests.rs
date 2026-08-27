@@ -1479,3 +1479,21 @@ fn zai_glm_5_3_family_resolves_only_on_the_direct_zai_route() {
         );
     }
 }
+
+#[test]
+fn openrouter_glm_5_3_flash_resolves_on_openrouter() {
+    let model = "z-ai/glm-5.3-flash";
+    assert_eq!(
+        canonical_catalog_provider(model),
+        Some(OPENROUTER_PROVIDER_ID)
+    );
+    assert_eq!(
+        resolve_model_for_provider(Some(model.to_string()), OPENROUTER_PROVIDER_ID).as_deref(),
+        Some(model)
+    );
+    // The direct ZAI route and OpenRouter route are distinct model slugs.
+    assert_ne!(
+        canonical_catalog_provider("glm-5.3-flash"),
+        canonical_catalog_provider(model)
+    );
+}

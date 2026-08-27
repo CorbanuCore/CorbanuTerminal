@@ -285,6 +285,7 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
             | "deepseek/deepseek-v4-flash-0731"
             | "tencent/hy3:free"
             | "moonshotai/kimi-k3"
+            | "z-ai/glm-5.3-flash"
     ) {
         return Some(OPENROUTER_PROVIDER_ID);
     }

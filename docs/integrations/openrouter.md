@@ -35,6 +35,7 @@ Visible OpenRouter models are bundled in
 | `deepseek/deepseek-v4-pro-0813` | OpenRouter DeepSeek V4 Pro 0813 | `$0.435/M input`, `$0.003625/M cached input`, `$0.87/M output` |
 | `deepseek/deepseek-v4-pro` | OpenRouter DeepSeek V4 Pro | `$0.435/M input`, `$0.87/M output` |
 | `moonshotai/kimi-k3` | OpenRouter Kimi K3 | `$3.00/M input`, `$0.30/M cached input`, `$15.00/M output` |
+| `z-ai/glm-5.3-flash` | OpenRouter GLM 5.3 Flash | `$0.075/M input`, `$0.015/M cached input`, `$0.25/M output` |
 | `x-ai/grok-4.5` | OpenRouter Grok 4.5 | `$2.00/M input`, `$6.00/M output` |
 | `minimax/minimax-m3` | OpenRouter MiniMax M3 | `$0.60/M input`, `$2.40/M output` |
 | `openrouter/owl-alpha` | OpenRouter Owl Alpha | `$0/M input`, `$0/M output` |
