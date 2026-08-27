@@ -1,16 +1,16 @@
 ---
 sprint_id: "PF-26-S01"
 title: "Security harnesses and standards crosswalk"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-26"
 execution_order: 15
 owner: "Jim Ricketts"
 lane: "harness"
-write_scope: "scripts/security-level-compat, scripts/security-level-adversarial, scripts/security-level-standards-check, scripts/test_security_level_compat.py, scripts/test_security_level_adversarial.py, scripts/test_security_level_standards_check.py, qa/security-levels/fixtures"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+write_scope: "scripts/security-level-compat, scripts/security-level-adversarial, scripts/security-level-standards-check, scripts/security_level_compat.py, scripts/security_level_evidence.py, scripts/security_level_adversarial.py, scripts/security_level_capture.py, scripts/security_level_standards_check.py, scripts/test_security_level_compat.py, scripts/test_security_level_evidence.py, scripts/test_security_level_adversarial.py, scripts/test_security_level_capture.py, scripts/test_security_level_standards_check.py, qa/security-levels/fixtures, qa/security-levels/sprints/PF-26-S01"
+worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-pf26-s01"
+branch: "codex/pf-26-security-harnesses"
+base_commit: "cb808c30c0058c101597ab2ada3da16238565c5e"
 depends_on: "PF-21-S01, PF-27-S01"
 created: 2026-08-24
 updated: 2026-08-27
@@ -38,12 +38,12 @@ updated: 2026-08-27
 
 ## Preconditions
 
-- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
-- [ ] Every listed dependency is completed and archived.
-- [ ] Harness and PF-27 contract commits are pinned; a final product candidate is not required.
-- [ ] Exact worktree coordinates match the active plan.
+- [x] Plan upstream baseline, adapter ownership, and exact contract tests are resolved in the PF-26-S01 execution contract.
+- [x] PF-21-S01 and PF-27-S01 are completed and archived.
+- [x] Harness base/PF-27 completion is pinned above; accepted baseline bytes are frozen before extending runners.
+- [x] Exact worktree coordinates match the active plan.
 
-- [ ] Allocate lane/worktree/base in the plan and validate disjoint write scopes before readiness.
+- [x] Harness allocation is disjoint from PF-13 qualification; shared metadata updates are serial.
 
 ## Done
 

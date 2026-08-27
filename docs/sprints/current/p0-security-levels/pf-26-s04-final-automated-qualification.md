@@ -32,7 +32,7 @@ updated: 2026-08-27
 
 ## Code boundaries
 
-- Existing (paths below `codex-rs/`): `scripts/{security-level-compat,security-level-adversarial,security-level-standards-check}` from S01.
+- Existing (repository-root paths): `scripts/{security-level-compat,security-level-adversarial,security-level-standards-check}` from S01; exact schemas and preparation commands are in `qa/security-levels/fixtures/README.md`.
 - Planned: `qa/release/<version>/security/` candidate manifest and final automated evidence.
 - Tests: sibling unit/integration regressions and the PF-26 fixture matrix.
 
@@ -63,8 +63,8 @@ updated: 2026-08-27
 - [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] Verify formatting/fixes precede final tests; any later runtime change invalidates affected candidate evidence.
 - [ ] Run `python3 scripts/security-level-compat --baseline <commit> --candidate <binary> --output <dir>`.
-- [ ] Run `python3 scripts/security-level-adversarial --candidate <binary> --output <dir>`.
-- [ ] Run `python3 scripts/security-level-standards-check --manifest qa/release/<version>/security/standards-crosswalk.yaml`.
+- [ ] Run `python3 scripts/security-level-adversarial --bundle <prepared-dir> --observations <host-run.json> --candidate <binary> --source-commit <sha> --platform <platform> --not-before <UTC> --output <dir>`; retain trusted build/run provenance, not model-authored verdicts.
+- [ ] Run `python3 scripts/security-level-standards-check --manifest qa/release/<version>/security/standards-crosswalk.json --candidate <binary> --source-commit <sha> --platform <platform> --not-before <UTC>`; S01's planning check is not qualification.
 - [ ] TUI applicability: PF-26-S02 repeats final integrated workflows after this sprint; component interactive sprints must already have their own actual-key proof.
 
 ## Exit evidence

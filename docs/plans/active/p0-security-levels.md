@@ -26,6 +26,9 @@ implementation_worktrees:
   - path: "/Users/travisgood/Documents/ChatGPT/corbanu-pf27-s01"
     branch: "codex/pf-27-shared-security-contracts"
     base_commit: "ea7d4bec720098f6e0994fcfcc59e272108f7e70"
+  - path: "/Users/travisgood/Documents/ChatGPT/corbanu-pf26-s01"
+    branch: "codex/pf-26-security-harnesses"
+    base_commit: "cb808c30c0058c101597ab2ada3da16238565c5e"
 ---
 
 # P0 `/security` levels
@@ -48,6 +51,7 @@ Plan lifecycle: `docs/plans/index.md`
 | Integration amendment | Travis Good, 2026-08-27: require upstream separation and compatibility evidence, explicitly schedule the browser lane in parallel, and tighten injection/task-integrity coverage; no new runtime sprint activated by this documentation update |
 | PF-27 activation | Travis Good, 2026-08-27: “Please start work on PF-27”; isolated contracts lane allocated below, leaving PF-13 qualification unchanged |
 | PF-27 completion | Travis Good, 2026-08-27: “Got it, please finish PF-27”; full shared-contract sprint completed with evidence below; no consumer activation or release authorization |
+| PF-26 activation | Travis Good, 2026-08-27: ensure PF-27 is pushed, then complete PF-26; activate dependency-ready S01 in the isolated harness lane. S04/S02/S03 remain gated by their recorded dependencies and human acceptance. |
 
 The scope/integration amendments approved product-initiative planning plus routine
 process/validator work; the later PF-27 activation starts only its allocated sprint,
@@ -199,6 +203,7 @@ update; it cannot silently change Permissive or an accepted security level.
 | Jim Ricketts | `/home/pfrpc/repos/CorbanuTerminal-pf13-s02` | `feat/pf-13-s02-scoped-vault-resolver` | `1bdc515bff48a4d9048dae7d06c6214e884265bc` | Security-level model, persistence, policy composition, TUI, tests, and evidence |
 | Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-pf13-s02` | `feat/pf-13-s02-scoped-vault-resolver` | `1bdc515bff48a4d9048dae7d06c6214e884265bc` | macOS qualification, complete Core regression, and evidence reconciliation |
 | Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-pf27-s01` | `codex/pf-27-shared-security-contracts` | `ea7d4bec720098f6e0994fcfcc59e272108f7e70` | PF-27 shared security contracts; Codex implementation, separate from PF-13 candidate |
+| Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-pf26-s01` | `codex/pf-26-security-harnesses` | `cb808c30c0058c101597ab2ada3da16238565c5e` | PF-26-S01 Python harnesses, fixtures and evidence only; no native runtime or PF-13 edits |
 
 Implementation does not occur in the documentation checkout. Update this plan
 before changing the implementation worktree, base, owner, or scope.
@@ -251,7 +256,7 @@ only after dependencies, allocation, and concurrency checks pass.
 | `PF-23` | Moderate/Aggressive protected-surface enforcement | [S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), [S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md), [S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | draft |
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
-| `PF-26` | Early harnesses, final automated qualification, true-TUI/live-repository proof, and acceptance | [S01](../../sprints/current/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md), [S04](../../sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md), [S02](../../sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md), [S03](../../sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | draft |
+| `PF-26` | Early harnesses, final automated qualification, true-TUI/live-repository proof, and acceptance | [S01](../../sprints/current/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md), [S04](../../sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md), [S02](../../sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md), [S03](../../sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | S01 in_progress; S04/S02/S03 dependency-gated drafts |
 | `PF-27` | Shared security integration contracts | [S01 completion evidence](../../../qa/security-levels/sprints/PF-27-S01/evidence.md) | completed; native consumers remain separately gated |
 | `PF-28` | Cross-surface confidentiality | [S01](../../sprints/current/p0-security-levels/pf-28-s01-confidentiality-and-safe-environments.md) | draft |
 | `PF-29` | External Content Firewall | [S01](../../sprints/current/p0-security-levels/pf-29-s01-source-envelopes-and-ingress.md), [S02](../../sprints/current/p0-security-levels/pf-29-s02-derived-taint-and-action-context.md) | draft |
@@ -338,7 +343,7 @@ may run together under the sprint-process rules, never all rows automatically.
 | --- | --- | --- |
 | qualification | PF-13-S05 | Mac triage, Windows follow-up, and independent review may run together against pinned evidence |
 | contracts | PF-27-S01 | Completed and archived; shared contracts available to eligible consumers, PF-13 qualification unchanged |
-| harness | PF-26-S01 | After PF-27; fixtures and runner construction can accompany feature work |
+| harness | PF-26-S01 | Active isolated allocation after archived PF-21/PF-27; accompanies PF-13 qualification without native code writes |
 | confidentiality | PF-28-S01 | After PF-13-S05, PF-27, and early harness |
 | content | PF-29-S01 then S02 | After PF-27 and early harness; independent of browser backend construction |
 | browser | PF-30-S01 then S02 | S01 after PF-27/harness; S02 joins S01 and PF-29-S01 ingress contract |
@@ -395,6 +400,33 @@ consumers become ready; add exact paths to its write scope if needed. Each
 consumer links its row, fills exact contract commands, and records patch
 disposition on upstream changes. PF-26-S04 audits all rows on the integrated
 candidate. Passing plan/sprint structure checks is not upstream qualification.
+
+#### PF-26-S01 execution contract
+
+The harness base is the pushed PF-27 completion commit
+`cb808c30c0058c101597ab2ada3da16238565c5e`; its inherited upstream ancestry is
+unchanged. Pin the accepted PF-21 baseline bytes and PF-27 adapter definitions,
+and validate those pins before fixture preparation. Do not rewrite historical
+evidence or create a Python policy engine. Native adapters are read-only; their
+eventual owners supply host-recorded observations, never model-authored verdicts.
+
+The lane owns `scripts/security_level_{compat,evidence,adversarial,capture,standards_check}.py`,
+the three `scripts/security-level-*` entrypoints named in S01, corresponding
+`scripts/test_security_level_*.py` tests, `qa/security-levels/fixtures/`, and
+`qa/security-levels/sprints/PF-26-S01/`. Shared plan/sprint metadata is updated
+serially. The capture fixture is loopback-only, synthetic, and never forwards to
+a provider; it supports PF-13's future transport harness, not a shipping proxy.
+
+Contract checks: immutable Permissive probe hashes; all seven pinned PF-27
+adapter definitions and their recorded source/test mappings; complete ingress,
+sink, control and ownership inventories; strict evidence identity/digest checks.
+Run `python3 -m unittest discover -s scripts -p 'test_security_level_*.py'`,
+`python3 docs/plans/check.py`, and `python3 docs/sprints/check.py` after formatting.
+Python-only work does not require another Rust build or an actual-key TUI run.
+Fixture self-tests may pass while product observations remain pending; no
+synthetic report is accepted as final candidate qualification. PF-26-S04 supplies
+the integrated candidate and platform evidence, S02 supplies tmux/live-repository
+proof, and S03 supplies named human acceptance and release evidence.
 
 #### PF-27 execution contract
 
@@ -532,8 +564,8 @@ Run fix and formatting tools before the final affected tests.
 | Config and core integration | `cd codex-rs && just test -p codex-config && just test -p codex-core` | pending | `qa/release/<version>/security/integration-tests.txt` |
 | Vault and network boundaries | `cd codex-rs && just test -p codex-vault && just test -p codex-network-proxy` | pending | `qa/release/<version>/security/boundary-tests.txt` |
 | TUI and snapshots | `cd codex-rs && just test -p codex-tui` | pending | `qa/release/<version>/security/tui-tests.txt` |
-| Adversarial matrix | `python3 scripts/security-level-adversarial --candidate <binary> --output <dir>` | pending; S01 constructs, S04 qualifies final candidate | `qa/release/<version>/security/adversarial/` |
-| Standards crosswalk | `python3 scripts/security-level-standards-check --manifest qa/release/<version>/security/standards-crosswalk.yaml` | pending; S01 constructs, S04 closes coverage | `qa/release/<version>/security/standards-crosswalk.yaml` |
+| Adversarial matrix | `python3 scripts/security-level-adversarial --bundle <prepared-dir> --observations <host-run.json> --candidate <binary> --source-commit <sha> --platform <platform> --not-before <UTC> --output <dir>` | pending; S01 constructs, S04 qualifies final candidate | `qa/release/<version>/security/adversarial/` |
+| Standards crosswalk | `python3 scripts/security-level-standards-check --manifest <crosswalk.json> --candidate <binary> --source-commit <sha> --platform <platform> --not-before <UTC>` | pending; S01 constructs, S04 closes coverage; preparation is not qualification | `qa/release/<version>/security/standards-crosswalk.json` |
 | Formatting | `cd codex-rs && just fmt`, then inspect the diff | pending; precedes final affected tests | `qa/release/<version>/security/fmt.txt` |
 | Final affected tests | `cd codex-rs && just test -p <affected-project>` for each changed project; never direct `cargo test` | pending | `qa/release/<version>/security/final-tests.txt` |
 
