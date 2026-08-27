@@ -4,12 +4,14 @@ status: active
 change_class: product-initiative
 priority: P0
 owner: "Jim Ricketts"
+max_active_sprints: 3
+integration_owner: "Jim Ricketts"
 activation_authority: "Product authority defined in the product specification"
 activation_basis: "Accountable sequencing item 1 defines /security as P0 and immediate."
 target_release: "TBD — candidate qualified by 2026-10-08"
 deadline: 2026-10-08
 created: 2026-08-23
-updated: 2026-08-26
+updated: 2026-08-27
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
@@ -39,6 +41,12 @@ Plan lifecycle: `docs/plans/index.md`
 | Authoritative decision | “Accountable sequencing,” item 1: `/security` is P0 and begins immediately |
 | Delivery owner | Jim Ricketts |
 | Deadline | **2026-10-08** |
+| Scope amendment | Travis Good, 2026-08-27: preserve Permissive, adopt stronger guarantees only for Moderate/Aggressive, separately scope browser isolation, and permit bounded independent sprint concurrency |
+
+This amendment is approved product-initiative planning plus routine process/
+validator work, not runtime implementation or release acceptance. The design
+input is [Security Comparative Analysis](https://github.com/CorbanuCore/CorbanuTerminal/blob/549c18f0b63b8e5c4fedf60b18932d1d48adb56f/research/2026-08-23-product-security-session/SecurityComparativeAnalysis.html),
+dated 2026-08-23; its comparative scores are not certification evidence.
 
 ## User pain
 
@@ -76,6 +84,8 @@ the level.
 | Plan requirement excerpt | “Permissive preserves the shipping behavior and does not silently change existing policies.” |
 | PF-13 trust-boundary heading | **Required trust boundaries** |
 | PF-13 requirement excerpt | “Credentials are referenced by label and resolved only inside a trusted execution boundary.” |
+| Expanded feature heading | **Moderate/Aggressive isolation and content provenance** |
+| Expanded requirement excerpt | “Browser isolation is a separately scoped feature within the security initiative.” |
 | Product outcome advanced | One understandable control for agent security posture |
 | North-star criterion advanced | External content cannot silently gain sensitive access or change security policy |
 
@@ -108,6 +118,11 @@ the level.
 - Require explicit human confirmation for a downgrade; cancel or restart must
   not apply an unconfirmed change.
 - Add compatibility, policy, adversarial, snapshot, and true-TUI evidence.
+- Add explicit shared security contracts (PF-27), cross-surface confidentiality
+  (PF-28), external-content provenance/taint (PF-29), and isolated public-web
+  acquisition (PF-30) for Moderate/Aggressive only.
+- Expose effective enforcement and independent browser/content-firewall health
+  in the security inspector; unavailable required controls fail closed.
 
 ### Out
 
@@ -116,6 +131,11 @@ the level.
   relevant control semantics inside Corbanu.
 - Adding unrelated product capabilities or downstream integrations.
 - Changing the existing behavior of Permissive.
+- Authenticated browser login, new search providers, classifier training or
+  hosted detection services, and the proposed Agent Sweep behavior monitor.
+- Automatically migrating/deleting user plaintext credentials. Stronger modes
+  detect unsupported legacy credential paths and block or quarantine their use;
+  human-directed migration is a later separately authorized workflow.
 - Replacing the existing `/permissions` surface; `/security` composes the
   relevant existing controls into a user-facing posture.
 - Allowing a model or model-based reviewer to choose, change, or downgrade the
@@ -137,7 +157,11 @@ the level.
   invalidate incompatible pending authority.
 - **Inheritance never weakens.** Child agents receive the same or a stricter
   effective level.
-- **Secrets stay out of model-visible and audit paths.**
+- **Moderate/Aggressive secrets stay out of model-visible and audit paths.**
+- **Sanitized content is still untrusted.** Provenance is host-assigned and
+  derived taint cannot be cleared by summaries, compaction, memory, or children.
+- **Isolation and content policy are separate controls.** Neither an available
+  browser backend nor a classifier result grants protected-action authority.
 - **Aggressive grants are narrow and expire.**
 - **Kill switch and revocation override pending work and survive restart.**
 
@@ -171,6 +195,12 @@ update; it cannot silently change Permissive or an accepted security level.
 Implementation does not occur in the documentation checkout. Update this plan
 before changing the implementation worktree, base, owner, or scope.
 
+New lanes are deliberately `UNALLOCATED` until a worker and a dependency-complete
+base are selected. Do not reuse the stale `corbanu-security-levels` coordinates.
+Record each actual lane worktree/branch/base here and in its sprint before
+activation. Jim Ricketts integrates shared files and records merge commits;
+concurrent workers use distinct branches and non-overlapping write scopes.
+
 ## Useful code references
 
 | Path or symbol | Why it matters |
@@ -195,9 +225,9 @@ before changing the implementation worktree, base, owner, or scope.
 
 This map covers every implementation and qualification unit currently required
 by the plan. PF-15 through PF-22 and PF-13-S01 through PF-13-S04 are
-completed and archived with final-tree evidence. PF-13-S05 is the sole `in_progress`
-sprint; later records remain `draft` until their dependencies are completed and
-archived.
+completed and archived with final-tree evidence. PF-13-S05 remains the only
+`in_progress` sprint; this refactor starts no new implementation. Drafts become
+executable only after dependencies, allocation, and concurrency checks pass.
 
 | Feature ID | Plan feature | Current sprint records | State |
 | --- | --- | --- | --- |
@@ -213,7 +243,89 @@ archived.
 | `PF-23` | Moderate/Aggressive protected-surface enforcement | [S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), [S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md), [S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | draft |
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
-| `PF-26` | Harnesses, true-TUI/live-repository qualification, human acceptance, and finished docs | [S01](../../sprints/current/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md), [S02](../../sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md), [S03](../../sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | draft |
+| `PF-26` | Early harnesses, final automated qualification, true-TUI/live-repository proof, and acceptance | [S01](../../sprints/current/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md), [S04](../../sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md), [S02](../../sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md), [S03](../../sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | draft |
+| `PF-27` | Shared security integration contracts | [S01](../../sprints/current/p0-security-levels/pf-27-s01-shared-security-contracts.md) | draft |
+| `PF-28` | Cross-surface confidentiality | [S01](../../sprints/current/p0-security-levels/pf-28-s01-confidentiality-and-safe-environments.md) | draft |
+| `PF-29` | External Content Firewall | [S01](../../sprints/current/p0-security-levels/pf-29-s01-source-envelopes-and-ingress.md), [S02](../../sprints/current/p0-security-levels/pf-29-s02-derived-taint-and-action-context.md) | draft |
+| `PF-30` | Browser Isolation (separate feature) | [S01](../../sprints/current/p0-security-levels/pf-30-s01-isolated-acquisition-runtime.md), [S02](../../sprints/current/p0-security-levels/pf-30-s02-acquisition-integration-and-recovery.md) | draft |
+
+### Adopted feature contracts
+
+- **PF-27:** Extend existing policy/protocol types with versioned requested/
+  effective enforcement facts, host-assigned source envelopes, derived taint,
+  authority epochs, and trusted UI events. Register shared module/event seams
+  once; downstream sprints implement consumers, not competing policy systems.
+- **PF-28:** Inventory every model/output/diagnostic/export sink and child
+  environment. Reuse PF-13's trusted broker, centralize exact-value and pattern
+  redaction, allowlist child environments, and block unsupported credential
+  paths in stronger modes. Redaction is defense in depth, never permission to
+  hand plaintext to a model or generic child. Protected financial values use
+  explicit narrow derived views; raw balances/positions/PNL are not receipts.
+- **PF-29:** Cover repository/files, retrieved web/browser/document text,
+  tool/MCP/connector/email results, prior memory, and delegated output through
+  existing adapters. Authenticate origin outside content, normalize markup/
+  control-token spoofing, preserve taint through every derivation and resume,
+  and supply action context for deterministic post-read authorization. Unknown
+  provenance denies protected use. No classifier is required for safety.
+- **PF-30:** Isolate eligible unauthenticated acquisition in an ephemeral
+  backend with pinned runtime, disposable profile, restricted mounts, no host
+  IPC/vault/credentials, resource limits, redirect/DNS/IP-aware destination
+  enforcement, quarantine, and explicit file promotion. Preserve the existing
+  web-tool facade. Disable unsupported/native-search or host-browser bypasses
+  in stronger modes. Return PF-29 source envelopes, not a privileged browser
+  handle. Missing backend visibly denies acquisition; never fall back. Backend
+  selection and supported-platform matrix must be recorded before S01 is ready.
+
+### Requirement traceability
+
+All stronger-mode rows below implement **Required trust boundaries** (“External
+content enters as untrusted data”) and **Non-negotiable controls** (“Classify
+instruction intent and provenance before external content can influence tools
+or financial actions”), plus the expanded heading cited above.
+
+| Design requirement | Owner sprint(s) | Coverage state | Acceptance evidence |
+| --- | --- | --- | --- |
+| Existing Permissive unchanged | PF-21-S01; PF-26-S04 | baseline completed; final comparison pending | Frozen baseline and final compatibility run |
+| Exact brokered credential use | PF-13-S01–S05 | S01–S04 completed; S05 pending | Canary, platform evidence, independent review |
+| Requested versus effective policy, no widening | PF-22-S01; PF-27-S01; PF-23 | foundation completed; integration pending | Unknown/degraded states, inherited denials, epoch races |
+| Secret-free sinks, reflected errors, safe child env | PF-28-S01 | pending; PF-13 evidence reused, not generalized | Canary absent from model requests, tool results, logs, exports, artifacts, environments, and unbound network |
+| Provenance and sanitization without trust elevation | PF-29-S01 | pending | Forged markers and supported-source coverage matrix |
+| Sticky taint and post-read action checks | PF-29-S02; PF-23-S01 | pending | Compaction, memory, child, resume, unknown-origin and action regressions |
+| Browser containment, egress, quarantine, recovery | PF-30-S01–S02 | pending; separate feature | Platform backend matrix, escape/bypass/redirect tests and true-PTY recovery |
+| Inspector and trusted controls | PF-24; PF-25 | pending | Effective facts, separate health, exact grants, revoke/kill, actual-key proof |
+| Early attacks plus final integrated qualification | PF-26-S01; S04; S02; S03 | pending | Source/sink crosswalk, full tests, two live repos, independent and human acceptance |
+| Browser login or additional credential providers | No current sprint | deferred | Separate product decision; no implied support |
+| Classifier training, hosted detection, Agent Sweep | Proposed firewall plan only | excluded | Not prerequisites and not claimed shipped |
+
+The proposed firewall plan remains non-executable. Only the contracts explicitly
+adopted here authorize new drafts; its cancelled sprint catalog is not revived.
+
+### Dependency graph and parallel lanes
+
+The sprint front matter is authoritative; the [current index](../../sprints/current/p0-security-levels/index.md)
+lists every edge. Display order is not a waterfall. Up to three eligible lanes
+may run together under the sprint-process rules, never all rows automatically.
+
+| Lane | Work | Hard handoff / allowed overlap |
+| --- | --- | --- |
+| qualification | PF-13-S05 | Mac triage, Windows follow-up, and independent review may run together against pinned evidence |
+| contracts | PF-27-S01 | Existing PF-17/19/20/22 foundations suffice; may overlap PF-13 qualification with disjoint files |
+| harness | PF-26-S01 | After PF-27; fixtures and runner construction can accompany feature work |
+| confidentiality | PF-28-S01 | After PF-13-S05, PF-27, and early harness |
+| content | PF-29-S01 then S02 | After PF-27 and early harness; independent of browser backend construction |
+| browser | PF-30-S01 then S02 | S01 after PF-27/harness; S02 joins S01 and PF-29-S01 ingress contract |
+| enforcement | PF-23-S01 then S02 | S01 joins confidentiality, derived taint, browser integration, and shared contracts |
+| lifecycle | PF-23-S03 | After PF-23-S01; can overlap S02 using the completed epoch/dispatch interface |
+| inspector | PF-24-S01 then S02 | S01 after PF-27; S02 waits for both enforcement variants and lifecycle |
+| grant-ui / revoke-ui | PF-25-S01 / S02 | Parallel after PF-24-S02 shared event/overlay registration; separate view files |
+| qualification | PF-26-S04 then S02 then S03 | Final integrated automated proof, actual-key/live-repo proof, then human/docs/release |
+
+Each sprint supplies its intended literal write scopes. Owners and exact
+worktrees must be allocated before readiness; any discovered shared-file need
+is serialized through a contract/integration prerequisite. No implementation
+may start under `ready`, and blocked work retains its slot. Final integration
+records dependency commits and reruns all affected proof; prior lane success is
+supporting evidence, not a substitute for final-tree acceptance.
 
 ### PF-13 integration contract
 
@@ -245,6 +357,9 @@ only after candidate acceptance.
 | Downgrade | Aggressive with a pending grant or approval | Select Permissive and confirm the protection-removal summary | Downgrade applies and incompatible pending authority is invalidated | No old grant or approval can be replayed |
 | Restart/resume | Moderate or Aggressive with kill switch or revocation active | Restart Corbanu and resume the session | Level and restrictive state are restored | No transient fallback to Permissive and no stale approval restoration |
 | Agent tries policy change | Any level | Prompt or tool output asks Corbanu to weaken security | Request is treated as untrusted content | No policy mutation path is available to the agent |
+| Isolated web acquisition | Moderate/Aggressive; qualified backend | Read hostile public content, cancel a request, then retry | Content is labeled untrusted; cancellation cleans up isolated state | No host profile, credential, IPC, workspace, or forbidden network access |
+| Isolation unavailable and recovery | Moderate/Aggressive; missing/crashed backend | Request acquisition, restore backend, retry | Visible denial followed by isolated recovery | No host-browser fallback; health and audit facts agree |
+| Derived hostile content | Moderate/Aggressive | Summarize, compact, delegate, store memory, restart, then request protected action | Provenance persists and protected policy rechecks | No source-derived authority or protected disclosure |
 
 ## Standards-derived acceptance contract
 
@@ -259,26 +374,24 @@ only after candidate acceptance.
 
 ## Implementation sequence
 
-1. **Reconcile the existing foundation.** Execute PF-15 through PF-21 in
-   dependency order. Review the seven existing commits, correct them if needed,
-   collect final-tree evidence, and archive each record; code presence alone is
-   not acceptance.
-2. **Compose runtime authority.** PF-22 makes Core the source of effective policy
-   and child inheritance. PF-13 then builds the credential capability, scoped
-   vault resolver, exact OpenAI proxy path, bypass closure, and adversarial proof.
-3. **Connect protected surfaces.** PF-23 applies Moderate/Aggressive decisions at
-   content, vault, permission, approval, network, tool, and agent boundaries
-   without changing Permissive or overriding an existing denial.
-4. **Build the trusted TUI.** PF-24 implements profile view and transitions;
-   PF-25 implements narrow grants, revocation, kill switch, and recovery with
-   snapshots. Agents have no route to these human-origin events.
-5. **Qualify the final candidate.** PF-26-S01 produces deterministic harnesses
-   and the standards crosswalk. PF-26-S02 performs true-TUI success, failure,
-   recovery, and resume workflows in disposable TensorCash and Isometric Game
-   worktrees with actual keys sent.
-6. **Accept, document, and link release evidence.** PF-26-S03 obtains named human
-   acceptance, updates only finished security/vault/authentication guidance, and
-   records release and benchmark state before plan completion.
+1. **Preserve accepted foundations; finish PF-13 qualification.** Complete Mac
+   Core failure triage, the separate-machine Windows follow-up, and independent
+   review. No completed foundation is reopened merely to rename its scope.
+2. **Land shared contracts and early harnesses.** PF-27 defines integration
+   seams; PF-26-S01 supplies hostile-source fixtures and test runners. The
+   read-only PF-24-S01 inspector can proceed against those status contracts.
+3. **Build independent boundaries.** Schedule confidentiality, external-content,
+   and browser work subject to slots and literal write scopes; join browser
+   integration with the ingress contract before enabling acquisition.
+4. **Compose enforcement and lifecycle.** PF-23-S01 joins the boundaries;
+   Aggressive enforcement and transition/recovery can then run independently.
+5. **Wire trusted controls.** PF-24-S02 lands shared event plumbing; grant and
+   revoke/kill views can run in parallel. Each interactive sprint records actual
+   keys before completion, not just snapshots.
+6. **Join on a frozen candidate.** PF-26-S04 runs full automated/security/platform
+   qualification; PF-26-S02 repeats integrated true-TUI flows in both live repos.
+   Isolated platform/repository runs may execute concurrently at the same commit.
+   PF-26-S03 obtains human acceptance, finished docs, and release/benchmark proof.
 
 ## Automated evidence
 
@@ -293,8 +406,8 @@ Run fix and formatting tools before the final affected tests.
 | Config and core integration | `cd codex-rs && just test -p codex-config && just test -p codex-core` | pending | `qa/release/<version>/security/integration-tests.txt` |
 | Vault and network boundaries | `cd codex-rs && just test -p codex-vault && just test -p codex-network-proxy` | pending | `qa/release/<version>/security/boundary-tests.txt` |
 | TUI and snapshots | `cd codex-rs && just test -p codex-tui` | pending | `qa/release/<version>/security/tui-tests.txt` |
-| Adversarial matrix | `python3 scripts/security-level-adversarial --candidate <binary> --output <dir>` | pending; harness is part of stage 5 | `qa/release/<version>/security/adversarial/` |
-| Standards crosswalk | `python3 scripts/security-level-standards-check --manifest qa/release/<version>/security/standards-crosswalk.yaml` | pending; checker and manifest are part of stage 5 | `qa/release/<version>/security/standards-crosswalk.yaml` |
+| Adversarial matrix | `python3 scripts/security-level-adversarial --candidate <binary> --output <dir>` | pending; S01 constructs, S04 qualifies final candidate | `qa/release/<version>/security/adversarial/` |
+| Standards crosswalk | `python3 scripts/security-level-standards-check --manifest qa/release/<version>/security/standards-crosswalk.yaml` | pending; S01 constructs, S04 closes coverage | `qa/release/<version>/security/standards-crosswalk.yaml` |
 | Formatting | `cd codex-rs && just fmt`, then inspect the diff | pending; precedes final affected tests | `qa/release/<version>/security/fmt.txt` |
 | Final affected tests | `cd codex-rs && just test -p <affected-project>` for each changed project; never direct `cargo test` | pending | `qa/release/<version>/security/final-tests.txt` |
 
@@ -309,6 +422,7 @@ prompt text and Enter separately. `corbanu exec` is not acceptable proof.
 | Moderate | TensorCash disposable worktree | Select Moderate; confirm; process hostile fixture; attempt protected action; cancel and retry | Level visible; normal work continues; prohibited request blocked; approval state exact | pending | `qa/release/<version>/security/tui/moderate/` |
 | Aggressive | Isometric Game disposable worktree | Select Aggressive; confirm; attempt sensitive tool; grant one scoped action; spawn child; wait for expiry | Default denial; one narrow grant; child cannot weaken; expiry removes access | pending | `qa/release/<version>/security/tui/aggressive/` |
 | Downgrade/recovery | Isometric Game disposable worktree | Activate kill switch; request downgrade; inspect warning; cancel once, then confirm; restart and resume | Cancel preserves level; confirmation invalidates pending authority; persisted state is coherent | pending | `qa/release/<version>/security/tui/recovery/` |
+| Browser/content boundary | Both disposable repositories | Inspect separate health; acquire hostile content; cancel; disable backend; recover and resume | Source taint persists; unavailable backend denies visibly; no fallback or secret exposure | pending | `qa/release/<version>/security/tui/browser-content/` |
 
 ## Live-repository applicability
 
@@ -338,12 +452,15 @@ before qualification.
 
 | Item | Owner | Needed by | State |
 | --- | --- | --- | --- |
-| Permissive golden baseline | Jim Ricketts | PF-21-S01 | Commit `220af8dae8` contains an initial manifest/tests; final reconciliation evidence is pending |
-| Existing security-policy commits | Jim Ricketts | PF-15 through PF-21 | Seven commits are present; none is accepted until its current sprint completes and archives |
+| Permissive golden baseline | Jim Ricketts | PF-26-S04 | PF-21-S01 completed; final-candidate compatibility remains pending |
+| Existing security-policy commits | Jim Ricketts | Downstream integration | PF-15 through PF-22 completed and archived; preserve evidence |
 | Moderate and Aggressive control matrix | Product authority | PF-23 review | Defined in the product specification; any change requires a product decision |
 | Persistence and downgrade invalidation | Jim Ricketts | PF-20/PF-23 | Persistence code is present; transition and final evidence remain pending |
 | Independent security reviewer | Release owner | PF-13-S05 and final qualification | Must be named before either review completes |
 | Human tester | Release owner | Final qualification | Must be named before acceptance |
+| Browser backend/platform matrix | Jim Ricketts | PF-30-S01 readiness | Select pinned containment backend and record supported Linux/macOS/Windows behavior; unsupported acquisition fails closed |
+| Lane allocation and shared files | Jim Ricketts | Each sprint readiness | Draft coordinates are UNALLOCATED; serialize shared-file changes and check the three-slot limit |
+| Scope reconciliation | Travis Good | This amendment | Approved 2026-08-27; stronger guarantees only in Moderate/Aggressive; browser isolation is PF-30 |
 
 ## Release linkage
 

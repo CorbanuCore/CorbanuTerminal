@@ -31,15 +31,51 @@ contract. A sprint turns one feature into an exact code-and-evidence checklist.
 - A `draft` sprint may use `UNALLOCATED` worktree coordinates.
 - A `ready` or `in_progress` sprint requires an active plan plus an exact
   worktree, branch, and 40-character base commit matching that plan.
-- A plan may have at most one `in_progress` sprint, and executable dependencies
-  must already be completed and archived.
+- Executable dependencies must already be completed and archived.
 - A sprint never grants authority beyond its active plan.
+
+## Bounded concurrency
+
+Plans default to `max_active_sprints: 1`. An active plan may opt into two or
+three slots and name an `integration_owner`. Both `in_progress` and `blocked`
+consume slots; `ready` does not authorize code changes or reserve a slot.
+The two-plan portfolio limit is unchanged. Do not split an initiative into
+overlapping plans to evade either limit.
+
+Before opting in, record the dependency graph and lane allocation in the plan.
+Every executable sprint in that plan records `lane` and `write_scope` as well
+as its owner and exact worktree coordinates. `write_scope` is a comma-separated
+list of literal repository-relative files or directory prefixes, not globs;
+`.`/`..`, absolute paths, and backslashes are invalid. Include implementation
+and test paths; the sprint's own record and evidence directory are implicit.
+Shared plan/navigation metadata is updated serially by the integration owner.
+
+Concurrently active sprints must have distinct lanes, worktrees, and branches,
+and disjoint write scopes, including across plans. Separate worktrees alone
+do not make edits to the same module independent. Land shared interfaces and
+registration points first, then give each lane its own files. Shared-file
+changes require a serialized integration sprint or dependency, not an overlap
+exception. An integration owner cannot waive a collision or missing evidence.
+
+`depends_on` is the hard prerequisite graph, including completed interface
+contracts; cycles and self-dependencies are invalid even in drafts.
+`execution_order` is a unique display priority within a plan, not a dependency
+or an obligation to wait for every lower number. Split harness construction
+from final qualification instead of treating unfinished prerequisites as soft.
+
+Each worker follows one sprint. Platform tests, independent review, and
+isolated live-repository flows may run concurrently within a qualification
+sprint against the same recorded candidate. No new sprint is activated by a
+plan edit alone. Rebase/integrate through the named owner, then re-run affected
+tests and true-PTY proof on the final integrated candidate. Interactive sprint
+completion requires its own applicable true-PTY proof; final release workflows
+repeat that proof across the integrated product.
 
 ## Execution loop
 
-1. Select the next dependency-complete sprint linked from the active plan.
-2. Resolve its exact worktree coordinates and set it to `ready`.
-3. Set it to `in_progress` before code changes.
+1. Select a dependency-complete sprint linked from the active plan.
+2. Resolve its owner, lane, write scope, and exact worktree coordinates; set it to `ready`.
+3. Check slot availability and collisions; set it to `in_progress` and run the checker before code changes.
 4. Execute only `Remaining` items; move verified work to `Done` with `[x]`.
 5. Run formatting before final affected tests and true-TUI QA.
 6. Complete every verification and exit-evidence checkbox.
@@ -51,7 +87,7 @@ contract. A sprint turns one feature into an exact code-and-evidence checklist.
 
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
-| [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [11 current sprints](current/p0-security-levels/index.md) | PF-13-S05 is in progress; PF-15 through PF-22 and PF-13-S01 through PF-13-S04 are completed and archived |
+| [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [Current sprints and dependency graph](current/p0-security-levels/index.md) | PF-13-S05 is in progress; other work remains draft pending dependency completion and allocation |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
 | [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | The superseded 72-sprint decomposition is retained in the excluded archive |
 
@@ -63,5 +99,5 @@ python3 docs/sprints/check.py
 
 The checker validates lifecycle placement, one-feature linkage, plan backlinks,
 required checkbox ledgers, line limits, status authorization, exact plan/worktree
-agreement, dependency completion, one-in-progress-per-plan, and archive
-completion.
+agreement, dependency completion and cycles, bounded active slots, lane/path/
+branch collisions, and archive completion.

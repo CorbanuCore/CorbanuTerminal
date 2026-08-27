@@ -4,14 +4,16 @@ title: "Revocation and kill-switch TUI"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-25"
-execution_order: 20
+execution_order: 27
 owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
-depends_on: "PF-19-S01, PF-23-S03, PF-25-S01"
+lane: "revoke-ui"
+write_scope: "codex-rs/tui/src/security/revocation_view.rs, codex-rs/tui/src/security/revocation_tests.rs, codex-rs/tui/src/security/snapshots/revocation"
+worktree: "UNALLOCATED"
+branch: "UNALLOCATED"
+base_commit: "UNALLOCATED"
+depends_on: "PF-19-S01, PF-23-S03, PF-24-S02"
 created: 2026-08-24
-updated: 2026-08-25
+updated: 2026-08-27
 ---
 
 # PF-25-S02 — Revocation and kill-switch TUI
@@ -29,15 +31,17 @@ updated: 2026-08-25
 
 ## Code boundaries
 
-- Existing: `security-policy/src/revocation.rs`; `tui/src/bottom_pane/approval_overlay.rs`
-- Planned: `tui/src/security/revocation_view.rs`; Core revocation/kill events and persistence adapter
-- Tests: sibling behavior tests, Core recovery tests, and reviewed snapshots
+- Existing (read-only): `security-policy/src/revocation.rs`; PF-24-S02 overlay/events.
+- Planned: `tui/src/security/{revocation_view,revocation_tests}.rs`; revocation-only snapshots; consume registered Core events.
+- Tests: revocation-only behavior tests and snapshots; run existing Core recovery tests without editing shared files.
 
 ## Preconditions
 
-- [ ] PF-19-S01, PF-23-S03, and PF-25-S01 are completed and archived.
+- [ ] Every listed dependency is completed and archived.
 - [ ] Read root, Rust, Core, TUI, and TUI style instructions.
 - [ ] Exact worktree coordinates match the active plan.
+
+- [ ] Allocate lane/worktree/base in the plan and validate disjoint write scopes before readiness.
 
 ## Done
 
@@ -47,7 +51,7 @@ updated: 2026-08-25
 
 - [ ] List active secret-free grants/mandates and their exact scopes without protected values.
 - [ ] Require trusted human confirmation for revoke-all, scoped revoke, and kill-switch activation.
-- [ ] Apply and persist revocation before another protected operation can start; show durable active state after restart.
+- [ ] Use the completed Core API to apply and persist revocation before another protected operation can start; show durable active state after restart.
 - [ ] Provide an explicit human recovery path that cannot silently weaken the selected level.
 - [ ] Add race, cancel, persistence-failure, restart/resume, child, cached-decision, and agent-attempt tests with snapshots.
 
@@ -57,7 +61,7 @@ updated: 2026-08-25
 - [ ] Format: `cd codex-rs && just fmt`; then inspect the final diff.
 - [ ] Tests: `cd codex-rs && just test -p codex-tui security_revocation && just test -p codex-core security_recovery`.
 - [ ] Snapshot review: inspect and intentionally accept only PF-25 revocation output.
-- [ ] TUI qualification deferred to PF-26-S02 with revoke/kill/restart/recovery keys.
+- [ ] Run applicable success/cancel/failure/recovery keys in a true PTY before completion; PF-26 repeats final integrated qualification.
 
 ## Exit evidence
 

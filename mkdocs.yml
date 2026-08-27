@@ -113,8 +113,18 @@ nav:
                   - "PF-25-S02 — Revocation and kill switch": sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md
               - "Qualification and release evidence":
                   - "PF-26-S01 — Harnesses and crosswalk": sprints/current/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md
+                  - "PF-26-S04 — Final automated qualification": sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md
                   - "PF-26-S02 — True-TUI and live repos": sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md
                   - "PF-26-S03 — Human acceptance and docs": sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md
+              - "Shared contracts and confidentiality":
+                  - "PF-27-S01 — Shared security contracts": sprints/current/p0-security-levels/pf-27-s01-shared-security-contracts.md
+                  - "PF-28-S01 — Confidentiality and environments": sprints/current/p0-security-levels/pf-28-s01-confidentiality-and-safe-environments.md
+              - "External Content Firewall":
+                  - "PF-29-S01 — Sources and ingress": sprints/current/p0-security-levels/pf-29-s01-source-envelopes-and-ingress.md
+                  - "PF-29-S02 — Derived taint": sprints/current/p0-security-levels/pf-29-s02-derived-taint-and-action-context.md
+              - "Browser Isolation":
+                  - "PF-30-S01 — Isolated runtime": sprints/current/p0-security-levels/pf-30-s01-isolated-acquisition-runtime.md
+                  - "PF-30-S02 — Integration and recovery": sprints/current/p0-security-levels/pf-30-s02-acquisition-integration-and-recovery.md
           - Current Autoreview Work:
               - Overview: sprints/current/arbitrary-model-autoreview/index.md
               - "PF-14 — Arbitrary-model Autoreview":

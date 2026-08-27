@@ -4,14 +4,16 @@ title: "Moderate ingress and disclosure enforcement"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-23"
-execution_order: 14
+execution_order: 21
 owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
-depends_on: "PF-13-S05, PF-22-S01"
+lane: "enforcement"
+write_scope: "codex-rs/core/src/tools/router.rs, codex-rs/core/src/security/protected_surface.rs, codex-rs/core/src/security/protected_surface_tests.rs"
+worktree: "UNALLOCATED"
+branch: "UNALLOCATED"
+base_commit: "UNALLOCATED"
+depends_on: "PF-13-S05, PF-22-S01, PF-27-S01, PF-28-S01, PF-29-S02, PF-30-S02"
 created: 2026-08-24
-updated: 2026-08-25
+updated: 2026-08-27
 ---
 
 # PF-23-S01 — Moderate ingress and disclosure enforcement
@@ -29,15 +31,17 @@ updated: 2026-08-25
 
 ## Code boundaries
 
-- Existing: `codex-rs/core/src/tools/{router,registry}.rs`; `core/src/mcp_tool_call.rs`; `core/src/exec.rs`
+- Existing: `codex-rs/core/src/tools/router.rs`; completed PF-28/PF-29/PF-30 adapters are read-only consumers.
 - Planned: `codex-rs/core/src/security/{protected_surface,protected_surface_tests}.rs`
 - Tests: affected tool, MCP, exec, context, vault, and policy suites
 
 ## Preconditions
 
-- [ ] PF-13-S05 and PF-22-S01 are completed and archived.
+- [ ] Every listed dependency is completed and archived.
 - [ ] Read root, `codex-rs/AGENTS.md`, and `codex-rs/core/AGENTS.md`.
 - [ ] Exact worktree coordinates match the active plan.
+
+- [ ] Allocate lane/worktree/base in the plan and validate disjoint write scopes before readiness.
 
 ## Done
 
@@ -45,6 +49,8 @@ updated: 2026-08-25
 
 ## Remaining
 
+- [ ] Consume PF-27 effective health/epoch contracts, PF-28 sink protections, PF-29 source taint, and PF-30 acquisition status; do not reimplement those boundaries.
+- [ ] Reauthorize protected actions after untrusted reads; deny unknown provenance, unavailable controls, and stale epochs without changing Permissive.
 - [ ] Classify protected surfaces by typed resource/action at the shared Core dispatch boundary.
 - [ ] Treat project text, tool/MCP output, hooks, plugins, connectors, and external content as non-authoritative inputs.
 - [ ] Deny vault enumeration/extraction, protected-financial-data disclosure, policy mutation, approval bypass, and value transfer without matching authority.
@@ -58,7 +64,7 @@ updated: 2026-08-25
 - [ ] Format: `cd codex-rs && just fmt`; then inspect the final diff.
 - [ ] Focused tests: `cd codex-rs && just test -p codex-core protected_surface`.
 - [ ] Boundary regressions: `cd codex-rs && just test -p codex-core tools:: && just test -p codex-core mcp_tool_call`.
-- [ ] TUI applicability: none; PF-26-S02 owns interactive proof.
+- [ ] TUI applicability: true-PTY hostile-source/protected-action denial and safe retry before completion; PF-26 repeats final proof.
 
 ## Exit evidence
 

@@ -6,6 +6,8 @@ plan_file: "docs/plans/proposed/example.md"
 plan_feature: "PF-00"
 execution_order: 0
 owner: "accountable owner"
+lane: "UNALLOCATED"
+write_scope: "UNALLOCATED"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
@@ -38,6 +40,7 @@ updated: YYYY-MM-DD
 - [ ] Plan is active.
 - [ ] Dependencies are completed.
 - [ ] Worktree, branch, and base commit are exact and match the plan.
+- [ ] Lane and literal write scopes are allocated; active-slot and collision checks pass.
 
 ## Done
 
@@ -53,6 +56,7 @@ updated: YYYY-MM-DD
 - [ ] Focused test: `<final-tree command>`
 - [ ] Integration test: `<final-tree command>`
 - [ ] TUI applicability resolved; if applicable, keys and checkpoints recorded.
+- [ ] Integrated interfaces and candidate commit match dependency evidence.
 
 ## Exit evidence
 

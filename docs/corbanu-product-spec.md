@@ -190,6 +190,11 @@ protected-action decision.
 
 ## Required trust boundaries
 
+The stronger guarantees in this section, **Non-negotiable controls**, and
+**Required adversarial tests** apply to Moderate and Aggressive. Permissive
+preserves the existing product, including its existing vault/helper policies;
+it does not acquire an all-mode confidentiality guarantee from this initiative.
+
 1. External content enters as untrusted data.
 2. The model may research and propose but cannot resolve secrets or authorize itself.
 3. Credentials are referenced by label and resolved only inside a trusted execution boundary.
@@ -230,6 +235,31 @@ The release suite must cover:
 - kill-switch, cooldown, revocation, and limit failures.
 
 **Pass condition:** Every critical attack-class regression passes and no critical finding remains open.
+
+## Moderate/Aggressive isolation and content provenance
+
+Status: **TO BUILD**. Product decision: Travis Good, 2026-08-27, approved the
+security-plan refactor while explicitly preserving Permissive as-is.
+
+Browser isolation is a separately scoped feature within the security initiative.
+Eligible public-web acquisition runs in an ephemeral isolated process boundary
+without host browser profiles, inherited credentials, vault access, host IPC, or
+unrestricted workspace access. Network destinations and redirects are enforced;
+downloads remain quarantined until an explicitly approved promotion. Missing
+isolation denies the affected acquisition path rather than falling back to the
+host browser. Authenticated browser login is not part of this initial feature.
+
+External content remains untrusted after extraction or sanitization. Source
+provenance and taint survive summaries, compaction, children, memory, and resume;
+deterministic policy rechecks protected actions after untrusted reads. A
+classifier may inform risk but cannot confer authority. Protected values must
+remain absent from model-visible outputs, diagnostics, artifacts, and inherited
+environments, including reflected provider failures.
+
+The security inspector distinguishes the requested level from effective
+enforcement and displays Browser Isolation and External Content Firewall health
+separately. Unavailable controls cannot be represented as active protection.
+These contracts do not change Permissive or weaken any release evidence gate.
 
 # Trader capabilities
 

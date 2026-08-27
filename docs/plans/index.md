@@ -66,6 +66,9 @@ activate when it records:
 - useful code references;
 - a sprint execution map that assigns every implementation unit to exactly one
   plan feature;
+- a hard dependency graph, requirement-to-evidence traceability, and, when
+  opting into sprint concurrency, an integration owner and lane allocations
+  under `docs/sprints/index.md`;
 - measurable success, failure, recovery, and resume flows;
 - applicable automated, true-TUI, live-repository, human, documentation, and
   benchmark evidence fields; and

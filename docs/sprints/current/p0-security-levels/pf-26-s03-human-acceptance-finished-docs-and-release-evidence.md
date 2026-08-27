@@ -4,14 +4,16 @@ title: "Human acceptance, finished docs, and release evidence"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-26"
-execution_order: 23
+execution_order: 30
 owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+lane: "qualification"
+write_scope: "qa/release, docs/features, docs/authentication.md, docs/slash_commands.md"
+worktree: "UNALLOCATED"
+branch: "UNALLOCATED"
+base_commit: "UNALLOCATED"
 depends_on: "PF-26-S02"
 created: 2026-08-24
-updated: 2026-08-25
+updated: 2026-08-27
 ---
 
 # PF-26-S03 — Human acceptance, finished docs, and release evidence
@@ -35,9 +37,11 @@ updated: 2026-08-25
 
 ## Preconditions
 
-- [ ] PF-26-S02 is completed and archived.
+- [ ] Every listed dependency is completed and archived.
 - [ ] A named human tester and independent security reviewer are recorded.
 - [ ] Candidate version/commit and benchmark state are fixed.
+
+- [ ] Allocate lane/worktree/base in the plan and validate disjoint write scopes before readiness.
 
 ## Done
 

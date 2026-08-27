@@ -6,12 +6,14 @@ plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 13
 owner: "Jim Ricketts"
+lane: "qualification"
+write_scope: "scripts/security-credential-canary, scripts/test_security_credential_canary.py, qa/security-levels/sprints/PF-13-S05"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-pf13-s02"
 branch: "feat/pf-13-s02-scoped-vault-resolver"
 base_commit: "1bdc515bff48a4d9048dae7d06c6214e884265bc"
 depends_on: "PF-13-S04"
 created: 2026-08-24
-updated: 2026-08-26
+updated: 2026-08-27
 ---
 
 # PF-13-S05 — Credential boundary adversarial qualification
@@ -54,6 +56,10 @@ updated: 2026-08-26
 - [ ] Obtain independent security review of raw-secret reachability and record findings/corrections.
 - [ ] Triage the 135 complete-Core failures and record a clean full rerun; all 13 credential-named tests already pass.
 - [ ] Collect the remaining Windows test evidence from the separate machine; the hosted canary pass does not close this follow-up.
+
+Mac failure triage, separate-machine Windows testing, and independent review may
+run concurrently within this sprint. Pin each result to its candidate; runtime
+fixes return to an authorized implementation sprint and require affected reruns.
 
 ## Verification
 

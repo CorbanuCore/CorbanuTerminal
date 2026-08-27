@@ -4,6 +4,8 @@ status: draft
 change_class: product-initiative
 priority: "<P0, P1, or P2>"
 owner: "<name or accountable role>"
+max_active_sprints: 1
+integration_owner: "<name or accountable role>"
 activation_authority: "<person or role>"
 activation_basis: "<existing product decision authorizing this outcome>"
 target_release: "<version or TBD>"
@@ -90,6 +92,22 @@ with release evidence after the sprint is archived.
 | Feature ID | Current sprint records | Completion evidence |
 | --- | --- | --- |
 |  |  | pending |
+
+### Dependency graph and lane allocation
+
+Use `depends_on` for hard prerequisites and `execution_order` only for display.
+Follow the concurrency contract in `docs/sprints/index.md`; record actual
+allocations before activating a sprint, not hypothetical worktree paths.
+
+| Lane | Sprint(s) | Owner | Write scope | Shared-interface prerequisite | Integration checkpoint |
+| --- | --- | --- | --- | --- | --- |
+|  |  |  |  |  |  |
+
+### Requirement traceability
+
+| Product requirement / adopted design | Feature and sprint | State (covered, pending, deferred, excluded) | Acceptance evidence |
+| --- | --- | --- | --- |
+|  |  |  |  |
 
 ## Acceptance flows
 
