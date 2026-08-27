@@ -13,6 +13,7 @@ mod bounded;
 mod credential;
 mod digest;
 mod grant;
+mod integration;
 mod level;
 mod mandate;
 mod revocation;
@@ -48,6 +49,12 @@ pub use grant::BoundedGrant;
 pub use grant::GrantContext;
 pub use grant::GrantScope;
 pub use grant::GrantValidationError;
+pub use integration::SECURITY_INSPECTOR_SCHEMA_VERSION;
+pub use integration::SecurityControlHealth;
+pub use integration::SecurityControlHealthSnapshot;
+pub use integration::SecurityDegradationReason;
+pub use integration::SecurityInspectorError;
+pub use integration::SecurityInspectorSnapshot;
 pub use level::SECURITY_SETTINGS_VERSION;
 pub use level::SecurityLevel;
 pub use level::SecuritySettings;
@@ -68,6 +75,10 @@ pub use revocation::RevocationTarget;
 #[cfg(test)]
 #[path = "credential_tests.rs"]
 mod credential_tests;
+
+#[cfg(test)]
+#[path = "integration_tests.rs"]
+mod integration_tests;
 
 #[cfg(test)]
 #[path = "security_policy_tests.rs"]
