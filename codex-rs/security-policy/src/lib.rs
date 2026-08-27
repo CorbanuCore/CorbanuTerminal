@@ -16,6 +16,7 @@ mod grant;
 mod integration;
 mod level;
 mod mandate;
+mod provenance;
 mod revocation;
 
 pub use authorization::ActorChain;
@@ -66,11 +67,21 @@ pub use mandate::MandateOutcome;
 pub use mandate::ProtectedActionMandate;
 pub use mandate::ProtectedActionPreview;
 pub use mandate::ReplayLedger;
+pub use provenance::MAX_TAINT_SOURCES;
+pub use provenance::ProvenanceError;
+pub use provenance::SourceEnvelope;
+pub use provenance::SourceId;
+pub use provenance::SourceKind;
+pub use provenance::TaintContext;
 pub use revocation::RevocationError;
 pub use revocation::RevocationEvent;
 pub use revocation::RevocationReason;
 pub use revocation::RevocationState;
 pub use revocation::RevocationTarget;
+
+#[cfg(test)]
+#[path = "provenance_tests.rs"]
+mod provenance_tests;
 
 #[cfg(test)]
 #[path = "credential_tests.rs"]
