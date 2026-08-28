@@ -1,0 +1,68 @@
+text You're right, and I've verified the exact chain in the snapshot.
+															458 text P1-1 is withdrawn.
+															459 text Verification of the correction:
+															460 text  My error was conflating types.
+															461 text runtime.rs:13
+															462 text  imports
+															463 text crate::policy::Host
+															464 text  — the crate's own normalized wrapper, not
+															465 text url::Host
+															466 text . So at
+															467 button runtime.rs:535
+															468 text ,
+															469 text Host::parse(host)
+															470 text  runs
+															471 button policy.rs:21-25
+															472 text , which calls
+															473 text normalize_host
+															474 text  (
+															475 button policy.rs:101-119
+															476 text ) →
+															477 text normalize_dns_host_or_ip_literal
+															478 text  (
+															479 button policy.rs:121-128
+															480 text ), which lowercases and strips trailing dots before any deny/allow glob matching or local-IP classification in
+															481 text host_blocked
+															482 text . A dotted host like
+															483 text evil.example.
+															484 text  therefore matches
+															485 text denied_domains: ["evil.example"]
+															486 text  and is denied — there is no bypass. The residual trailing-dot effects on the browser path (raw dotted host used for DNS lookup, TLS hostname, the audit-event field, and the
+															487 text visited
+															488 text  final-URL match) are consistency/reliability nits that fail closed or reach the identical validated destination; none is a policy defect.
+															489 heading Corrected final finding summary — PF-30-S01 (unchanged candidate), Value: 2
+																490 text Corrected final finding summary — PF-30-S01 (unchanged candidate)
+															491 text No P0. One confirmed P1, one confirmed P2, one unconfirmed P2 qualification risk.
+															492 content list
+																493 container
+																	494 AXListMarker •
+																	495 text P1 — DNS resolution before policy denial  (
+																	496 button browser_policy.rs:72-106
+																	497 text ; also exercised via the redirect precheck at
+																	498 button broker.rs:162-166
+																	499 text ).  lookup_host  runs before  method_allowed / evaluate_host_policy , so a compromised worker can drive host-side DNS queries for attacker-chosen names (up to 64 requests + 8 redirect prechecks per acquisition) even when the composed policy denies them — a DNS egress side channel across the boundary this sprint must enforce. The correction above strengthens this finding's fix: since  host_blocked  matches the deny list dot-insensitively and  before  its own DNS check (
+																	500 button runtime.rs:554-560
+																	501 text ), reordering the policy block ahead of  lookup_host  fully eliminates resolver traffic for deny-listed hosts. Regression: with  denied_domains: ["denied.example"] , assert  resolve_browser_destination("https://denied.example/")  is  PolicyDenied  (offline-deterministic post-fix; pre-fix it yields  ResolutionFailed  offline). Residual:  host_blocked 's internal local-IP DNS check still resolves not-allowlisted hosts — unchanged dependency code, out of S01 write scope, follow-up for the owning lane.
+																502 container
+																	503 AXListMarker •
+																	504 text P2 — Podman image-ID format mismatch, confirmed  (
+																	505 button image.rs:20-22
+																	506 text , used at
+																	507 button image.rs:73-79
+																	508 text ).  is_image_id  requires a  sha256:  prefix; Podman image inspect emits bare 64-hex  Id  (per your doc check), so  prepare_image  fails every Podman engine with  ContainerMismatch  — the Podman path is dead on arrival (fail-closed availability, not containment). Fix: strip an optional  sha256:  prefix, require 64 hex, use one canonical form consistently with  verify_owner  (which already trims). Regression: unit-test both ID forms; extend  fixture_engine.py  with an  image inspect  arm; confirm on the real Linux host during planned qualification.
+																509 container
+																	510 AXListMarker •
+																	511 text P2 (unconfirmed qualification risk) — 128 KiB engine-JSON stdout cap  (
+																	512 button command.rs:41-49
+																	513 text ,
+																	514 button engine.rs:110-113
+																	515 text ). Real  podman container inspect / docker info  payloads could exceed the cap on some hosts, spuriously failing closed. Not a proven defect; record observed payload sizes during Mac/Linux qualification and raise the cap for the  json()  path if warranted.
+															516 text Testing gaps (unchanged, minus the withdrawn item):
+															517 text  broker redirect branch (
+															518 button broker.rs:144-169
+															519 text ) untested; worker
+															520 text route_request
+															521 text  deny/limit/non-GET paths untested;
+															522 text pin_local_endpoint
+															523 text  JSON selection untested; the P1 DNS-ordering regression is absent. The already-tracked real-backend blockers stand: no live containment/egress/cancel/crash probes have run on any platform, and nothing here certifies any platform.
+															524

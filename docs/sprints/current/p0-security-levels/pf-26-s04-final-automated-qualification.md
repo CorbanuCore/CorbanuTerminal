@@ -11,7 +11,7 @@ write_scope: "qa/release"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-26-S01, PF-23-S02, PF-23-S03, PF-25-S01, PF-25-S02, PF-28-S01, PF-29-S02, PF-30-S02"
+depends_on: "PF-26-S01, PF-23-S02, PF-23-S03, PF-25-S01, PF-25-S02, PF-28-S01, PF-29-S02, PF-30-S02, PF-30-S03"
 created: 2026-08-27
 updated: 2026-08-27
 ---
@@ -32,7 +32,7 @@ updated: 2026-08-27
 
 ## Code boundaries
 
-- Existing (paths below `codex-rs/`): `scripts/{security-level-compat,security-level-adversarial,security-level-standards-check}` from S01.
+- Existing (repository-root paths): `scripts/{security-level-compat,security-level-adversarial,security-level-standards-check}` from S01; exact schemas and preparation commands are in `qa/security-levels/fixtures/README.md`.
 - Planned: `qa/release/<version>/security/` candidate manifest and final automated evidence.
 - Tests: sibling unit/integration regressions and the PF-26 fixture matrix.
 
@@ -55,16 +55,18 @@ updated: 2026-08-27
 - [ ] Audit every upstream-touch row and ingress adapter against the final candidate; run native schema/child/history/transport-recovery contracts and separate non-secret task-integrity assertions.
 - [ ] Record verified upstream and fork SHAs, per-adapter retain/adapt/remove disposition, exact commands and evidence; unresolved compatibility cannot be marked qualified.
 - [ ] Collect Linux/macOS/Windows results for promised controls; record backend support versus fail-closed unavailable behavior explicitly.
+- [ ] Verify PF-30-S03 runtime reuse, missing-engine/image setup, stopped/stalled owned-service recovery, elevation/cancel, secret-free authentication handling, and no Permissive setup on the final candidate.
 - [ ] Complete the versioned standards/design-requirement crosswalk with no missing applicable case or unsupported security claim.
 - [ ] Obtain independent security review with no open critical finding; return fixes to owning sprints and requalify the resulting candidate.
+- [ ] Record Travis's selected independent reviewer provider/model and exact reviewed candidate; routine Autoreview is supporting evidence, not a substitute for that selection or Travis's human acceptance.
 
 ## Verification
 
 - [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] Verify formatting/fixes precede final tests; any later runtime change invalidates affected candidate evidence.
 - [ ] Run `python3 scripts/security-level-compat --baseline <commit> --candidate <binary> --output <dir>`.
-- [ ] Run `python3 scripts/security-level-adversarial --candidate <binary> --output <dir>`.
-- [ ] Run `python3 scripts/security-level-standards-check --manifest qa/release/<version>/security/standards-crosswalk.yaml`.
+- [ ] Run `python3 scripts/security-level-adversarial --bundle <prepared-dir> --observations <host-run.json> --candidate <binary> --source-commit <sha> --platform <platform> --not-before <UTC> --output <dir>`; retain trusted build/run provenance, not model-authored verdicts.
+- [ ] Run `python3 scripts/security-level-standards-check --manifest qa/release/<version>/security/standards-crosswalk.json --candidate <binary> --source-commit <sha> --platform <platform> --not-before <UTC>`; S01's planning check is not qualification.
 - [ ] TUI applicability: PF-26-S02 repeats final integrated workflows after this sprint; component interactive sprints must already have their own actual-key proof.
 
 ## Exit evidence

@@ -1,0 +1,51 @@
+{
+  "recorded_at": "2026-08-28T03:39:22.936Z",
+  "kind": "PF-30-S01-platform-repair-checkpoint",
+  "source_base_commit": "ddfb27b4daed6d022403ae0c4e2d869f1910f02a",
+  "source_state": "uncommitted four-file repair, identified by platform-fix-candidate.sha256",
+  "binary_sha256": {
+    "macos": "aa23358c43c3eb6df6088b2e37b7578439fe03bfd30cb7d7737a04adef192b5a",
+    "linux": "911ac3e38898f87b5aaf1040f77d326f119279b17c5ddee7676282215f79954b"
+  },
+  "expected": {
+    "macSmokeFixed": 0,
+    "linuxSmokeFixed": 0,
+    "macDisabledSeccomp": 1,
+    "linuxDisabledSeccomp": 1,
+    "macResidualCapability": 1,
+    "linuxResidualCapability": 1
+  },
+  "qualification_scope": "Real public-fetch/private-denial smoke and pre-browser rejection of disabled seccomp or retained capabilities; not full platform/PF-26 certification",
+  "captures": {
+    "macSmokeFixed": {
+      "command": "/Users/travisgood/Documents/ChatGPT/corbanu-pf27-s01/codex-rs/target/ci-test/examples/qualify",
+      "exit_code": 0,
+      "output": "{\"engine\":\"Docker\",\"health\":\"enforcing\",\"image_id\":\"sha256:75e63e06e2a8767c441b06aed760b95aa8d93a51927d5dc4f5f55c6cf1ae1468\",\"private_and_file_denials\":4,\"probe\":\"PF-30-S01-real-smoke\",\"public_html_bytes\":559,\"remaining\":\"adversarial containment, cancellation/recovery and platform matrix\",\"result\":\"pass\"}\n"
+    },
+    "linuxSmokeFixed": {
+      "command": "ssh -S /tmp/corbanu-pf30-fix-ssh.sJ6CKV/control travis@100.99.88.49 '/home/travis/corbanu-pf30-qualify.0XirOU/source/codex-rs/target/ci-test/examples/qualify'",
+      "exit_code": 0,
+      "output": "{\"engine\":\"Podman\",\"health\":\"enforcing\",\"image_id\":\"49f2876f60e5e751d5a6ce7baa2907faa149120b0a91c261f788dad0b6d7ebd0\",\"private_and_file_denials\":4,\"probe\":\"PF-30-S01-real-smoke\",\"public_html_bytes\":559,\"remaining\":\"adversarial containment, cancellation/recovery and platform matrix\",\"result\":\"pass\"}\n"
+    },
+    "macDisabledSeccomp": {
+      "command": "docker run --rm --name corbanu-pf30-negative-seccomp --network=none --read-only --user=65532:65532 --cap-drop=ALL --security-opt=no-new-privileges --security-opt=seccomp=unconfined sha256:75e63e06e2a8767c441b06aed760b95aa8d93a51927d5dc4f5f55c6cf1ae1468 probe",
+      "exit_code": 1,
+      "output": "{\"type\":\"failed\"}\n"
+    },
+    "linuxDisabledSeccomp": {
+      "command": "ssh -S /tmp/corbanu-pf30-fix-ssh.sJ6CKV/control travis@100.99.88.49 'podman run --rm --name corbanu-pf30-negative-seccomp --network=none --read-only --user=65532:65532 --cap-drop=ALL --security-opt=no-new-privileges --security-opt=seccomp=unconfined 49f2876f60e5e751d5a6ce7baa2907faa149120b0a91c261f788dad0b6d7ebd0 probe'",
+      "exit_code": 1,
+      "output": "{\"type\":\"failed\"}\n"
+    },
+    "macResidualCapability": {
+      "command": "docker run --rm --name corbanu-pf30-negative-capability --network=none --read-only --user=65532:65532 --cap-drop=ALL --cap-add=NET_BIND_SERVICE --security-opt=no-new-privileges --security-opt=seccomp=builtin sha256:75e63e06e2a8767c441b06aed760b95aa8d93a51927d5dc4f5f55c6cf1ae1468 probe",
+      "exit_code": 1,
+      "output": "{\"type\":\"failed\"}\n"
+    },
+    "linuxResidualCapability": {
+      "command": "ssh -S /tmp/corbanu-pf30-fix-ssh.sJ6CKV/control travis@100.99.88.49 'podman run --rm --name corbanu-pf30-negative-capability --network=none --read-only --user=65532:65532 --cap-drop=ALL --cap-add=NET_BIND_SERVICE --security-opt=no-new-privileges --seccomp-policy=default 49f2876f60e5e751d5a6ce7baa2907faa149120b0a91c261f788dad0b6d7ebd0 probe'",
+      "exit_code": 1,
+      "output": "{\"type\":\"failed\"}\n"
+    }
+  }
+}

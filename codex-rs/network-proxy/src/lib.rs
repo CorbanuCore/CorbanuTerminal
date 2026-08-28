@@ -1,6 +1,8 @@
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 
 mod attribution;
+// Public module seam avoids shared root registrations in the parallel browser lane.
+pub mod browser_policy;
 mod certs;
 mod config;
 mod connect_policy;

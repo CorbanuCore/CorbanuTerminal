@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "contract_commit": "cb808c30c0058c101597ab2ada3da16238565c5e",
+  "upstream_commit": "413492cd6c3a4d4f8dff6f406247ccda5a9d88aa",
+  "files": {
+    "qa/security-levels/permissive-baseline-v1.json": "45d1f2bd96733381638bb62961ee59fb1c026bc05a6a78d03b560cb794406b8d",
+    "qa/security-levels/sprints/PF-27-S01/adapter-conformance.json": "0060f1f292177a3afac9e67b9c7f4cbdc5ea0765706aa949d6af29c6a541d004",
+    "qa/security-levels/sprints/PF-27-S01/code-sha256.txt": "d117257dfb6d7db00c59fd7f77463742a187d658a7417cfbfadbdbb51d9fb780"
+  }
+}

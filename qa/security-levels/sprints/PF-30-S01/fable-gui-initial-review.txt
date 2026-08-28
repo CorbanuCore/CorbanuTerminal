@@ -1,0 +1,307 @@
+heading PF-30-S01 independent security review — Fable 5, High effort, Value: 2
+																129 text PF-30-S01 independent security review — Fable 5, High effort
+															130 text Scope reviewed:
+															131 text  all 27 entries in
+															132 text candidate-files.sha256
+															133 text  plus
+															134 text tracked-changes.diff
+															135 text , against the unchanged dependency context in the snapshot (
+															136 button network-proxy/src/policy.rs
+																137 text network-proxy/src/policy.rs
+															138 text ,
+															139 text network_policy.rs
+															140 text ,
+															141 text runtime.rs
+															142 text ,
+															143 button security-policy/src/action_context.rs
+																144 text security-policy/src/action_context.rs
+															145 text ,
+															146 button core/src/security/effective_policy.rs
+																147 text core/src/security/effective_policy.rs
+															148 text ). Read-only; no code executed; no nested reviewers. Source text was treated strictly as data.
+															149 text Summary:
+															150 text  The overall design is strong — host-generated ownership tokens, inspect-verified confinement, pinned-address connect binding with a no-fallback resolver, per-redirect revalidation, denial-only policy composition (no decider override), consume-on-promotion quarantine, and consistent fail-closed error mapping. I found
+															151 text no P0
+															152 text . I found
+															153 text two confirmed P1 defects
+															154 text  in the new egress policy seam,
+															155 text one likely P2 functional defect
+															156 text  on the Podman path, and
+															157 text one P2 robustness risk
+															158 text , plus testing gaps. No platform certification is claimed or implied; the sprint's open real-backend qualification remains a blocker independent of these findings.
+															159 heading Confirmed defects, Value: 3
+																160 text Confirmed defects
+															161 heading P1-1 — Trailing-dot hostname bypasses the composed denied_domains policy, Value: 4
+																162 text P1-1 — Trailing-dot hostname bypasses the composed
+																163 text denied_domains
+																164 text  policy
+															165 text Path:
+															166 button codex-rs/network-proxy/src/browser_policy.rs:64-68
+																167 text codex-rs/network-proxy/src/browser_policy.rs:64-68
+															168 text  (host extraction) and
+															169 text :127-148
+															170 text  (
+															171 text parse_destination
+															172 text  domain arm). The WHATWG-conformant
+															173 text url
+															174 text  crate retains a trailing dot in domains (
+															175 text https://evil.example./
+															176 text  → host
+															177 text "evil.example."
+															178 text ). Every existing proxy ingress path normalizes the host before policy evaluation (
+															179 text http_proxy.rs:197
+															180 text ,
+															181 text :394
+															182 text ,
+															183 text :675
+															184 text ,
+															185 text socks5.rs:202
+															186 text  all call
+															187 text normalize_host
+															188 text , which strips trailing dots —
+															189 text policy.rs:123
+															190 text ), and deny/allow patterns are normalized at compile time (
+															191 text policy.rs:150-170
+															192 text ). The new browser path passes the raw dotted host into
+															193 text evaluate_host_policy → host_blocked
+															194 text  (
+															195 text runtime.rs:533-607
+															196 text ), which does no normalization of its input. A glob compiled from
+															197 text denied_domains: ["evil.example"]
+															198 text  does not match
+															199 text "evil.example."
+															200 text . Notably,
+															201 text parse_destination
+															202 text  itself trims the trailing dot for its own suffix denylist (
+															203 text browser_policy.rs:129
+															204 text ) but not for the host handed to the policy engine — the divergence is internal to one function.
+															205 text Failure scenario:
+															206 text  configuration
+															207 text allowed_domains: ["*"]
+															208 text  (or any broad allow),
+															209 text denied_domains: ["evil.example"]
+															210 text . A compromised in-container page issues a GET to
+															211 text https://evil.example./
+															212 text . The deny glob does not match, the wildcard allow does, DNS for
+															213 text evil.example.
+															214 text  resolves to the same public addresses, and the host-side broker fetches from an explicitly denied destination. The same URL through the existing HTTP/SOCKS proxy would be denied. (With a non-wildcard allowlist the dotted form fails the allowlist instead, so the bypass specifically defeats deny-list composition under broad allows.)
+															215 text Smallest in-scope fix:
+															216 text  in
+															217 text parse_destination
+															218 text 's
+															219 text Host::Domain
+															220 text  arm, reject hosts with a trailing dot outright (e.g., error when
+															221 text name.ends_with('.')
+															222 text ) before the suffix checks. Rejection is safer than normalization: it also removes the dotted/undotted ambiguity from
+															223 text BrowserDestination::url()
+															224 text , DNS lookup, TLS SNI, and the
+															225 text visited
+															226 text  final-URL match in
+															227 text runtime.rs:151-163
+															228 text .
+															229 text Regression test:
+															230 text  in
+															231 text browser_policy_tests.rs
+															232 text , assert
+															233 text parse_destination("https://example.com./")
+															234 text  errors; and an async test that
+															235 text resolve_browser_destination("https://a.example./", state)
+															236 text  errors for a state with
+															237 text {"*": "allow", "a.example": "deny"}
+															238 text  (deterministic offline once parse rejects it — today it can succeed on a networked host).
+															239 heading P1-2 — DNS resolution happens before policy denial: DNS egress side channel for denied destinations, Value: 4
+																240 text P1-2 — DNS resolution happens before policy denial: DNS egress side channel for denied destinations
+															241 text Path:
+															242 button codex-rs/network-proxy/src/browser_policy.rs:72-106
+																243 text codex-rs/network-proxy/src/browser_policy.rs:72-106
+															244 text ; also exercised via the redirect precheck at
+															245 button codex-rs/browser-isolation/src/broker.rs:162-166
+																246 text codex-rs/browser-isolation/src/broker.rs:162-166
+															247 text .
+															248 text resolve_browser_destination
+															249 text  calls
+															250 text tokio::net::lookup_host
+															251 text  (lines 72-80)
+															252 text before
+															253 text method_allowed
+															254 text /
+															255 text evaluate_host_policy
+															256 text  (lines 82-106). In
+															257 text host_blocked
+															258 text , the explicit-deny check is deliberately first, before any DNS (
+															259 text runtime.rs:554-560
+															260 text ), so a correctly ordered call would deny listed hosts with zero resolver traffic. As written, the host issues a system DNS query for every syntactically valid worker-supplied URL, including ones the composed policy will then deny.
+															261 text Failure scenario:
+															262 text  a compromised page in the isolated worker encodes data into hostnames (
+															263 text <exfil-chunk>.attacker.example
+															264 text ) and issues GETs to them. Policy denies the fetches, but the host's resolver still queries the attacker's authoritative DNS — up to 64 requests plus 8 redirect prechecks per acquisition, ~250 bytes of labels each. That is an egress channel crossing the boundary this sprint is explicitly required to enforce ("Enforce destinations at URL, DNS/IP, redirect, and connection boundaries"), and it also discloses the host's resolver/network position for denied destinations.
+															265 text Smallest in-scope fix:
+															266 text  reorder — build the
+															267 text NetworkPolicyRequest
+															268 text  and run the
+															269 text method_allowed
+															270 text /
+															271 text evaluate_host_policy
+															272 text  block before
+															273 text lookup_host
+															274 text , keeping
+															275 text validate_addresses
+															276 text  after resolution. The redirect precheck in
+															277 text broker.rs:162-166
+															278 text  then inherits the ordering automatically (its discarded resolution could also be skipped, but that's optional once ordering is fixed).
+															279 text Regression test:
+															280 text  with
+															281 text denied_domains: ["denied.example"]
+															282 text , assert
+															283 text resolve_browser_destination("https://denied.example/", state)
+															284 text  returns
+															285 text Err(PolicyDenied)
+															286 text  — today, on an offline CI host, it returns
+															287 text ResolutionFailed
+															288 text , which proves resolution precedes denial and makes the test deterministic post-fix.
+															289 text Residual, out of S01 scope:
+															290 text  for hosts that are neither deny-listed nor allow-listed, the unchanged
+															291 text host_blocked
+															292 text  performs its own local/private-IP DNS check (
+															293 text runtime.rs:587-600
+															294 text ) before returning
+															295 text NotAllowed
+															296 text , so a smaller residual DNS channel remains in the dependency file. Worth a follow-up in the owning lane; do not fix it from this sprint's write scope.
+															297 heading Likely defect (fail-closed; needs one real-backend observation to confirm), Value: 3
+																298 text Likely defect (fail-closed; needs one real-backend observation to confirm)
+															299 heading P2-1 — is_image_id requires a sha256: prefix that Podman's image inspect does not emit, Value: 4
+																300 text P2-1 —
+																301 text is_image_id
+																302 text  requires a
+																303 text sha256:
+																304 text  prefix that Podman's image inspect does not emit
+															305 text Path:
+															306 button codex-rs/browser-isolation/src/image.rs:20-22
+																307 text codex-rs/browser-isolation/src/image.rs:20-22
+															308 text  with
+															309 text :73-79
+															310 text ; compare
+															311 text container.rs:203-216
+															312 text .
+															313 text prepare_image
+															314 text  demands
+															315 text Id
+															316 text  be exactly
+															317 text sha256:
+															318 text  + 64 hex (
+															319 text is_image_id
+															320 text ). Docker reports image IDs in that form; Podman's
+															321 text podman image inspect
+															322 text  reports a bare 64-hex
+															323 text Id
+															324 text . The code already anticipates the bare form for
+															325 text container
+															326 text  inspect (
+															327 text verify_owner
+															328 text  trims
+															329 text sha256:
+															330 text  on both sides), but the
+															331 text image
+															332 text  check does not. If Podman's format is as described,
+															333 text prepare_image
+															334 text  returns
+															335 text ContainerMismatch
+															336 text  on every Podman engine — the whole Podman path fails closed at image preparation. Availability, not containment; but it defeats stage-2's "preserve existing engine selection" on Podman hosts, and Linux qualification would dead-end on it.
+															337 text Smallest in-scope fix:
+															338 text  normalize before checking — strip an optional
+															339 text sha256:
+															340 text  prefix, require 64 hex digits, and use one canonical form consistently for
+															341 text create
+															342 text  and
+															343 text verify_owner
+															344 text  (which already trims).
+															345 text Regression test:
+															346 text  unit-test
+															347 text is_image_id
+															348 text /the normalized check against both
+															349 text sha256:<64hex>
+															350 text  and bare
+															351 text <64hex>
+															352 text ; extend
+															353 text fixture_engine.py
+															354 text  with an
+															355 text image inspect
+															356 text  arm emitting the bare-hex Podman shape and cover
+															357 text prepare_image
+															358 text  selection against it. Confirm on the real Linux Podman host during the already-planned qualification.
+															359 heading Robustness risk (assumption, not a confirmed defect), Value: 3
+																360 text Robustness risk (assumption, not a confirmed defect)
+															361 heading P2-2 — 128 KiB stdout cap on engine JSON may reject legitimate inspect payloads, Value: 4
+																362 text P2-2 — 128 KiB stdout cap on engine JSON may reject legitimate inspect payloads
+															363 text Path:
+															364 button codex-rs/browser-isolation/src/command.rs:41-49
+																365 text codex-rs/browser-isolation/src/command.rs:41-49
+															366 text  with
+															367 text engine.rs:110-113
+															368 text . All engine JSON (
+															369 text container inspect
+															370 text ,
+															371 text image inspect
+															372 text ,
+															373 text docker info
+															374 text , connection lists) flows through a single 131,072-byte cap. Real
+															375 text podman container inspect
+															376 text  and
+															377 text docker info
+															378 text  payloads are typically tens of KiB but can exceed 128 KiB on hosts with large environment blocks, many plugins, or verbose security profiles. Overflow maps to
+															379 text ResourceLimit
+															380 text /
+															381 text RuntimeUnavailable
+															382 text  — fail-closed, so no containment impact, but it would spuriously brick acquisition on such hosts. Consider a larger cap for the
+															383 text json()
+															384 text  path (the parse step already bounds memory), and record observed payload sizes during Mac/Linux qualification.
+															385 heading Testing gaps (distinct from defects), Value: 3
+																386 text Testing gaps (distinct from defects)
+															387 content list
+																388 container
+																	389 AXListMarker •
+																	390 text Broker redirect branch is untested. broker.rs:144-169  (Location join, 4096-byte cap, redirect-target denial, >8-redirect limit) has no unit or fixture coverage;  broker_tests.rs  covers only the deny/limit/framing paths. These are pure host-side paths and testable against a loopback-free mock only after minor refactoring, or via the planned real-backend fixtures.
+																391 container
+																	392 AXListMarker •
+																	393 text Worker
+																	394 text route_request
+																	395 text  paths are untested. test_worker.py  covers framing, setup-failure atomicity, and capture, but not non-GET abort, denied-reply abort, sequence enforcement, or the oversized-body guard ( worker.py:77-96 ).
+																396 container
+																	397 AXListMarker •
+																	398 text Engine endpoint pinning JSON logic is untested. pin_local_endpoint 's Docker context and Podman connection-selection parsing ( engine.rs:117-194 ) has no coverage; only  verify_podman_endpoint  and  verify_docker_info  are tested.
+																399 container
+																	400 AXListMarker •
+																	401 text The two P1 regressions above (trailing dot, DNS ordering) are absent, consistent with the defects.
+																402 container
+																	403 AXListMarker •
+																	404 text The already-tracked blockers stand and are not re-counted as findings: no live containment/egress/cancel/crash/restart probes have run on any platform, the qualify example stopped at  RuntimeUnavailable , and Chromium-level behaviors this review necessarily took on trust (Playwright sync-API serialization of route handlers,  accept_downloads /service-worker blocking, redirect fulfillment semantics) are exactly what the pending real-backend matrix must exercise.
+															405 heading Assumptions this review rests on, Value: 3
+																406 text Assumptions this review rests on
+															407 content list
+																408 container
+																	409 AXListMarker •
+																	410 text The  url  crate retains trailing dots in domains (basis of P1-1) — per WHATWG host parsing; not executed here.
+																411 container
+																	412 AXListMarker •
+																	413 text Podman emits bare-hex image  Id  (basis of P2-1) — from documented Podman behavior; unverified on a real host.
+																414 container
+																	415 AXListMarker •
+																	416 text EffectivePolicySnapshot::authority_epoch()  (called at  core/src/security/browser_isolation/mod.rs:43,69 ) is defined in  trusted_requests.rs , which is not in the snapshot; assumed to bind  (runtime_nonce, epoch, revocation_generation)  per  AuthorityEpoch . Likewise,
+																	417 button core/src/security/mod.rs
+																		418 text core/src/security/mod.rs
+																	419 text  module registration is assumed present at planning HEAD as the scope note states.
+																420 container
+																	421 AXListMarker •
+																	422 text hyper/reqwest carry the pinned resolver's addresses through to the connection consistent with the  remote_addr()  recheck; any divergence fails closed at  broker.rs:127-132 .
+															423 heading What I verified and did not flag, Value: 3
+																424 text What I verified and did not flag
+															425 text Deliberately not flagged, per scope: promotion's human-consent/native-write-policy join and the facade/content wiring (S02), installer/elevation UI (S03),
+															426 text --no-sandbox
+															427 text  Chromium inside the verified container boundary, best-effort Drop cleanup on abrupt abandonment (documented, with the 90-second in-container lifetime and
+															428 text --force
+															429 text  removal as backstops), and the deny-by-default result when no allowlist is configured (fail-closed by design). Ownership/collision checks, bounded restart (exactly one), cancellation-awaited cleanup, wire-framing bounds on both sides, quarantine consumption semantics, and epoch/kill-switch staleness checks all read correct against their tests.
+															430 text Bottom line:
+															431 text  two P1 fixes in
+															432 text browser_policy.rs
+															433 text  (both small and localized), one Podman-path P2 to fix before Linux qualification, one P2 cap to revisit with real payloads — and no P0. This is not a platform certification; the sprint's real-backend evidence requirements remain open.
+															434

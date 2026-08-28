@@ -1,0 +1,31 @@
+[package]
+name = "codex-browser-isolation"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[lib]
+name = "codex_browser_isolation"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+base64 = { workspace = true }
+codex-network-proxy = { workspace = true }
+codex-security-policy = { workspace = true }
+codex-utils-absolute-path = { workspace = true }
+reqwest = { workspace = true, features = ["rustls-tls-native-roots", "stream"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tokio-util = { workspace = true, features = ["rt"] }
+url = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

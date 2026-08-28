@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="nextest-run" tests="26" skipped="0" failures="0" errors="0" uuid="16668f72-6b7c-4a83-9d4b-f44ddaace6fe" timestamp="2026-08-27T03:15:49.542-07:00" time="13.137">
+    <testsuite name="codex-core" tests="26" skipped="0" errors="0" failures="0">
+        <testcase name="security::credential_capability::tests::capability_authority_does_not_survive_runtime_restart" classname="codex-core" timestamp="2026-08-27T03:15:49.551-07:00" time="0.035"/>
+        <testcase name="security::credential_capability::tests::capacity_is_hard_bounded_and_cleanup_reclaims_space" classname="codex-core" timestamp="2026-08-27T03:15:49.551-07:00" time="0.036"/>
+        <testcase name="security::credential_capability::tests::concurrent_duplicate_consumption_allows_exactly_one_use" classname="codex-core" timestamp="2026-08-27T03:15:49.551-07:00" time="0.038"/>
+        <testcase name="security::credential_capability::tests::adjacent_actor_purpose_operation_method_host_path_and_scope_fail" classname="codex-core" timestamp="2026-08-27T03:15:49.551-07:00" time="0.039"/>
+        <testcase name="security::credential_capability::tests::forged_bearer_and_public_id_alone_cannot_authorize" classname="codex-core" timestamp="2026-08-27T03:15:49.588-07:00" time="0.020"/>
+        <testcase name="security::credential_capability::tests::issued_capability_is_consumed_only_for_the_complete_bound_request" classname="codex-core" timestamp="2026-08-27T03:15:49.589-07:00" time="0.020"/>
+        <testcase name="security::effective_policy_tests::effective_policy_change_is_atomic_and_stale_confirmation_fails_closed" classname="codex-core" timestamp="2026-08-27T03:15:49.591-07:00" time="0.018"/>
+        <testcase name="security::credential_capability::tests::expiry_and_revocation_remove_authority_before_reuse" classname="codex-core" timestamp="2026-08-27T03:15:49.587-07:00" time="0.025"/>
+        <testcase name="security::effective_policy_tests::effective_policy_composition_never_expands_existing_authority" classname="codex-core" timestamp="2026-08-27T03:15:49.608-07:00" time="0.017"/>
+        <testcase name="security::effective_policy_tests::effective_policy_rejects_paraphrased_model_and_project_mutation_requests" classname="codex-core" timestamp="2026-08-27T03:15:49.609-07:00" time="0.018"/>
+        <testcase name="security::effective_policy_tests::root_policy_binding_includes_the_root_agent" classname="codex-core" timestamp="2026-08-27T03:15:49.612-07:00" time="0.016"/>
+        <testcase name="security::effective_policy_tests::effective_policy_rejects_unknown_and_corrupt_persisted_state" classname="codex-core" timestamp="2026-08-27T03:15:49.610-07:00" time="0.020"/>
+        <testcase name="security::effective_policy_tests::security_inheritance_rejects_unknown_parent_and_conflicting_child_binding" classname="codex-core" timestamp="2026-08-27T03:15:49.628-07:00" time="0.022"/>
+        <testcase name="security::effective_policy_tests::security_inheritance_preserves_authority_identity_and_revocation_state" classname="codex-core" timestamp="2026-08-27T03:15:49.625-07:00" time="0.025"/>
+        <testcase name="security::integration_tests::confirmation_is_single_consumption_and_receipt_does_not_mutate_policy" classname="codex-core" timestamp="2026-08-27T03:15:49.628-07:00" time="0.024"/>
+        <testcase name="security::integration_tests::grant_proposals_require_native_actor_binding_and_current_expiry" classname="codex-core" timestamp="2026-08-27T03:15:49.629-07:00" time="0.024"/>
+        <testcase name="security::integration_tests::invalid_host_snapshot_fails_closed_without_publishing_inspector_facts" classname="codex-core" timestamp="2026-08-27T03:15:49.650-07:00" time="0.017"/>
+        <testcase name="security::integration_tests::host_ingress_does_not_accept_self_labelled_provenance" classname="codex-core" timestamp="2026-08-27T03:15:49.650-07:00" time="0.017"/>
+        <testcase name="security::integration_tests::native_action_binding_rejects_spoofed_actor_session_and_task" classname="codex-core" timestamp="2026-08-27T03:15:49.651-07:00" time="0.018"/>
+        <testcase name="security::integration_tests::native_child_policy_keeps_requested_level_and_unavailable_controls_distinct" classname="codex-core" timestamp="2026-08-27T03:15:49.653-07:00" time="0.018"/>
+        <testcase name="security::credential_capability::tests::concurrent_issuance_never_aliases_capability_ids" classname="codex-core" timestamp="2026-08-27T03:15:49.551-07:00" time="0.120"/>
+        <testcase name="security::integration_tests::stale_and_cross_runtime_confirmations_are_rejected_after_resume" classname="codex-core" timestamp="2026-08-27T03:15:49.668-07:00" time="0.014"/>
+        <testcase name="security::integration_tests::repeated_initialization_keeps_the_current_runtime_epoch" classname="codex-core" timestamp="2026-08-27T03:15:49.667-07:00" time="0.015"/>
+        <testcase name="security::credential_capability::tests::clock_entropy_collision_and_lock_failures_are_fail_closed" classname="codex-core" timestamp="2026-08-27T03:15:49.551-07:00" time="0.163"/>
+        <testcase name="security::credential_capability::tests::credential_authority_revocation_before_resolve_denies_without_vault_access" classname="codex-core" timestamp="2026-08-27T03:15:49.551-07:00" time="0.242"/>
+        <testcase name="security::credential_capability::tests::credential_authority_unique_canary_is_confined_to_one_outgoing_request" classname="codex-core" timestamp="2026-08-27T03:15:49.551-07:00" time="13.127"/>
+    </testsuite>
+</testsuites>

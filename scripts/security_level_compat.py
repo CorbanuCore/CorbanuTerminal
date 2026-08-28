@@ -13,6 +13,9 @@ from pathlib import Path
 from typing import Any
 
 BASELINE_PATH = Path("qa/security-levels/permissive-baseline-v1.json")
+FROZEN_BASELINE_SHA256 = (
+    "45d1f2bd96733381638bb62961ee59fb1c026bc05a6a78d03b560cb794406b8d"
+)
 REPORT_NAME = "compatibility-report.json"
 MAX_CAPTURE_BYTES = 64 * 1024
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
@@ -288,6 +291,8 @@ def run_compatibility(
     git_output(repo_root, ["cat-file", "-e", f"{baseline_commit}^{{commit}}"])
     manifest_path = repo_root / BASELINE_PATH
     manifest_bytes = manifest_path.read_bytes()
+    if sha256_bytes(manifest_bytes) != FROZEN_BASELINE_SHA256:
+        raise CompatibilityError("accepted PF-21 baseline bytes changed")
     manifest = json.loads(manifest_bytes)
     probes = validate_manifest(manifest, repo_root, baseline_commit)
     build_result = build_workspace_candidate(repo_root, candidate)
@@ -350,10 +355,38 @@ def run_compatibility(
     return all_passed, report_path
 
 
+def prepare_compatibility(
+    repo_root: Path, baseline_commit: str, output_dir: Path
+) -> Path:
+    """Validate immutable probes without claiming a build or a runtime pass."""
+    manifest_bytes = (repo_root / BASELINE_PATH).read_bytes()
+    if sha256_bytes(manifest_bytes) != FROZEN_BASELINE_SHA256:
+        raise CompatibilityError("accepted PF-21 baseline bytes changed")
+    manifest = json.loads(manifest_bytes)
+    probes = validate_manifest(manifest, repo_root, baseline_commit)
+    output_dir.mkdir(parents=True, exist_ok=False)
+    return write_report(
+        output_dir,
+        {
+            "schema_version": 1,
+            "phase": "fixture-preparation",
+            "status": "pending",
+            "baseline_commit": baseline_commit,
+            "baseline_sha256": FROZEN_BASELINE_SHA256,
+            "candidate": None,
+            "source_commit": git_output(repo_root, ["rev-parse", "HEAD"]),
+            "immutable_probes_validated": len(probes),
+            "surfaces": len(manifest["surfaces"]),
+            "qualification": "pending final candidate build and executed compatibility probes",
+        },
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", required=True)
-    parser.add_argument("--candidate", type=Path, required=True)
+    parser.add_argument("--candidate", type=Path)
+    parser.add_argument("--prepare", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     return parser.parse_args()
 
@@ -362,6 +395,16 @@ def main() -> int:
     args = parse_args()
     repo_root = Path(__file__).resolve().parent.parent
     try:
+        if args.prepare:
+            if args.candidate is not None:
+                raise CompatibilityError("preparation cannot claim a candidate")
+            report_path = prepare_compatibility(repo_root, args.baseline, args.output)
+            print(
+                f"security-level-compat: fixtures validated; qualification PENDING: {report_path}"
+            )
+            return 0
+        if args.candidate is None:
+            raise CompatibilityError("qualification requires --candidate")
         passed, report_path = run_compatibility(
             repo_root, args.baseline, args.candidate, args.output
         )

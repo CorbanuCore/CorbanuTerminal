@@ -16,6 +16,10 @@ use codex_security_policy::RevocationState;
 use codex_security_policy::SecurityLevel;
 use codex_security_policy::SecuritySettings;
 use thiserror::Error;
+use uuid::Uuid;
+
+#[path = "trusted_requests.rs"]
+mod trusted_requests;
 
 /// Human-owned persisted inputs from which Core may build an effective policy.
 ///
@@ -68,6 +72,7 @@ struct AgentSecurityBinding {
 #[derive(Clone, Debug)]
 struct EffectivePolicyState {
     persisted: PersistedHumanSecurityState,
+    runtime_nonce: [u8; 16],
     epoch: u64,
     root_agent_id: ThreadId,
     agents: HashMap<ThreadId, AgentSecurityBinding>,
@@ -105,13 +110,16 @@ pub(crate) enum EffectivePolicyInitialization {
 #[derive(Clone, Debug)]
 pub(crate) struct ConfirmedSecurityLevelChange {
     expected_epoch: u64,
+    expected_runtime_nonce: [u8; 16],
     authority_id: BoundedText,
     next: PersistedHumanSecurityState,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct EffectivePolicySnapshot {
+    pub(crate) runtime_nonce: [u8; 16],
     pub(crate) epoch: u64,
+    pub(crate) requested_level: SecurityLevel,
     pub(crate) level: SecurityLevel,
     pub(crate) actor_chain: ActorChain,
     pub(crate) session_id: BoundedText,
@@ -281,6 +289,7 @@ impl TrustedSecurityController {
         };
         let proposed = EffectivePolicyState {
             persisted,
+            runtime_nonce: *Uuid::new_v4().as_bytes(),
             epoch: 0,
             root_agent_id,
             agents: HashMap::from([(root_agent_id, root_binding)]),
@@ -321,6 +330,7 @@ impl TrustedSecurityController {
         )?;
         Ok(ConfirmedSecurityLevelChange {
             expected_epoch: state.epoch,
+            expected_runtime_nonce: state.runtime_nonce,
             authority_id: state.persisted.human_authority.id.clone(),
             next,
         })
@@ -343,7 +353,8 @@ impl TrustedSecurityController {
                 actual: state.epoch,
             });
         }
-        if state.persisted.human_authority.id != confirmation.authority_id
+        if state.runtime_nonce != confirmation.expected_runtime_nonce
+            || state.persisted.human_authority.id != confirmation.authority_id
             || state.persisted.human_authority != confirmation.next.human_authority
         {
             return Err(SecurityPolicyError::AuthorityMismatch);
@@ -386,7 +397,9 @@ fn snapshot(
     binding: &AgentSecurityBinding,
 ) -> EffectivePolicySnapshot {
     EffectivePolicySnapshot {
+        runtime_nonce: state.runtime_nonce,
         epoch: state.epoch,
+        requested_level: state.persisted.settings.level,
         level: state.persisted.settings.level.max(binding.minimum_level),
         actor_chain: binding.actor_chain.clone(),
         session_id: binding.session_id.clone(),

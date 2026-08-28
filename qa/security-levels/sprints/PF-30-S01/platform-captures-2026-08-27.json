@@ -1,0 +1,50 @@
+{
+  "recorded_at": "2026-08-28T02:58:19.520Z",
+  "candidate_source_commit": "322c81b88cbe8e90ba02b16937a4c7b4a792bb1c",
+  "checkout_commit": "ddfb27b4daed6d022403ae0c4e2d869f1910f02a",
+  "qualification_status": "failed",
+  "scope": "PF-30-S01 backend qualification; diagnostic containers are NOT end-to-end candidate passes",
+  "diagnostic_difference": "Mac diagnostic omits rejected --pid=private and --uts=private flags; Linux diagnostic uses the committed flags. Production source remains unchanged.",
+  "captures": {
+    "macSmoke": {
+      "command": "/Users/travisgood/Documents/ChatGPT/corbanu-pf27-s01/codex-rs/target/ci-test/examples/qualify",
+      "exit_code": 1,
+      "output": "Error: HealthCheckFailed\n"
+    },
+    "linuxSmoke": {
+      "command": "ssh -S /tmp/corbanu-pf30-ssh.6NhgBV/control travis@100.99.88.49 '/home/travis/corbanu-pf30-qualify.0XirOU/source/codex-rs/target/ci-test/examples/qualify'",
+      "exit_code": 1,
+      "output": "Error: HealthCheckFailed\n"
+    },
+    "macInspect": {
+      "command": "docker inspect corbanu-pf30-qualify-mac-20260827 | jq '.[0] | {Id,Image,State:{Status:.State.Status,Running:.State.Running},User:.Config.User,HostConfig:(.HostConfig | {NetworkMode,ReadonlyRootfs,Privileged,PidMode,IpcMode,UTSMode,CgroupnsMode,Memory,MemorySwap,PidsLimit,CpuPeriod,CpuQuota,CapAdd,CapDrop,SecurityOpt,Tmpfs,Binds,Devices,VolumesFrom}),Mounts}'",
+      "output": "{\n  \"Id\": \"3057ef9908a633d4aeebc5808e88dd074416a4144daa1a79d366060a0e307b04\",\n  \"Image\": \"sha256:3b452032df4f536b4845a09cfd94c601af412fd918a90efc4f595d293e0a2ddc\",\n  \"State\": {\n    \"Status\": \"running\",\n    \"Running\": true\n  },\n  \"User\": \"65532:65532\",\n  \"HostConfig\": {\n    \"NetworkMode\": \"none\",\n    \"ReadonlyRootfs\": true,\n    \"Privileged\": false,\n    \"PidMode\": \"\",\n    \"IpcMode\": \"private\",\n    \"UTSMode\": \"\",\n    \"CgroupnsMode\": \"private\",\n    \"Memory\": 1073741824,\n    \"MemorySwap\": 1073741824,\n    \"PidsLimit\": 256,\n    \"CpuPeriod\": 100000,\n    \"CpuQuota\": 100000,\n    \"CapAdd\": null,\n    \"CapDrop\": [\n      \"ALL\"\n    ],\n    \"SecurityOpt\": [\n      \"no-new-privileges\"\n    ],\n    \"Tmpfs\": {\n      \"/tmp\": \"rw,nosuid,nodev,noexec,size=268435456,mode=1777\"\n    },\n    \"Binds\": null,\n    \"Devices\": [],\n    \"VolumesFrom\": null\n  },\n  \"Mounts\": []\n}\n",
+      "exit_code": 0
+    },
+    "linuxInspect": {
+      "command": "ssh -S /tmp/corbanu-pf30-ssh.6NhgBV/control travis@100.99.88.49 'podman inspect corbanu-pf30-qualify-linux-20260827' | jq '.[0] | {Id,Image,State:{Status:.State.Status,Running:.State.Running},User:.Config.User,HostConfig:(.HostConfig | {NetworkMode,ReadonlyRootfs,Privileged,PidMode,IpcMode,UTSMode,CgroupnsMode,Memory,MemorySwap,PidsLimit,CpuPeriod,CpuQuota,CapAdd,CapDrop,SecurityOpt,Tmpfs,Binds,Devices,VolumesFrom}),Mounts}'",
+      "output": "{\n  \"Id\": \"2d4af218d0c73ffef157fe11fe5e27b3b8b0ffa949985fdb914acc0840e41765\",\n  \"Image\": \"e34f1eb2917364d44f5de00921bfd8c6e6686b25a51c98906df950d536079f78\",\n  \"State\": {\n    \"Status\": \"running\",\n    \"Running\": true\n  },\n  \"User\": \"65532:65532\",\n  \"HostConfig\": {\n    \"NetworkMode\": \"none\",\n    \"ReadonlyRootfs\": true,\n    \"Privileged\": false,\n    \"PidMode\": \"private\",\n    \"IpcMode\": \"private\",\n    \"UTSMode\": \"private\",\n    \"CgroupnsMode\": null,\n    \"Memory\": 1073741824,\n    \"MemorySwap\": 1073741824,\n    \"PidsLimit\": 256,\n    \"CpuPeriod\": 100000,\n    \"CpuQuota\": 100000,\n    \"CapAdd\": [],\n    \"CapDrop\": [\n      \"CAP_CHOWN\",\n      \"CAP_DAC_OVERRIDE\",\n      \"CAP_FOWNER\",\n      \"CAP_FSETID\",\n      \"CAP_KILL\",\n      \"CAP_NET_BIND_SERVICE\",\n      \"CAP_SETFCAP\",\n      \"CAP_SETGID\",\n      \"CAP_SETPCAP\",\n      \"CAP_SETUID\",\n      \"CAP_SYS_CHROOT\"\n    ],\n    \"SecurityOpt\": [\n      \"no-new-privileges\"\n    ],\n    \"Tmpfs\": {\n      \"/tmp\": \"rw,nosuid,nodev,noexec,size=268435456,mode=1777,rprivate,tmpcopyup\"\n    },\n    \"Binds\": [],\n    \"Devices\": [],\n    \"VolumesFrom\": null\n  },\n  \"Mounts\": []\n}\n",
+      "exit_code": 0
+    },
+    "macKernel": {
+      "command": "docker start corbanu-pf30-qualify-mac-20260827 && docker exec corbanu-pf30-qualify-mac-20260827 /app/.venv/bin/python -I -c 'import errno,json,os,pathlib,socket\nstatus=dict(line.split(\":\",1) for line in pathlib.Path(\"/proc/self/status\").read_text().splitlines() if \":\" in line)\nresult={\"identity\":{k:status[k].strip() for k in (\"Uid\",\"Gid\",\"CapEff\",\"NoNewPrivs\",\"Seccomp\")},\"network\":[],\"root_write\":None,\"host_socket_present\":{p:os.path.exists(p) for p in (\"/var/run/docker.sock\",\"/run/podman/podman.sock\")},\"limits\":{}}\ntry:\n    with open(\"/corbanu-qualification-write\",\"x\") as handle: handle.write(\"synthetic\")\n    result[\"root_write\"]=\"unexpected_success\"\nexcept OSError as error: result[\"root_write\"]={\"errno\":error.errno}\nfor destination in (\"1.1.1.1\",\"10.0.0.1\",\"169.254.169.254\"):\n    with socket.socket() as sock:\n        sock.settimeout(1)\n        result[\"network\"].append({\"destination\":destination,\"port\":443,\"connect_errno\":sock.connect_ex((destination,443))})\nfor name in (\"memory.max\",\"memory.swap.max\",\"pids.max\",\"cpu.max\"):\n    path=pathlib.Path(\"/sys/fs/cgroup\")/name\n    result[\"limits\"][name]=path.read_text().strip() if path.exists() else \"unavailable\"\nprint(json.dumps(result,sort_keys=True))\n'",
+      "exit_code": 0,
+      "output": "corbanu-pf30-qualify-mac-20260827\n{\"host_socket_present\": {\"/run/podman/podman.sock\": false, \"/var/run/docker.sock\": false}, \"identity\": {\"CapEff\": \"0000000000000000\", \"Gid\": \"65532\\t65532\\t65532\\t65532\", \"NoNewPrivs\": \"1\", \"Seccomp\": \"0\", \"Uid\": \"65532\\t65532\\t65532\\t65532\"}, \"limits\": {\"cpu.max\": \"100000 100000\", \"memory.max\": \"1073741824\", \"memory.swap.max\": \"0\", \"pids.max\": \"256\"}, \"network\": [{\"connect_errno\": 101, \"destination\": \"1.1.1.1\", \"port\": 443}, {\"connect_errno\": 101, \"destination\": \"10.0.0.1\", \"port\": 443}, {\"connect_errno\": 101, \"destination\": \"169.254.169.254\", \"port\": 443}], \"root_write\": {\"errno\": 30}}\n"
+    },
+    "linuxKernel": {
+      "command": "ssh -S /tmp/corbanu-pf30-ssh.6NhgBV/control travis@100.99.88.49 'podman start corbanu-pf30-qualify-linux-20260827 && podman exec corbanu-pf30-qualify-linux-20260827 /app/.venv/bin/python -I -c '\\''import errno,json,os,pathlib,socket\nstatus=dict(line.split(\":\",1) for line in pathlib.Path(\"/proc/self/status\").read_text().splitlines() if \":\" in line)\nresult={\"identity\":{k:status[k].strip() for k in (\"Uid\",\"Gid\",\"CapEff\",\"NoNewPrivs\",\"Seccomp\")},\"network\":[],\"root_write\":None,\"host_socket_present\":{p:os.path.exists(p) for p in (\"/var/run/docker.sock\",\"/run/podman/podman.sock\")},\"limits\":{}}\ntry:\n    with open(\"/corbanu-qualification-write\",\"x\") as handle: handle.write(\"synthetic\")\n    result[\"root_write\"]=\"unexpected_success\"\nexcept OSError as error: result[\"root_write\"]={\"errno\":error.errno}\nfor destination in (\"1.1.1.1\",\"10.0.0.1\",\"169.254.169.254\"):\n    with socket.socket() as sock:\n        sock.settimeout(1)\n        result[\"network\"].append({\"destination\":destination,\"port\":443,\"connect_errno\":sock.connect_ex((destination,443))})\nfor name in (\"memory.max\",\"memory.swap.max\",\"pids.max\",\"cpu.max\"):\n    path=pathlib.Path(\"/sys/fs/cgroup\")/name\n    result[\"limits\"][name]=path.read_text().strip() if path.exists() else \"unavailable\"\nprint(json.dumps(result,sort_keys=True))\n'\\'''",
+      "exit_code": 0,
+      "output": "corbanu-pf30-qualify-linux-20260827\n{\"host_socket_present\": {\"/run/podman/podman.sock\": false, \"/var/run/docker.sock\": false}, \"identity\": {\"CapEff\": \"0000000000000000\", \"Gid\": \"65532\\t65532\\t65532\\t65532\", \"NoNewPrivs\": \"1\", \"Seccomp\": \"2\", \"Uid\": \"65532\\t65532\\t65532\\t65532\"}, \"limits\": {\"cpu.max\": \"100000 100000\", \"memory.max\": \"1073741824\", \"memory.swap.max\": \"0\", \"pids.max\": \"256\"}, \"network\": [{\"connect_errno\": 101, \"destination\": \"1.1.1.1\", \"port\": 443}, {\"connect_errno\": 101, \"destination\": \"10.0.0.1\", \"port\": 443}, {\"connect_errno\": 101, \"destination\": \"169.254.169.254\", \"port\": 443}], \"root_write\": {\"errno\": 30}}\n"
+    },
+    "macWorker": {
+      "command": "docker exec -i --user=65532:65532 corbanu-pf30-qualify-mac-20260827 /app/.venv/bin/python -I -u /opt/corbanu/worker.py probe",
+      "output": "{\"type\":\"healthy\",\"version\":1}\n",
+      "exit_code": 0
+    },
+    "linuxWorker": {
+      "command": "ssh -S /tmp/corbanu-pf30-ssh.6NhgBV/control travis@100.99.88.49 'podman exec -i --user=65532:65532 corbanu-pf30-qualify-linux-20260827 /app/.venv/bin/python -I -u /opt/corbanu/worker.py probe'",
+      "output": "{\"type\":\"healthy\",\"version\":1}\n",
+      "exit_code": 0
+    }
+  }
+}
