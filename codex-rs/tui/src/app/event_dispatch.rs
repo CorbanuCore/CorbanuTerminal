@@ -426,13 +426,33 @@ impl App {
                 return;
             }
         };
-        match std::process::Command::new(executable)
-            .arg("internal-gpu-controller")
+        // The controller re-loads config on its own. Forward this session's
+        // resolved model/provider pair so a broken global config (for example
+        // an incompatible explicit model/provider pair) cannot silently kill
+        // the process that enforces rental TTL and spend limits, and keep its
+        // stderr in a log instead of discarding startup failures.
+        let stderr_log = self.config.sqlite.home().join("gpu-controller.stderr.log");
+        let stderr = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&stderr_log)
+            .map(std::process::Stdio::from)
+            .unwrap_or_else(|_| std::process::Stdio::null());
+        let mut command = std::process::Command::new(executable);
+        command.arg("internal-gpu-controller");
+        if let Some(model) = self.config.model.as_deref() {
+            command.arg("-c").arg(format!("model={model:?}"));
+            command.arg("-c").arg(format!(
+                "model_provider={:?}",
+                self.config.model_provider_id.as_str()
+            ));
+        }
+        match command
             .env("CODEX_HOME", self.config.codex_home.as_path())
             .env(codex_state::SQLITE_HOME_ENV, self.config.sqlite.home())
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            .stderr(stderr)
             .spawn()
         {
             Ok(_) => {}
