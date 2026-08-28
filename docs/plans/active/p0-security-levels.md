@@ -263,7 +263,7 @@ only after dependencies, allocation, and concurrency checks pass.
 | `PF-20` | Versioned security persistence | `qa/security-levels/sprints/PF-20-S01/evidence.md` | completed |
 | `PF-21` | Frozen Permissive compatibility | `qa/security-levels/sprints/PF-21-S01/evidence.md` | completed |
 | `PF-22` | Effective runtime policy and agent inheritance | `qa/security-levels/sprints/PF-22-S01/evidence.md` | completed |
-| `PF-13` | Vault-backed exact-host credential boundary | S01: `qa/security-levels/sprints/PF-13-S01/evidence.md`; S02: `qa/security-levels/sprints/PF-13-S02/evidence.md`; S03: `qa/security-levels/sprints/PF-13-S03/evidence.md`; S04: `qa/security-levels/sprints/PF-13-S04/evidence.md`; [S05](../../sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md) | in progress; S05 in progress |
+| `PF-13` | Vault-backed exact-host credential boundary | S01: `qa/security-levels/sprints/PF-13-S01/evidence.md`; S02: `qa/security-levels/sprints/PF-13-S02/evidence.md`; S03: `qa/security-levels/sprints/PF-13-S03/evidence.md`; S04: `qa/security-levels/sprints/PF-13-S04/evidence.md`; [S05](../../sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md) | in progress; scoped issuance/transport tested at invoked seams, native PF-23 integration pending; Kimi review complete, qualification not ready |
 | `PF-23` | Moderate/Aggressive protected-surface enforcement | [S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), [S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md), [S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | draft |
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
@@ -375,7 +375,7 @@ or financial actions”), plus the expanded heading cited above.
 | Design requirement | Owner sprint(s) | Coverage state | Acceptance evidence |
 | --- | --- | --- | --- |
 | Existing Permissive unchanged | PF-21-S01; PF-26-S04 | baseline completed; final comparison pending | Frozen baseline and final compatibility run |
-| Exact brokered credential use | PF-13-S01–S05 | S01–S04 completed; S05 pending | Canary, platform evidence, independent review |
+| Exact brokered credential use | PF-13-S01–S05 | S01–S04 component slices completed; S05 in progress; native profile wiring pending PF-23 | Canary, platform evidence, completed Kimi review with open qualification findings |
 | Requested versus effective policy, no widening | PF-22-S01; PF-27-S01; PF-23 | foundation completed; integration pending | Unknown/degraded states, inherited denials, epoch races |
 | Secret-free sinks, reflected errors, safe child env | PF-28-S01 | pending; PF-13 evidence reused, not generalized | Canary absent from model requests, tool results, logs, exports, artifacts, environments, and unbound network |
 | Provenance and sanitization without trust elevation | PF-29-S01 | pending | Forged markers and supported-source coverage matrix |
@@ -400,7 +400,7 @@ may run together under the sprint-process rules, never all rows automatically.
 
 | Lane | Work | Hard handoff / allowed overlap |
 | --- | --- | --- |
-| qualification | PF-13-S05 | Mac triage and independent review may run together against pinned evidence; Windows follow-up completed at `ea7d4bec72` |
+| qualification | PF-13-S05 | Mac triage and accepted qualification repairs may run together against pinned evidence; Kimi review completed, not ready; historical Windows follow-up at `ea7d4bec72` |
 | contracts | PF-27-S01 | Completed and archived; shared contracts available to eligible consumers, PF-13 qualification unchanged |
 | harness | PF-26-S01 | Completed and archived; frozen fixtures/checkers available, native product evidence pending; PF-13 unchanged |
 | confidentiality | PF-28-S01 | After PF-13-S05, PF-27, and early harness |
@@ -472,7 +472,7 @@ claims that every named adapter already exists.
 
 | Feature / sprint | Upstream touch and native seam | Product boundary / reason | Contract proof and upgrade disposition |
 | --- | --- | --- | --- |
-| PF-13-S05 | Existing broker/provider request adapters; inventory from S01–S04 commits | `vault/`, `security-policy/`; trusted exact credential use | Preserve pinned canary evidence; Windows follow-up passed; full-Core triage and independent review remain pending; inventory before upstream acceptance |
+| PF-13-S05 | Existing broker/provider request adapters; inventory from S01–S04 commits | `vault/`, `security-policy/`; trusted exact credential use | Preserve historical platform identities; Kimi review completed with open scanning/panic-proof and integration-evidence gaps; full-Core triage/rerun and adapter inventory remain pending |
 | PF-27-S01 | `protocol/src/lib.rs`, Core/TUI/network module registration and existing Core policy snapshot | Typed security integration contracts; one registration owner | Completed contract/epoch/native-inheritance tests on macOS; [retained/adapted seam decisions](https://github.com/CorbanuCore/CorbanuTerminal/blob/cb808c30c0058c101597ab2ada3da16238565c5e/qa/security-levels/sprints/PF-27-S01/consumer-contracts.md); native consumer qualification remains pending |
 | PF-28-S01 | Provider/output serialization and child environments; enumerate all literal hooks | Core confidentiality module consuming vault broker | Exact outgoing-byte, reflected-error, log/export/environment canaries; no duplicate scanner policy |
 | PF-29-S01 | `core/src/mcp_tool_call.rs`, `core/src/session/inject.rs`; remaining native adapter inventory pending | `core/src/security/ingress/`; native ingestion adapters | The old `core/src/tools/handlers/read_file.rs` is absent at this baseline; resolve concrete tool/file/context hooks before readiness, not a placeholder implementation |
@@ -595,6 +595,14 @@ canary and independent-review evidence before PF-23 composes the boundary into
 the security profiles. PF-26-S03 updates finished vault/authentication guidance
 only after candidate acceptance.
 
+At reviewed merge `044491b8b`, scoped capability issuance and proxy route
+installation have no native session call site; S01–S05 evidence covers invoked
+component seams, not running profile enforcement. S04's CLI raw-export denial
+is separately exercised. Kimi's completed outside review and validated
+dispositions are recorded in `qa/security-levels/sprints/PF-13-S05/kimi-outside-review.md`.
+This clarification does not reopen archived foundation sprints or authorize
+PF-23 wiring inside the S05 qualification lane.
+
 ## Acceptance flows
 
 | Flow | Starting state | User action | Expected visible result | Pass criterion |
@@ -626,8 +634,10 @@ only after candidate acceptance.
 ## Implementation sequence
 
 1. **Preserve accepted foundations; finish PF-13 qualification.** Complete Mac
-   Core failure triage and independent review. The Windows follow-up passed at
-   `ea7d4bec72`. No completed foundation is reopened merely to rename its scope.
+   Core failure triage/rerun and accepted Kimi/controller qualification repairs.
+   Repeat affected tests on the final integrated candidate; the historical
+   Windows follow-up passed at `ea7d4bec72`. Native profile composition remains
+   PF-23 work. No completed foundation is reopened merely to rename its scope.
 2. **Land shared contracts and early harnesses.** PF-27 defines integration
    seams; PF-26-S01 supplies hostile-source fixtures and test runners. The
    read-only PF-24-S01 inspector can proceed against those status contracts.
@@ -707,7 +717,7 @@ before qualification.
 | Existing security-policy commits | Jim Ricketts | Downstream integration | PF-15 through PF-22 completed and archived; preserve evidence |
 | Moderate and Aggressive control matrix | Product authority | PF-23 review | Defined in the product specification; any change requires a product decision |
 | Persistence and downgrade invalidation | Jim Ricketts | PF-20/PF-23 | Persistence code is present; transition and final evidence remain pending |
-| Independent security reviewer | Travis Good / release owner | PF-13-S05 and final qualification | Fable High: `claude-fable-5`, high effort, selected 2026-08-27. Outside review of integrated `044491b8b` interrupted by provider model fallback; no substitute verdict accepted. See `qa/security-levels/sprints/PF-13-S05/fable-outside-review.md`; reviewer change requires Travis; no PF-14 activation |
+| Independent security reviewer | Travis Good / release owner | PF-13-S05 and final qualification | Travis replaced interrupted Fable High with Kimi 3.0 through Corbanu Terminal (`moonshotai/kimi-k3`, High, OpenRouter), 2026-08-27 Arizona time. Review of integrated `044491b8b` completed 2026-08-28 UTC; qualification not ready. No fallback or PF-14 activation. Raw findings, validated dispositions and C1/C2 diagnostics: `qa/security-levels/sprints/PF-13-S05/kimi-outside-review.md`; prior interruption retained separately |
 | Human tester | Travis Good | Final qualification | Named 2026-08-27; final-candidate acceptance pending |
 | Browser backend/platform matrix | Jim Ricketts | PF-30-S01/S03 | Podman preferred, existing Docker preserved; pinned Scrapling inputs and all-platform pending matrix in S01 record; Mac/Linux before Windows |
 | Lane allocation and shared files | Jim Ricketts | Each sprint readiness | Draft coordinates are UNALLOCATED; serialize shared-file changes and check the three-slot limit |

@@ -7,6 +7,16 @@
 - Product requirement: `docs/corbanu-product-spec.md`, **Required trust boundaries** — “Permit agents to reference credentials only by label; resolve them solely inside the trusted execution boundary.”
 - TUI applicability: none; this sprint changes no interactive surface.
 
+## Review clarification — 2026-08-28 UTC
+
+The scoped capability/transport claims below describe invoked component seams,
+not native profile wiring: at reviewed merge `044491b8b`, issuance and route
+installation have no session call site (PF-23 owns that integration). Source
+allocation zeroization and stable panic errors do not prove every transport
+copy or production panic-hook output is secret-free. See the
+[completed Kimi review and corrections](../PF-13-S05/kimi-outside-review.md).
+Historical candidate identities and results remain unchanged.
+
 ## Result
 
 Core can install one vault-backed OpenAI credential route in the managed network

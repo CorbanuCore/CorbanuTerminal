@@ -1,6 +1,6 @@
 # PF-13-S05 credential-boundary qualification evidence
 
-- Date: 2026-08-27 UTC
+- Date: 2026-08-27 UTC; outside-review update 2026-08-28 UTC
 - Status: in progress
 - Product requirement: `docs/corbanu-product-spec.md`, **Required trust boundaries** — “Credentials are referenced by label and resolved only inside a trusted execution boundary.”
 - Harness implementation commit: `27b738ab8d6289b2dc27fc45549fddc2622f6bc7`
@@ -19,31 +19,42 @@
 
 ## Current result
 
-The credential canary passed on Linux, macOS, and Windows, including a separate
-local macOS reproduction and a fresh Windows 2022 follow-up from the clean
-current branch tip. The complete macOS Core suite remains failed with 135
-failures, and independent security review remains pending.
+Historical credential canary runs passed on Linux, macOS, and Windows, including
+a separate local macOS reproduction and a Windows 2022 follow-up at the recorded
+clean candidate. These are invoked component/test-seam results, not proof of a
+native session using scoped credentials. The complete macOS Core suite remains
+failed with 135 failures. The Kimi outside review is complete; **qualification
+remains not ready**.
 
 Subsequent [outside-review attempt](fable-outside-review.md): all work through
 the PF-30 platform repair and this Windows report was merged into the PF-13
 branch at `044491b8b02b24a65a84e8da61619d3444e63fe0` before review. Fable High's
 provider automatically switched models after a safeguard flag; the response
-was stopped, and no substitute verdict was accepted. Independent review is
-still incomplete. Earlier platform results below retain their original
-candidate identities and are not relabeled as tests of the integrated merge.
+was stopped, and no substitute verdict was accepted. Travis then selected Kimi
+3.0 High through Corbanu Terminal. Its [completed review and controller
+dispositions](kimi-outside-review.md) preserve the raw response and corrections.
+Earlier platform results below retain their original candidate identities and
+are not relabeled as tests of the integrated merge.
 
 The harness generated a
 fresh credential canary inside the Rust test process, stored it through the
 encrypted Vault path, consumed a complete Core credential capability, and
-resolved it only inside the trusted proxy injection callback. The exact
-outgoing OpenAI request capture observed the raw value once. A second attempt
-failed as a replay before another provider request.
+resolved it inside the trusted proxy injection callback invoked by the test.
+An in-process `HeaderMap` observed the raw value once. A second invocation failed
+as a replay. No live CONNECT/MITM socket or provider round trip was measured;
+the historical `outgoing_request_count` field counts this test capture. Native
+scoped-route installation is not wired into the session path at the reviewed
+merge; PF-23 owns that profile integration. The S04 CLI raw-export denial is a
+separate, exercised native entry point.
 
-Only the canary SHA-256 digest crossed into the report. The test scanned actual
-secret-free authority/model context, tool-shaped payload, virtualized child
-environment, audit metadata, errors, receipt logs, contained panic output, and
-Vault files. The harness additionally scans every subprocess capture and the
-serialized report for credential-shaped material.
+Only the canary SHA-256 digest crossed into the report. The test scanned its
+constructed authority/model context, tool-shaped payload, virtualized environment,
+audit metadata, errors, receipt logs, stable callback-panic error, and Vault
+files. It did not capture a secret-bearing panic through the production panic
+hook (review diagnostic C2). The harness scans retained subprocess captures and
+the serialized report, but truncates stdout/stderr before scanning: diagnostic
+C1 reproduces acceptance when a synthetic marker lies beyond the capture limit.
+Thus the historical checks do not establish complete-output/crash-log secrecy.
 
 The Linux machine-readable report is
 `qa/security-levels/sprints/PF-13-S05/credential-canary-report.json`; the local
@@ -59,19 +70,19 @@ surface coverage, and canary digest.
 
 | Boundary case | Result | Probe |
 | --- | --- | --- |
-| One exact authorized OpenAI request | Passed; one raw observation in the outgoing capture | `core-capability-and-unique-canary` |
+| One exact authorized OpenAI request binding | Passed; one raw observation in an in-process header capture, not a live request | `core-capability-and-unique-canary` |
 | Malformed or ambiguous authority | Failed closed | `policy-authority-validation` |
 | Forged bearer/public capability id | Failed closed without consuming valid authority | `core-capability-and-unique-canary` |
 | Expired or revoked authority | Failed closed before reuse/decryption | policy, Vault, proxy, and Core probes |
-| Sequential replay / redirect reuse | Failed before a second resolver/provider request | Core and proxy probes |
+| Sequential replay / redirect reuse | Repeated invocation failed before a second resolution; no live redirect measured | Core and proxy probes |
 | Wrong actor, purpose, operation, method, host, path, or scope | Failed closed | Core and proxy probes |
 | Concurrent duplicate use | Exactly one consumer succeeded | Core capability probe |
 | Revocation racing an active use | Read/write locking linearized revocation after the active callback | `core-revocation-linearization` |
 | Bounded store exhaustion and cleanup | Hard capacity enforced; expired entries reclaimed | Core capability probe |
-| Callback error, cancellation, or panic | Stable secret-free outcomes; panic contained | Vault and dynamic canary probes |
+| Callback error, cancellation, or panic | Stable returned outcomes; secret-bearing production panic-hook output untested (C2) | Vault and dynamic canary probes |
 | Protected raw export and downgrade attempt | Moderate/Aggressive denial; persisted posture won | CLI raw-export probe |
-| Child environment | Raw input replaced by a fresh opaque dummy | proxy and dynamic canary probes |
-| Logs, audit, receipts, errors, artifacts | Canary absent | dynamic canary probe |
+| Child environment | Test environment virtualized to a dummy; no native child-spawn proof | proxy and dynamic canary probes |
+| Logs, audit, receipts, errors, artifacts | Canary absent from tested surfaces; truncated-output and panic-hook gaps C1/C2 remain | dynamic canary probe |
 
 ## Harness result
 
@@ -182,7 +193,7 @@ rerun passes. The complete machine-readable report is
 `.github/workflows/credential-boundary-canary.yml` runs the identical
 fail-closed harness on Ubuntu 24.04, macOS 15, and Windows 2022. The harness
 accepts only Linux, Darwin, or Windows and has no flag that skips host checks.
-Each job uploads its complete report as a commit-bound artifact. Workflow run
+Each job uploads its report with bounded captures as a commit-bound artifact. Workflow run
 `32933578147` passed all three jobs at exact source commit
 `55025dd42a869221b023fd783d52038b4b7c092f`:
 
@@ -227,14 +238,18 @@ The commit-bound uploaded artifact is
 `credential-boundary-canary-Windows-ea7d4bec720098f6e0994fcfcc59e272108f7e70`
 (artifact ID `9663966064`, uploaded-archive SHA-256
 `c9c17fd5c626df315512ce496f16acf00eb9024fc87ee45ad3b441f20917271b`).
-This closes the Windows follow-up; it does not claim that the independent
-security review or the broader complete-Core gate has passed.
+This closes that historical Windows follow-up; it does not establish integrated
+merge qualification or a passing independent-review/complete-Core gate.
 
 ## Remaining acceptance gates
 
-- Complete the selected Fable High raw-secret reachability review, or obtain
-  Travis's approval for another reviewer after the recorded provider interruption.
+- Resolve the accepted [Kimi/controller findings](kimi-outside-review.md),
+  especially complete-output scanning (C1) and panic-hook qualification (C2).
+  Review execution is complete; its outcome is not a qualification pass.
 - Triage the 135 complete-Core failures recorded above, correct or establish
   the required test prerequisites, and record a clean complete rerun.
+- Repeat applicable affected tests and cross-platform canaries against the final
+  integrated candidate. Preserve the PF-23/PF-26 native integration/TUI boundary;
+  test-seam results alone cannot certify running Moderate/Aggressive profiles.
 - After those gates pass, update the final candidate/evidence coordinates and
   archive PF-13-S05. The sprint remains `in_progress` until then.
