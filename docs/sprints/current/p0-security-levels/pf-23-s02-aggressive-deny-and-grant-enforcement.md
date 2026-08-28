@@ -4,7 +4,7 @@ title: "Aggressive deny and grant enforcement"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-23"
-execution_order: 27
+execution_order: 34
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"

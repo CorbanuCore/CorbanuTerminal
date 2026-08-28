@@ -6,7 +6,10 @@ Planning evidence for the active [P0 `/security` plan](active/p0-security-levels
 
 Travis Good's 2026-08-28 instruction adopts **Permissive compatibility and mandatory brokered protection above Permissive**, and asks for a complete reconciled sprint sequence with OpenClaw as the primary implementation reference. This supersedes the comparison's “all modes” no-raw-secret wording and the historical child/container raw-secret injection proposal. Permissive retains existing policies; it does not mean disabling existing sandbox/approval controls.
 
-The active plan owns the merged work. The earlier firewall proposal remains historical design input, not a second implementation authority. The inventory contains **72 cancelled firewall sprints**, not 75. All 72 remain untouched; the 23 current security records are retained/reconciled and **40 new records** produce **63 current security sprints**. The seven unrelated Autoreview drafts are unchanged. None of these counts implies accepted implementation.
+The active plan owns the merged work. The earlier firewall proposal remains historical design input, not a second implementation authority. The inventory contains **72 cancelled firewall sprints**, not 75. All 72 remain untouched; the 23 current security records are retained/reconciled and **40 new records** produced the 63-sprint review snapshot. The subsequent
+[accepted architecture refinement](security-architecture-refinements-2026-08-28.md)
+adds five preparation/foundation units for **68 current security sprints**; the
+historical 72-record dispositions below remain unchanged. The seven unrelated Autoreview drafts are unchanged. None of these counts implies accepted implementation.
 
 ## Source packet
 

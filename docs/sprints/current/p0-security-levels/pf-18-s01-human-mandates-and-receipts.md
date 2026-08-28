@@ -4,7 +4,7 @@ title: "Human mandates and receipts reconciliation"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-18"
-execution_order: 4
+execution_order: 10
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"

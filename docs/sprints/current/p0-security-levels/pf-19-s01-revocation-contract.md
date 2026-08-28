@@ -4,7 +4,7 @@ title: "Revocation contract reconciliation"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-19"
-execution_order: 5
+execution_order: 11
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -48,6 +48,8 @@ updated: 2026-08-28
 - [x] Commit `8a3b416c26` added revocation events/state and policy contract tests.
 
 ## Remaining
+
+- [ ] Define the dispatch revocation fence across queued, uploading and established-channel work. Emergency kill/restriction never waits for audit availability or unknown financial finality; preserve uncertainty and block new effects, with later PF-38/PF-26 joint recovery tests.
 
 - [ ] Specify revocation semantics for admitted operations, open channels and queued work, including the point after which no further protected dispatch is allowed; reject stale run generations without claiming already-completed effects can be undone.
 

@@ -4,7 +4,7 @@ title: "Credential boundary adversarial qualification"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
-execution_order: 22
+execution_order: 29
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -46,6 +46,9 @@ updated: 2026-08-28
 - [x] Sprint record defines one bounded qualification outcome.
 
 ## Remaining
+
+- [ ] Trace the concrete request/response capture adapter through final redaction and persistence; scan headers, bodies, trailers, SSE, errors and debug artifacts. Final transport contains the authorized credential, but evidence stores only canary digests/results, never raw capture values.
+- [ ] Rerun PF-27-S03 process-memory/debug/handle/filesystem/IPC and PF-20 policy tamper/restart canaries from the actual agent context on all three OSes; design probes or CI platform labels alone are not proof.
 
 - [ ] Qualify the PF-27 isolated process/launch contract, PF-28 reflected-response/output gates, PF-29 migration preflight and PF-33 actual-connection enforcement; the earlier in-process thin slice is not the final secret boundary.
 

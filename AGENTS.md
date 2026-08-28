@@ -2,8 +2,8 @@
 
 | Field | Value |
 | --- | --- |
-| Policy version | 1.2 |
-| Updated | 2026-08-23 |
+| Policy version | 1.3 |
+| Updated | 2026-08-28 |
 | Policy owner | Lead developer, as assigned in the [product roles table](docs/corbanu-product-spec.md#ownership-and-decision-rights) |
 | Product authority | The decision roles in the product specification |
 | Amendment rule | Changes to product scope or hard release gates require the product decision process defined in the product specification |
@@ -78,8 +78,9 @@ from plan prose.
   be `ready` or `in_progress`, before implementation begins.
 - `ready` and `in_progress` sprints record the exact implementation worktree,
   branch, and base commit. Those values must agree with the active plan.
-- A plan has at most one `in_progress` sprint. A sprint with dependencies cannot
-  become executable until every dependency is completed and archived.
+- Parallel implementation follows the bounded allocation and integration rules
+  in `docs/sprints/index.md`. A sprint with dependencies cannot become executable
+  until every dependency is completed and archived.
 - Agents implement only the selected sprint's remaining checklist. New scope
   goes back to the plan and sprint map before code changes.
 - A sprint becomes `completed` only after every task and required evidence item

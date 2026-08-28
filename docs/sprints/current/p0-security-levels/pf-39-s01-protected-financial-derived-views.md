@@ -4,7 +4,7 @@ title: "Protected financial derived views"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-39"
-execution_order: 54
+execution_order: 59
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"

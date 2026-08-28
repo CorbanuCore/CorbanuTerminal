@@ -4,7 +4,7 @@ title: "Typed financial executor and deterministic limits"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-38"
-execution_order: 51
+execution_order: 56
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"

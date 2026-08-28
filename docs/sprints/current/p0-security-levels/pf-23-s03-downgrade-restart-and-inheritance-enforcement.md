@@ -4,7 +4,7 @@ title: "Downgrade, restart, and inheritance enforcement"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-23"
-execution_order: 28
+execution_order: 35
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -46,6 +46,8 @@ updated: 2026-08-28
 - [x] Sprint record is linked only to PF-23.
 
 ## Remaining
+
+- [ ] Test authoritative-store tamper and stale checkpoints through restart; transitions cannot recover a revoked generation. Restrictive transitions fence new work immediately; unknown already-submitted effects remain separately reconcilable, never relabeled cancelled.
 
 - [ ] Block transitions until required isolation/migration/screening probes pass; confirmed changes invalidate broker/browser sessions, pending financial actions, child authority and queued disclosures. Test updates arriving during execution.
 

@@ -4,7 +4,7 @@ title: "Reflected-secret response scrubbing"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-28"
-execution_order: 16
+execution_order: 23
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -48,6 +48,8 @@ updated: 2026-08-28
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 
 ## Remaining
+
+- [ ] Publish a protocol/encoding latency and buffer matrix with product-approved time-to-first-safe-output targets; bounded carry requires split/encoded/short/rotating-secret fixtures. Unknown codecs/resource exhaustion deny, and response streaming never waives whole-ingress screening.
 
 - [ ] Exercise a permitted origin reflecting credentials in response headers, bodies, errors and split/encoded streams before model, log or persistence handoff; neither request substitution nor diagnostic masking satisfies this gate.
 

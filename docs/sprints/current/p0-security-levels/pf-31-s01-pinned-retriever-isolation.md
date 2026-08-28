@@ -4,12 +4,12 @@ title: "Pinned retriever artifact and sandbox"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-31"
-execution_order: 32
+execution_order: 39
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
-depends_on: "PF-33-S02, PF-27-S02"
+depends_on: "PF-33-S02, PF-27-S02, PF-31-S04"
 created: 2026-08-28
 updated: 2026-08-28
 ---
@@ -31,6 +31,8 @@ updated: 2026-08-28
 
 ## Code boundaries
 
+- Planned setup/recovery UI: `codex-rs/tui/src/security/retriever_setup.rs`; typed engine lifecycle adapter under `codex-rs/web-retriever/src/engine.rs` and tests.
+
 - OpenClaw adoption reference: [OC-8](../../../plans/openclaw-source-review-2026-08-28.md#oc-8) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; see the review for named functions, callers, tests and limits. Reference tests are not candidate evidence.
 
 - Existing/foundation: codex-rs/sandboxing/src/{manager,spawn}.rs; codex-rs/exec-server/src/process_sandbox.rs.
@@ -39,7 +41,7 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Active plan; PF-33-S02, PF-27-S02 completed and archived.
+- [ ] All dependencies in front matter are completed and archived; plan remains active.
 - [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
 - [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
 
@@ -49,9 +51,12 @@ updated: 2026-08-28
 
 ## Remaining
 
+- [ ] Consume PF-31-S04 pins and engine fixtures; implement the idempotent human install/start/restart/pull/test flow with existing-engine reuse and Corbanu-owned worker locking. Shared engines and unrelated containers are never replaced or restarted without separate authority.
+- [ ] Exercise actual-key installation cancel/failure/retry, reuse, stalled-worker recovery and concurrent launches on Linux/macOS/Windows; explain elevation and never record passwords. Final engine state, mounts/network and health must match the approved containment contract.
+
 - [ ] Verify observed image digest, user, mounts, engine target, network and resource policy separately from configured defaults; test mismatched/reused workers, required-session identity and failed provisioning without host fallback.
 
-- [ ] Package the Scrapling-class retrieval worker with pinned image/runtime/dependency digests, license inventory and SBOM; evaluate version/security before selecting pins at implementation.
+- [ ] Integrate the completed PF-31-S04 artifact manifest, pinned image/runtime/dependency digests, license inventory and SBOM; verify identity again at installation and startup.
 - [ ] Mount no workspace, vault, wallet, host browser profile or IPC sockets; use ephemeral storage, unprivileged identity and bounded CPU/memory/time/file/process budgets.
 - [ ] Restrict all worker networking to PF-33 policy; disable downloads/executables, arbitrary eval, extensions, persistent cookies and service-worker persistence by default.
 - [ ] Probe actual isolation at startup and expose capability failures; Moderate/Aggressive refuse retrieval if the required backend is unavailable.
@@ -63,7 +68,7 @@ updated: 2026-08-28
 - [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
 - [ ] Focused: `cd codex-rs && just test -p codex-web-retriever pf_31_s01 && just test -p codex-sandboxing pf_31_s01`; confirm tests actually ran.
 - [ ] Integration: full affected crate suites via `just test -p <affected-crate>`; update Bazel locks when manifests change.
-- [ ] TUI applicability: none; integration flows are re-run by PF-26-S02
+- [ ] TUI applicability: required for install/cancel/recovery and engine reuse; send actual keys separately from Enter and rerun final flows in PF-26-S02.
 - [ ] Record candidate/commit, commands, expected/actual outcomes and safe artifact digests; no production credentials or funds.
 
 ## Exit evidence

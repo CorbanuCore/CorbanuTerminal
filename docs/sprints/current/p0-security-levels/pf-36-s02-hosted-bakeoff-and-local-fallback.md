@@ -4,7 +4,7 @@ title: "Hosted detector bakeoff and safe local fallback"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-36"
-execution_order: 48
+execution_order: 53
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"

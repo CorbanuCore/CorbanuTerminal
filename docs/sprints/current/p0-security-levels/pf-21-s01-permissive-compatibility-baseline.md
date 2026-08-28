@@ -4,7 +4,7 @@ title: "Permissive compatibility baseline reconciliation"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-21"
-execution_order: 7
+execution_order: 14
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -47,6 +47,9 @@ updated: 2026-08-28
 - [x] Commit `220af8dae8` added the first baseline manifest and Core/vault compatibility tests.
 
 ## Remaining
+
+- [ ] Keep the independent pre-feature baseline as an acceptance oracle. Add an upstream-aligned control and reviewed upstream-drift ledger; same-candidate feature-on/off tests are supplemental and cannot regenerate golden expectations.
+- [ ] Record baseline/upstream/candidate commits, config and environment digests per run; explain intentional upstream differences with owner review and new independent control evidence before accepting drift.
 
 - [ ] Freeze inherited environment/auth-helper, web.run history/native search, browser, MCP/plugin/child, wallet, clipboard/export and persisted-session behavior; added broker/screening/migration controls are opt-in above Permissive, not silent baseline changes.
 

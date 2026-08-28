@@ -4,7 +4,7 @@ title: "Post-taint authority checks"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-30"
-execution_order: 25
+execution_order: 32
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -48,6 +48,9 @@ updated: 2026-08-28
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 
 ## Remaining
+
+- [ ] Implement the action/profile matrix using data plus control-flow ancestry; unchanged narrow grants authorize only unchanged scope. Human-origin argument labels do not declassify model-selected actions; require trusted reconstruction or exact bounded human mandate.
+- [ ] Record realistic research-workflow approval counts and latency for later PF-26 validation; product-owned usability targets cannot relax deterministic denial or erase taint.
 
 - [ ] Exercise tainted transcript to maintenance flush to memory recall to protected action, with a new user message and exact human approval interposed; preserve ancestry and authorize only the approved effect. A wrapper/classifier result cannot reset taint.
 

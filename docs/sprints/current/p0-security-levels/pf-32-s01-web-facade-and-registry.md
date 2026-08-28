@@ -4,7 +4,7 @@ title: "Stable web facade and provider registry"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-32"
-execution_order: 41
+execution_order: 46
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"

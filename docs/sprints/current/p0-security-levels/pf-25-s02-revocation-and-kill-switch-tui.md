@@ -4,7 +4,7 @@ title: "Revocation and kill-switch TUI"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-25"
-execution_order: 31
+execution_order: 38
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -46,6 +46,8 @@ updated: 2026-08-28
 - [x] Sprint record is linked only to PF-25.
 
 ## Remaining
+
+- [ ] Exercise immediate kill while a fake financial effect is submitted/unknown; show future authority revoked and the prior effect still uncertain. Full financial integration is repeated in PF-38-S03/PF-26, not claimed from a UI fixture.
 
 - [ ] List active secret-free grants/mandates and their exact scopes without protected values.
 - [ ] Require trusted human confirmation for revoke-all, scoped revoke, and kill-switch activation.

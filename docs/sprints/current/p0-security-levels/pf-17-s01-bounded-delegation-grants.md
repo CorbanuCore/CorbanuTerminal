@@ -4,7 +4,7 @@ title: "Bounded delegation grants reconciliation"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-17"
-execution_order: 3
+execution_order: 9
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"

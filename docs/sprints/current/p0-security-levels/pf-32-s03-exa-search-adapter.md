@@ -4,7 +4,7 @@ title: "Exa brokered search adapter"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-32"
-execution_order: 43
+execution_order: 48
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"

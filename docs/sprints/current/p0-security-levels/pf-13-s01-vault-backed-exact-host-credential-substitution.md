@@ -4,7 +4,7 @@ title: "Typed credential capability and bounded store"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
-execution_order: 9
+execution_order: 16
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -46,6 +46,8 @@ updated: 2026-08-28
 - [x] Sprint record is linked only to PF-13.
 
 ## Remaining
+
+- [ ] Bind per-request and aggregate use/count/token/byte/spend limits to the existing BoundedGrant reservation and operation identity; unknown authoritative usage cannot silently become unlimited.
 
 - [ ] Reuse `ActorChain`, `AuthorizationRequest`, `BoundedGrant`, `RevocationState`, and `ActionReceipt`; do not create parallel policy types.
 - [ ] Define safe metadata for human, agent/session, task, purpose, operation, HTTP method, normalized destination, vault label/scope, issue/expiry, and revocation generation.

@@ -4,12 +4,12 @@ title: "Render-aware content sanitization"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-34"
-execution_order: 35
+execution_order: 42
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
-depends_on: "PF-31-S02, PF-30-S01"
+depends_on: "PF-31-S02, PF-30-S01, PF-34-S04"
 created: 2026-08-28
 updated: 2026-08-28
 ---
@@ -39,7 +39,7 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Active plan; PF-31-S02, PF-30-S01 completed and archived.
+- [ ] All dependencies in front matter are completed and archived; plan remains active.
 - [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
 - [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
 
@@ -48,6 +48,8 @@ updated: 2026-08-28
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 
 ## Remaining
+
+- [ ] Consume PF-34-S04 segment/transform fixtures and bind actual PF-30 source identities. Real rendering/sanitization output must remain compatible with the independently prepared classifier dataset; rerun evaluator fixtures for any schema change.
 
 - [ ] Port expansion-safe truncation, metadata, zero-width/fullwidth and complete-before-clipped-marker cases; separately test rendered visibility and terminal controls. Wrapper heuristics alone do not establish render sanitization or classifier quality.
 

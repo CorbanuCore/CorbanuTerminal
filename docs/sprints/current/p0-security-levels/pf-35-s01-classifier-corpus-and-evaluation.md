@@ -4,12 +4,12 @@ title: "Classifier corpus and leakage-free evaluation"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-35"
-execution_order: 36
+execution_order: 6
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
-depends_on: "PF-34-S01"
+depends_on: "PF-34-S04"
 created: 2026-08-28
 updated: 2026-08-28
 ---
@@ -33,13 +33,13 @@ updated: 2026-08-28
 
 - OpenClaw adoption reference: [OC-4](../../../plans/openclaw-source-review-2026-08-28.md#oc-4) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; see the review for named functions, callers, tests and limits. Reference tests are not candidate evidence.
 
-- Existing/foundation: PF-34 sanitized-content contract; docs/plans/active/p0-security-levels.md qualification targets.
+- Existing/foundation: PF-34-S04 frozen segment/verdict contract; docs/plans/active/p0-security-levels.md qualification targets.
 - Planned: qa/security-levels/classifier/{corpus-manifest.json,split-manifest.json}; scripts/security-classifier-eval.
 - Tests: planned colocated Rust test modules prefixed `pf_35_s01`; fixtures use synthetic secrets and fake services only.
 
 ## Preconditions
 
-- [ ] Active plan; PF-34-S01 completed and archived.
+- [ ] All dependencies in front matter are completed and archived; plan remains active.
 - [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
 - [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
 
@@ -49,9 +49,11 @@ updated: 2026-08-28
 
 ## Remaining
 
+- [ ] Build against the completed PF-34-S04 segment/verdict contract and frozen fixtures, without waiting for live browser/sanitizer integration. Separate licensed acquisition and blind evaluator ownership from training; publish measured CPU feasibility before costly tuning.
+
 - [ ] Use upstream heuristic/wrapper adversarial cases only as labeled regression seeds, not a training/test leak or a validated detector. Add benign lookalikes and independently held-out attacks; record no upstream classifier-quality evidence was established here.
 
-- [ ] Define versioned allow/suspicious/hostile/unavailable results with model/version/threshold IDs and safe diagnostics; scores never authorize actions.
+- [ ] Consume PF-34-S04 versioned allow/suspicious/hostile/unavailable results with model/version/threshold IDs and safe diagnostics; the evaluator cannot redefine trust or authorize actions.
 - [ ] Inventory licensed source data, allowed use, hashes and synthetic finance/repository/web/tool/child attacks; exclude customer secrets and identifying financial records.
 - [ ] Group splits by original source, template, attack family and semantic near-duplicates; retain independent unseen-source/language/topic/position/adaptive holdouts.
 - [ ] Include benign security research, legitimate human trading instructions and trigger-token hard negatives; freeze evaluator-owned blind data before training.

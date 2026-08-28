@@ -4,7 +4,7 @@ title: "Persistent taint across summaries and memory"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-30"
-execution_order: 24
+execution_order: 31
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -49,6 +49,8 @@ updated: 2026-08-28
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 
 ## Remaining
+
+- [ ] Test provenance-store capacity rejection before wrapped file commit, filename/path aliases including memory/dreaming, and out-of-band changed content against read-time digests. Do not encode the outside review's disproven OpenClaw capacity exploit as an observed fact.
 
 - [ ] Reuse the persistent writer/store/index chain, not only turn-taint-state: test canonical workspace aliases, sticky least-trusted origin, reservation-owned rollback, capacity rejection and content identity on read. Missing records, user-turn boundaries and dreaming/memory filenames must not clear protected ancestry.
 

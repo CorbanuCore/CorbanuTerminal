@@ -4,7 +4,7 @@ title: "Secretless agent launch and bypass containment"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
-execution_order: 14
+execution_order: 21
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -49,6 +49,8 @@ updated: 2026-08-28
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 
 ## Remaining
+
+- [ ] Run all three OS containment probes against shell, plugins/MCP and descendants, including process memory/debug APIs and inherited descriptors/handles. Protect policy-store writes as well as broker secrets; stale capability results cannot enable launch.
 
 - [ ] Inventory SDK/plugin/native-harness auth handoffs including hidden request-transport metadata; verify raw opt-out flags, ignored proxy variables and child environments cannot bypass protected mode. Separate engine availability from verified process/OS containment.
 

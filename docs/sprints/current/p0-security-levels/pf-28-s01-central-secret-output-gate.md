@@ -4,7 +4,7 @@ title: "Central secret and protected-output gate"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-28"
-execution_order: 15
+execution_order: 22
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -48,6 +48,8 @@ updated: 2026-08-28
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 
 ## Remaining
+
+- [ ] Trace every diagnostic/request-capture adapter to its final sink; test short secrets, capacity exhaustion and concurrent rotation. Retain all active managed values through their response lifetime or deny safely; registry eviction cannot make an in-flight secret unprotected.
 
 - [ ] Add short values below six characters, more than 512 distinct representations, repeated/encoded values and split-output chunks to canary tests. Protected sinks remove the whole credential, not a diagnostic prefix/suffix; capacity exhaustion must fail safely without evicting live protection.
 

@@ -4,7 +4,7 @@ title: "Safe quarantine review and recovery"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-34"
-execution_order: 40
+execution_order: 45
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"

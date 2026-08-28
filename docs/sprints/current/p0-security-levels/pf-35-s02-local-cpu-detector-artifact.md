@@ -4,7 +4,7 @@ title: "Reproducible local CPU detector artifact"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-35"
-execution_order: 37
+execution_order: 7
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -48,6 +48,8 @@ updated: 2026-08-28
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 
 ## Remaining
+
+- [ ] Record CPU baseline, artifact size/RSS, reproducible build and license/security pins early; do not interpret fixture quality as final live-ingress acceptance. Reserve blind holdouts for the independent evaluator.
 
 - [ ] Record and verify the separately selected CPU model/license/artifact/runtime; OpenClaw's regex signals are not that model and supply no quality or resource qualification. Keep deterministic policy independent of the detector.
 

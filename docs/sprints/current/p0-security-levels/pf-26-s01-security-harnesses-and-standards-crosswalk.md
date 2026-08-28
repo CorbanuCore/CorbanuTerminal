@@ -4,7 +4,7 @@ title: "Security harnesses and standards crosswalk"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-26"
-execution_order: 61
+execution_order: 66
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -48,6 +48,9 @@ updated: 2026-08-28
 - [x] Sprint record is linked only to PF-26.
 
 ## Remaining
+
+- [ ] Map every accepted architecture recommendation to its owning sprint, final test and artifact; reject missing platform/state-tamper, stale-TLS, capture-sink, closed-world route, control-flow-taint and uncertain-financial-kill coverage.
+- [ ] Audit actual parallel diffs and combined-tree commits against declared scopes; rerun Codex seam tests, upstream-drift controls and the independent Permissive baseline. Source evidence and fixture-only contract passes remain separate from qualification.
 
 - [ ] Add an OC-1–11 adoption matrix: pinned source/function and test, Corbanu owner/hook, deliberate difference, candidate case and artifact. Track inspected-only/open-channel concerns separately; the reference's 87 helper tests and 10 observation probes cannot be relabeled as Corbanu passes.
 

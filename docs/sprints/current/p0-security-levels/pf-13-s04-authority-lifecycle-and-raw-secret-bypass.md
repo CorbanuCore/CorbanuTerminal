@@ -4,7 +4,7 @@ title: "Credential authority lifecycle and raw-secret bypass closure"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
-execution_order: 12
+execution_order: 19
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -48,6 +48,8 @@ updated: 2026-08-28
 - [x] Sprint record identifies the existing raw `auth-helper` and broker storage bypasses.
 
 ## Remaining
+
+- [ ] Add the stale TLS-handler fixture: revoke then re-register the same run ID/instance with a new generation and open a fresh connection to a still-admitted host. Neither cached server closures nor pooled channels may reuse the old credential; assert unrelated runs continue.
 
 - [ ] Test authority closure on an already-established CONNECT/keep-alive channel, during body upload, and after same-ID run re-registration. New-connection 407/refusal tests alone do not prove revocation; unrelated active runs must continue safely.
 

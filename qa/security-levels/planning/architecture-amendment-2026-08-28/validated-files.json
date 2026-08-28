@@ -1,0 +1,325 @@
+{
+  "base_commit": "87857faedec1053aefde7925697e308d905700d7",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "48e4ec32b74271ae7af10b5a125fef6ea01316f8c0c3cd67b111a77fb368f187"
+    },
+    {
+      "path": "docs/plans/PLAN_TEMPLATE.md",
+      "sha256": "7ec7e5b8866b2f69e81ab5c50586e62b6e41ce788f5ed0ddf1eb39c7af1c3473"
+    },
+    {
+      "path": "docs/plans/active/p0-security-levels.md",
+      "sha256": "43278f3d9372a586ee876ed9111bd85757a77fdec9d2faf9b103246fb18edaf4"
+    },
+    {
+      "path": "docs/plans/index.md",
+      "sha256": "cef3d1bfde15d0cf93a59528c7e999b8fe3b2cd4c03f8a8fa9690925efa09a78"
+    },
+    {
+      "path": "docs/plans/proposed/prompt-injection-firewall.md",
+      "sha256": "544c3ef7b20a9e0eca952bb42c8af7664f501f27969c75caa6ba24ecc4d28ffc"
+    },
+    {
+      "path": "docs/plans/security-architecture-refinements-2026-08-28.md",
+      "sha256": "99b03b0e51c12e1ac9b9bd67bbbe5a1522024c1f9d0f798ff988358d48804a38"
+    },
+    {
+      "path": "docs/plans/security-source-reconciliation.md",
+      "sha256": "2925c707e636e4486302fed77a34b9ffd694bfcefe8b4e671ab9c6b588359bb6"
+    },
+    {
+      "path": "docs/sprints/SPRINT_TEMPLATE.md",
+      "sha256": "b2b21983fea8b4a5554dd2203a6c15ef8fc2960a034ed34150700a0a98569da5"
+    },
+    {
+      "path": "docs/sprints/check.py",
+      "sha256": "2e7a1b830f4991447dd89af69fe73a2d63658324a29e6d154531c2db9b8810f5"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/index.md",
+      "sha256": "0ca6ee74cf65f84d2a5e7473f1ebc2e02819dec79eb7780171e356163603551b"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md",
+      "sha256": "aadd972c4f76b52d5aa6319eb3ad7cddc3a984964501ccada306098b7816fb8c"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-13-s02-scoped-vault-resolver.md",
+      "sha256": "96d9bad9baba35f7a90cdc016b7456857b86c14dc2a5cbb8ba3217db84f7479f"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md",
+      "sha256": "c951a23b9684e0639eed1f6fe85ac71946927ae7bf85ca1fc7c7186e1f5f5a7b"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md",
+      "sha256": "7be0eec68c67d8cecd1dbd5b3b1736eaa311f8126d47d0dfcaead199ce421b8c"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md",
+      "sha256": "1a864c2a9795ade88bb1c9ceb453751de645d849c02dff44dc49f765bc1f1b9a"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-16-s01-authorization-decision-contract.md",
+      "sha256": "752b55a5d12fdcf2c372d11bbca1a0e63dd4f7825fe7b840e149bf010ad1ce85"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-17-s01-bounded-delegation-grants.md",
+      "sha256": "1e22f0cd1fef14198d322584ac06070478bb9000f2134a35f81064c340b23f02"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-18-s01-human-mandates-and-receipts.md",
+      "sha256": "f14c4e57297cee48ce76d0a703f3f2c317f4529969933bb8fb2a67275454d891"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-19-s01-revocation-contract.md",
+      "sha256": "ac1cac15ddb09c3f1c9eed2db8c17d8e42af3c40cd088147d689a82561514f5c"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-20-s01-versioned-security-persistence.md",
+      "sha256": "36a20bc97fed6d3687a267a6d6577658cdfb0d389c5326e2a0e825dca0a4b875"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md",
+      "sha256": "a9c82aee1b5e08b3f5c4ff79f90901eb6e4ee5a99dcc69319d0d90c91abbe12b"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md",
+      "sha256": "b9a571c2c90092eb3494ec79396576dff7d53364597f18aaabb7721d3c90706d"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md",
+      "sha256": "55a2758a8104448a1f4ba88ad8ddf931b29d739ee4806a4720bddd8e3b758a64"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md",
+      "sha256": "1700d24bf190e615104beaff39afa14aead5b3ba65e617add28d70d95a6adcdb"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md",
+      "sha256": "1064873409cdad45ca931f79a17a6f43729395088fed67cd950d5ed6902b98b1"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md",
+      "sha256": "ca2f3a89152c65887e04d898591b2c6d1da8ec912cda7ec74154fb5c0090a840"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md",
+      "sha256": "e5e7bd24495c2800f61ac931137ef5c0b97a28b5a07b162485e6f3c49181d642"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md",
+      "sha256": "9227133cbcb8303c9fbd3879c6317a2c6b5252c43a373b61ce61a8cc3abfc95c"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md",
+      "sha256": "ccfdd653663643c441a31bc638cd55452e8b4a224156eab13419b1994b6c7499"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md",
+      "sha256": "095e22f6f3d8d5bf7215e273a8e1466c2add447fbac95194d663cf62e1d7363a"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md",
+      "sha256": "877add2dec4e926c359ac3f08206db3597a95e3fca2eb651f83634b15ea70792"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md",
+      "sha256": "060167db845d9b1fe243f25c3c8eee1d4632810950d6eb9096139c3c6b06366e"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-27-s01-isolated-credential-broker.md",
+      "sha256": "02a635d43585f7f77a7dd49a65b0477b18a4a4cccdb5b9480191312ace009c96"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md",
+      "sha256": "a3440330a76f9128fd8465056bbdce10c95d622a18a5a816e628c3f510dea54d"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-27-s03-platform-containment-contract.md",
+      "sha256": "e108d89eac307ff473cad7726290d4543dbf02f9b6e8a9886c1fb0538d647bde"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md",
+      "sha256": "27cf0934e3faaa0857a7cde73edbe8efa032415773cef8023571c86edbc79110"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md",
+      "sha256": "02e9f7ff3f04ab36dea7e34491e5e850e6d3109c13370890e5e4f91bd1fe323c"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md",
+      "sha256": "75702c0ba9023e59bce506ea022a5322ed5a7b31d12edcfcf7f2e67a0c3a1261"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md",
+      "sha256": "451e0e9dca213c565dfeed4d5806127f41eb40442094c9908ef9bd6ff6ae9bd9"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md",
+      "sha256": "b53594e3d94a823aff33dcd279783aae7ff82a38cf81b85ecd20c5922c6896e2"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md",
+      "sha256": "35396644c4626946c5817fde40b0e4b84ce0e2360b6317230f6ee5cc3990f4b4"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md",
+      "sha256": "3c08167546482ee6dbbdf5e78f4219499258c0b7082760e3d2ce2e71501bbb87"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-31-s01-pinned-retriever-isolation.md",
+      "sha256": "45f4e498a48321d6e8bdab1c467a43bf7cafc1723a48c2889b2c4243952ecb5c"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-31-s02-bounded-fetch-no-fallback.md",
+      "sha256": "7adabd90c02757004fea025a1e8a6f10447bc27d8dd33842b8a6b470bad4ee99"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-31-s03-download-quarantine-promotion.md",
+      "sha256": "88e2218edf7cfb153f7225dbf1c3aff0a3dd0ce0cb079256e883407960d6e773"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md",
+      "sha256": "fc7149ace154bcf756ef350f9aa5b5513371e39bab64f8630df3620cbcdb4862"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-32-s01-web-facade-and-registry.md",
+      "sha256": "28d8d707a8a6b6a1c9a6da5aa185a06f6f677f940a17c76bc99290c4438afe26"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-32-s02-existing-search-and-native-bypass.md",
+      "sha256": "e0836f7c04b521d31c154b5c0357b21e84d66a0f15ec486dffc7ca40553fa652"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-32-s03-exa-search-adapter.md",
+      "sha256": "73058c7e4996cfc94527ff5b9dacc3278230bc8894e528c1771345959b2551c6"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-32-s04-brave-search-adapter.md",
+      "sha256": "b5359a04d85a35482402c8e4ae408c8b7aeab2d572faad3cb6304f4c27690ce4"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-32-s05-searxng-search-adapter.md",
+      "sha256": "8f5e239001c7aeeaf8f1215ee02b57a658e9ff2931e1f352fa809f7533825563"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-32-s06-privacy-routing-and-failover.md",
+      "sha256": "2923a8993ff42a6570de9d01f7dfa08b6a1e2efbf3f17b9d4fb9fe2523527f76"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md",
+      "sha256": "d31de3b9fe6233468ae8c13716d215b404dbda00170f45e5c80ec681614f237a"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md",
+      "sha256": "94b51a128cbefad65feed4a405095f2b84c428e1b8bebbf5cd5fd4e6ee6546c2"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-33-s03-destination-policy-contract.md",
+      "sha256": "035dbc997fd74ad747b311010fa1fa2a6973d4093dcbdc1c58803409e78d18e3"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-34-s01-render-aware-sanitization.md",
+      "sha256": "70678f2ec9c79b5c09435b604cf7f4924c2c51340e70bd7b2c3224d31cd1ae19"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-34-s02-quarantine-state-and-store.md",
+      "sha256": "c93bcc07522f3bf7a4907eccc973a61065d8e7f18eb9183b931af1034bd6c6d7"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-34-s03-safe-quarantine-review.md",
+      "sha256": "81db29671630d70eb1fe1992b6297614603050bb7faeb35b953b831deceb9a89"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md",
+      "sha256": "bb504972545589a6b71bed09f6243e4b1a26bc07d73355408a89503ce29648a1"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-35-s01-classifier-corpus-and-evaluation.md",
+      "sha256": "322ad8b7cd205beb5bbfc29f910e8b2407366f1510d1b41b0779ec196f79d8bd"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-35-s02-local-cpu-detector-artifact.md",
+      "sha256": "4cec8815140e94eff344888a8b0dff838db6bcb32aa08190314d423004ad7034"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-35-s03-calibration-and-ingress-gate.md",
+      "sha256": "6195c9af159be842e854511dea6aacfa6b79d53c50ad5fc732eb7c74c583255f"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-36-s01-hosted-detector-consent-contract.md",
+      "sha256": "f7c07b05b5c40d5db49d43f6fe02695407c478041d364c4d011c473c1589039b"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-36-s02-hosted-bakeoff-and-local-fallback.md",
+      "sha256": "5a159414ae9d021d9980051bd95be39d0396b5fd0f4128a4bfcff0db9c2d7373"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-37-s01-origin-bound-browser-login.md",
+      "sha256": "25998e089ee915ceb1d4d2c49063eab4d02b4ca5413d74c19506eac8b39a00c6"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-37-s02-human-auth-handoff-lifecycle.md",
+      "sha256": "5ce0910f63b64c174259c1e395a429bde343afa34203a725cce5d78a133204e4"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-38-s01-typed-financial-executor.md",
+      "sha256": "49a12356dc649dd4ab9c3f4a4cbbfa2951ba6663562e7de7048348dd6a1fcaf7"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-38-s02-full-effect-preview-and-mandate.md",
+      "sha256": "8b029419d54b7650f2eb82ba869da751fa3da978d07a0453700dd1ca4220b748"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-38-s03-sign-broadcast-and-receipts.md",
+      "sha256": "e18ff19d319e26becbe1528c0acf0a98e279819ed83f39806ba7fa034d606615"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-39-s01-protected-financial-derived-views.md",
+      "sha256": "2b488aa43ed11263948ca480c7f3b69aa3e902a190c68678e4bb4bc48936c91a"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-39-s02-outbound-disclosure-controls.md",
+      "sha256": "9605d2d2a974a76aab64ed5bb17e64ea91dca2d8e8fa2d6a5d88e7607e45614c"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-40-s01-sweep-events-and-rules.md",
+      "sha256": "80d6166c49507ac8e6416dd29af8aba8d5976b5717e615ff3309c744d142fe85"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-40-s02-isolated-sweep-reviewer.md",
+      "sha256": "45e5ec41bcc8eb20565135922ec7b336d5cdbe5c8b69cd34a22866a5f1ca8fb1"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-40-s03-sweep-alerts-and-recovery.md",
+      "sha256": "9aa5b445ea9ae64d42f99647d5f487364d570509c466b341c6b0d40f939e9ca9"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md",
+      "sha256": "5468719c780ccdd93c01a53d56637b58444de5569f644b15aecb9a6906e3cb29"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-41-s02-tamper-evident-security-audit.md",
+      "sha256": "9dfcc4cec27e90c734ad6d9c8fba10d97294d328cfccaae9a060e3be48e20033"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-41-s03-durable-security-event-foundation.md",
+      "sha256": "5431a229a3dd2dc9814189eff65b881aaf50a04e72d58cf98293c5386540674f"
+    },
+    {
+      "path": "docs/sprints/index.md",
+      "sha256": "0ccf1694e38fc6034989c868c0dbfad811d3e852a95cc8db1a45ed1e2d6d6a71"
+    },
+    {
+      "path": "docs/sprints/tests/test_check.py",
+      "sha256": "331a6b00e43093f792ad09c6fcb82e19b92f3224a2dd4a2ec5b616056a8d07bc"
+    },
+    {
+      "path": "mkdocs.yml",
+      "sha256": "e5b183093017fa054f32a5d4a33a09541adb1cfd59217e19dea4d4092622f375"
+    }
+  ]
+}

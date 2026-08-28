@@ -4,7 +4,7 @@ title: "Moderate ingress and disclosure enforcement"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-23"
-execution_order: 26
+execution_order: 33
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -46,6 +46,8 @@ updated: 2026-08-28
 - [x] Sprint record is linked only to PF-23.
 
 ## Remaining
+
+- [ ] Implement the plan's action/profile usability matrix with conservative data and control-flow ancestry; a model selecting clean-looking human values after hostile content is not trusted reconstruction. No runtime Moderate activation until all required subsystems qualify.
 
 - [ ] Integrate PF-30 durable provenance and post-taint checks; detector output never supplies authority, and a new turn or summary never clears taint.
 - [ ] Register required protected-mode subsystems and deny unsupported/unready routes; final activation requires the full plan readiness matrix, not this dispatch slice alone.

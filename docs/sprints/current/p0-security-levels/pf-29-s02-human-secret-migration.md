@@ -4,7 +4,7 @@ title: "Human-reviewed credential migration and recovery"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-29"
-execution_order: 21
+execution_order: 28
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -48,6 +48,8 @@ updated: 2026-08-28
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 
 ## Remaining
+
+- [ ] Crash at each ownership transfer/commit/cleanup point; stale rollback cannot overwrite a later owner or restore a revoked level. No plaintext backup/recovery copy; contaminated resume requires a genuinely clean context.
 
 - [ ] Port preflight/consent and post-commit-publication-failure cases; add power-loss, encrypted recovery, stale preview and concurrent owner changes. Prove whole-migration recovery rather than inferring it from atomic individual file replacement or best-effort rollback.
 

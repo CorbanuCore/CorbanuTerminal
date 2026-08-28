@@ -4,12 +4,12 @@ title: "Separate signing broadcasting and idempotent receipts"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-38"
-execution_order: 53
+execution_order: 58
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
-depends_on: "PF-38-S02"
+depends_on: "PF-38-S02, PF-41-S03"
 created: 2026-08-28
 updated: 2026-08-28
 ---
@@ -39,7 +39,7 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Active plan; PF-38-S02 completed and archived.
+- [ ] All dependencies in front matter are completed and archived; plan remains active.
 - [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
 - [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
 
@@ -48,6 +48,8 @@ updated: 2026-08-28
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 
 ## Remaining
+
+- [ ] Use PF-41-S03 causal event/receipt IDs and durable intent/unknown recovery. With a submitted-unknown fake transfer, kill or tighten immediately, reject new sign/broadcast, restart and reconcile status without blind rebroadcast or false cancellation.
 
 - [ ] Test stale/revoked authority and ownership-aware recovery around separate sign/broadcast operations; retries must not replay effects. Upstream credential lifecycle tests are not evidence of financial idempotence or custody safety.
 

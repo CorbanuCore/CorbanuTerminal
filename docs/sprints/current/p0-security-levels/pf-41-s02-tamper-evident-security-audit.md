@@ -4,12 +4,12 @@ title: "Tamper-evident audit and safe support export"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-41"
-execution_order: 60
+execution_order: 65
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
-depends_on: "PF-41-S01"
+depends_on: "PF-41-S01, PF-41-S03"
 created: 2026-08-28
 updated: 2026-08-28
 ---
@@ -39,7 +39,7 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Active plan; PF-41-S01 completed and archived.
+- [ ] All dependencies in front matter are completed and archived; plan remains active.
 - [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
 - [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
 
@@ -49,9 +49,11 @@ updated: 2026-08-28
 
 ## Remaining
 
+- [ ] Compose the completed PF-41-S03 producer chains and recovery semantics; this sprint owns inspection/export integration, not a late incompatible event-ID redesign. Audit failure cannot block emergency restriction or hide uncertain effects.
+
 - [ ] Record payload-free authorization/lifecycle events and fully scrub support exports; prove tamper detection, missing-event handling and protected-sink coverage independently of diagnostic logs and prefix/suffix masks.
 
-- [ ] Unify event IDs and tamper-evident chaining across level changes, requests/decisions, grants, use/revoke, ingress outcomes, broker actions and financial receipts.
+- [ ] Verify the shared PF-41-S03 event IDs and tamper-evident chaining across level changes, requests/decisions, grants, use/revoke, ingress outcomes, broker actions and financial receipts.
 - [ ] Bound retention and encrypt sensitive metadata at rest; detect gaps, truncation and corruption without pretending a local hash chain defeats a fully compromised host.
 - [ ] Provide human-initiated minimized support export with explicit destination/content preview and PF-39 disclosure checks; omit credential refs usable as capabilities, raw prompts and financial records.
 - [ ] Test rotation, disk full, crash/restart, tampering, invalid chain, export cancel and secret canaries in every error path.

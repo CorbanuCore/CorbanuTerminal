@@ -4,6 +4,8 @@ status: draft
 change_class: product-initiative
 priority: "<P0, P1, or P2>"
 owner: "<name or accountable role>"
+parallel_sprint_limit: 1
+integration_owner: "<named owner if opting into parallel implementation>"
 activation_authority: "<person or role>"
 activation_basis: "<existing product decision authorizing this outcome>"
 target_release: "<version or TBD>"
@@ -76,6 +78,10 @@ failure, recovery, resume, and return use.>
 |  |  |  |  |  |
 
 ## Useful code references
+
+For parallel work, allocate distinct named owners/worktrees/branches in the table
+above and define scope plus receiving integration gates in each sprint. Follow
+`docs/sprints/index.md`; an unallocated draft does not reserve a worker slot.
 
 | Path or symbol | Why it matters |
 | --- | --- |

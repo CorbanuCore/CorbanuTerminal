@@ -4,12 +4,12 @@ title: "Versioned security persistence reconciliation"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-20"
-execution_order: 6
+execution_order: 12
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
-depends_on: "PF-15-S01"
+depends_on: "PF-15-S01, PF-27-S03"
 created: 2026-08-24
 updated: 2026-08-28
 ---
@@ -31,6 +31,8 @@ updated: 2026-08-28
 
 ## Code boundaries
 
+- Planned controller-owned store: `codex-rs/config/src/security_state.rs`; authenticated update adapter and restart/tamper tests in `codex-rs/core/src/security/`.
+
 - OpenClaw adoption reference: [OC-6](../../../plans/openclaw-source-review-2026-08-28.md#oc-6), [OC-11](../../../plans/openclaw-source-review-2026-08-28.md#oc-11) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; see the review for named functions, callers, tests and limits. Reference tests are not candidate evidence.
 
 - Existing: `codex-rs/config/src/config_toml.rs`; `codex-rs/core/src/config/{mod,edit}.rs`
@@ -39,7 +41,7 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] PF-15-S01 is completed and archived.
+- [ ] All dependencies in front matter are completed and archived; plan remains active.
 - [ ] Exact worktree coordinates match the plan.
 - [ ] Read `codex-rs/AGENTS.md` and `codex-rs/core/AGENTS.md` before corrective work.
 
@@ -49,6 +51,9 @@ updated: 2026-08-28
 - [x] Commit `0e3f2dfd92` added versioned config, schema, editing, and persistence tests.
 
 ## Remaining
+
+- [ ] Implement the PF-27-S03 controller-owned authoritative level/grant/revocation/kill/recovery store, separate from agent-editable preference files; authenticate updates and reject missing protected state, rollback or replacement rather than reverting to legacy Permissive.
+- [ ] Test overwrite/delete/rename/symlink/permission change/old snapshot restoration followed by restart and resume; tamper cannot downgrade or resurrect authority. Record bootstrap distinctions between genuinely new legacy installs and lost protected state.
 
 - [ ] Test compare-and-activate revision checks and ownership-scoped rollback so stale recovery cannot overwrite a later credential/provenance owner; distinguish durable crash recovery from in-memory snapshots.
 

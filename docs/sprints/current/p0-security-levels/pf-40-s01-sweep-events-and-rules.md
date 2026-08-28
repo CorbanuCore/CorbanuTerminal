@@ -4,12 +4,12 @@ title: "Agent Sweep sanitized events and deterministic rules"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-40"
-execution_order: 56
+execution_order: 61
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
-depends_on: "PF-30-S03, PF-38-S03, PF-39-S02"
+depends_on: "PF-30-S03, PF-38-S03, PF-39-S02, PF-41-S03"
 created: 2026-08-28
 updated: 2026-08-28
 ---
@@ -39,7 +39,7 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Active plan; PF-30-S03, PF-38-S03, PF-39-S02 completed and archived.
+- [ ] All dependencies in front matter are completed and archived; plan remains active.
 - [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
 - [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
 
@@ -48,6 +48,8 @@ updated: 2026-08-28
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 
 ## Remaining
+
+- [ ] Consume PF-41-S03 producer/deduplication/commit contracts; saturation, chain gaps and corrupt inputs must become visible degradation, not implicit grants or healthy audit state.
 
 - [ ] Carry host-assigned source and lineage through sanitized Sweep events; missing metadata must not become trusted merely because it came from a transcript or memory file. Keep monitoring separate from synchronous prevention.
 

@@ -4,7 +4,7 @@ title: "Human authentication handoff and session revocation"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-37"
-execution_order: 50
+execution_order: 55
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"

@@ -26,7 +26,7 @@ Plan lifecycle: `docs/plans/index.md`
 This is **historical proposed design input**, retained as a draft rather than
 reactivated. On 2026-08-28, Travis Good requested selective reuse and reconciliation
 into the [active P0 plan](../active/p0-security-levels.md). That plan now owns all
-accepted implementation scope and its 63 current sprints. This document and its
+accepted implementation scope and its 68 current sprints. This document and its
 72 cancelled sprints do not authorize parallel work or describe finished behavior.
 
 [The complete source and archive crosswalk](../security-source-reconciliation.md)

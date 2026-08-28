@@ -4,7 +4,7 @@ title: "Outbound disclosure clipboard and export controls"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-39"
-execution_order: 55
+execution_order: 60
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"

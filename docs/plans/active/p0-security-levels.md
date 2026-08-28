@@ -4,6 +4,8 @@ status: active
 change_class: product-initiative
 priority: P0
 owner: "Jim Ricketts"
+parallel_sprint_limit: 3
+integration_owner: "Jim Ricketts"
 activation_authority: "Product authority defined in the product specification"
 activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to reconcile the complete security program into this active plan."
 target_release: "TBD — candidate qualified by 2026-10-08"
@@ -72,13 +74,34 @@ passing candidate evidence; no source citation alone closes an acceptance item.
   launch and deterministic ingress/disclosure policy. Unsupported adapters or
   isolation fail visibly; they never fall back to raw credentials.
 - **All source requirements have owners.** Retain/reconcile 23 current records,
-  add 40 single-feature drafts, and leave all 72 cancelled records untouched.
-  There are now 63 security execution units; the seven Autoreview drafts are unrelated.
+  add 40 full-scope drafts plus five reviewed preparation/foundation units, and
+  leave all 72 cancelled records untouched. There are now 68 security execution
+  units; the seven Autoreview drafts are unrelated.
 - **No evidence is retroactively accepted.** The first seven recorded commits
   still require reconciliation. PF-15-S01 remains the only ready sprint.
 - The existing October 8 deadline is unchanged, but this larger program has not
   been effort-estimated or scheduled. The owner must assess capacity and surface
   any conflict; no scope or release gate is silently waived.
+
+## Accepted architecture refinement — 2026-08-28
+
+Travis Good authorized the assessed recommendations after the Opus 5 / Extra
+review. The [architecture appendix](../security-architecture-refinements-2026-08-28.md)
+records accepted/rejected claims, platform/state and upstream-seam contracts,
+action/profile usability, durable events and required regression detail.
+
+Five draft preparation/foundation sprints make independent work explicit:
+PF-27-S03 platform containment, PF-31-S04 retriever artifacts/engine fixtures,
+PF-33-S03 pure destination policy, PF-34-S04 segment/verdict fixtures and
+PF-41-S03 durable audit/recovery. PF-35 corpus/CPU work now follows the completed
+segment contract, while real screening still depends on sanitizer and policy
+integration. Browser login gains its missing screening dependency.
+
+The plan opts into the [bounded parallel process](../../sprints/index.md#bounded-parallel-implementation)
+with Jim Ricketts as integration owner. No extra execution owner or worktree has
+been allocated and no sprint is activated by this amendment. Keep PF-13-S05 and
+PF-26 final qualification, full Moderate/Aggressive guarantees, independent
+Permissive evidence and the existing deadline pending measured capacity review.
 
 ## User pain
 
@@ -234,6 +257,12 @@ update; it cannot silently change Permissive or an accepted security level.
 Implementation does not occur in the documentation checkout. Update this plan
 before changing the implementation worktree, base, owner, or scope.
 
+Parallel preparation lanes and integration gates are in the architecture appendix.
+Before a second worker starts, assign distinct named execution owners and exact
+worktrees/branches/base commits, fill each sprint's literal write_scope and
+integration_gate, and record a dated capacity estimate. The existing shared
+coordinates are not permission for concurrent workers in the same checkout.
+
 ## Useful code references
 
 | Path or symbol | Why it matters |
@@ -257,9 +286,10 @@ before changing the implementation worktree, base, owner, or scope.
 ## Sprint execution map
 
 This map covers every implementation and qualification unit currently required
-by the plan: **63 current sprints**. The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
+by the plan: **68 current sprints**. The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
 is the dependency-correct sequence; feature IDs are stable identifiers, not
-execution order. All records use the allocated worktree, branch, and base commit.
+execution order. The original records retain the allocated worktree coordinates;
+the five new preparation/foundation drafts remain `UNALLOCATED` until assigned.
 Code presence is not completion: PF-15 through PF-21 reconcile seven existing
 feature-worktree commits whose final-tree evidence has not yet been accepted.
 Only dependency-free PF-15-S01 is `ready`; every other record remains `draft`
@@ -280,21 +310,21 @@ until its dependencies are completed and archived.
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
 | `PF-26` | Harnesses, true-TUI/live-repository qualification, human acceptance, and finished docs | [S01](../../sprints/current/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md), [S02](../../sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md), [S03](../../sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | draft |
-| `PF-27` | Isolated credential broker and secretless launch | [S01](../../sprints/current/p0-security-levels/pf-27-s01-isolated-credential-broker.md), [S02](../../sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md) | draft |
+| `PF-27` | Isolated credential broker and secretless launch | [S01](../../sprints/current/p0-security-levels/pf-27-s01-isolated-credential-broker.md), [S02](../../sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md), [S03](../../sprints/current/p0-security-levels/pf-27-s03-platform-containment-contract.md) | draft |
 | `PF-28` | Central output and reflected-secret protection | [S01](../../sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md), [S02](../../sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) | draft |
 | `PF-29` | Protected-mode inventory and human migration | [S01](../../sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md), [S02](../../sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md) | draft |
 | `PF-30` | Durable provenance and post-taint authority | [S01](../../sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md), [S02](../../sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md), [S03](../../sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) | draft |
-| `PF-31` | Isolated retrieval and download promotion | [S01](../../sprints/current/p0-security-levels/pf-31-s01-pinned-retriever-isolation.md), [S02](../../sprints/current/p0-security-levels/pf-31-s02-bounded-fetch-no-fallback.md), [S03](../../sprints/current/p0-security-levels/pf-31-s03-download-quarantine-promotion.md) | draft |
+| `PF-31` | Isolated retrieval and download promotion | [S01](../../sprints/current/p0-security-levels/pf-31-s01-pinned-retriever-isolation.md), [S02](../../sprints/current/p0-security-levels/pf-31-s02-bounded-fetch-no-fallback.md), [S03](../../sprints/current/p0-security-levels/pf-31-s03-download-quarantine-promotion.md), [S04](../../sprints/current/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md) | draft |
 | `PF-32` | Screened web facade and search providers | [S01](../../sprints/current/p0-security-levels/pf-32-s01-web-facade-and-registry.md), [S02](../../sprints/current/p0-security-levels/pf-32-s02-existing-search-and-native-bypass.md), [S03](../../sprints/current/p0-security-levels/pf-32-s03-exa-search-adapter.md), [S04](../../sprints/current/p0-security-levels/pf-32-s04-brave-search-adapter.md), [S05](../../sprints/current/p0-security-levels/pf-32-s05-searxng-search-adapter.md), [S06](../../sprints/current/p0-security-levels/pf-32-s06-privacy-routing-and-failover.md) | draft |
-| `PF-33` | Destination validation and connection enforcement | [S01](../../sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md), [S02](../../sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md) | draft |
-| `PF-34` | Sanitization quarantine and safe review | [S01](../../sprints/current/p0-security-levels/pf-34-s01-render-aware-sanitization.md), [S02](../../sprints/current/p0-security-levels/pf-34-s02-quarantine-state-and-store.md), [S03](../../sprints/current/p0-security-levels/pf-34-s03-safe-quarantine-review.md) | draft |
+| `PF-33` | Destination validation and connection enforcement | [S01](../../sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md), [S02](../../sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md), [S03](../../sprints/current/p0-security-levels/pf-33-s03-destination-policy-contract.md) | draft |
+| `PF-34` | Sanitization quarantine and safe review | [S01](../../sprints/current/p0-security-levels/pf-34-s01-render-aware-sanitization.md), [S02](../../sprints/current/p0-security-levels/pf-34-s02-quarantine-state-and-store.md), [S03](../../sprints/current/p0-security-levels/pf-34-s03-safe-quarantine-review.md), [S04](../../sprints/current/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md) | draft |
 | `PF-35` | Local classifier and blind qualification | [S01](../../sprints/current/p0-security-levels/pf-35-s01-classifier-corpus-and-evaluation.md), [S02](../../sprints/current/p0-security-levels/pf-35-s02-local-cpu-detector-artifact.md), [S03](../../sprints/current/p0-security-levels/pf-35-s03-calibration-and-ingress-gate.md) | draft |
 | `PF-36` | Optional hosted detector and safe fallback | [S01](../../sprints/current/p0-security-levels/pf-36-s01-hosted-detector-consent-contract.md), [S02](../../sprints/current/p0-security-levels/pf-36-s02-hosted-bakeoff-and-local-fallback.md) | draft |
 | `PF-37` | Origin-bound browser login and human handoff | [S01](../../sprints/current/p0-security-levels/pf-37-s01-origin-bound-browser-login.md), [S02](../../sprints/current/p0-security-levels/pf-37-s02-human-auth-handoff-lifecycle.md) | draft |
 | `PF-38` | Typed financial execution and exact effects | [S01](../../sprints/current/p0-security-levels/pf-38-s01-typed-financial-executor.md), [S02](../../sprints/current/p0-security-levels/pf-38-s02-full-effect-preview-and-mandate.md), [S03](../../sprints/current/p0-security-levels/pf-38-s03-sign-broadcast-and-receipts.md) | draft |
 | `PF-39` | Derived financial views and disclosure control | [S01](../../sprints/current/p0-security-levels/pf-39-s01-protected-financial-derived-views.md), [S02](../../sprints/current/p0-security-levels/pf-39-s02-outbound-disclosure-controls.md) | draft |
 | `PF-40` | Agent Sweep and safe recovery | [S01](../../sprints/current/p0-security-levels/pf-40-s01-sweep-events-and-rules.md), [S02](../../sprints/current/p0-security-levels/pf-40-s02-isolated-sweep-reviewer.md), [S03](../../sprints/current/p0-security-levels/pf-40-s03-sweep-alerts-and-recovery.md) | draft |
-| `PF-41` | Effective security inspector and audit | [S01](../../sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md), [S02](../../sprints/current/p0-security-levels/pf-41-s02-tamper-evident-security-audit.md) | draft |
+| `PF-41` | Effective security inspector and audit | [S01](../../sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md), [S02](../../sprints/current/p0-security-levels/pf-41-s02-tamper-evident-security-audit.md), [S03](../../sprints/current/p0-security-levels/pf-41-s03-durable-security-event-foundation.md) | draft |
 
 ### PF-13 integration contract
 
@@ -382,7 +412,7 @@ for design provenance; product scope remains in the specification.
 
 ### PF-41
 
-**Effective security inspector and audit.** Display requested versus actual level/backend/isolation/egress, broker/classifier readiness, leases/grants/expiry, taint, denials, retention and audit integrity. Degradation must be visible. Human support exports are minimized and disclosure-gated; an integrity gap cannot be hidden behind a healthy badge.
+**Effective security inspector and audit.** First provide shared versioned event IDs, durable commit/failure and recovery contracts in PF-41-S03; inspector/export integration stays later. Display requested versus actual level/backend/isolation/egress, broker/classifier readiness, leases/grants/expiry, taint, denials, retention and audit integrity. Degradation must be visible. Human support exports are minimized and disclosure-gated; an integrity gap cannot be hidden behind a healthy badge.
 
 ### Profile and failure contract
 
@@ -465,15 +495,23 @@ incomplete; do not substitute a wrapper heuristic or optional hosted service.
 
 ## Implementation sequence
 
-Use the [63-record ordered index](../../sprints/current/p0-security-levels/index.md)
-for exact dependencies; there is at most one in-progress sprint.
+Use the [68-record ordered index](../../sprints/current/p0-security-levels/index.md)
+for exact dependencies. Bounded parallel allocations follow the sprint process;
+reading order is not a serial lock. The graph has 68 nodes and a longest
+unweighted chain of 35; that is not an elapsed-time estimate.
 
-1. **Reconcile existing foundations.** PF-15–21 review the seven recorded commits,
+1. **Prepare independent boundaries and reconcile foundations.** Allocate up to
+   three checked workers: platform/foundation, browser artifact/destination policy,
+   and segment/classifier preparation. Complete the new contract sprints before
+   consumers; do not enable any protected path from fixtures alone.
+   **Reconcile existing foundations.** PF-15–21 review the seven recorded commits,
    prove the frozen baseline and archive accepted evidence; PF-22 composes runtime policy.
 2. **Complete the first credential boundary.** PF-13-S01–S04 build narrow capabilities,
    resolver and OpenAI substitution. PF-27/28/33 add process, output and connection
    guarantees. PF-24-S01 provides the initial honest profile view; PF-29 adds
    preflight/migration. PF-13-S05 then independently qualifies that complete boundary.
+   PF-41-S03 supplies durable event/commit/recovery contracts before runtime,
+   broker, quarantine, financial and Sweep consumers, without waiting for audit UI.
 3. **Make authority durable and usable.** PF-30 adds provenance/memory/post-taint
    checks; PF-23 composes profiles, PF-24-S02 confirms safe transitions and PF-25
    provides grants/stop/recovery. Missing future adapters remain denied.
@@ -566,8 +604,9 @@ before qualification.
 | Persistence and downgrade invalidation | Jim Ricketts | PF-20/PF-23 | Persistence code is present; transition and final evidence remain pending |
 | Independent security reviewer | Release owner | PF-13-S05 and final qualification | Must be named before either review completes |
 | Human tester | Release owner | Final qualification | Must be named before acceptance |
-| Expanded program capacity | Jim Ricketts / product authority | Execution scheduling | 63 units mapped; effort estimate and October 8 feasibility pending, no scope silently removed |
-| Platform isolation capability matrix | Jim Ricketts | PF-27/PF-31 readiness | Linux/macOS/Windows probes required; unsupported protected paths block visibly |
+| Expanded program capacity | Jim Ricketts / product authority | Execution scheduling | 68 units / 35 unweighted stages; dated resource/effort/review estimate required before second worker allocation; October 8 feasibility pending, no scope silently removed |
+| Platform isolation capability matrix | Jim Ricketts | PF-27-S03 completion and PF-27/PF-31 integration readiness | Linux/macOS/Windows mechanism choices and probes required; unsupported protected paths block visibly |
+| Moderate workflow usability targets | Product authority / Jim Ricketts | PF-26-S02 readiness | Numeric task-completion, approval-count and latency targets with fixed workflows pending; no relaxation of protection |
 | Local detector hardware/corpus/license pins | Jim Ricketts / evaluator | PF-35-S01 | Exact weakest supported CPU, licensed corpus and blind evaluator ownership pending |
 | Retriever/API/model dependency pins | Jim Ricketts | Owning adapter sprint readiness | Verify then pin current supported artifacts and APIs; historical sources are not fresh release security evidence |
 | Optional hosted vendor and data terms | Product authority | PF-36-S02 real-service activation | No vendor selected; interface/fixtures and explicit disabled disposition are in scope |
@@ -585,7 +624,10 @@ before qualification.
 
 ## Completion
 
-- [x] Complete source scope is mapped to 63 single-feature sprints; every one of the 72 cancelled archive records has an explicit disposition.
+- [ ] Accepted architecture refinements and upstream-seam register have final-tree evidence.
+- [ ] Parallel allocations, scope audits and combined-tree integration evidence are complete.
+
+- [x] Complete source scope is mapped to 68 single-feature sprints; every one of the 72 cancelled archive records has an explicit disposition.
 - [ ] Every PF-27–41 contract and protected-mode readiness condition passes final-candidate evidence.
 - [ ] Optional hosted/reviewer lanes are explicitly qualified-enabled or disabled with an auditable reason.
 - [ ] Permissive compatibility is proven against the frozen pre-feature baseline.

@@ -4,7 +4,7 @@ title: "Agent Sweep alerts revocation and recovery"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-40"
-execution_order: 58
+execution_order: 63
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -48,6 +48,8 @@ updated: 2026-08-28
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 
 ## Remaining
+
+- [ ] Test audit unavailable and unknown financial effect during Sweep kill/recovery; stop new authority immediately, preserve unresolved receipt identity and require fresh human authority without clearing taint.
 
 - [ ] Show observation failures and stale health explicitly; test alert-driven revocation against already-open channels and avoid representing an advisory finding or missing event as a completed prevention action.
 

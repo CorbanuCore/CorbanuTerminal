@@ -4,7 +4,7 @@ title: "Download quarantine and human file promotion"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-31"
-execution_order: 34
+execution_order: 41
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"

@@ -4,12 +4,12 @@ title: "Origin-bound brokered browser login"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-37"
-execution_order: 49
+execution_order: 54
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
-depends_on: "PF-31-S03, PF-28-S02, PF-30-S03"
+depends_on: "PF-31-S03, PF-28-S02, PF-30-S03, PF-34-S03"
 created: 2026-08-28
 updated: 2026-08-28
 ---
@@ -39,7 +39,7 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Active plan; PF-31-S03, PF-28-S02, PF-30-S03 completed and archived.
+- [ ] All dependencies in front matter are completed and archived; plan remains active.
 - [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
 - [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
 - [ ] Human owner records one permitted HTTPS login origin, non-production test account and reviewed form contract; unavailable origin/account blocks qualification, not source-based planning.
@@ -49,6 +49,8 @@ updated: 2026-08-28
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 
 ## Remaining
+
+- [ ] Require completed PF-34-S03/PF-35-S03 screening and quarantine integration before login readiness; test reflected credential DOM/error plus classifier unavailable/forced-allow and preserve source lineage end to end.
 
 - [ ] Keep CDP/control-plane trust and public-page destination policy separate; prove exact-origin login cannot expose cookies, profile files or raw credentials to public retrieval, arbitrary evaluate or model-selected selectors. Browser helper review is not login qualification.
 

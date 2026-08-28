@@ -4,7 +4,7 @@ title: "Temporary grant TUI"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-25"
-execution_order: 30
+execution_order: 37
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -47,6 +47,9 @@ updated: 2026-08-28
 
 ## Remaining
 
+- [ ] Add a typed secret-free descendant authority-request view with exact actor/parent/task/action/resource/destination/limits/expiry, rate limits and deduplication. Requests and explanations remain untrusted; only a separately confirmed human event can issue the existing narrow grant.
+- [ ] Test forged parent/human identity, request flooding, deduplication, Esc/deny, scoped approval, actor replacement and expiry in true TUI; notification alone grants nothing.
+
 - [ ] Render canonical actor/action/resource/destination/limit/expiry fields and the adjacent access that remains denied.
 - [ ] Require explicit human confirmation; prevent agent, prompt, tool, or project content from creating the event.
 - [ ] Persist only the signed secret-free grant record and show active scope/expiry in `/security`.
@@ -59,7 +62,7 @@ updated: 2026-08-28
 - [ ] Format: `cd codex-rs && just fmt`; then inspect the final diff.
 - [ ] Tests: `cd codex-rs && just test -p codex-tui security_grant && just test -p codex-core bounded_grant`.
 - [ ] Snapshot review: inspect and intentionally accept only PF-25 grant output.
-- [ ] TUI qualification deferred to PF-26-S02 with grant/cancel/expiry keys.
+- [ ] True-TUI proof with actual request/inspect/deny/Esc/grant/expiry keys on the final sprint candidate; PF-26-S02 repeats the combined-tree workflows.
 
 ## Exit evidence
 

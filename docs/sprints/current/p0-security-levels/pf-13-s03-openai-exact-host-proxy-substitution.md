@@ -4,7 +4,7 @@ title: "OpenAI exact-host proxy substitution"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
-execution_order: 11
+execution_order: 18
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -48,6 +48,8 @@ updated: 2026-08-28
 - [x] Sprint record names the provider, scheme, host, method, path, and header.
 
 ## Remaining
+
+- [ ] Enforce the granted operation and usage reservation at transport, not merely POST /v1/*; reject an adjacent valid provider operation, changed model/resource and parallel budget overspend. Reserve worst-case bounded usage before dispatch; use trusted metering/reconciliation, retaining uncertainty after ambiguous failures.
 
 - [ ] Port reference cases for exact host versus traffic allowlist, changed HTTPS port/method/path and unknown references. Authorize the complete operation before dispatch; a late streaming-substitution error must not be treated as proof that no earlier bytes or side effects occurred.
 

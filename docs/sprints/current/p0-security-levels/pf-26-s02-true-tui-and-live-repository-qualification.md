@@ -4,7 +4,7 @@ title: "True-TUI and live-repository qualification"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-26"
-execution_order: 62
+execution_order: 67
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
@@ -46,6 +46,9 @@ updated: 2026-08-28
 - [x] Sprint record is linked only to PF-26.
 
 ## Remaining
+
+- [ ] Measure both live repositories' Moderate research tasks: completion, prompt/approval counts, blocked false positives, time-to-first-safe-output and end-to-end latency against product-approved targets; fail safely without taint laundering.
+- [ ] Repeat typed descendant request/cancel/grant, policy-tamper recovery, engine reuse/stall recovery and submitted-unknown financial kill in the final candidate TUI, then obtain named human acceptance in PF-26-S03.
 
 - [ ] Exercise full-plan true-TUI flows: migration cancel/failure/recovery, broker failure, screened web outage, quarantine, download promotion, origin-bound login/human challenge, derived-data export, exact financial sign/broadcast, Sweep and inspector/audit.
 - [ ] Use fake credentials/venues only; forced detector misses must still deny extraction and unauthorized actions. Include multi-turn poisoned summary/memory, child handoff and restart with revoked authority.
