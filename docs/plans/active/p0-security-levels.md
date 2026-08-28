@@ -431,6 +431,17 @@ inventory must finish before readiness. Its allocated branch does not by itself
 authorize code. Shared planning changes originate in the browser worktree and
 are integrated into the content worktree before its activation.
 
+PF-30-S01 has an internal backend checkpoint with 270 passing focused Rust tests
+and four worker tests. Its latest evidence is
+`qa/security-levels/sprints/PF-30-S01/review-fixes.md`. S01 remains `in_progress`:
+the P1 explicit-denial/DNS ordering and P2 Podman image-ID findings are fixed,
+and Fable 5 High returned a clean scoped fix-cycle review via Computer Use.
+Its initial trailing-dot finding was withdrawn after validation. The integration owner must
+resolve the unchanged native allowlist/DNS ordering before DNS qualification,
+allocating any additional write scope first. Mac/Linux engine prerequisites need
+human action, and real platform qualification (including Windows) is still
+pending. No dependent sprint is made executable by this draft.
+
 ### Upstream-touch record
 
 Owner: Jim Ricketts. Follow the [upstream integration contract](../upstream-integration.md).

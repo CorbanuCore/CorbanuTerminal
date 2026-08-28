@@ -2,6 +2,8 @@
 
 Date: 2026-08-27. Owner: Jim Ricketts. Product authority: Travis Good.
 Status: implementation inputs selected; **no platform isolation certification**.
+This is the initial preflight record. The later local implementation and its
+remaining blockers are recorded in [implementation evidence](implementation-evidence.md).
 Plan: `docs/plans/active/p0-security-levels.md`, **Browser runtime lifecycle decision**.
 Product: **Moderate/Aggressive isolation and content provenance** — “Support
 Windows, Linux, and macOS with containerized Scrapling.”
@@ -13,9 +15,11 @@ Windows, Linux, and macOS with containerized Scrapling.”
 - Base: `9fc9c9106c8afd38aff48d0e5ad4a5f2552b723c`; PF-26-S01 pushed and clean.
 - Upstream: `openai/codex`, `413492cd6c3a4d4f8dff6f406247ccda5a9d88aa`, inherited
   through the plan's verified fork merge; no upstream upgrade in this stage.
-- Product code: existing registered `core/src/security/browser_isolation/` and
-  `network-proxy/src/browser_policy.rs`. No new Cargo/Bazel dependencies or
-  shared registrations in the first stage. Expand scope before needing them.
+- Initial preflight scope: existing registered `core/src/security/browser_isolation/`
+  and `network-proxy/src/browser_policy.rs`. Before implementation, planning
+  commit `399daef151592505f4057d52bbe20fc48a41106d` expanded S01's explicit scope
+  to the isolated crate and serial Cargo/Bazel registrations; see the current
+  sprint for the authoritative allocation.
 - Core is only the native host-runtime adapter seam; content normalization and
   deterministic protected-action authorization stay with PF-29/PF-23. Runtime
   lifecycle must not be inserted into generic tools or a second policy engine.
