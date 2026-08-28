@@ -53,7 +53,7 @@ updated: 2026-08-28
 - [x] Proved bounded-store cleanup and denial before repeat resolution in component tests; no provider network round trips were measured.
 - [x] Ran Linux locally and attached passing commit-bound CI evidence for macOS and Windows without weakening host checks.
 - [x] Ran the approved complete Core suite on macOS and preserved its failing JUnit report without claiming a pass.
-- [x] Re-ran the complete PF-13 credential qualification on Windows 2022 at the clean current branch tip and committed its machine-readable report.
+- [x] Recorded historical pre-repair PF-13 credential qualification on Windows 2022 and committed its machine-readable report; it does not qualify repaired candidate `f6ec1c75f`.
 - [x] Merged all prior work at `044491b8b` before the Fable High outside review; recorded its provider-triggered interruption in `qa/security-levels/sprints/PF-13-S05/fable-outside-review.md` without accepting the automatic Opus substitution.
 - [x] Completed Kimi 3.0 High review of `044491b8b`; preserved raw findings and controller dispositions in `qa/security-levels/sprints/PF-13-S05/kimi-outside-review.md`. Qualification remains not ready.
 - [x] C1: scan complete stdout/stderr before capture limits, deny overflow/incomplete capture, and pass all ten Python regressions.
@@ -64,11 +64,13 @@ updated: 2026-08-28
 - [x] Restored and identified the production executable after all CLI probes; eleven Python tests and Kimi's artifact-identity review passed.
 - [x] Final Mac/Linux canaries each passed all nine groups / 47 tests at clean candidate `f6ec1c75f`; report hashes match the on-disk executables. Final Mac PTY success/cancel/recovery/resume passed on a byte-identical candidate.
 - [x] Re-ran complete Core with companion executables: 3,388/3,407 passed, 19 failed; all 13 credential tests passed. Preserved full JUnit and classified every remaining failure without weakening tests.
+- [x] Rechecked corrected Windows endpoint `100.111.98.11`: reachable and supplied host fingerprint verified; login rejected. Recorded the authentication blocker in `qa/security-levels/sprints/PF-13-S05/windows-access-2026-08-28.md` without claiming test execution.
+- [x] Recorded the later agent-reported SSH/fingerprint success at `100.111.98.12` and independently verified publication through `a9ebfcc2f`, including required candidate `f6ec1c75f`. No Windows test result is inferred.
 
 ## Remaining
 
 - [ ] Scope the remaining Core lifecycle/tool/shell/serialization repairs, then obtain a clean complete rerun. Nineteen failures remain; the additional prompt-cache failure passes in isolation but is not removed from the full-run result.
-- [ ] Run the final Windows canary, including the new directory-junction posture test, when authorized connectivity is available. Historical Windows results are not relabeled as qualification of the repaired candidate.
+- [ ] On the remote agent's working Windows route, fetch the published candidate, prepare Rust 1.95/Python and required test tools, then run the final canary including the directory-junction posture test. Final source/artifact identity must be recorded; historical results are not relabeled as qualification of the repaired candidate.
 
 Mac failure triage and qualification repairs may run concurrently within this
 sprint. This amended implementation mandate authorizes only the repairs above;

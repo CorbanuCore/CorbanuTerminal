@@ -608,8 +608,13 @@ PF-23 wiring inside the S05 qualification lane.
 The accepted repair cycle is implemented through `f6ec1c75f`: Kimi returned no
 findings, Mac/Linux canaries each passed 47 tests with final executable hashes
 verified, and the final Mac candidate passed actual PTY success/cancel/recovery/
-resume. S05 remains `in_progress`: the complete Core rerun has 19 failures and
-final Windows access is unavailable. Evidence and the scope-separated Core
+resume. S05 remains `in_progress`: the recorded complete Core rerun has 19
+failures and final Windows qualification has not run. The remote agent reports
+working SSH at `100.111.98.12` with the expected fingerprint, superseding the
+earlier Mac authentication blocker. Candidate publication is now verified;
+Windows toolchain setup and tests remain pending. See
+`qa/security-levels/sprints/PF-13-S05/windows-access-2026-08-28.md`.
+Evidence and the scope-separated Core
 triage are in `qa/security-levels/sprints/PF-13-S05/repair-evidence.md`; these
 results do not authorize unrelated native lifecycle/tool changes or waive gates.
 

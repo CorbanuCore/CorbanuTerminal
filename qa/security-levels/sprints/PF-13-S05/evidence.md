@@ -26,8 +26,11 @@ native session using scoped credentials. Those historical records remain intact.
 The accepted [repair cycle](repair-evidence.md) subsequently passed 47 canary
 tests on both Mac and Linux at `f6ec1c75f`, final Mac PTY proof and Kimi review.
 The fresh complete Core run passed 3,388/3,407 with 19 failures (down from the
-historical 135); final-tree Windows evidence is unavailable. **Qualification
-remains not ready**; see [Core triage](repair-core-triage.md).
+historical 135). The remote agent now reports working Windows SSH and the
+expected fingerprint at `100.111.98.12`, superseding the earlier Mac login
+blocker. The required candidate is published, but prerequisites and final-tree
+Windows tests remain pending. See [access/publication chronology](windows-access-2026-08-28.md).
+**Qualification remains not ready**; see [Core triage](repair-core-triage.md).
 
 Subsequent [outside-review attempt](fable-outside-review.md): all work through
 the PF-30 platform repair and this Windows report was merged into the PF-13
