@@ -1,0 +1,64 @@
+{
+  "run_dir": "/home/pfrpc/bench-runs/glm53-flash-clean-full-20260828",
+  "waves": 1,
+  "caps": {
+    "timeout_seconds": 1800,
+    "max_total_runs": 9,
+    "max_agent_commands": 80,
+    "max_identical_commands": 10
+  },
+  "agents": [
+    {
+      "name": "zai-flash-low",
+      "kind": "corbanu",
+      "binary": "/home/pfrpc/repos/CorbanuTerminal-glm53-flash/codex-rs/target/debug/corbanu-debug",
+      "provider": "zai",
+      "model": "glm-5.3-flash",
+      "lane": "zai-plan",
+      "reasoning_effort": "low",
+      "required_env": ["ZAI_API_KEY"]
+    },
+    {
+      "name": "zai-flash-max",
+      "kind": "corbanu",
+      "binary": "/home/pfrpc/repos/CorbanuTerminal-glm53-flash/codex-rs/target/debug/corbanu-debug",
+      "provider": "zai",
+      "model": "glm-5.3-flash",
+      "lane": "zai-plan",
+      "reasoning_effort": "max",
+      "required_env": ["ZAI_API_KEY"]
+    },
+    {
+      "name": "or-flash-low",
+      "kind": "corbanu",
+      "binary": "/home/pfrpc/repos/CorbanuTerminal-glm53-flash/codex-rs/target/debug/corbanu-debug",
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.3-flash",
+      "lane": "openrouter",
+      "reasoning_effort": "low",
+      "required_env": ["OPENROUTER_API_KEY"]
+    }
+  ],
+  "tasks": [
+    {
+      "name": "eventforge",
+      "baseline": "../tasks/eventforge/baseline",
+      "prompt": "../tasks/eventforge/task_prompt.md",
+      "verifier": "../tasks/eventforge/verifier/verify.py",
+      "core_rel": "src/eventforge/core.py"
+    },
+    {
+      "name": "logtriage",
+      "baseline": "../tasks/logtriage/baseline",
+      "prompt": "../tasks/logtriage/task_prompt.md",
+      "verifier": "../tasks/logtriage/verifier/verify.py",
+      "core_rel": "src/logtriage/core.py"
+    },
+    {
+      "name": "queuecraft",
+      "baseline": "../tasks/queuecraft/bugged",
+      "prompt": "../tasks/queuecraft/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/queuecraft/verifier/verify.py"
+    }
+  ]
+}
