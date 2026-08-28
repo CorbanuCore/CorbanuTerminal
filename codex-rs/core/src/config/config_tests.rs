@@ -7491,6 +7491,37 @@ async fn set_model_updates_defaults() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Regression test: the `zai` chat provider must honour the configured
+/// reasoning effort verbatim. It previously shared Ambient's
+/// `normalize_ambient_reasoning_effort` clamp, which rewrote `low` (and
+/// everything else outside the deep bucket) to `xhigh`; with GLM 5.3's
+/// `preserved_required` chat protocol that serialized as `"max"` on the wire,
+/// so low-effort lanes silently ran maximum preserved reasoning.
+#[tokio::test]
+async fn zai_provider_does_not_clamp_reasoning_effort() -> anyhow::Result<()> {
+    let codex_home = TempDir::new()?;
+    tokio::fs::write(
+        codex_home.path().join(CONFIG_TOML_FILE),
+        r#"
+model_provider = "zai"
+model = "glm-5.3"
+model_reasoning_effort = "low"
+"#,
+    )
+    .await?;
+
+    let config = ConfigBuilder::without_managed_config_for_tests()
+        .codex_home(codex_home.path().to_path_buf())
+        .fallback_cwd(Some(codex_home.path().to_path_buf()))
+        .build()
+        .await?;
+
+    assert_eq!(config.model_provider_id, "zai");
+    assert_eq!(config.model_reasoning_effort, Some(ReasoningEffort::Low));
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn for_config_writes_selected_user_config_file() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;

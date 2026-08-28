@@ -4188,7 +4188,6 @@ impl Config {
             model_provider_id.as_str(),
             VERCEL_PROVIDER_ID | VERCEL_ANTHROPIC_PROVIDER_ID | VERCEL_ANTHROPIC_FAST_PROVIDER_ID
         );
-        let zai_chat_provider_selected = model_provider_id == ZAI_PROVIDER_ID;
         let zai_provider_selected =
             matches!(model_provider_id.as_str(), ZAI_PROVIDER_ID | ZAI_ANTHROPIC_PROVIDER_ID);
         let forced_login_method = cfg
@@ -4205,8 +4204,12 @@ impl Config {
                     .then_some(ForcedLoginMethod::Api)
             });
 
-        let model_reasoning_effort = if (ambient_provider_selected && !model_without_explicit_provider)
-            || zai_chat_provider_selected
+        // Ambient normalizes reasoning effort into its own deep-thinking buckets.
+        // The `zai` chat provider must NOT share that clamp: since GLM 5.3's
+        // `preserved_required` protocol landed, clamping low/medium to xhigh
+        // forced every direct Z.AI request to `reasoning_effort: "max"`,
+        // making it impossible to benchmark or run the model at low effort.
+        let model_reasoning_effort = if ambient_provider_selected && !model_without_explicit_provider
         {
             cfg.model_reasoning_effort
                 .map(normalize_ambient_reasoning_effort)
