@@ -48,7 +48,7 @@
       },
       "display_name": "Z.AI GLM 5.3 Flash",
       "description": "GLM 5.3 Flash through the Z.AI Coding Plan with 3x the GLM 5.3 quota and native image input.",
-      "default_reasoning_level": "max",
+      "default_reasoning_level": "low",
       "supported_reasoning_levels": [
         {
           "effort": "low",
@@ -181,7 +181,7 @@
       },
       "display_name": "Z.AI GLM 5.3",
       "description": "GLM 5.3 through the legacy Z.AI Coding Plan: 3x quota during weekday peak hours (06:00-10:00 UTC) and 1x off-peak.",
-      "default_reasoning_level": "max",
+      "default_reasoning_level": "low",
       "supported_reasoning_levels": [
         {
           "effort": "low",
@@ -1345,7 +1345,7 @@
       },
       "display_name": "OpenRouter GLM 5.3 Flash",
       "description": "OpenRouter: GLM 5.3 Flash - $0.075/M input, $0.015/M cached input, $0.25/M output; native image and video input.",
-      "default_reasoning_level": "max",
+      "default_reasoning_level": "low",
       "supported_reasoning_levels": [
         {
           "effort": "low",

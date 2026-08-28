@@ -83,6 +83,18 @@ model_provider = "zai"
 model = "glm-5.3-flash"
 ```
 
+GLM 5.3 routes always run with preserved reasoning and accept `low`, `high`,
+or `max` effort. When `model_reasoning_effort` is unset, Corbanu applies the
+catalogue default of `low`; the upstream API would otherwise silently default
+to `max`, which is several times slower and is intended as an explicit opt-in
+for hard tasks:
+
+```toml
+model_provider = "zai"
+model = "glm-5.3-flash"
+model_reasoning_effort = "max"   # opt-in deep reasoning
+```
+
 OpenRouter pinned DeepSeek Flash:
 
 ```toml

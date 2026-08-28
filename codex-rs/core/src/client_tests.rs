@@ -1129,7 +1129,9 @@ fn zai_glm_5_3_replays_preserved_reasoning_with_tool_calls_and_outputs() {
 
     assert_eq!(request.model, "glm-5.3");
     assert_eq!(request.enable_thinking, Some(true));
-    assert_eq!(request.reasoning_effort.as_deref(), Some("max"));
+    // No explicit effort configured, so the catalogue default (low) applies;
+    // max preserved reasoning is an explicit opt-in.
+    assert_eq!(request.reasoning_effort.as_deref(), Some("low"));
     assert_eq!(
         replay.reasoning_content.as_deref(),
         Some("I need to inspect the repository before editing.")

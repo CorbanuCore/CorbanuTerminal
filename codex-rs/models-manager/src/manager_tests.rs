@@ -1801,7 +1801,9 @@ fn bundled_models_json_contains_ambient_and_zai_models() {
             "Z.AI GLM 5.3 Flash",
             Some(1_000_000),
             Some(128_000),
-            Some(ReasoningEffort::Max),
+            // Catalogue default is low: the wire protocol would otherwise fall
+            // back to max preserved reasoning, which is a heavy opt-in choice.
+            Some(ReasoningEffort::Low),
             ChatReasoningProtocol::PreservedRequired,
             ChatReasoningEffortProtocol::LowHighMaxRequiredDefaultMax,
             vec![InputModality::Text, InputModality::Image],
@@ -1862,7 +1864,8 @@ fn bundled_models_json_contains_ambient_and_zai_models() {
         (
             Some(1_000_000),
             Some(128_000),
-            Some(ReasoningEffort::Max),
+            // Catalogue default is low; max preserved reasoning is opt-in.
+            Some(ReasoningEffort::Low),
             ChatReasoningProtocol::PreservedRequired,
             ChatReasoningEffortProtocol::LowHighMaxRequiredDefaultMax,
         )
