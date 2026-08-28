@@ -9,12 +9,18 @@
       "description": "Absolute path or path relative to the config file."
     },
     "waves": {"type": "integer", "minimum": 1},
+    "allow_run_root_in_repo": {
+      "type": "boolean",
+      "description": "Unsafe. Permit run_dir inside a git repository, exposing that repo's AGENTS.md and skills to candidates."
+    },
     "caps": {
       "type": "object",
       "required": ["timeout_seconds", "max_total_runs"],
       "properties": {
         "timeout_seconds": {"type": "integer", "minimum": 1},
-        "max_total_runs": {"type": "integer", "minimum": 1}
+        "max_total_runs": {"type": "integer", "minimum": 1},
+        "max_agent_commands": {"type": "integer", "minimum": 1},
+        "max_identical_commands": {"type": "integer", "minimum": 1}
       },
       "additionalProperties": false
     },
@@ -43,7 +49,35 @@
             "items": {"type": "string"},
             "description": "Optional argv template. No shell is used."
           },
-          "stdin_prompt": {"type": "boolean"}
+          "stdin_prompt": {"type": "boolean"},
+          "reasoning_effort": {
+            "type": "string",
+            "description": "Required for corbanu agents. Pinned via model_reasoning_effort; never rely on model defaults."
+          },
+          "sandbox": {
+            "type": "string",
+            "enum": ["read-only", "workspace-write", "danger-full-access", "danger-bypass"],
+            "description": "Sandbox mode for corbanu/codex agents. Defaults to workspace-write."
+          },
+          "config_overrides": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Extra -c key=value overrides passed to corbanu/codex."
+          },
+          "env_passthrough": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Extra environment variable names copied from the operator environment."
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": {"type": "string"},
+            "description": "Literal environment values set inside the isolated run environment. Templates like {result_dir} are expanded."
+          },
+          "isolate_home": {
+            "type": "boolean",
+            "description": "Default true: give the candidate a private HOME/XDG tree and strip operator-home PATH entries."
+          }
         },
         "additionalProperties": false
       }

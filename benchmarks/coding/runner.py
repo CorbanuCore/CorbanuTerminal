@@ -12,6 +12,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -21,6 +22,14 @@ from typing import Any, Iterable
 
 BENCH_ROOT = Path(__file__).resolve().parent
 DEFAULT_CONFIG = BENCH_ROOT / "configs" / "example.json"
+RUNNER_PATH = Path(__file__).resolve()
+
+# Environment variables copied from the parent environment into the isolated
+# candidate environment. Everything else must be requested explicitly through
+# `required_env` or `env_passthrough`.
+BASE_ENV_PASSTHROUGH = ("PATH", "TERM", "LANG", "LC_ALL", "TMPDIR")
+DEFAULT_MAX_AGENT_COMMANDS = 120
+DEFAULT_MAX_IDENTICAL_COMMANDS = 12
 
 
 @dataclass(frozen=True)
@@ -45,6 +54,12 @@ class AgentSpec:
     required_env: tuple[str, ...]
     command: tuple[str, ...] | None = None
     stdin_prompt: bool | None = None
+    reasoning_effort: str | None = None
+    sandbox: str | None = None
+    config_overrides: tuple[str, ...] = ()
+    env_passthrough: tuple[str, ...] = ()
+    env: tuple[tuple[str, str], ...] = ()
+    isolate_home: bool = True
 
 
 @dataclass(frozen=True)
@@ -123,6 +138,56 @@ def resolve_binary(raw: str) -> str | None:
     return shutil.which(expanded)
 
 
+def binary_is_script(path: str) -> bool:
+    try:
+        with open(path, "rb") as handle:
+            return handle.read(2) == b"#!"
+    except OSError:
+        return False
+
+
+def git_repo_root(path: Path) -> Path | None:
+    for candidate in (path, *path.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def git_provenance(repo_dir: Path) -> dict[str, Any]:
+    def run_git(*args: str) -> str | None:
+        try:
+            completed = subprocess.run(
+                ["git", "-C", str(repo_dir), *args],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=30,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return completed.stdout.strip() if completed.returncode == 0 else None
+
+    status = run_git("status", "--porcelain")
+    return {
+        "commit": run_git("rev-parse", "HEAD"),
+        "branch": run_git("rev-parse", "--abbrev-ref", "HEAD"),
+        "dirty": bool(status) if status is not None else None,
+    }
+
+
+def binary_provenance(binary: str | None) -> dict[str, Any]:
+    if not binary or not Path(binary).is_file():
+        return {"path": binary, "sha256": None, "bytes": None, "is_script_wrapper": None}
+    path = Path(binary)
+    return {
+        "path": str(path),
+        "sha256": sha256(path),
+        "bytes": path.stat().st_size,
+        "mtime": datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat(timespec="seconds"),
+        "is_script_wrapper": binary_is_script(binary),
+    }
+
+
 def load_specs(config_path: Path) -> tuple[dict[str, Any], list[TaskSpec], list[AgentSpec], Path]:
     config_path = config_path.resolve()
     config = read_json(config_path)
@@ -156,6 +221,7 @@ def load_specs(config_path: Path) -> tuple[dict[str, Any], list[TaskSpec], list[
 
     agents = []
     for raw in config.get("agents") or []:
+        env_map = raw.get("env") or {}
         agents.append(
             AgentSpec(
                 name=str(raw["name"]),
@@ -167,6 +233,12 @@ def load_specs(config_path: Path) -> tuple[dict[str, Any], list[TaskSpec], list[
                 required_env=tuple(str(item) for item in raw.get("required_env") or []),
                 command=tuple(str(item) for item in raw["command"]) if raw.get("command") else None,
                 stdin_prompt=bool(raw["stdin_prompt"]) if "stdin_prompt" in raw else None,
+                reasoning_effort=str(raw["reasoning_effort"]) if raw.get("reasoning_effort") else None,
+                sandbox=str(raw["sandbox"]) if raw.get("sandbox") else None,
+                config_overrides=tuple(str(item) for item in raw.get("config_overrides") or []),
+                env_passthrough=tuple(str(item) for item in raw.get("env_passthrough") or []),
+                env=tuple((str(key), str(value)) for key, value in env_map.items()),
+                isolate_home=bool(raw.get("isolate_home", True)),
             )
         )
 
@@ -195,6 +267,25 @@ def validate_inputs(
     for agent in agents:
         if require_binaries and resolve_binary(agent.binary) is None:
             errors.append(f"agent {agent.name}: binary not found: {agent.binary}")
+        if agent.kind in {"corbanu", "codex"} and agent.command is None:
+            expanded = os.path.expandvars(os.path.expanduser(agent.binary))
+            if not os.path.isabs(expanded):
+                errors.append(
+                    f"agent {agent.name}: {agent.kind} binary must be an absolute path "
+                    f"(PATH lookup can resolve to an env-overriding wrapper): {agent.binary}"
+                )
+            elif require_binaries:
+                resolved = resolve_binary(agent.binary)
+                if resolved and binary_is_script(resolved):
+                    errors.append(
+                        f"agent {agent.name}: {agent.kind} binary is a script wrapper, "
+                        f"which can override CODEX_HOME isolation: {resolved}"
+                    )
+        if agent.kind == "corbanu" and agent.command is None and not agent.reasoning_effort:
+            errors.append(
+                f"agent {agent.name}: corbanu agents must pin reasoning_effort explicitly "
+                "(models such as glm-5.3 silently default to max)"
+            )
         if paid:
             missing = [name for name in agent.required_env if not os.environ.get(name, "").strip()]
             if missing:
@@ -288,12 +379,48 @@ def template_values(run: RunSpec, binary: str) -> dict[str, str]:
     }
 
 
+def isolated_env(run: RunSpec) -> dict[str, str]:
+    """Build a minimal, isolated environment for a candidate run.
+
+    The previous behaviour (`os.environ.copy()`) leaked the operator's HOME,
+    XDG dirs, PYTHONPATH, and Python user site-packages into every candidate,
+    which allowed cross-run contamination (see MODEL_EVAL_HANDOFF_2026-08-28).
+    """
+    env: dict[str, str] = {}
+    for name in (*BASE_ENV_PASSTHROUGH, *run.agent.env_passthrough, *run.agent.required_env):
+        value = os.environ.get(name)
+        if value is not None:
+            env[name] = value
+    if run.agent.isolate_home:
+        run_home = run.result_dir / "home"
+        run_home.mkdir(parents=True, exist_ok=True)
+        env["HOME"] = str(run_home)
+        env["XDG_CONFIG_HOME"] = str(run_home / ".config")
+        env["XDG_DATA_HOME"] = str(run_home / ".local" / "share")
+        env["XDG_CACHE_HOME"] = str(run_home / ".cache")
+        env["XDG_STATE_HOME"] = str(run_home / ".local" / "state")
+        real_home = os.environ.get("HOME")
+        if real_home and env.get("PATH"):
+            kept = [
+                part
+                for part in env["PATH"].split(os.pathsep)
+                if part and not part.startswith(real_home.rstrip("/") + "/") and part != real_home
+            ]
+            env["PATH"] = os.pathsep.join(kept)
+    env["PYTHONNOUSERSITE"] = "1"
+    env["NO_COLOR"] = "1"
+    env.pop("PYTHONPATH", None)
+    values = template_values(run, resolve_binary(run.agent.binary) or run.agent.binary)
+    for key, value in run.agent.env:
+        env[key] = value.format_map(values)
+    return env
+
+
 def build_command(run: RunSpec, prompt: str) -> tuple[list[str], dict[str, str], str | None]:
     binary = resolve_binary(run.agent.binary)
     if binary is None:
         raise RuntimeError(f"binary not found: {run.agent.binary}")
-    env = os.environ.copy()
-    env["NO_COLOR"] = "1"
+    env = isolated_env(run)
     values = template_values(run, binary)
 
     if run.agent.command:
@@ -304,6 +431,10 @@ def build_command(run: RunSpec, prompt: str) -> tuple[list[str], dict[str, str],
 
     kind = run.agent.kind
     if kind == "corbanu":
+        if binary_is_script(binary):
+            raise RuntimeError(
+                f"refusing script wrapper as corbanu binary (it can override CODEX_HOME): {binary}"
+            )
         codex_home = run.result_dir / "corbanu-home"
         codex_home.mkdir(parents=True, exist_ok=True)
         env["CODEX_HOME"] = str(codex_home)
@@ -315,19 +446,28 @@ def build_command(run: RunSpec, prompt: str) -> tuple[list[str], dict[str, str],
         env["CORBANU_DUMP_RESPONSES_REQUEST"] = str(
             run.result_dir / "corbanu.responses.request.json"
         )
+        sandbox = run.agent.sandbox or "workspace-write"
         command = [
             binary,
             "exec",
             "--json",
             "--skip-git-repo-check",
-            "--dangerously-bypass-approvals-and-sandbox",
+            "--ignore-user-config",
             "-C",
             str(run.workspace),
         ]
+        if sandbox == "danger-bypass":
+            command.append("--dangerously-bypass-approvals-and-sandbox")
+        else:
+            command.extend(["--sandbox", sandbox])
         if run.agent.provider:
             command.extend(["-c", f'model_provider="{run.agent.provider}"'])
         if run.agent.model:
             command.extend(["-m", run.agent.model])
+        if run.agent.reasoning_effort:
+            command.extend(["-c", f'model_reasoning_effort="{run.agent.reasoning_effort}"'])
+        for override in run.agent.config_overrides:
+            command.extend(["-c", override])
         command.append("-")
         return command, env, prompt
 
@@ -374,22 +514,26 @@ def build_command(run: RunSpec, prompt: str) -> tuple[list[str], dict[str, str],
         codex_home = run.result_dir / "codex-home"
         codex_home.mkdir(parents=True, exist_ok=True)
         env["CODEX_HOME"] = str(codex_home)
-        return (
-            [
-                binary,
-                "exec",
-                "--json",
-                "--skip-git-repo-check",
-                "--dangerously-bypass-approvals-and-sandbox",
-                "-C",
-                str(run.workspace),
-                "-m",
-                run.agent.model,
-                prompt,
-            ],
-            env,
-            None,
-        )
+        sandbox = run.agent.sandbox or "workspace-write"
+        command = [
+            binary,
+            "exec",
+            "--json",
+            "--skip-git-repo-check",
+            "-C",
+            str(run.workspace),
+        ]
+        if sandbox == "danger-bypass":
+            command.append("--dangerously-bypass-approvals-and-sandbox")
+        else:
+            command.extend(["--sandbox", sandbox])
+        command.extend(["-m", run.agent.model])
+        if run.agent.reasoning_effort:
+            command.extend(["-c", f'model_reasoning_effort="{run.agent.reasoning_effort}"'])
+        for override in run.agent.config_overrides:
+            command.extend(["-c", override])
+        command.append(prompt)
+        return command, env, None
 
     if kind == "claude-code":
         claude_home = run.result_dir / "claude-home"
@@ -433,6 +577,40 @@ def stop_process(process: subprocess.Popen[str]) -> None:
         process.wait()
 
 
+def scan_stdout_for_loops(
+    stdout_path: Path,
+    max_commands: int,
+    max_identical: int,
+) -> str | None:
+    """Return a kill reason when the agent JSONL stream shows a pathological loop."""
+    try:
+        text = stdout_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    commands: dict[str, int] = {}
+    total = 0
+    for line in text.splitlines():
+        if '"command_execution"' not in line or '"item.started"' not in line:
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        item = event.get("item") or {}
+        if item.get("type") != "command_execution":
+            continue
+        total += 1
+        key = str(item.get("command") or "")
+        commands[key] = commands.get(key, 0) + 1
+    if max_commands and total > max_commands:
+        return f"command cap exceeded: {total} > {max_commands}"
+    if max_identical:
+        for key, count in commands.items():
+            if count > max_identical:
+                return f"identical command repeated {count} times (> {max_identical}): {key[:200]}"
+    return None
+
+
 def run_process(
     command: list[str],
     cwd: Path,
@@ -441,10 +619,14 @@ def run_process(
     stdout_path: Path,
     stderr_path: Path,
     timeout_seconds: int,
+    max_commands: int = DEFAULT_MAX_AGENT_COMMANDS,
+    max_identical_commands: int = DEFAULT_MAX_IDENTICAL_COMMANDS,
 ) -> dict[str, Any]:
     stdout_path.parent.mkdir(parents=True, exist_ok=True)
     started_at = utc_now()
     started = time.monotonic()
+    loop_kill_reason: list[str] = []
+    monitor_stop = threading.Event()
     with stdout_path.open("w", encoding="utf-8") as stdout, stderr_path.open(
         "w", encoding="utf-8"
     ) as stderr:
@@ -458,6 +640,17 @@ def run_process(
             text=True,
             start_new_session=True,
         )
+
+        def monitor() -> None:
+            while not monitor_stop.wait(10):
+                reason = scan_stdout_for_loops(stdout_path, max_commands, max_identical_commands)
+                if reason:
+                    loop_kill_reason.append(reason)
+                    stop_process(process)
+                    return
+
+        monitor_thread = threading.Thread(target=monitor, daemon=True)
+        monitor_thread.start()
         timed_out = False
         try:
             if stdin_payload is None:
@@ -469,6 +662,9 @@ def run_process(
             timed_out = True
             stop_process(process)
             returncode = int(process.returncode or 124)
+        finally:
+            monitor_stop.set()
+            monitor_thread.join(timeout=15)
     return {
         "command": command,
         "started_at": started_at,
@@ -476,6 +672,8 @@ def run_process(
         "wall_seconds": round(time.monotonic() - started, 3),
         "returncode": returncode,
         "timed_out": timed_out,
+        "loop_capped": bool(loop_kill_reason),
+        "loop_cap_reason": loop_kill_reason[0] if loop_kill_reason else None,
         "stdout": str(stdout_path),
         "stderr": str(stderr_path),
     }
@@ -510,7 +708,15 @@ def render_command(parts: tuple[str, ...], values: dict[str, str]) -> list[str]:
 
 
 def run_check(command: list[str], cwd: Path, output: Path, timeout_seconds: int) -> dict[str, Any]:
-    env = os.environ.copy()
+    env = {
+        name: value
+        for name in BASE_ENV_PASSTHROUGH
+        if (value := os.environ.get(name)) is not None
+    }
+    check_home = output.parent / "check-home"
+    check_home.mkdir(parents=True, exist_ok=True)
+    env["HOME"] = str(check_home)
+    env["PYTHONNOUSERSITE"] = "1"
     env["PYTHONPATH"] = str(cwd / "src")
     started = time.monotonic()
     try:
@@ -639,15 +845,115 @@ def route_and_usage(run: RunSpec) -> dict[str, Any]:
         for value in collect_named_values(item, {"total_cost_usd", "cost_usd", "sumcost"})
         if isinstance(value, (int, float))
     ]
+    reasoning_efforts = sorted(
+        {
+            str(value)
+            for item in values
+            for value in collect_named_values(item, {"reasoning_effort"})
+            if isinstance(value, str)
+        }
+    )
+    thinking_flags = sorted(
+        {
+            bool(value)
+            for item in values
+            for value in collect_named_values(item, {"enable_thinking"})
+            if isinstance(value, bool)
+        },
+        key=str,
+    )
     expected = run.agent.model
     return {
         "provider_expected": run.agent.provider,
         "model_expected": expected,
         "models_observed": models,
         "route_verified": expected in models if models else None,
+        "reasoning_effort_expected": run.agent.reasoning_effort,
+        "reasoning_effort_observed": reasoning_efforts,
+        "reasoning_effort_verified": (
+            reasoning_efforts == [run.agent.reasoning_effort]
+            if run.agent.reasoning_effort and reasoning_efforts
+            else None
+        ),
+        "enable_thinking_observed": thinking_flags,
         "native_cost_usd": max(costs) if costs else None,
         "sources": [str(path) for path in sources if path.is_file()],
     }
+
+
+def agent_telemetry(run: RunSpec) -> dict[str, Any]:
+    """Summarize the agent's JSONL event stream for loop/usage diagnostics."""
+    stdout_path = run.result_dir / f"{run.agent.name}.stdout"
+    if not stdout_path.is_file():
+        return {}
+    turns = 0
+    commands = 0
+    file_changes = 0
+    errors = 0
+    agent_messages = 0
+    command_counts: dict[str, int] = {}
+    usage_totals: dict[str, int] = {}
+    for line in stdout_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if not line.startswith("{"):
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        kind = event.get("type")
+        if kind == "turn.started":
+            turns += 1
+        elif kind == "turn.completed":
+            usage = event.get("usage") or {}
+            for key, value in usage.items():
+                if isinstance(value, (int, float)):
+                    usage_totals[key] = usage_totals.get(key, 0) + int(value)
+        elif kind == "item.started":
+            item = event.get("item") or {}
+            if item.get("type") == "command_execution":
+                commands += 1
+                key = str(item.get("command") or "")
+                command_counts[key] = command_counts.get(key, 0) + 1
+        elif kind == "item.completed":
+            item = event.get("item") or {}
+            if item.get("type") == "file_change":
+                file_changes += 1
+            elif item.get("type") == "error":
+                errors += 1
+            elif item.get("type") == "agent_message":
+                agent_messages += 1
+    repeated = {key: count for key, count in command_counts.items() if count >= 3}
+    return {
+        "turns": turns,
+        "commands": commands,
+        "file_changes": file_changes,
+        "errors": errors,
+        "agent_messages": agent_messages,
+        "usage": usage_totals,
+        "repeated_commands": {key[:200]: count for key, count in sorted(repeated.items())},
+    }
+
+
+def isolation_evidence(run: RunSpec, env: dict[str, str]) -> dict[str, Any]:
+    """Post-run proof that per-run isolation actually took effect."""
+    evidence: dict[str, Any] = {
+        "env_keys": sorted(env.keys()),
+        "home_isolated": env.get("HOME", "").startswith(str(run.result_dir)),
+        "pythonnousersite": env.get("PYTHONNOUSERSITE") == "1",
+    }
+    codex_home = env.get("CODEX_HOME")
+    if codex_home:
+        sessions = Path(codex_home) / "sessions"
+        session_files = (
+            [str(p) for p in sessions.rglob("*.jsonl")] if sessions.exists() else []
+        )
+        evidence["codex_home"] = codex_home
+        evidence["codex_home_isolated"] = codex_home.startswith(str(run.result_dir))
+        evidence["codex_home_session_count"] = len(session_files)
+        # If the per-run CODEX_HOME never received a session, the binary most
+        # likely re-exported CODEX_HOME (for example via a wrapper script).
+        evidence["codex_home_used"] = bool(session_files)
+    return evidence
 
 
 def run_one(
@@ -656,6 +962,7 @@ def run_one(
     wave: int,
     run_root: Path,
     expected_source_digest: str | None = None,
+    caps: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     workspace = run_root / "workspaces" / task.name / agent.name / f"wave-{wave:03d}"
     result_dir = run_root / "results" / task.name / agent.name / f"wave-{wave:03d}"
@@ -667,6 +974,7 @@ def run_one(
     baseline = prepare_workspace(task, workspace)
     prompt = task.prompt.read_text(encoding="utf-8")
     command, env, stdin_payload = build_command(run, prompt)
+    caps = caps or {}
     agent_run = run_process(
         command,
         workspace,
@@ -675,6 +983,10 @@ def run_one(
         result_dir / f"{agent.name}.stdout",
         result_dir / f"{agent.name}.stderr",
         task.timeout_seconds,
+        max_commands=int(caps.get("max_agent_commands") or DEFAULT_MAX_AGENT_COMMANDS),
+        max_identical_commands=int(
+            caps.get("max_identical_commands") or DEFAULT_MAX_IDENTICAL_COMMANDS
+        ),
     )
     integrity = test_integrity(task, workspace)
     source_after = source_tree_digest()
@@ -685,6 +997,8 @@ def run_one(
     }
     verification = verify_workspace(run, integrity, source_integrity)
     route = route_and_usage(run)
+    telemetry = agent_telemetry(run)
+    isolation = isolation_evidence(run, env)
     summary = {
         "task": task.name,
         "agent": agent.name,
@@ -693,10 +1007,15 @@ def run_one(
         "workspace": str(workspace),
         "result_dir": str(result_dir),
         "baseline": baseline,
+        "binary": binary_provenance(resolve_binary(agent.binary)),
+        "reasoning_effort": agent.reasoning_effort,
+        "sandbox": agent.sandbox or ("workspace-write" if agent.kind in {"corbanu", "codex"} else None),
         "agent_run": agent_run,
         "verification": verification,
         "source_integrity": source_integrity,
         "route_and_usage": route,
+        "telemetry": telemetry,
+        "isolation": isolation,
         "passed": bool(verification["ok"]) and agent_run["returncode"] == 0,
         "workspace_tree_sha256_after": tree_digest(workspace),
     }
@@ -709,6 +1028,7 @@ def run_one(
                 "wave": wave,
                 "passed": summary["passed"],
                 "wall_seconds": agent_run["wall_seconds"],
+                "loop_capped": agent_run.get("loop_capped", False),
             },
             sort_keys=True,
         ),
@@ -761,13 +1081,23 @@ def run_campaign(
     agents: list[AgentSpec],
     run_root: Path,
     waves: int,
+    config_path: Path | None = None,
 ) -> int:
-    max_runs = int((config.get("caps") or {}).get("max_total_runs") or 100)
+    caps = config.get("caps") if isinstance(config.get("caps"), dict) else {}
+    max_runs = int(caps.get("max_total_runs") or 100)
     total = len(tasks) * len(agents) * waves
     if total > max_runs:
         raise RuntimeError(f"planned runs {total} exceed caps.max_total_runs {max_runs}")
     if run_root.exists() and any(run_root.iterdir()):
         raise RuntimeError(f"refusing to reuse nonempty run root: {run_root}")
+    enclosing_repo = git_repo_root(run_root.parent if not run_root.exists() else run_root)
+    if enclosing_repo is not None and not config.get("allow_run_root_in_repo"):
+        raise RuntimeError(
+            "run root is inside a git repository "
+            f"({enclosing_repo}); candidates would inherit that repository's AGENTS.md "
+            "and .codex skills. Point run_dir outside any repo or set "
+            '"allow_run_root_in_repo": true to accept the contamination.'
+        )
     run_root.mkdir(parents=True, exist_ok=True)
     lane_plan = schedule(tasks, agents, waves)
     expected_source_digest = source_tree_digest()
@@ -779,6 +1109,29 @@ def run_campaign(
             "tasks": [task.name for task in tasks],
             "agents": [agent.name for agent in agents],
             "benchmark_source_sha256": expected_source_digest,
+            "benchmark_git": git_provenance(BENCH_ROOT),
+            "runner_sha256": sha256(RUNNER_PATH),
+            "config_path": str(config_path) if config_path else None,
+            "config_sha256": sha256(config_path) if config_path and config_path.is_file() else None,
+            "caps": caps,
+            "binaries": {
+                agent.name: binary_provenance(resolve_binary(agent.binary)) for agent in agents
+            },
+            "agent_settings": [
+                {
+                    "name": agent.name,
+                    "kind": agent.kind,
+                    "provider": agent.provider,
+                    "model": agent.model,
+                    "reasoning_effort": agent.reasoning_effort,
+                    "sandbox": agent.sandbox,
+                    "isolate_home": agent.isolate_home,
+                    "config_overrides": list(agent.config_overrides),
+                    "required_env": list(agent.required_env),
+                    "env_passthrough": list(agent.env_passthrough),
+                }
+                for agent in agents
+            ],
             "lanes": {
                 lane: [
                     {"task": task.name, "agent": agent.name, "wave": wave}
@@ -791,7 +1144,7 @@ def run_campaign(
 
     def run_lane(steps: list[tuple[TaskSpec, AgentSpec, int]]) -> list[dict[str, Any]]:
         return [
-            run_one(task, agent, wave, run_root, expected_source_digest)
+            run_one(task, agent, wave, run_root, expected_source_digest, caps=caps)
             for task, agent, wave in steps
         ]
 
@@ -834,7 +1187,7 @@ def main() -> int:
         return 0
     if not args.confirm_paid_run:
         raise SystemExit("live benchmark execution requires --confirm-paid-run")
-    return run_campaign(config, tasks, agents, run_root, waves)
+    return run_campaign(config, tasks, agents, run_root, waves, config_path=args.config)
 
 
 if __name__ == "__main__":

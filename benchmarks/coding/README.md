@@ -54,6 +54,39 @@ python3 benchmarks/coding/runner.py \
 The runner refuses to reuse a nonempty run root or existing workspace. Adjust
 `run_dir` for every fresh campaign.
 
+## Isolation and pinning invariants
+
+The 2026-08-28 investigation (`/home/pfrpc/MODEL_EVAL_HANDOFF_2026-08-28.md`)
+found several contamination paths. The runner now enforces:
+
+- **No wrapper binaries.** `corbanu`/`codex` agents must give an absolute
+  binary path, and script wrappers (files starting with `#!`) are rejected. A
+  `~/.local/bin` wrapper previously re-exported `CODEX_HOME` to the global
+  Corbanu home and silently defeated per-run isolation.
+- **Isolated environment.** Candidates get a private `HOME`, `XDG_*` tree, and
+  `PYTHONNOUSERSITE=1`; `PYTHONPATH` is dropped; operator-home `PATH` entries
+  are stripped; only `required_env`/`env_passthrough` variables cross the
+  boundary. Verification subprocesses get the same treatment.
+- **Explicit reasoning.** Corbanu agents must set `reasoning_effort` in the
+  config. GLM 5.3 routes default to `max` preserved reasoning when the effort
+  is left implicit. The outbound payload's `reasoning_effort`/`enable_thinking`
+  are recorded and verified in each summary (`route_and_usage`).
+- **Sandboxed candidates.** Corbanu/codex agents run under
+  `--sandbox workspace-write` (plus `--ignore-user-config`) by default instead
+  of `--dangerously-bypass-approvals-and-sandbox`. Set `"sandbox":
+  "danger-bypass"` only when the environment is externally sandboxed.
+- **Run roots outside git repositories.** A run root nested in a repo lets
+  candidates inherit that repo's `AGENTS.md` and `.codex/skills`, which burned
+  millions of cached input tokens in earlier campaigns. The runner refuses such
+  roots unless `"allow_run_root_in_repo": true`.
+- **Loop caps.** `caps.max_agent_commands` (default 120) and
+  `caps.max_identical_commands` (default 12) kill runs stuck in
+  inspect/edit/retest loops instead of letting them burn the full timeout.
+- **Provenance.** `manifest.json` records the benchmark git commit/dirty state,
+  runner and config SHA-256, and each agent binary's SHA-256; every
+  `summary.json` repeats the binary hash and per-run isolation evidence,
+  including whether the per-run `CODEX_HOME` actually received a session.
+
 For the required every-third-release campaign, derive a release-owned config
 from the full catalog, add one Corbanu agent entry for every route in the frozen
 relevant model set, raise `max_total_runs` to the exact bounded matrix size, and

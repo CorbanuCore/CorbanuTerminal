@@ -1,0 +1,38 @@
+{
+  "run_dir": "/home/pfrpc/bench-runs/glm52-repro-20260828",
+  "waves": 3,
+  "caps": {
+    "timeout_seconds": 1200,
+    "max_total_runs": 6,
+    "max_agent_commands": 80,
+    "max_identical_commands": 10
+  },
+  "agents": [
+    {
+      "name": "zai-glm52-none",
+      "kind": "corbanu",
+      "binary": "/home/pfrpc/repos/CorbanuTerminal-glm53-flash/codex-rs/target/debug/corbanu-debug",
+      "provider": "zai",
+      "model": "glm-5.2",
+      "lane": "serial",
+      "reasoning_effort": "none",
+      "required_env": ["ZAI_API_KEY"]
+    }
+  ],
+  "tasks": [
+    {
+      "name": "eventforge",
+      "baseline": "../tasks/eventforge/baseline",
+      "prompt": "../tasks/eventforge/task_prompt.md",
+      "verifier": "../tasks/eventforge/verifier/verify.py",
+      "core_rel": "src/eventforge/core.py"
+    },
+    {
+      "name": "logtriage",
+      "baseline": "../tasks/logtriage/baseline",
+      "prompt": "../tasks/logtriage/task_prompt.md",
+      "verifier": "../tasks/logtriage/verifier/verify.py",
+      "core_rel": "src/logtriage/core.py"
+    }
+  ]
+}
