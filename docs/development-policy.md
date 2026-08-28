@@ -4,13 +4,13 @@
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Policy version    | 1.2                                                                                                                      |
 | Updated           | 2026-08-23                                                                                                               |
-| Policy owner      | Lead developer, as assigned in the [product roles table](docs/corbanu-product-spec.md#ownership-and-decision-rights)     |
+| Policy owner      | Lead developer, as assigned in the [product roles table](corbanu-product-spec.md#ownership-and-decision-rights)     |
 | Product authority | The decision roles in the product specification                                                                          |
 | Amendment rule    | Changes to product scope or hard release gates require the product decision process defined in the product specification |
 
 Corbanu Terminal is a Codex fork designed for agentic trading. This file contains
 only repository-wide Corbanu rules. Rust implementation guidance is scoped to
-[`codex-rs/AGENTS.md`](codex-rs/AGENTS.md).
+[Rust development policy](rust-development-policy.md).
 
 Use the `corbanu-terminal-development` skill for product behavior, planning,
 interactive QA, documentation, benchmarks, and releases. Repository skills are
@@ -24,16 +24,16 @@ they must not restate policy.
 
 | Concern                                                    | Canonical source                                                                                                |
 | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Product outcomes, status, sequencing, and decision roles   | [Product specification](docs/corbanu-product-spec.md)                                                           |
+| Product outcomes, status, sequencing, and decision roles   | [Product specification](corbanu-product-spec.md)                                                           |
 | Change classification and repository-wide release rules    | This file                                                                                                       |
-| Active-plan limit and lifecycle                            | [Plan process](docs/plans/index.md)                                                                             |
-| Plan evidence fields                                       | [Plan template](docs/plans/PLAN_TEMPLATE.md)                                                                    |
-| Sprint lifecycle and execution rules                       | [Sprint process](docs/sprints/index.md)                                                                         |
-| Sprint execution fields                                    | [Sprint template](docs/sprints/SPRINT_TEMPLATE.md)                                                              |
-| Benchmark cadence, methods, performance matrix, and ledger | [Benchmark tracker](benchmarks/README.md)                                                                       |
+| Active-plan limit and lifecycle                            | [Plan process](plans/index.md)                                                                             |
+| Plan evidence fields                                       | [Plan template](plans/PLAN_TEMPLATE.md)                                                                    |
+| Sprint lifecycle and execution rules                       | [Sprint process](sprints/index.md)                                                                         |
+| Sprint execution fields                                    | [Sprint template](sprints/SPRINT_TEMPLATE.md)                                                              |
+| Benchmark cadence, methods, performance matrix, and ledger | [Benchmark tracker](../benchmarks/README.md)                                                                       |
 | Shipped user guidance                                      | `docs/`                                                                                                         |
 | Release-candidate evidence and human sign-off              | `qa/release/<version>/`                                                                                         |
-| Rust implementation conventions                            | [`codex-rs/AGENTS.md`](codex-rs/AGENTS.md)                                                                      |
+| Rust implementation conventions                            | [Rust development policy](rust-development-policy.md)                                                                      |
 | Repository skills and portable mirror                      | `.codex/skills/`, mirrored byte-for-byte at `.agents/skills/` and checked by `scripts/check_portable_skills.py` |
 
 The product specification defines **what**. A plan defines the feature contract,
@@ -106,7 +106,7 @@ candidate passes a true TUI workflow in a PTY with actual keys sent.
   automated and TUI qualification. If no tester is available, the release
   waits.
 
-Use the repository's [$test-tui skill](.codex/skills/test-tui/SKILL.md).
+Use the repository's [$test-tui skill](../.codex/skills/test-tui/SKILL.md).
 
 ## Live-codebase qualification
 
@@ -146,7 +146,7 @@ A release may ship only when its record shows:
 5. the release suite passes in both default live repositories;
 6. a named human tester accepts the affected flows;
 7. shipped-feature documentation matches the candidate; and
-8. the [benchmark and performance gate](benchmarks/README.md) is passing when due.
+8. the [benchmark and performance gate](../benchmarks/README.md) is passing when due.
 
 A missing required artifact, failed human acceptance, P0 security finding, or
 due benchmark that is failed or incomplete blocks shipment. There is no waiver

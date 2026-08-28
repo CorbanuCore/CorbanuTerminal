@@ -141,6 +141,14 @@ nav:
           - Cancelled Plans: plans/cancelled/index.md
           - Plan Template: plans/PLAN_TEMPLATE.md
       - Corbanu Terminal Development Skill: corbanu-terminal-development-skill.md
+      - Development Policy: development-policy.md
+      - Rust Development Policy: rust-development-policy.md
+      - Crate Notes:
+          - Core: crate-notes/core.md
+          - TUI: crate-notes/tui.md
+          - TUI Bottom Pane: crate-notes/tui-bottom-pane.md
+          - App Server: crate-notes/app-server.md
+          - App Server Protocol: crate-notes/app-server-protocol.md
       - Contributing: contributing.md
       - CI Coverage: ci.md
       - License: license.md

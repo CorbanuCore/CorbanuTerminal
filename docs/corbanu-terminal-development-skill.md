@@ -34,7 +34,7 @@ description: Develop, plan, test, document, benchmark, or release the Corbanu Te
 
 Route work through the repository's canonical policy; do not restate it.
 
-1. Locate the Corbanu Terminal root and read its `AGENTS.md` completely.
+1. Locate the Corbanu Terminal root and read `docs/development-policy.md` completely.
 2. Classify the change using the root policy.
 3. Read the cited product-spec heading and requirement excerpt.
 4. For a product initiative, read `docs/plans/index.md`, inspect
@@ -44,7 +44,7 @@ Route work through the repository's canonical policy; do not restate it.
    select or create one sprint from `docs/sprints/SPRINT_TEMPLATE.md`. Confirm it
    links exactly one plan feature, is `ready` or `in_progress`, and records the
    active plan's exact worktree coordinates. Run `python3 docs/sprints/check.py`.
-6. Read the nearest nested `AGENTS.md` for every implementation path.
+6. Read `docs/rust-development-policy.md` and the relevant `docs/crate-notes/` file for every implementation path.
 7. Implement only the selected sprint's remaining checklist in its recorded
    worktree. Update its `Done` and `Remaining` ledgers as evidence changes.
 8. Collect the evidence required by the root policy, plan, and sprint. Archive a
@@ -64,7 +64,7 @@ human sign-off, documentation, benchmark state, and release blockers.
 This mirror does not replace the repository policy or its evidence records.
 Use these sources together:
 
-- [Repository development policy](https://github.com/CorbanuCore/CorbanuTerminal/blob/main/AGENTS.md)
+- [Repository development policy](https://github.com/CorbanuCore/CorbanuTerminal/blob/main/docs/development-policy.md)
 - [Canonical development skill](https://github.com/CorbanuCore/CorbanuTerminal/blob/main/.codex/skills/corbanu-terminal-development/SKILL.md)
 - [Portable agent mirror](https://github.com/CorbanuCore/CorbanuTerminal/blob/main/.agents/skills/corbanu-terminal-development/SKILL.md)
 - [Product specification](corbanu-product-spec.md)

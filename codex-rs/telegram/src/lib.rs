@@ -364,14 +364,23 @@ async fn build_core_config(
         main_execve_wrapper_exe: arg0_paths.main_execve_wrapper_exe.clone(),
         ..Default::default()
     };
-    codex_core::config::ConfigBuilder::default()
+    let mut core_config = codex_core::config::ConfigBuilder::default()
         .cli_overrides(cli_overrides)
         .harness_overrides(overrides)
         .loader_overrides(loader_overrides)
         .strict_config(strict_config)
         .build()
         .await
-        .context("failed to build Corbanu Terminal config for Telegram")
+        .context("failed to build Corbanu Terminal config for Telegram")?;
+    if let Some(identity) = telegram_config.identity_instructions.as_deref() {
+        let identity = identity.replace("<cwd>", &core_config.cwd.display().to_string());
+        core_config.developer_instructions = Some(match core_config.developer_instructions.take()
+        {
+            Some(existing) => format!("{existing}\n\n{identity}"),
+            None => identity,
+        });
+    }
+    Ok(core_config)
 }
 
 fn telegram_default_model_provider(config: &TelegramConfig) -> Option<String> {

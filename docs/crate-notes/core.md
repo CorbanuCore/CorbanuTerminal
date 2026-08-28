@@ -1,7 +1,7 @@
 # Corbanu core engineering
 
 These instructions apply inside `codex-rs/core/`. Read the repository-root and
-`codex-rs/AGENTS.md` policies first.
+the [Rust development policy](../rust-development-policy.md) first.
 
 ## The `codex-core` crate
 

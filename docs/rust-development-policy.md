@@ -1,14 +1,14 @@
 # Corbanu Terminal Rust workspace
 
-These instructions apply only inside `codex-rs/`. The repository-root
-`AGENTS.md` owns Corbanu-wide product, plan, QA, documentation, benchmark, and
+These instructions apply only inside `codex-rs/`. The
+[development policy](development-policy.md) owns Corbanu-wide product, plan, QA, documentation, benchmark, and
 release policy.
 
 More-specific guidance is scoped to:
 
-- [`core/AGENTS.md`](core/AGENTS.md) for core architecture, model context, and core integration tests;
-- [`tui/AGENTS.md`](tui/AGENTS.md) for TUI code, styling, snapshots, and interactive-test tooling; and
-- [`APP_SERVER_GUIDE.md`](APP_SERVER_GUIDE.md), required by the nested app-server and protocol policies.
+- [core crate notes](crate-notes/core.md) for core architecture, model context, and core integration tests;
+- [TUI crate notes](crate-notes/tui.md) for TUI code, styling, snapshots, and interactive-test tooling; and
+- [`APP_SERVER_GUIDE.md`](../codex-rs/APP_SERVER_GUIDE.md), required by the nested app-server and protocol policies.
 
 ## Repository and toolchain invariants
 
@@ -48,7 +48,7 @@ More-specific guidance is scoped to:
 
 ## Build and integration boundaries
 
-- Follow the root `AGENTS.md` for Corbanu product documentation. Keep app-server API implementation documentation with the app-server guidance below.
+- Follow the [development policy](development-policy.md) for Corbanu product documentation. Keep app-server API implementation documentation with the app-server guidance below.
 - Prefer private modules and explicitly exported public crate API.
 - If you change `ConfigToml` or nested config types, run `just write-config-schema` to update `codex-rs/core/config.schema.json`.
 - When working with MCP tool calls, prefer using `codex-rs/codex-mcp/src/mcp_connection_manager.rs` to handle mutation of tools and tool calls. Aim to minimize the footprint of changes and leverage existing abstractions rather than plumbing code through multiple levels of function calls.
@@ -118,7 +118,7 @@ For complex logic changes the size should be under 500 lines.
 
 If the change is larger, explore whether it can be split into reviewable stages and identify the smallest coherent stage to land first.
 Base the staging suggestion on the actual diff, dependencies, and affected call sites.
-Staged implementation may land behind non-user-accessible boundaries, but it is not a finished feature and may not be documented or released as one until the root policy's product gates pass.
+Staged implementation may land behind non-user-accessible boundaries, but it is not a finished feature and may not be documented or released as one until the development policy's product gates pass.
 
 ## Test implementation conventions
 

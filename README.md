@@ -81,7 +81,7 @@ For the complete shipping inventory, see the
 Corbanu development is governed by:
 
 - the [product specification](docs/corbanu-product-spec.md);
-- the repository [development policy](AGENTS.md);
+- the repository [development policy](docs/development-policy.md);
 - the [active-plan process and template](docs/plans/index.md);
 - the [single-feature sprint execution process](docs/sprints/index.md); and
 - the public [benchmark and performance tracker](benchmarks/README.md).

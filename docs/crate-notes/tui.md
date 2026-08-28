@@ -1,7 +1,7 @@
 # Corbanu TUI engineering
 
 These instructions apply inside `codex-rs/tui/`. Read the repository-root and
-`codex-rs/AGENTS.md` policies first. For interactive qualification, use the
+the [Rust development policy](../rust-development-policy.md) first. For interactive qualification, use the
 [$test-tui skill](../../.codex/skills/test-tui/SKILL.md).
 
 ## Code and style

@@ -2,7 +2,8 @@
 
 Corbanu Terminal changes must preserve a coherent product, not merely compile.
 Before starting work, read the [Corbanu Terminal development skill](corbanu-terminal-development-skill.md),
-the repository-root `AGENTS.md`, and the relevant nested `AGENTS.md` files.
+the [development policy](development-policy.md), and the relevant
+[Rust development policy](rust-development-policy.md) and [crate notes](crate-notes/core.md).
 
 ## Start with product intent
 

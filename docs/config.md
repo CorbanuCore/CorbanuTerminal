@@ -280,11 +280,13 @@ rejected rather than unpacked or implied to be available.
 
 `default_cwd` is the workspace used for Telegram-created turns. Set it to the
 directory where the agent should work, not to the Corbanu Terminal source tree or all
-of `$HOME`. Codex automatically loads `AGENTS.md` from that workspace. The setup
-script defaults fresh installs to `~/corbanu-telegram`, reuses an existing
-legacy `~/pfterminal-telegram`, creates the selected directory, and seeds
-`AGENTS.md` there from `codex-rs/telegram/dist/AGENTS.md.template` when the
-workspace does not already have one. Use `--workspace "$HOME"` only when you
+of `$HOME`. The setup script defaults fresh installs to `~/corbanu-telegram`,
+reuses an existing legacy `~/pfterminal-telegram`, and creates the selected
+directory. The Telegram identity is configured through
+`[telegram].identity_instructions` (with `<cwd>` expanding to the resolved
+workspace) and injected as developer instructions; Corbanu no longer seeds a
+default `AGENTS.md` file into the workspace. A user-authored `AGENTS.md` in the
+workspace continues to load normally. Use `--workspace "$HOME"` only when you
 intentionally want a home-rooted remote agent workspace.
 
 The recommended setup path is:

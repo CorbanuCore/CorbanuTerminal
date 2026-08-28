@@ -182,6 +182,39 @@ fn load_from_codex_home_reads_config_file() {
     fs::remove_dir_all(codex_home).expect("remove codex home");
 }
 
+/// The Telegram identity travels through `[telegram].identity_instructions`
+/// instead of a seeded workspace `AGENTS.md`; Corbanu must not ship or write
+/// default `AGENTS.md` content.
+#[test]
+fn load_from_codex_home_reads_identity_instructions() {
+    let codex_home = unique_temp_dir("codex-telegram-identity");
+    fs::create_dir_all(&codex_home).expect("create codex home");
+    fs::write(
+        codex_home.join("config.toml"),
+        r#"
+        [telegram]
+        enabled = true
+        identity_instructions = "You are Corbanu Terminal. Your workspace is <cwd>."
+        "#,
+    )
+    .expect("write config");
+
+    let config = TelegramConfig::load_from_codex_home(&codex_home).expect("load config");
+
+    assert_eq!(
+        config,
+        TelegramConfig {
+            enabled: true,
+            identity_instructions: Some(
+                "You are Corbanu Terminal. Your workspace is <cwd>.".to_string()
+            ),
+            ..Default::default()
+        }
+    );
+
+    fs::remove_dir_all(codex_home).expect("remove codex home");
+}
+
 fn unique_temp_dir(prefix: &str) -> PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)

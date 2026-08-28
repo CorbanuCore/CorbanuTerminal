@@ -222,7 +222,6 @@ def validate_package_dir(
             [
                 telegram_dir / "setup-telegram.sh",
                 telegram_dir / "install-telegram-task.ps1",
-                telegram_dir / "dist" / "AGENTS.md.template",
                 telegram_dir / "dist" / "corbanu-terminal-telegram.service",
                 telegram_dir / "dist" / "org.corbanu.terminal.telegram.plist",
             ]
@@ -353,11 +352,6 @@ def copy_telegram_resources(dest: Path, spec: TargetSpec) -> None:
         / "codex-rs"
         / "scripts"
         / "install-telegram-task.ps1",
-        Path("dist/AGENTS.md.template"): REPO_ROOT
-        / "codex-rs"
-        / "telegram"
-        / "dist"
-        / "AGENTS.md.template",
         Path("dist/corbanu-terminal-telegram.service"): REPO_ROOT
         / "codex-rs"
         / "telegram"

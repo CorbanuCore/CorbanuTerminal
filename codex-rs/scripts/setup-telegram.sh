@@ -312,6 +312,15 @@ candidates = {
     "mode": "polling",
     "approval_policy": sys.argv[4],
     "default_cwd": sys.argv[2],
+    "identity_instructions": (
+        "You are Corbanu Terminal, the user's crypto-native AI services terminal "
+        "reached over Telegram.\n"
+        "Your workspace is <cwd>, not the source tree.\n"
+        "Operate iteratively: inspect, implement, verify, and fix until the result "
+        "is working.\n"
+        "Be concise and actionable.\n"
+        "Never leak secrets, tokens, private keys, seed phrases, or credentials."
+    ),
 }
 order = list(candidates)
 top = {"sandbox_mode": sys.argv[3]} if sys.argv[3] else {}
@@ -422,20 +431,6 @@ if tomllib is not None:
 path.parent.mkdir(parents=True, exist_ok=True)
 path.write_text(output)
 PY
-}
-
-seed_agents_md() {
-    local target="$1/AGENTS.md"
-    local template="$CODEX_RS_DIR/telegram/dist/AGENTS.md.template"
-    if [[ -e "$target" ]]; then
-        printf 'AGENTS.md already exists at %s; leaving it unchanged.\n' "$target"
-        return
-    fi
-    [[ -r "$template" ]] || die "missing AGENTS.md template: $template"
-    local content
-    content="$(< "$template")"
-    printf '%s\n' "${content//<cwd>/$1}" > "$target"
-    printf 'Seeded Telegram identity instructions at %s\n' "$target"
 }
 
 install_systemd_unit() {
@@ -644,7 +639,6 @@ CHAT_IDS_CSV="$(IFS=,; printf '%s' "${CHAT_IDS[*]}")"
 USER_IDS_CSV="$(IFS=,; printf '%s' "${USER_IDS[*]}")"
 merge_config "$CONFIG_PATH" "$WORKSPACE" "$SANDBOX_MODE_TO_SET" "$APPROVAL_POLICY" "$EXPLICIT_CONFIG_KEYS" "$CHAT_IDS_CSV" "$USER_IDS_CSV"
 printf 'Configured Telegram connector in %s\n' "$CONFIG_PATH"
-seed_agents_md "$WORKSPACE"
 [[ $NO_TOKEN_REQUIRED -eq 1 ]] || run_health_check
 [[ $INSTALL_SYSTEMD -eq 1 ]] && install_systemd_unit
 [[ $INSTALL_LAUNCHD -eq 1 ]] && install_launchd_unit

@@ -34,6 +34,11 @@ pub struct TelegramConfig {
     pub default_cwd: Option<PathBuf>,
     pub approval_policy: Option<AskForApproval>,
     pub sandbox_mode: Option<SandboxMode>,
+    /// Connector-scoped identity instructions injected as developer
+    /// instructions for Telegram sessions. `<cwd>` expands to the resolved
+    /// session working directory. This replaces the deprecated workflow of
+    /// seeding a default `AGENTS.md` into the Telegram workspace.
+    pub identity_instructions: Option<String>,
     pub webhook_url: Option<String>,
     pub max_consecutive_polling_failures: u32,
     pub max_attachment_bytes: u32,
@@ -53,6 +58,7 @@ impl Default for TelegramConfig {
             default_cwd: None,
             approval_policy: Some(AskForApproval::OnRequest),
             sandbox_mode: None,
+            identity_instructions: None,
             webhook_url: None,
             max_consecutive_polling_failures: 8,
             max_attachment_bytes: 10 * 1024 * 1024,

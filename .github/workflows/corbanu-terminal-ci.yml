@@ -62,6 +62,12 @@ jobs:
           python3 -m unittest scripts.test_check_portable_skills
           python3 scripts/check_portable_skills.py
 
+      - name: Forbid shipped AGENTS.md content
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check_no_shipped_agents_md.py
+
       - name: Build Corbanu Terminal binaries
         shell: bash
         run: |
