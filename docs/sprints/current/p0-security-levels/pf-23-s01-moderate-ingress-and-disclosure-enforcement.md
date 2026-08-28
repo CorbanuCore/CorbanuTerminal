@@ -4,12 +4,12 @@ title: "Moderate ingress and disclosure enforcement"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-23"
-execution_order: 33
+execution_order: 38
 owner: "Jim Ricketts"
-worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
+worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"
-base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
-depends_on: "PF-13-S05, PF-22-S01, PF-30-S03"
+base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+depends_on: "PF-13-S05, PF-22-S02, PF-30-S03"
 created: 2026-08-24
 updated: 2026-08-28
 ---
@@ -37,7 +37,7 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] PF-13-S05, PF-22-S01, PF-30-S03 are completed and archived.
+- [ ] PF-13-S05, PF-22-S02, PF-30-S03 are completed and archived.
 - [ ] Read root, `codex-rs/AGENTS.md`, and `codex-rs/core/AGENTS.md`.
 - [ ] Exact worktree coordinates match the active plan.
 

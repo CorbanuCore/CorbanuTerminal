@@ -4,12 +4,12 @@ title: "Durable security event and recovery foundation"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-41"
-execution_order: 13
+execution_order: 20
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-19-S01, PF-20-S01"
+depends_on: "PF-19-S02, PF-20-S02"
 created: 2026-08-28
 updated: 2026-08-28
 ---

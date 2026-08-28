@@ -51,17 +51,17 @@ Marketing language belongs in this positioning section. Delivery requirements be
 
 Corbanu Terminal already exists and is shipping. The roadmap expands this live, multi-provider MVP into the complete trader product; it is not a prerequisite for Corbanu Terminal to exist.
 
-| Area | Shipping capability |
-| --- | --- |
-| **Runtime** | Rust, Apache-2.0, Linux/macOS/Windows, the `corbanu` command, and legacy `pfterminal` command and state compatibility. |
+| Area                         | Shipping capability                                                                                                                                              |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Runtime**                  | Rust, Apache-2.0, Linux/macOS/Windows, the `corbanu` command, and legacy `pfterminal` command and state compatibility.                                           |
 | **Multi-provider inference** | OpenAI, Anthropic/Claude Plan, Kimi, Z.AI, DeepSeek, OpenRouter, Ambient, Meta, Baseten, Vercel, Bedrock, Ollama, LM Studio, Corbanu Plan, and custom providers. |
-| **Vault and credentials** | Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat. |
-| **Agent orchestration** | Sauron → Nazgul → Troll → Orc orchestration, model-aware delegation, durable mailboxes, supervision, resume, and recovery. |
-| **Workspaces** | `/panes`, `/agent`, approvals, existing general sandboxing, review, MCP, skills, plugins, apps, connectors, and background terminals. |
-| **Wallet and payments** | Local Solana wallet, SOL and canonical USDC support, scoped signing, backup/restore, and Corbanu Plan purchase/recovery. |
-| **Compute** | Vast.ai and RunPod rental workflows with price, spend, duration, readiness, stop, and termination controls. |
-| **Task Node and identity** | Tasks, evidence, verification, rewards, balances, chat, context, linked identity, and **live Task Node-linked Nostr identity**. |
-| **Remote and context** | Allowlisted Telegram; durable `/goal` and `/memories`; ephemeral `/side` and `/btw`; `/skills` and `/docs`. |
+| **Vault and credentials**    | Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat.                                   |
+| **Agent orchestration**      | Sauron → Nazgul → Troll → Orc orchestration, model-aware delegation, durable mailboxes, supervision, resume, and recovery.                                       |
+| **Workspaces**               | `/panes`, `/agent`, approvals, existing general sandboxing, review, MCP, skills, plugins, apps, connectors, and background terminals.                            |
+| **Wallet and payments**      | Local Solana wallet, SOL and canonical USDC support, scoped signing, backup/restore, and Corbanu Plan purchase/recovery.                                         |
+| **Compute**                  | Vast.ai and RunPod rental workflows with price, spend, duration, readiness, stop, and termination controls.                                                      |
+| **Task Node and identity**   | Tasks, evidence, verification, rewards, balances, chat, context, linked identity, and **live Task Node-linked Nostr identity**.                                  |
+| **Remote and context**       | Allowlisted Telegram; durable `/goal` and `/memories`; ephemeral `/side` and `/btw`; `/skills` and `/docs`.                                                      |
 
 ## Live MVP versus the P0 security controls
 
@@ -78,17 +78,17 @@ financial actions.
 
 Corbanu Plan is wallet-native, one-calendar-month prepaid inference purchased through **x402**, normally using canonical USDC on Solana. The wallet proves ownership and receives a revocable Plan credential. Every tier uses the same model catalog and differs by allowance.
 
-| Tier | Price | Weekly allowance | Monthly allowance |
-| --- | ---: | ---: | ---: |
-| Starter | 1 USDC | 250K | 1M |
-| Basic | 20 USDC | 5M | 20M |
-| Power | 50 USDC | 12.5M | 50M |
-| Pro | 200 USDC | 50M | 200M |
+| Tier    |    Price | Weekly allowance | Monthly allowance |
+| ------- | -------: | ---------------: | ----------------: |
+| Starter |   1 USDC |             250K |                1M |
+| Basic   |  20 USDC |               5M |               20M |
+| Power   |  50 USDC |            12.5M |               50M |
+| Pro     | 200 USDC |              50M |              200M |
 
-| Models | Backend | Privacy boundary |
-| --- | --- | --- |
-| GLM 5.2, Kimi K2.7 Code | Ambient | Private, Corbanu-controlled inference. |
-| DeepSeek V4 Pro, Claude Fable 5 | xAPI | Non-private, third-party inference. |
+| Models                          | Backend | Privacy boundary                       |
+| ------------------------------- | ------- | -------------------------------------- |
+| GLM 5.2, Kimi K2.7 Code         | Ambient | Private, Corbanu-controlled inference. |
+| DeepSeek V4 Pro, Claude Fable 5 | xAPI    | Non-private, third-party inference.    |
 
 **x402 is payment. xAPI is inference.** Customers authenticate to Corbanu Plan, not directly to xAPI.
 
@@ -113,12 +113,12 @@ The expansion roadmap must make the following one coherent trader product:
 
 # Users and decisions
 
-| Persona | Primary job | Product decision implication |
-| --- | --- | --- |
-| **Buyside Bro** | Improve personal Hyperliquid or DEX trading without linking activity to a work identity. | Default to private research, pseudonymous identity, explicit disclosure controls, and bounded execution. |
-| **Hobbyist** | Explore and observe AI-assisted trading safely. | Lead with guided research, reproducible backtests, paper trading, and approval-required actions. |
-| **Accelerationist** | Deploy technically capable agents on-chain. | Provide machine-readable tools and constrained autonomy without weakening deterministic controls. |
-| **Crypto AI Guy** | Use an AI harness that remains explicitly crypto-native. | Keep wallet, stablecoin, venue, identity, and agent workflows native rather than bolted on. |
+| Persona             | Primary job                                                                              | Product decision implication                                                                             |
+| ------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| **Buyside Bro**     | Improve personal Hyperliquid or DEX trading without linking activity to a work identity. | Default to private research, pseudonymous identity, explicit disclosure controls, and bounded execution. |
+| **Hobbyist**        | Explore and observe AI-assisted trading safely.                                          | Lead with guided research, reproducible backtests, paper trading, and approval-required actions.         |
+| **Accelerationist** | Deploy technically capable agents on-chain.                                              | Provide machine-readable tools and constrained autonomy without weakening deterministic controls.        |
+| **Crypto AI Guy**   | Use an AI harness that remains explicitly crypto-native.                                 | Keep wallet, stablecoin, venue, identity, and agent workflows native rather than bolted on.              |
 
 All personas prefer reduced centralized identity, custody, and data collection. Corbanu must not imply that pseudonymity overrides a provider’s legal, jurisdictional, KYC, AML, sanctions, or account requirements.
 
@@ -130,11 +130,11 @@ The first interaction must be immediately useful. For example, “Corbanu, show 
 
 # Ownership and decision rights
 
-| Person or role | Accountability |
-| --- | --- |
-| **Travis Good — final product authority** | Owns all product decisions, priorities, gates, scope, and go/no-go decisions. |
-| **Alex Good — Head of Product** | Owns trading and backtesting skill creation; dataset business development, including Tiingo, Sharadar, and the desired EarningsCall.biz partnership; Stripe accounts; product financialization; commercial integrations; and related business-development execution. |
-| **Jim Ricketts — lead Corbanu Terminal developer** | Owns releases, technical implementation coordination, integration delivery, and implementation quality. |
+| Person or role                                     | Accountability                                                                                                                                                                                                                                                       |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Travis Good — final product authority**          | Owns all product decisions, priorities, gates, scope, and go/no-go decisions.                                                                                                                                                                                        |
+| **Alex Good — Head of Product**                    | Owns trading and backtesting skill creation; dataset business development, including Tiingo, Sharadar, and the desired EarningsCall.biz partnership; Stripe accounts; product financialization; commercial integrations; and related business-development execution. |
+| **Jim Ricketts — lead Corbanu Terminal developer** | Owns releases, technical implementation coordination, integration delivery, and implementation quality.                                                                                                                                                              |
 
 # Accountable sequencing
 
@@ -142,19 +142,19 @@ Security is the first implementation initiative and begins immediately. Other
 roadmap items have their own owners and plans; they are not dependencies or
 scope for the `/security` implementation plan.
 
-| Sequence | Capability or gate | Status | Priority | Delivery owner | Dependency | Deadline | Measurable definition of done |
-| ---: | --- | --- | --- | --- | --- | --- | --- |
-| **1** | **`/security` levels and protected-action controls** | TO BUILD | P0 | Lead developer | Existing approval, vault, wallet, tool, and sandbox boundaries | **2026-10-08; work begins immediately** | The `/security` tab ships with Permissive, Moderate, and Aggressive. Permissive demonstrably preserves current behavior. Moderate and Aggressive enforce their documented controls outside the model. Critical attack-class regressions pass, no critical finding remains open, audit records contain no secrets, and downgrade, revocation, and kill-switch flows pass end to end. |
-| **2** | **Native market-data gate: Tiingo and Sharadar** | TO ACQUIRE | P0 | Head of Product | Commercial authorization and native engineering access | **2026-10-08** | Tiingo and Sharadar equities datasets are commercially authorized and available natively to Terminal research and backtesting; source, timestamps, and dataset identity are recorded for replay; credentials remain outside model context. |
-| **3** | First-party backtesting skill | TO BUILD | P1 | Head of Product | Native data | TBD | A strategy can be replayed from recorded data version, code, parameters, model, and environment; required bias and cost controls are applied; machine-readable results promote to paper trading. |
-| **4** | First-party Hyperliquid skill | TO BUILD | P1 | Head of Product | Protected-action controls and venue review | TBD | Market/account reads and order lifecycle work in paper and approval-required modes; limits are enforced outside the model; credentials are never model-visible; every proposal and action is audited. |
-| **5** | Existing brokerage-agent services | TO INTEGRATE | P1 | Head of Product | Protected-action controls, provider authorization, and compliance review | TBD | At least one approved existing brokerage-agent service is usable through native normalized account, position, order, fill, permission, limit, health, and audit surfaces; read-only is the default. |
-| **6** | Post Fiat NAV infrastructure | TO INTEGRATE | P1 | Head of Product | Protected-action controls, supported Post Fiat capabilities, and compliance review | TBD | Terminal can discover and inspect supported NAV products and complete supported transaction flows with visible proofs, settlement state, permissions, and audit records. |
-| **7** | Corbanu trollbox | TO BUILD | P1 | Lead developer | Live Task Node/Nostr identity and untrusted-input handling | TBD | Real-time pseudonymous rooms, distinct human/agent identity, structured cards, moderation controls, consent-gated financial sharing, and untrusted-input treatment work end to end. |
-| **8** | EarningsCall.biz transcript partnership | TO ACQUIRE | P2 | Head of Product | Commercial agreement | TBD | If acquired, authorized real-time transcripts are available with source and timestamp provenance. |
-| **9** | USDAI preferred stablecoin partnership | TO ACQUIRE | P2 | Head of Product | Commercial and compliance review | TBD | If acquired, approved USDAI flows are native where appropriate. Corbanu does not center a new native token. |
-| **10** | Per-wallet xAPI isolation | BUILT NOT LIVE | P2 | Lead developer | Merge, deployment, tenant-isolation review, and accounting verification | TBD | The existing branch is merged and deployed; wallet isolation, encrypted tenant keys, capped refills, and cost attribution pass production verification. |
-| **11** | Upstream Codex parity | PRINCIPLE | CONTINUOUS | Lead developer | Continuous upstream review and benchmark evidence | Continuous | Relevant upstream harness improvements are assessed and adopted without regressions to Corbanu-specific behavior. At least every three releases, the full checked-in coding benchmark catalog is run across the relevant production model set; correctness, end-to-end runtime, and spend are recorded, and a threshold regression blocks release. |
+| Sequence | Capability or gate                                   | Status         | Priority   | Delivery owner  | Dependency                                                                         | Deadline                                | Measurable definition of done                                                                                                                                                                                                                                                                                                                                                       |
+| -------: | ---------------------------------------------------- | -------------- | ---------- | --------------- | ---------------------------------------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|    **1** | **`/security` levels and protected-action controls** | TO BUILD       | P0         | Lead developer  | Existing approval, vault, wallet, tool, and sandbox boundaries                     | **2026-10-08; work begins immediately** | The `/security` tab ships with Permissive, Moderate, and Aggressive. Permissive demonstrably preserves current behavior. Moderate and Aggressive enforce their documented controls outside the model. Critical attack-class regressions pass, no critical finding remains open, audit records contain no secrets, and downgrade, revocation, and kill-switch flows pass end to end. |
+|    **2** | **Native market-data gate: Tiingo and Sharadar**     | TO ACQUIRE     | P0         | Head of Product | Commercial authorization and native engineering access                             | **2026-10-08**                          | Tiingo and Sharadar equities datasets are commercially authorized and available natively to Terminal research and backtesting; source, timestamps, and dataset identity are recorded for replay; credentials remain outside model context.                                                                                                                                          |
+|    **3** | First-party backtesting skill                        | TO BUILD       | P1         | Head of Product | Native data                                                                        | TBD                                     | A strategy can be replayed from recorded data version, code, parameters, model, and environment; required bias and cost controls are applied; machine-readable results promote to paper trading.                                                                                                                                                                                    |
+|    **4** | First-party Hyperliquid skill                        | TO BUILD       | P1         | Head of Product | Protected-action controls and venue review                                         | TBD                                     | Market/account reads and order lifecycle work in paper and approval-required modes; limits are enforced outside the model; credentials are never model-visible; every proposal and action is audited.                                                                                                                                                                               |
+|    **5** | Existing brokerage-agent services                    | TO INTEGRATE   | P1         | Head of Product | Protected-action controls, provider authorization, and compliance review           | TBD                                     | At least one approved existing brokerage-agent service is usable through native normalized account, position, order, fill, permission, limit, health, and audit surfaces; read-only is the default.                                                                                                                                                                                 |
+|    **6** | Post Fiat NAV infrastructure                         | TO INTEGRATE   | P1         | Head of Product | Protected-action controls, supported Post Fiat capabilities, and compliance review | TBD                                     | Terminal can discover and inspect supported NAV products and complete supported transaction flows with visible proofs, settlement state, permissions, and audit records.                                                                                                                                                                                                            |
+|    **7** | Corbanu trollbox                                     | TO BUILD       | P1         | Lead developer  | Live Task Node/Nostr identity and untrusted-input handling                         | TBD                                     | Real-time pseudonymous rooms, distinct human/agent identity, structured cards, moderation controls, consent-gated financial sharing, and untrusted-input treatment work end to end.                                                                                                                                                                                                 |
+|    **8** | EarningsCall.biz transcript partnership              | TO ACQUIRE     | P2         | Head of Product | Commercial agreement                                                               | TBD                                     | If acquired, authorized real-time transcripts are available with source and timestamp provenance.                                                                                                                                                                                                                                                                                   |
+|    **9** | USDAI preferred stablecoin partnership               | TO ACQUIRE     | P2         | Head of Product | Commercial and compliance review                                                   | TBD                                     | If acquired, approved USDAI flows are native where appropriate. Corbanu does not center a new native token.                                                                                                                                                                                                                                                                         |
+|   **10** | Per-wallet xAPI isolation                            | BUILT NOT LIVE | P2         | Lead developer  | Merge, deployment, tenant-isolation review, and accounting verification            | TBD                                     | The existing branch is merged and deployed; wallet isolation, encrypted tenant keys, capped refills, and cost attribution pass production verification.                                                                                                                                                                                                                             |
+|   **11** | Upstream Codex parity                                | PRINCIPLE      | CONTINUOUS | Lead developer  | Continuous upstream review and benchmark evidence                                  | Continuous                              | Relevant upstream harness improvements are assessed and adopted without regressions to Corbanu-specific behavior. At least every three releases, the full checked-in coding benchmark catalog is run across the relevant production model set; correctness, end-to-end runtime, and spend are recorded, and a threshold regression blocks release.                                  |
 
 # P0 `/security` levels
 
@@ -164,11 +164,11 @@ scope for the `/security` implementation plan.
 plain-English explanation, the protections that change at each level, and a
 confirmation step before applying a change.
 
-| Level | Product promise | Policy behavior |
-| --- | --- | --- |
-| **Permissive** | Preserve the Corbanu Terminal users have now. | Default for existing users. Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged. The tab explains that no additional security controls are active. |
-| **Moderate** | Add strong protection without making normal agent work painful. | Treat external content and tool output as untrusted; prevent secrets and protected financial data from entering model-visible context; require trusted credential resolution; separate proposal, approval, signing, and broadcast; show the expected effect before protected actions; record redacted audit events; support revocation and a kill switch. |
-| **Aggressive** | Minimize sensitive access and require the user to open every important door. | Includes Moderate, then defaults sensitive tools, account access, credential use, protected-data disclosure, financial actions, arbitrary egress, and clipboard/export paths to denied. The user grants narrow, expiring access; every sign or broadcast requires exact human approval; child agents inherit the level and cannot weaken it. |
+| Level          | Product promise                                                              | Policy behavior                                                                                                                                                                                                                                                                                                                                           |
+| -------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Permissive** | Preserve the Corbanu Terminal users have now.                                | Default for existing users. Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged. The tab explains that no additional security controls are active.                                                                                                                                                                 |
+| **Moderate**   | Add strong protection without making normal agent work painful.              | Treat external content and tool output as untrusted; prevent secrets and protected financial data from entering model-visible context; require trusted credential resolution; separate proposal, approval, signing, and broadcast; show the expected effect before protected actions; record redacted audit events; support revocation and a kill switch. |
+| **Aggressive** | Minimize sensitive access and require the user to open every important door. | Includes Moderate, then defaults sensitive tools, account access, credential use, protected-data disclosure, financial actions, arbitrary egress, and clipboard/export paths to denied. The user grants narrow, expiring access; every sign or broadcast requires exact human approval; child agents inherit the level and cannot weaken it.              |
 
 Permissive must be verified against the pre-feature candidate so selecting it
 does not silently tighten or loosen an existing policy. Moderate is the
@@ -310,12 +310,12 @@ The Terminal must normalize:
 
 Default access is read-only. Corbanu must preserve venue-specific capabilities and requirements, keep credentials outside prompts, and give users a consistent experience across crypto venues, retail brokers, and institutional services.
 
-| External layer | Examples from current product context | Corbanu approach |
-| --- | --- | --- |
-| Broker-native agents | Robinhood, IBKR, Public, Webull, Coinbase, eToro, Moomoo | Integrate approved existing agent surfaces. |
-| Developer brokerage infrastructure | Alpaca | Use the infrastructure and make permissions native and visible. |
-| Multi-broker aggregation | SnapTrade and similar services | Normalize supported brokers through one Corbanu permission layer. |
-| Consumer agent apps | End-to-end AI trading products | Differentiate through security, pseudonymity, extensibility, and one Terminal. |
+| External layer                     | Examples from current product context                    | Corbanu approach                                                               |
+| ---------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Broker-native agents               | Robinhood, IBKR, Public, Webull, Coinbase, eToro, Moomoo | Integrate approved existing agent surfaces.                                    |
+| Developer brokerage infrastructure | Alpaca                                                   | Use the infrastructure and make permissions native and visible.                |
+| Multi-broker aggregation           | SnapTrade and similar services                           | Normalize supported brokers through one Corbanu permission layer.              |
+| Consumer agent apps                | End-to-end AI trading products                           | Differentiate through security, pseudonymity, extensibility, and one Terminal. |
 
 ## Post Fiat NAV — TO INTEGRATE
 
@@ -354,14 +354,14 @@ Required capabilities:
 
 # Data and economic partnerships
 
-| Partner | Requirement | Owner | Negotiation state | Fallback |
-| --- | --- | --- | --- | --- |
-| **Tiingo** | Required bare-minimum equities data for native research and backtesting by the 2026-10-08 market-data gate. | Alex Good | TBD | TBD |
-| **Sharadar** | Required bare-minimum equities data for native research and backtesting by the 2026-10-08 market-data gate. | Alex Good | TBD | TBD |
-| **EarningsCall.biz** | Desired real-time earnings transcript feed for research, alerts, trollbox rooms, and event backtests. | Alex Good | TBD | TBD |
-| **USDAI** | Preferred stablecoin and economic partner instead of creating or centering a Corbanu-native token. | Alex Good | TBD | TBD |
-| **Existing brokerage-agent services** | Required integration path for seamless brokerage connectivity without rebuilding brokerage infrastructure. | Alex Good | Provider selection TBD | TBD |
-| **Post Fiat** | Required infrastructure dependency for native NAV discovery and supported transaction flows. | Alex Good | Integration state TBD | TBD |
+| Partner                               | Requirement                                                                                                 | Owner     | Negotiation state      | Fallback |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------- | --------- | ---------------------- | -------- |
+| **Tiingo**                            | Required bare-minimum equities data for native research and backtesting by the 2026-10-08 market-data gate. | Alex Good | TBD                    | TBD      |
+| **Sharadar**                          | Required bare-minimum equities data for native research and backtesting by the 2026-10-08 market-data gate. | Alex Good | TBD                    | TBD      |
+| **EarningsCall.biz**                  | Desired real-time earnings transcript feed for research, alerts, trollbox rooms, and event backtests.       | Alex Good | TBD                    | TBD      |
+| **USDAI**                             | Preferred stablecoin and economic partner instead of creating or centering a Corbanu-native token.          | Alex Good | TBD                    | TBD      |
+| **Existing brokerage-agent services** | Required integration path for seamless brokerage connectivity without rebuilding brokerage infrastructure.  | Alex Good | Provider selection TBD | TBD      |
+| **Post Fiat**                         | Required infrastructure dependency for native NAV discovery and supported transaction flows.                | Alex Good | Integration state TBD  | TBD      |
 
 All agreements, licensing rights, provider terms, commercial targets, and fallbacks remain TBD unless explicitly stated above. Final decision rights are defined in the ownership table.
 
@@ -401,33 +401,33 @@ These are target expansion workflows, not claims that every step is live today.
 
 No commercial performance numbers have been supplied. The following metrics must be instrumented, with targets set through the decision rights defined above.
 
-| Area | Metric | Target |
-| --- | --- | --- |
-| Security | Critical attack-class regressions passing; critical findings open | 100% pass; zero critical findings open |
-| Data gate | Tiingo and Sharadar available natively for research and backtesting | Binary pass by 2026-10-08 |
-| Backtesting | Replay success and surfaced discrepancies | TBD |
-| Activation | Users progressing from first chart or idea to saved research or backtest | TBD |
-| Paper-to-live funnel | Backtest-to-paper and paper-to-approved-live conversion | TBD |
-| Retention | Returning active traders and active Plan users | TBD |
-| Corbanu Plan | Purchases, renewal, usage, revenue, and model-level unit economics | TBD |
-| Security adoption | Sessions and protected actions by Permissive, Moderate, and Aggressive | TBD |
-| Partnerships | Dataset, transcript, stablecoin, broker, and NAV integration readiness | Binary milestone status; commercial targets TBD |
-| Trollbox | Active identities, useful structured cards, moderation events, and consent violations | TBD; zero unauthorized financial disclosure is required |
+| Area                 | Metric                                                                                | Target                                                  |
+| -------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Security             | Critical attack-class regressions passing; critical findings open                     | 100% pass; zero critical findings open                  |
+| Data gate            | Tiingo and Sharadar available natively for research and backtesting                   | Binary pass by 2026-10-08                               |
+| Backtesting          | Replay success and surfaced discrepancies                                             | TBD                                                     |
+| Activation           | Users progressing from first chart or idea to saved research or backtest              | TBD                                                     |
+| Paper-to-live funnel | Backtest-to-paper and paper-to-approved-live conversion                               | TBD                                                     |
+| Retention            | Returning active traders and active Plan users                                        | TBD                                                     |
+| Corbanu Plan         | Purchases, renewal, usage, revenue, and model-level unit economics                    | TBD                                                     |
+| Security adoption    | Sessions and protected actions by Permissive, Moderate, and Aggressive                | TBD                                                     |
+| Partnerships         | Dataset, transcript, stablecoin, broker, and NAV integration readiness                | Binary milestone status; commercial targets TBD         |
+| Trollbox             | Active identities, useful structured cards, moderation events, and consent violations | TBD; zero unauthorized financial disclosure is required |
 
 # Risks, dependencies, and decision gates
 
-| Risk or dependency | Consequence | Required gate or mitigation | Owner |
-| --- | --- | --- | --- |
-| **`/security` controls miss 2026-10-08** | Moderate and Aggressive cannot be presented as available security levels. | Preserve Permissive behavior, do not ship incomplete controls, and issue a revised plan. | Final product authority |
-| **Tiingo or Sharadar unavailable** | The required native equities-data gate fails. | Negotiation state and fallback are TBD; resolve through the defined product decision process. | Head of Product |
-| **Other external partnership failure** | Transcript, stablecoin, brokerage, or NAV scope may be delayed or reduced. | Negotiation state and fallback must be recorded before commitment; no partner capability may be presented as live before deployment. | Head of Product |
-| **Data licensing or use restrictions** | Research, display, storage, or backtesting may be constrained. | Complete provider-rights review before production use; encode applicable storage, attribution, and redistribution rules. | Head of Product |
-| **Brokerage and Hyperliquid jurisdictional exposure** | Features may not be available to every user or region. | Before live enablement, review venue terms, jurisdiction, account eligibility, KYC/AML, sanctions, derivatives, disclosures, and required controls. Record an explicit launch decision without inventing a universal legal conclusion. | Final product authority |
-| **Stablecoin payments and USDAI integration** | Payment or financial workflows may trigger provider, sanctions, tax, or jurisdictional obligations. | Complete legal/compliance and provider-terms review before launch or material expansion. | Head of Product |
-| **Post Fiat NAV workflows** | Subscription, swap, redemption, marketing, or product structure may require jurisdiction-specific treatment. | Legal/compliance review and explicit product go/no-go are required before each live transaction type. | Final product authority |
-| **Referral, builder-code, advertising, and financialization model** | Commercial incentives may require disclosures or restrictions. | Define the commercial implementation and complete required legal/compliance review before launch. | Head of Product |
-| **Third-party inference leakage** | Strategy or financial context may leave Corbanu-controlled infrastructure. | Keep provider privacy labels explicit; private workflows default to Corbanu-controlled inference; minimize model-visible financial data in all modes. | Lead developer |
-| **Upstream Codex changes** | Corbanu may fall behind or regress specialized behavior. | Continuous parity review with regression tests for Corbanu-specific layers. | Lead developer |
+| Risk or dependency                                                  | Consequence                                                                                                  | Required gate or mitigation                                                                                                                                                                                                            | Owner                   |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| **`/security` controls miss 2026-10-08**                            | Moderate and Aggressive cannot be presented as available security levels.                                    | Preserve Permissive behavior, do not ship incomplete controls, and issue a revised plan.                                                                                                                                               | Final product authority |
+| **Tiingo or Sharadar unavailable**                                  | The required native equities-data gate fails.                                                                | Negotiation state and fallback are TBD; resolve through the defined product decision process.                                                                                                                                          | Head of Product         |
+| **Other external partnership failure**                              | Transcript, stablecoin, brokerage, or NAV scope may be delayed or reduced.                                   | Negotiation state and fallback must be recorded before commitment; no partner capability may be presented as live before deployment.                                                                                                   | Head of Product         |
+| **Data licensing or use restrictions**                              | Research, display, storage, or backtesting may be constrained.                                               | Complete provider-rights review before production use; encode applicable storage, attribution, and redistribution rules.                                                                                                               | Head of Product         |
+| **Brokerage and Hyperliquid jurisdictional exposure**               | Features may not be available to every user or region.                                                       | Before live enablement, review venue terms, jurisdiction, account eligibility, KYC/AML, sanctions, derivatives, disclosures, and required controls. Record an explicit launch decision without inventing a universal legal conclusion. | Final product authority |
+| **Stablecoin payments and USDAI integration**                       | Payment or financial workflows may trigger provider, sanctions, tax, or jurisdictional obligations.          | Complete legal/compliance and provider-terms review before launch or material expansion.                                                                                                                                               | Head of Product         |
+| **Post Fiat NAV workflows**                                         | Subscription, swap, redemption, marketing, or product structure may require jurisdiction-specific treatment. | Legal/compliance review and explicit product go/no-go are required before each live transaction type.                                                                                                                                  | Final product authority |
+| **Referral, builder-code, advertising, and financialization model** | Commercial incentives may require disclosures or restrictions.                                               | Define the commercial implementation and complete required legal/compliance review before launch.                                                                                                                                      | Head of Product         |
+| **Third-party inference leakage**                                   | Strategy or financial context may leave Corbanu-controlled infrastructure.                                   | Keep provider privacy labels explicit; private workflows default to Corbanu-controlled inference; minimize model-visible financial data in all modes.                                                                                  | Lead developer          |
+| **Upstream Codex changes**                                          | Corbanu may fall behind or regress specialized behavior.                                                     | Continuous parity review with regression tests for Corbanu-specific layers.                                                                                                                                                            | Lead developer          |
 
 ## Open decisions
 
@@ -455,18 +455,18 @@ Commercial ownership is defined in the roles table. Pricing rationale, revenue t
 
 # Glossary
 
-| Term | Meaning in this specification |
-| --- | --- |
-| **Codex parity** | Continuous adoption of relevant upstream agent-harness behavior without losing Corbanu-specific capabilities. |
-| **Task Node** | Corbanu’s task, evidence, verification, reward, balance, chat, context, and identity system. Its Nostr identity linkage is live. |
-| **Nostr** | The live identity and social protocol integration linked through Task Node. |
-| **Sauron → Nazgul → Troll → Orc** | Names for the live multi-agent orchestration hierarchy used for delegation, supervision, and execution work. |
-| **x402** | The payment mechanism used to purchase Corbanu Plan. |
-| **xAPI** | A third-party inference backend; it is not the Corbanu Plan payment or customer-authentication layer. |
-| **Post Fiat NAV** | External NAV infrastructure that Corbanu intends to make native for discovery, proofs, subscriptions, swaps, monitoring, exit, and redemption where supported. |
-| **Private inference** | Inference controlled by Corbanu, as identified in the Corbanu Plan model table; it does not describe third-party xAPI inference. |
-| **Constrained autonomy** | Live execution restricted to named accounts, venues, instruments, and deterministic signed limits enforced outside the model. |
-| **Native market data** | Commercially authorized provider data accessible directly through Corbanu Terminal and its skills with source and replay provenance. |
+| Term                              | Meaning in this specification                                                                                                                                  |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Codex parity**                  | Continuous adoption of relevant upstream agent-harness behavior without losing Corbanu-specific capabilities.                                                  |
+| **Task Node**                     | Corbanu’s task, evidence, verification, reward, balance, chat, context, and identity system. Its Nostr identity linkage is live.                               |
+| **Nostr**                         | The live identity and social protocol integration linked through Task Node.                                                                                    |
+| **Sauron → Nazgul → Troll → Orc** | Names for the live multi-agent orchestration hierarchy used for delegation, supervision, and execution work.                                                   |
+| **x402**                          | The payment mechanism used to purchase Corbanu Plan.                                                                                                           |
+| **xAPI**                          | A third-party inference backend; it is not the Corbanu Plan payment or customer-authentication layer.                                                          |
+| **Post Fiat NAV**                 | External NAV infrastructure that Corbanu intends to make native for discovery, proofs, subscriptions, swaps, monitoring, exit, and redemption where supported. |
+| **Private inference**             | Inference controlled by Corbanu, as identified in the Corbanu Plan model table; it does not describe third-party xAPI inference.                               |
+| **Constrained autonomy**          | Live execution restricted to named accounts, venues, instruments, and deterministic signed limits enforced outside the model.                                  |
+| **Native market data**            | Commercially authorized provider data accessible directly through Corbanu Terminal and its skills with source and replay provenance.                           |
 
 # North-star acceptance test
 

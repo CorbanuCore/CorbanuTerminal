@@ -20,10 +20,10 @@ Source claims refer to OpenClaw pin
 | Review / validation | Decision | Execution owner |
 | --- | --- | --- |
 | OR-01 | Bounded three-worker allocation; measure effort/capacity, do not infer calendar duration from node counts | Plan delivery/integration owner; sprint process/checker |
-| OR-02, OR-03 | Per-OS trusted-process design and tamper-resistant authoritative policy state | PF-27-S03 → PF-20-S01, PF-27-S01/S02 → PF-13-S05 |
-| OR-04, OR-05 | Independent baseline plus upstream control/drift evidence; explicit hook/owner/test register | PF-21-S01, PF-22-S01, every hook-owning sprint, PF-26 |
+| OR-02, OR-03 | Per-OS trusted-process design and tamper-resistant authoritative policy state | PF-27-S03 → PF-20-S02, PF-27-S01/S02 → PF-13-S05 |
+| OR-04, OR-05 | Independent baseline plus upstream control/drift evidence; explicit hook/owner/test register | PF-21-S02, PF-22-S02, every hook-owning sprint, PF-26 |
 | OR-06, OR-07, OR-08 | Completed preparation/interface sprints unblock construction, not protected activation | PF-31-S04, PF-33-S03, PF-34-S04; early PF-35-S01/S02 |
-| OR-09 | Quantitative reservations/metering at credential transport reuse BoundedGrant | PF-13-S01/S03/S04 |
+| OR-09 | Quantitative reservations/metering at credential transport reuse BoundedGrant | PF-13-S06/S03/S04 |
 | OR-10 | Action/profile usability matrix; preserve data and control-flow ancestry | PF-30-S03, PF-23-S01, PF-26-S02 |
 | OR-11 | Immediate restriction with separate uncertain-effect reconciliation | PF-19, PF-25-S02, PF-38-S03, PF-40-S03 |
 | OR-12 | Typed, bounded descendant request UI; requests do not grant authority | PF-25-S01 |
@@ -43,6 +43,19 @@ before emergency kill. Do not treat notarization, a separate account or universa
 administrator installation as proven necessary/sufficient OS mechanisms. The
 report's arithmetic deadline claim is not measured evidence. OR-14 is absent.
 
+## Reconciliation with completed upstream work
+
+Upstream `1bdc515bff48a4d9048dae7d06c6214e884265bc` completed PF-15–22 and
+PF-13-S01 under their original contracts. Preserve those archives and evidence.
+The new guarantees above belong to PF-13-S06 and PF-19/20/21/22-S02, not reopened
+S01 records. The reconciled graph has **64 remaining plus nine completed nodes**;
+longest total/remaining-only chains are **34/31**. Historical review snapshots
+remain unchanged. PF-13-S02 is ready; no additional sprint is activated.
+
+The [merge record](security-upstream-reconciliation-2026-08-28.md) distinguishes
+preserved historical results, new planning validation and still-pending runtime
+qualification. Upstream's typed tmux contract is retained in PF-26-S01/S02.
+
 ## Allocation and scheduling
 
 Follow [bounded parallel implementation](../sprints/index.md#bounded-parallel-implementation).
@@ -54,7 +67,7 @@ No sprint is made ready or in progress by this amendment.
 
 | Suggested lane | Early work after allocation | Integration gate / file ownership |
 | --- | --- | --- |
-| Foundation/platform | PF-15 reconciliation; PF-27-S03 design/probes; PF-16–22 and early PF-41-S03 | Core/protocol/policy/state changes serialized by integration owner; completed platform contract precedes protected-state implementation |
+| Foundation/platform | PF-13-S02 resolver; PF-27-S03 design/probes; new PF-13/19/20/21/22 follow-ups and early PF-41-S03 | Core/protocol/policy/state changes serialized by integration owner; completed platform contract precedes protected-state implementation |
 | Browser preparation | PF-31-S04 artifact/engine fixtures; PF-33-S03 pure destination contract | Retriever packaging and destination-contract files only; live PF-31-S01 retains completed broker/launch/network dependencies |
 | Ingress/classifier preparation | PF-34-S04 segment/verdict fixtures → PF-35-S01 corpus/evaluator → PF-35-S02 CPU artifact | Pure content contract/evaluator paths; live sanitizer and PF-35-S03 deterministic policy integration remain required |
 
@@ -64,7 +77,7 @@ registry, manifests, lockfiles and shared tests are disjoint or integrated in a
 separate serialized step. Three lanes are a capacity ceiling, not three staffed
 teams or permission for every lane to edit Core simultaneously.
 
-The amended graph has **68 nodes and a longest unweighted chain of 35 nodes**,
+The historical pre-merge amendment had **68 nodes and a longest unweighted chain of 35 nodes**,
 versus 63 and 34 before refinement. Five explicit preparation/foundation units
 add auditable gates; this does not claim a shorter calendar schedule. The graph
 exposes earlier independent work, and node count is not a duration estimate.
@@ -74,7 +87,7 @@ remaining unit: effort range, named capacity, platform access, integration/rewor
 allowance, reviewer availability and evidence lead time. Calculate a resource-
 constrained schedule and flag the October 8 risk to product authority. Keep the
 current deadline pending that decision; do not waive scope or release evidence.
-PF-15 reconciliation need not stop for this estimate.
+The existing single-worker PF-13-S02 allocation need not stop for this estimate.
 
 ## Platform and authoritative-state acceptance
 
@@ -99,7 +112,7 @@ health reports must bind their measured generation and expire on relevant change
 
 ## Codex integration seam register
 
-PF-22 establishes `qa/security-levels/upstream-seams.json` and its contract tests;
+PF-22-S02 establishes `qa/security-levels/upstream-seams.json` and its contract tests;
 each hook-owning sprint extends it before completion. The following are candidate
 integration paths from the plan, not a claim that this checkout qualifies them:
 

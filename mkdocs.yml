@@ -100,22 +100,17 @@ nav:
           - Workflow: sprints/index.md
           - Current Security Work:
               - Overview: sprints/current/p0-security-levels/index.md
-              - "Existing-commit reconciliation":
-                  - "PF-15-S01 — Security-level domain": sprints/current/p0-security-levels/pf-15-s01-security-level-domain-foundation.md
-                  - "PF-16-S01 — Authorization contract": sprints/current/p0-security-levels/pf-16-s01-authorization-decision-contract.md
-                  - "PF-17-S01 — Bounded grants": sprints/current/p0-security-levels/pf-17-s01-bounded-delegation-grants.md
-                  - "PF-18-S01 — Human mandates and receipts": sprints/current/p0-security-levels/pf-18-s01-human-mandates-and-receipts.md
-                  - "PF-19-S01 — Revocation contract": sprints/current/p0-security-levels/pf-19-s01-revocation-contract.md
-                  - "PF-20-S01 — Versioned persistence": sprints/current/p0-security-levels/pf-20-s01-versioned-security-persistence.md
-                  - "PF-21-S01 — Permissive baseline": sprints/current/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md
-              - "Runtime policy":
-                  - "PF-22-S01 — Policy and inheritance": sprints/current/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md
+              - "Foundation follow-ups":
+                  - "PF-19-S02 — Dispatch revocation fence contract": sprints/current/p0-security-levels/pf-19-s02-dispatch-revocation-fence.md
+                  - "PF-20-S02 — Protected authoritative-state persistence": sprints/current/p0-security-levels/pf-20-s02-protected-authoritative-state.md
+                  - "PF-21-S02 — Expanded compatibility and upstream drift": sprints/current/p0-security-levels/pf-21-s02-expanded-compatibility-and-upstream-drift.md
+                  - "PF-22-S02 — Protected runtime integration and upstream seams": sprints/current/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md
               - "PF-13 — Credential boundary":
-                  - "PF-13-S01 — Capability and store": sprints/current/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md
                   - "PF-13-S02 — Scoped vault resolver": sprints/current/p0-security-levels/pf-13-s02-scoped-vault-resolver.md
                   - "PF-13-S03 — OpenAI exact-host substitution": sprints/current/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md
                   - "PF-13-S04 — Lifecycle and bypass closure": sprints/current/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md
                   - "PF-13-S05 — Adversarial qualification": sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md
+                  - "PF-13-S06 — Credential usage reservations": sprints/current/p0-security-levels/pf-13-s06-credential-usage-reservations.md
               - "Protected-surface enforcement":
                   - "PF-23-S01 — Moderate enforcement": sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md
                   - "PF-23-S02 — Aggressive deny and grant": sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md
@@ -207,6 +202,7 @@ nav:
           - Security Source Reconciliation: plans/security-source-reconciliation.md
           - OpenClaw Source Review: plans/openclaw-source-review-2026-08-28.md
           - Architecture refinements: plans/security-architecture-refinements-2026-08-28.md
+          - Upstream reconciliation: plans/security-upstream-reconciliation-2026-08-28.md
           - Proposed Plans:
               - Overview: plans/proposed/index.md
               - Arbitrary-model Autoreview: plans/proposed/arbitrary-model-autoreview.md

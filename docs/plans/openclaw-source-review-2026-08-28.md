@@ -221,7 +221,7 @@ equate “atomic file replace” with whole-migration atomicity.
 Evidence: key audit/apply/runtime function ranges and selected apply tests
 (preflight/no-backup and publication-failure rollback) inspected. Audit/apply/
 runtime suites not executed.
-Owners: PF-29-S01/S02, PF-20-S01, PF-41-S01.
+Owners: PF-29-S01/S02, PF-20-S02, PF-41-S01.
 
 <a id="oc-7"></a>
 
@@ -268,7 +268,7 @@ Permissive. Public retrieval and credentialed login remain separate planes.
 
 Evidence: relevant resolution/creation paths inspected; no container/browser,
 CDP or three-OS qualification run. Owners: PF-27-S02, PF-31-S01/S02/S03,
-PF-37-S01/S02, PF-22-S01.
+PF-37-S01/S02, PF-22-S02.
 
 <a id="oc-9"></a>
 

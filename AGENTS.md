@@ -1,12 +1,12 @@
 # Corbanu Terminal development policy
 
-| Field | Value |
-| --- | --- |
-| Policy version | 1.3 |
-| Updated | 2026-08-28 |
-| Policy owner | Lead developer, as assigned in the [product roles table](docs/corbanu-product-spec.md#ownership-and-decision-rights) |
-| Product authority | The decision roles in the product specification |
-| Amendment rule | Changes to product scope or hard release gates require the product decision process defined in the product specification |
+| Field             | Value                                                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Policy version    | 1.3                                                                                                                      |
+| Updated           | 2026-08-28                                                                                                               |
+| Policy owner      | Lead developer, as assigned in the [product roles table](docs/corbanu-product-spec.md#ownership-and-decision-rights)     |
+| Product authority | The decision roles in the product specification                                                                          |
+| Amendment rule    | Changes to product scope or hard release gates require the product decision process defined in the product specification |
 
 Corbanu Terminal is a Codex fork designed for agentic trading. This file contains
 only repository-wide Corbanu rules. Rust implementation guidance is scoped to
@@ -22,19 +22,19 @@ portability; update both trees and run `python3 scripts/check_portable_skills.py
 Each rule has one owner. Linked files may collect evidence or provide fields;
 they must not restate policy.
 
-| Concern | Canonical source |
-| --- | --- |
-| Product outcomes, status, sequencing, and decision roles | [Product specification](docs/corbanu-product-spec.md) |
-| Change classification and repository-wide release rules | This file |
-| Active-plan limit and lifecycle | [Plan process](docs/plans/index.md) |
-| Plan evidence fields | [Plan template](docs/plans/PLAN_TEMPLATE.md) |
-| Sprint lifecycle and execution rules | [Sprint process](docs/sprints/index.md) |
-| Sprint execution fields | [Sprint template](docs/sprints/SPRINT_TEMPLATE.md) |
-| Benchmark cadence, methods, performance matrix, and ledger | [Benchmark tracker](benchmarks/README.md) |
-| Shipped user guidance | `docs/` |
-| Release-candidate evidence and human sign-off | `qa/release/<version>/` |
-| Rust implementation conventions | [`codex-rs/AGENTS.md`](codex-rs/AGENTS.md) |
-| Repository skills and portable mirror | `.codex/skills/`, mirrored byte-for-byte at `.agents/skills/` and checked by `scripts/check_portable_skills.py` |
+| Concern                                                    | Canonical source                                                                                                |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Product outcomes, status, sequencing, and decision roles   | [Product specification](docs/corbanu-product-spec.md)                                                           |
+| Change classification and repository-wide release rules    | This file                                                                                                       |
+| Active-plan limit and lifecycle                            | [Plan process](docs/plans/index.md)                                                                             |
+| Plan evidence fields                                       | [Plan template](docs/plans/PLAN_TEMPLATE.md)                                                                    |
+| Sprint lifecycle and execution rules                       | [Sprint process](docs/sprints/index.md)                                                                         |
+| Sprint execution fields                                    | [Sprint template](docs/sprints/SPRINT_TEMPLATE.md)                                                              |
+| Benchmark cadence, methods, performance matrix, and ledger | [Benchmark tracker](benchmarks/README.md)                                                                       |
+| Shipped user guidance                                      | `docs/`                                                                                                         |
+| Release-candidate evidence and human sign-off              | `qa/release/<version>/`                                                                                         |
+| Rust implementation conventions                            | [`codex-rs/AGENTS.md`](codex-rs/AGENTS.md)                                                                      |
+| Repository skills and portable mirror                      | `.codex/skills/`, mirrored byte-for-byte at `.agents/skills/` and checked by `scripts/check_portable_skills.py` |
 
 The product specification defines **what**. A plan defines the feature contract,
 scope, sequencing, and acceptance model. A sprint defines one mechanical code
@@ -45,12 +45,12 @@ finished**. QA and benchmark artifacts prove the claims.
 
 Classify work before editing. When uncertain, use the higher class.
 
-| Class | Definition | Required record |
-| --- | --- | --- |
-| **Routine** | Process text, internal cleanup, or implementation work that cannot change user-visible behavior, security, money, data disclosure, persistent state, or an external contract. | Task or change description; focused checks as applicable. |
-| **Bounded fix** | Restores already-authorized behavior without adding a user goal or changing a security, financial, data, persistence, or compatibility boundary. | Product-spec heading and a change record in the issue, PR, or release evidence. |
-| **Product initiative** | Adds or materially changes a user goal, interaction, authorization boundary, financial/data flow, persistent state, compatibility surface, or multiple-worktree workflow. | Active plan governed by `docs/plans/index.md` plus a current sprint governed by `docs/sprints/index.md` for implementation work. |
-| **Release** | Packages accepted routine work, bounded fixes, and product initiatives into a versioned candidate. It does not consume an active-plan slot. | `qa/release/<version>/` release record. |
+| Class                  | Definition                                                                                                                                                                    | Required record                                                                                                                  |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Routine**            | Process text, internal cleanup, or implementation work that cannot change user-visible behavior, security, money, data disclosure, persistent state, or an external contract. | Task or change description; focused checks as applicable.                                                                        |
+| **Bounded fix**        | Restores already-authorized behavior without adding a user goal or changing a security, financial, data, persistence, or compatibility boundary.                              | Product-spec heading and a change record in the issue, PR, or release evidence.                                                  |
+| **Product initiative** | Adds or materially changes a user goal, interaction, authorization boundary, financial/data flow, persistent state, compatibility surface, or multiple-worktree workflow.     | Active plan governed by `docs/plans/index.md` plus a current sprint governed by `docs/sprints/index.md` for implementation work. |
+| **Release**            | Packages accepted routine work, bounded fixes, and product initiatives into a versioned candidate. It does not consume an active-plan slot.                                   | `qa/release/<version>/` release record.                                                                                          |
 
 Urgent reliability and security repairs may proceed as bounded fixes while two
 product initiatives are active. They may not disguise new product scope, and
@@ -114,10 +114,10 @@ Use the repository's [$test-tui skill](.codex/skills/test-tui/SKILL.md).
 Use TensorCash for systems and layer-one workflows and Isometric Game for
 visual and interactive workflows.
 
-| Repository | Canonical origin | Path input |
-| --- | --- | --- |
-| TensorCash | `https://github.com/agtico/tensorcash.git` | `CORBANU_TENSORCASH_REPO` or an exact path recorded in the plan/release record |
-| Isometric Game | `https://github.com/goodalexander/isometricgame.git` | `CORBANU_ISOMETRIC_REPO` or an exact path recorded in the plan/release record |
+| Repository     | Canonical origin                                     | Path input                                                                     |
+| -------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------ |
+| TensorCash     | `https://github.com/agtico/tensorcash.git`           | `CORBANU_TENSORCASH_REPO` or an exact path recorded in the plan/release record |
+| Isometric Game | `https://github.com/goodalexander/isometricgame.git` | `CORBANU_ISOMETRIC_REPO` or an exact path recorded in the plan/release record  |
 
 Never encode a contributor's home directory as repository policy. Resolve and
 record the path and base commit before testing.
@@ -171,17 +171,17 @@ useful enough to present directly to a user.
 
 ## Resolved ambiguities
 
-| Previous conflict | Resolution |
-| --- | --- |
-| Active-plan cap versus urgent fixes | The limit applies to product initiatives. Routine work and bounded fixes do not consume a slot; they cannot introduce new scope. |
-| Active-plan cap versus a release train | A release record aggregates work and does not consume an active-plan slot. |
-| Finished-only docs versus a roadmap in `docs/` | Feature docs are finished-only; the status-labeled product specification is the sole exception. |
-| Corbanu docs versus the inherited “docs live elsewhere” rule | That upstream rule is not adopted. Root `docs/` is the official Corbanu documentation tree. |
-| Feature-specific repository applicability versus testing both repositories | A feature uses applicable repos; every release suite includes a generic real workflow in both. |
-| Automated tests versus true-TUI proof | Both are required for affected interactive behavior; neither substitutes for the other. |
-| Formatting after tests | Fix and formatting tools run before final affected tests and TUI qualification. |
-| Fixed local paths versus cross-platform support | Repository locations are inputs recorded by the plan/release record, never personal absolute paths in policy. |
-| Exact Markdown anchors versus durable product linkage | Heading text plus a requirement excerpt identifies the product decision; anchors are optional navigation. |
-| Missing competitor infrastructure versus benchmark success | A due run without all three auditable lanes is incomplete and blocks shipment, as does a Corbanu failure. Competitor task failure on a functioning lane is a valid result. |
-| Plan detail versus executable work | Plans own feature contracts and acceptance; sprints own mechanical code tasks. No product-initiative implementation starts without a single-feature current sprint. |
-| Completed sprints versus documentation clutter | Completed and cancelled sprint records move to the excluded archive. Current sprint navigation contains only unfinished work. |
+| Previous conflict                                                          | Resolution                                                                                                                                                                 |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Active-plan cap versus urgent fixes                                        | The limit applies to product initiatives. Routine work and bounded fixes do not consume a slot; they cannot introduce new scope.                                           |
+| Active-plan cap versus a release train                                     | A release record aggregates work and does not consume an active-plan slot.                                                                                                 |
+| Finished-only docs versus a roadmap in `docs/`                             | Feature docs are finished-only; the status-labeled product specification is the sole exception.                                                                            |
+| Corbanu docs versus the inherited “docs live elsewhere” rule               | That upstream rule is not adopted. Root `docs/` is the official Corbanu documentation tree.                                                                                |
+| Feature-specific repository applicability versus testing both repositories | A feature uses applicable repos; every release suite includes a generic real workflow in both.                                                                             |
+| Automated tests versus true-TUI proof                                      | Both are required for affected interactive behavior; neither substitutes for the other.                                                                                    |
+| Formatting after tests                                                     | Fix and formatting tools run before final affected tests and TUI qualification.                                                                                            |
+| Fixed local paths versus cross-platform support                            | Repository locations are inputs recorded by the plan/release record, never personal absolute paths in policy.                                                              |
+| Exact Markdown anchors versus durable product linkage                      | Heading text plus a requirement excerpt identifies the product decision; anchors are optional navigation.                                                                  |
+| Missing competitor infrastructure versus benchmark success                 | A due run without all three auditable lanes is incomplete and blocks shipment, as does a Corbanu failure. Competitor task failure on a functioning lane is a valid result. |
+| Plan detail versus executable work                                         | Plans own feature contracts and acceptance; sprints own mechanical code tasks. No product-initiative implementation starts without a single-feature current sprint.        |
+| Completed sprints versus documentation clutter                             | Completed and cancelled sprint records move to the excluded archive. Current sprint navigation contains only unfinished work.                                              |

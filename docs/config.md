@@ -22,23 +22,23 @@ installs to `.corbanu`. This keeps product state separate from stock Codex.
 
 These providers are compiled into Corbanu Terminal:
 
-| Provider id   | Display name | Base URL                                | Env key              | Wire API         |
-| ------------- | ------------ | --------------------------------------- | -------------------- | ---------------- |
-| `openai`      | OpenAI       | `https://chatgpt.com/backend-api/codex` | Account login        | Responses        |
-| `anthropic`   | Anthropic    | `https://api.anthropic.com/v1`          | `ANTHROPIC_API_KEY`  | Messages         |
-| `claude-plan` | Claude Plan  | Claude Code account route               | Claude Code login    | Messages         |
-| `ambient`     | Ambient      | `https://api.ambient.xyz/v1`            | `AMBIENT_API_KEY`    | Chat Completions |
-| `kimi-code`   | Kimi Code    | `https://api.kimi.com/coding/v1`        | `KIMI_API_KEY`       | Chat Completions |
-| `zai`         | Z.AI         | `https://api.z.ai/api/coding/paas/v4`   | `ZAI_API_KEY`        | Chat Completions |
-| `deepseek`    | DeepSeek     | `https://api.deepseek.com`              | `DEEPSEEK_API_KEY`   | Responses        |
-| `openrouter`  | OpenRouter   | `https://openrouter.ai/api/v1`          | `OPENROUTER_API_KEY` | Chat Completions |
-| `meta`        | Meta         | `https://api.meta.ai/v1`                | `MODEL_API_KEY`      | Responses        |
-| `baseten`     | Baseten      | `https://inference.baseten.co/v1`       | `BASETEN_API_KEY`    | Chat Completions |
-| `vercel`      | Vercel       | `https://ai-gateway.vercel.sh/v1`       | `AI_GATEWAY_API_KEY` | Responses        |
-| `corbanu-plan` | Corbanu Plan | Corbanu Plan gateway                    | Plan credential       | Multiple         |
-| `amazon-bedrock` | Amazon Bedrock | AWS Bedrock endpoint                | AWS or Bedrock auth   | Responses        |
-| `ollama`      | Ollama       | Configured local endpoint                | None                   | Responses        |
-| `lmstudio`    | LM Studio    | Configured local endpoint                | None                   | Responses        |
+| Provider id      | Display name   | Base URL                                | Env key              | Wire API         |
+| ---------------- | -------------- | --------------------------------------- | -------------------- | ---------------- |
+| `openai`         | OpenAI         | `https://chatgpt.com/backend-api/codex` | Account login        | Responses        |
+| `anthropic`      | Anthropic      | `https://api.anthropic.com/v1`          | `ANTHROPIC_API_KEY`  | Messages         |
+| `claude-plan`    | Claude Plan    | Claude Code account route               | Claude Code login    | Messages         |
+| `ambient`        | Ambient        | `https://api.ambient.xyz/v1`            | `AMBIENT_API_KEY`    | Chat Completions |
+| `kimi-code`      | Kimi Code      | `https://api.kimi.com/coding/v1`        | `KIMI_API_KEY`       | Chat Completions |
+| `zai`            | Z.AI           | `https://api.z.ai/api/coding/paas/v4`   | `ZAI_API_KEY`        | Chat Completions |
+| `deepseek`       | DeepSeek       | `https://api.deepseek.com`              | `DEEPSEEK_API_KEY`   | Responses        |
+| `openrouter`     | OpenRouter     | `https://openrouter.ai/api/v1`          | `OPENROUTER_API_KEY` | Chat Completions |
+| `meta`           | Meta           | `https://api.meta.ai/v1`                | `MODEL_API_KEY`      | Responses        |
+| `baseten`        | Baseten        | `https://inference.baseten.co/v1`       | `BASETEN_API_KEY`    | Chat Completions |
+| `vercel`         | Vercel         | `https://ai-gateway.vercel.sh/v1`       | `AI_GATEWAY_API_KEY` | Responses        |
+| `corbanu-plan`   | Corbanu Plan   | Corbanu Plan gateway                    | Plan credential      | Multiple         |
+| `amazon-bedrock` | Amazon Bedrock | AWS Bedrock endpoint                    | AWS or Bedrock auth  | Responses        |
+| `ollama`         | Ollama         | Configured local endpoint               | None                 | Responses        |
+| `lmstudio`       | LM Studio      | Configured local endpoint               | None                 | Responses        |
 
 OpenAI uses Codex account login from `/providers` or `corbanu login`.
 Provider API keys should normally be stored through onboarding, `/providers`,

@@ -17,15 +17,15 @@ def candidate_files(root: Path):
             yield path
 
 
-def contains_secret(path: Path, secrets: list[bytes]) -> tuple[bool, int]:
-    overlap = max(len(secret) for secret in secrets) - 1
+def contains_secret(path: Path, needles: list[bytes]) -> tuple[bool, int]:
+    overlap = max(map(len, needles)) - 1
     tail = b""
     scanned = 0
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             scanned += len(chunk)
             window = tail + chunk
-            if any(secret in window for secret in secrets):
+            if any(needle in window for needle in needles):
                 return True, scanned
             tail = window[-overlap:] if overlap > 0 else b""
     return False, scanned
@@ -39,12 +39,12 @@ def main() -> int:
     args = parser.parse_args()
 
     key_files = {path.resolve() for path in args.key_file}
-    secrets = []
+    needles = []
     for path in args.key_file:
         value = path.read_bytes().strip()
         if not value:
             raise SystemExit(f"empty key file: {path}")
-        secrets.append(value)
+        needles.append(value)
 
     output = args.output.resolve() if args.output else None
     hits = []
@@ -55,7 +55,7 @@ def main() -> int:
             resolved = path.resolve()
             if resolved in key_files or resolved == output:
                 continue
-            found, size = contains_secret(path, secrets)
+            found, size = contains_secret(path, needles)
             files_scanned += 1
             bytes_scanned += size
             if found:
@@ -63,7 +63,6 @@ def main() -> int:
 
     result = {
         "paths": [str(path) for path in args.path],
-        "secrets_scanned": len(secrets),
         "files_scanned": files_scanned,
         "bytes_scanned": bytes_scanned,
         "exact_key_hits": hits,
@@ -72,7 +71,7 @@ def main() -> int:
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps(result, sort_keys=True))
+    print("exact-key scan complete; use --output for the JSON report")
     return 0 if not hits else 1
 
 

@@ -15,20 +15,20 @@ has been integrated.
 The [Feature Catalog](features/index.md) is the canonical inventory of finished
 product behavior.
 
-| Area | Pain solved | Current capability | Read |
-| --- | --- | --- | --- |
-| Runtime | A local agent needs visible tools and authorization | Cross-platform Rust TUI, permissions, sandbox, review, extensions, and the `corbanu` command | [Runtime and extensions](features/runtime-extensions.md) |
-| Models | Account and credential routes are fragmented | Unified OpenAI and Claude account login, provider credentials, model selection, usage, and status | [`/providers`, account login, and `/model`](features/model-providers.md) |
-| Vault | Secrets should never be pasted into chat | Encrypted storage, masked entry, metadata-only inspection, and operational credential use | [`/vault` and credentials](features/vault.md) |
-| Orchestration | Delegated work needs hierarchy and supervision | Nazgul, Troll, and Orc roles; subagents; durable mailboxes; persistent assignments; resume and recovery | [`/spawn` hierarchy](features/spawn-orchestration.md) · [`/orchestrate` supervision](features/orchestrate.md) |
-| Workspaces | Long-running sessions are hard to track | User, Claude, and agent panes; retained state; approvals; background terminals | [`/panes` and workspaces](features/workspaces.md) |
-| Wallet | Custody and payment need explicit control | Local Solana wallet, SOL/USDC, scoped signing, backup/restore, and Plan ownership | [Wallet and Corbanu Plan](features/wallet-plan.md) |
-| Corbanu Plan | Inference payment and entitlement should be native | Wallet-purchased monthly x402 Plan, tier allowance, receipt, recovery, usage, and model routing | [Wallet and Corbanu Plan](features/wallet-plan.md) |
-| Compute | GPU rentals can overspend or continue billing | Vast.ai and RunPod budgets, readiness, stop, and provider-confirmed termination | [GPU rentals](features/gpu-rentals.md) |
-| Task Node | Tasks and identity should follow the agent | Tasks, evidence, requests, context, chat, rewards, balances, and Task Node-linked Nostr identity | [Task Node and identity](features/tasknode.md) |
-| Remote control | Users need bounded access away from the keyboard | Allowlisted Telegram connector with explicit workspace and authorization | [Telegram](features/telegram.md) |
-| Context | Long work and tangents need different persistence | Durable goals and memories; ephemeral side conversations; in-terminal skills and docs | [Context tools](features/context-tools.md) |
-| Benchmarking | Green unit tests can hide degraded agent performance | Three-way release gates, visual website bakeoffs, synthetic coding tasks, and TUI/provider diagnostics | [Benchmarking](benchmarking/index.md) |
+| Area           | Pain solved                                          | Current capability                                                                                      | Read                                                                                                          |
+| -------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Runtime        | A local agent needs visible tools and authorization  | Cross-platform Rust TUI, permissions, sandbox, review, extensions, and the `corbanu` command            | [Runtime and extensions](features/runtime-extensions.md)                                                      |
+| Models         | Account and credential routes are fragmented         | Unified OpenAI and Claude account login, provider credentials, model selection, usage, and status       | [`/providers`, account login, and `/model`](features/model-providers.md)                                      |
+| Vault          | Secrets should never be pasted into chat             | Encrypted storage, masked entry, metadata-only inspection, and operational credential use               | [`/vault` and credentials](features/vault.md)                                                                 |
+| Orchestration  | Delegated work needs hierarchy and supervision       | Nazgul, Troll, and Orc roles; subagents; durable mailboxes; persistent assignments; resume and recovery | [`/spawn` hierarchy](features/spawn-orchestration.md) · [`/orchestrate` supervision](features/orchestrate.md) |
+| Workspaces     | Long-running sessions are hard to track              | User, Claude, and agent panes; retained state; approvals; background terminals                          | [`/panes` and workspaces](features/workspaces.md)                                                             |
+| Wallet         | Custody and payment need explicit control            | Local Solana wallet, SOL/USDC, scoped signing, backup/restore, and Plan ownership                       | [Wallet and Corbanu Plan](features/wallet-plan.md)                                                            |
+| Corbanu Plan   | Inference payment and entitlement should be native   | Wallet-purchased monthly x402 Plan, tier allowance, receipt, recovery, usage, and model routing         | [Wallet and Corbanu Plan](features/wallet-plan.md)                                                            |
+| Compute        | GPU rentals can overspend or continue billing        | Vast.ai and RunPod budgets, readiness, stop, and provider-confirmed termination                         | [GPU rentals](features/gpu-rentals.md)                                                                        |
+| Task Node      | Tasks and identity should follow the agent           | Tasks, evidence, requests, context, chat, rewards, balances, and Task Node-linked Nostr identity        | [Task Node and identity](features/tasknode.md)                                                                |
+| Remote control | Users need bounded access away from the keyboard     | Allowlisted Telegram connector with explicit workspace and authorization                                | [Telegram](features/telegram.md)                                                                              |
+| Context        | Long work and tangents need different persistence    | Durable goals and memories; ephemeral side conversations; in-terminal skills and docs                   | [Context tools](features/context-tools.md)                                                                    |
+| Benchmarking   | Green unit tests can hide degraded agent performance | Three-way release gates, visual website bakeoffs, synthetic coding tasks, and TUI/provider diagnostics  | [Benchmarking](benchmarking/index.md)                                                                         |
 
 ## Fast reading path
 

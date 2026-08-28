@@ -13,12 +13,12 @@ account, storage, migration, and logout behavior.
 
 ## Product contract
 
-| Field | Value |
-| --- | --- |
-| Status | **LIVE** |
-| Exact product-spec heading | **Shipping MVP — LIVE** |
-| Vault excerpt | “Vault and credentials: Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat.” |
-| Provider excerpt | “Multi-provider inference: OpenAI, Anthropic/Claude Plan, Kimi, Z.AI, DeepSeek, OpenRouter, Ambient, Meta, Baseten, Vercel, Bedrock, Ollama, LM Studio, Corbanu Plan, and custom providers.” |
+| Field                      | Value                                                                                                                                                                                        |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status                     | **LIVE**                                                                                                                                                                                     |
+| Exact product-spec heading | **Shipping MVP — LIVE**                                                                                                                                                                      |
+| Vault excerpt              | “Vault and credentials: Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat.”                                      |
+| Provider excerpt           | “Multi-provider inference: OpenAI, Anthropic/Claude Plan, Kimi, Z.AI, DeepSeek, OpenRouter, Ambient, Meta, Baseten, Vercel, Bedrock, Ollama, LM Studio, Corbanu Plan, and custom providers.” |
 
 ## Credential surfaces
 

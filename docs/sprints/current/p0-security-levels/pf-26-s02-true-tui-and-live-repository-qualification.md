@@ -4,11 +4,11 @@ title: "True-TUI and live-repository qualification"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-26"
-execution_order: 67
+execution_order: 72
 owner: "Jim Ricketts"
-worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
+worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"
-base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
+base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
 depends_on: "PF-26-S01"
 created: 2026-08-24
 updated: 2026-08-28
@@ -33,13 +33,15 @@ updated: 2026-08-28
 
 - Evidence: `qa/release/<version>/security/tui/`
 - Inputs: exact disposable TensorCash and Isometric Game paths/base commits
-- Tooling: repository `test-tui` skill, PTY, actual key sends, isolated `RUST_LOG=trace`
+- Tooling: existing Rust `TmuxServer` support and `test-tui` skill, PTY, actual key sends, isolated `RUST_LOG=trace`; do not reimplement the driver in shell.
 
 ## Preconditions
 
 - [ ] PF-26-S01 is completed and archived.
 - [ ] Final formatted candidate binary/version/commit is recorded.
 - [ ] Both disposable live-repository worktrees are resolved and safe for chaotic edits.
+- [ ] The typed tmux harness is merged and its required Ubuntu lane is green.
+- [ ] Product authority has approved numeric usability targets for the fixed research workflows.
 
 ## Done
 
@@ -60,17 +62,27 @@ updated: 2026-08-28
 - [ ] Exercise the PF-13 credential boundary through a user-visible Moderate workflow without exposing the canary.
 - [ ] If a failure requires code changes, return to the owning feature sprint, reformat/retest, rebuild, and rerun all affected final-candidate flows.
 
+## PF-13 tmux qualification contract
+
+- PF-26-S01 supplies the local capture proxy and scanner; drive them with the Rust test `tmux_pf13_moderate_credential_is_brokered_without_disclosure`.
+- Start the candidate in private tmux with isolated `CODEX_HOME`, temporary vault, unique canary, fixed dimensions and no live provider.
+- Send text and Enter separately. Exactly one approved `POST https://api.openai.com/v1/*` has `Authorization: Bearer <canary>` in transport capture alone.
+- Show success and a secret-free receipt; a raw `vault auth-helper` attempt is visibly denied under Moderate.
+- Scan model context, tool payloads, child environment, viewport, scrollback, logs, audit, errors, receipts, crash output and artifacts.
+- Exit and prove cleanup of the control reader, tmux server, proxy, children, private socket and temporary secret material.
+
 ## Verification
 
 - [ ] TensorCash success, failure/cancel, and recovery artifacts pass.
 - [ ] Isometric Game success, failure/cancel, and restart/resume artifacts pass.
 - [ ] Candidate binary hash matches the automated-evidence candidate.
 - [ ] Exact-key scripts and screenshots/logs contain no secret or protected financial value.
+- [ ] PF-13 passes with `CORBANU_TMUX_REQUIRED=1`, zero retries, exactly one transport-only canary occurrence and zero forbidden-surface occurrences.
 - [ ] TUI applicability: required and satisfied only by these true PTY runs.
 
 ## Exit evidence
 
 - [ ] Candidate, repositories, base commits, keys, checkpoints, and outcomes recorded.
-- [ ] Artifacts linked under `qa/release/<version>/security/tui/`.
+- [ ] Artifacts linked under `qa/release/<version>/security/tui/`; PF-13 uses `moderate/credential-boundary/` beneath it.
 - [ ] No flow relies on `corbanu exec`, mocks, snapshots, or smoke tests as its proof.
 - [ ] Ledgers reflect reality and the completed record is archived.

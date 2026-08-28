@@ -2687,6 +2687,7 @@ dependencies = [
  "codex-model-provider-info",
  "codex-network-proxy",
  "codex-protocol",
+ "codex-security-policy",
  "codex-utils-absolute-path",
  "codex-utils-path",
  "codex-utils-path-uri",
@@ -2820,6 +2821,7 @@ dependencies = [
  "codex-rollout",
  "codex-rollout-trace",
  "codex-sandboxing",
+ "codex-security-policy",
  "codex-shell-command",
  "codex-shell-escalation",
  "codex-skills",
@@ -2892,6 +2894,7 @@ dependencies = [
  "which 8.0.0",
  "whoami 1.6.1",
  "wiremock",
+ "zeroize",
  "zstd",
 ]
 
@@ -2913,6 +2916,7 @@ dependencies = [
  "codex-model-provider-info",
  "codex-models-manager",
  "codex-protocol",
+ "codex-security-policy",
  "codex-state",
  "codex-utils-absolute-path",
 ]
@@ -4149,6 +4153,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-security-policy"
+version = "0.1.35"
+dependencies = [
+ "pretty_assertions",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "codex-shell-command"
 version = "0.1.35"
 dependencies = [
@@ -4760,6 +4776,7 @@ dependencies = [
  "chrono",
  "codex-keyring-store",
  "codex-secrets",
+ "codex-security-policy",
  "pretty_assertions",
  "schemars 0.8.22",
  "serde",

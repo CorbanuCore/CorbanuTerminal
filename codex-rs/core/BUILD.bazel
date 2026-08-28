@@ -1,5 +1,10 @@
 load("//:defs.bzl", "codex_rust_crate")
 
+exports_files(
+    ["src/agent/builtins/standard_base.md"],
+    visibility = ["//codex-rs/models-manager:__pkg__"],
+)
+
 codex_rust_crate(
     name = "core",
     compile_data = glob(

@@ -17,9 +17,9 @@ product_spec:
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
-  - path: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
+  - path: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
     branch: "feat/p0-security-levels"
-    base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
+    base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
 ---
 
 # P0 `/security` levels
@@ -73,12 +73,13 @@ passing candidate evidence; no source citation alone closes an acceptance item.
   use separately constrained credential/financial execution, secretless agent
   launch and deterministic ingress/disclosure policy. Unsupported adapters or
   isolation fail visibly; they never fall back to raw credentials.
-- **All source requirements have owners.** Retain/reconcile 23 current records,
-  add 40 full-scope drafts plus five reviewed preparation/foundation units, and
-  leave all 72 cancelled records untouched. There are now 68 security execution
-  units; the seven Autoreview drafts are unrelated.
-- **No evidence is retroactively accepted.** The first seven recorded commits
-  still require reconciliation. PF-15-S01 remains the only ready sprint.
+- **All source requirements have owners.** The review's 68-record snapshot is
+  historical. Reconciliation with upstream preserves nine completed archives and
+  adds five narrow follow-ups: **64 current plus nine completed units**. All 72
+  cancelled firewall records and seven unrelated Autoreview drafts are unchanged.
+- **No evidence is retroactively accepted.** Upstream's PF-15–22 and PF-13-S01
+  completions remain accepted for their original scope. The stronger review
+  requirements have separate draft follow-ups; PF-13-S02 retains ready status.
 - The existing October 8 deadline is unchanged, but this larger program has not
   been effort-estimated or scheduled. The owner must assess capacity and surface
   any conflict; no scope or release gate is silently waived.
@@ -102,6 +103,32 @@ with Jim Ricketts as integration owner. No extra execution owner or worktree has
 been allocated and no sprint is activated by this amendment. Keep PF-13-S05 and
 PF-26 final qualification, full Moderate/Aggressive guarantees, independent
 Permissive evidence and the existing deadline pending measured capacity review.
+
+## Upstream reconciliation — 2026-08-28
+
+This review branch incorporates upstream `1bdc515bff48a4d9048dae7d06c6214e884265bc`.
+Its runtime code, completed sprint records and qualification artifacts are retained;
+this merge adds no runtime implementation or new release qualification.
+[Reconciliation evidence](../security-upstream-reconciliation-2026-08-28.md)
+records the two parent revisions, preservation checks and planning validation.
+
+| Accepted foundation | New requirement owner | Integration dependency |
+| --- | --- | --- |
+| PF-13-S01 opaque capability/store | PF-13-S06 usage reservations and trusted metering | PF-13-S03 before live transport |
+| PF-19-S01 generation/revocation types | PF-19-S02 dispatch fence and emergency restriction | PF-41-S03 / PF-22-S02, then transports and financial recovery |
+| PF-20-S01 versioned config persistence | PF-20-S02 protected authoritative state | After PF-27-S03; before runtime and migration |
+| PF-21-S01 frozen independent baseline | PF-21-S02 expanded surfaces and upstream drift | Before PF-22-S02 and final PF-26 |
+| PF-22-S01 policy and child inheritance | PF-22-S02 protected runtime and upstream seams | After new state/fence/event/compatibility contracts |
+
+PF-15–18 need no duplicate implementation sprint. Preserve all nine archives and
+their original evidence byte-for-byte. New cases cannot be checked off from those
+historical passes. The historical PF-22-S01 workspace run was **not green**:
+15,788 ran, 15,617 passed, 169 failed, two timed out and 28 were skipped.
+The owning repair work and final-candidate qualification remain required.
+
+The allocated Mac worktree/base follow upstream's record; the independent
+pre-feature Permissive baseline remains `3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb`.
+Neither updating allocation nor merging upstream rewrites that oracle.
 
 ## User pain
 
@@ -252,7 +279,7 @@ update; it cannot silently change Permissive or an accepted security level.
 
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
-| Jim Ricketts | `/home/pfrpc/repos/CorbanuTerminal-security-levels` | `feat/p0-security-levels` | `3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb` | Complete reconciled security program, policy/broker/ingress/financial adapters, TUI and evidence |
+| Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-security-levels` | `feat/p0-security-levels` | `7cc15ae0762664d6d01765de407329887da9f876` | Complete reconciled security program, policy/broker/ingress/financial adapters, TUI and evidence |
 
 Implementation does not occur in the documentation checkout. Update this plan
 before changing the implementation worktree, base, owner, or scope.
@@ -285,27 +312,26 @@ coordinates are not permission for concurrent workers in the same checkout.
 
 ## Sprint execution map
 
-This map covers every implementation and qualification unit currently required
-by the plan: **68 current sprints**. The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
-is the dependency-correct sequence; feature IDs are stable identifiers, not
-execution order. The original records retain the allocated worktree coordinates;
-the five new preparation/foundation drafts remain `UNALLOCATED` until assigned.
-Code presence is not completion: PF-15 through PF-21 reconcile seven existing
-feature-worktree commits whose final-tree evidence has not yet been accepted.
-Only dependency-free PF-15-S01 is `ready`; every other record remains `draft`
-until its dependencies are completed and archived.
+This map covers **64 current and nine completed archived sprints**.
+The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
+is dependency-correct; feature IDs are not execution order. Archive orders 1–9
+stay unchanged and current orders start at 10. Existing allocation coordinates
+follow upstream; the five preparation/foundation drafts and five new follow-ups
+remain `UNALLOCATED` until assigned. Only PF-13-S02 is `ready`; all other
+current records are `draft`, with completed prerequisites and checked allocation
+required before execution. Archived links document original scope, not new passes.
 
-| Feature ID | Plan feature | Current sprint records | State |
+| Feature ID | Plan feature | Sprint records (completed links are archived) | State |
 | --- | --- | --- | --- |
-| `PF-15` | Typed security-level domain | [PF-15-S01](../../sprints/current/p0-security-levels/pf-15-s01-security-level-domain-foundation.md) | Commit `a4f178fe15` present; reconciliation ready |
-| `PF-16` | Deterministic authorization request/decision | [PF-16-S01](../../sprints/current/p0-security-levels/pf-16-s01-authorization-decision-contract.md) | Commit `d183036cb0` present; evidence pending |
-| `PF-17` | Bounded grants and delegation | [PF-17-S01](../../sprints/current/p0-security-levels/pf-17-s01-bounded-delegation-grants.md) | Commit `d68c4dbc95` present; evidence pending |
-| `PF-18` | Human mandates and secret-free receipts | [PF-18-S01](../../sprints/current/p0-security-levels/pf-18-s01-human-mandates-and-receipts.md) | Commit `e22a35ccf2` present; evidence pending |
-| `PF-19` | Revocation and invalidation contract | [PF-19-S01](../../sprints/current/p0-security-levels/pf-19-s01-revocation-contract.md) | Commit `8a3b416c26` present; evidence pending |
-| `PF-20` | Versioned security persistence | [PF-20-S01](../../sprints/current/p0-security-levels/pf-20-s01-versioned-security-persistence.md) | Commit `0e3f2dfd92` present; evidence pending |
-| `PF-21` | Frozen Permissive compatibility | [PF-21-S01](../../sprints/current/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md) | Commit `220af8dae8` present; evidence pending |
-| `PF-22` | Effective runtime policy and agent inheritance | [PF-22-S01](../../sprints/current/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md) | draft |
-| `PF-13` | Vault-backed exact-host credential boundary | [S01](../../sprints/current/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md), [S02](../../sprints/current/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/current/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/current/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md) | draft |
+| `PF-15` | Typed security-level domain | [PF-15-S01](../../sprints/archive/p0-security-levels/pf-15-s01-security-level-domain-foundation.md) | S01 completed and archived |
+| `PF-16` | Deterministic authorization request/decision | [PF-16-S01](../../sprints/archive/p0-security-levels/pf-16-s01-authorization-decision-contract.md) | S01 completed and archived |
+| `PF-17` | Bounded grants and delegation | [PF-17-S01](../../sprints/archive/p0-security-levels/pf-17-s01-bounded-delegation-grants.md) | S01 completed and archived |
+| `PF-18` | Human mandates and secret-free receipts | [PF-18-S01](../../sprints/archive/p0-security-levels/pf-18-s01-human-mandates-and-receipts.md) | S01 completed and archived |
+| `PF-19` | Revocation and invalidation contract | [PF-19-S01](../../sprints/archive/p0-security-levels/pf-19-s01-revocation-contract.md), [PF-19-S02](../../sprints/current/p0-security-levels/pf-19-s02-dispatch-revocation-fence.md) | S01 completed; S02 follow-up draft |
+| `PF-20` | Versioned security persistence | [PF-20-S01](../../sprints/archive/p0-security-levels/pf-20-s01-versioned-security-persistence.md), [PF-20-S02](../../sprints/current/p0-security-levels/pf-20-s02-protected-authoritative-state.md) | S01 completed; S02 follow-up draft |
+| `PF-21` | Frozen Permissive compatibility | [PF-21-S01](../../sprints/archive/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md), [PF-21-S02](../../sprints/current/p0-security-levels/pf-21-s02-expanded-compatibility-and-upstream-drift.md) | S01 completed; S02 follow-up draft |
+| `PF-22` | Effective runtime policy and agent inheritance | [PF-22-S01](../../sprints/archive/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md), [PF-22-S02](../../sprints/current/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md) | S01 completed; S02 follow-up draft |
+| `PF-13` | Vault-backed exact-host credential boundary | [S01](../../sprints/archive/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md), [S02](../../sprints/current/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/current/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/current/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md), [PF-13-S06](../../sprints/current/p0-security-levels/pf-13-s06-credential-usage-reservations.md) | S01 completed; S02 ready; S03–S06 draft |
 | `PF-23` | Moderate/Aggressive protected-surface enforcement | [S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), [S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md), [S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | draft |
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
@@ -495,18 +521,19 @@ incomplete; do not substitute a wrapper heuristic or optional hosted service.
 
 ## Implementation sequence
 
-Use the [68-record ordered index](../../sprints/current/p0-security-levels/index.md)
+Use the [64-record current index](../../sprints/current/p0-security-levels/index.md)
 for exact dependencies. Bounded parallel allocations follow the sprint process;
-reading order is not a serial lock. The graph has 68 nodes and a longest
-unweighted chain of 35; that is not an elapsed-time estimate.
+reading order is not a serial lock. Including nine completed archives, the graph
+has 73 nodes and a longest unweighted chain of 34; remaining-only depth is 31.
+These are graph counts, not elapsed-time estimates or evidence of acceleration.
 
 1. **Prepare independent boundaries and reconcile foundations.** Allocate up to
    three checked workers: platform/foundation, browser artifact/destination policy,
    and segment/classifier preparation. Complete the new contract sprints before
    consumers; do not enable any protected path from fixtures alone.
-   **Reconcile existing foundations.** PF-15–21 review the seven recorded commits,
-   prove the frozen baseline and archive accepted evidence; PF-22 composes runtime policy.
-2. **Complete the first credential boundary.** PF-13-S01–S04 build narrow capabilities,
+   **Build only the remaining foundation guarantees.** Preserve PF-15–22/PF-13-S01
+   completions; PF-13-S06 and PF-19/20/21/22-S02 carry the newly accepted requirements.
+2. **Complete the first credential boundary.** PF-13-S02–S04 and S06 extend accepted capabilities,
    resolver and OpenAI substitution. PF-27/28/33 add process, output and connection
    guarantees. PF-24-S01 provides the initial honest profile view; PF-29 adds
    preflight/migration. PF-13-S05 then independently qualifies that complete boundary.
@@ -538,7 +565,7 @@ Run fix and formatting tools before the final affected tests.
 | --- | --- | --- | --- |
 | Plan and sprint lifecycle | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | pending | governance-check output |
 | Rust fix | `cd codex-rs && just fix -p <affected-project>` for every affected crate | pending; run before formatting/final tests | `qa/release/<version>/security/fix.txt` |
-| Permissive compatibility | `python3 scripts/security-level-compat --baseline <commit> --candidate <binary> --output <dir>` | pending; harness is PF-21/PF-26 work | `qa/release/<version>/security/compatibility/` |
+| Permissive compatibility | `python3 scripts/security-level-compat --baseline <commit> --candidate <binary> --output <dir>` | pending final candidate; existing PF-21-S01 harness is extended by PF-21-S02/PF-26 | `qa/release/<version>/security/compatibility/` |
 | Security policy | `cd codex-rs && just test -p codex-security-policy` | pending | `qa/release/<version>/security/policy-tests.txt` |
 | Config and core integration | `cd codex-rs && just test -p codex-config && just test -p codex-core` | pending | `qa/release/<version>/security/integration-tests.txt` |
 | Vault and network boundaries | `cd codex-rs && just test -p codex-vault && just test -p codex-network-proxy` | pending | `qa/release/<version>/security/boundary-tests.txt` |
@@ -552,7 +579,11 @@ Run fix and formatting tools before the final affected tests.
 
 ## True-TUI evidence
 
-Use the `test-tui` skill, `RUST_LOG=trace`, and an isolated `log_dir`. Send
+Use the existing Rust `TmuxServer` harness and `test-tui` skill, `RUST_LOG=trace`,
+and an isolated `log_dir`; do not replace the typed driver with shell automation.
+PF-26-S01 supplies the local capture proxy/scanner; PF-26-S02 retains the required
+Ubuntu lane, named credential-boundary test, zero-retry canary checks and cleanup.
+Send
 prompt text and Enter separately. `corbanu exec` is not acceptable proof.
 
 | Flow | Test repository | Keys/actions | Visible checkpoints | Result | Artifact |
@@ -598,13 +629,13 @@ before qualification.
 
 | Item | Owner | Needed by | State |
 | --- | --- | --- | --- |
-| Permissive golden baseline | Jim Ricketts | PF-21-S01 | Commit `220af8dae8` contains an initial manifest/tests; final reconciliation evidence is pending |
-| Existing security-policy commits | Jim Ricketts | PF-15 through PF-21 | Seven commits are present; none is accepted until its current sprint completes and archives |
+| Permissive golden baseline | Jim Ricketts | PF-21-S02 / PF-26 | S01 accepted independent manifest/probes preserved; expanded surfaces and upstream-aligned drift controls pending |
+| Existing foundations | Jim Ricketts | Current consumers | PF-15–22 and PF-13-S01 completed/archived upstream; five follow-ups remain draft for added review guarantees |
 | Moderate and Aggressive control matrix | Product authority | PF-23 review | Defined in the product specification; any change requires a product decision |
-| Persistence and downgrade invalidation | Jim Ricketts | PF-20/PF-23 | Persistence code is present; transition and final evidence remain pending |
+| Persistence and downgrade invalidation | Jim Ricketts | PF-20-S02 / PF-23 | S01 versioned config accepted; protected authoritative store and transitions still pending |
 | Independent security reviewer | Release owner | PF-13-S05 and final qualification | Must be named before either review completes |
 | Human tester | Release owner | Final qualification | Must be named before acceptance |
-| Expanded program capacity | Jim Ricketts / product authority | Execution scheduling | 68 units / 35 unweighted stages; dated resource/effort/review estimate required before second worker allocation; October 8 feasibility pending, no scope silently removed |
+| Expanded program capacity | Jim Ricketts / product authority | Execution scheduling | 64 remaining units / 31 unweighted remaining stages; dated resource/effort/review estimate required before second worker allocation; October 8 feasibility pending, no scope silently removed |
 | Platform isolation capability matrix | Jim Ricketts | PF-27-S03 completion and PF-27/PF-31 integration readiness | Linux/macOS/Windows mechanism choices and probes required; unsupported protected paths block visibly |
 | Moderate workflow usability targets | Product authority / Jim Ricketts | PF-26-S02 readiness | Numeric task-completion, approval-count and latency targets with fixed workflows pending; no relaxation of protection |
 | Local detector hardware/corpus/license pins | Jim Ricketts / evaluator | PF-35-S01 | Exact weakest supported CPU, licensed corpus and blind evaluator ownership pending |
@@ -618,7 +649,8 @@ before qualification.
 - Release record: `qa/release/<version>/` — pending target version.
 - Benchmark tracker: repository-root `benchmarks/README.md`, when due for the
   target release.
-- Remaining blockers: implementation, final compatibility and adversarial
+- Remaining blockers: implementation, unresolved historical full-suite failures,
+  final compatibility and adversarial
   evidence, independent security review, true-TUI qualification, and named
   human acceptance.
 
@@ -627,7 +659,7 @@ before qualification.
 - [ ] Accepted architecture refinements and upstream-seam register have final-tree evidence.
 - [ ] Parallel allocations, scope audits and combined-tree integration evidence are complete.
 
-- [x] Complete source scope is mapped to 68 single-feature sprints; every one of the 72 cancelled archive records has an explicit disposition.
+- [x] Complete source scope maps to 64 current and nine completed single-feature sprints; all 72 cancelled records have explicit dispositions.
 - [ ] Every PF-27–41 contract and protected-mode readiness condition passes final-candidate evidence.
 - [ ] Optional hosted/reviewer lanes are explicitly qualified-enabled or disabled with an auditable reason.
 - [ ] Permissive compatibility is proven against the frozen pre-feature baseline.

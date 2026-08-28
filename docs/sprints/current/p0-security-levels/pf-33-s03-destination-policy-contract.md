@@ -4,7 +4,7 @@ title: "Pure destination-policy contract"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-33"
-execution_order: 4
+execution_order: 13
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"

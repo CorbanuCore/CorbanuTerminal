@@ -5621,6 +5621,127 @@ async fn memory_tool_makes_memories_root_readable_without_creating_or_widening_w
 }
 
 #[tokio::test]
+async fn missing_security_state_defaults_to_permissive() -> std::io::Result<()> {
+    let codex_home = TempDir::new()?;
+    let config = Config::load_from_base_config_with_overrides(
+        ConfigToml::default(),
+        ConfigOverrides::default(),
+        codex_home.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.security_level, SecurityLevel::Permissive);
+    Ok(())
+}
+
+#[tokio::test]
+async fn explicit_security_state_round_trips_into_effective_config() -> std::io::Result<()> {
+    let codex_home = TempDir::new()?;
+    let config = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            security: Some(codex_security_policy::SecuritySettings::new(
+                SecurityLevel::Moderate,
+            )),
+            ..Default::default()
+        },
+        ConfigOverrides::default(),
+        codex_home.abs(),
+    )
+    .await?;
+
+    assert_eq!(config.security_level, SecurityLevel::Moderate);
+    Ok(())
+}
+
+#[tokio::test]
+async fn unsupported_security_state_version_fails_visibly() -> std::io::Result<()> {
+    let codex_home = TempDir::new()?;
+    let error = Config::load_from_base_config_with_overrides(
+        ConfigToml {
+            security: Some(codex_security_policy::SecuritySettings {
+                version: 99,
+                level: SecurityLevel::Aggressive,
+            }),
+            ..Default::default()
+        },
+        ConfigOverrides::default(),
+        codex_home.abs(),
+    )
+    .await
+    .expect_err("unknown persisted version must fail");
+
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    assert!(
+        error
+            .to_string()
+            .contains("unsupported security settings version 99")
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn permissive_security_state_preserves_existing_policy_resolution() -> std::io::Result<()> {
+    let codex_home = TempDir::new()?;
+    for (approval_policy, sandbox_mode, network_access) in [
+        (AskForApproval::OnRequest, SandboxMode::ReadOnly, false),
+        (
+            AskForApproval::UnlessTrusted,
+            SandboxMode::WorkspaceWrite,
+            true,
+        ),
+        (AskForApproval::Never, SandboxMode::DangerFullAccess, true),
+    ] {
+        let base = ConfigToml {
+            approval_policy: Some(approval_policy),
+            sandbox_mode: Some(sandbox_mode),
+            sandbox_workspace_write: (sandbox_mode == SandboxMode::WorkspaceWrite).then_some(
+                SandboxWorkspaceWrite {
+                    writable_roots: Vec::new(),
+                    network_access,
+                    exclude_tmpdir_env_var: false,
+                    exclude_slash_tmp: false,
+                },
+            ),
+            ..Default::default()
+        };
+        let without_security = Config::load_from_base_config_with_overrides(
+            base.clone(),
+            ConfigOverrides::default(),
+            codex_home.abs(),
+        )
+        .await?;
+        let with_permissive = Config::load_from_base_config_with_overrides(
+            ConfigToml {
+                security: Some(codex_security_policy::SecuritySettings::new(
+                    SecurityLevel::Permissive,
+                )),
+                ..base
+            },
+            ConfigOverrides::default(),
+            codex_home.abs(),
+        )
+        .await?;
+
+        assert_eq!(without_security.security_level, SecurityLevel::Permissive);
+        assert_eq!(with_permissive.security_level, SecurityLevel::Permissive);
+        assert_eq!(
+            without_security.permissions.approval_policy.value(),
+            approval_policy
+        );
+        assert_eq!(with_permissive.permissions, without_security.permissions);
+        assert_eq!(
+            with_permissive.legacy_sandbox_policy(),
+            without_security.legacy_sandbox_policy()
+        );
+        assert_eq!(
+            with_permissive.permissions.network_sandbox_policy(),
+            without_security.permissions.network_sandbox_policy()
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn config_defaults_to_resolved_cli_auth_store_mode() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml::default();

@@ -617,12 +617,21 @@ impl Session {
             }
         });
         let initial_auto_compact_window_ids = AutoCompactWindowIds::new_initial();
-        let agent_control = agent_control.with_session_id(
-            session_id,
-            config
-                .effective_agent_max_threads(MultiAgentVersion::V2)
-                .unwrap_or(usize::MAX),
-        );
+        let agent_control = agent_control
+            .with_session_id(
+                session_id,
+                config
+                    .effective_agent_max_threads(MultiAgentVersion::V2)
+                    .unwrap_or(usize::MAX),
+            )
+            .with_effective_security_policy(
+                config.security_level,
+                thread_id,
+                matches!(
+                    session_configuration.session_source,
+                    SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. })
+                ),
+            )?;
         let time_provider = crate::current_time::resolve_time_provider(
             config.current_time_reminder.as_ref(),
             external_time_provider,

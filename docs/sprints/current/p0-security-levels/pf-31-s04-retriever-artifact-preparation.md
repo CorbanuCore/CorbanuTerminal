@@ -4,7 +4,7 @@ title: "Retriever artifact and engine preparation"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-31"
-execution_order: 3
+execution_order: 12
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
