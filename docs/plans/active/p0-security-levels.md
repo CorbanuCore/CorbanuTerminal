@@ -605,6 +605,14 @@ dispositions are recorded in `qa/security-levels/sprints/PF-13-S05/kimi-outside-
 This clarification does not reopen archived foundation sprints or authorize
 PF-23 wiring inside the S05 qualification lane.
 
+The accepted repair cycle is implemented through `f6ec1c75f`: Kimi returned no
+findings, Mac/Linux canaries each passed 47 tests with final executable hashes
+verified, and the final Mac candidate passed actual PTY success/cancel/recovery/
+resume. S05 remains `in_progress`: the complete Core rerun has 19 failures and
+final Windows access is unavailable. Evidence and the scope-separated Core
+triage are in `qa/security-levels/sprints/PF-13-S05/repair-evidence.md`; these
+results do not authorize unrelated native lifecycle/tool changes or waive gates.
+
 ## Acceptance flows
 
 | Flow | Starting state | User action | Expected visible result | Pass criterion |

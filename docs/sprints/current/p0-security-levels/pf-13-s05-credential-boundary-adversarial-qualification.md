@@ -48,7 +48,7 @@ updated: 2026-08-28
 
 - [x] Sprint record defines one bounded qualification outcome.
 - [x] Generated a unique canary and exercised one authorized in-process header injection without printing or persisting the value; no live provider request was measured.
-- [x] Scanned test-constructed model/tool/environment, header, log/audit/receipt/error and artifact surfaces; production panic-hook output and truncated captures remain gaps.
+- [x] Scanned test-constructed model/tool/environment, header, log/audit/receipt/error and artifact surfaces; the original production-hook and truncated-capture gaps are closed by the repair evidence below.
 - [x] Exercised malformed, forged, expired, revoked, replayed, wrong-actor/purpose/operation/method/host/scope, redirect, concurrent-use, and revocation-race cases.
 - [x] Proved bounded-store cleanup and denial before repeat resolution in component tests; no provider network round trips were measured.
 - [x] Ran Linux locally and attached passing commit-bound CI evidence for macOS and Windows without weakening host checks.
@@ -60,13 +60,15 @@ updated: 2026-08-28
 - [x] C2: contain scoped callback panic output with Vault's permanent guarded hook and thread-local scope; production logging/terminal hooks, nested/concurrent/unscoped and recovery proof passed on macOS.
 - [x] F4/F6: zeroizing scoped header temporary, sensitive final header and corrected label comment; 295 Vault/proxy/policy tests passed with legacy behavior unchanged.
 - [x] Final Kimi K3 High repair review returned no findings; both initial P3 suggestions resolved. Artifacts and final source hashes are in `qa/security-levels/sprints/PF-13-S05/repair-evidence.md`.
+- [x] F3: copied-vault/canonical-home and both-home-variable symlink CLI tests passed on Mac/Linux; custom homes remain supported and parent-policy composition stays in PF-23.
+- [x] Restored and identified the production executable after all CLI probes; eleven Python tests and Kimi's artifact-identity review passed.
+- [x] Final Mac/Linux canaries each passed all nine groups / 47 tests at clean candidate `f6ec1c75f`; report hashes match the on-disk executables. Final Mac PTY success/cancel/recovery/resume passed on a byte-identical candidate.
+- [x] Re-ran complete Core with companion executables: 3,388/3,407 passed, 19 failed; all 13 credential tests passed. Preserved full JUnit and classified every remaining failure without weakening tests.
 
 ## Remaining
 
-- [ ] F3: copied encrypted vault/canonical home keyring tests pass; run the new native symlink-home CLI tests. Preserve custom-home support and defer parent-policy composition to PF-23.
-- [ ] Triage the 135 complete-Core failures and record a clean full rerun; all 13 credential-named tests already pass.
-- [ ] Repeat affected tests and platform canaries against the final integrated candidate; historical results are not relabeled as merge qualification.
-- [ ] Final artifact identity: CLI probe builds replace the executable; rebuild and identify the production candidate after all probes, with an ordering regression test and refreshed Kimi/harness evidence.
+- [ ] Scope the remaining Core lifecycle/tool/shell/serialization repairs, then obtain a clean complete rerun. Nineteen failures remain; the additional prompt-cache failure passes in isolation but is not removed from the full-run result.
+- [ ] Run the final Windows canary, including the new directory-junction posture test, when authorized connectivity is available. Historical Windows results are not relabeled as qualification of the repaired candidate.
 
 Mac failure triage and qualification repairs may run concurrently within this
 sprint. This amended implementation mandate authorizes only the repairs above;
@@ -74,16 +76,16 @@ additional runtime fixes return to scope review and require affected reruns.
 
 ## Verification
 
-- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
+- [x] Record applicable upstream adapter evidence: permanent Vault guard, thin native TUI hook checks, unchanged legacy provider path, focused tests and final PTY; verified upstream ancestor is recorded in repair evidence.
 - [x] Fix and format all affected crates before the final run; inspect the final diff.
 - [ ] Final affected tests: `cd codex-rs && just test -p codex-security-policy && just test -p codex-vault && just test -p codex-network-proxy && just test -p codex-core`.
 - [x] Canary: `python3 scripts/security-credential-canary --candidate <binary> --output qa/security-levels/sprints/PF-13-S05/`.
 - [x] Reviewer, reviewed commit, commands and historical platform/canary identities are recorded without claiming a final integrated pass.
-- [ ] TUI: production panic-hook subprocess proof plus final candidate startup/cancel/resume in a PTY; no new UI. PF-26-S02 retains integrated feature/live-repository qualification.
+- [x] TUI: production panic-hook subprocess proof plus final candidate startup/cancel/resume in a PTY; no new UI. PF-26-S02 retains integrated feature/live-repository qualification.
 
 ## Exit evidence
 
-- [ ] Final integrated candidate commit and artifact manifest recorded after review repairs.
-- [ ] Canary absent from every required unauthorized/model-visible surface, including complete output and production panic-hook coverage.
-- [ ] Independent security review passes with no open P0 finding.
+- [x] Final integrated candidate `f6ec1c75f` and artifact/source manifests recorded after review repairs; Core and Windows limitations remain explicit.
+- [ ] Final all-platform canary proof: Mac/Linux required component surfaces, complete output and production panic hooks passed; Windows remains pending. Native PF-23 wiring is not claimed.
+- [x] Independent accepted-repair security review passes with no findings; native integration review remains downstream in PF-23/PF-26.
 - [ ] Ledgers reflect reality and the completed record is archived.

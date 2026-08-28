@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="nextest-run" tests="1" skipped="0" failures="0" errors="0" uuid="71836555-03e0-4433-bd60-dac76e371afc" timestamp="2026-08-27T23:33:53.612-07:00" time="0.322">
+    <testsuite name="codex-core::all" tests="1" skipped="0" errors="0" failures="0">
+        <testcase name="suite::prompt_caching::overrides_turn_context_but_keeps_cached_prefix_and_key_constant" classname="codex-core::all" timestamp="2026-08-27T23:33:53.618-07:00" time="0.316"/>
+    </testsuite>
+</testsuites>

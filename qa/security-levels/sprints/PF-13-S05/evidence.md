@@ -15,16 +15,19 @@
 - Local macOS candidate SHA-256: `b4db4cf7b3f1f70465e25028e51f0ac7553427ad5be7dbc3b0a7e47dc68ed8f1`
 - Local macOS report SHA-256: `6105fef2834e179ea955f9758f896005fb368a3228f87d3e3f840d75ef999ed5`
 - Local macOS Core JUnit SHA-256 (gzip): `c2fdeb23c5e2c86dcc8cd636e25377c5ab20ce45ad83d96e25cb30b09a1476dd`
-- TUI applicability: none; this sprint changes no interactive surface.
+- Original TUI applicability: none. The later accepted panic-hook repair requires and now has final-candidate PTY proof in `repair-final-tui-macos.md`.
 
 ## Current result
 
 Historical credential canary runs passed on Linux, macOS, and Windows, including
 a separate local macOS reproduction and a Windows 2022 follow-up at the recorded
 clean candidate. These are invoked component/test-seam results, not proof of a
-native session using scoped credentials. The complete macOS Core suite remains
-failed with 135 failures. The Kimi outside review is complete; **qualification
-remains not ready**.
+native session using scoped credentials. Those historical records remain intact.
+The accepted [repair cycle](repair-evidence.md) subsequently passed 47 canary
+tests on both Mac and Linux at `f6ec1c75f`, final Mac PTY proof and Kimi review.
+The fresh complete Core run passed 3,388/3,407 with 19 failures (down from the
+historical 135); final-tree Windows evidence is unavailable. **Qualification
+remains not ready**; see [Core triage](repair-core-triage.md).
 
 Subsequent [outside-review attempt](fable-outside-review.md): all work through
 the PF-30 platform repair and this Windows report was merged into the PF-13
