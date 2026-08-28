@@ -1,0 +1,14 @@
+{
+  "reviewed_base": "f0a160eee5b820bc16fcd116013274d44e7d9be4",
+  "findings": [],
+  "coverage": [
+    "REPAIR_FILES.sha256: 16/16 entries verified OK; 12 files hash-identical to prior snapshot, 4 changed (tui/src/tui.rs, tui/src/credential_panic_tests.rs, scripts/security_credential_canary.py, scripts/test_security_credential_canary.py)",
+    "REPAIR_DIFF.patch read in full",
+    "P3-A: tui/src/tui.rs:537 set_panic_hook now checks scoped_credential_callback_active() before restore_after_exit() and chaining; test installs the real color_eyre -> install_panic_hook -> set_panic_hook chain in both orders",
+    "P3-B: scripts/security_credential_canary.py overflow error includes measured/limit bytes; test asserts exact message",
+    "TUI fixture: authorization.schema_version=1 added (matches AUTHORIZATION_SCHEMA_VERSION=1); grant schema_version=2 (matches GRANT_SCHEMA_VERSION=2); deny_unknown_fields satisfied",
+    "Re-verified unchanged: C1 run_command scan-before-limit + timeout denial, C2 vault/src/credential_panic.rs guard + Once hook, F3 home/keyring tests, F4 scoped_openai_header_value zeroizing+sensitive, F6 label comment",
+    "tui/src/lib.rs module wiring (mod tui; #[cfg(test)] mod credential_panic_tests; pub(super) visibility), codex-vault dependency present in tui/Cargo.toml"
+  ],
+  "verdict": "The complete repair delta is correct and self-consistent. Both prior P3 suggestions (terminal-restore hook flag check with real-chain test; overflow byte-count error) are properly resolved, and the TUI fixture schema omission caught by the first real run is fixed and now satisfies the security-policy deserialization contract. No new defects introduced. The five accepted fixes (C1/C2/F3/F4/F6) are implemented as scoped, with PF-23 native wiring, legacy/Permissive headers, and dummy shaping correctly excluded. This does not certify full Core/platform readiness, which is running separately."
+}

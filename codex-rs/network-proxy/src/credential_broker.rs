@@ -346,8 +346,7 @@ impl ScopedCredentialRecord {
         };
         let mut inserted = false;
         let mut callback = |secret: &str| {
-            let Some(header_value) = providers::openai_provider().request_header_value(secret)
-            else {
+            let Some(header_value) = providers::scoped_openai_header_value(secret) else {
                 return Err(ScopedCredentialCallbackError::Failed);
             };
             providers::openai_provider().insert_request_header(headers, header_value);

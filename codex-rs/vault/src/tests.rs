@@ -524,3 +524,65 @@ fn corrupt_encrypted_state_fails_closed() {
     assert!(reopened.list().is_err());
     assert!(reopened.reveal("protected").is_err());
 }
+
+#[test]
+fn copied_vault_in_another_home_cannot_use_the_original_keyring_account() {
+    let (original, keyring, vault) = test_vault();
+    vault
+        .add(api_key_entry("protected", "synthetic-home-binding-canary"))
+        .expect("seed original encrypted vault");
+    let copied = tempfile::tempdir().expect("alternate home");
+    let original_file = original.path().join("secrets/local.age");
+    let copied_file = copied.path().join("secrets/local.age");
+    let ciphertext = std::fs::read(&original_file).expect("encrypted original");
+    std::fs::create_dir(copied.path().join("secrets")).expect("copied secrets directory");
+    std::fs::write(&copied_file, &ciphertext).expect("copy ciphertext, not keyring material");
+    assert_ne!(
+        codex_secrets::compute_keyring_account(original.path()),
+        codex_secrets::compute_keyring_account(copied.path())
+    );
+    let copied_vault = Vault::new_with_keyring_store(copied.path().to_path_buf(), keyring.clone());
+    assert!(
+        copied_vault
+            .reveal_for_programmatic_use("protected", SecurityLevel::Permissive)
+            .is_err()
+    );
+    assert_eq!(
+        std::fs::read(&copied_file).expect("unchanged ciphertext"),
+        ciphertext
+    );
+    let reopened = Vault::new_with_keyring_store(original.path().to_path_buf(), keyring);
+    assert_eq!(
+        reopened
+            .reveal("protected")
+            .expect("original account still works"),
+        "synthetic-home-binding-canary"
+    );
+}
+
+#[test]
+fn canonical_home_alias_preserves_keyring_identity_and_label_case() {
+    let (home, keyring, vault) = test_vault();
+    vault
+        .add(api_key_entry("Case", "first-value"))
+        .expect("upper-case label");
+    vault
+        .add(api_key_entry("case", "second-value"))
+        .expect("lower-case label");
+    let alias = home.path().join(".");
+    let reopened = Vault::new_with_keyring_store(alias.clone(), keyring);
+    assert_eq!(
+        codex_secrets::compute_keyring_account(&alias),
+        codex_secrets::compute_keyring_account(home.path())
+    );
+    assert_eq!(
+        reopened
+            .reveal(" Case ")
+            .expect("trimmed case-preserving lookup"),
+        "first-value"
+    );
+    assert_eq!(
+        reopened.reveal("case").expect("distinct label"),
+        "second-value"
+    );
+}

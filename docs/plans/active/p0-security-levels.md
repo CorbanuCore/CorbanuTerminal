@@ -11,7 +11,7 @@ activation_basis: "Accountable sequencing item 1 defines /security as P0 and imm
 target_release: "TBD — candidate qualified by 2026-10-08"
 deadline: 2026-10-08
 created: 2026-08-23
-updated: 2026-08-27
+updated: 2026-08-28
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
@@ -61,6 +61,7 @@ Plan lifecycle: `docs/plans/index.md`
 | Browser/content activation | Travis Good, 2026-08-27: approve pushing PF-26-S01 and starting PF-30/PF-29 in parallel; allocate the two worktrees below. PF-13 qualification retains the third slot. |
 | Runtime and acceptance decision | Travis Good, 2026-08-27: reuse Podman/Docker; prefer Podman for new installs; guide setup and recover only owned Scrapling services in stronger modes; require all three OSes, Mac/Linux first. Human tester is Travis Good (acceptance pending). |
 | S01 implementation and reviewer | Travis Good, 2026-08-27: implement PF-30-S01 end to end; reviewer is Fable High (`claude-fable-5`, high effort). No fallback reviewer; Windows instructions follow Mac/Linux qualification. |
+| PF-13 review repairs | Travis Good, 2026-08-28 UTC: “Please commit all work and then do all fixes.” Review checkpoint `f0a160eee`; amend PF-13-S05 to implement accepted C1/C2/F3/F4/F6 repairs, triage Core and rerun qualification/review. Reject scoped dummy-shape finding; PF-23/native profile wiring remains separate; no push/release requested. |
 
 The scope/integration amendments approved product-initiative planning plus routine
 process/validator work; the later PF-27 activation starts only its allocated sprint,
@@ -210,7 +211,7 @@ update; it cannot silently change Permissive or an accepted security level.
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
 | Jim Ricketts | `/home/pfrpc/repos/CorbanuTerminal-pf13-s02` | `feat/pf-13-s02-scoped-vault-resolver` | `1bdc515bff48a4d9048dae7d06c6214e884265bc` | Security-level model, persistence, policy composition, TUI, tests, and evidence |
-| Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-pf13-s02` | `feat/pf-13-s02-scoped-vault-resolver` | `1bdc515bff48a4d9048dae7d06c6214e884265bc` | macOS qualification, complete Core regression, and evidence reconciliation |
+| Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-pf13-s02` | `feat/pf-13-s02-scoped-vault-resolver` | `1bdc515bff48a4d9048dae7d06c6214e884265bc` | Accepted PF-13 review repairs under amended S05, macOS qualification, complete Core regression, and evidence reconciliation |
 | Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-pf27-s01` | `codex/pf-27-shared-security-contracts` | `ea7d4bec720098f6e0994fcfcc59e272108f7e70` | PF-27 shared security contracts; Codex implementation, separate from PF-13 candidate |
 | Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-pf26-s01` | `codex/pf-26-security-harnesses` | `cb808c30c0058c101597ab2ada3da16238565c5e` | PF-26-S01 Python harnesses, fixtures and evidence only; no native runtime or PF-13 edits |
 | Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-pf30-s01` | `codex/pf-30-isolated-runtime` | `9fc9c9106c8afd38aff48d0e5ad4a5f2552b723c` | PF-30-S01 browser backend; shared planning updates serialized here |
@@ -473,6 +474,7 @@ claims that every named adapter already exists.
 | Feature / sprint | Upstream touch and native seam | Product boundary / reason | Contract proof and upgrade disposition |
 | --- | --- | --- | --- |
 | PF-13-S05 | Existing broker/provider request adapters; inventory from S01–S04 commits | `vault/`, `security-policy/`; trusted exact credential use | Preserve historical platform identities; Kimi review completed with open scanning/panic-proof and integration-evidence gaps; full-Core triage/rerun and adapter inventory remain pending |
+| PF-13-S05 repair mandate | `vault/src/{lib,capability,credential_panic,credential_panic_tests,capability_tests,tests}.rs`; `network-proxy/src/credential_broker.rs`, `credential_broker/providers.rs`, `credential_broker_tests.rs`; `tui/src/lib.rs`, `tui.rs`, `credential_panic_tests.rs`; `cli/tests/vault.rs`; `core/src/security/credential_capability_tests.rs`; Python canary and tests under `scripts/` | Vault owns synchronous callback/panic containment; TUI only guards its existing panic logger and terminal-restoration hook; scoped broker owns sensitive header construction; no new dependency, wire/config/storage format or scheduler | Upstream `413492cd6c3a4d4f8dff6f406247ccda5a9d88aa` ancestry reverified at checkpoint `f0a160eee`. Retain native unscoped panic chain and legacy headers; no upstream update performed. `just test -p codex-vault`, `-p codex-network-proxy`, `-p codex-cli --test vault`, scoped TUI production-hook tests, complete Core, Python canary tests and final platform harness runs; actual results in S05 repair evidence. |
 | PF-27-S01 | `protocol/src/lib.rs`, Core/TUI/network module registration and existing Core policy snapshot | Typed security integration contracts; one registration owner | Completed contract/epoch/native-inheritance tests on macOS; [retained/adapted seam decisions](https://github.com/CorbanuCore/CorbanuTerminal/blob/cb808c30c0058c101597ab2ada3da16238565c5e/qa/security-levels/sprints/PF-27-S01/consumer-contracts.md); native consumer qualification remains pending |
 | PF-28-S01 | Provider/output serialization and child environments; enumerate all literal hooks | Core confidentiality module consuming vault broker | Exact outgoing-byte, reflected-error, log/export/environment canaries; no duplicate scanner policy |
 | PF-29-S01 | `core/src/mcp_tool_call.rs`, `core/src/session/inject.rs`; remaining native adapter inventory pending | `core/src/security/ingress/`; native ingestion adapters | The old `core/src/tools/handlers/read_file.rs` is absent at this baseline; resolve concrete tool/file/context hooks before readiness, not a placeholder implementation |

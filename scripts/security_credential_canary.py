@@ -101,8 +101,53 @@ PROBES = (
             "expired_and_revoked_authority_is_revalidated_before_decryption",
             "mismatched_label_and_scope_are_rejected_as_stable_errors",
         ),
-        source_paths=("codex-rs/vault/src/capability_tests.rs",),
+        source_paths=(
+            "codex-rs/vault/src/capability_tests.rs",
+            "codex-rs/vault/src/capability.rs",
+        ),
         covers=("vault_callback", "crash_output", "expired", "revoked", "scope"),
+    ),
+    Probe(
+        probe_id="vault-panic-hook-containment",
+        package="codex-vault",
+        cargo_args=("--lib", "credential_panic"),
+        expected_tests=(
+            "scoped_credential_panic_guard_restores_nested_and_unwound_scopes",
+            "scoped_credential_panic_hook_is_thread_local_and_preserves_other_panics",
+        ),
+        source_paths=(
+            "codex-rs/vault/src/credential_panic_tests.rs",
+            "codex-rs/vault/src/credential_panic.rs",
+        ),
+        covers=(
+            "panic_hook",
+            "nested_scope",
+            "concurrent_scope",
+            "ordinary_panic_compatibility",
+        ),
+    ),
+    Probe(
+        probe_id="vault-canonical-home-binding",
+        package="codex-vault",
+        cargo_args=("--lib", "home"),
+        expected_tests=(
+            "copied_vault_in_another_home_cannot_use_the_original_keyring_account",
+            "canonical_home_alias_preserves_keyring_identity_and_label_case",
+        ),
+        source_paths=("codex-rs/vault/src/tests.rs", "codex-rs/secrets/src/lib.rs"),
+        covers=("canonical_home", "copied_ciphertext", "custom_home_compatibility"),
+    ),
+    Probe(
+        probe_id="production-tui-panic-hook",
+        package="codex-tui",
+        cargo_args=("--lib", "production_panic_hook_does_not_log_scoped_credentials"),
+        expected_tests=("production_panic_hook_does_not_log_scoped_credentials",),
+        source_paths=(
+            "codex-rs/tui/src/credential_panic_tests.rs",
+            "codex-rs/tui/src/lib.rs",
+            "codex-rs/tui/src/tui.rs",
+        ),
+        covers=("production_panic_hook", "stderr", "logs", "panic_recovery"),
     ),
     Probe(
         probe_id="proxy-injection-boundary",
@@ -182,6 +227,7 @@ PROBES = (
             "vault_auth_helper_denies_raw_export_in_protected_levels_without_label_disclosure",
             "vault_auth_helper_preserves_permissive_compatibility_path",
             "vault_auth_helper_cli_override_cannot_downgrade_persisted_posture",
+            "vault_auth_helper_symlink_home_cannot_downgrade_persisted_posture",
         ),
         source_paths=("codex-rs/cli/tests/vault.rs",),
         covers=("raw_export", "downgrade", "errors"),
@@ -199,16 +245,6 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def bounded_output(value: str) -> str:
-    encoded = value.encode("utf-8", errors="replace")
-    if len(encoded) <= MAX_CAPTURE_BYTES:
-        return value
-    suffix = b"\n... output truncated by security-credential-canary ...\n"
-    return (encoded[: MAX_CAPTURE_BYTES - len(suffix)] + suffix).decode(
-        "utf-8", errors="replace"
-    )
 
 
 def sanitized_environment(temporary_directory: Path) -> dict[str, str]:
@@ -231,20 +267,37 @@ def run_command(
     env: dict[str, str],
     timeout_seconds: int = 900,
 ) -> CommandResult:
-    completed = subprocess.run(
-        command,
-        cwd=cwd,
-        env=env,
-        text=True,
-        capture_output=True,
-        timeout=timeout_seconds,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=cwd,
+            env=env,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            timeout=timeout_seconds,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        raise QualificationError(
+            "command timed out; output capture is incomplete"
+        ) from None
+    # Never discard unscanned output or certify a partial test transcript. Scan
+    # first so a credential beyond the retention limit still fails explicitly.
+    for surface, output in (("stdout", completed.stdout), ("stderr", completed.stderr)):
+        assert_secret_free(output, f"command {surface}")
+        output_bytes = len(output.encode("utf-8"))
+        if output_bytes > MAX_CAPTURE_BYTES:
+            raise QualificationError(
+                f"command {surface} exceeds the capture limit: "
+                f"{output_bytes} bytes > {MAX_CAPTURE_BYTES} bytes"
+            )
     return CommandResult(
         command=command,
         returncode=completed.returncode,
-        stdout=bounded_output(completed.stdout),
-        stderr=bounded_output(completed.stderr),
+        stdout=completed.stdout,
+        stderr=completed.stderr,
     )
 
 

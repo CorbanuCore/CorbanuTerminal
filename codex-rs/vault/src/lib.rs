@@ -52,10 +52,12 @@ use thiserror::Error;
 use zeroize::Zeroizing;
 
 mod capability;
+mod credential_panic;
 
 pub use capability::ScopedCredentialCallbackError;
 pub use capability::ScopedCredentialError;
 pub use capability::VaultCredentialRef;
+pub use credential_panic::scoped_credential_callback_active;
 
 #[cfg(test)]
 mod tests;
@@ -596,7 +598,7 @@ impl Vault {
 ///
 /// Labels must be 1..=128 chars and may contain ASCII alphanumerics, `-`, `_`,
 /// `.`, and `/` (so provider-scoped labels like `ambient/api-key` work). They
-/// are trimmed and lowercased for stable lookups.
+/// are trimmed for stable lookups; case-distinct labels remain distinct.
 fn normalize_label(raw: &str) -> Result<String, VaultError> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {

@@ -609,8 +609,8 @@ fn credential_authority_unique_canary_is_confined_to_one_outgoing_request() {
         .into_vault_ref()
         .expect("crash vault reference");
     let crash_error = vault
-        .with_scoped_credential(&crash_reference, 100, &revocations, |_| {
-            panic!("credential canary callback crash")
+        .with_scoped_credential(&crash_reference, 100, &revocations, |secret| {
+            panic!("credential canary callback crash: {secret}")
         })
         .expect_err("callback panic must be contained");
     assert_eq!(

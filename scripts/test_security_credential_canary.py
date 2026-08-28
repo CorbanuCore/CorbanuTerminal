@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -12,6 +13,93 @@ import security_credential_canary as canary
 
 
 class SecurityCredentialCanaryTests(unittest.TestCase):
+    def test_real_subprocess_canary_after_limit_is_rejected(self) -> None:
+        for stream in ("stdout", "stderr"):
+            with self.subTest(stream=stream):
+                source = (
+                    f"import sys; sys.{stream}.write('x' * {canary.MAX_CAPTURE_BYTES} "
+                    "+ '\\nsk-synthetic-subprocess-canary\\n')"
+                )
+                with self.assertRaisesRegex(
+                    canary.QualificationError, "credential-shaped material"
+                ):
+                    canary.run_command(
+                        [sys.executable, "-c", source], cwd=Path.cwd(), env={}
+                    )
+
+    def test_run_command_scans_both_streams_before_capture_limit(self) -> None:
+        probe = canary.PROBES[0]
+        passing = "".join(f"test {name} ... ok\n" for name in probe.expected_tests)
+        passing += f"test result: ok. {len(probe.expected_tests)} passed;\n"
+        for stream in ("stdout", "stderr"):
+            for offset in (-32, 0, 32):
+                with self.subTest(stream=stream, offset=offset):
+                    output = passing + "x" * (
+                        canary.MAX_CAPTURE_BYTES + offset - len(passing)
+                    )
+                    output += "\nsk-synthetic-overflow-canary\n"
+                    completed = subprocess.CompletedProcess(
+                        ["fixture"],
+                        0,
+                        **{
+                            stream: output,
+                            ("stderr" if stream == "stdout" else "stdout"): "",
+                        },
+                    )
+                    with mock.patch.object(
+                        canary.subprocess, "run", return_value=completed
+                    ):
+                        with self.assertRaisesRegex(
+                            canary.QualificationError, "credential-shaped material"
+                        ):
+                            canary.run_command(["fixture"], cwd=Path.cwd(), env={})
+
+    def test_run_command_capture_limit_is_utf8_bytes_and_fails_closed(self) -> None:
+        for stream in ("stdout", "stderr"):
+            for output in (
+                "x" * canary.MAX_CAPTURE_BYTES,
+                "é" * (canary.MAX_CAPTURE_BYTES // 2),
+            ):
+                with self.subTest(stream=stream, characters=len(output)):
+                    streams = {"stdout": "", "stderr": "", stream: output}
+                    with mock.patch.object(
+                        canary.subprocess,
+                        "run",
+                        return_value=subprocess.CompletedProcess(
+                            ["fixture"], 0, **streams
+                        ),
+                    ):
+                        result = canary.run_command(["fixture"], cwd=Path.cwd(), env={})
+                        self.assertEqual(getattr(result, stream), output)
+                    streams[stream] += "x"
+                    with mock.patch.object(
+                        canary.subprocess,
+                        "run",
+                        return_value=subprocess.CompletedProcess(
+                            ["fixture"], 0, **streams
+                        ),
+                    ):
+                        with self.assertRaisesRegex(
+                            canary.QualificationError,
+                            f"command {stream} exceeds the capture limit: "
+                            f"{canary.MAX_CAPTURE_BYTES + 1} bytes > "
+                            f"{canary.MAX_CAPTURE_BYTES} bytes",
+                        ):
+                            canary.run_command(["fixture"], cwd=Path.cwd(), env={})
+
+    def test_run_command_timeout_does_not_expose_partial_output(self) -> None:
+        marker = "sk-synthetic-timeout-canary"
+        with mock.patch.object(
+            canary.subprocess,
+            "run",
+            side_effect=subprocess.TimeoutExpired(["fixture"], 1, output=marker),
+        ):
+            with self.assertRaisesRegex(
+                canary.QualificationError, "capture is incomplete"
+            ) as caught:
+                canary.run_command(["fixture"], cwd=Path.cwd(), env={})
+        self.assertNotIn(marker, str(caught.exception))
+
     def test_sanitized_environment_removes_credential_material(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             with mock.patch.dict(

@@ -441,6 +441,13 @@ fn scoped_openai_route_injects_once_and_passes_complete_context() {
         authorization(&headers),
         Some("Bearer sk-scoped-canary-never-retained")
     );
+    assert!(
+        headers
+            .get(AUTHORIZATION)
+            .expect("injected header")
+            .is_sensitive()
+    );
+    assert!(!format!("{headers:?}").contains("sk-scoped-canary-never-retained"));
     assert_eq!(
         resolver.requests(),
         vec![UseSnapshot {

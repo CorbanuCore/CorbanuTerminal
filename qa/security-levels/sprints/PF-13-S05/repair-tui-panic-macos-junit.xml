@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="nextest-run" tests="1" skipped="0" failures="0" errors="0" uuid="e1febb68-57bc-4148-a8e8-b773ec39ef1f" timestamp="2026-08-27T23:10:04.703-07:00" time="50.835">
+    <testsuite name="codex-tui" tests="1" skipped="0" errors="0" failures="0">
+        <testcase name="credential_panic_tests::production_panic_hook_does_not_log_scoped_credentials" classname="codex-tui" timestamp="2026-08-27T23:10:04.723-07:00" time="50.812"/>
+    </testsuite>
+</testsuites>

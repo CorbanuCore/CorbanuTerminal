@@ -186,7 +186,7 @@ fn callback_error_cancellation_and_panic_are_contained_and_secret_free() {
     let panic_error = vault
         .with_scoped_credential(&credential, 110, &revocations, |secret| {
             assert_eq!(secret, SECRET);
-            panic!("callback panic without credential material")
+            panic!("callback panic containing {secret}")
         })
         .expect_err("panic must be contained");
     assert_eq!(panic_error, ScopedCredentialError::CallbackPanicked);

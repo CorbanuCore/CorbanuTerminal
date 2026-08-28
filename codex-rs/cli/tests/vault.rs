@@ -18,6 +18,7 @@ fn write_security_config(codex_home: &Path, level: &str) -> Result<()> {
 
 fn codex_command(codex_home: &Path) -> Result<assert_cmd::Command> {
     let mut command = assert_cmd::Command::new(codex_utils_cargo_bin::cargo_bin("codex")?);
+    command.env_remove("CORBANU_HOME");
     command.env("CODEX_HOME", codex_home);
     Ok(command)
 }
@@ -81,5 +82,48 @@ fn vault_auth_helper_cli_override_cannot_downgrade_persisted_posture() -> Result
                 .and(contains(LABEL_CANARY).not()),
         );
 
+    Ok(())
+}
+
+#[test]
+fn vault_auth_helper_symlink_home_cannot_downgrade_persisted_posture() -> Result<()> {
+    let root = TempDir::new()?;
+    let protected = root.path().join("protected");
+    let alias = root.path().join("alias");
+    fs::create_dir(&protected)?;
+    write_security_config(&protected, "aggressive")?;
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&protected, &alias)?;
+    #[cfg(windows)]
+    anyhow::ensure!(
+        std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&alias)
+            .arg(&protected)
+            .output()?
+            .status
+            .success(),
+        "create unprivileged directory junction"
+    );
+    for home_variable in ["CODEX_HOME", "CORBANU_HOME"] {
+        let mut command = codex_command(&alias)?;
+        command
+            .env_remove("CODEX_HOME")
+            .env(home_variable, &alias)
+            .args([
+                "-c",
+                "security.level=\"permissive\"",
+                "vault",
+                "auth-helper",
+                LABEL_CANARY,
+            ])
+            .assert()
+            .failure()
+            .stdout("")
+            .stderr(
+                contains("vault auth-helper is unavailable under aggressive")
+                    .and(contains(LABEL_CANARY).not()),
+            );
+    }
     Ok(())
 }

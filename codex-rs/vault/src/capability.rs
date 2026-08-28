@@ -11,6 +11,7 @@ use zeroize::Zeroizing;
 
 use super::Vault;
 use super::VaultError;
+use crate::credential_panic::ScopedCredentialPanicGuard;
 
 /// Secret-free reference emitted by the trusted Core capability store after it
 /// has validated the opaque bearer and the complete requested authority.
@@ -119,7 +120,8 @@ impl Vault {
     /// The backing allocation is wrapped in Zeroizing before the storage lock is
     /// released and is explicitly dropped before any outcome returns. Callback
     /// errors are reduced to stable variants, and panic payloads are discarded
-    /// without formatting.
+    /// without formatting. Host panic hooks installed after first use must
+    /// honor [`crate::scoped_credential_callback_active`] before logging.
     pub fn with_scoped_credential(
         &self,
         credential: &VaultCredentialRef,
@@ -129,6 +131,7 @@ impl Vault {
     ) -> Result<(), ScopedCredentialError> {
         credential.validate_at(now_unix_seconds, revocations)?;
         let secret = self.read_scoped_secret(credential.label())?;
+        let _panic_guard = ScopedCredentialPanicGuard::enter();
         let outcome = catch_unwind(AssertUnwindSafe(|| callback(secret.as_str())));
         drop(secret);
 

@@ -1,0 +1,35 @@
+{
+  "reviewed_base": "f0a160eee5b820bc16fcd116013274d44e7d9be4",
+  "findings": [
+    {
+      "priority": "P3",
+      "file": "codex-rs/tui/src/tui.rs",
+      "line": 537,
+      "title": "Terminal-restore panic hook does not itself check scoped_credential_callback_active; suppression relies on chaining into the vault-aware hook",
+      "failure_path": "set_panic_hook is installed after install_panic_hook (lib.rs:1423 -> tui.rs:420) and chains to the vault-aware hook without checking the thread-local flag first; formatting is suppressed only because the inner hook checks. A future edit that formats panic_info before chaining could leak a secret-bearing payload.",
+      "recommendation": "Add the scoped_credential_callback_active() early-return inside set_panic_hook before any formatting, or pin the check-before-format invariant with a comment and test.",
+      "regression_test": "Subprocess test installing an additional hook after the vault hook, panicking with a canary secret inside a scoped callback, asserting the canary is absent from stderr/logs."
+    },
+    {
+      "priority": "P3",
+      "file": "scripts/security_credential_canary.py",
+      "line": 288,
+      "title": "Fail-closed 1 MiB capture ceiling yields an undifferentiated 'exceeds the capture limit' error for large secret-free transcripts",
+      "failure_path": "With bounded_output removed, any probe stream over 1 MiB hard-fails qualification; the error does not report measured bytes, so a noisy secret-free transcript is indistinguishable in message from a true overflow-denial.",
+      "recommendation": "Include the measured byte count in the QualificationError message so operators can distinguish 'secret found' from 'transcript too large'; behavior itself (fail closed) is correct.",
+      "regression_test": "Existing test_run_command_capture_limit_is_utf8_bytes_and_fails_closed covers the boundary; extend to assert the message includes the byte count if added."
+    }
+  ],
+  "coverage": [
+    "REPAIR_DIFF.patch read in full; all 15 REPAIR_FILES.sha256 entries verified (15/15 OK)",
+    "vault/src/credential_panic.rs: thread-local flag, Once-installed global hook, nested/non-Send guard, Drop restore",
+    "vault/src/credential_panic_tests.rs + tui/src/credential_panic_tests.rs: nesting, thread-locality, ordinary-panic preservation, vault-first/tui-first hook ordering, recovery after panic",
+    "vault/src/capability.rs: guard entered before callback, dropped before outcome mapping",
+    "tui/src/lib.rs install_panic_hook + tui/src/tui.rs set_panic_hook: installation order and chaining",
+    "network-proxy providers.rs scoped_openai_header_value (Zeroizing + set_sensitive), credential_broker.rs scoped call site, is_sensitive/Debug test",
+    "cli/tests/vault.rs symlink/alias downgrade test; vault/src/tests.rs canonical-home and copied-ciphertext tests",
+    "scripts/security_credential_canary.py run_command full-capture scan-before-limit, timeout denial; test_security_credential_canary.py overflow/UTF-8/timeout tests",
+    "security-policy GRANT_SCHEMA_VERSION=2 (TUI fixture validity), compute_keyring_account canonicalization"
+  ],
+  "verdict": "Repair delta correctly implements all five accepted fixes (C1, C2, F3, F4, F6) with no new P1/P2 defect. Two P3 hardening items remain (post-vault panic-hook invariant at tui.rs; canary large-output error clarity). Acceptable to include in the running qualification; final PF-13 readiness remains gated on the separately-executing Core/platform tests and deferred PF-23 native wiring, which this review does not certify."
+}
