@@ -218,6 +218,75 @@ class SecurityCredentialCanaryTests(unittest.TestCase):
                     {"status": "failed", "output": "Bearer sk-leaked-test-secret"},
                 )
 
+    def test_qualification_identifies_final_artifact_after_probes(self) -> None:
+        for final_build_fails in (False, True):
+            with self.subTest(final_build_fails=final_build_fails):
+                calls = mock.Mock()
+                first = canary.CommandResult(["initial-build"], 0, "", "")
+                final = canary.CommandResult(["final-build"], 0, "", "")
+                calls.build.side_effect = [
+                    first,
+                    canary.QualificationError("final build failed")
+                    if final_build_fails
+                    else final,
+                ]
+                calls.identity.side_effect = [
+                    ({"sha256": "initial"}, first),
+                    ({"sha256": "final"}, final),
+                ]
+                calls.probe.return_value = first
+                calls.validate.return_value = 1
+                calls.sources.return_value = []
+                calls.canary.return_value = {}
+                calls.report.return_value = Path("report.json")
+                with (
+                    mock.patch.multiple(
+                        canary,
+                        PROBES=(canary.PROBES[0],),
+                        build_candidate=calls.build,
+                        candidate_identity=calls.identity,
+                        run_command=calls.probe,
+                        validate_probe_output=calls.validate,
+                        source_evidence=calls.sources,
+                        parse_canary_result=calls.canary,
+                        write_report=calls.report,
+                    ),
+                    mock.patch.object(canary, "git_output", side_effect=["a" * 40, ""]),
+                    mock.patch.object(canary, "sanitized_environment", return_value={}),
+                ):
+                    arguments = (Path.cwd(), Path("corbanu"), Path("evidence"))
+                    if final_build_fails:
+                        with self.assertRaisesRegex(
+                            canary.QualificationError, "final build failed"
+                        ):
+                            canary.run_qualification(*arguments)
+                        calls.report.assert_not_called()
+                    else:
+                        self.assertEqual(
+                            canary.run_qualification(*arguments),
+                            (True, Path("report.json")),
+                        )
+                        report = calls.report.call_args.args[1]
+                        self.assertEqual(report["candidate"], {"sha256": "final"})
+                        self.assertEqual(
+                            report["candidate_build_command"], final.as_json()
+                        )
+                        self.assertEqual(
+                            report["candidate_pre_probe_build_command"], first.as_json()
+                        )
+                expected = [
+                    "build",
+                    "identity",
+                    "probe",
+                    "validate",
+                    "sources",
+                    "canary",
+                    "build",
+                ]
+                if not final_build_fails:
+                    expected += ["identity", "report"]
+                self.assertEqual([call[0] for call in calls.mock_calls], expected)
+
 
 if __name__ == "__main__":
     unittest.main()

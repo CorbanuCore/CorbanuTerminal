@@ -521,6 +521,12 @@ def run_qualification(
             )
 
         canary = parse_canary_result(command_results)
+        # CLI integration tests can replace target/debug/corbanu with a binary
+        # linked using test dependency features. Restore the production build
+        # and identify the exact artifact left for interactive qualification.
+        pre_probe_build = build
+        build = build_candidate(repo_root, candidate, environment)
+        identity, version = candidate_identity(candidate, repo_root, environment)
         report = {
             "schema_version": 1,
             "status": "passed",
@@ -534,6 +540,7 @@ def run_qualification(
             },
             "candidate": identity,
             "candidate_build_command": build.as_json(),
+            "candidate_pre_probe_build_command": pre_probe_build.as_json(),
             "candidate_version_command": version.as_json(),
             "canary": canary,
             "probes": probe_reports,

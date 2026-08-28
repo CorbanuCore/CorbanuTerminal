@@ -66,6 +66,7 @@ updated: 2026-08-28
 - [ ] F3: copied encrypted vault/canonical home keyring tests pass; run the new native symlink-home CLI tests. Preserve custom-home support and defer parent-policy composition to PF-23.
 - [ ] Triage the 135 complete-Core failures and record a clean full rerun; all 13 credential-named tests already pass.
 - [ ] Repeat affected tests and platform canaries against the final integrated candidate; historical results are not relabeled as merge qualification.
+- [ ] Final artifact identity: CLI probe builds replace the executable; rebuild and identify the production candidate after all probes, with an ordering regression test and refreshed Kimi/harness evidence.
 
 Mac failure triage and qualification repairs may run concurrently within this
 sprint. This amended implementation mandate authorizes only the repairs above;

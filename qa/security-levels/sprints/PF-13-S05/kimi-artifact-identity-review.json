@@ -1,0 +1,13 @@
+{
+  "reviewed_base": "a7ae94e4c9c01924c896d9f10b1f588f1727fc67",
+  "findings": [],
+  "coverage": [
+    "FILES.sha256 verified: 2/2 OK (scripts/security_credential_canary.py, scripts/test_security_credential_canary.py)",
+    "IDENTITY_FIX.patch read in full",
+    "security_credential_canary.py run_qualification: post-probe build_candidate + candidate_identity re-run (lines 524-529); report now binds final candidate identity/build/version; additive candidate_pre_probe_build_command field; candidate_identity hashes file and runs --version on the final artifact",
+    "build_candidate fails closed (QualificationError on non-zero); write_report not reached on final-build failure",
+    "test_security_credential_canary.py test_qualification_identifies_final_artifact_after_probes: both final-build-failure and success paths, exact mock-call ordering (build, identity, probe, validate, sources, canary, build, [identity, report]), report field assertions",
+    "Confirmed parse_canary_result operates on pre-rebuild probe output; canary evidence semantics unchanged"
+  ],
+  "verdict": "The two-file artifact-identity fix correctly resolves the concrete qualification defect: the production candidate is rebuilt after all probes and the report's candidate identity, build command, and version command now describe the final binary actually left on disk, with the pre-probe build retained additively. The fix fails closed on a failed final rebuild and the unit test pins probe/build/identity/report ordering plus both outcome paths. No new defects; no Rust source changed and the prior runtime review stands. This does not certify Core/platform readiness (full Mac Core run remains red at 3388/3407 with 19 tracked failures, out of scope here)."
+}
