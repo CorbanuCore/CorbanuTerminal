@@ -110,3 +110,18 @@ then Windows qualification, are still pending. S01 is internal and unactivated,
 so no S01 TUI workflow is applicable; S02/S03 own the actual-key user flows.
 Live-repository, human acceptance (Travis Good), benchmark and release gates are
 not passed by this development commit. Do not archive S01 or start dependents.
+
+Subsequent [platform qualification](platform-qualification-2026-08-27.md)
+recovered Mac Docker and installed rootless Linux Podman with Travis's explicit
+authorization. Both unchanged candidates then failed with `HealthCheckFailed`:
+Docker rejects the private PID/UTS arguments; Podman's expanded dropped-capability
+list is rejected by the verifier. A Mac diagnostic also exposed unverified
+disabled seccomp. Windows is unreachable. All platform qualifications remain open;
+the earlier scoped review does not supersede these newly observed failures.
+
+The later [platform repair checkpoint](platform-fixes.md) fixes those three
+findings in four browser-crate files. Final tests passed: 272 focused Rust tests,
+six worker tests on each host, real Mac/Linux backend smokes and fail-closed
+seccomp/capability checks. Fable 5 High found no in-scope defects in that frozen
+patch. Full platform/lifecycle qualification, the residual native DNS issue and
+Windows remain open; neither clean scoped review closes those gates.

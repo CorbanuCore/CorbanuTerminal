@@ -55,11 +55,12 @@ a distinct worktree/branch within the three-slot cap. Allocated and started on
 ## Done
 
 - [x] Approved feature contract decomposed into this single-feature draft.
-- [x] Recorded user runtime/installation decisions and non-mutating Mac/Linux preflight in `qa/security-levels/sprints/PF-30-S01/runtime-selection.md`.
+- [x] Recorded runtime decisions/preflight; with later user authorization recovered Mac Docker and installed Linux Podman. Real qualification failures: `qa/security-levels/sprints/PF-30-S01/platform-qualification-2026-08-27.md`.
 - [x] User requested end-to-end S01 implementation and selected Fable High; Autoreview must use `--engine claude --model claude-fable-5 --thinking high` without fallback.
 - [x] Implemented the internal backend draft, pinned derivative image recipe, networkless worker/broker, owned lifecycle, quarantine and thin Core live-policy/health adapter; no public activation.
 - [x] Added protocol, destination, ownership, bounded-restart, cancellation, promotion and native policy-epoch regression tests. Checkpoint evidence: `qa/security-levels/sprints/PF-30-S01/implementation-evidence.md`.
 - [x] Fixed the validated DNS-denial ordering and Podman image-ID findings, added regressions, and obtained a clean Fable 5 High fix-cycle review via Computer Use. Evidence: `qa/security-levels/sprints/PF-30-S01/review-fixes.md`; the initial false positive remains withdrawn.
+- [x] Fixed Docker PID/UTS arguments, Podman capability verification and undetected disabled seccomp; regressions, real Mac/Linux smokes, negative confinement checks and Fable High scoped review pass. Evidence: `qa/security-levels/sprints/PF-30-S01/platform-fixes.md`.
 
 Reviewable stages: (1) crate registration and connection policy; (2) engine
 selection, pinned image recipe and owned-container lifecycle; (3) bounded broker,
@@ -69,9 +70,8 @@ review/test each independently and review the final integrated candidate.
 
 ## Remaining
 
-The backend remains incomplete despite fixed findings and a clean scoped review.
-Mac/Linux prerequisites need human action; Windows follows Mac/Linux.
-Unit tests and code presence are not platform qualification.
+The backend remains incomplete despite its earlier clean scoped review.
+Mac/Linux backend smokes now pass; full qualification and Windows remain open.
 
 - [ ] Resolve the residual native allowlist/DNS ordering with the integration owner before DNS qualification; allocate any scope expansion first. This is separate from the fixed explicit-denial ordering.
 - [ ] Close review coverage gaps for broker redirects, worker request-handler branches and engine endpoint-selection JSON; measure real engine payload sizes before changing the bounded output cap.
@@ -87,7 +87,7 @@ Unit tests and code presence are not platform qualification.
 
 - [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [x] Run `just fix -p <affected-crate>` and `just fmt` in `codex-rs` before final tests.
-- [x] Run focused and affected integration tests with `just test -p <affected-crate>`; never direct `cargo test`. 270 selected Rust tests and four worker-protocol tests passed after fixes; see review-fixes for the exact filter and fingerprints. Real backend qualification remains open below.
+- [x] Run focused and affected integration tests with `just test -p <affected-crate>`; never direct `cargo test`. 272 selected Rust tests and six worker tests on each host passed; see platform-fixes for the exact filter and fingerprints. Full backend qualification remains open below.
 - [ ] Record exact dependency commits, candidate, commands, artifacts, and missing coverage; no pass by code presence.
 - [ ] Run real backend probes and early PF-26 isolation fixtures, not only mocked policy tests.
 - [ ] Prove the backend conforms to PF-27 native adapter contracts without requiring PF-29 implementation; S02 owns the content/facade join.

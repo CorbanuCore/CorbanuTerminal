@@ -431,16 +431,30 @@ inventory must finish before readiness. Its allocated branch does not by itself
 authorize code. Shared planning changes originate in the browser worktree and
 are integrated into the content worktree before its activation.
 
-PF-30-S01 has an internal backend checkpoint with 270 passing focused Rust tests
-and four worker tests. Its latest evidence is
-`qa/security-levels/sprints/PF-30-S01/review-fixes.md`. S01 remains `in_progress`:
+PF-30-S01 has an internal backend checkpoint with 272 passing focused Rust tests
+and six worker tests on each of Mac/Linux. Its latest evidence is
+`qa/security-levels/sprints/PF-30-S01/platform-fixes.md`. S01 remains `in_progress`:
 the P1 explicit-denial/DNS ordering and P2 Podman image-ID findings are fixed,
 and Fable 5 High returned a clean scoped fix-cycle review via Computer Use.
 Its initial trailing-dot finding was withdrawn after validation. The integration owner must
 resolve the unchanged native allowlist/DNS ordering before DNS qualification,
-allocating any additional write scope first. Mac/Linux engine prerequisites need
-human action, and real platform qualification (including Windows) is still
-pending. No dependent sprint is made executable by this draft.
+allocating any additional write scope first. Real platform qualification
+(including Windows) is still incomplete. No dependent sprint is made executable
+by this draft.
+
+The historical failed platform attempt is recorded in
+`qa/security-levels/sprints/PF-30-S01/platform-qualification-2026-08-27.md`:
+with explicit user authorization, Mac's shared Docker engine was recovered and
+rootless Podman installed on Linux. Both committed backend smokes failed: Docker
+rejects the PID/UTS arguments and Podman's capability inspection is incompatible.
+The Mac diagnostic also exposed disabled seccomp that readiness did not detect.
+The four-file repair now passes real Mac Docker/Linux Podman backend smokes and
+negative seccomp/capability checks; Fable 5 High's scoped re-review is clean.
+The three existing Ambient Docker containers are one browser plus egress/DNS
+helpers and were preserved. Full adversarial/lifecycle qualification, legacy
+engine rejection checks and the native DNS residual remain open. The supplied
+Windows endpoint is unreachable from both hosts. No full platform qualification
+pass is claimed; see the latest evidence for source hashes and exact coverage.
 
 ### Upstream-touch record
 

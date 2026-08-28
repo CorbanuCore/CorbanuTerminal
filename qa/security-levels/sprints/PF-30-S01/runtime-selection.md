@@ -4,6 +4,12 @@ Date: 2026-08-27. Owner: Jim Ricketts. Product authority: Travis Good.
 Status: implementation inputs selected; **no platform isolation certification**.
 This is the initial preflight record. The later local implementation and its
 remaining blockers are recorded in [implementation evidence](implementation-evidence.md).
+The latest [platform repairs and retest](platform-fixes.md) supersede this
+historical preflight and the intervening failed attempt: Mac Docker and rootless
+Linux Podman now pass backend smoke and negative confinement checks. All three
+real-platform defects are fixed and Fable High's scoped review is clean.
+Windows has an assigned but unreachable endpoint. Full platform/lifecycle
+qualification remains open; these smoke passes are not certification.
 Plan: `docs/plans/active/p0-security-levels.md`, **Browser runtime lifecycle decision**.
 Product: **Moderate/Aggressive isolation and content provenance** — “Support
 Windows, Linux, and macOS with containerized Scrapling.”

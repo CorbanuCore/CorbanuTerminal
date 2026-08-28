@@ -1,5 +1,6 @@
 use crate::BrowserError;
 use crate::ContainerEngine;
+use crate::EngineKind;
 use crate::engine::strings;
 use serde_json::Value;
 use std::time::Duration;
@@ -44,7 +45,7 @@ impl OwnedContainer {
     }
 
     fn create_args(&self) -> Vec<String> {
-        strings(&[
+        let mut args = strings(&[
             "create",
             "--name",
             &self.name,
@@ -56,8 +57,6 @@ impl OwnedContainer {
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
             "--ipc=private",
-            "--pid=private",
-            "--uts=private",
             "--cgroupns=private",
             "--memory=1073741824",
             "--memory-swap=1073741824",
@@ -67,9 +66,20 @@ impl OwnedContainer {
             "--tmpfs=/tmp:rw,nosuid,nodev,noexec,size=268435456,mode=1777",
             "--log-driver=none",
             "--init",
-            &self.image,
-            "idle",
-        ])
+        ]);
+        match self.engine.kind() {
+            // Docker's private PID/UTS defaults are selected by omission; it
+            // rejects the literal "private" accepted by Podman. Override only
+            // this container's seccomp default, never the shared daemon.
+            EngineKind::Docker => args.push("--security-opt=seccomp=builtin".into()),
+            EngineKind::Podman => args.extend(strings(&[
+                "--pid=private",
+                "--uts=private",
+                "--seccomp-policy=default",
+            ])),
+        }
+        args.extend([self.image.clone(), "idle".into()]);
+        args
     }
 
     async fn inspect(&self) -> Result<Value, BrowserError> {
@@ -84,7 +94,7 @@ impl OwnedContainer {
 
     async fn verify(&self) -> Result<Value, BrowserError> {
         let value = self.inspect().await?;
-        verify_confinement(&value)?;
+        verify_confinement(self.engine.kind(), &value)?;
         Ok(value)
     }
 
@@ -244,7 +254,22 @@ fn bounded_tmpfs(value: &Value) -> bool {
             .any(|part| matches!(*part, "exec" | "suid" | "dev"))
 }
 
-fn verify_confinement(value: &Value) -> Result<(), BrowserError> {
+fn dropped_capabilities(kind: EngineKind, value: &Value) -> bool {
+    match kind {
+        EngineKind::Docker => value["HostConfig"]["CapDrop"]
+            .as_array()
+            .is_some_and(|caps| caps.iter().any(|cap| cap == "ALL" || cap == "CAP_ALL")),
+        // Podman expands CapDrop to names; its computed capability sets are
+        // authoritative. Null denotes an empty set, but missing keys are not
+        // evidence. The fixed worker also verifies every kernel capability set
+        // before idle/probe/acquire, so inspect alone cannot report readiness.
+        EngineKind::Podman => ["EffectiveCaps", "BoundingCaps"]
+            .iter()
+            .all(|key| value.get(key).is_some_and(empty)),
+    }
+}
+
+fn verify_confinement(kind: EngineKind, value: &Value) -> Result<(), BrowserError> {
     let host = &value["HostConfig"];
     let security = host["SecurityOpt"]
         .as_array()
@@ -258,15 +283,19 @@ fn verify_confinement(value: &Value) -> Result<(), BrowserError> {
         || !empty(&host["CapAdd"])
         || !empty(&host["VolumesFrom"])
         || !matches!(host["PidMode"].as_str(), Some("private" | ""))
+        || !matches!(host["UTSMode"].as_str(), Some("private" | ""))
         || !matches!(host["IpcMode"].as_str(), Some("private"))
+        || match kind {
+            EngineKind::Docker => host["CgroupnsMode"] != "private",
+            EngineKind::Podman => host["CgroupMode"] != "private",
+        }
         || host["Memory"].as_u64() != Some(MEMORY)
         || host["MemorySwap"].as_u64() != Some(MEMORY)
         || host["PidsLimit"].as_u64() != Some(PIDS)
         || host["CpuPeriod"].as_u64() != Some(100_000)
         || host["CpuQuota"].as_u64() != Some(100_000)
-        || !host["CapDrop"]
-            .as_array()
-            .is_some_and(|caps| caps.iter().any(|cap| cap == "ALL" || cap == "CAP_ALL"))
+        || !dropped_capabilities(kind, value)
+        || (kind == EngineKind::Docker && !security.iter().any(|item| item == "seccomp=builtin"))
         || !security.iter().any(|item| {
             matches!(
                 item.as_str(),

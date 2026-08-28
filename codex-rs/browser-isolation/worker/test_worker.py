@@ -8,6 +8,7 @@ import sys
 import types
 import unittest
 from unittest.mock import patch
+from unittest.mock import mock_open
 
 spec = importlib.util.spec_from_file_location("worker", Path(__file__).with_name("worker.py"))
 worker = importlib.util.module_from_spec(spec)
@@ -36,6 +37,38 @@ class Page:
 
 
 class WorkerTests(unittest.TestCase):
+    def test_kernel_confinement_rejects_disabled_filters_caps_and_missing_fields(self):
+        status = {"Uid": "65532 65532 65532 65532", "Gid": "65532 65532 65532 65532",
+                  "NoNewPrivs": "1", "Seccomp": "2",
+                  **{key: "0000000000000000" for key in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb")}}
+        def verify(fields):
+            contents = "\n".join(f"{key}:\t{value}" for key, value in fields.items())
+            with patch("builtins.open", mock_open(read_data=contents)):
+                worker.verify_process_confinement()
+        verify(status)
+        for key, invalid in [("Seccomp", "0"), ("Seccomp", "1"), ("NoNewPrivs", "0"),
+                             ("Uid", "0 0 0 0"), ("Gid", "0 0 0 0")]:
+            with self.subTest(key=key, value=invalid), self.assertRaises(ValueError):
+                verify({**status, key: invalid})
+        for key in status:
+            with self.subTest(missing=key), self.assertRaises(ValueError):
+                verify({name: value for name, value in status.items() if name != key})
+            if key.startswith("Cap"):
+                with self.subTest(capability=key), self.assertRaises(ValueError):
+                    verify({**status, key: "0000000000000001"})
+
+    def test_confinement_failure_precedes_every_worker_mode(self):
+        for mode in ["idle", "probe", "acquire"]:
+            with patch.object(sys, "argv", ["worker.py", mode]), patch.object(worker.signal, "alarm"), \
+                    patch.object(worker, "verify_process_confinement", side_effect=ValueError("confinement")), \
+                    patch.object(worker, "probe") as probe, patch.object(worker, "acquire") as acquire, \
+                    patch.object(worker.time, "sleep") as sleep:
+                with self.assertRaises(ValueError):
+                    worker.main()
+                probe.assert_not_called()
+                acquire.assert_not_called()
+                sleep.assert_not_called()
+
     def run_acquisition(self, page):
         def fetch(url, **options):
             self.assertEqual(options["retries"], 1)

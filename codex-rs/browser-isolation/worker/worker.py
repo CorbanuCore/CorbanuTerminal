@@ -37,6 +37,20 @@ def receive():
     return value
 
 
+def verify_process_confinement():
+    # Engine inspect can omit inherited defaults (notably disabled seccomp).
+    # Check actual kernel state before any browser or untrusted input is loaded.
+    with open("/proc/self/status") as handle:
+        status = dict(line.split(":", 1) for line in handle.read(16384).splitlines() if ":" in line)
+    if (status.get("Seccomp", "").strip() != "2"
+            or status.get("NoNewPrivs", "").strip() != "1"
+            or any(status.get(key, "").split() != ["65532"] * 4 for key in ("Uid", "Gid"))):
+        raise ValueError("confinement")
+    for key in ("CapInh", "CapPrm", "CapEff", "CapBnd", "CapAmb"):
+        if key not in status or int(status[key].strip(), 16) != 0:
+            raise ValueError("capabilities")
+
+
 def probe():
     # Only run before loading untrusted content. Host inspect separately verifies
     # mounts/namespaces/caps/limits/image; these checks are not the sole boundary.
@@ -127,6 +141,7 @@ def acquire():
 
 def main():
     signal.alarm(100)
+    verify_process_confinement()
     mode = sys.argv[1:] or ["idle"]
     if mode == ["idle"]:
         time.sleep(90)  # bounded lifetime even if the host is terminated abruptly
