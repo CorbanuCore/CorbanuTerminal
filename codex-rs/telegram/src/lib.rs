@@ -374,11 +374,11 @@ async fn build_core_config(
         .context("failed to build Corbanu Terminal config for Telegram")?;
     if let Some(identity) = telegram_config.identity_instructions.as_deref() {
         let identity = identity.replace("<cwd>", &core_config.cwd.display().to_string());
-        core_config.developer_instructions = Some(match core_config.developer_instructions.take()
-        {
-            Some(existing) => format!("{existing}\n\n{identity}"),
-            None => identity,
-        });
+        core_config.developer_instructions =
+            Some(match core_config.developer_instructions.take() {
+                Some(existing) => format!("{existing}\n\n{identity}"),
+                None => identity,
+            });
     }
     Ok(core_config)
 }
