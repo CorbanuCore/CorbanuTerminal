@@ -24,6 +24,14 @@ local macOS reproduction and a fresh Windows 2022 follow-up from the clean
 current branch tip. The complete macOS Core suite remains failed with 135
 failures, and independent security review remains pending.
 
+Subsequent [outside-review attempt](fable-outside-review.md): all work through
+the PF-30 platform repair and this Windows report was merged into the PF-13
+branch at `044491b8b02b24a65a84e8da61619d3444e63fe0` before review. Fable High's
+provider automatically switched models after a safeguard flag; the response
+was stopped, and no substitute verdict was accepted. Independent review is
+still incomplete. Earlier platform results below retain their original
+candidate identities and are not relabeled as tests of the integrated merge.
+
 The harness generated a
 fresh credential canary inside the Rust test process, stored it through the
 encrypted Vault path, consumed a complete Core credential capability, and
@@ -224,7 +232,8 @@ security review or the broader complete-Core gate has passed.
 
 ## Remaining acceptance gates
 
-- Name an independent security reviewer and record the raw-secret reachability review and any corrections.
+- Complete the selected Fable High raw-secret reachability review, or obtain
+  Travis's approval for another reviewer after the recorded provider interruption.
 - Triage the 135 complete-Core failures recorded above, correct or establish
   the required test prerequisites, and record a clean complete rerun.
 - After those gates pass, update the final candidate/evidence coordinates and

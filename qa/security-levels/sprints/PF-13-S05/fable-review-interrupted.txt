@@ -1,0 +1,119 @@
+Fable 5 High outside-expert review — interrupted, NOT a completed verdict
+Date: 2026-08-27 Arizona time (2026-08-28 UTC)
+Review candidate: 044491b8b02b24a65a84e8da61619d3444e63fe0
+Session: claude.ai/epitaxy/local_ed0e2179-fb33-45ee-a502-90dd3ca9c289
+Mode at start: Manual, Fable 5, High; provider automatically switched to Opus 4.8.
+Stopped on detection; no alternative-model verdict accepted, no review fixes made.
+Whitespace-normalized accessibility capture follows.
+
+container Message 1
+															72 heading You said: Act as the outside security expert reviewing PF-13 (Sprint 13) work, using Fable 5 High., Value: 2
+																73 text You said: Act as the outside security expert reviewing PF-13 (Sprint 13) work, using Fable 5 High.
+															74 text Act as the outside security expert reviewing PF-13 (Sprint 13) work, using Fable 5 High. All work to date was merged first: exact candidate 044491b8b02b24a65a84e8da61619d3444e63fe0 on feat/pf-13-s02-scoped-vault-resolver. Read REVIEW_SCOPE.md first and follow its read-only review boundaries and requested output. Validate PF13_REVIEW_FILES.sha256; inspect the original six diffs, current source and native call paths, plus evidence. This is a broad independent credential-boundary review, not a review of only t
+															75 button Show message actions
+														76 container Message 2
+															77 container
+																78 heading Claude responded: I'll start by reading REVIEW_SCOPE., Value: 2
+																	79 text Claude responded: I'll start by reading REVIEW_SCOPE.
+																80 text I'll start by reading REVIEW_SCOPE.md as instructed, then survey the export layout.
+														81 button Read REVIEW_SCOPE.md, ran 3 commands
+															82 text Read
+															83 text REVIEW_SCOPE.md
+															84 text ,
+															85 text ran
+															86 text 3 commands
+														87 text The manifest check needs a cleaner run — the grep pipeline masked the shasum exit code. Let me verify properly.
+														88 container
+															89 button Failed to verify SHA256 manifest with clean exit code
+															90 button Show message actions
+														91 container Message 3
+															92 heading You said: Continue the same outside-expert review., Value: 2
+																93 text You said: Continue the same outside-expert review.
+															94 text Continue the same outside-expert review. The last command was denied only because it redirected to a scratch file; please run shasum -a 256 -c PF13_REVIEW_FILES.sha256 directly without redirection, then continue inspecting source and evidence. All 35 hashes also verified independently in the export. Read-only commands and reading the snapshot are permitted; avoid scratch-file writes, repository execution, or other filesystem changes. Please complete the substantive review and structured findings requested i
+															95 button Show message actions
+														96 container Message 4
+															97 container
+																98 heading Claude responded: All 35 hashes verify OK., Value: 2
+																	99 text Claude responded: All 35 hashes verify OK.
+																100 button Verified SHA256 manifest (read-only)
+														101 text All 35 hashes verify OK. Now I'll survey file sizes and read the core implementation files.
+														102 button Ran a command, read 4 files
+															103 text Ran
+															104 text a command
+															105 text ,
+															106 text read
+															107 text 4 files
+														108 text Now the network-proxy side — the broker and actual header substitution paths.
+														109 button Read 5 files
+															110 text Read
+															111 text 5 files
+														112 text Now the actual transport call sites — where injection happens in the proxy/MITM paths.
+														113 button Ran 4 commands, read 3 files
+															114 text Ran
+															115 text 4 commands
+															116 text ,
+															117 text read
+															118 text 3 files
+														119 text Injection call sites are mapped. Now the Core-side wiring — how the scoped route gets installed and whether the native product actually exercises it.
+														120 button Read network_proxy_credential.rs, ran a command
+															121 text Read
+															122 text network_proxy_credential.rs
+															123 text ,
+															124 text ran
+															125 text a command
+														126 text The scoped pipeline is test-only today — an expected integration seam. Now checking the Moderate/Aggressive helper-closure path in the CLI (question 4).
+														127 button Ran 6 commands, read 2 files
+															128 text Ran
+															129 text 6 commands
+															130 text ,
+															131 text read
+															132 text 2 files
+														133 text Let me read the security-policy binding chain (mandate, revocation, grant, authorization) and the mod.rs.
+														134 button Read mandate.rs
+															135 text Read
+															136 button mandate.rs
+														137 container
+															138 text Fable 5's safeguards flagged this message Our intentionally broad safeguards allow us to deliver more capabilities faster, but can sometimes flag legitimate coding, cybersecurity, and biology tasks. Switched to Opus 4.8. Details:  [cyber]
+															139 button Learn more
+														140 button Read revocation.rs
+															141 text Read
+															142 button revocation.rs
+														143 text Let me examine the upstream client for redirect/retry behavior (authority-confusion concern), and check the effective_policy helper-closure enforcement.
+														144 container
+															145 button Ran 2 commands
+																146 text Ran
+																147 text 2 commands
+															148 button Show message actions
+											149 container
+												150 text Chat mode
+												151 container
+													152 text entry area (settable) Description: Prompt, Value: Type / for commands
+
+														153 text Type / for commands
+												154 button (disabled) Send
+											155 pop up button Auto
+											156 pop up button Add
+											157 container Press and hold to record
+												158 toggle button Description: Press and hold to record, Value: 0
+												159 pop up button Dictation settings
+											160 pop up button Opus 4.8
+											161 pop up button Effort: High
+												162 text Effort:
+												163 text High
+											164 pop up button Usage · Context 149.6k / 1M (15%) · Plan 28%
+											165 text Fast mode off
+										166 text Arrow keys move the tile. Perpendicular arrows preview a split; press Enter to commit or Escape to cancel.
+					167 container
+						168 container Notifications
+	169 close button
+	170 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	171 minimize button
+172 menu bar
+	173 Claude
+	174 File
+	175 Edit
+	176 View
+	177 Window
+	178 Help
+
+The focused UI element is 4 HTML content Claude, URL: claude.ai/epitaxy/local_ed0e2179-fb33-45ee-a502-90dd3ca9c289

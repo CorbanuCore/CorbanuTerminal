@@ -39,7 +39,7 @@ updated: 2026-08-27
 ## Preconditions
 
 - [x] PF-13-S04 is completed and archived.
-- [ ] A named independent security reviewer is recorded before acceptance.
+- [x] Travis selected Fable High as the independent reviewer; the interrupted attempt is not acceptance.
 - [x] Exact worktree coordinates match the active plan.
 
 ## Done
@@ -52,10 +52,11 @@ updated: 2026-08-27
 - [x] Ran Linux locally and attached passing commit-bound CI evidence for macOS and Windows without weakening host checks.
 - [x] Ran the approved complete Core suite on macOS and preserved its failing JUnit report without claiming a pass.
 - [x] Re-ran the complete PF-13 credential qualification on Windows 2022 at the clean current branch tip and committed its machine-readable report.
+- [x] Merged all prior work at `044491b8b` before the Fable High outside review; recorded its provider-triggered interruption in `qa/security-levels/sprints/PF-13-S05/fable-outside-review.md` without accepting the automatic Opus substitution.
 
 ## Remaining
 
-- [ ] Obtain independent security review of raw-secret reachability and record findings/corrections.
+- [ ] Complete independent raw-secret reachability review and record findings/corrections; Fable's provider interrupted the attempt, so a reviewer change needs Travis's approval.
 - [ ] Triage the 135 complete-Core failures and record a clean full rerun; all 13 credential-named tests already pass.
 
 Mac failure triage and independent review may run concurrently within this

@@ -707,7 +707,7 @@ before qualification.
 | Existing security-policy commits | Jim Ricketts | Downstream integration | PF-15 through PF-22 completed and archived; preserve evidence |
 | Moderate and Aggressive control matrix | Product authority | PF-23 review | Defined in the product specification; any change requires a product decision |
 | Persistence and downgrade invalidation | Jim Ricketts | PF-20/PF-23 | Persistence code is present; transition and final evidence remain pending |
-| Independent security reviewer | Travis Good / release owner | PF-13-S05 and final qualification | Fable High: `claude-fable-5`, high effort, selected 2026-08-27. Review result pending; no silent substitution or PF-14 activation |
+| Independent security reviewer | Travis Good / release owner | PF-13-S05 and final qualification | Fable High: `claude-fable-5`, high effort, selected 2026-08-27. Outside review of integrated `044491b8b` interrupted by provider model fallback; no substitute verdict accepted. See `qa/security-levels/sprints/PF-13-S05/fable-outside-review.md`; reviewer change requires Travis; no PF-14 activation |
 | Human tester | Travis Good | Final qualification | Named 2026-08-27; final-candidate acceptance pending |
 | Browser backend/platform matrix | Jim Ricketts | PF-30-S01/S03 | Podman preferred, existing Docker preserved; pinned Scrapling inputs and all-platform pending matrix in S01 record; Mac/Linux before Windows |
 | Lane allocation and shared files | Jim Ricketts | Each sprint readiness | Draft coordinates are UNALLOCATED; serialize shared-file changes and check the three-slot limit |
