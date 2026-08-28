@@ -39,8 +39,7 @@ def main() -> int:
     offenders = [
         path
         for path in tracked_files()
-        if Path(path).name in BANNED_NAMES
-        and not path.startswith(ALLOWED_PREFIXES)
+        if Path(path).name in BANNED_NAMES and not path.startswith(ALLOWED_PREFIXES)
     ]
     if offenders:
         print("shipped AGENTS.md content is not allowed:", file=sys.stderr)
