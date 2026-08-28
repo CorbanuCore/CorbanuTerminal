@@ -4,14 +4,14 @@ title: "Credential boundary adversarial qualification"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
-execution_order: 13
+execution_order: 22
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
-depends_on: "PF-13-S04"
+depends_on: "PF-13-S04, PF-27-S02, PF-28-S02, PF-29-S02, PF-33-S02"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-28
 ---
 
 # PF-13-S05 — Credential boundary adversarial qualification
@@ -25,6 +25,8 @@ updated: 2026-08-24
 
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-13`
+- Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
+- Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
 - Acceptance advanced: authorized use succeeds while every unauthorized or observable surface remains secret-free.
 
 ## Code boundaries
@@ -35,7 +37,7 @@ updated: 2026-08-24
 
 ## Preconditions
 
-- [ ] PF-13-S04 is completed and archived.
+- [ ] PF-13-S04, PF-27-S02, PF-28-S02, PF-29-S02, PF-33-S02 are completed and archived.
 - [ ] A named independent security reviewer is recorded before acceptance.
 - [ ] Exact worktree coordinates match the active plan.
 
@@ -44,6 +46,8 @@ updated: 2026-08-24
 - [x] Sprint record defines one bounded qualification outcome.
 
 ## Remaining
+
+- [ ] Qualify the PF-27 isolated process/launch contract, PF-28 reflected-response/output gates, PF-29 migration preflight and PF-33 actual-connection enforcement; the earlier in-process thin slice is not the final secret boundary.
 
 - [ ] Generate a unique canary and exercise one authorized OpenAI request without printing or persisting the value.
 - [ ] Scan exact outgoing request capture, model context, tool payloads, child environment, logs, audit, errors, receipts, crash output, and artifacts.

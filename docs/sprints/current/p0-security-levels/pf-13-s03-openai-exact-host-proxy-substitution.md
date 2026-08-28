@@ -11,7 +11,7 @@ branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
 depends_on: "PF-13-S02"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-28
 ---
 
 # PF-13-S03 — OpenAI exact-host proxy substitution
@@ -25,9 +25,13 @@ updated: 2026-08-24
 
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-13`
+- Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
+- Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
 - Acceptance advanced: approved `POST https://api.openai.com/v1/*` receives `Authorization: Bearer <secret>` only at transport.
 
 ## Code boundaries
+
+- OpenClaw adoption reference: [OC-1](../../../plans/openclaw-source-review-2026-08-28.md#oc-1), [OC-2](../../../plans/openclaw-source-review-2026-08-28.md#oc-2), [OC-9](../../../plans/openclaw-source-review-2026-08-28.md#oc-9) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; see the review for named functions, callers, tests and limits. Reference tests are not candidate evidence.
 
 - Existing: `network-proxy/src/credential_broker.rs::CredentialBroker`; `credential_broker/providers/openai.rs`
 - Planned: `network-proxy/src/credential_broker/resolver.rs`; Core adapter in `core/src/config/network_proxy_spec.rs`
@@ -44,6 +48,8 @@ updated: 2026-08-24
 - [x] Sprint record names the provider, scheme, host, method, path, and header.
 
 ## Remaining
+
+- [ ] Port reference cases for exact host versus traffic allowlist, changed HTTPS port/method/path and unknown references. Authorize the complete operation before dispatch; a late streaming-substitution error must not be treated as proof that no earlier bytes or side effects occurred.
 
 - [ ] Replace broker-owned `real_value: String` state with a capability reference plus a non-secret resolver interface.
 - [ ] Pass scheme, normalized host, port, method, path, actor/session/task, and capability id into validation before resolution.

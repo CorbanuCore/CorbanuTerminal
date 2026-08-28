@@ -11,7 +11,7 @@ branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
 depends_on: "PF-13-S03"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-28
 ---
 
 # PF-13-S04 — Credential authority lifecycle and raw-secret bypass closure
@@ -25,9 +25,13 @@ updated: 2026-08-24
 
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-13`
+- Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
+- Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
 - Acceptance advanced: credential use produces a secret-free decision/receipt and revoked authority cannot be replayed.
 
 ## Code boundaries
+
+- OpenClaw adoption reference: [OC-2](../../../plans/openclaw-source-review-2026-08-28.md#oc-2) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; see the review for named functions, callers, tests and limits. Reference tests are not candidate evidence.
 
 - Existing: `cli/src/main.rs::run_vault_auth_helper`; `vault/src/lib.rs::reveal_for_programmatic_use`
 - Existing: `security-policy/src/{revocation,mandate}.rs`; `network-proxy/src/credential_broker.rs`
@@ -44,6 +48,8 @@ updated: 2026-08-24
 - [x] Sprint record identifies the existing raw `auth-helper` and broker storage bypasses.
 
 ## Remaining
+
+- [ ] Test authority closure on an already-established CONNECT/keep-alive channel, during body upload, and after same-ID run re-registration. New-connection 407/refusal tests alone do not prove revocation; unrelated active runs must continue safely.
 
 - [ ] Consume or reject the capability atomically so replay and revocation races fail before another resolution.
 - [ ] Emit `ActionReceipt` metadata for capability id, policy reason, operation, destination, and outcome without label value or secret.

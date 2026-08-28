@@ -181,6 +181,31 @@ cannot change or downgrade it. A confirmed change applies immediately to active
 and future agents, invalidates incompatible pending approvals, persists across
 restart, and produces a secret-free audit event.
 
+## Reconciled security scope — TO BUILD
+
+The 2026-08-28 product decision preserves Permissive compatibility and makes the
+broker mandatory for both Moderate and Aggressive. It authorizes the
+[active security plan](plans/active/p0-security-levels.md) to reconcile the
+working-session overview/transcript, archived security designs and OpenClaw
+implementation into one program; these outcomes are not yet shipped.
+
+Protected modes include isolated credential execution and secretless agent
+launch; reflected-secret/output protection; safe migration and clean-context
+recovery; provenance that survives summaries, memory and child agents; isolated
+retrieval, screened search, network validation and download promotion;
+sanitization, local detection and quarantine; exact-origin brokered login with
+human authentication challenges; bounded financial execution, derived views
+and disclosure controls; Agent Sweep; and an inspector of actual protection,
+degradation and secret-free audit state.
+
+Optional hosted detection and advisory review remain disabled until qualified
+and explicitly consented. Search/security adapters and existing wallet/fake-venue
+qualification are included; new trading venues, commercial agreements, paid
+service activation and live financial actions are not authorized by this
+planning decision. Unknown or unsupported protected paths fail visibly rather
+than falling back to raw secrets or unscreened execution. The plan owns the
+detailed contracts and sprint sequencing.
+
 ## Release rule
 
 Moderate and Aggressive controls must be deterministic policy around the model,
@@ -189,6 +214,10 @@ authorize itself, resolve a secret, change the security level, or bypass a
 protected-action decision.
 
 ## Required trust boundaries
+
+The added boundaries and controls below apply to Moderate and Aggressive;
+Permissive preserves the existing policies specified above and does not acquire
+an implied secretless guarantee.
 
 1. External content enters as untrusted data.
 2. The model may research and propose but cannot resolve secrets or authorize itself.

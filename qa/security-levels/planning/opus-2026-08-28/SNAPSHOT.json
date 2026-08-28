@@ -1,0 +1,646 @@
+{
+  "purpose": "read-only architectural review",
+  "corbanuBase": "f173a0bc97c7495d134a67079aadfbe3657d11a7",
+  "uncommittedTreeIncluded": true,
+  "upstreamPin": "13adff02ca3897768d80d2bca18f5acf08c55d91",
+  "securitySprints": 63,
+  "supplementaryAutoreviewSprints": 7,
+  "copiedFiles": 127,
+  "files": [
+    {
+      "path": "corbanu/AGENTS.md",
+      "sha256": "e3393e85a635a22037b7979db57a0e089993f3c60736835a03a8a540587cc81a",
+      "bytes": 11809
+    },
+    {
+      "path": "corbanu/docs/corbanu-product-spec.md",
+      "sha256": "fb9d853a0890f8a4d71bc8195e4cc40ef55aa34596d9441cd9273684e494b35d",
+      "bytes": 34174
+    },
+    {
+      "path": "corbanu/docs/plans/index.md",
+      "sha256": "f352e91e39abce49f67bfac7ca2ea62535e4a2fc5b4d122e8a02a0ce06052908",
+      "bytes": 5062
+    },
+    {
+      "path": "corbanu/docs/sprints/index.md",
+      "sha256": "9e1e0f3dc605dc7d8c5832fbc5ce2f3e7a588e8742266eb164af315265a53429",
+      "bytes": 3419
+    },
+    {
+      "path": "corbanu/docs/plans/active/p0-security-levels.md",
+      "sha256": "9a4ab3b78250b4b4a1a3b3e7dcc6a5be28d7a9e34fbc577c1635def37856fa5e",
+      "bytes": 53310
+    },
+    {
+      "path": "corbanu/docs/plans/security-source-reconciliation.md",
+      "sha256": "22f73c9b3eacd979d2395e06365cb0dd3e184c12ade2fec87beb3a760d27f30f",
+      "bytes": 50586
+    },
+    {
+      "path": "corbanu/docs/plans/openclaw-source-review-2026-08-28.md",
+      "sha256": "d2c45e2006486d8463e62835744543caa88d4466dab15a1d2b473fc076e61f04",
+      "bytes": 26068
+    },
+    {
+      "path": "corbanu/docs/plans/proposed/arbitrary-model-autoreview.md",
+      "sha256": "e46fb60845db18464e8a9bb2a0438000c07ef9fc34c0ca1f03e25913faedb827",
+      "bytes": 21271
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/index.md",
+      "sha256": "f6a2ec7e88f22c331d129ad388981c754634a5df53090fa4ca921f4cff3e4508",
+      "bytes": 10410
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md",
+      "sha256": "c2dd1457567ec9cba06fbd5520c0c2fbc4a26cb3a32904d9ade8d0e3008675b4",
+      "bytes": 3570
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-13-s02-scoped-vault-resolver.md",
+      "sha256": "8a78953d478c8455b1df60f822b41ebcd21c50cfd802eefe04febe87e62dadb6",
+      "bytes": 3045
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md",
+      "sha256": "05e2e720f94e460ba8fc85258c9faca64a8d325437104d78a1ccecb9c2d8c313",
+      "bytes": 3970
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md",
+      "sha256": "d6c21fcf5d5d2dca25ecbc83408baeab19b9d5ce59df94c381037001fb162a0d",
+      "bytes": 3992
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md",
+      "sha256": "54d0e41182dbf839d1508860e8f402e2bfda2b24446241a478cc09d891a9d4e4",
+      "bytes": 3670
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-15-s01-security-level-domain-foundation.md",
+      "sha256": "2a5269ff380eb9735b86c492699b53dece813ca22f05421b6676842bbdf3efdb",
+      "bytes": 2920
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-16-s01-authorization-decision-contract.md",
+      "sha256": "8c3cc3d5a319d1b8ea2499765a5adb0e4750a165b5d3676057964cf50e73632a",
+      "bytes": 2705
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-17-s01-bounded-delegation-grants.md",
+      "sha256": "552c183e419366b17da71e93140b02b91f7edf2e75a0753fcdd027e5c8eb78eb",
+      "bytes": 2575
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-18-s01-human-mandates-and-receipts.md",
+      "sha256": "c569b2abf8de6e1b55f050035d71ff19872432d531e5067fe5cf0309ce75e223",
+      "bytes": 2571
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-19-s01-revocation-contract.md",
+      "sha256": "c55d73fc5e87539f275eb8429b1dca46ef76a298f10276926b1c3290c79bebc6",
+      "bytes": 3086
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-20-s01-versioned-security-persistence.md",
+      "sha256": "26a2c65e07cfdc9da82ef9754bb9162111340a71523bfbd8d6f06ddd47837a60",
+      "bytes": 3340
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md",
+      "sha256": "c060bf781ca567fee8c85e9887b2f763242dbccfe9ef1c10a373d8901abfac53",
+      "bytes": 3178
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md",
+      "sha256": "bdc2144b5989ca857eb517b42c94545dad6a2dd815407de91c23b68189ae1538",
+      "bytes": 3374
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md",
+      "sha256": "53879a841c209de3edbadf5a16fca3e943868dc08138f8c2e312579c031431ea",
+      "bytes": 3416
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md",
+      "sha256": "751bb43613780b012f05d26f7e68195ab43ada060f9f88a83ae4ff286dbb6f08",
+      "bytes": 3221
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md",
+      "sha256": "2b196179837ec89e8748c8874f3f7780847af13f73199703dd7c3be89e0a788e",
+      "bytes": 3237
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md",
+      "sha256": "ad27220f01cc4660b0adeebb6926ba16721165151eb85ea59cb61071bfeceff6",
+      "bytes": 3117
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md",
+      "sha256": "9cb093fef901ee482415796f05df23983392569bd872249a064e4825c78fff01",
+      "bytes": 3191
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md",
+      "sha256": "32b9a3881c6db6ef3943950874151ae0041045286f01d6610da71a8b29196478",
+      "bytes": 2942
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md",
+      "sha256": "493122588df62d9bde65335942c4add041122da65499b3a624de1b2b14e650cd",
+      "bytes": 3015
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md",
+      "sha256": "696eaeb45962a7a96f8185586534df883e9bf654ffcbb9363a9135b2aecd54c2",
+      "bytes": 5337
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md",
+      "sha256": "270a8d95cc3ef6e449baff5f36fe000db181623cd39438004c18872ade837156",
+      "bytes": 3849
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md",
+      "sha256": "c337e078ccc7ca0253bbddd39eb1dfa2e8967ea801d33e86f6316fdcbe3376e9",
+      "bytes": 3647
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-27-s01-isolated-credential-broker.md",
+      "sha256": "9ded479858a73e6901500a61340020759cd9ee3c1ebd4548f02828be75fb2a7b",
+      "bytes": 4848
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md",
+      "sha256": "c2529b81a4955d2dad7cd38cec8e27294501b268fbfb24d8e35930de2dae0c16",
+      "bytes": 5205
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md",
+      "sha256": "3dcd0a7c2b8cb84d7915183a2588e70f27a24fb24f6af5c9049ec366195661e6",
+      "bytes": 4780
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md",
+      "sha256": "b0b8daac9fdcb3a2aa8279af86eb23f3e4091b3b64674de8860cd56df9408dfc",
+      "bytes": 4640
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md",
+      "sha256": "f3aac540af8e9f27ea74d386742a139393b6c8fdaf2911dbe92bf7be69aab363",
+      "bytes": 4737
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md",
+      "sha256": "c7deb918ac2169e252a8ed03088739e107d6d9be5b44bdb0327a9fe6de58d8e0",
+      "bytes": 4946
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md",
+      "sha256": "0cf0063ea52c00c8e489cb1fb8f792a8159400bcfa0b6890696e75593479cdbd",
+      "bytes": 4689
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md",
+      "sha256": "7a76b8f521d6d0e00c341c027c58d9df2ea8ae59b85a4ca3098300633c9684d1",
+      "bytes": 5156
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md",
+      "sha256": "93914fe2895d6af4a8755b8492f9da2a9a4daf059396286212ef9e09395b03d2",
+      "bytes": 4614
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-31-s01-pinned-retriever-isolation.md",
+      "sha256": "3406b9ca14f10f64e6de31d2d8a5cac5f0a64bca7db063433f490081dda3818f",
+      "bytes": 4564
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-31-s02-bounded-fetch-no-fallback.md",
+      "sha256": "c6a8de1e078e873b4edbb9a27a37119be9cd3e6e58ad9dc46f1137059b4506f0",
+      "bytes": 4563
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-31-s03-download-quarantine-promotion.md",
+      "sha256": "175c66f482624b08808939df235c71981cae4fc85bd329dc0384f74bfd79dcd5",
+      "bytes": 4670
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-32-s01-web-facade-and-registry.md",
+      "sha256": "19f74dad1f7b78667bcaeb13155e6141162b177d2ddd809991e3bc1452ee1fef",
+      "bytes": 4633
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-32-s02-existing-search-and-native-bypass.md",
+      "sha256": "6583cef5f44ae22a7a4a63d0de1179e9749698acea1275145a6d749b1f31f96c",
+      "bytes": 4589
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-32-s03-exa-search-adapter.md",
+      "sha256": "90f8d34f6c6fcaa1477a758cc22947499e91e07e0f050d1d62eca5887c01789a",
+      "bytes": 4598
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-32-s04-brave-search-adapter.md",
+      "sha256": "5593e37a410b4fcbfdd20b0ef4bacaa4cf13db0d6e54f040c5fd5390d713b459",
+      "bytes": 4585
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-32-s05-searxng-search-adapter.md",
+      "sha256": "175294e87215c274cc06b1b47f6839150302d03f14fc8118ffe4a0827bd53efe",
+      "bytes": 4499
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-32-s06-privacy-routing-and-failover.md",
+      "sha256": "5a20bec9146c0eb5b20b945a43756538b06b6ee0b37ce9d2d315b17cc99f03f6",
+      "bytes": 4568
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md",
+      "sha256": "7299b5f326c336da2a0140b49d40027ca9917036ebf5828bbbc63d67d0369055",
+      "bytes": 4518
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md",
+      "sha256": "eec459c9e42abb22a0a58add41edfc75c77441f0f3c57fa82dd0631bb9d7fe5a",
+      "bytes": 4708
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-34-s01-render-aware-sanitization.md",
+      "sha256": "d861da9b407888bcbf180f6979aa34d19ea414ada344e8858166b46c07e26022",
+      "bytes": 4643
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-34-s02-quarantine-state-and-store.md",
+      "sha256": "5eb2c1ba0875ae1f526f758348228ab6dcbca30613544cf4ccdff0dadbac83c3",
+      "bytes": 4441
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-34-s03-safe-quarantine-review.md",
+      "sha256": "a0405d00b5011389f97bba55a95bcd34ddca88b4f877c61ad9de315ef01700cc",
+      "bytes": 4422
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-35-s01-classifier-corpus-and-evaluation.md",
+      "sha256": "5ebb262e8b28ad90d4cb7d086ff651ccedde457b9c5f2144a8004ca003c4742e",
+      "bytes": 4632
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-35-s02-local-cpu-detector-artifact.md",
+      "sha256": "1bf172553a6deec898fe12c867226156c62c8f563d3313042bee1e14a7d92e22",
+      "bytes": 4437
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-35-s03-calibration-and-ingress-gate.md",
+      "sha256": "05ee4de16cc05554a955f8822d6a07ccadeecc6502e0a50a0de7d368469f9d63",
+      "bytes": 4710
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-36-s01-hosted-detector-consent-contract.md",
+      "sha256": "e4aa884248e6a3a59d7709cd99afb6e3a7df9e7607f5272f679954cc7014df0b",
+      "bytes": 4640
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-36-s02-hosted-bakeoff-and-local-fallback.md",
+      "sha256": "93cd1b0b728429c3f3829420bc2742bdfa4f51057b099ab0f000aafd955ac26a",
+      "bytes": 4639
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-37-s01-origin-bound-browser-login.md",
+      "sha256": "58422fbf60a7a0a26ab6fdacdd116762ac0226afc9afe56aa4b0ed4eb5d5b83b",
+      "bytes": 5361
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-37-s02-human-auth-handoff-lifecycle.md",
+      "sha256": "e244535cb1cd6a6fe38d4a356369687489f22ae0c3af54752831034c62ef0cb1",
+      "bytes": 4804
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-38-s01-typed-financial-executor.md",
+      "sha256": "d3b8ef226a788e3476fa0b7a6ff9830c75e3fbc54a89798095566d6231a2f909",
+      "bytes": 4672
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-38-s02-full-effect-preview-and-mandate.md",
+      "sha256": "50b631fd79610ba041dd4f5bff94e6af31721eea2ab79125ac62030ae345ced8",
+      "bytes": 4726
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-38-s03-sign-broadcast-and-receipts.md",
+      "sha256": "0a249e5735c8c24537624d1e1760d449c5d66aa32f7cf8df3a994fcbaa73a054",
+      "bytes": 4691
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-39-s01-protected-financial-derived-views.md",
+      "sha256": "d3f4f58521d83dc69f0888e183bcc569f03d9a975d3a812e55480ec9be0bf3f1",
+      "bytes": 4652
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-39-s02-outbound-disclosure-controls.md",
+      "sha256": "6e38b23ebc5c0fd0583ec2161a077cd663d76bb73d3d8a4cfebbe0aa2b1cbd1f",
+      "bytes": 5030
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-40-s01-sweep-events-and-rules.md",
+      "sha256": "c2a268bf2ec8450ac5631a444015fd6181d57c64e462d6238bbc31165a067f70",
+      "bytes": 4584
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-40-s02-isolated-sweep-reviewer.md",
+      "sha256": "7fcd2a5499a3a508b6b1c75afad9a2fdbb0c776417083269ae07fd652bd13d18",
+      "bytes": 4547
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-40-s03-sweep-alerts-and-recovery.md",
+      "sha256": "1b14b4c51ab962513fe0983af114bc81a8b50512c7dbd8650a485b435e1a54bf",
+      "bytes": 4571
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md",
+      "sha256": "6554c802c453c95c06eaf6d9c5e1fb3e5da814711c910dd8f1744310f8a80f2e",
+      "bytes": 4943
+    },
+    {
+      "path": "corbanu/docs/sprints/current/p0-security-levels/pf-41-s02-tamper-evident-security-audit.md",
+      "sha256": "56810a10d4aef421932b1b5c95f56471c64d50d16a40eb738031bc86e979cc4a",
+      "bytes": 4759
+    },
+    {
+      "path": "corbanu/docs/sprints/current/arbitrary-model-autoreview/index.md",
+      "sha256": "1efef6f8ecf21acaed7873a79c148fe4a915c95ac7d29f752227dcd8da21bc41",
+      "bytes": 1662
+    },
+    {
+      "path": "corbanu/docs/sprints/current/arbitrary-model-autoreview/pf-14-s01-request-and-skill-contract.md",
+      "sha256": "3382f49d7cd1c5fbb9a6bebc286cc50f309caa36d965470f1f894c809c8ee974",
+      "bytes": 2676
+    },
+    {
+      "path": "corbanu/docs/sprints/current/arbitrary-model-autoreview/pf-14-s02-review-packet-and-secret-gate.md",
+      "sha256": "9cd5bf86434a8b3a058806321bd45501c645a3a0a22e7085dbf0e47cc09df080",
+      "bytes": 2991
+    },
+    {
+      "path": "corbanu/docs/sprints/current/arbitrary-model-autoreview/pf-14-s03-core-provider-readiness.md",
+      "sha256": "a41dced1d91ee93be13882b490762b9427102eb249847fdf829e1c62b6cb1cf0",
+      "bytes": 2885
+    },
+    {
+      "path": "corbanu/docs/sprints/current/arbitrary-model-autoreview/pf-14-s04-exact-runtime-dispatch.md",
+      "sha256": "e108c0698e2e7bfb57950e288ab2d4b783e912f47a20c1c844ab0d1d8e30d369",
+      "bytes": 3076
+    },
+    {
+      "path": "corbanu/docs/sprints/current/arbitrary-model-autoreview/pf-14-s05-full-history-invariant.md",
+      "sha256": "4c18c5b52007be9c9dcbcbe40ea3226d8b88d20a6e63922c32f1308b9b537f31",
+      "bytes": 2879
+    },
+    {
+      "path": "corbanu/docs/sprints/current/arbitrary-model-autoreview/pf-14-s06-isolated-review-runner.md",
+      "sha256": "a39f9c3d49f46564b4c62a8da6ce9a2234bb8e96e625282cf5bd294b0e4d9866",
+      "bytes": 3228
+    },
+    {
+      "path": "corbanu/docs/sprints/current/arbitrary-model-autoreview/pf-14-s07-tui-qualification-and-docs.md",
+      "sha256": "bd196b823354817329beea1869eea60df40f7e4c149e4c7c74de8fe61dfc3cde",
+      "bytes": 3169
+    },
+    {
+      "path": "corbanu/qa/security-levels/planning/openclaw-2026-08-28/README.md",
+      "sha256": "9a2afa0602e8cf1dcd9c0fdf6e2b89a2a3315e50c77fe4ab5c6ebba34f2813ba",
+      "bytes": 5405
+    },
+    {
+      "path": "corbanu/qa/security-levels/planning/openclaw-2026-08-28/source-manifest.json",
+      "sha256": "d7c78f36a5b2291311c3ca7612bd28abaf66ff87b0913669b8df900a69c38033",
+      "bytes": 14279
+    },
+    {
+      "path": "corbanu/qa/security-levels/planning/openclaw-2026-08-28/probes.json",
+      "sha256": "f5a2ea3736b36d64fe78ece99c1bb8dcc117b98b3d18d9616e59155cd6674d7c",
+      "bytes": 1062
+    },
+    {
+      "path": "corbanu/qa/security-levels/planning/openclaw-2026-08-28/upstream-tests.json",
+      "sha256": "a70851dc6eb32cde044189c4cee675453a1ac672a48e36c12513210657b348d5",
+      "bytes": 33173
+    },
+    {
+      "path": "openclaw/LICENSE",
+      "sha256": "73571b25326281d369087f469842c02444fe39faaecebda4d82ed21ff3a1c29d",
+      "bytes": 1170
+    },
+    {
+      "path": "openclaw/SECURITY.md",
+      "sha256": "0794cfc7055b70a3333c0c45c1e239904cc37529b02beb461ca85193b2a76252",
+      "bytes": 36196
+    },
+    {
+      "path": "openclaw/docs/gateway/sandbox-vs-tool-policy-vs-elevated.md",
+      "sha256": "8a5a118715d6f3ba9759cf3dce539db01d93528daea96d7e1e3ff18e03e5c174",
+      "bytes": 12555
+    },
+    {
+      "path": "openclaw/docs/gateway/secrets.md",
+      "sha256": "047232736d7ce30bfaa006fafcbc682ffe81e5de3f66d02cec3d4d861f9ae673",
+      "bytes": 48556
+    },
+    {
+      "path": "openclaw/extensions/browser/src/browser/config.ts",
+      "sha256": "620830e56dae48eadf37f6bdc5545c8a1aaaf85c4a8bb96b0a36b0d2b5e7db86",
+      "bytes": 23461
+    },
+    {
+      "path": "openclaw/extensions/browser/src/browser/ssrf-policy-helpers.ts",
+      "sha256": "1131051ee30f8421ab410b4301c204c1d0b70dc7c95c8b68a0c005f1303ad86b",
+      "bytes": 2229
+    },
+    {
+      "path": "openclaw/extensions/memory-core/src/memory/memory-path-provenance.ts",
+      "sha256": "8f39e9adad21f99f44266097e37377831fb359d45a8e35b4d5ed1cb32f8ad7c2",
+      "bytes": 2526
+    },
+    {
+      "path": "openclaw/src/agents/agent-tools.ts",
+      "sha256": "44fd01d9145736975d2db7a440c0c03bd41e311286dcce403163f75efa318c61",
+      "bytes": 51156
+    },
+    {
+      "path": "openclaw/src/agents/bash-tools.exec-run.ts",
+      "sha256": "0f345f4353f64d8690264732fb73f6e4382a4c10490006725020e221d5cbdc08",
+      "bytes": 29761
+    },
+    {
+      "path": "openclaw/src/agents/embedded-agent-runner/cli-backend-dispatch-transcript.ts",
+      "sha256": "99116d2b40479109be273f0faa65dff406621d0f4c8a671ef9a7e6c4f56bd035",
+      "bytes": 8510
+    },
+    {
+      "path": "openclaw/src/agents/embedded-agent-runner/run-loop.ts",
+      "sha256": "94309f455d838cf669c4f620da3a2f6a71edece45a799c9456879293f55b6ced",
+      "bytes": 29997
+    },
+    {
+      "path": "openclaw/src/agents/embedded-agent-runner/run/turn-taint-state.ts",
+      "sha256": "7fd28e4064c555256feeaace2dbabb8b08d31ce1e0d7baaf1a1d7b20380723fe",
+      "bytes": 511
+    },
+    {
+      "path": "openclaw/src/agents/memory-write-provenance.ts",
+      "sha256": "7dee9d0e8f29ad36dcab87c0954551cf0f5ef313c242a29f41687050f5642729",
+      "bytes": 5268
+    },
+    {
+      "path": "openclaw/src/agents/provider-secret-egress.ts",
+      "sha256": "28b2308c0d66b20df123314abb2462d21f43b265da50031609d2c60313e7bbb4",
+      "bytes": 5601
+    },
+    {
+      "path": "openclaw/src/agents/provider-stream.ts",
+      "sha256": "473d7abf699cd98c924392b32b2996d52b16a28ecfbfe2c8c973329bbd60086a",
+      "bytes": 3751
+    },
+    {
+      "path": "openclaw/src/agents/sandbox/config.ts",
+      "sha256": "631aa8cd12054187663761929f5a1f21e13727ed1f9dd73dec4bcca7818e0b77",
+      "bytes": 11831
+    },
+    {
+      "path": "openclaw/src/agents/sandbox/context.ts",
+      "sha256": "f958f851e8e665f1d1850391db3d53de41af8845ac3060440da1b7d85f6cdcd0",
+      "bytes": 14806
+    },
+    {
+      "path": "openclaw/src/agents/sandbox/docker.ts",
+      "sha256": "94f51a0e613f629c91f5421725c19ee000f15811e6ec759169829fcb4b859666",
+      "bytes": 24588
+    },
+    {
+      "path": "openclaw/src/agents/sandbox/runtime-status.ts",
+      "sha256": "e9d5e1ae30336dd967c16fd2185e4474bfc6f82bc088f8a67f25983f30aa4f9e",
+      "bytes": 8524
+    },
+    {
+      "path": "openclaw/src/agents/tools/web-fetch.ts",
+      "sha256": "3c5d1f99364d3d203a5e85ba8ee62fc7bdd5045a6f9b68d4801ab02d7a6c43a8",
+      "bytes": 37797
+    },
+    {
+      "path": "openclaw/src/agents/tools/web-guarded-fetch.ts",
+      "sha256": "3b85dcabfcca445f98b14c6cc07663685db60c6b6f1e1cd05b182e630e495978",
+      "bytes": 3754
+    },
+    {
+      "path": "openclaw/src/auto-reply/reply/agent-runner-memory.ts",
+      "sha256": "34054bc2d1c5c5e30f45e6a04a308679ad563fe1008d395ebe11ad2840d678ef",
+      "bytes": 64938
+    },
+    {
+      "path": "openclaw/src/commands/sandbox-explain.ts",
+      "sha256": "a0744cc1c61c58f8e9f3db7c4c779cdff17044b46df04c7e992817252fcde8e5",
+      "bytes": 16311
+    },
+    {
+      "path": "openclaw/src/cron/isolated-agent/run-prepare.ts",
+      "sha256": "3c7c97bad70128502bbe8f619de71b476d8970edd8f48934b70523b82a8632d3",
+      "bytes": 26491
+    },
+    {
+      "path": "openclaw/src/gateway/server-core-runtime.ts",
+      "sha256": "5c0c806dee52a86b90ffd5591e99e5c384279df0e40de6e540f996458eacc746",
+      "bytes": 26500
+    },
+    {
+      "path": "openclaw/src/infra/net/fetch-guard.ts",
+      "sha256": "a0c13ee7e70f28665856d90d398e5924d81a95c82c5bb12cbe648e4bfc73a2e0",
+      "bytes": 28018
+    },
+    {
+      "path": "openclaw/src/infra/net/ssrf.ts",
+      "sha256": "348d2372f37ccc28576cf3530a477158eb847b4cc2f7b982ffe3269016c09a99",
+      "bytes": 24973
+    },
+    {
+      "path": "openclaw/src/logging/redact.ts",
+      "sha256": "5914b92f5b3c94fe0ee511e6607090d04d6639baaaabb0a0cd54e766177e56bb",
+      "bytes": 43741
+    },
+    {
+      "path": "openclaw/src/logging/secret-redaction-registry.ts",
+      "sha256": "5a04b76c89d0caf3b0a77768faa2f6494f8117d98079b1c86ddf1913533cea7d",
+      "bytes": 2926
+    },
+    {
+      "path": "openclaw/src/memory/memory-artifact-provenance.ts",
+      "sha256": "566543e2532a53a3ccdce222096e3f3a025f3d06bd64c44d0e8589bbd02e5794",
+      "bytes": 7243
+    },
+    {
+      "path": "openclaw/src/secrets/apply.ts",
+      "sha256": "b7ef70c405abfb3d35be992aed1ffbca05f61704bbca1e43a51075de16cf91b1",
+      "bytes": 34149
+    },
+    {
+      "path": "openclaw/src/secrets/audit.ts",
+      "sha256": "ca734405c8feae64aa662384d1af4882ecd6775d575189d1022388c23a8cc965",
+      "bytes": 24381
+    },
+    {
+      "path": "openclaw/src/secrets/egress-proxy/proxy-server.test.ts",
+      "sha256": "fe9f40ceead3166bb850c65e6f812fcc8c3ca81c9140da57d109daeab5dede04",
+      "bytes": 20680
+    },
+    {
+      "path": "openclaw/src/secrets/egress-proxy/proxy-server.ts",
+      "sha256": "c3d67bcc8947499bb883c09ca68f8bbffd5f67f2dbbde3252fab1c90c14e8c6f",
+      "bytes": 21177
+    },
+    {
+      "path": "openclaw/src/secrets/egress-proxy/registry.ts",
+      "sha256": "1f993d1acaa35ca4eb6e4fa1d7f78aa45180c41c32fdabc313055e801b1b620e",
+      "bytes": 1638
+    },
+    {
+      "path": "openclaw/src/secrets/egress-proxy/runtime.ts",
+      "sha256": "8774c757a8c3fa1e31130006f9f31d681dab5a940a0aaf05d2f5d4430b46e8ab",
+      "bytes": 2700
+    },
+    {
+      "path": "openclaw/src/secrets/egress-proxy/stream-substitution.ts",
+      "sha256": "1df3b84920f824e50b737e8677dfd7f44cd39923a27a4b34280d69eeda003a56",
+      "bytes": 4157
+    },
+    {
+      "path": "openclaw/src/secrets/runtime-state.ts",
+      "sha256": "c241873579c0f45877a9204555497254ce0c52542f88c76ba525953c1eb9b38e",
+      "bytes": 47221
+    },
+    {
+      "path": "openclaw/src/secrets/sentinel.ts",
+      "sha256": "64dcc2f2a1cdd295a6eea062c8fa5325048d5fa9cb4a53ddd1d22fc923ce1d9f",
+      "bytes": 5361
+    },
+    {
+      "path": "openclaw/src/security/external-content-source.ts",
+      "sha256": "3d63cc76484787e66b6684260b1b0e999b893b9cb6b4e0d19c77d208b7b6857a",
+      "bytes": 1341
+    },
+    {
+      "path": "openclaw/src/security/external-content.test.ts",
+      "sha256": "31c90e664668d96a8e8f36db49189d01079f3bdfd88eb4f554bfb435d48aea84",
+      "bytes": 28094
+    },
+    {
+      "path": "openclaw/src/security/external-content.ts",
+      "sha256": "54789a5965db70ad23e824e61df807b258550036d681be50cc4617dc5e4d0c8a",
+      "bytes": 15376
+    },
+    {
+      "path": "corbanu-tracked-code-paths.txt",
+      "sha256": "f8dfde3d8392004dd106736fbb90b79c169078bf85b96ce2a13d27b65c09d6ac",
+      "bytes": 339732
+    }
+  ]
+}

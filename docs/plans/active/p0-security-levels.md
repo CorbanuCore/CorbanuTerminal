@@ -5,15 +5,15 @@ change_class: product-initiative
 priority: P0
 owner: "Jim Ricketts"
 activation_authority: "Product authority defined in the product specification"
-activation_basis: "Accountable sequencing item 1 defines /security as P0 and immediate."
+activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to reconcile the complete security program into this active plan."
 target_release: "TBD — candidate qualified by 2026-10-08"
 deadline: 2026-10-08
 created: 2026-08-23
-updated: 2026-08-24
+updated: 2026-08-28
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
-  requirement_excerpt: "Permissive preserves the shipping behavior and does not silently change existing policies."
+  requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
   - path: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
     branch: "feat/p0-security-levels"
@@ -36,6 +36,49 @@ Plan lifecycle: `docs/plans/index.md`
 | Authoritative decision | “Accountable sequencing,” item 1: `/security` is P0 and begins immediately |
 | Delivery owner | Jim Ricketts |
 | Deadline | **2026-10-08** |
+
+## Reconciled planning decision — 2026-08-28
+
+Travis Good requested the full security program, selectively reusing the cancelled
+firewall decomposition and using the working-session overview/transcript and
+OpenClaw implementation as primary grounding. This **planning update**, not a
+product-code or release change, merges those contracts into this one active plan.
+
+[Source reconciliation and all 72 archive dispositions](../security-source-reconciliation.md)
+records the source hashes, transcript timestamps, pinned OpenClaw code, differences
+from that reference and new owners. The earlier proposed firewall plan remains
+historical input, not competing implementation authority.
+
+The [OpenClaw source review](../openclaw-source-review-2026-08-28.md) pins the
+2026-08-28 download at `13adff02ca3897768d80d2bca18f5acf08c55d91` and maps
+implementations, callers, defaults and tests to OC-1–11. It is targeted reference
+research, not OpenClaw-wide or Corbanu release qualification. Reuse persistent
+memory provenance as well as turn taint; explicitly test open-channel revocation,
+complete reflected-secret removal, missing-lineage handling, proxy/DNS bypasses
+and migration ownership. Upstream's trusted-host defaults are not Moderate or
+Aggressive guarantees.
+
+For each adaptation, record the pinned upstream function/test, Corbanu owner and
+small Codex integration hook, license notice, deliberate differences and final-tree
+regression evidence. Keep the source checkout/reference outside the Corbanu runtime
+dependency graph. PF-26 must track unexecuted reference cases separately from
+passing candidate evidence; no source citation alone closes an acceptance item.
+
+- **Permissive retains compatibility.** No mandatory broker, environment purge,
+  ingestion classifier or migration is silently added to its shipping path.
+  Existing stricter low-level restrictions remain intact.
+- **Every level above Permissive requires the broker.** Moderate and Aggressive
+  use separately constrained credential/financial execution, secretless agent
+  launch and deterministic ingress/disclosure policy. Unsupported adapters or
+  isolation fail visibly; they never fall back to raw credentials.
+- **All source requirements have owners.** Retain/reconcile 23 current records,
+  add 40 single-feature drafts, and leave all 72 cancelled records untouched.
+  There are now 63 security execution units; the seven Autoreview drafts are unrelated.
+- **No evidence is retroactively accepted.** The first seven recorded commits
+  still require reconciliation. PF-15-S01 remains the only ready sprint.
+- The existing October 8 deadline is unchanged, but this larger program has not
+  been effort-estimated or scheduled. The owner must assess capacity and surface
+  any conflict; no scope or release gate is silently waived.
 
 ## User pain
 
@@ -70,9 +113,9 @@ the level.
 | Field | Value |
 | --- | --- |
 | Exact product-spec heading | **P0 `/security` levels** |
-| Plan requirement excerpt | “Permissive preserves the shipping behavior and does not silently change existing policies.” |
-| PF-13 trust-boundary heading | **Required trust boundaries** |
-| PF-13 requirement excerpt | “Permit agents to reference credentials only by label; resolve them solely inside the trusted execution boundary.” |
+| Plan requirement excerpt | “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.” |
+| Credential trust-boundary heading | **Required trust boundaries** |
+| Credential requirement excerpt | “Credentials are referenced by label and resolved only inside a trusted execution boundary.” |
 | Product outcome advanced | One understandable control for agent security posture |
 | North-star criterion advanced | External content cannot silently gain sensitive access or change security policy |
 
@@ -105,10 +148,18 @@ the level.
 - Require explicit human confirmation for a downgrade; cancel or restart must
   not apply an unconfirmed change.
 - Add compatibility, policy, adversarial, snapshot, and true-TUI evidence.
+- Implement the complete PF-27–41 contracts below: process/environment containment,
+  reflected-output gates, migration, durable provenance, isolated retrieval,
+  screened search adapters, SSRF controls, sanitization/quarantine, local and
+  optional hosted detection, browser login, financial execution/derived views,
+  outbound disclosure, Agent Sweep, and runtime inspection/audit.
 
 ### Out
 
-- Implementing external protocols or integrations.
+- Implementing external protocol servers, new trading venues, or unrelated
+  integrations. Security-specific existing-search/Exa/Brave/SearXNG adapters,
+  one reviewed login origin plus fixtures and the optional detector interface are in scope;
+  this is not authorization for paid accounts, live trades or commercial contracts.
 - Claiming conformance to AP2, OAuth, OpenID, or SPIFFE; this plan adopts
   relevant control semantics inside Corbanu.
 - Adding unrelated product capabilities or downstream integrations.
@@ -134,7 +185,23 @@ the level.
   invalidate incompatible pending authority.
 - **Inheritance never weakens.** Child agents receive the same or a stricter
   effective level.
-- **Secrets stay out of model-visible and audit paths.**
+- **Protected modes keep managed secrets outside agent-readable paths.**
+  Raw operational credentials and custody material never enter model, generic
+  tools, shell environment/argv, logs, transcripts, summaries or artifacts.
+  Permissive retains its baseline and makes no added secretless guarantee.
+- **Independent defenses compose.** Isolation, tool policy, broker authority,
+  egress checks, screening and output gates are separate controls; no classifier
+  score or source wrapper grants authority.
+- **Taint is durable.** Compaction, memory, a new turn or another agent cannot
+  promote untrusted material. Exact human action approval does not erase taint.
+- **Failures are observable.** Missing backend, broker, required local classifier,
+  safe migration or audit prerequisites block affected protected work; no silent
+  native-search/host-browser/raw-auth fallback.
+- **Bound the claim.** The protected boundary covers managed credentials and
+  classified/configured protected resources. Inventory/redaction heuristics do
+  not guarantee discovery of every unknown secret in arbitrary user text, nor
+  defend against a fully compromised trusted host. Unknown routes/data deny or
+  quarantine; known historical exposure requires clean-context recovery.
 - **Aggressive grants are narrow and expire.**
 - **Kill switch and revocation override pending work and survive restart.**
 
@@ -162,7 +229,7 @@ update; it cannot silently change Permissive or an accepted security level.
 
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
-| Jim Ricketts | `/home/pfrpc/repos/CorbanuTerminal-security-levels` | `feat/p0-security-levels` | `3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb` | Security-level model, persistence, policy composition, TUI, tests, and evidence |
+| Jim Ricketts | `/home/pfrpc/repos/CorbanuTerminal-security-levels` | `feat/p0-security-levels` | `3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb` | Complete reconciled security program, policy/broker/ingress/financial adapters, TUI and evidence |
 
 Implementation does not occur in the documentation checkout. Update this plan
 before changing the implementation worktree, base, owner, or scope.
@@ -190,7 +257,9 @@ before changing the implementation worktree, base, owner, or scope.
 ## Sprint execution map
 
 This map covers every implementation and qualification unit currently required
-by the plan. All records use the allocated worktree, branch, and base commit.
+by the plan: **63 current sprints**. The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
+is the dependency-correct sequence; feature IDs are stable identifiers, not
+execution order. All records use the allocated worktree, branch, and base commit.
 Code presence is not completion: PF-15 through PF-21 reconcile seven existing
 feature-worktree commits whose final-tree evidence has not yet been accepted.
 Only dependency-free PF-15-S01 is `ready`; every other record remains `draft`
@@ -211,6 +280,21 @@ until its dependencies are completed and archived.
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
 | `PF-26` | Harnesses, true-TUI/live-repository qualification, human acceptance, and finished docs | [S01](../../sprints/current/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md), [S02](../../sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md), [S03](../../sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | draft |
+| `PF-27` | Isolated credential broker and secretless launch | [S01](../../sprints/current/p0-security-levels/pf-27-s01-isolated-credential-broker.md), [S02](../../sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md) | draft |
+| `PF-28` | Central output and reflected-secret protection | [S01](../../sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md), [S02](../../sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) | draft |
+| `PF-29` | Protected-mode inventory and human migration | [S01](../../sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md), [S02](../../sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md) | draft |
+| `PF-30` | Durable provenance and post-taint authority | [S01](../../sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md), [S02](../../sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md), [S03](../../sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) | draft |
+| `PF-31` | Isolated retrieval and download promotion | [S01](../../sprints/current/p0-security-levels/pf-31-s01-pinned-retriever-isolation.md), [S02](../../sprints/current/p0-security-levels/pf-31-s02-bounded-fetch-no-fallback.md), [S03](../../sprints/current/p0-security-levels/pf-31-s03-download-quarantine-promotion.md) | draft |
+| `PF-32` | Screened web facade and search providers | [S01](../../sprints/current/p0-security-levels/pf-32-s01-web-facade-and-registry.md), [S02](../../sprints/current/p0-security-levels/pf-32-s02-existing-search-and-native-bypass.md), [S03](../../sprints/current/p0-security-levels/pf-32-s03-exa-search-adapter.md), [S04](../../sprints/current/p0-security-levels/pf-32-s04-brave-search-adapter.md), [S05](../../sprints/current/p0-security-levels/pf-32-s05-searxng-search-adapter.md), [S06](../../sprints/current/p0-security-levels/pf-32-s06-privacy-routing-and-failover.md) | draft |
+| `PF-33` | Destination validation and connection enforcement | [S01](../../sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md), [S02](../../sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md) | draft |
+| `PF-34` | Sanitization quarantine and safe review | [S01](../../sprints/current/p0-security-levels/pf-34-s01-render-aware-sanitization.md), [S02](../../sprints/current/p0-security-levels/pf-34-s02-quarantine-state-and-store.md), [S03](../../sprints/current/p0-security-levels/pf-34-s03-safe-quarantine-review.md) | draft |
+| `PF-35` | Local classifier and blind qualification | [S01](../../sprints/current/p0-security-levels/pf-35-s01-classifier-corpus-and-evaluation.md), [S02](../../sprints/current/p0-security-levels/pf-35-s02-local-cpu-detector-artifact.md), [S03](../../sprints/current/p0-security-levels/pf-35-s03-calibration-and-ingress-gate.md) | draft |
+| `PF-36` | Optional hosted detector and safe fallback | [S01](../../sprints/current/p0-security-levels/pf-36-s01-hosted-detector-consent-contract.md), [S02](../../sprints/current/p0-security-levels/pf-36-s02-hosted-bakeoff-and-local-fallback.md) | draft |
+| `PF-37` | Origin-bound browser login and human handoff | [S01](../../sprints/current/p0-security-levels/pf-37-s01-origin-bound-browser-login.md), [S02](../../sprints/current/p0-security-levels/pf-37-s02-human-auth-handoff-lifecycle.md) | draft |
+| `PF-38` | Typed financial execution and exact effects | [S01](../../sprints/current/p0-security-levels/pf-38-s01-typed-financial-executor.md), [S02](../../sprints/current/p0-security-levels/pf-38-s02-full-effect-preview-and-mandate.md), [S03](../../sprints/current/p0-security-levels/pf-38-s03-sign-broadcast-and-receipts.md) | draft |
+| `PF-39` | Derived financial views and disclosure control | [S01](../../sprints/current/p0-security-levels/pf-39-s01-protected-financial-derived-views.md), [S02](../../sprints/current/p0-security-levels/pf-39-s02-outbound-disclosure-controls.md) | draft |
+| `PF-40` | Agent Sweep and safe recovery | [S01](../../sprints/current/p0-security-levels/pf-40-s01-sweep-events-and-rules.md), [S02](../../sprints/current/p0-security-levels/pf-40-s02-isolated-sweep-reviewer.md), [S03](../../sprints/current/p0-security-levels/pf-40-s03-sweep-alerts-and-recovery.md) | draft |
+| `PF-41` | Effective security inspector and audit | [S01](../../sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md), [S02](../../sprints/current/p0-security-levels/pf-41-s02-tamper-evident-security-audit.md) | draft |
 
 ### PF-13 integration contract
 
@@ -224,10 +308,126 @@ using the existing OpenAI bearer header; redirects and adjacent hosts fail.
 
 Permissive retains the shipping `vault auth-helper` and broker behavior.
 PF-13-S04 makes that raw-secret helper unavailable to agent execution under
-Moderate and Aggressive, which must use the brokered path. PF-13-S05 supplies
-canary and independent-review evidence before PF-23 composes the boundary into
-the security profiles. PF-26-S03 updates finished vault/authentication guidance
+Moderate and Aggressive. PF-27 then moves raw resolution to a separately
+constrained process; PF-28 adds reflected-response/output gating, PF-29 adds
+safe migration and PF-33 binds actual network connections. PF-13-S05 depends
+on those completed boundaries before collecting canary/independent-review proof.
+The original in-process slice alone is not the final protected-mode guarantee. PF-26-S03 updates finished vault/authentication guidance
 only after candidate acceptance.
+
+## Expanded feature contracts
+
+These are unfinished contracts authorized for planning/execution through their
+individual sprints, not claims of shipped behavior. New crate/module paths in
+sprints are explicitly planned; validate actual foundation paths in the recorded
+implementation worktree before readiness. Add Cargo/Bazel parity in the owning
+sprint. [Source decisions](../security-source-reconciliation.md) are authoritative
+for design provenance; product scope remains in the specification.
+
+### PF-27
+
+**Isolated credential broker and secretless launch.** One trusted broker owns raw credential resolution and a bounded authenticated IPC surface. All model/exec/child/MCP/plugin/hook/provider-pane launch paths use a secretless allowlist and OS restrictions; unsupported platform containment prevents protected activation.
+
+### PF-28
+
+**Central output and reflected-secret protection.** One broker-side output registry/gate covers managed values and supported encodings, short secrets, chunks, active rotations, reflected responses and every persistence/export sink. Resource pressure or unsupported response decoding denies; it never evicts protection for live credentials.
+
+### PF-29
+
+**Protected-mode inventory and human migration.** Inventory only scoped supported sources without leaking their values. Human preview binds migration to exact file identities; use encrypted vault/recovery storage, atomic journal, re-audit and clean-context handling for contaminated histories. Cancel is inert; failure cannot claim activation.
+
+### PF-30
+
+**Durable provenance and post-taint authority.** Trusted ingress assigns immutable source/authority/lineage envelopes. Propagate conservative taint through every provider serialization, summary, memory, cache/import/export, child/mailbox and resume path. Re-evaluate protected actions at use; neither a detector nor a summarizer creates authority.
+
+### PF-31
+
+**Isolated retrieval and download promotion.** Pin a Scrapling-class public retrieval artifact and isolate it from workspace/vault/wallet/browser profiles/IPC with bounded resources and egress. Fetch/open/click/find cannot fall back to the host browser. Downloads are sealed until exact human digest/destination promotion, which preserves taint and does not execute.
+
+### PF-32
+
+**Screened web facade and search providers.** Keep web.run semantics in Permissive; protected modes use one normalized screened facade. Implement the existing SearchClient adapter plus Exa, Brave and SearXNG with minimal queries, stable references, explicit capabilities, cost limits and already-authorized same-role failover. Native search that cannot be screened before model access is disabled.
+
+### PF-33
+
+**Destination validation and connection enforcement.** Enforce scheme/host/port/method/path and all resolved addresses at redirects, retries and actual connections; prevent rebinding, private-network/metadata access and direct socket/proxy/QUIC escape. A human-configured exact self-hosted search service is a narrow adapter exception, not arbitrary private fetch.
+
+### PF-34
+
+**Sanitization quarantine and safe review.** Render-aware cleaning strips hidden/non-body and unsafe control content, preserving raw/sanitized digests and immutable provenance. Encrypted bounded quarantine enforces allow/rescan/quarantine/reject before model visibility, with safe human review and restart recovery. Cleaned or released content remains untrusted.
+
+### PF-35
+
+**Local classifier and blind qualification.** Ship a licensed, reproducible, offline CPU detector with leakage-free evaluator-owned holdouts and profile-calibrated thresholds. Screen complete bounded inputs before exposure. Missing artifacts/timeouts pause ingestion in Moderate and Aggressive; forced false negatives still cannot authorize secrets or financial actions.
+
+### PF-36
+
+**Optional hosted detector and safe fallback.** Build the optional hosted interface/consent and evaluation path without selecting or purchasing a vendor. Enable only a qualified named service with approved data terms and cost cap; otherwise record disabled-no-qualified-vendor. Outages use an already-qualified local detector or pause. This optional disposition cannot waive required local qualification.
+
+### PF-37
+
+**Origin-bound browser login and human handoff.** Use a separate origin-bound credentialed browser session, not the public retrieval worker or host profile. Broker fills only an adapter-reviewed login form; raw passwords/cookies never reach the model. Qualify a deterministic fixture and one human-selected permitted HTTPS origin with a non-production test account; record the exact origin/form contract before sprint readiness. MFA/passkeys/CAPTCHA remain human-only, sensitive keystrokes unrecorded, and cancellation/revocation destroys pending session authority. Additional origins remain denied until reviewed.
+
+### PF-38
+
+**Typed financial execution and exact effects.** Adapt existing wallet operations and a fake venue, not a new trading integration. Typed canonical requests and atomic limits precede complete-effect simulation/preview. Reuse PF-16–19 mandates; sign and broadcast are separate, exact-human-approved operations in Aggressive. Durable idempotency/status recovery prevents blind replay after uncertain submission.
+
+### PF-39
+
+**Derived financial views and disclosure control.** Account reads stay trusted; model-visible outputs are purpose/precision/expiry-limited derived values with reconstruction budgets. Apply typed disclosure checks to provider payloads, search, tools, social/email, artifacts, clipboard/export and child messages; operational credentials/custody material cannot be disclosed above Permissive.
+
+### PF-40
+
+**Agent Sweep and safe recovery.** Use secret-free tamper-evident behavior events and deterministic anomaly rules to pause/revoke/kill. An optional isolated reviewer receives only sanitized events and cannot grant authority. Human recovery requires fresh scoped authority and preserves taint, audit and irreversible-action status across restart.
+
+### PF-41
+
+**Effective security inspector and audit.** Display requested versus actual level/backend/isolation/egress, broker/classifier readiness, leases/grants/expiry, taint, denials, retention and audit integrity. Degradation must be visible. Human support exports are minimized and disclosure-gated; an integrity gap cannot be hidden behind a healthy badge.
+
+### Profile and failure contract
+
+| Surface | Permissive | Moderate | Aggressive |
+| --- | --- | --- | --- |
+| Existing approvals/sandbox/tool rules | Frozen baseline | Compose existing denials with new policy | Same, never weaken |
+| Credentials/agent environment | Existing supported behavior | Broker only; no raw managed secrets in agent env/context | Same plus narrow expiring credential-use grants |
+| Protected financial data | Existing policy | Only scoped derived values | Derived views denied until explicit narrow grant |
+| Public retrieval/search | Existing route/history/native behavior | Isolated fetch and screened authorized search | Same plus explicit provider/destination grants |
+| Ingestion/provenance | Existing behavior | Sanitize, screen, durable taint | Stricter threshold; missing provenance rejects |
+| Local classifier unavailable | No new control | Pause external ingestion | Pause external ingestion |
+| Optional hosted detector/reviewer | No automatic activation | Explicit data/cost consent and qualification | Same plus narrow disclosure/egress grants |
+| Login/challenges/downloads | Existing workflows | Exact-origin broker login; human challenges/promotion | Same plus explicit narrow access |
+| Financial operations | Existing policy | Typed limits, complete effect and required mandate | Default deny; exact human approval for each sign and broadcast |
+| Clipboard/export/egress | Existing policy | Typed disclosure gate; raw secrets denied | Denied until exact eligible derived-data grant |
+| Broker/backend/migration failure | Existing behavior | Block activation or affected protected work | Same; never downgrade automatically |
+| Revocation/restart | Existing policy | Durable stop, fresh revalidation | Same; no stale grant/session restoration |
+
+The implementation must version the resolved profile bundle and record effective
+sandbox, network, browser, protected-data, lease, ingress, inheritance, retention
+and audit settings. Atomic transition previews use that effective bundle, not
+only the three-level name. A partially implemented draft is not eligible to
+advertise a working protected mode.
+
+### Local classifier qualification targets
+
+Retain the researched targets from the historical proposal as this feature's
+qualification baseline, not a new repository-wide policy or a detector guarantee.
+PF-35-S01 records the exact weakest supported CPU and evaluation manifests before
+training; threshold/resource changes require product review before acceptance.
+
+| Measure | Target |
+| --- | --- |
+| Benign false positives | ≤0.1% on ≥100,000 held-out benign segments, with confidence interval |
+| Known-family detection | ≥80% at that low-FPR operating point |
+| Unseen-source/evasion detection | ≥65% at the same threshold; every miss remains policy-contained |
+| Benign position/trigger perturbations | ≤2 percentage-point rejection increase |
+| CPU envelope | p95 ≤50 ms per 2,048-token segment; peak RSS ≤512 MiB; model ≤300 MiB |
+| Privacy | No real customer secrets/protected financial records in corpus, hosted payloads, metrics or artifacts |
+| Deterministic safety | All critical unauthorized-disclosure/action cases deny, including forced detector misses |
+
+Long inputs must be bounded and screened across segment boundaries. Measure
+end-to-end latency as well as per-segment speed; the model cannot receive a
+streamed prefix while screening is pending. A failed required target remains
+incomplete; do not substitute a wrapper heuristic or optional hosted service.
 
 ## Acceptance flows
 
@@ -235,13 +435,22 @@ only after candidate acceptance.
 | --- | --- | --- | --- | --- |
 | Existing-user compatibility | Pre-feature config and representative workflows | Upgrade and continue without opening `/security` | Level is Permissive; behavior is unchanged | Policy snapshots, approval decisions, and workflow outcomes match the baseline |
 | Open and cancel | Any level | Open `/security`, highlight another level, press `Esc` | Tab closes and current level remains | No config, session, child-agent, or audit state changes |
-| Select Moderate | Permissive | Select Moderate, inspect differences, confirm | Moderate becomes visible immediately | Active and future agents enforce Moderate and one redacted change event is recorded |
+| Select Moderate | Permissive | Select Moderate; pass preflight/migration, inspect differences, confirm | Effective Moderate appears only when all required components are ready | Active/future agents enforce the complete profile; unsupported routes fail visibly and one redacted change event is recorded |
 | Moderate hostile input | Moderate; untrusted page, file, or tool output contains instructions | Ask the agent to process it | Normal analysis may continue; secret, protected-data, policy-change, and protected-action requests are blocked | No protected value or unauthorized action reaches model-visible output or execution |
 | Select Aggressive | Moderate | Select Aggressive and confirm | Sensitive surfaces show denied-by-default state and grant affordances | All listed sensitive paths deny until a human grants narrow access |
 | Aggressive temporary grant | Aggressive | Grant one sensitive action with scope and expiry | Only that action becomes available; scope and expiry remain visible | Adjacent tool, account, destination, child agent, and post-expiry attempts fail |
 | Downgrade | Aggressive with a pending grant or approval | Select Permissive and confirm the protection-removal summary | Downgrade applies and incompatible pending authority is invalidated | No old grant or approval can be replayed |
 | Restart/resume | Moderate or Aggressive with kill switch or revocation active | Restart Corbanu and resume the session | Level and restrictive state are restored | No transient fallback to Permissive and no stale approval restoration |
 | Agent tries policy change | Any level | Prompt or tool output asks Corbanu to weaken security | Request is treated as untrusted content | No policy mutation path is available to the agent |
+| Secret migration | Permissive with synthetic legacy auth/history | Dry-run, cancel, confirm, inject failure, recover | Values never shown; protected activation waits for clean state | No plaintext rollback and no contaminated resume |
+| Allowed-host reflection | Protected broker with fake provider | Send a credentialed request that reflects the credential | Redacted response or bounded denial | Canary absent from model/tool/log/stream/artifact sinks |
+| Poisoned memory | Protected mode | Read hostile text, summarize, store, spawn child and resume | Original untrusted lineage persists | Forced benign detector result still cannot grant authority |
+| Screened web failure | Protected web.run | Search/fetch, fail provider/worker/classifier | Safe permitted same-role retry or visible pause | No native-search or host-browser bypass |
+| Quarantine/download | Suspicious page or file | Inspect, cancel, rescan or approve exact promotion | Esc is inert; content remains tainted | No active raw rendering, uncontrolled write or auto-execution |
+| Brokered login | Fake exact-origin credentialed session | Approve login, handle human challenge, revoke | No password/cookie in model or recorded input | Wrong origin and stale session deny across restart |
+| Financial effect | Fake wallet/venue | Preview, sign, separately approve broadcast; simulate timeout | Complete expected effect and honest uncertain status | No mutation, duplicate transfer or blind resubmission |
+| Derived-data disclosure | Synthetic protected portfolio | Request view/export, cancel, grant exact permitted view | Only authorized derived data leaves trusted boundary | Reconstruction, raw portfolio and secret export deny |
+| Sweep/inspector | Active protected task | Trigger anomaly; inspect runtime; recover and restart | Actual degradation, stop and fresh-authority requirements visible | Old grants remain revoked and audit is secret-free |
 
 ## Standards-derived acceptance contract
 
@@ -256,26 +465,32 @@ only after candidate acceptance.
 
 ## Implementation sequence
 
-1. **Reconcile the existing foundation.** Execute PF-15 through PF-21 in
-   dependency order. Review the seven existing commits, correct them if needed,
-   collect final-tree evidence, and archive each record; code presence alone is
-   not acceptance.
-2. **Compose runtime authority.** PF-22 makes Core the source of effective policy
-   and child inheritance. PF-13 then builds the credential capability, scoped
-   vault resolver, exact OpenAI proxy path, bypass closure, and adversarial proof.
-3. **Connect protected surfaces.** PF-23 applies Moderate/Aggressive decisions at
-   content, vault, permission, approval, network, tool, and agent boundaries
-   without changing Permissive or overriding an existing denial.
-4. **Build the trusted TUI.** PF-24 implements profile view and transitions;
-   PF-25 implements narrow grants, revocation, kill switch, and recovery with
-   snapshots. Agents have no route to these human-origin events.
-5. **Qualify the final candidate.** PF-26-S01 produces deterministic harnesses
-   and the standards crosswalk. PF-26-S02 performs true-TUI success, failure,
-   recovery, and resume workflows in disposable TensorCash and Isometric Game
-   worktrees with actual keys sent.
-6. **Accept, document, and link release evidence.** PF-26-S03 obtains named human
-   acceptance, updates only finished security/vault/authentication guidance, and
-   records release and benchmark state before plan completion.
+Use the [63-record ordered index](../../sprints/current/p0-security-levels/index.md)
+for exact dependencies; there is at most one in-progress sprint.
+
+1. **Reconcile existing foundations.** PF-15–21 review the seven recorded commits,
+   prove the frozen baseline and archive accepted evidence; PF-22 composes runtime policy.
+2. **Complete the first credential boundary.** PF-13-S01–S04 build narrow capabilities,
+   resolver and OpenAI substitution. PF-27/28/33 add process, output and connection
+   guarantees. PF-24-S01 provides the initial honest profile view; PF-29 adds
+   preflight/migration. PF-13-S05 then independently qualifies that complete boundary.
+3. **Make authority durable and usable.** PF-30 adds provenance/memory/post-taint
+   checks; PF-23 composes profiles, PF-24-S02 confirms safe transitions and PF-25
+   provides grants/stop/recovery. Missing future adapters remain denied.
+4. **Build protected research.** PF-31 isolation, PF-34 cleaning, PF-35 local
+   qualification, then PF-34 quarantine/review and PF-32 screened provider adapters.
+5. **Qualify optional detection.** PF-36 adds consent, a fake-service contract and
+   measured hosted disposition; no commercial vendor is assumed.
+6. **Complete protected workflows.** PF-37 login/human handoff, PF-38 existing-wallet
+   execution and PF-39 derived-data/outbound checks reuse the same authority types.
+7. **Close operator visibility.** PF-40 Sweep and PF-41 actual-state/audit inspection
+   complete stop/recovery/degradation coverage.
+8. **Requalify the entire final tree.** PF-26-S01 checks every source requirement,
+   old-to-new mapping, standards/threat class and forced-miss regression.
+   PF-26-S02 repeats all applicable true-TUI workflows in both live repositories.
+9. **Accept and document.** PF-26-S03 requires named human/independent review,
+   finished-only guidance and release/benchmark evidence. Planning completeness
+   is not implementation, release readiness or a promised ship date.
 
 ## Automated evidence
 
@@ -289,6 +504,8 @@ Run fix and formatting tools before the final affected tests.
 | Security policy | `cd codex-rs && just test -p codex-security-policy` | pending | `qa/release/<version>/security/policy-tests.txt` |
 | Config and core integration | `cd codex-rs && just test -p codex-config && just test -p codex-core` | pending | `qa/release/<version>/security/integration-tests.txt` |
 | Vault and network boundaries | `cd codex-rs && just test -p codex-vault && just test -p codex-network-proxy` | pending | `qa/release/<version>/security/boundary-tests.txt` |
+| Expanded broker/ingress/retriever suites | `cd codex-rs && just test -p codex-secret-broker && just test -p codex-content-security && just test -p codex-web-retriever && just test -p codex-web-search-extension` | pending; new crates are planned | `qa/release/<version>/security/expanded-boundaries/` |
+| Classifier corpus/artifact/quality | `python3 scripts/security-classifier-eval --manifest <frozen-manifest> --artifact <pinned-artifact> --output <dir>` | pending; evaluator is PF-35 work | `qa/release/<version>/security/classifier/` |
 | TUI and snapshots | `cd codex-rs && just test -p codex-tui` | pending | `qa/release/<version>/security/tui-tests.txt` |
 | Adversarial matrix | `python3 scripts/security-level-adversarial --candidate <binary> --output <dir>` | pending; harness is part of stage 5 | `qa/release/<version>/security/adversarial/` |
 | Standards crosswalk | `python3 scripts/security-level-standards-check --manifest qa/release/<version>/security/standards-crosswalk.yaml` | pending; checker and manifest are part of stage 5 | `qa/release/<version>/security/standards-crosswalk.yaml` |
@@ -306,6 +523,14 @@ prompt text and Enter separately. `corbanu exec` is not acceptable proof.
 | Moderate | TensorCash disposable worktree | Select Moderate; confirm; process hostile fixture; attempt protected action; cancel and retry | Level visible; normal work continues; prohibited request blocked; approval state exact | pending | `qa/release/<version>/security/tui/moderate/` |
 | Aggressive | Isometric Game disposable worktree | Select Aggressive; confirm; attempt sensitive tool; grant one scoped action; spawn child; wait for expiry | Default denial; one narrow grant; child cannot weaken; expiry removes access | pending | `qa/release/<version>/security/tui/aggressive/` |
 | Downgrade/recovery | Isometric Game disposable worktree | Activate kill switch; request downgrade; inspect warning; cancel once, then confirm; restart and resume | Cancel preserves level; confirmation invalidates pending authority; persisted state is coherent | pending | `qa/release/<version>/security/tui/recovery/` |
+
+Additional PF-26-S02 cases use the same final candidate and both applicable live
+repositories: migration/corrupt recovery; broker reflection/failure; multi-turn
+memory taint; screened web failover/blocked classifier; quarantine and download
+promotion; exact-origin login/human challenge; full-effect fake sign/broadcast
+with uncertain recovery; derived-data export; Sweep and inspector/audit
+degradation. Each has success, cancel/deny, failure, recovery and resume
+checkpoints and safe evidence. No real funds or credentials are used.
 
 ## Live-repository applicability
 
@@ -341,6 +566,13 @@ before qualification.
 | Persistence and downgrade invalidation | Jim Ricketts | PF-20/PF-23 | Persistence code is present; transition and final evidence remain pending |
 | Independent security reviewer | Release owner | PF-13-S05 and final qualification | Must be named before either review completes |
 | Human tester | Release owner | Final qualification | Must be named before acceptance |
+| Expanded program capacity | Jim Ricketts / product authority | Execution scheduling | 63 units mapped; effort estimate and October 8 feasibility pending, no scope silently removed |
+| Platform isolation capability matrix | Jim Ricketts | PF-27/PF-31 readiness | Linux/macOS/Windows probes required; unsupported protected paths block visibly |
+| Local detector hardware/corpus/license pins | Jim Ricketts / evaluator | PF-35-S01 | Exact weakest supported CPU, licensed corpus and blind evaluator ownership pending |
+| Retriever/API/model dependency pins | Jim Ricketts | Owning adapter sprint readiness | Verify then pin current supported artifacts and APIs; historical sources are not fresh release security evidence |
+| Optional hosted vendor and data terms | Product authority | PF-36-S02 real-service activation | No vendor selected; interface/fixtures and explicit disabled disposition are in scope |
+| First real login origin/test account | Human owner / security reviewer | PF-37-S01 readiness | Record one permitted exact HTTPS origin, reviewed form and non-production account; missing access blocks qualification |
+| Additional login/financial adapters | Product authority / security reviewer | Any expansion beyond first reviewed origin/existing wallet | Denied until separately reviewed; no new commercial venue scope |
 
 ## Release linkage
 
@@ -353,7 +585,9 @@ before qualification.
 
 ## Completion
 
-- [x] Every currently required implementation unit is represented by a valid single-feature sprint.
+- [x] Complete source scope is mapped to 63 single-feature sprints; every one of the 72 cancelled archive records has an explicit disposition.
+- [ ] Every PF-27–41 contract and protected-mode readiness condition passes final-candidate evidence.
+- [ ] Optional hosted/reviewer lanes are explicitly qualified-enabled or disabled with an auditable reason.
 - [ ] Permissive compatibility is proven against the frozen pre-feature baseline.
 - [ ] Moderate and Aggressive match the product-spec control matrix.
 - [ ] Every adopted standards behavior is mapped to passing code, test, and TUI

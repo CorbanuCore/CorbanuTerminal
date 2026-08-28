@@ -11,7 +11,7 @@ branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
 depends_on: "PF-16-S01, PF-20-S01"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-28
 ---
 
 # PF-21-S01 — Permissive compatibility baseline reconciliation
@@ -25,6 +25,8 @@ updated: 2026-08-24
 
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-21`
+- Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
+- Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
 - Acceptance advanced: existing installations gain no silent approval, vault, tool, network, or agent-policy change.
 
 ## Code boundaries
@@ -45,6 +47,8 @@ updated: 2026-08-24
 - [x] Commit `220af8dae8` added the first baseline manifest and Core/vault compatibility tests.
 
 ## Remaining
+
+- [ ] Freeze inherited environment/auth-helper, web.run history/native search, browser, MCP/plugin/child, wallet, clipboard/export and persisted-session behavior; added broker/screening/migration controls are opt-in above Permissive, not silent baseline changes.
 
 - [ ] Audit the manifest against representative approval, vault, tool, network, and agent-spawn policy surfaces.
 - [ ] Implement the baseline-versus-candidate harness without rewriting expected behavior from the candidate.

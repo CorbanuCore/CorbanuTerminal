@@ -4,14 +4,14 @@ title: "Security command and profile view"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-24"
-execution_order: 17
+execution_order: 19
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
 depends_on: "PF-20-S01, PF-22-S01"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-28
 ---
 
 # PF-24-S01 — Security command and profile view
@@ -25,6 +25,8 @@ updated: 2026-08-24
 
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-24`
+- Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
+- Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
 - Acceptance advanced: the user can understand current protection and profile differences without internal policy vocabulary.
 
 ## Code boundaries
@@ -44,6 +46,8 @@ updated: 2026-08-24
 - [x] Sprint record is linked only to PF-24.
 
 ## Remaining
+
+- [ ] Distinguish requested level from effective readiness; unfinished/degraded protected subsystems show blocked status, not a healthy Moderate/Aggressive badge. PF-41 owns detailed runtime inspection.
 
 - [ ] Register and route `/security` without changing `/permissions`.
 - [ ] Render current level, concise protection summary, and Permissive/Moderate/Aggressive choices using existing TUI patterns.

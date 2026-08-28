@@ -4,14 +4,14 @@ title: "Security harnesses and standards crosswalk"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-26"
-execution_order: 21
+execution_order: 61
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
-depends_on: "PF-13-S05, PF-21-S01, PF-23-S03, PF-25-S02"
+depends_on: "PF-13-S05, PF-21-S01, PF-23-S03, PF-25-S02, PF-36-S02, PF-41-S02"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-28
 ---
 
 # PF-26-S01 — Security harnesses and standards crosswalk
@@ -25,9 +25,13 @@ updated: 2026-08-24
 
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-26`
+- Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
+- Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
 - Acceptance advanced: every adopted control and applicable agentic risk maps to code, a prevention control, and a passing test.
 
 ## Code boundaries
+
+- OpenClaw adoption reference: [OC-1](../../../plans/openclaw-source-review-2026-08-28.md#oc-1), [OC-2](../../../plans/openclaw-source-review-2026-08-28.md#oc-2), [OC-3](../../../plans/openclaw-source-review-2026-08-28.md#oc-3), [OC-4](../../../plans/openclaw-source-review-2026-08-28.md#oc-4), [OC-5](../../../plans/openclaw-source-review-2026-08-28.md#oc-5), [OC-6](../../../plans/openclaw-source-review-2026-08-28.md#oc-6), [OC-7](../../../plans/openclaw-source-review-2026-08-28.md#oc-7), [OC-8](../../../plans/openclaw-source-review-2026-08-28.md#oc-8), [OC-9](../../../plans/openclaw-source-review-2026-08-28.md#oc-9), [OC-10](../../../plans/openclaw-source-review-2026-08-28.md#oc-10), [OC-11](../../../plans/openclaw-source-review-2026-08-28.md#oc-11) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; see the review for named functions, callers, tests and limits. Reference tests are not candidate evidence.
 
 - Planned: `scripts/{security-level-compat,security-level-adversarial,security-level-standards-check}`
 - Planned: `qa/release/<version>/security/standards-crosswalk.yaml`
@@ -35,7 +39,7 @@ updated: 2026-08-24
 
 ## Preconditions
 
-- [ ] PF-13-S05, PF-21-S01, PF-23-S03, and PF-25-S02 are completed and archived.
+- [ ] PF-13-S05, PF-21-S01, PF-23-S03, PF-25-S02, PF-36-S02, PF-41-S02 are completed and archived.
 - [ ] Candidate version and commit are fixed for evidence collection.
 - [ ] Exact worktree coordinates match the active plan.
 
@@ -44,6 +48,13 @@ updated: 2026-08-24
 - [x] Sprint record is linked only to PF-26.
 
 ## Remaining
+
+- [ ] Add an OC-1–11 adoption matrix: pinned source/function and test, Corbanu owner/hook, deliberate difference, candidate case and artifact. Track inspected-only/open-channel concerns separately; the reference's 87 helper tests and 10 observation probes cannot be relabeled as Corbanu passes.
+
+- [ ] Cover every row in the source reconciliation and every PF-13/PF-15–41 contract, including optional lanes' explicit disabled disposition; generate a missing-control report, not just standards coverage.
+- [ ] Build hostile web/file/transcript/social/MCP/plugin/child/memory fixtures, canary credentials, fake login/venue and forced-classifier-allow cases; measure end-to-end unauthorized disclosure/action denial separately from detector recall.
+- [ ] Attack process/env/helper bypasses, reflected provider responses, DNS/redirect/pinning, download promotion, provenance laundering, migration crashes, financial replay, Sweep and audit/inspector degradation across supported platforms.
+- [ ] Re-run local/hosted detector quality/resource/privacy evidence on pinned artifacts; an unavailable optional vendor is visibly disabled, while required local-classifier qualification cannot be skipped.
 
 - [ ] Implement deterministic CLI schemas, nonzero failure exits, candidate/baseline identity, and artifact manifests for all three harnesses.
 - [ ] Cover applicable OWASP agentic risks plus the AuthZEN, RAR/token-exchange, CAEP, and AP2 semantics adopted by the plan.

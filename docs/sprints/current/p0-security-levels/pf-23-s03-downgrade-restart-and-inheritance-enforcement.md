@@ -4,14 +4,14 @@ title: "Downgrade, restart, and inheritance enforcement"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-23"
-execution_order: 16
+execution_order: 28
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
 depends_on: "PF-19-S01, PF-20-S01, PF-23-S02"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-28
 ---
 
 # PF-23-S03 — Downgrade, restart, and inheritance enforcement
@@ -25,6 +25,8 @@ updated: 2026-08-24
 
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-23`
+- Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
+- Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
 - Acceptance advanced: no old grant, mandate, cached decision, child state, or pending approval can be replayed after change/restart.
 
 ## Code boundaries
@@ -44,6 +46,8 @@ updated: 2026-08-24
 - [x] Sprint record is linked only to PF-23.
 
 ## Remaining
+
+- [ ] Block transitions until required isolation/migration/screening probes pass; confirmed changes invalidate broker/browser sessions, pending financial actions, child authority and queued disclosures. Test updates arriving during execution.
 
 - [ ] Define prepare/commit/cancel transition state so only trusted human confirmation commits a level change.
 - [ ] Atomically advance revocation generation and invalidate cached decisions, grants, mandates, approvals, and incompatible child authority.

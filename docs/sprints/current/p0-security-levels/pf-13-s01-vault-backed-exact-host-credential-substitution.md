@@ -11,7 +11,7 @@ branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
 depends_on: "PF-16-S01, PF-17-S01, PF-19-S01, PF-22-S01"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-28
 ---
 
 # PF-13-S01 — Typed credential capability and bounded store
@@ -25,7 +25,8 @@ updated: 2026-08-24
 
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-13`
-- Product citation: **Required trust boundaries** — “Permit agents to reference credentials only by label; resolve them solely inside the trusted execution boundary.”
+- Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
+- Product citation: **Required trust boundaries** — “Credentials are referenced by label and resolved only inside a trusted execution boundary.”
 - Acceptance advanced: an opaque capability binds exact authority before any secret is resolved.
 
 ## Code boundaries
@@ -48,7 +49,7 @@ updated: 2026-08-24
 
 - [ ] Reuse `ActorChain`, `AuthorizationRequest`, `BoundedGrant`, `RevocationState`, and `ActionReceipt`; do not create parallel policy types.
 - [ ] Define safe metadata for human, agent/session, task, purpose, operation, HTTP method, normalized destination, vault label/scope, issue/expiry, and revocation generation.
-- [ ] Keep an unguessable non-serializable `CapabilityToken` inside trusted runtime state; expose only a separate digest `CapabilityId` in decisions/receipts and no secret-returning API.
+- [ ] Keep an unguessable `CapabilityToken` inside trusted runtime state, with no model/public serialization; PF-27 may transport bounded authority only over authenticated broker IPC. Expose only a digest `CapabilityId` in decisions/receipts, never a secret-returning API.
 - [ ] Implement a hard-bounded concurrent store with expiry/revocation cleanup and fail-closed clock, poison, capacity, unknown-field, and malformed-input behavior.
 - [ ] Add full-object, concurrency, forgery, expiry, revocation, wrong-actor, wrong-purpose, wrong-operation, wrong-method, wrong-host, and broader-scope tests.
 - [ ] Update Cargo, lock, Bazel, and module exports together.

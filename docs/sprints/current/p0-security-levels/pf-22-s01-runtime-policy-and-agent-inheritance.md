@@ -11,7 +11,7 @@ branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
 depends_on: "PF-19-S01, PF-20-S01, PF-21-S01"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-28
 ---
 
 # PF-22-S01 — Runtime policy and agent inheritance
@@ -25,9 +25,13 @@ updated: 2026-08-24
 
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-22`
+- Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
+- Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
 - Acceptance advanced: no agent, tool, project input, hook, plugin, connector, or MCP server can weaken the human-selected level.
 
 ## Code boundaries
+
+- OpenClaw adoption reference: [OC-8](../../../plans/openclaw-source-review-2026-08-28.md#oc-8) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; see the review for named functions, callers, tests and limits. Reference tests are not candidate evidence.
 
 - Existing: `codex-rs/core/src/config/mod.rs`; `codex-rs/core/src/agent/{control,registry}.rs`
 - Planned: `codex-rs/core/src/security/{mod,effective_policy}.rs`
@@ -44,6 +48,8 @@ updated: 2026-08-24
 - [x] Sprint record is linked to PF-22.
 
 ## Remaining
+
+- [ ] Record configured versus creator-required/effective containment and enforce inherited restrictions across every supported child/provider runtime; missing backend or identity must not silently downgrade a protected session.
 
 - [ ] Build effective policy only from persisted human state and existing lower-level policies.
 - [ ] Make Permissive compose to the existing decision unchanged; Moderate/Aggressive may only narrow.

@@ -4,14 +4,14 @@ title: "True-TUI and live-repository qualification"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-26"
-execution_order: 22
+execution_order: 62
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
 depends_on: "PF-26-S01"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-28
 ---
 
 # PF-26-S02 — True-TUI and live-repository qualification
@@ -25,6 +25,8 @@ updated: 2026-08-24
 
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-26`
+- Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
+- Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
 - Acceptance advanced: success, cancel/failure, recovery, and resume work end to end; Corbanu exec is not accepted proof.
 
 ## Code boundaries
@@ -44,6 +46,10 @@ updated: 2026-08-24
 - [x] Sprint record is linked only to PF-26.
 
 ## Remaining
+
+- [ ] Exercise full-plan true-TUI flows: migration cancel/failure/recovery, broker failure, screened web outage, quarantine, download promotion, origin-bound login/human challenge, derived-data export, exact financial sign/broadcast, Sweep and inspector/audit.
+- [ ] Use fake credentials/venues only; forced detector misses must still deny extraction and unauthorized actions. Include multi-turn poisoned summary/memory, child handoff and restart with revoked authority.
+- [ ] Run applicable flows in both disposable live repositories with actual keys; text and Enter are separate inputs, and artifact capture must not contain secrets or sensitive human-auth keystrokes.
 
 - [ ] In TensorCash, prove Permissive compatibility and Moderate hostile-content/protected-action success, denial, cancel, and recovery.
 - [ ] In Isometric Game, prove Aggressive default denial, one narrow grant, child inheritance, expiry, revocation, kill switch, downgrade, restart, and resume.

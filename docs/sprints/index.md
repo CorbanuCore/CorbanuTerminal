@@ -51,9 +51,9 @@ contract. A sprint turns one feature into an exact code-and-evidence checklist.
 
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
-| [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [23 current sprints](current/p0-security-levels/index.md) | PF-15-S01 is ready for existing-commit reconciliation; all later sprints remain draft until dependencies archive |
+| [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [63 current sprints](current/p0-security-levels/index.md) | PF-15-S01 is ready for existing-commit reconciliation; all later sprints remain draft until dependencies archive |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
-| [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | The superseded 72-sprint decomposition is retained in the excluded archive |
+| [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | Historical 72-sprint decomposition remains cancelled; every record maps into the active P0 plan's current work |
 
 ## Machine check
 

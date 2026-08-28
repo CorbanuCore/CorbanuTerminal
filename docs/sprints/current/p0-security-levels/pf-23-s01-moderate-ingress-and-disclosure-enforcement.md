@@ -4,14 +4,14 @@ title: "Moderate ingress and disclosure enforcement"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-23"
-execution_order: 14
+execution_order: 26
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
-depends_on: "PF-13-S05, PF-22-S01"
+depends_on: "PF-13-S05, PF-22-S01, PF-30-S03"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-28
 ---
 
 # PF-23-S01 — Moderate ingress and disclosure enforcement
@@ -25,6 +25,8 @@ updated: 2026-08-24
 
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-23`
+- Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
+- Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
 - Acceptance advanced: normal analysis continues while hostile instructions cannot gain authority or protected data.
 
 ## Code boundaries
@@ -35,7 +37,7 @@ updated: 2026-08-24
 
 ## Preconditions
 
-- [ ] PF-13-S05 and PF-22-S01 are completed and archived.
+- [ ] PF-13-S05, PF-22-S01, PF-30-S03 are completed and archived.
 - [ ] Read root, `codex-rs/AGENTS.md`, and `codex-rs/core/AGENTS.md`.
 - [ ] Exact worktree coordinates match the active plan.
 
@@ -44,6 +46,9 @@ updated: 2026-08-24
 - [x] Sprint record is linked only to PF-23.
 
 ## Remaining
+
+- [ ] Integrate PF-30 durable provenance and post-taint checks; detector output never supplies authority, and a new turn or summary never clears taint.
+- [ ] Register required protected-mode subsystems and deny unsupported/unready routes; final activation requires the full plan readiness matrix, not this dispatch slice alone.
 
 - [ ] Classify protected surfaces by typed resource/action at the shared Core dispatch boundary.
 - [ ] Treat project text, tool/MCP output, hooks, plugins, connectors, and external content as non-authoritative inputs.

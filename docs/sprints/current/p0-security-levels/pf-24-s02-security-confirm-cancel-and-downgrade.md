@@ -4,14 +4,14 @@ title: "Security confirm, cancel, and downgrade"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-24"
-execution_order: 18
+execution_order: 29
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
-depends_on: "PF-23-S03, PF-24-S01"
+depends_on: "PF-23-S03, PF-24-S01, PF-29-S02"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-28
 ---
 
 # PF-24-S02 — Security confirm, cancel, and downgrade
@@ -25,6 +25,8 @@ updated: 2026-08-24
 
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-24`
+- Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
+- Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
 - Acceptance advanced: Esc changes nothing; confirmation applies immediately; downgrade shows removed protections first.
 
 ## Code boundaries
@@ -35,7 +37,7 @@ updated: 2026-08-24
 
 ## Preconditions
 
-- [ ] PF-23-S03 and PF-24-S01 are completed and archived.
+- [ ] PF-23-S03, PF-24-S01, PF-29-S02 are completed and archived.
 - [ ] Read root, Rust, Core, TUI, and TUI style instructions.
 - [ ] Exact worktree coordinates match the active plan.
 
@@ -44,6 +46,8 @@ updated: 2026-08-24
 - [x] Sprint record is linked only to PF-24.
 
 ## Remaining
+
+- [ ] Run PF-29 preflight/migration before protected activation; show newly added broker, environment, web, browser, financial and disclosure restrictions, and do not apply an incomplete transition after restart.
 
 - [ ] Show exact profile differences before confirmation and a protection-removal warning for downgrades.
 - [ ] Send one typed human-origin transition event; expose no model/tool route to the event.

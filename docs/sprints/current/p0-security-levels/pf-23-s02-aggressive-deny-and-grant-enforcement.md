@@ -4,14 +4,14 @@ title: "Aggressive deny and grant enforcement"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-23"
-execution_order: 15
+execution_order: 27
 owner: "Jim Ricketts"
 worktree: "/home/pfrpc/repos/CorbanuTerminal-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb"
 depends_on: "PF-17-S01, PF-23-S01"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-28
 ---
 
 # PF-23-S02 — Aggressive deny and grant enforcement
@@ -25,6 +25,8 @@ updated: 2026-08-24
 
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-23`
+- Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
+- Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
 - Acceptance advanced: one narrow grant cannot authorize an adjacent actor, resource, destination, operation, child, or post-expiry use.
 
 ## Code boundaries
@@ -44,6 +46,8 @@ updated: 2026-08-24
 - [x] Sprint record is linked only to PF-23.
 
 ## Remaining
+
+- [ ] Apply narrow grants to every registered broker, retrieval, browser-login, derived-data and disclosure operation; later adapters must use this common enforcement point, not add a second policy engine.
 
 - [ ] Default sensitive tools, accounts, credentials, protected data, financial actions, arbitrary egress, clipboard, and export to deny.
 - [ ] Compose with existing permission/network policies so the security level can narrow but never override an existing denial.
