@@ -1,5 +1,5 @@
 {
-  "run_dir": "/home/pfrpc/bench-runs/glm52-repro-low-20260828",
+  "run_dir": "/home/pfrpc/bench-runs/glm52-vercel-fast-repro-20260828",
   "waves": 3,
   "caps": {
     "timeout_seconds": 1200,
@@ -9,16 +9,14 @@
   },
   "agents": [
     {
-      "name": "zai-glm52-low",
+      "name": "vercel-glm52-fast",
       "kind": "corbanu",
       "binary": "/home/pfrpc/repos/CorbanuTerminal-glm53-flash/codex-rs/target/debug/corbanu-debug",
-      "provider": "zai",
-      "model": "glm-5.2",
+      "provider": "vercel-anthropic-fast",
+      "model": "zai/glm-5.2-fast",
       "lane": "serial",
-      "reasoning_effort": "low",
-      "required_env": [
-        "ZAI_API_KEY"
-      ]
+      "reasoning_effort": "none",
+      "required_env": ["AI_GATEWAY_API_KEY"]
     }
   ],
   "tasks": [

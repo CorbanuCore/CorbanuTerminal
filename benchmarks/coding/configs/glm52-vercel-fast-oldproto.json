@@ -1,0 +1,31 @@
+{
+  "run_dir": "/home/pfrpc/bench-runs/glm52-vercel-fast-oldproto-20260828",
+  "waves": 3,
+  "caps": {
+    "timeout_seconds": 1200,
+    "max_total_runs": 3,
+    "max_agent_commands": 80,
+    "max_identical_commands": 10
+  },
+  "agents": [
+    {
+      "name": "vercel-glm52-fast-oldproto",
+      "kind": "corbanu",
+      "binary": "/home/pfrpc/repos/CorbanuTerminal-glm53-flash/codex-rs/target/debug/corbanu-debug",
+      "provider": "vercel-anthropic-fast",
+      "model": "zai/glm-5.2-fast",
+      "lane": "serial",
+      "reasoning_effort": "none",
+      "required_env": ["AI_GATEWAY_API_KEY"]
+    }
+  ],
+  "tasks": [
+    {
+      "name": "eventforge",
+      "baseline": "../tasks/eventforge/baseline",
+      "prompt": "/home/pfrpc/bench-runs/oldproto/eventforge_oldproto_prompt.md",
+      "verifier": "../tasks/eventforge/verifier/verify.py",
+      "core_rel": "src/eventforge/core.py"
+    }
+  ]
+}

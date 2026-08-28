@@ -1,0 +1,31 @@
+{
+  "run_dir": "/home/pfrpc/bench-runs/glm52-vercel-hermes-oldproto-20260828",
+  "waves": 1,
+  "caps": {
+    "timeout_seconds": 1200,
+    "max_total_runs": 1,
+    "max_agent_commands": 80,
+    "max_identical_commands": 10
+  },
+  "agents": [
+    {
+      "name": "hermes-glm52-fast-oldproto",
+      "kind": "hermes",
+      "binary": "/home/pfrpc/.local/bin/hermes",
+      "provider": "ai-gateway",
+      "model": "zai/glm-5.2-fast",
+      "lane": "serial",
+      "isolate_home": false,
+      "required_env": ["AI_GATEWAY_API_KEY"]
+    }
+  ],
+  "tasks": [
+    {
+      "name": "eventforge",
+      "baseline": "../tasks/eventforge/baseline",
+      "prompt": "/home/pfrpc/bench-runs/oldproto/eventforge_oldproto_prompt.md",
+      "verifier": "../tasks/eventforge/verifier/verify.py",
+      "core_rel": "src/eventforge/core.py"
+    }
+  ]
+}
