@@ -94,11 +94,21 @@ impl App {
         );
     }
 
-    pub(super) fn clear_ui_header_lines_with_version(
+    fn current_session_header_details(&self) -> history_cell::SessionHeaderDetails {
+        history_cell::SessionHeaderDetails::new(
+            self.chat_widget.current_model().to_string(),
+            self.chat_widget.current_reasoning_effort(),
+            self.chat_widget.should_show_fast_status(
+                self.chat_widget.current_model(),
+                self.chat_widget.current_service_tier(),
+            ),
+        )
+    }
+
+    fn clear_ui_header_cell_with_version(
         &self,
-        width: u16,
         version: &'static str,
-    ) -> Vec<Line<'static>> {
+    ) -> history_cell::SessionHeaderHistoryCell {
         history_cell::SessionHeaderHistoryCell::new(
             self.chat_widget.current_model().to_string(),
             self.chat_widget.current_reasoning_effort(),
@@ -110,22 +120,47 @@ impl App {
             version,
         )
         .with_yolo_mode(history_cell::is_yolo_mode(&self.config))
-        .display_lines(width)
     }
 
-    pub(super) fn clear_ui_header_lines(&self, width: u16) -> Vec<Line<'static>> {
-        self.clear_ui_header_lines_with_version(width, CODEX_CLI_VERSION)
+    #[cfg(test)]
+    pub(super) fn clear_ui_header_lines_with_version(
+        &self,
+        width: u16,
+        version: &'static str,
+    ) -> Vec<Line<'static>> {
+        self.clear_ui_header_cell_with_version(version)
+            .display_lines(width)
     }
 
     pub(super) fn queue_clear_ui_header(&mut self, tui: &mut tui::Tui) {
-        let width = self
-            .chat_widget
-            .history_wrap_width(tui.terminal.last_known_screen_size.width);
-        let header_lines = self.clear_ui_header_lines(width);
-        if !header_lines.is_empty() {
-            tui.insert_history_lines(header_lines);
-            self.has_emitted_history_lines = true;
+        let header = self.clear_ui_header_cell_with_version(CODEX_CLI_VERSION);
+        self.insert_history_cell(tui, Box::new(header));
+    }
+
+    pub(super) fn refresh_session_header(&mut self, tui: &mut tui::Tui) -> Result<()> {
+        let details = self.current_session_header_details();
+        let changed = self.transcript_cells.iter().find_map(|cell| {
+            if let Some(session_info) = cell
+                .as_any()
+                .downcast_ref::<history_cell::SessionInfoCell>()
+            {
+                Some(session_info.update_header(&details))
+            } else {
+                cell.as_any()
+                    .downcast_ref::<history_cell::SessionHeaderHistoryCell>()
+                    .map(|header| header.update(&details))
+            }
+        });
+        if changed != Some(true) {
+            return Ok(());
         }
+
+        if let Some(Overlay::Transcript(overlay)) = &mut self.overlay {
+            overlay.replace_cells(self.transcript_cells.clone());
+        }
+        self.reflow_transcript_now(tui)?;
+        tui.frame_requester().schedule_frame();
+        Ok(())
     }
 
     pub(super) fn clear_terminal_ui(

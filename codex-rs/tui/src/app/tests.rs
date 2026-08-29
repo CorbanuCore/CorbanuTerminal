@@ -11163,6 +11163,72 @@ async fn clear_ui_header_shows_fast_status_for_fast_capable_models() {
     assert_app_snapshot!("clear_ui_header_fast_status_fast_capable_models", rendered);
 }
 
+#[tokio::test]
+async fn model_change_refreshes_committed_session_header_snapshot() -> Result<()> {
+    let mut app = make_test_app().await;
+    app.config.cwd = test_path_buf("/tmp/project").abs();
+    app.chat_widget.set_model("gpt-before");
+    app.chat_widget
+        .set_reasoning_effort(Some(ReasoningEffortConfig::Medium));
+
+    let mut session = test_thread_session(ThreadId::new(), PathBuf::from("/tmp/project"));
+    session.model = "gpt-before".to_string();
+    session.reasoning_effort = Some(ReasoningEffortConfig::Medium);
+    app.transcript_cells = vec![Arc::new(new_session_info(
+        app.chat_widget.config_ref(),
+        app.chat_widget.current_model(),
+        &session,
+        /*is_first_event*/ true,
+        /*tooltip_override*/ None,
+        /*auth_plan*/ None,
+        /*show_fast_status*/ false,
+    )) as Arc<dyn HistoryCell>];
+    app.has_emitted_history_lines = true;
+
+    app.chat_widget.set_model("gpt-after");
+    app.chat_widget
+        .set_reasoning_effort(Some(ReasoningEffortConfig::High));
+    let mut tui = crate::tui::test_support::make_test_tui()?;
+    app.refresh_session_header(&mut tui)?;
+
+    let rendered = app.transcript_cells[0]
+        .display_lines(/*width*/ 80)
+        .into_iter()
+        .map(|line| line.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(!rendered.contains("gpt-before"));
+    assert_app_snapshot!("model_change_refreshes_committed_session_header", rendered);
+    Ok(())
+}
+
+#[tokio::test]
+async fn clear_header_remains_source_backed_for_model_refresh() -> Result<()> {
+    let mut app = make_test_app().await;
+    app.config.cwd = test_path_buf("/tmp/project").abs();
+    let mut tui = crate::tui::test_support::make_test_tui()?;
+
+    app.queue_clear_ui_header(&mut tui);
+    assert_eq!(app.transcript_cells.len(), 1);
+    assert!(
+        app.transcript_cells[0]
+            .as_any()
+            .is::<history_cell::SessionHeaderHistoryCell>()
+    );
+
+    app.chat_widget.set_model("gpt-after-clear");
+    app.refresh_session_header(&mut tui)?;
+
+    let rendered = app.transcript_cells[0]
+        .display_lines(/*width*/ 80)
+        .into_iter()
+        .map(|line| line.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(rendered.contains("gpt-after-clear"));
+    Ok(())
+}
+
 async fn make_test_app() -> App {
     let (chat_widget, app_event_tx, _rx, _op_rx) = make_chatwidget_manual_with_sender().await;
     let config = chat_widget.config_ref().clone();

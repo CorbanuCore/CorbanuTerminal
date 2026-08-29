@@ -5,6 +5,7 @@ use crate::line_truncation::line_width;
 use crate::line_truncation::truncate_line_with_ellipsis_if_overflow;
 use crate::width::display_width;
 use codex_product_brand::PRODUCT_NAME;
+use std::sync::RwLock;
 
 pub(crate) const SESSION_HEADER_MAX_INNER_WIDTH: usize = 56; // Just an eyeballed value
 
@@ -104,6 +105,20 @@ impl HistoryCell for TooltipHistoryCell {
 
 #[derive(Debug)]
 pub struct SessionInfoCell(CompositeHistoryCell);
+
+impl SessionInfoCell {
+    pub(crate) fn update_header(&self, details: &SessionHeaderDetails) -> bool {
+        self.0
+            .parts
+            .iter()
+            .find_map(|part| {
+                part.as_any()
+                    .downcast_ref::<SessionHeaderHistoryCell>()
+                    .map(|header| header.update(details))
+            })
+            .unwrap_or(false)
+    }
+}
 
 impl HistoryCell for SessionInfoCell {
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
@@ -223,13 +238,32 @@ pub(crate) fn has_yolo_permissions(
                 }
         )
 }
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct SessionHeaderDetails {
+    model: String,
+    reasoning_effort: Option<ReasoningEffortConfig>,
+    show_fast_status: bool,
+}
+
+impl SessionHeaderDetails {
+    pub(crate) fn new(
+        model: String,
+        reasoning_effort: Option<ReasoningEffortConfig>,
+        show_fast_status: bool,
+    ) -> Self {
+        Self {
+            model,
+            reasoning_effort,
+            show_fast_status,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct SessionHeaderHistoryCell {
     version: &'static str,
-    model: String,
+    details: RwLock<SessionHeaderDetails>,
     model_style: Style,
-    reasoning_effort: Option<ReasoningEffortConfig>,
-    show_fast_status: bool,
     directory: PathBuf,
     yolo_mode: bool,
 }
@@ -262,10 +296,12 @@ impl SessionHeaderHistoryCell {
     ) -> Self {
         Self {
             version,
-            model,
+            details: RwLock::new(SessionHeaderDetails::new(
+                model,
+                reasoning_effort,
+                show_fast_status,
+            )),
             model_style,
-            reasoning_effort,
-            show_fast_status,
             directory,
             yolo_mode: false,
         }
@@ -303,8 +339,21 @@ impl SessionHeaderHistoryCell {
         formatted
     }
 
-    fn reasoning_label(&self) -> Option<&str> {
-        self.reasoning_effort
+    pub(crate) fn update(&self, details: &SessionHeaderDetails) -> bool {
+        let mut current = self
+            .details
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if *current == *details {
+            return false;
+        }
+        *current = details.clone();
+        true
+    }
+
+    fn reasoning_label(details: &SessionHeaderDetails) -> Option<&str> {
+        details
+            .reasoning_effort
             .as_ref()
             .map(ReasoningEffortConfig::as_str)
     }
@@ -315,6 +364,10 @@ impl HistoryCell for SessionHeaderHistoryCell {
         let Some(inner_width) = card_inner_width(width, SESSION_HEADER_MAX_INNER_WIDTH) else {
             return Vec::new();
         };
+        let details = self
+            .details
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         let make_row = |spans: Vec<Span<'static>>| Line::from(spans);
 
@@ -341,17 +394,17 @@ impl HistoryCell for SessionHeaderHistoryCell {
             model_label = "model:",
             label_width = label_width
         );
-        let reasoning_label = self.reasoning_label();
+        let reasoning_label = Self::reasoning_label(&details);
         let model_spans: Vec<Span<'static>> = {
             let mut spans = vec![
                 Span::from(format!("{model_label} ")).dim(),
-                Span::styled(self.model.clone(), self.model_style),
+                Span::styled(details.model.clone(), self.model_style),
             ];
             if let Some(reasoning) = reasoning_label {
                 spans.push(Span::from(" "));
                 spans.push(Span::from(reasoning.to_owned()));
             }
-            if self.show_fast_status {
+            if details.show_fast_status {
                 spans.push("   ".into());
                 spans.push(Span::styled("fast", self.model_style.magenta()));
             }
@@ -391,12 +444,16 @@ impl HistoryCell for SessionHeaderHistoryCell {
     }
 
     fn raw_lines(&self) -> Vec<Line<'static>> {
+        let details = self
+            .details
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut lines = vec![
             Line::from(format!("{PRODUCT_NAME} (v{})", self.version)),
             Line::from(format!(
                 "model: {}{}",
-                self.model,
-                self.reasoning_label()
+                details.model,
+                Self::reasoning_label(&details)
                     .map(|reasoning| format!(" {reasoning}"))
                     .unwrap_or_default()
             )),
@@ -409,5 +466,9 @@ impl HistoryCell for SessionHeaderHistoryCell {
             lines.push(Line::from("permissions: YOLO mode"));
         }
         lines
+    }
+
+    fn has_stable_transcript_height(&self) -> bool {
+        false
     }
 }

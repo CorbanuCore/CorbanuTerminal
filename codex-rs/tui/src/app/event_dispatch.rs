@@ -1578,11 +1578,13 @@ impl App {
             }
             AppEvent::UpdateReasoningEffort(effort) => {
                 self.on_update_reasoning_effort(effort.clone());
+                self.refresh_session_header(tui)?;
                 self.sync_active_thread_reasoning_setting(app_server, effort)
                     .await;
             }
             AppEvent::UpdateModel(model) => {
                 self.chat_widget.set_model(&model);
+                self.refresh_session_header(tui)?;
                 self.sync_active_thread_model_setting(app_server, model)
                     .await;
                 self.sync_active_thread_service_tier_to_cached_session()
@@ -1604,6 +1606,7 @@ impl App {
                         .set_model_provider(model_provider.clone(), provider_info);
                 }
                 self.chat_widget.set_model(&model);
+                self.refresh_session_header(tui)?;
                 self.sync_active_thread_model_selection(app_server, model, provider)
                     .await;
                 self.sync_active_thread_service_tier_to_cached_session()
@@ -1634,6 +1637,7 @@ impl App {
             AppEvent::ApplyAdvancedReasoning { model, effort } => {
                 let default_effort =
                     self.on_apply_advanced_reasoning(model.as_str(), effort.clone());
+                self.refresh_session_header(tui)?;
                 if let Some(mut params) =
                     self.active_thread_model_setting_update_params(model.clone())
                 {
@@ -3300,6 +3304,7 @@ impl App {
             }
             AppEvent::PersistServiceTierSelection { service_tier } => {
                 self.refresh_status_line();
+                self.refresh_session_header(tui)?;
                 self.config.service_tier = service_tier.clone();
                 self.sync_active_thread_service_tier_to_cached_session()
                     .await;
