@@ -492,13 +492,13 @@ impl McpConnectionSet {
                         outcome = Err(StartupOutcomeError::Cancelled);
                     }
                     let status = match &outcome {
-                        Ok(_) => Some(McpStartupStatus::Ready),
+                        Ok(_) => McpStartupStatus::Ready,
                         Err(StartupOutcomeError::Cancelled)
                             if startup_cancellation.should_report() =>
                         {
-                            Some(McpStartupStatus::Cancelled)
+                            McpStartupStatus::Cancelled
                         }
-                        Err(StartupOutcomeError::Cancelled) => None,
+                        Err(StartupOutcomeError::Cancelled) => McpStartupStatus::Stopped,
                         Err(error) => {
                             let reason = mcp_startup_failure_reason(auth_state, error);
                             let error_str = mcp_init_error_display(
@@ -506,24 +506,22 @@ impl McpConnectionSet {
                                 Some(&configured_config),
                                 error,
                             );
-                            Some(McpStartupStatus::Failed {
+                            McpStartupStatus::Failed {
                                 error: error_str,
                                 reason,
-                            })
+                            }
                         }
                     };
 
-                    if let Some(status) = status {
-                        let _ = emit_update(
-                            submit_id.as_str(),
-                            tx_event,
-                            McpStartupUpdateEvent {
-                                server: server_name.clone(),
-                                status,
-                            },
-                        )
-                        .await;
-                    }
+                    let _ = emit_update(
+                        submit_id.as_str(),
+                        tx_event,
+                        McpStartupUpdateEvent {
+                            server: server_name.clone(),
+                            status,
+                        },
+                    )
+                    .await;
                 }
                 if cancel_token.is_cancelled() {
                     outcome = Err(StartupOutcomeError::Cancelled);

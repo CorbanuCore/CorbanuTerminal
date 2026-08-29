@@ -13115,7 +13115,8 @@
           "starting",
           "ready",
           "failed",
-          "cancelled"
+          "cancelled",
+          "stopped"
         ],
         "type": "string"
       },

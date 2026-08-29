@@ -20,6 +20,7 @@ pub(crate) enum McpStartupStatus {
     Ready,
     Failed { error: String },
     Cancelled,
+    Stopped,
 }
 
 impl ChatWidget {
@@ -123,7 +124,7 @@ impl ChatWidget {
             let mut cancelled = Vec::new();
             for (name, state) in current {
                 match state {
-                    McpStartupStatus::Ready => {}
+                    McpStartupStatus::Ready | McpStartupStatus::Stopped => {}
                     McpStartupStatus::Failed { .. } => failed.push(name.clone()),
                     McpStartupStatus::Cancelled => cancelled.push(name.clone()),
                     McpStartupStatus::Starting => {}
@@ -236,7 +237,7 @@ impl ChatWidget {
 
         for name in server_names {
             match current.get(&name) {
-                Some(McpStartupStatus::Ready) => {}
+                Some(McpStartupStatus::Ready | McpStartupStatus::Stopped) => {}
                 Some(McpStartupStatus::Failed { .. }) => failed.push(name),
                 Some(McpStartupStatus::Cancelled | McpStartupStatus::Starting) | None => {
                     cancelled.push(name);
@@ -276,6 +277,7 @@ impl ChatWidget {
                 }),
             },
             McpServerStartupState::Cancelled => McpStartupStatus::Cancelled,
+            McpServerStartupState::Stopped => McpStartupStatus::Stopped,
         };
         self.update_mcp_startup_status(
             notification.name,

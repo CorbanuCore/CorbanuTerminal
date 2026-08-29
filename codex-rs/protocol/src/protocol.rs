@@ -3885,6 +3885,9 @@ pub enum McpStartupStatus {
         reason: Option<McpStartupFailureReason>,
     },
     Cancelled,
+    /// Startup ended because the owning connection was replaced or shut down.
+    /// This is terminal like `Cancelled`, but must not be presented as a user-visible failure.
+    Stopped,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema, TS)]

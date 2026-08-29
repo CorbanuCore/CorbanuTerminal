@@ -239,6 +239,7 @@ pub enum McpServerStartupState {
     Ready,
     Failed,
     Cancelled,
+    Stopped,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

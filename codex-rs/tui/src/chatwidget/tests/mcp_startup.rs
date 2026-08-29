@@ -428,6 +428,22 @@ async fn explicit_mcp_startup_cancellation_renders_warning_history() {
 }
 
 #[tokio::test]
+async fn lifecycle_stopped_mcp_startup_settles_without_warning() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.show_welcome_banner = false;
+    chat.set_mcp_startup_expected_servers(["alpha".to_string()]);
+
+    notify_mcp_status(&mut chat, "alpha", McpServerStartupState::Starting);
+    assert!(chat.bottom_pane.is_task_running());
+
+    notify_mcp_status(&mut chat, "alpha", McpServerStartupState::Stopped);
+
+    assert!(drain_insert_history(&mut rx).is_empty());
+    assert!(!chat.bottom_pane.is_task_running());
+    assert!(chat.mcp_startup_status.is_none());
+}
+
+#[tokio::test]
 async fn mcp_startup_failure_restores_running_status_header() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     chat.show_welcome_banner = false;

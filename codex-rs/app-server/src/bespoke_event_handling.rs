@@ -216,6 +216,9 @@ pub(crate) async fn apply_bespoke_event_handling(
                 codex_protocol::protocol::McpStartupStatus::Cancelled => {
                     (McpServerStartupState::Cancelled, None, None)
                 }
+                codex_protocol::protocol::McpStartupStatus::Stopped => {
+                    (McpServerStartupState::Stopped, None, None)
+                }
             };
             let notification = McpServerStatusUpdatedNotification {
                 thread_id: Some(conversation_id.to_string()),

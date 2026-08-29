@@ -16,14 +16,15 @@ Normal MCP connection replacement, supersession, and shutdown must not be presen
 
 `McpServerConnection::drop` cancelled the same token used by explicit startup interruption. The connection-manager startup task converted every cancelled token into `McpStartupStatus::Cancelled`, so a normal lifecycle replacement could produce `MCP startup interrupted` even when `codex_apps` initialized and its tools were available.
 
-Each connection now shares a first-writer-wins startup-cancellation disposition with its startup task. Explicit `cancel_startup` remains reportable. Drop, shutdown, and unpublished/superseded candidates are silent, so they do not emit a cancelled update or enter the cancelled startup summary. Genuine cancellation behavior remains unchanged and snapshot-covered.
+Each connection now shares a first-writer-wins startup-cancellation disposition with its startup task. Explicit `cancel_startup` remains reportable. Drop, shutdown, and unpublished/superseded candidates emit a terminal, non-warning `Stopped` update and do not enter the cancelled startup summary. This both suppresses the false interruption message and lets app-server consumers settle an already-started UI round. Genuine cancellation behavior remains unchanged and snapshot-covered.
 
 ## Automated evidence
 
-- `just fmt` passed.
+- Rust formatting and `cargo fmt -- --check` passed for the final follow-up.
 - `git diff --check` passed.
 - `just test -p codex-mcp` passed 144 tests, 0 failed. This includes `dropping_pending_connection_suppresses_lifecycle_cancellation_warning` and `explicit_startup_cancellation_remains_user_visible`.
-- `just test -p codex-tui explicit_mcp_startup_cancellation_renders_warning_history` passed 1 test, 0 failed; 3,847 tests were filtered out.
+- The focused TUI tests `explicit_mcp_startup_cancellation_renders_warning_history` and `lifecycle_stopped_mcp_startup_settles_without_warning` each passed, preserving the genuine warning while proving lifecycle cancellation settles without warning or a running startup task.
+- App-server protocol schema fixtures were regenerated and their fixture test passed, including the new `stopped` state.
 - `cargo build --bin corbanu --bin codex-code-mode-host` completed successfully with all Cargo state and build artifacts rooted on CorbanuDrive.
 - The stable launcher targets resolve to the rebuilt Mach-O arm64 executables. `corbanu --version` reports `corbanu 0.1.35`, and `codex-code-mode-host --help` exits successfully.
 
@@ -38,6 +39,10 @@ The repository `just codex` target was launched in a PTY with `TERM=xterm-256col
 5. The trace records `codex_apps` service initialization and contains zero occurrences of `MCP startup interrupted`. Lifecycle cancellation remains visible only as internal service teardown during refresh and shutdown.
 
 Trace artifact: `/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/evidence/mcp-startup-fix/codex-tui.log`
+
+## Review follow-up
+
+Exact-commit autoreview identified that fully suppressing the lifecycle status update could leave app-server consumers stuck in `Starting`. The repair replaces suppression with the terminal, non-warning `Stopped` status across the core protocol, app-server protocol, and TUI. The connection-manager and TUI regressions above cover both halves of that contract. Follow-up autoreview reported no actionable findings and judged the repaired patch correct with 0.86 confidence.
 
 ## Launcher repeatability evidence
 

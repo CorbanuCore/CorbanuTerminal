@@ -2942,17 +2942,22 @@ async fn pending_http_startup_manager() -> (
 
 async fn receive_startup_complete(
     rx_event: &async_channel::Receiver<Event>,
-) -> (bool, McpStartupCompleteEvent) {
+) -> (bool, bool, McpStartupCompleteEvent) {
     tokio::time::timeout(Duration::from_secs(2), async {
         let mut saw_cancelled_update = false;
+        let mut saw_stopped_update = false;
         loop {
             match rx_event.recv().await.expect("startup event channel").msg {
                 EventMsg::McpStartupUpdate(McpStartupUpdateEvent {
                     status: McpStartupStatus::Cancelled,
                     ..
                 }) => saw_cancelled_update = true,
+                EventMsg::McpStartupUpdate(McpStartupUpdateEvent {
+                    status: McpStartupStatus::Stopped,
+                    ..
+                }) => saw_stopped_update = true,
                 EventMsg::McpStartupComplete(summary) => {
-                    return (saw_cancelled_update, summary);
+                    return (saw_cancelled_update, saw_stopped_update, summary);
                 }
                 _ => {}
             }
@@ -2967,9 +2972,11 @@ async fn dropping_pending_connection_suppresses_lifecycle_cancellation_warning()
     let (manager, rx_event, _listener) = pending_http_startup_manager().await;
 
     drop(manager);
-    let (saw_cancelled_update, summary) = receive_startup_complete(&rx_event).await;
+    let (saw_cancelled_update, saw_stopped_update, summary) =
+        receive_startup_complete(&rx_event).await;
 
     assert!(!saw_cancelled_update);
+    assert!(saw_stopped_update);
     assert!(summary.cancelled.is_empty());
 }
 
@@ -2978,9 +2985,11 @@ async fn explicit_startup_cancellation_remains_user_visible() {
     let (manager, rx_event, _listener) = pending_http_startup_manager().await;
 
     manager.cancel_startup();
-    let (saw_cancelled_update, summary) = receive_startup_complete(&rx_event).await;
+    let (saw_cancelled_update, saw_stopped_update, summary) =
+        receive_startup_complete(&rx_event).await;
 
     assert!(saw_cancelled_update);
+    assert!(!saw_stopped_update);
     assert_eq!(summary.cancelled, vec!["pending".to_string()]);
 }
 
