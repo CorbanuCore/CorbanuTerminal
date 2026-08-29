@@ -385,6 +385,7 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
             "glm-5.3-flash-fp8-2xb300",
             "glm-5.3-flash-nvfp4-2xb200-experimental",
             "qwen3.8-27b-fp8-2xh200-experimental",
+            "qwen3.8-flash-next-fp8-2xb300-experimental",
             "glm-5.2-fp8-8xh200",
             "huihui-deepseek-v4-flash-q4k-2xh200-experimental",
             "huihui-glm-5.2-iq1m-2xh200-experimental"
@@ -405,6 +406,7 @@ fn built_in_catalog_distinguishes_qualified_and_experimental_recipes() {
             RecipeStability::Qualified,
             RecipeStability::Qualified,
             RecipeStability::Qualified,
+            RecipeStability::Experimental,
             RecipeStability::Experimental,
             RecipeStability::Experimental,
             RecipeStability::Qualified,

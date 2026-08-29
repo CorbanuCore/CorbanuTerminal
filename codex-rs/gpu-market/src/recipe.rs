@@ -85,6 +85,7 @@ impl Default for RecipeCatalog {
                 crate::glm_recipes::glm_5_3_flash_b300_recipe(),
                 crate::glm_recipes::glm_5_3_flash_nvfp4_b200_recipe(),
                 crate::qwen_recipes::qwen_3_8_27b_recipe(),
+                crate::qwen_recipes::qwen_3_8_flash_next_fp8_b300_recipe(),
                 glm_5_2_recipe(),
                 crate::gguf_recipes::huihui_deepseek_v4_flash_recipe(),
                 crate::gguf_recipes::huihui_glm_5_2_recipe(),
