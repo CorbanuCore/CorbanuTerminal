@@ -12340,6 +12340,38 @@ async fn absent_gpu_runtime_overlay_does_not_create_state_db() -> std::io::Resul
     Ok(())
 }
 
+#[test]
+fn built_in_provider_auth_commands_use_the_running_corbanu_executable() {
+    use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+
+    let mut providers = built_in_model_providers(/*openai_base_url*/ None);
+    let running_executable = "/opt/corbanu/bin/corbanu-debug";
+
+    bind_built_in_provider_auth_commands(&mut providers, running_executable);
+
+    let command_auth_providers = providers
+        .iter()
+        .filter_map(|(provider_id, provider)| {
+            provider
+                .auth
+                .as_ref()
+                .map(|auth| (provider_id.as_str(), auth.command.as_str()))
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        command_auth_providers
+            .iter()
+            .any(|(provider_id, _)| *provider_id == CLAUDE_PLAN_PROVIDER_ID),
+        "the regression must exercise Claude Plan command auth"
+    );
+    for (provider_id, command) in command_auth_providers {
+        assert_eq!(
+            command, running_executable,
+            "built-in provider {provider_id} delegated auth to a different installation"
+        );
+    }
+}
+
 #[tokio::test]
 async fn explicit_incompatible_model_provider_pair_fails_closed() -> std::io::Result<()> {
     use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;

@@ -1607,6 +1607,17 @@ fn current_corbanu_auth_helper() -> String {
         .unwrap_or_else(|| "corbanu".to_string())
 }
 
+fn bind_built_in_provider_auth_commands(
+    model_providers: &mut HashMap<String, ModelProviderInfo>,
+    command: &str,
+) {
+    for provider in model_providers.values_mut() {
+        if let Some(auth) = provider.auth.as_mut() {
+            auth.command = command.to_string();
+        }
+    }
+}
+
 fn corbanu_auth_helper_from_executable(path: PathBuf) -> Option<String> {
     let file_name = path.file_name()?.to_str()?;
     if matches!(file_name, "corbanu" | "corbanu-debug") {
@@ -3889,6 +3900,14 @@ impl Config {
             .unwrap_or_else(|| codex_home.to_path_buf());
 
         let mut built_in_model_providers = built_in_model_providers(openai_base_url);
+        // Built-in helpers are internal subcommands of this binary. Self-invoke so a debug
+        // build or upgraded release cannot delegate credentials to a stale launcher on PATH.
+        // Configured provider overrides are merged afterward and keep their explicit command.
+        let provider_auth_command = current_corbanu_auth_helper();
+        bind_built_in_provider_auth_commands(
+            &mut built_in_model_providers,
+            &provider_auth_command,
+        );
         built_in_model_providers
             .extend(load_gpu_runtime_model_providers(&sqlite_home, &codex_home).await);
         if let Some(openrouter_provider) =
