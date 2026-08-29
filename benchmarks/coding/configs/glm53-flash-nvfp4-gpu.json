@@ -1,0 +1,67 @@
+{
+  "run_dir": "../runs/glm53-flash-nvfp4-gpu-20260827-r3",
+  "waves": 1,
+  "caps": {
+    "timeout_seconds": 1800,
+    "max_total_runs": 9
+  },
+  "agents": [
+    {
+      "name": "corbanu",
+      "kind": "corbanu",
+      "binary": "/home/pfrpc/repos/CorbanuTerminal-glm53-flash/benchmarks/coding/run_with_isolated_home.sh",
+      "provider": "nvfp4_bench",
+      "model": "LibertAIDAI/GLM-5.3-Flash-NVFP4",
+      "lane": "glm53-nvfp4-gpu",
+      "required_env": ["PFT_ENDPOINT_TOKEN"],
+      "stdin_prompt": true,
+      "command": [
+        "{binary}",
+        "{result_dir}/corbanu-home",
+        "/home/pfrpc/repos/CorbanuTerminal-glm53-flash/codex-rs/target/debug/corbanu-debug",
+        "exec",
+        "--json",
+        "--skip-git-repo-check",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "-C",
+        "{workspace}",
+        "-c",
+        "model_provider=\"nvfp4_bench\"",
+        "-c",
+        "model_providers.nvfp4_bench.name=\"GLM 5.3 Flash NVFP4 benchmark\"",
+        "-c",
+        "model_providers.nvfp4_bench.base_url=\"http://127.0.0.1:45061/v1\"",
+        "-c",
+        "model_providers.nvfp4_bench.env_key=\"PFT_ENDPOINT_TOKEN\"",
+        "-c",
+        "model_providers.nvfp4_bench.wire_api=\"chat\"",
+        "-m",
+        "{model}",
+        "-"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "name": "eventforge",
+      "baseline": "../tasks/eventforge/baseline",
+      "prompt": "../tasks/eventforge/task_prompt.md",
+      "verifier": "../tasks/eventforge/verifier/verify.py",
+      "core_rel": "src/eventforge/core.py"
+    },
+    {
+      "name": "logtriage",
+      "baseline": "../tasks/logtriage/baseline",
+      "prompt": "../tasks/logtriage/task_prompt.md",
+      "verifier": "../tasks/logtriage/verifier/verify.py",
+      "core_rel": "src/logtriage/core.py"
+    },
+    {
+      "name": "queuecraft",
+      "baseline": "../tasks/queuecraft/bugged",
+      "prompt": "../tasks/queuecraft/bugged/BENCHMARK_TASK.md",
+      "verifier": "../tasks/queuecraft/verifier/verify.py",
+      "core_rel": null
+    }
+  ]
+}
