@@ -78,14 +78,10 @@ The instructions preserve the Codex engineering posture: inspect code first, kee
 
 ## Upstream Isolation
 
-The fork should keep upstream Codex changes easy to reason about:
-
-- Product-specific provider constants should stay in provider metadata modules.
-- Product model choices should stay in bundled model metadata.
-- UI branding should stay in TUI-facing modules.
-- Request-compatibility shims should stay close to API serialization.
-
-That boundary makes it easier to merge upstream Codex changes without hiding Corbanu Terminal product behavior in scattered prompt text.
+The [upstream integration contract](../plans/upstream-integration.md) owns
+adapter boundaries, upstream-touch records, parallel ownership, and upgrade
+qualification. Plans record unfinished integration work and its evidence;
+this lineage page does not certify a particular upstream update.
 
 ## Source
 

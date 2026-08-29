@@ -87,6 +87,16 @@ The user can always tell:
 
 ## Relationship to the active P0 plan
 
+On 2026-08-27 Travis Good approved selective adoption into the active P0 plan:
+shared contracts (PF-27), cross-surface confidentiality (PF-28), provenance and
+derived taint (PF-29), and separately scoped browser isolation (PF-30), with
+early adversarial harnesses under PF-26. These stronger guarantees apply only
+to Moderate/Aggressive; Permissive preserves the existing product.
+Those active contracts supersede the overlapping proposal text for current
+implementation. This proposal and its cancelled sprint catalog remain
+non-executable. New providers, authenticated browser login, classifier training,
+hosted detection, and Agent Sweep are not adopted or implicitly authorized.
+
 The active [`P0 /security levels`](../active/p0-security-levels.md) plan owns the
 current product initiative. This proposal is a researched expansion of its
 untrusted-input, secret-broker, browser-isolation, and adversarial-testing

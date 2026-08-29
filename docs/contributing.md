@@ -37,6 +37,9 @@ the last code-changing tool. User-facing interactive behavior also requires a
 real Corbanu Terminal TUI run in a PTY with actual keys sent. Smoke tests and
 non-interactive `exec` runs are supporting evidence, not substitutes.
 
+Use the [tmux TUI harness](tmuxHarness.md) for isolated, key-driven terminal
+scenarios, stable viewport assertions, cleanup, and failure artifacts.
+
 Release candidates additionally require live workflows in TensorCash and
 Isometric Game, named human acceptance, current user documentation, and the
 benchmark and coding-performance gate when due.

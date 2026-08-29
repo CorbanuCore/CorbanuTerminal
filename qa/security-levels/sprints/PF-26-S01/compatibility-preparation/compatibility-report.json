@@ -1,0 +1,12 @@
+{
+  "baseline_commit": "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb",
+  "baseline_sha256": "45d1f2bd96733381638bb62961ee59fb1c026bc05a6a78d03b560cb794406b8d",
+  "candidate": null,
+  "immutable_probes_validated": 5,
+  "phase": "fixture-preparation",
+  "qualification": "pending final candidate build and executed compatibility probes",
+  "schema_version": 1,
+  "source_commit": "cb808c30c0058c101597ab2ada3da16238565c5e",
+  "status": "pending",
+  "surfaces": 10
+}

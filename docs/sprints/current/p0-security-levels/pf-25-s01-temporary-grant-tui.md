@@ -4,14 +4,16 @@ title: "Temporary grant TUI"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-25"
-execution_order: 19
+execution_order: 26
 owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+lane: "grant-ui"
+write_scope: "codex-rs/tui/src/security/grant_view.rs, codex-rs/tui/src/security/grant_tests.rs, codex-rs/tui/src/security/snapshots/grant"
+worktree: "UNALLOCATED"
+branch: "UNALLOCATED"
+base_commit: "UNALLOCATED"
 depends_on: "PF-17-S01, PF-23-S02, PF-24-S02"
 created: 2026-08-24
-updated: 2026-08-25
+updated: 2026-08-27
 ---
 
 # PF-25-S01 — Temporary grant TUI
@@ -23,21 +25,25 @@ updated: 2026-08-25
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-25`
 - Acceptance advanced: the exact actor, action, resource, destination, limits, and expiry are visible before human confirmation.
 
 ## Code boundaries
 
-- Existing: `tui/src/bottom_pane/approval_overlay.rs`; `security-policy/src/grant.rs`
-- Planned: `tui/src/security/grant_view.rs`; typed Core grant event
-- Tests: sibling behavior tests, Core event tests, and reviewed snapshots
+- Existing (read-only): PF-24-S02 overlay/events and `security-policy/src/grant.rs`.
+- Planned: `tui/src/security/{grant_view,grant_tests}.rs`; grant-only snapshots; consume registered Core events.
+- Tests: grant-only behavior tests and snapshots; run existing Core event tests without editing shared files.
 
 ## Preconditions
 
-- [ ] PF-17-S01, PF-23-S02, and PF-24-S02 are completed and archived.
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
+- [ ] Every listed dependency is completed and archived.
 - [ ] Read root, Rust, Core, TUI, and TUI style instructions.
 - [ ] Exact worktree coordinates match the active plan.
+
+- [ ] Allocate lane/worktree/base in the plan and validate disjoint write scopes before readiness.
 
 ## Done
 
@@ -47,17 +53,18 @@ updated: 2026-08-25
 
 - [ ] Render canonical actor/action/resource/destination/limit/expiry fields and the adjacent access that remains denied.
 - [ ] Require explicit human confirmation; prevent agent, prompt, tool, or project content from creating the event.
-- [ ] Persist only the signed secret-free grant record and show active scope/expiry in `/security`.
+- [ ] Use the completed Core grant API to persist only the canonical, human-bound secret-free grant record and show active scope/expiry in `/security`.
 - [ ] Support Esc cancel and visible validation/persistence errors without creating authority.
 - [ ] Add mutation, adjacent-scope, child, expiry, cancel, failure, and agent-attempt tests with snapshots.
 
 ## Verification
 
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] Fix: `cd codex-rs && just fix -p codex-tui && just fix -p codex-core`.
 - [ ] Format: `cd codex-rs && just fmt`; then inspect the final diff.
 - [ ] Tests: `cd codex-rs && just test -p codex-tui security_grant && just test -p codex-core bounded_grant`.
 - [ ] Snapshot review: inspect and intentionally accept only PF-25 grant output.
-- [ ] TUI qualification deferred to PF-26-S02 with grant/cancel/expiry keys.
+- [ ] Run applicable success/cancel/failure/recovery keys in a true PTY before completion; PF-26 repeats final integrated qualification.
 
 ## Exit evidence
 

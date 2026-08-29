@@ -1,10 +1,20 @@
 mod providers;
+mod resolver;
+
+pub use resolver::ScopedCredentialCallbackError;
+pub use resolver::ScopedCredentialInjectionError;
+pub use resolver::ScopedCredentialResolver;
+pub use resolver::ScopedCredentialResolverError;
+pub use resolver::ScopedCredentialRoute;
+pub use resolver::ScopedCredentialRouteError;
+pub use resolver::ScopedCredentialUse;
 
 use crate::policy::normalize_host;
 use rama_http::HeaderMap;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::RwLock;
+use zeroize::Zeroizing;
 
 pub const CREDENTIAL_BROKER_ACTIVE_ENV_KEY: &str = "CODEX_NETWORK_PROXY_CREDENTIAL_BROKER_ACTIVE";
 pub(crate) const BROKERED_CREDENTIALS_ENV_KEY: &str = "CODEX_NETWORK_PROXY_BROKERED_CREDENTIALS";
@@ -18,14 +28,21 @@ pub(crate) struct CredentialBroker {
 struct CredentialBrokerState {
     enabled: bool,
     credentials: Vec<CredentialRecord>,
+    scoped_openai: Option<ScopedCredentialRecord>,
 }
 
 struct CredentialRecord {
     env_var: String,
     provider: &'static providers::CredentialProvider,
     host_binding: providers::CredentialHostBinding,
-    real_value: String,
+    real_value: Zeroizing<String>,
     dummy_value: String,
+}
+
+struct ScopedCredentialRecord {
+    route: ScopedCredentialRoute,
+    dummy_value: String,
+    used: bool,
 }
 
 impl CredentialBroker {
@@ -55,6 +72,10 @@ impl CredentialBroker {
         );
 
         for provider in providers::credential_providers() {
+            if state.scoped_openai.is_some() && std::ptr::eq(provider, providers::openai_provider())
+            {
+                continue;
+            }
             for source in provider.sources() {
                 if let Some(host_binding) = (source.host_binding)(env) {
                     for env_var in source.env_vars {
@@ -69,24 +90,79 @@ impl CredentialBroker {
                 }
             }
         }
+        if let Some(scoped) = state.scoped_openai.as_ref() {
+            env.insert(
+                resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
+                scoped.dummy_value.clone(),
+            );
+        }
         update_brokered_credentials_marker(&state, env);
+    }
+
+    pub(crate) fn install_scoped_openai_route(
+        &self,
+        route: ScopedCredentialRoute,
+    ) -> Result<(), ScopedCredentialRouteError> {
+        let mut state = self.write_state();
+        if !state.enabled {
+            return Err(ScopedCredentialRouteError::BrokerDisabled);
+        }
+        if state.scoped_openai.is_some() {
+            return Err(ScopedCredentialRouteError::AlreadyConfigured);
+        }
+        state
+            .credentials
+            .retain(|credential| !std::ptr::eq(credential.provider, providers::openai_provider()));
+        let dummy_value = providers::openai_provider().dummy_value(route.capability_id().as_str());
+        state.scoped_openai = Some(ScopedCredentialRecord {
+            route,
+            dummy_value,
+            used: false,
+        });
+        Ok(())
+    }
+
+    pub(crate) fn scoped_openai_enabled(&self) -> bool {
+        self.read_state().scoped_openai.is_some()
+    }
+
+    pub(crate) fn scoped_openai_matches_host(&self, host: &str) -> bool {
+        self.read_state().scoped_openai.is_some()
+            && normalize_host(host) == resolver::OPENAI_API_HOST
     }
 
     pub(crate) fn host_requires_mitm(&self, host: &str) -> bool {
         let normalized_host = normalize_host(host);
         let state = self.read_state();
         state.enabled
-            && state
-                .credentials
-                .iter()
-                .any(|credential| credential.matches_host(&normalized_host))
+            && (state.scoped_openai.is_some() && normalized_host == resolver::OPENAI_API_HOST
+                || state
+                    .credentials
+                    .iter()
+                    .any(|credential| credential.matches_host(&normalized_host)))
     }
 
-    pub(crate) fn inject_request_headers(&self, host: &str, headers: &mut HeaderMap) {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn inject_request_headers_for_request(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        method: &str,
+        path: &str,
+        headers: &mut HeaderMap,
+    ) -> Result<(), ScopedCredentialInjectionError> {
         let normalized_host = normalize_host(host);
-        let state = self.read_state();
+        let mut state = self.write_state();
         if !state.enabled {
-            return;
+            return Ok(());
+        }
+
+        if let Some(scoped) = state.scoped_openai.as_mut() {
+            let carries_reference = scoped.matches_reference(headers);
+            if normalized_host == resolver::OPENAI_API_HOST || carries_reference {
+                return scoped.inject(scheme, &normalized_host, port, method, path, headers);
+            }
         }
 
         let matching_credentials = state
@@ -95,17 +171,29 @@ impl CredentialBroker {
             .filter(|credential| credential.matches_host(&normalized_host))
             .collect::<Vec<_>>();
         let Some(credential) = select_credential(headers, &matching_credentials) else {
-            return;
+            return Ok(());
         };
         let Some(header_value) = credential
             .provider
-            .request_header_value(&credential.real_value)
+            .request_header_value(credential.real_value.as_str())
         else {
-            return;
+            return Ok(());
         };
         credential
             .provider
             .insert_request_header(headers, header_value);
+        Ok(())
+    }
+
+    pub(crate) fn inject_request_headers(&self, host: &str, headers: &mut HeaderMap) {
+        let _ = self.inject_request_headers_for_request(
+            "https",
+            host,
+            resolver::OPENAI_API_PORT,
+            "POST",
+            "/v1/responses",
+            headers,
+        );
     }
 
     fn read_state(&self) -> std::sync::RwLockReadGuard<'_, CredentialBrokerState> {
@@ -161,7 +249,7 @@ impl CredentialBrokerState {
             credential.env_var == env_var
                 && std::ptr::eq(credential.provider, provider)
                 && credential.host_binding == host_binding
-                && credential.real_value == real_value
+                && credential.real_value.as_str() == real_value
         }) {
             return existing.dummy_value.clone();
         }
@@ -176,7 +264,7 @@ impl CredentialBrokerState {
             env_var: env_var.to_string(),
             provider,
             host_binding,
-            real_value: real_value.to_string(),
+            real_value: Zeroizing::new(real_value.to_string()),
             dummy_value: dummy_value.clone(),
         });
         dummy_value
@@ -186,12 +274,94 @@ impl CredentialBrokerState {
         self.credentials
             .iter()
             .any(|credential| credential.dummy_value == value)
+            || self
+                .scoped_openai
+                .as_ref()
+                .is_some_and(|credential| credential.dummy_value == value)
     }
 }
 
 impl CredentialRecord {
     fn matches_host(&self, host: &str) -> bool {
         self.host_binding.matches_host(host)
+    }
+}
+
+impl ScopedCredentialRecord {
+    fn matches_reference(&self, headers: &HeaderMap) -> bool {
+        providers::openai_provider()
+            .request_header(headers)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value == format!("Bearer {}", self.dummy_value))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn inject(
+        &mut self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        method: &str,
+        path: &str,
+        headers: &mut HeaderMap,
+    ) -> Result<(), ScopedCredentialInjectionError> {
+        if scheme != "https" {
+            return Err(ScopedCredentialInjectionError::SchemeDenied);
+        }
+        if host != resolver::OPENAI_API_HOST {
+            return Err(ScopedCredentialInjectionError::HostDenied);
+        }
+        if port != resolver::OPENAI_API_PORT {
+            return Err(ScopedCredentialInjectionError::PortDenied);
+        }
+        if method != "POST" {
+            return Err(ScopedCredentialInjectionError::MethodDenied);
+        }
+        if !path.starts_with(resolver::OPENAI_API_PATH_PREFIX)
+            || path != self.route.authority().path.as_str()
+        {
+            return Err(ScopedCredentialInjectionError::PathDenied);
+        }
+        let Some(authorization) = providers::openai_provider()
+            .request_header(headers)
+            .and_then(|value| value.to_str().ok())
+        else {
+            return Err(ScopedCredentialInjectionError::MissingReference);
+        };
+        if authorization != format!("Bearer {}", self.dummy_value) {
+            return Err(ScopedCredentialInjectionError::AuthorizationConflict);
+        }
+        if self.used {
+            return Err(ScopedCredentialInjectionError::AlreadyUsed);
+        }
+
+        let use_request = ScopedCredentialUse {
+            scheme,
+            host,
+            port,
+            method,
+            path,
+            capability_id: self.route.capability_id(),
+            authority: self.route.authority(),
+        };
+        let mut inserted = false;
+        let mut callback = |secret: &str| {
+            let Some(header_value) = providers::scoped_openai_header_value(secret) else {
+                return Err(ScopedCredentialCallbackError::Failed);
+            };
+            providers::openai_provider().insert_request_header(headers, header_value);
+            inserted = true;
+            Ok(())
+        };
+        self.route
+            .resolver()
+            .resolve(&use_request, &mut callback)
+            .map_err(|_| ScopedCredentialInjectionError::ResolutionFailed)?;
+        if !inserted {
+            return Err(ScopedCredentialInjectionError::ResolutionFailed);
+        }
+        self.used = true;
+        Ok(())
     }
 }
 

@@ -489,6 +489,65 @@ fn mandate_binds_exact_preview_and_rejects_replay() {
 }
 
 #[test]
+fn credential_use_receipt_is_bound_and_contains_only_secret_free_metadata() {
+    let capability_id = CapabilityId::from_sha256_hex("a".repeat(64)).expect("capability id");
+    let receipt = ActionReceipt::complete_credential_use(
+        capability_id.clone(),
+        DecisionReason::MatchingGrant,
+        text("responses.create"),
+        text("https://api.openai.com:443"),
+        text(&"b".repeat(64)),
+        MandateOutcome::Executed,
+        120,
+    )
+    .expect("credential receipt");
+    receipt.validate().expect("receipt integrity");
+
+    assert_eq!(
+        serde_json::to_value(&receipt).expect("serialize receipt"),
+        serde_json::json!({
+            "schema_version": receipt.schema_version,
+            "receipt_id": receipt.receipt_id,
+            "mandate_id": capability_id.as_str(),
+            "preview_digest": "b".repeat(64),
+            "outcome": "executed",
+            "completed_at_unix_seconds": 120,
+            "credential_use": {
+                "capability_id": capability_id.as_str(),
+                "policy_reason": "matching_grant",
+                "operation": "responses.create",
+                "destination": "https://api.openai.com:443"
+            }
+        })
+    );
+    let serialized = serde_json::to_string(&receipt).expect("serialize");
+    for forbidden in [
+        "provider.openai",
+        "credential_value",
+        "secret_value",
+        "sk-canary",
+        "\"label\"",
+    ] {
+        assert!(
+            !serialized.contains(forbidden),
+            "found forbidden text {forbidden}"
+        );
+    }
+
+    let mut mismatched = receipt;
+    mismatched
+        .credential_use
+        .as_mut()
+        .expect("credential metadata")
+        .capability_id =
+        CapabilityId::from_sha256_hex("c".repeat(64)).expect("adjacent capability");
+    assert!(matches!(
+        mismatched.validate(),
+        Err(MandateError::CredentialReceiptMismatch)
+    ));
+}
+
+#[test]
 fn mandate_rejects_mutation_of_every_bound_preview_dimension() {
     let original = preview();
     let mandate = ProtectedActionMandate::approve(&original, human(), 110).expect("approve");

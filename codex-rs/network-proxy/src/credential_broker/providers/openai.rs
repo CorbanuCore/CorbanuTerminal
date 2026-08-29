@@ -2,14 +2,15 @@ use super::CredentialHostBinding;
 use super::CredentialProvider;
 use super::CredentialSource;
 use super::shaped_dummy_value;
+use crate::credential_broker::resolver::OPENAI_API_HOST;
+use crate::credential_broker::resolver::OPENAI_API_KEY_ENV_VAR;
 use rama_http::HeaderMap;
 use rama_http::HeaderValue;
 use rama_http::header::AUTHORIZATION;
 use std::collections::HashMap;
 
-const OPENAI_API_KEY_ENV_VARS: &[&str] = &["OPENAI_API_KEY"];
+const OPENAI_API_KEY_ENV_VARS: &[&str] = &[OPENAI_API_KEY_ENV_VAR];
 const OPENAI_API_KEY_MIN_LEN: usize = 51;
-const OPENAI_API_HOST: &str = "api.openai.com";
 
 pub(super) static PROVIDER: CredentialProvider = CredentialProvider {
     context_env_vars: &[],

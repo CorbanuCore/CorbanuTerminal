@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="nextest-run" tests="2" skipped="0" failures="0" errors="0" uuid="0596e24d-2259-40cb-b56a-7762934baa9f" timestamp="2026-08-27T03:16:05.939-07:00" time="0.032">
+    <testsuite name="codex-tui" tests="2" skipped="0" errors="0" failures="0">
+        <testcase name="security::tests::unavailable_inspector_never_manufactures_a_request_or_effective_protection" classname="codex-tui" timestamp="2026-08-27T03:16:05.954-07:00" time="0.016"/>
+        <testcase name="security::tests::prepare_and_cancel_are_observational_and_reconnect_discards_stale_state" classname="codex-tui" timestamp="2026-08-27T03:16:05.954-07:00" time="0.016"/>
+    </testsuite>
+</testsuites>

@@ -6,12 +6,14 @@ plan_file: "docs/plans/proposed/arbitrary-model-autoreview.md"
 plan_feature: "PF-14"
 execution_order: 5
 owner: "Jim Ricketts"
+lane: "autoreview"
+write_scope: "UNALLOCATED"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-14-S04"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-27
 ---
 
 # PF-14-S05 — Fail-closed full-history invariant
@@ -23,6 +25,7 @@ updated: 2026-08-24
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/proposed/arbitrary-model-autoreview.md#native-lifecycle-and-upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [Arbitrary-model Autoreview](../../../plans/proposed/arbitrary-model-autoreview.md)
 - Feature: `PF-14`
 - Acceptance advanced: every runtime override paired with `fork_turns=all` is rejected before child creation.
@@ -36,6 +39,8 @@ updated: 2026-08-24
 
 ## Preconditions
 
+- [ ] Allocate literal implementation/test/registration scopes and check cross-plan collisions before readiness.
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
 - [ ] Plan is active.
 - [ ] Dependencies are completed.
 - [ ] Worktree, branch, and base commit are exact and match the plan.
@@ -56,10 +61,12 @@ updated: 2026-08-24
 
 ## Verification
 
-- [ ] Focused test: `cargo test -p codex-core full_history_runtime_override`
-- [ ] Inheritance test: `cargo test -p codex-core spawn_agent_full_history`
-- [ ] Cross-provider regression: `cargo test -p codex-core exact_runtime_dispatch`
-- [ ] TUI applicability resolved; invalid-fork failure does not require a separate user surface.
+- [ ] Run fix/format before final tests; execute Rust commands below from `codex-rs`.
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
+- [ ] Focused test: `just test -p codex-core full_history_runtime_override`
+- [ ] Inheritance test: `just test -p codex-core spawn_agent_full_history`
+- [ ] Cross-provider regression: `just test -p codex-core exact_runtime_dispatch`
+- [ ] If this sprint changes an interactive path, complete its actual-key success/failure/recovery proof before completion; otherwise record why internal-only. S07 repeats integrated proof.
 
 ## Exit evidence
 

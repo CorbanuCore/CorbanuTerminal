@@ -4,12 +4,14 @@ status: draft
 change_class: product-initiative
 priority: P1
 owner: "Alex Good — Head of Product"
+max_active_sprints: 1
+integration_owner: "Jim Ricketts"
 activation_authority: "Travis Good — final product authority"
 activation_basis: "2026-08-24 request to propose explicit Autoreview with arbitrary configured models; implementation remains pending activation"
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-27
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Shipping MVP — LIVE"
@@ -38,6 +40,7 @@ feature.
 | Delivery owner | Jim Ricketts |
 | Authoritative decision | Produce an executable proposal for explicit Autoreview on an arbitrary configured Corbanu provider/model |
 | Activation gate | Explicit product authorization, an available plan slot, exact worktree coordinates, and a dependency decision for the secret scanner |
+| Planning amendment | Travis Good, 2026-08-27: retain native subagents, align upstream/security contracts and execution metadata; this does not activate PF-14 |
 | Target release | TBD |
 | Deadline | TBD |
 
@@ -211,6 +214,53 @@ Planned native boundaries:
 - `codex-rs/core/tests/suite/arbitrary_model_autoreview.rs`
 - `codex-rs/tui/src/chatwidget/autoreview.rs`
 
+## Native lifecycle and upstream-touch record
+
+Follow the [upstream integration contract](../upstream-integration.md).
+Canonical upstream is `https://github.com/openai/codex.git`; its verified SHA is
+unresolved in this shallow checkout. Inspected fork HEAD:
+`12bf62444bcab7c5eea6d25b23aa301993fcb0ab`. A future implementation base and
+upstream update candidate remain unallocated, not inferred from that fork SHA.
+Jim Ricketts resolves the baseline, exact changed files, and contract commands
+before readiness and records evidence and patch disposition at completion.
+
+`spawn_agent` and the Corbanu `/spawn` command are not deprecated in the inspected
+branch. The architectural distinction is native child lifecycle versus legacy
+external-process orchestration. Autoreview uses the former; no external CLI
+engine list, second scheduler, or new provider-reserved tool fields are adopted.
+Runtime choice is host-authorized before transport encoding. This is planned
+Autoreview behavior, not a claim that arbitrary-model review already ships.
+
+| Sprint | Upstream touch / native seam | Product-owned boundary | Required compatibility proof |
+| --- | --- | --- | --- |
+| S01 | Core module/tool registration; mirrored repository skills | `core/src/autoreview/request.rs` and thin handler | Explicit invocation; distinct `/review`/Guardian semantics; native schema unchanged |
+| S02 | Shared confidentiality/source contracts, exact outgoing bytes | `core/src/autoreview/{bundle,secret_scan}.rs` | PF-28 shared scanner/redaction semantics; PF-29 provenance; zero provider calls on refusal |
+| S03 | Native spawn and TUI readiness call sites | `core/src/agent/provider_readiness.rs` | Same auth/allowlist results on all routes; brokered credential use; Core does not depend on TUI |
+| S04/S05 | Native V2 spawn, collaboration schemas, history fork guard | `core/src/agent/runtime_dispatch.rs`; minimal native adapters | Reserved-wire compatibility; exact runtime/one child; full-history override rejection; permissions and provenance preserved |
+| S06 | Native child cancellation, output, and persistence | `core/src/autoreview/{runner,report}.rs` | No tools/history/repository access; sticky source lineage; no review-result authority; bounded calls and cancellation |
+| S07 | TUI event/routing and view registration | `tui/src/chatwidget/autoreview.rs` | Exact route, failure/cancel/resume, native `/spawn` and `/review` regressions, both live-repo workflows |
+
+Paths in this table are below `codex-rs/` unless stated otherwise. Resolve
+concrete files behind brace notation in each sprint's literal write scope.
+Retain/adapt/remove each upstream patch explicitly when integrating an update.
+
+### Security prerequisites and scheduling
+
+S01 consumes PF-27 shared contracts. S02 waits for PF-28 confidentiality and
+PF-29-S01 source envelopes; it must not create a competing secret-policy engine.
+S03 waits for PF-13-S05 broker qualification and PF-27. S06 also waits for
+PF-29-S02 derivation/resume contracts, including reviewer output as untrusted
+content. Packet scanning remains a distinct fail-closed disclosure gate, not a
+license to redact and send a packet that failed its scan.
+
+This plan defaults to one active sprint. After explicit activation and allocation,
+its independent request/packet/report work may overlap the security plan's
+browser lane. Shared native spawn, context, registration, and test files cannot
+be edited concurrently across plans; record serial dependencies at allocation.
+Each sprint's lane and write scope must include module/test registration and any
+Cargo/Bazel dependency files. No execution or new worktree is authorized by this
+documentation amendment.
+
 ## Sprint execution map
 
 All records map to the single PF-14 product feature. Each sprint owns one
@@ -247,14 +297,15 @@ worktree coordinates are assigned.
 
 ## Automated evidence
 
-Run formatting before the final affected tests.
+Run formatting before the final affected tests. Run Rust commands from
+`codex-rs`; plan/sprint and documentation commands run from the repository root.
 
 | Check | Final-tree command | Result | Artifact |
 | --- | --- | --- | --- |
-| Spawn routing regressions | `cargo test -p codex-core multi_agents_tests` | pending | linked from sprint evidence |
-| Autoreview Core contract | `cargo test -p codex-core arbitrary_model_autoreview` | pending | linked from sprint evidence |
-| Secret/adversarial packet tests | `cargo test -p codex-core autoreview_secret_gate` | pending | linked from sprint evidence |
-| TUI behavior | `cargo test -p codex-tui autoreview` | pending | linked from sprint evidence |
+| Spawn routing regressions | `just test -p codex-core multi_agents_tests` | pending | linked from sprint evidence |
+| Autoreview Core contract | `just test -p codex-core arbitrary_model_autoreview` | pending | linked from sprint evidence |
+| Secret/adversarial packet tests | `just test -p codex-core autoreview_secret_gate` | pending | linked from sprint evidence |
+| TUI behavior | `just test -p codex-tui autoreview` | pending | linked from sprint evidence |
 | Plan and sprint records | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | pending | CI log |
 | Documentation | `mkdocs build --strict` | pending | CI log |
 
@@ -303,6 +354,7 @@ Finished-feature documentation is created only after the candidate passes.
 | TruffleHog version and distribution on supported platforms | implementation dependency | Jim Ricketts | PF-14-S02 | pin and fail closed if absent |
 | Operator provider allowlist and authentication | runtime precondition | user/operator | PF-14-S03 onward | never bypassed |
 | Upstream Autoreview source provenance | design dependency | Jim Ricketts | PF-14-S01 | pinned to `128a4ea6`; native implementation, no partial copy |
+| Shared security and upstream contracts | hard dependency | Jim Ricketts | S01/S02/S03/S06 as mapped above | PF-27, PF-28, PF-29, and PF-13 qualification remain pending; baseline and literal scopes resolved before readiness |
 | Benchmark cadence | release gate | release owner | candidate release | run full campaign if this is a due third release |
 
 ## Release linkage

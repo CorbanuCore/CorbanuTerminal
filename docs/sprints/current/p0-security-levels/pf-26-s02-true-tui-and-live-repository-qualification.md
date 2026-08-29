@@ -4,14 +4,16 @@ title: "True-TUI and live-repository qualification"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-26"
-execution_order: 22
+execution_order: 29
 owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
-depends_on: "PF-26-S01"
+lane: "qualification"
+write_scope: "qa/release"
+worktree: "UNALLOCATED"
+branch: "UNALLOCATED"
+base_commit: "UNALLOCATED"
+depends_on: "PF-26-S04"
 created: 2026-08-24
-updated: 2026-08-25
+updated: 2026-08-27
 ---
 
 # PF-26-S02 — True-TUI and live-repository qualification
@@ -19,10 +21,11 @@ updated: 2026-08-25
 ## Execution mandate
 
 - Deliver: final-candidate true-TUI evidence with actual keys in disposable TensorCash and Isometric Game worktrees.
-- Excludes: code changes beyond discovered fixes, finished docs, human sign-off, and release decision.
+- Excludes: runtime fixes, finished docs, human sign-off, and release decision; failures return to the owning implementation sprint.
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-26`
 - Acceptance advanced: success, cancel/failure, recovery, and resume work end to end; Corbanu exec is not accepted proof.
@@ -36,16 +39,22 @@ updated: 2026-08-25
 
 ## Preconditions
 
-- [ ] PF-26-S01 is completed and archived.
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
+- [ ] Every listed dependency is completed and archived.
 - [ ] Final formatted candidate binary/version/commit is recorded.
 - [ ] Both disposable live-repository worktrees are resolved and safe for chaotic edits.
 - [ ] The typed tmux harness is merged and its required Ubuntu lane is green.
+
+- [ ] Allocate lane/worktree/base in the plan and validate disjoint write scopes before readiness.
 
 ## Done
 
 - [x] Sprint record is linked only to PF-26.
 
 ## Remaining
+
+- [ ] Run platform/live-repository lanes in isolated state against the same PF-26-S04 candidate; collate one evidence manifest.
+- [ ] In both repositories, prove separate browser/content health, hostile acquisition, cancellation, backend-unavailable denial, and isolated recovery/resume.
 
 - [ ] In TensorCash, prove Permissive compatibility and Moderate hostile-content/protected-action success, denial, cancel, and recovery.
 - [ ] In Isometric Game, prove Aggressive default denial, one narrow grant, child inheritance, expiry, revocation, kill switch, downgrade, restart, and resume.
@@ -72,6 +81,8 @@ updated: 2026-08-25
 
 ## Verification
 
+- [ ] Include remote Linux/tmux detach/reattach and provider-recovery proof with synthetic actions; preserve taint/epochs and verify no duplicate execution without assuming SSH caused provider failure.
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] TensorCash success, failure/cancel, and recovery artifacts pass.
 - [ ] Isometric Game success, failure/cancel, and restart/resume artifacts pass.
 - [ ] Candidate binary hash matches the automated-evidence candidate.

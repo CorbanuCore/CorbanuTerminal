@@ -5,6 +5,7 @@ use rama_http::HeaderMap;
 use rama_http::HeaderValue;
 use rand::Rng as _;
 use std::collections::HashMap;
+use zeroize::Zeroizing;
 
 const DUMMY_ALPHANUMERIC: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -87,6 +88,22 @@ pub(super) fn credential_broker_env_keys() -> impl Iterator<Item = &'static str>
 
 pub(super) fn credential_providers() -> impl Iterator<Item = &'static CredentialProvider> {
     CREDENTIAL_PROVIDERS.iter().copied()
+}
+
+pub(super) fn openai_provider() -> &'static CredentialProvider {
+    &openai::PROVIDER
+}
+
+// Only the protected scoped route uses this path. Legacy provider behavior and
+// dummy shaping remain unchanged. The final wire header is necessarily a copy;
+// its sensitive flag prevents Debug disclosure, not memory persistence.
+pub(super) fn scoped_openai_header_value(value: &str) -> Option<HeaderValue> {
+    let mut bearer = Zeroizing::new(String::with_capacity("Bearer ".len() + value.len()));
+    bearer.push_str("Bearer ");
+    bearer.push_str(value);
+    let mut header = HeaderValue::from_str(&bearer).ok()?;
+    header.set_sensitive(true);
+    Some(header)
 }
 
 fn shaped_dummy_value(real_value: &str, prefix: &str, minimum_len: usize) -> String {

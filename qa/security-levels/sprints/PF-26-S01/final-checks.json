@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "phase": "harness-self-tests",
+  "product_qualification": "pending",
+  "source_commit": "bed9c5bfeece2414cbf7e3f54af09fcb646959ed",
+  "worktree": "/Users/travisgood/Documents/ChatGPT/corbanu-pf26-s01",
+  "platform": "macos",
+  "commands": [
+    {
+      "command": "ruff format --check scripts/security_level_*.py scripts/test_security_level_*.py",
+      "chunk_id": "ebb048",
+      "wall_time_seconds": 0.00000325,
+      "exit_code": 0,
+      "original_token_count": 7,
+      "output": "10 files already formatted\n"
+    },
+    {
+      "command": "ruff check scripts/security_level_*.py scripts/test_security_level_*.py",
+      "chunk_id": "31a2ad",
+      "wall_time_seconds": 0.000004167,
+      "exit_code": 0,
+      "original_token_count": 5,
+      "output": "All checks passed!\n"
+    },
+    {
+      "command": "python3 -m unittest discover -s scripts -p 'test_security_level_*.py'",
+      "chunk_id": "94e465",
+      "wall_time_seconds": 4.499541167,
+      "exit_code": 0,
+      "original_token_count": 35,
+      "output": ".......................................\n----------------------------------------------------------------------\nRan 39 tests in 4.517s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest discover -s scripts -p 'test_security_credential_canary.py'",
+      "chunk_id": "94fc7c",
+      "wall_time_seconds": 0.000002459,
+      "exit_code": 0,
+      "original_token_count": 26,
+      "output": "......\n----------------------------------------------------------------------\nRan 6 tests in 0.002s\n\nOK\n"
+    },
+    {
+      "command": "python3 docs/plans/check.py",
+      "chunk_id": "d120a8",
+      "wall_time_seconds": 0.000002417,
+      "exit_code": 0,
+      "original_token_count": 10,
+      "output": "plans: active 1/2; available slots 1\n"
+    },
+    {
+      "command": "python3 docs/sprints/check.py",
+      "chunk_id": "a0cbd3",
+      "wall_time_seconds": 0.000002333,
+      "exit_code": 0,
+      "original_token_count": 9,
+      "output": "sprints: current 24; archived 85\n"
+    },
+    {
+      "command": "shasum -a 256 -c qa/security-levels/sprints/PF-26-S01/code-sha256.txt",
+      "chunk_id": "8f5f96",
+      "wall_time_seconds": 0.000002292,
+      "exit_code": 0,
+      "original_token_count": 151,
+      "output": "scripts/security-level-adversarial: OK\nscripts/security-level-standards-check: OK\nscripts/security_level_adversarial.py: OK\nscripts/security_level_capture.py: OK\nscripts/security_level_compat.py: OK\nscripts/security_level_evidence.py: OK\nscripts/security_level_standards_check.py: OK\nscripts/test_security_level_adversarial.py: OK\nscripts/test_security_level_capture.py: OK\nscripts/test_security_level_compat.py: OK\nscripts/test_security_level_evidence.py: OK\nscripts/test_security_level_standards_check.py: OK\nqa/security-levels/fixtures/catalog-v1.json: OK\nqa/security-levels/fixtures/pins-v1.json: OK\n"
+    },
+    {
+      "command": "python3 scripts/security-level-standards-check --check-plan --manifest qa/security-levels/sprints/PF-26-S01/crosswalk-pending.json",
+      "chunk_id": "e427b8",
+      "wall_time_seconds": 0.013196167,
+      "exit_code": 0,
+      "original_token_count": 34,
+      "output": "{\"candidate\": null, \"checked_results\": 65, \"phase\": \"planning\", \"qualification\": \"pending\", \"schema_version\": 1, \"status\": \"pending\"}\n"
+    },
+    {
+      "command": "git diff --check",
+      "chunk_id": "7569d7",
+      "wall_time_seconds": 0.000001875,
+      "exit_code": 0,
+      "original_token_count": 0,
+      "output": ""
+    }
+  ],
+  "closeout_commands": [
+    {
+      "command": "python3 -m unittest discover -s scripts -p 'test_security_level_*.py'",
+      "chunk_id": "a5a585",
+      "wall_time_seconds": 4.358042042,
+      "exit_code": 0,
+      "original_token_count": 35,
+      "output": ".......................................\n----------------------------------------------------------------------\nRan 39 tests in 4.373s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest discover -s scripts -p 'test_security_credential_canary.py'",
+      "chunk_id": "9abd47",
+      "wall_time_seconds": 0.000002375,
+      "exit_code": 0,
+      "original_token_count": 26,
+      "output": "......\n----------------------------------------------------------------------\nRan 6 tests in 0.002s\n\nOK\n"
+    },
+    {
+      "command": "python3 docs/sprints/check.py",
+      "chunk_id": "2f6811",
+      "wall_time_seconds": 0.000002208,
+      "exit_code": 0,
+      "original_token_count": 9,
+      "output": "sprints: current 23; archived 86\n"
+    },
+    {
+      "command": "python3 docs/plans/check.py",
+      "chunk_id": "4ae84f",
+      "wall_time_seconds": 0.000002708,
+      "exit_code": 0,
+      "original_token_count": 10,
+      "output": "plans: active 1/2; available slots 1\n"
+    },
+    {
+      "command": "shasum -a 256 -c qa/security-levels/sprints/PF-26-S01/code-sha256.txt",
+      "chunk_id": "b2f6d9",
+      "wall_time_seconds": 0.00000275,
+      "exit_code": 0,
+      "original_token_count": 151,
+      "output": "scripts/security-level-adversarial: OK\nscripts/security-level-standards-check: OK\nscripts/security_level_adversarial.py: OK\nscripts/security_level_capture.py: OK\nscripts/security_level_compat.py: OK\nscripts/security_level_evidence.py: OK\nscripts/security_level_standards_check.py: OK\nscripts/test_security_level_adversarial.py: OK\nscripts/test_security_level_capture.py: OK\nscripts/test_security_level_compat.py: OK\nscripts/test_security_level_evidence.py: OK\nscripts/test_security_level_standards_check.py: OK\nqa/security-levels/fixtures/catalog-v1.json: OK\nqa/security-levels/fixtures/pins-v1.json: OK\n"
+    },
+    {
+      "command": "git diff bed9c5bfeece2414cbf7e3f54af09fcb646959ed -- scripts qa/security-levels/fixtures",
+      "chunk_id": "1bf4cd",
+      "wall_time_seconds": 0.000002292,
+      "exit_code": 0,
+      "original_token_count": 0,
+      "output": ""
+    },
+    {
+      "command": "git diff --check",
+      "chunk_id": "4f5d71",
+      "wall_time_seconds": 0.00000275,
+      "exit_code": 0,
+      "original_token_count": 0,
+      "output": ""
+    }
+  ]
+}

@@ -4,14 +4,16 @@ title: "Security confirm, cancel, and downgrade"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-24"
-execution_order: 18
+execution_order: 25
 owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
-depends_on: "PF-23-S03, PF-24-S01"
+lane: "inspector"
+write_scope: "codex-rs/tui/src/app/config_persistence.rs, codex-rs/tui/src/bottom_pane/approval_overlay.rs, codex-rs/tui/src/security/confirm.rs, codex-rs/tui/src/security/events.rs, codex-rs/tui/src/security/mod.rs, codex-rs/core/src/security/ui_events.rs"
+worktree: "UNALLOCATED"
+branch: "UNALLOCATED"
+base_commit: "UNALLOCATED"
+depends_on: "PF-23-S02, PF-23-S03, PF-24-S01, PF-30-S03"
 created: 2026-08-24
-updated: 2026-08-25
+updated: 2026-08-27
 ---
 
 # PF-24-S02 — Security confirm, cancel, and downgrade
@@ -23,6 +25,7 @@ updated: 2026-08-25
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-24`
 - Acceptance advanced: Esc changes nothing; confirmation applies immediately; downgrade shows removed protections first.
@@ -30,14 +33,17 @@ updated: 2026-08-25
 ## Code boundaries
 
 - Existing: `tui/src/app/config_persistence.rs`; `tui/src/bottom_pane/approval_overlay.rs`
-- Planned: `tui/src/security/{confirm,events}.rs`; Core transition event wiring
+- Planned: `tui/src/security/{confirm,events,mod}.rs`; `core/src/security/ui_events.rs`; shared grant/revoke view registrations.
 - Tests: sibling tests, app event tests, and reviewed snapshots
 
 ## Preconditions
 
-- [ ] PF-23-S03 and PF-24-S01 are completed and archived.
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
+- [ ] Every listed dependency is completed and archived.
 - [ ] Read root, Rust, Core, TUI, and TUI style instructions.
 - [ ] Exact worktree coordinates match the active plan.
+
+- [ ] Allocate lane/worktree/base in the plan and validate disjoint write scopes before readiness.
 
 ## Done
 
@@ -45,7 +51,11 @@ updated: 2026-08-25
 
 ## Remaining
 
+- [ ] Land shared overlay/module registrations and trusted grant/revoke event adapters to completed Core APIs; PF-25 sprints own separate view implementations only.
+- [ ] Preserve unavailable placeholders until each view lands; do not expose an unimplemented action or accept self-declared human provenance.
+
 - [ ] Show exact profile differences before confirmation and a protection-removal warning for downgrades.
+- [ ] Invoke PF-30-S03's setup/readiness UI for Moderate/Aggressive; display missing protection and deny acquisition after cancellation/failure without silently reverting to Permissive. Keep engine/installer policy in PF-30.
 - [ ] Send one typed human-origin transition event; expose no model/tool route to the event.
 - [ ] On Enter, call the Core transition API and show success or actionable failure; on Esc, restore the prior state.
 - [ ] Keep the view open/recoverable after persistence failure and reflect the effective level only after commit.
@@ -53,11 +63,12 @@ updated: 2026-08-25
 
 ## Verification
 
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] Fix: `cd codex-rs && just fix -p codex-tui && just fix -p codex-core`.
 - [ ] Format: `cd codex-rs && just fmt`; then inspect the final diff.
 - [ ] Tests: `cd codex-rs && just test -p codex-tui security_confirm && just test -p codex-core security_transition`.
 - [ ] Snapshot review: inspect and intentionally accept only PF-24 output.
-- [ ] TUI qualification deferred to PF-26-S02 with exact success/cancel/failure/restart keys.
+- [ ] Run applicable success/cancel/failure/recovery keys in a true PTY before completion; PF-26 repeats final integrated qualification.
 
 ## Exit evidence
 

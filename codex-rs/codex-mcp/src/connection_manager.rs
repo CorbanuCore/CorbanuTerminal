@@ -24,6 +24,7 @@ pub use tool_catalog::tool_is_model_visible;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::OnceLock;
+use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
@@ -67,6 +68,42 @@ use tracing::warn;
 pub(crate) struct McpServerConnection {
     identity: Option<McpServerConnectionIdentity>,
     client: AsyncManagedClient,
+    startup_cancellation: StartupCancellation,
+}
+
+const STARTUP_CANCELLATION_PENDING: u8 = 0;
+const STARTUP_CANCELLATION_REPORTABLE: u8 = 1;
+const STARTUP_CANCELLATION_SILENT: u8 = 2;
+
+#[derive(Clone, Default)]
+struct StartupCancellation {
+    disposition: Arc<AtomicU8>,
+}
+
+impl StartupCancellation {
+    fn cancel_reportably(&self, cancel_token: &tokio_util::sync::CancellationToken) {
+        let _ = self.disposition.compare_exchange(
+            STARTUP_CANCELLATION_PENDING,
+            STARTUP_CANCELLATION_REPORTABLE,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+        cancel_token.cancel();
+    }
+
+    fn cancel_silently(&self, cancel_token: &tokio_util::sync::CancellationToken) {
+        let _ = self.disposition.compare_exchange(
+            STARTUP_CANCELLATION_PENDING,
+            STARTUP_CANCELLATION_SILENT,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+        cancel_token.cancel();
+    }
+
+    fn should_report(&self) -> bool {
+        self.disposition.load(Ordering::Acquire) != STARTUP_CANCELLATION_SILENT
+    }
 }
 
 impl McpServerConnection {
@@ -102,19 +139,23 @@ impl McpServerConnection {
     }
 
     async fn shutdown(&self) {
+        self.startup_cancellation
+            .cancel_silently(&self.client.cancel_token);
         self.client.shutdown().await;
     }
 
     fn cancel_startup(&self) {
         if !self.client.startup_complete.load(Ordering::Acquire) {
-            self.client.cancel_token.cancel();
+            self.startup_cancellation
+                .cancel_reportably(&self.client.cancel_token);
         }
     }
 }
 
 impl Drop for McpServerConnection {
     fn drop(&mut self) {
-        self.client.cancel_token.cancel();
+        self.startup_cancellation
+            .cancel_silently(&self.client.cancel_token);
     }
 }
 
@@ -356,6 +397,7 @@ impl McpConnectionSet {
                 None
             };
             let has_runtime_auth = runtime_auth_provider.is_some();
+            let startup_cancellation = StartupCancellation::default();
             let async_managed_client = AsyncManagedClient::new(
                 server_name.clone(),
                 startup_submit_id.clone(),
@@ -380,6 +422,7 @@ impl McpConnectionSet {
                     connection: Arc::new(McpServerConnection {
                         identity: Some(connection_identity),
                         client: async_managed_client.clone(),
+                        startup_cancellation: startup_cancellation.clone(),
                     }),
                     metadata,
                     tool_filter: configured_tool_filter,
@@ -391,7 +434,11 @@ impl McpConnectionSet {
             let publication_gate = publication_gate.clone();
             join_set.spawn(async move {
                 if !publication_gate.wait().await {
-                    return (server_name, Err(StartupOutcomeError::Cancelled));
+                    return (
+                        server_name,
+                        Err(StartupOutcomeError::Cancelled),
+                        /*report_cancellation*/ false,
+                    );
                 }
                 if let Some(tx_event) = tx_event.as_ref() {
                     let _ = emit_update(
@@ -445,8 +492,13 @@ impl McpConnectionSet {
                         outcome = Err(StartupOutcomeError::Cancelled);
                     }
                     let status = match &outcome {
-                        Ok(_) => McpStartupStatus::Ready,
-                        Err(StartupOutcomeError::Cancelled) => McpStartupStatus::Cancelled,
+                        Ok(_) => Some(McpStartupStatus::Ready),
+                        Err(StartupOutcomeError::Cancelled)
+                            if startup_cancellation.should_report() =>
+                        {
+                            Some(McpStartupStatus::Cancelled)
+                        }
+                        Err(StartupOutcomeError::Cancelled) => None,
                         Err(error) => {
                             let reason = mcp_startup_failure_reason(auth_state, error);
                             let error_str = mcp_init_error_display(
@@ -454,22 +506,24 @@ impl McpConnectionSet {
                                 Some(&configured_config),
                                 error,
                             );
-                            McpStartupStatus::Failed {
+                            Some(McpStartupStatus::Failed {
                                 error: error_str,
                                 reason,
-                            }
+                            })
                         }
                     };
 
-                    let _ = emit_update(
-                        submit_id.as_str(),
-                        tx_event,
-                        McpStartupUpdateEvent {
-                            server: server_name.clone(),
-                            status,
-                        },
-                    )
-                    .await;
+                    if let Some(status) = status {
+                        let _ = emit_update(
+                            submit_id.as_str(),
+                            tx_event,
+                            McpStartupUpdateEvent {
+                                server: server_name.clone(),
+                                status,
+                            },
+                        )
+                        .await;
+                    }
                 }
                 if cancel_token.is_cancelled() {
                     outcome = Err(StartupOutcomeError::Cancelled);
@@ -479,7 +533,8 @@ impl McpConnectionSet {
                     async_managed_client.reconnect_failed_startup().await;
                 }
 
-                (server_name, outcome)
+                let report_cancellation = startup_cancellation.should_report();
+                (server_name, outcome, report_cancellation)
             });
         }
         let manager = Self {
@@ -516,10 +571,13 @@ impl McpConnectionSet {
                     )
                     .await;
                 }
-                for (server_name, outcome) in outcomes {
+                for (server_name, outcome, report_cancellation) in outcomes {
                     match outcome {
                         Ok(_) => summary.ready.push(server_name),
-                        Err(StartupOutcomeError::Cancelled) => summary.cancelled.push(server_name),
+                        Err(StartupOutcomeError::Cancelled) if report_cancellation => {
+                            summary.cancelled.push(server_name);
+                        }
+                        Err(StartupOutcomeError::Cancelled) => {}
                         Err(StartupOutcomeError::Failed { error, .. }) => {
                             summary.failed.push(McpStartupFailure {
                                 server: server_name,

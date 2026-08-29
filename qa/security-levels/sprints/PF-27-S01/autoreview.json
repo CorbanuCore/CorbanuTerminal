@@ -1,0 +1,6 @@
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "I found no actionable defects in the PF-27 inspector-contract slice. The new contract keeps serialization closed with denied unknown fields, preserves the distinction between requested/effective policy facts and independent health facts, rejects weaker effective levels, and does not introduce runtime activation or upstream coupling in this slice.",
+  "overall_confidence": 0.83
+}

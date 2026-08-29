@@ -1,0 +1,92 @@
+{
+  "reviewed_commit": "044491b8b02b24a65a84e8da61619d3444e63fe0",
+  "coverage": [
+    "All 35 PF13_REVIEW_FILES.sha256 paths verified by hash and read",
+    "core/src/security/credential_capability.rs: issue/consume/purge lifecycle, entropy, capacity, atomic consumption",
+    "vault/src/capability.rs + lib.rs: with_scoped_credential, zeroizing lifetime, panic containment, reveal_for_programmatic_use gate, normalize_label, keyring account derivation (secrets/src/lib.rs:193)",
+    "security-policy: credential.rs, authorization.rs, mandate.rs, revocation.rs, action_context.rs contracts",
+    "core/src/config/network_proxy_credential.rs: VaultNetworkCredentialResolver resolve/receipt path; network_proxy_spec.rs state build",
+    "network-proxy: credential_broker.rs, resolver.rs, providers (openai/github), mitm.rs forward_request/evaluate_mitm_policy/path_and_query, http_proxy.rs plaintext + CONNECT + DetectTls paths, upstream.rs (no redirect follower), runtime.rs install/virtualize/inject, config.rs defaults, features/src/feature_configs.rs TOML surface",
+    "cli/src/main.rs:2453-2472 run_vault_auth_helper; cli/tests/vault.rs",
+    "scripts/security_credential_canary.py + test + workflow; qa PF-13-S01..S05 evidence and all three canary reports",
+    "docs/plans/active/p0-security-levels.md; docs/sprints archive/current PF-13 records; review-diffs (six original patches)"
+  ],
+  "findings": [
+    {
+      "priority": "P2",
+      "title": "Scoped credential boundary has no production call site; evidence language overstates shipped behavior",
+      "file": "codex-rs/core/src/config/network_proxy_credential.rs",
+      "line": 175,
+      "preconditions": "Any real Moderate/Aggressive session at the reviewed commit",
+      "failure_path": "CredentialCapabilityStore::issue/consume and build_state_with_scoped_openai_credential are invoked only from #[cfg(test)] code; credential_broker defaults false (network-proxy/src/config.rs:162) and is not exposed in NetworkProxyConfigToml; children keep raw OPENAI_API_KEY",
+      "recommendation": "Wire the issuer path under a guard before claiming behavioral completion, or explicitly qualify all S01-S05 records as harness-invoked seam evidence pending PF-23 integration",
+      "regression_test": "End-to-end test from real session spawn proving dummy-only child env and exactly one live CONNECT/MITM injection",
+      "confidence": "high"
+    },
+    {
+      "priority": "P2",
+      "title": "No canary or Core evidence at the reviewed merge; full Core suite failed (135) and unattributed",
+      "file": "qa/security-levels/sprints/PF-13-S05/evidence.md",
+      "line": 1,
+      "preconditions": "Qualification decision on commit 044491b8",
+      "failure_path": "Windows report is at ea7d4bec72, macOS/Linux at 55025dd42/27b738ab8; post-merge evidence is only 6 Python tests and doc checks; 135 Core failures (123 in codex-core::all) remain unwaived and unattributed",
+      "recommendation": "Re-run six-probe canary and targeted Core credential tests at 044491b8 on all three OSes; triage/fix the 135 Core failures before sign-off",
+      "regression_test": "CI gate binding canary report source_commit to the merged hash plus required Core suite result",
+      "confidence": "high"
+    },
+    {
+      "priority": "P3",
+      "title": "auth-helper posture gate resolves config via env-controlled CODEX_HOME",
+      "file": "codex-rs/cli/src/main.rs",
+      "line": 2453,
+      "preconditions": "Agent can spawn processes with controlled environment",
+      "failure_path": "Persisted and override configs both honor CODEX_HOME; max() gate is bypassed if the agent supplies a home with permissive config; containment currently relies solely on keyring account being keyed by canonicalized home path (secrets/src/lib.rs:193), which is untested",
+      "recommendation": "Resolve posture from the canonical real home independent of env overrides, or bind and document the keyring-keying invariant",
+      "regression_test": "CLI test: alternate CODEX_HOME with permissive config and copied/symlinked vault must fail closed",
+      "confidence": "medium"
+    },
+    {
+      "priority": "P3",
+      "title": "Secret passes through non-zeroized String temporaries during header construction",
+      "file": "codex-rs/network-proxy/src/credential_broker/providers/openai.rs",
+      "line": 51,
+      "preconditions": "Any scoped or legacy broker injection",
+      "failure_path": "format!(\"Bearer {value}\") creates an unzeroed heap String containing the secret; freed without wiping; HeaderValue not marked sensitive",
+      "recommendation": "Build header value inside Zeroizing<String> and mark HeaderValue sensitive",
+      "regression_test": "Assert HeaderValue::is_sensitive() after injection",
+      "confidence": "high"
+    },
+    {
+      "priority": "P3",
+      "title": "Dummy values leak real secret length and punctuation layout to the child",
+      "file": "codex-rs/network-proxy/src/credential_broker/providers/providers.rs",
+      "line": 96,
+      "preconditions": "Broker virtualization of any supported credential",
+      "failure_path": "shaped_dummy_value copies non-alphanumeric positions and length of the real secret into the dummy visible to the untrusted child",
+      "recommendation": "Use fixed-format random dummies independent of real-value shape",
+      "regression_test": "Matrix test asserting dummy shape independence from real-value shape",
+      "confidence": "high"
+    },
+    {
+      "priority": "P3",
+      "title": "Stale doc comment on normalize_label (claims lowercasing; code only trims)",
+      "file": "codex-rs/vault/src/lib.rs",
+      "line": 545,
+      "preconditions": "Reader relying on documented canonicalization",
+      "failure_path": "Misdocumentation of a security-relevant label canonicalization function; behavior itself is consistent and fail-closed",
+      "recommendation": "Correct the comment",
+      "regression_test": "Doc check or unit test pinning case-sensitivity semantics",
+      "confidence": "high"
+    }
+  ],
+  "follow_ups": [
+    "Live CONNECT -> MITM -> upstream end-to-end test with an installed scoped route (current canary captures a HeaderMap, not a socket)",
+    "Independent assertion manifest so the canary cannot self-certify a weakened test tree",
+    "Test the MITM-hook Authorization collision guard at forward_request level",
+    "Define intended credential_broker config exposure before PF-23 wiring",
+    "Zeroizing audit of header-construction temporaries; mark injected headers sensitive",
+    "Require canary + Core-suite evidence at the exact merged hash for future sprint completion claims",
+    "Deferred by design (not defects): AuthorityEpoch/policy-revision binding, non-OpenAI scoped providers, durable receipt persistence, cross-process revocation"
+  ],
+  "verdict": "qualified-with-gaps leaning not-ready: no reachable secret-leak defect found and the boundary design/tests are strong at the invoked seams, but the path has no production call site (claims must be re-scoped), no qualification evidence exists at the reviewed merge commit, and the full Core suite gate is failed (135) and unattributed. Keep PF-13-S05 open until both P2 items close; P3 items may follow up."
+}

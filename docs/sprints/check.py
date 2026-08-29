@@ -7,6 +7,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from pathlib import PurePosixPath
 
 
 ROOT = Path(__file__).resolve().parent
@@ -40,6 +41,7 @@ REQUIRED_SECTIONS = (
     "Exit evidence",
 )
 MAX_CURRENT_LINES = 100
+ACTIVE_STATUSES = {"in_progress", "blocked"}
 
 
 def scalar(value):
@@ -56,7 +58,9 @@ def parse_front_matter(path):
         return text, {}, ""
     front = match.group(1)
     values = {}
-    for key, value in re.findall(r"^([a-z][a-z0-9_-]*):[ \t]*(.*?)\s*$", front, re.MULTILINE):
+    for key, value in re.findall(
+        r"^([a-z][a-z0-9_-]*):[ \t]*(.*?)\s*$", front, re.MULTILINE
+    ):
         values[key] = scalar(value)
     return text, values, front
 
@@ -107,6 +111,85 @@ def dependency_ids(value):
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def write_scopes(value):
+    """Literal prefixes make file ownership conflicts deterministic."""
+    return [item.strip().rstrip("/") for item in value.split(",") if item.strip()]
+
+
+def valid_scope(scope):
+    return (
+        bool(scope)
+        and scope != "UNALLOCATED"
+        and not PurePosixPath(scope).is_absolute()
+        and not any(part in {"", ".", ".."} for part in scope.split("/"))
+        and not re.search(r"[\\:*?\[\]{}]", scope)
+    )
+
+
+def scopes_overlap(left, right):
+    # Conservatively include case-insensitive developer filesystems.
+    left, right = left.casefold(), right.casefold()
+    return left == right or left.startswith(right + "/") or right.startswith(left + "/")
+
+
+def check_dependency_cycles(records, errors):
+    graph = {record["sprint_id"]: record["depends_on"] for record in records}
+    visited = set()
+    visiting = []
+
+    def visit(sprint_id):
+        if sprint_id in visiting:
+            cycle = visiting[visiting.index(sprint_id) :] + [sprint_id]
+            errors.append("sprint dependency cycle: " + " -> ".join(cycle))
+            return
+        if sprint_id in visited or sprint_id not in graph:
+            return
+        visiting.append(sprint_id)
+        for dependency in graph[sprint_id]:
+            visit(dependency)
+        visiting.pop()
+        visited.add(sprint_id)
+
+    for sprint_id in graph:
+        visit(sprint_id)
+
+
+def check_concurrency(records, plan_limits, errors):
+    active = [
+        record
+        for record in records
+        if record["lifecycle"] == "current" and record["status"] in ACTIVE_STATUSES
+    ]
+    for plan_file, limit in plan_limits.items():
+        count = sum(record["plan_file"] == plan_file for record in active)
+        if count > limit:
+            errors.append(
+                f"{plan_file}: {count} active sprints exceed max_active_sprints={limit}"
+            )
+    for index, record in enumerate(active):
+        if len(active) > 1 and (
+            not re.fullmatch(r"[a-z][a-z0-9-]*", record["lane"])
+            or not record["write_scope"]
+        ):
+            errors.append(
+                f"{record['path']}: concurrent work requires lane and write_scope"
+            )
+        for other in active[:index]:
+            for key in ("lane", "worktree", "branch"):
+                if record[key] and record[key] == other[key]:
+                    errors.append(
+                        f"{record['path']}: active {key} collision with {other['path']}"
+                    )
+            if any(
+                scopes_overlap(a, b)
+                for a in record["write_scope"]
+                for b in other["write_scope"]
+            ):
+                errors.append(
+                    f"{record['path']}: active write_scope overlaps {other['path']}"
+                )
+
+
 def sprint_files(root):
     records = []
     for lifecycle in ("current", "archive"):
@@ -125,6 +208,7 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
     records = []
     by_id = {}
     metadata_by_id = {}
+    plan_limits = {}
 
     for required in ("current", "archive"):
         if not (root / required).is_dir():
@@ -143,6 +227,11 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
             "plan_file": values.get("plan_file"),
             "plan_feature": values.get("plan_feature"),
             "execution_order": values.get("execution_order"),
+            "depends_on": dependency_ids(values.get("depends_on", "")),
+            "lane": values.get("lane", ""),
+            "write_scope": write_scopes(values.get("write_scope", "")),
+            "worktree": os.path.normpath(values.get("worktree", "")),
+            "branch": values.get("branch", ""),
         }
         records.append(record)
 
@@ -164,13 +253,19 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
         feature = values.get("plan_feature", "")
         if re.fullmatch(r"PF-\d{2}", feature) is None:
             errors.append(f"{relative}: plan_feature must be exactly one PF-NN id")
-        expected_id = rf"{re.escape(feature)}-S\d{{2}}" if feature else r"PF-\d{2}-S\d{2}"
+        expected_id = (
+            rf"{re.escape(feature)}-S\d{{2}}" if feature else r"PF-\d{2}-S\d{2}"
+        )
         if re.fullmatch(expected_id, sprint_id) is None:
             errors.append(f"{relative}: sprint_id must be {feature or 'PF-NN'}-SNN")
         if sprint_id and sprint_id.lower() not in path.stem:
-            errors.append(f"{relative}: filename must contain lowercase sprint id {sprint_id.lower()!r}")
+            errors.append(
+                f"{relative}: filename must contain lowercase sprint id {sprint_id.lower()!r}"
+            )
         if sprint_id in by_id:
-            errors.append(f"{relative}: duplicate sprint_id {sprint_id!r} also used by {by_id[sprint_id]}")
+            errors.append(
+                f"{relative}: duplicate sprint_id {sprint_id!r} also used by {by_id[sprint_id]}"
+            )
         elif sprint_id:
             by_id[sprint_id] = relative
             metadata_by_id[sprint_id] = record
@@ -203,12 +298,21 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
             errors.append(f"{relative}: unchecked work belongs in Remaining, not Done")
         if lifecycle == "current":
             if "- [ ]" not in remaining:
-                errors.append(f"{relative}: current sprint Remaining must contain unchecked work")
+                errors.append(
+                    f"{relative}: current sprint Remaining must contain unchecked work"
+                )
             if "- [x]" in remaining.lower():
-                errors.append(f"{relative}: checked work belongs in Done, not Remaining")
-            for heading, body in (("Verification", verification), ("Exit evidence", exit_evidence)):
+                errors.append(
+                    f"{relative}: checked work belongs in Done, not Remaining"
+                )
+            for heading, body in (
+                ("Verification", verification),
+                ("Exit evidence", exit_evidence),
+            ):
                 if "- [ ]" not in body:
-                    errors.append(f"{relative}: {heading} must contain unchecked evidence items")
+                    errors.append(
+                        f"{relative}: {heading} must contain unchecked evidence items"
+                    )
         elif status == "completed":
             for heading, body in (
                 ("Remaining", remaining),
@@ -216,22 +320,57 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
                 ("Exit evidence", exit_evidence),
             ):
                 if "- [ ]" in body:
-                    errors.append(f"{relative}: completed sprint has unchecked {heading} items")
+                    errors.append(
+                        f"{relative}: completed sprint has unchecked {heading} items"
+                    )
 
         plan_value = values.get("plan_file", "")
         plan_path = repo_root / plan_value
-        if not plan_value or Path(plan_value).is_absolute() or ".." in Path(plan_value).parts:
+        if (
+            not plan_value
+            or Path(plan_value).is_absolute()
+            or ".." in Path(plan_value).parts
+        ):
             errors.append(f"{relative}: plan_file must be a repository-relative path")
         elif not plan_path.is_file():
             errors.append(f"{relative}: plan file does not exist: {plan_value}")
         else:
             plan_text = plan_path.read_text(encoding="utf-8")
-            _, _, plan_front = parse_front_matter(plan_path)
+            _, plan_values, plan_front = parse_front_matter(plan_path)
+            if plan_value not in plan_limits:
+                try:
+                    limit = int(plan_values.get("max_active_sprints", "1"))
+                    if limit not in (1, 2, 3):
+                        raise ValueError
+                except ValueError:
+                    errors.append(
+                        f"{plan_value}: max_active_sprints must be 1, 2, or 3"
+                    )
+                    limit = 1
+                plan_limits[plan_value] = limit
+                owner = plan_values.get("integration_owner", "")
+                if limit > 1 and (owner in {"", "UNALLOCATED", "TBD"} or "<" in owner):
+                    errors.append(
+                        f"{plan_value}: concurrent plan requires integration_owner"
+                    )
+            if status in EXECUTABLE_STATUSES and plan_limits[plan_value] > 1:
+                if not re.fullmatch(r"[a-z][a-z0-9-]*", record["lane"]):
+                    errors.append(
+                        f"{relative}: executable concurrent sprint requires an allocated lane"
+                    )
+                if not record["write_scope"]:
+                    errors.append(
+                        f"{relative}: executable concurrent sprint requires write_scope"
+                    )
             if feature and feature not in plan_text:
-                errors.append(f"{relative}: linked plan does not define feature {feature}")
+                errors.append(
+                    f"{relative}: linked plan does not define feature {feature}"
+                )
             backlink = Path(os.path.relpath(path, plan_path.parent)).as_posix()
             if lifecycle == "current" and backlink not in plan_text:
-                errors.append(f"{relative}: linked plan is missing sprint backlink {backlink!r}")
+                errors.append(
+                    f"{relative}: linked plan is missing sprint backlink {backlink!r}"
+                )
             if status in EXECUTABLE_STATUSES and plan_status(plan_path) != "active":
                 errors.append(f"{relative}: {status} sprint requires an active plan")
             if status in EXECUTABLE_STATUSES:
@@ -251,15 +390,24 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
         base_commit = values.get("base_commit", "")
         if status in EXECUTABLE_STATUSES:
             if worktree == "UNALLOCATED" or not Path(worktree).is_absolute():
-                errors.append(f"{relative}: {status} sprint requires an exact absolute worktree")
+                errors.append(
+                    f"{relative}: {status} sprint requires an exact absolute worktree"
+                )
             if branch == "UNALLOCATED":
                 errors.append(f"{relative}: {status} sprint requires an exact branch")
             if re.fullmatch(r"[0-9a-f]{40}", base_commit) is None:
-                errors.append(f"{relative}: {status} sprint requires a 40-character base commit")
+                errors.append(
+                    f"{relative}: {status} sprint requires a 40-character base commit"
+                )
 
         for dependency in dependency_ids(values.get("depends_on", "")):
             if re.fullmatch(r"PF-\d{2}-S\d{2}", dependency) is None:
                 errors.append(f"{relative}: invalid dependency id {dependency!r}")
+        for scope in record["write_scope"]:
+            if scope == "UNALLOCATED" and status == "draft":
+                continue
+            if not valid_scope(scope):
+                errors.append(f"{relative}: invalid literal write_scope {scope!r}")
 
     known_ids = {record["sprint_id"] for record in records if record["sprint_id"]}
     for lifecycle, path in sprint_files(root):
@@ -290,18 +438,8 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
         else:
             order_keys[key] = record["path"]
 
-    in_progress_by_plan = {}
-    for record in records:
-        if record["lifecycle"] != "current" or record["status"] != "in_progress":
-            continue
-        plan_file = record["plan_file"]
-        if plan_file in in_progress_by_plan:
-            errors.append(
-                f"{record['path']}: only one sprint may be in_progress per plan; "
-                f"also in progress: {in_progress_by_plan[plan_file]}"
-            )
-        else:
-            in_progress_by_plan[plan_file] = record["path"]
+    check_dependency_cycles(records, errors)
+    check_concurrency(records, plan_limits, errors)
 
     return {
         "ok": not errors,

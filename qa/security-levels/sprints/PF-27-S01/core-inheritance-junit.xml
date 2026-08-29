@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="nextest-run" tests="3" skipped="0" failures="0" errors="0" uuid="15cb1132-34ca-4b9f-b29a-5629051a4355" timestamp="2026-08-27T03:16:03.924-07:00" time="0.596">
+    <testsuite name="codex-core" tests="3" skipped="0" errors="0" failures="0">
+        <testcase name="security::effective_policy_tests::security_inheritance_preserves_authority_identity_and_revocation_state" classname="codex-core" timestamp="2026-08-27T03:16:03.935-07:00" time="0.012"/>
+        <testcase name="security::effective_policy_tests::security_inheritance_rejects_unknown_parent_and_conflicting_child_binding" classname="codex-core" timestamp="2026-08-27T03:16:03.935-07:00" time="0.012"/>
+        <testcase name="agent::control::tests::security_inheritance_flows_through_live_spawn_path" classname="codex-core" timestamp="2026-08-27T03:16:03.935-07:00" time="0.586"/>
+    </testsuite>
+</testsuites>

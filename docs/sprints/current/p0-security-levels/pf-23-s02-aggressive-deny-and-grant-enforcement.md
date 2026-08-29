@@ -4,14 +4,16 @@ title: "Aggressive deny and grant enforcement"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-23"
-execution_order: 15
+execution_order: 22
 owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+lane: "enforcement"
+write_scope: "codex-rs/core/src/config/permissions.rs, codex-rs/core/src/tools/router.rs, codex-rs/network-proxy/src/policy.rs, codex-rs/core/src/security/aggressive.rs"
+worktree: "UNALLOCATED"
+branch: "UNALLOCATED"
+base_commit: "UNALLOCATED"
 depends_on: "PF-17-S01, PF-23-S01"
 created: 2026-08-24
-updated: 2026-08-25
+updated: 2026-08-27
 ---
 
 # PF-23-S02 — Aggressive deny and grant enforcement
@@ -23,6 +25,7 @@ updated: 2026-08-25
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-23`
 - Acceptance advanced: one narrow grant cannot authorize an adjacent actor, resource, destination, operation, child, or post-expiry use.
@@ -35,9 +38,12 @@ updated: 2026-08-25
 
 ## Preconditions
 
-- [ ] PF-17-S01 and PF-23-S01 are completed and archived.
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
+- [ ] Every listed dependency is completed and archived.
 - [ ] Read root, `codex-rs/AGENTS.md`, and `codex-rs/core/AGENTS.md`.
 - [ ] Exact worktree coordinates match the active plan.
+
+- [ ] Allocate lane/worktree/base in the plan and validate disjoint write scopes before readiness.
 
 ## Done
 
@@ -53,11 +59,12 @@ updated: 2026-08-25
 
 ## Verification
 
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] Fix: `cd codex-rs && just fix -p codex-core && just fix -p codex-network-proxy`.
 - [ ] Format: `cd codex-rs && just fmt`; then inspect the final diff.
 - [ ] Focused test: `cd codex-rs && just test -p codex-core aggressive`.
 - [ ] Network/permission regressions: `cd codex-rs && just test -p codex-core permissions && just test -p codex-network-proxy policy`.
-- [ ] TUI applicability: none; PF-25/PF-26 own interactive proof.
+- [ ] TUI applicability: true-PTY default denial and expiry/recovery using the completed dispatch boundary; PF-25/PF-26 add final UI flows.
 
 ## Exit evidence
 

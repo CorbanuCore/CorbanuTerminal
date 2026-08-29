@@ -17,6 +17,7 @@ use crate::policy::normalize_host;
 use crate::reasons::REASON_METHOD_NOT_ALLOWED;
 use crate::reasons::REASON_MITM_REQUIRED;
 use crate::reasons::REASON_NOT_ALLOWED;
+use crate::reasons::REASON_POLICY_DENIED;
 use crate::reasons::REASON_PROXY_DISABLED;
 use crate::reasons::REASON_UNIX_SOCKET_UNSUPPORTED;
 use crate::responses::PolicyDecisionDetails;
@@ -804,6 +805,10 @@ async fn http_plain_proxy(
         ));
     }
 
+    if app_state.scoped_credential_route_matches_host(&host) {
+        return Ok(json_blocked(&host, REASON_POLICY_DENIED, None));
+    }
+
     if let Err(err) =
         inject_plaintext_credentials_if_enabled(app_state.as_ref(), &host, req.headers_mut()).await
     {
@@ -848,7 +853,7 @@ async fn inject_plaintext_credentials_if_enabled(
     headers: &mut HeaderMap,
 ) -> Result<()> {
     if app_state.plaintext_credential_injection_enabled().await? {
-        app_state.inject_request_credentials(host, headers);
+        app_state.inject_legacy_request_credentials(host, headers);
     }
     Ok(())
 }

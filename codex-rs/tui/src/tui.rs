@@ -534,9 +534,14 @@ fn probe_windows_default_colors() {
     }
 }
 
-fn set_panic_hook() {
+pub(super) fn set_panic_hook() {
     let hook = panic::take_hook();
     panic::set_hook(Box::new(move |panic_info| {
+        // Scoped callbacks recover inside Vault. Do not format their payload or
+        // tear down the terminal for a panic that will not exit the application.
+        if codex_vault::scoped_credential_callback_active() {
+            return;
+        }
         let _ = restore_after_exit(); // ignore any errors as we are already failing
         hook(panic_info);
     }));

@@ -1,0 +1,18 @@
+{
+  "findings": [
+    {
+      "title": "Adapter evidence can pass without contract-test proof",
+      "body": "For adapter rows, `required_assertions()` returns only the PF-27 `expected` text assertions. `check_result()` treats that set as the complete proof requirement, so a `passed` adapter report can omit every `contract_tests` selector from `adapter-conformance.json` and still make the standards manifest pass. That violates this sprint's requirement that the checker require exact PF-27 native expectations and contract selectors, and it lets incomplete adapter proof become a qualification pass. Include the adapter `contract_tests` keys in the required assertion set before accepting adapter evidence.",
+      "priority": "P1",
+      "confidence": 0.88,
+      "category": "bug",
+      "code_location": {
+        "file_path": "scripts/security_level_standards_check.py",
+        "line": 34
+      }
+    }
+  ],
+  "overall_correctness": "patch is incorrect",
+  "overall_explanation": "The standards checker can accept incomplete PF-27 adapter evidence as passed because adapter contract-test selectors are not required in the passing assertion set. That is a release-gating correctness issue for this harness patch.",
+  "overall_confidence": 0.86
+}

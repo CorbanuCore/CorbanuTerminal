@@ -1,0 +1,36 @@
+Verification complete: both files match `FILES.sha256` (2/2 OK), and I've read the patch plus both full scripts in this snapshot.
+
+# PF-13 Artifact-Identity Fix Review — base `a7ae94e4c9c01924c896d9f10b1f588f1727fc67`
+
+## The fix (scripts/security_credential_canary.py:524–529)
+The real defect is correctly diagnosed and fixed: CLI probe test-builds replace `target/debug/corbanu` with a test-feature-linked binary, so the pre-probe hash (`55c4b0…`) no longer matched the on-disk executable (`ce3d70…`). The fix re-runs `build_candidate` **after** all probes, then re-derives `identity`/`version` from the restored production artifact, so the report's `candidate`, `candidate_build_command`, and `candidate_version_command` all describe the **final** binary actually left for qualification. The pre-probe build command is preserved in a new additive field `candidate_pre_probe_build_command` — no existing JSON field changes meaning, so downstream report parsing is unaffected.
+
+Correctness checks:
+- **Final identity is genuinely final:** both the final build and `candidate_identity` (which hashes the file and runs `--version`) execute after the last probe; nothing mutates the candidate afterward before `write_report`.
+- **Fail-closed on final build failure:** `build_candidate` raises `QualificationError` on non-zero exit, and the unit test asserts `write_report` is **not** called in that path — no partial/mismatched report is emitted as success.
+- **Ordering is enforced:** the mock-call assertion pins the exact sequence `build → identity → probe → validate → sources → canary → build → identity → report`, and on failure omits the terminal `identity`/`report`. This directly guards the regression.
+- `parse_canary_result` still runs on probe output captured before the rebuild, so the canary semantics are unchanged; the rebuild only affects artifact identity, not test evidence.
+
+## Scope boundaries respected
+No Rust source changed; the two-file delta is confined to the harness and its test. The additive JSON field is the only schema change. Legacy report consumers reading `candidate`/`candidate_build_command` see the corrected final artifact — which is the intended behavior change, not a break.
+
+## Findings
+No P1/P2/P3 defects. The fix correctly restores and re-identifies the final artifact, fails closed on rebuild failure, and the test pins ordering and both outcome paths.
+
+One observation (not a defect, informational only): the report does not record the *probe-time* binary hash, so a reader cannot from the report alone confirm the pre-probe and final hashes differed — but that is historical context, not a qualification input, and the pre-probe build *command* is retained for reproducibility. No action required.
+
+```json
+{
+  "reviewed_base": "a7ae94e4c9c01924c896d9f10b1f588f1727fc67",
+  "findings": [],
+  "coverage": [
+    "FILES.sha256 verified: 2/2 OK (scripts/security_credential_canary.py, scripts/test_security_credential_canary.py)",
+    "IDENTITY_FIX.patch read in full",
+    "security_credential_canary.py run_qualification: post-probe build_candidate + candidate_identity re-run (lines 524-529); report now binds final candidate identity/build/version; additive candidate_pre_probe_build_command field; candidate_identity hashes file and runs --version on the final artifact",
+    "build_candidate fails closed (QualificationError on non-zero); write_report not reached on final-build failure",
+    "test_security_credential_canary.py test_qualification_identifies_final_artifact_after_probes: both final-build-failure and success paths, exact mock-call ordering (build, identity, probe, validate, sources, canary, build, [identity, report]), report field assertions",
+    "Confirmed parse_canary_result operates on pre-rebuild probe output; canary evidence semantics unchanged"
+  ],
+  "verdict": "The two-file artifact-identity fix correctly resolves the concrete qualification defect: the production candidate is rebuilt after all probes and the report's candidate identity, build command, and version command now describe the final binary actually left on disk, with the pre-probe build retained additively. The fix fails closed on a failed final rebuild and the unit test pins probe/build/identity/report ordering plus both outcome paths. No new defects; no Rust source changed and the prior runtime review stands. This does not certify Core/platform readiness (full Mac Core run remains red at 3388/3407 with 19 tracked failures, out of scope here)."
+}
+```

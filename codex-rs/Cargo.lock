@@ -2387,6 +2387,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-browser-isolation"
+version = "0.1.35"
+dependencies = [
+ "base64 0.22.1",
+ "codex-network-proxy",
+ "codex-security-policy",
+ "codex-utils-absolute-path",
+ "pretty_assertions",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "codex-bwrap"
 version = "0.1.35"
 dependencies = [
@@ -2785,6 +2806,7 @@ dependencies = [
  "codex-app-server-protocol",
  "codex-apply-patch",
  "codex-async-utils",
+ "codex-browser-isolation",
  "codex-code-mode",
  "codex-config",
  "codex-connectors",
@@ -2805,6 +2827,7 @@ dependencies = [
  "codex-http-client",
  "codex-image-generation-extension",
  "codex-install-context",
+ "codex-keyring-store",
  "codex-login",
  "codex-mcp",
  "codex-memories-read",
@@ -2843,6 +2866,7 @@ dependencies = [
  "codex-utils-pty",
  "codex-utils-stream-parser",
  "codex-utils-string",
+ "codex-vault",
  "codex-web-search-extension",
  "codex-windows-sandbox",
  "core_test_support",
@@ -3832,6 +3856,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "clap",
+ "codex-security-policy",
  "codex-utils-absolute-path",
  "codex-utils-home-dir",
  "codex-utils-rustls-provider",
@@ -3860,6 +3885,7 @@ dependencies = [
  "tracing",
  "url",
  "windows-sys 0.52.0",
+ "zeroize",
 ]
 
 [[package]]
@@ -3964,6 +3990,7 @@ dependencies = [
  "codex-extension-items",
  "codex-http-client",
  "codex-network-proxy",
+ "codex-security-policy",
  "codex-utils-absolute-path",
  "codex-utils-image",
  "codex-utils-path-uri",
@@ -4785,6 +4812,8 @@ dependencies = [
  "strum_macros 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
+ "tracing",
+ "tracing-test",
  "zeroize",
 ]
 
