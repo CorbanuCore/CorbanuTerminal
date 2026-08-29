@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sys
+from itertools import combinations
 from pathlib import Path
 from pathlib import PurePosixPath
 
@@ -41,7 +42,100 @@ REQUIRED_SECTIONS = (
     "Exit evidence",
 )
 MAX_CURRENT_LINES = 100
-ACTIVE_STATUSES = {"in_progress", "blocked"}
+PARALLEL_LIMIT = 3
+RESERVED_STATUSES = {"in_progress", "blocked"}
+
+
+def concrete(value):
+    return bool(
+        value
+        and value.strip().lower()
+        not in {
+            "unallocated",
+            "tbd",
+            "pending",
+            "none",
+            "owner",
+            "accountable owner",
+        }
+        and "<" not in value
+        and ">" not in value
+    )
+
+
+def write_paths(value):
+    """Literal, portable reservations; directories are conservative prefixes."""
+    paths = []
+    for item in value.split(","):
+        item = item.strip()
+        parts = item.rstrip("/").split("/")
+        if (
+            not concrete(item)
+            or any(part in {"", ".", ".."} for part in parts)
+            or any(char in item for char in "*?[]{}:\\")
+        ):
+            raise ValueError("write_scope requires literal repository-relative paths")
+        paths.append(PurePosixPath(item.casefold()))
+    return paths
+
+
+def check_parallel(records, plans):
+    errors = []
+    active = [
+        r
+        for r in records
+        if r["lifecycle"] == "current" and r["status"] in RESERVED_STATUSES
+    ]
+    limits = {}
+    for path, values in plans.items():
+        value = values.get("parallel_sprint_limit", "1")
+        if value not in {"1", "2", "3"}:
+            errors.append(f"{path}: parallel_sprint_limit must be 1, 2, or 3")
+            limits[path] = 1
+        else:
+            limits[path] = int(value)
+        count = sum(r["plan_file"] == path for r in active)
+        if (limits[path] > 1 or (count and len(active) > 1)) and not concrete(
+            values.get("integration_owner", "")
+        ):
+            errors.append(f"{path}: parallel plan requires a named integration_owner")
+        if count > limits[path]:
+            errors.append(
+                f"{path}: reserved sprint count {count} exceeds plan limit {limits[path]}"
+            )
+    if len(active) > PARALLEL_LIMIT:
+        errors.append(
+            f"global reserved sprint count {len(active)} exceeds {PARALLEL_LIMIT}"
+        )
+    scopes = {}
+    for record in active:
+        if len(active) <= 1 and limits.get(record["plan_file"], 1) == 1:
+            continue
+        for key in ("owner", "parallel_lane", "write_scope", "integration_gate"):
+            if not concrete(record.get(key, "")):
+                errors.append(
+                    f"{record['path']}: parallel allocation requires concrete {key}"
+                )
+        try:
+            scopes[record["path"]] = write_paths(record.get("write_scope", ""))
+        except ValueError as error:
+            errors.append(f"{record['path']}: {error}")
+    for first, second in combinations(active, 2):
+        for key in ("owner", "parallel_lane", "worktree", "branch"):
+            left, right = first.get(key, "").strip(), second.get(key, "").strip()
+            if key == "worktree":
+                left, right = os.path.normpath(left), os.path.normpath(right)
+            if left.casefold() == right.casefold():
+                errors.append(
+                    f"{first['path']} and {second['path']}: shared parallel {key}"
+                )
+        for left in scopes.get(first["path"], []):
+            for right in scopes.get(second["path"], []):
+                if left == right or left in right.parents or right in left.parents:
+                    errors.append(
+                        f"{first['path']} and {second['path']}: overlapping write_scope {left} / {right}"
+                    )
+    return errors
 
 
 def scalar(value):
@@ -111,85 +205,6 @@ def dependency_ids(value):
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
-def write_scopes(value):
-    """Literal prefixes make file ownership conflicts deterministic."""
-    return [item.strip().rstrip("/") for item in value.split(",") if item.strip()]
-
-
-def valid_scope(scope):
-    return (
-        bool(scope)
-        and scope != "UNALLOCATED"
-        and not PurePosixPath(scope).is_absolute()
-        and not any(part in {"", ".", ".."} for part in scope.split("/"))
-        and not re.search(r"[\\:*?\[\]{}]", scope)
-    )
-
-
-def scopes_overlap(left, right):
-    # Conservatively include case-insensitive developer filesystems.
-    left, right = left.casefold(), right.casefold()
-    return left == right or left.startswith(right + "/") or right.startswith(left + "/")
-
-
-def check_dependency_cycles(records, errors):
-    graph = {record["sprint_id"]: record["depends_on"] for record in records}
-    visited = set()
-    visiting = []
-
-    def visit(sprint_id):
-        if sprint_id in visiting:
-            cycle = visiting[visiting.index(sprint_id) :] + [sprint_id]
-            errors.append("sprint dependency cycle: " + " -> ".join(cycle))
-            return
-        if sprint_id in visited or sprint_id not in graph:
-            return
-        visiting.append(sprint_id)
-        for dependency in graph[sprint_id]:
-            visit(dependency)
-        visiting.pop()
-        visited.add(sprint_id)
-
-    for sprint_id in graph:
-        visit(sprint_id)
-
-
-def check_concurrency(records, plan_limits, errors):
-    active = [
-        record
-        for record in records
-        if record["lifecycle"] == "current" and record["status"] in ACTIVE_STATUSES
-    ]
-    for plan_file, limit in plan_limits.items():
-        count = sum(record["plan_file"] == plan_file for record in active)
-        if count > limit:
-            errors.append(
-                f"{plan_file}: {count} active sprints exceed max_active_sprints={limit}"
-            )
-    for index, record in enumerate(active):
-        if len(active) > 1 and (
-            not re.fullmatch(r"[a-z][a-z0-9-]*", record["lane"])
-            or not record["write_scope"]
-        ):
-            errors.append(
-                f"{record['path']}: concurrent work requires lane and write_scope"
-            )
-        for other in active[:index]:
-            for key in ("lane", "worktree", "branch"):
-                if record[key] and record[key] == other[key]:
-                    errors.append(
-                        f"{record['path']}: active {key} collision with {other['path']}"
-                    )
-            if any(
-                scopes_overlap(a, b)
-                for a in record["write_scope"]
-                for b in other["write_scope"]
-            ):
-                errors.append(
-                    f"{record['path']}: active write_scope overlaps {other['path']}"
-                )
-
-
 def sprint_files(root):
     records = []
     for lifecycle in ("current", "archive"):
@@ -208,7 +223,7 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
     records = []
     by_id = {}
     metadata_by_id = {}
-    plan_limits = {}
+    plans = {}
 
     for required in ("current", "archive"):
         if not (root / required).is_dir():
@@ -227,11 +242,18 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
             "plan_file": values.get("plan_file"),
             "plan_feature": values.get("plan_feature"),
             "execution_order": values.get("execution_order"),
-            "depends_on": dependency_ids(values.get("depends_on", "")),
-            "lane": values.get("lane", ""),
-            "write_scope": write_scopes(values.get("write_scope", "")),
-            "worktree": os.path.normpath(values.get("worktree", "")),
-            "branch": values.get("branch", ""),
+            **{
+                key: values.get(key, "")
+                for key in (
+                    "depends_on",
+                    "owner",
+                    "worktree",
+                    "branch",
+                    "parallel_lane",
+                    "write_scope",
+                    "integration_gate",
+                )
+            },
         }
         records.append(record)
 
@@ -337,31 +359,7 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
         else:
             plan_text = plan_path.read_text(encoding="utf-8")
             _, plan_values, plan_front = parse_front_matter(plan_path)
-            if plan_value not in plan_limits:
-                try:
-                    limit = int(plan_values.get("max_active_sprints", "1"))
-                    if limit not in (1, 2, 3):
-                        raise ValueError
-                except ValueError:
-                    errors.append(
-                        f"{plan_value}: max_active_sprints must be 1, 2, or 3"
-                    )
-                    limit = 1
-                plan_limits[plan_value] = limit
-                owner = plan_values.get("integration_owner", "")
-                if limit > 1 and (owner in {"", "UNALLOCATED", "TBD"} or "<" in owner):
-                    errors.append(
-                        f"{plan_value}: concurrent plan requires integration_owner"
-                    )
-            if status in EXECUTABLE_STATUSES and plan_limits[plan_value] > 1:
-                if not re.fullmatch(r"[a-z][a-z0-9-]*", record["lane"]):
-                    errors.append(
-                        f"{relative}: executable concurrent sprint requires an allocated lane"
-                    )
-                if not record["write_scope"]:
-                    errors.append(
-                        f"{relative}: executable concurrent sprint requires write_scope"
-                    )
+            plans[plan_value] = plan_values
             if feature and feature not in plan_text:
                 errors.append(
                     f"{relative}: linked plan does not define feature {feature}"
@@ -403,11 +401,6 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
         for dependency in dependency_ids(values.get("depends_on", "")):
             if re.fullmatch(r"PF-\d{2}-S\d{2}", dependency) is None:
                 errors.append(f"{relative}: invalid dependency id {dependency!r}")
-        for scope in record["write_scope"]:
-            if scope == "UNALLOCATED" and status == "draft":
-                continue
-            if not valid_scope(scope):
-                errors.append(f"{relative}: invalid literal write_scope {scope!r}")
 
     known_ids = {record["sprint_id"] for record in records if record["sprint_id"]}
     for lifecycle, path in sprint_files(root):
@@ -416,9 +409,9 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
         for dependency in dependency_ids(values.get("depends_on", "")):
             if dependency not in known_ids:
                 errors.append(f"{relative}: dependency does not exist: {dependency}")
-            elif values.get("status") in EXECUTABLE_STATUSES:
+            else:
                 dependency_record = metadata_by_id[dependency]
-                if not (
+                if values.get("status") in EXECUTABLE_STATUSES and not (
                     dependency_record["lifecycle"] == "archive"
                     and dependency_record["status"] == "completed"
                 ):
@@ -426,6 +419,20 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
                         f"{relative}: executable sprint dependency is not completed "
                         f"and archived: {dependency}"
                     )
+                if (
+                    lifecycle == "current"
+                    and dependency_record["lifecycle"] == "current"
+                    and values.get("plan_file") == dependency_record["plan_file"]
+                ):
+                    try:
+                        if int(dependency_record["execution_order"]) >= int(
+                            values["execution_order"]
+                        ):
+                            errors.append(
+                                f"{relative}: dependency order must precede sprint: {dependency}"
+                            )
+                    except (TypeError, ValueError):
+                        pass  # Already reported by the record validator.
 
     order_keys = {}
     for record in records:
@@ -438,8 +445,23 @@ def check_sprints(root=ROOT, repo_root=REPO_ROOT):
         else:
             order_keys[key] = record["path"]
 
-    check_dependency_cycles(records, errors)
-    check_concurrency(records, plan_limits, errors)
+    visiting, visited = set(), set()
+
+    def visit(sprint_id):
+        if sprint_id in visiting:
+            errors.append(f"dependency cycle includes {sprint_id}")
+            return
+        if sprint_id in visited or sprint_id not in metadata_by_id:
+            return
+        visiting.add(sprint_id)
+        for dependency in dependency_ids(metadata_by_id[sprint_id]["depends_on"]):
+            visit(dependency)
+        visiting.remove(sprint_id)
+        visited.add(sprint_id)
+
+    for sprint_id in metadata_by_id:
+        visit(sprint_id)
+    errors.extend(check_parallel(records, plans))
 
     return {
         "ok": not errors,

@@ -4,16 +4,14 @@ title: "Revocation and kill-switch TUI"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-25"
-execution_order: 27
+execution_order: 45
 owner: "Jim Ricketts"
-lane: "revoke-ui"
-write_scope: "codex-rs/tui/src/security/revocation_view.rs, codex-rs/tui/src/security/revocation_tests.rs, codex-rs/tui/src/security/snapshots/revocation"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
-depends_on: "PF-19-S01, PF-23-S03, PF-24-S02"
+worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
+branch: "feat/p0-security-levels"
+base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+depends_on: "PF-19-S02, PF-23-S03, PF-25-S01"
 created: 2026-08-24
-updated: 2026-08-27
+updated: 2026-08-28
 ---
 
 # PF-25-S02 — Revocation and kill-switch TUI
@@ -25,25 +23,23 @@ updated: 2026-08-27
 
 ## Plan linkage
 
-- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-25`
+- Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
+- Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
 - Acceptance advanced: revocation immediately dominates grants, mandates, approvals, cached decisions, and resumed work.
 
 ## Code boundaries
 
-- Existing (read-only): `security-policy/src/revocation.rs`; PF-24-S02 overlay/events.
-- Planned: `tui/src/security/{revocation_view,revocation_tests}.rs`; revocation-only snapshots; consume registered Core events.
-- Tests: revocation-only behavior tests and snapshots; run existing Core recovery tests without editing shared files.
+- Existing: `security-policy/src/revocation.rs`; `tui/src/bottom_pane/approval_overlay.rs`
+- Planned: `tui/src/security/revocation_view.rs`; Core revocation/kill events and persistence adapter
+- Tests: sibling behavior tests, Core recovery tests, and reviewed snapshots
 
 ## Preconditions
 
-- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
-- [ ] Every listed dependency is completed and archived.
+- [ ] PF-19-S02, PF-23-S03, and PF-25-S01 are completed and archived.
 - [ ] Read root, Rust, Core, TUI, and TUI style instructions.
 - [ ] Exact worktree coordinates match the active plan.
-
-- [ ] Allocate lane/worktree/base in the plan and validate disjoint write scopes before readiness.
 
 ## Done
 
@@ -51,20 +47,21 @@ updated: 2026-08-27
 
 ## Remaining
 
+- [ ] Exercise immediate kill while a fake financial effect is submitted/unknown; show future authority revoked and the prior effect still uncertain. Full financial integration is repeated in PF-38-S03/PF-26, not claimed from a UI fixture.
+
 - [ ] List active secret-free grants/mandates and their exact scopes without protected values.
 - [ ] Require trusted human confirmation for revoke-all, scoped revoke, and kill-switch activation.
-- [ ] Use the completed Core API to apply and persist revocation before another protected operation can start; show durable active state after restart.
+- [ ] Apply and persist revocation before another protected operation can start; show durable active state after restart.
 - [ ] Provide an explicit human recovery path that cannot silently weaken the selected level.
 - [ ] Add race, cancel, persistence-failure, restart/resume, child, cached-decision, and agent-attempt tests with snapshots.
 
 ## Verification
 
-- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] Fix: `cd codex-rs && just fix -p codex-tui && just fix -p codex-core`.
 - [ ] Format: `cd codex-rs && just fmt`; then inspect the final diff.
 - [ ] Tests: `cd codex-rs && just test -p codex-tui security_revocation && just test -p codex-core security_recovery`.
 - [ ] Snapshot review: inspect and intentionally accept only PF-25 revocation output.
-- [ ] Run applicable success/cancel/failure/recovery keys in a true PTY before completion; PF-26 repeats final integrated qualification.
+- [ ] TUI qualification deferred to PF-26-S02 with revoke/kill/restart/recovery keys.
 
 ## Exit evidence
 

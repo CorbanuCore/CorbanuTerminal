@@ -20,8 +20,6 @@ def sprint_text(
     worktree="UNALLOCATED",
     branch="UNALLOCATED",
     base_commit="UNALLOCATED",
-    lane="",
-    write_scope="",
 ):
     return f"""---
 sprint_id: "PF-01-S01"
@@ -31,8 +29,6 @@ plan_file: "{plan_file}"
 plan_feature: "{feature}"
 execution_order: 1
 owner: "Owner"
-lane: "{lane}"
-write_scope: "{write_scope}"
 worktree: "{worktree}"
 branch: "{branch}"
 base_commit: "{base_commit}"
@@ -78,47 +74,6 @@ updated: 2026-08-23
 
 
 class SprintCheckerTests(unittest.TestCase):
-    def parallel_repo(self, temporary, count=2, limit=3):
-        repo, root, first = self.make_repo(temporary, plan_status="active")
-        plan = repo / "docs/plans/proposed/plan.md"
-        front = [
-            "---",
-            "status: active",
-            f"max_active_sprints: {limit}",
-            "integration_owner: Owner",
-            "implementation_worktrees:",
-        ]
-        links = []
-        paths = []
-        for number in range(1, count + 1):
-            sprint_id = f"PF-01-S{number:02}"
-            path = first.with_name(f"{sprint_id.lower()}-one-task.md")
-            worktree = f"/tmp/lane-{number}"
-            branch = f"codex/lane-{number}"
-            front.extend(
-                [
-                    f'  - path: "{worktree}"',
-                    f'    branch: "{branch}"',
-                    f'    base_commit: "{"a" * 40}"',
-                ]
-            )
-            text = sprint_text(
-                status="in_progress",
-                worktree=worktree,
-                branch=branch,
-                base_commit="a" * 40,
-                lane=f"lane-{number}",
-                write_scope=f"src/lane-{number}",
-            )
-            text = text.replace("PF-01-S01", sprint_id).replace(
-                "execution_order: 1", f"execution_order: {number}"
-            )
-            path.write_text(text, encoding="utf-8")
-            links.append(Path(os.path.relpath(path, plan.parent)).as_posix())
-            paths.append(path)
-        plan.write_text("\n".join(front + ["---", "PF-01"] + links), encoding="utf-8")
-        return repo, root, plan, paths
-
     def make_repo(
         self,
         temporary,
@@ -236,197 +191,261 @@ class SprintCheckerTests(unittest.TestCase):
             result = checker.check_sprints(root, repo)
             self.assertTrue(result["ok"], result["errors"])
 
-    def test_three_independent_active_sprints_pass(self):
+    def test_parallel_metadata_is_checked_end_to_end(self):
         with tempfile.TemporaryDirectory() as temporary:
-            repo, root, _, _ = self.parallel_repo(temporary, count=3)
+            coordinates = ("/tmp/first", "feat/first", "a" * 40)
+            repo, root, first = self.make_repo(
+                temporary,
+                plan_status="active",
+                plan_worktree=coordinates,
+            )
+            second = first.with_name("pf-01-s02-second-task.md")
+            plan = repo / "docs/plans/proposed/plan.md"
+            plan.write_text(
+                plan.read_text()
+                .replace(
+                    "status: active\n",
+                    'status: active\nparallel_sprint_limit: 3\nintegration_owner: "Alex"\n',
+                )
+                .replace(
+                    '    base_commit: "' + "a" * 40 + '"\n',
+                    '    base_commit: "' + "a" * 40 + '"\n'
+                    '  - path: "/tmp/second"\n    branch: "feat/second"\n'
+                    '    base_commit: "' + "b" * 40 + '"\n',
+                )
+                + f"\n[{second.name}](../../sprints/current/plan/{second.name})\n"
+            )
+            for index, path in enumerate((first, second), 1):
+                value = sprint_text(
+                    status="in_progress",
+                    worktree=f"/tmp/{'first' if index == 1 else 'second'}",
+                    branch=f"feat/{'first' if index == 1 else 'second'}",
+                    base_commit=("a" if index == 1 else "b") * 40,
+                ).replace(
+                    'owner: "Owner"',
+                    f'owner: "Worker {index}"\n'
+                    f'parallel_lane: "lane-{index}"\n'
+                    f'write_scope: "src/module{index}/"\n'
+                    'integration_gate: "Alex merges and reruns contract tests"',
+                )
+                if index == 2:
+                    value = value.replace("PF-01-S01", "PF-01-S02").replace(
+                        "execution_order: 1", "execution_order: 2"
+                    )
+                path.write_text(value)
             result = checker.check_sprints(root, repo)
             self.assertTrue(result["ok"], result["errors"])
-
-    def test_default_limit_still_one(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            repo, root, plan, _ = self.parallel_repo(temporary)
-            plan.write_text(plan.read_text().replace("max_active_sprints: 3\n", ""))
-            result = checker.check_sprints(root, repo)
+            second.write_text(
+                second.read_text().replace("src/module2/", "src/module1/child.rs")
+            )
             self.assertTrue(
-                any("exceed max_active_sprints=1" in e for e in result["errors"])
-            )
-
-    def test_blocked_sprint_keeps_slot(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            repo, root, _, paths = self.parallel_repo(temporary, count=4)
-            paths[-1].write_text(
-                paths[-1].read_text().replace("status: in_progress", "status: blocked")
-            )
-            result = checker.check_sprints(root, repo)
-            self.assertTrue(
-                any("4 active sprints exceed" in e for e in result["errors"])
-            )
-
-    def test_ready_sprint_does_not_reserve_slot(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            repo, root, _, paths = self.parallel_repo(temporary, count=4)
-            paths[-1].write_text(
-                paths[-1].read_text().replace("status: in_progress", "status: ready")
-            )
-            result = checker.check_sprints(root, repo)
-            self.assertTrue(result["ok"], result["errors"])
-
-    def test_invalid_limit_and_missing_integration_owner(self):
-        for limit in ("0", "4", "many"):
-            with self.subTest(limit=limit), tempfile.TemporaryDirectory() as temporary:
-                repo, root, _, _ = self.parallel_repo(temporary, count=1, limit=limit)
-                result = checker.check_sprints(root, repo)
-                self.assertTrue(
-                    any("must be 1, 2, or 3" in e for e in result["errors"])
+                any(
+                    "overlapping write_scope" in e
+                    for e in checker.check_sprints(root, repo)["errors"]
                 )
-        with tempfile.TemporaryDirectory() as temporary:
-            repo, root, plan, _ = self.parallel_repo(temporary)
-            plan.write_text(plan.read_text().replace("integration_owner: Owner\n", ""))
-            result = checker.check_sprints(root, repo)
-            self.assertTrue(
-                any("requires integration_owner" in e for e in result["errors"])
             )
 
-    def test_lane_worktree_branch_and_scope_collisions(self):
-        for key, before, after, expected in (
-            ("lane", "lane-2", "lane-1", "lane collision"),
-            ("worktree", "/tmp/lane-2", "/tmp/lane-1", "worktree collision"),
-            ("branch", "codex/lane-2", "codex/lane-1", "branch collision"),
-            (
-                "write_scope",
-                "src/lane-2",
-                "src/lane-1/child.rs",
-                "write_scope overlaps",
-            ),
-        ):
-            with self.subTest(key=key), tempfile.TemporaryDirectory() as temporary:
-                repo, root, _, paths = self.parallel_repo(temporary)
-                paths[1].write_text(
-                    paths[1]
-                    .read_text()
-                    .replace(f'{key}: "{before}"', f'{key}: "{after}"')
-                )
-                result = checker.check_sprints(root, repo)
-                self.assertTrue(
-                    any(expected in e for e in result["errors"]), result["errors"]
-                )
-
-    def test_literal_scope_validation_and_prefix_semantics(self):
-        for scope in (
-            ".",
-            "../src",
-            "/src",
-            "src/../lib",
-            "src/*.rs",
-            "src\\lib",
-            "C:/src",
-            "UNALLOCATED",
-        ):
-            with self.subTest(scope=scope):
-                self.assertFalse(checker.valid_scope(scope))
-        self.assertTrue(checker.scopes_overlap("src/core", "SRC/Core/file.rs"))
-        self.assertTrue(checker.scopes_overlap("src/core/file.rs", "src/core"))
-        self.assertFalse(checker.scopes_overlap("src/core", "src/core-extra"))
-
-    def test_missing_concurrent_metadata_is_rejected(self):
-        for line in ('lane: "lane-1"\n', 'write_scope: "src/lane-1"\n'):
-            with self.subTest(line=line), tempfile.TemporaryDirectory() as temporary:
-                repo, root, _, paths = self.parallel_repo(temporary, count=1)
-                paths[0].write_text(paths[0].read_text().replace(line, ""))
-                result = checker.check_sprints(root, repo)
-                self.assertFalse(result["ok"])
-                self.assertTrue(
-                    any(
-                        "executable concurrent sprint requires" in e
-                        for e in result["errors"]
-                    )
-                )
-
-    def test_cycles_detected_in_drafts(self):
-        for self_cycle in (False, True):
-            with (
-                self.subTest(self_cycle=self_cycle),
-                tempfile.TemporaryDirectory() as temporary,
-            ):
-                repo, root, _, paths = self.parallel_repo(temporary)
-                for index, path in enumerate(paths):
-                    dependency = (
-                        "PF-01-S01" if self_cycle or index == 1 else "PF-01-S02"
-                    )
-                    path.write_text(
-                        path.read_text()
-                        .replace("status: in_progress", "status: draft")
-                        .replace('depends_on: "none"', f'depends_on: "{dependency}"')
-                    )
-                result = checker.check_sprints(root, repo)
-                self.assertTrue(any("dependency cycle" in e for e in result["errors"]))
-
-    def test_parallelism_does_not_waive_dependency_completion(self):
+    def test_cycle_and_wrong_order_are_rejected_even_for_drafts(self):
         with tempfile.TemporaryDirectory() as temporary:
-            repo, root, _, paths = self.parallel_repo(temporary)
-            paths[1].write_text(
-                paths[1]
-                .read_text()
+            repo, root, first = self.make_repo(temporary)
+            second = first.with_name("pf-01-s02-second-task.md")
+            first.write_text(
+                sprint_text().replace('depends_on: "none"', 'depends_on: "PF-01-S02"')
+            )
+            second.write_text(
+                sprint_text()
+                .replace("PF-01-S01", "PF-01-S02")
+                .replace("execution_order: 1", "execution_order: 2")
                 .replace('depends_on: "none"', 'depends_on: "PF-01-S01"')
             )
-            result = checker.check_sprints(root, repo)
-            self.assertTrue(
-                any("not completed and archived" in e for e in result["errors"])
+            plan = repo / "docs/plans/proposed/plan.md"
+            plan.write_text(
+                plan.read_text()
+                + f"\n[{second.name}](../../sprints/current/plan/{second.name})\n"
             )
+            errors = checker.check_sprints(root, repo)["errors"]
+            self.assertTrue(any("dependency cycle" in e for e in errors))
+            self.assertTrue(any("dependency order" in e for e in errors))
 
-    def test_completed_dependency_with_later_display_order_is_valid(self):
+    def test_ready_still_requires_completed_archived_dependency(self):
         with tempfile.TemporaryDirectory() as temporary:
-            repo, root, _, paths = self.parallel_repo(temporary)
-            paths[0].write_text(
-                paths[0]
-                .read_text()
+            coordinates = ("/tmp/first", "feat/first", "a" * 40)
+            repo, root, first = self.make_repo(
+                temporary, plan_status="active", plan_worktree=coordinates
+            )
+            dependency = first.with_name("pf-01-s02-dependency.md")
+            first.write_text(
+                sprint_text(
+                    status="ready",
+                    worktree=coordinates[0],
+                    branch=coordinates[1],
+                    base_commit=coordinates[2],
+                )
+                .replace("execution_order: 1", "execution_order: 2")
                 .replace('depends_on: "none"', 'depends_on: "PF-01-S02"')
             )
-            archived = root / "archive" / paths[1].name
-            paths[1].rename(archived)
+            dependency.write_text(sprint_text().replace("PF-01-S01", "PF-01-S02"))
+            plan = repo / "docs/plans/proposed/plan.md"
+            plan.write_text(
+                plan.read_text()
+                + f"\n[{dependency.name}](../../sprints/current/plan/{dependency.name})\n"
+            )
+            self.assertTrue(
+                any(
+                    "not completed and archived" in e
+                    for e in checker.check_sprints(root, repo)["errors"]
+                )
+            )
+            dependency.unlink()
+            archived = root / "archive" / dependency.name
             archived.write_text(
-                archived.read_text()
-                .replace("status: in_progress", "status: completed")
+                sprint_text(status="completed")
+                .replace("PF-01-S01", "PF-01-S02")
                 .replace("- [ ]", "- [x]")
             )
             result = checker.check_sprints(root, repo)
             self.assertTrue(result["ok"], result["errors"])
 
-    def test_cancelled_dependency_is_not_completion(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            repo, root, _, paths = self.parallel_repo(temporary)
-            paths[0].write_text(
-                paths[0]
-                .read_text()
-                .replace('depends_on: "none"', 'depends_on: "PF-01-S02"')
-            )
-            archived = root / "archive" / paths[1].name
-            paths[1].rename(archived)
-            archived.write_text(
-                archived.read_text().replace("status: in_progress", "status: cancelled")
-            )
-            result = checker.check_sprints(root, repo)
-            self.assertTrue(
-                any("not completed and archived" in e for e in result["errors"])
-            )
 
-    def test_cross_plan_collisions_are_rejected(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            repo, root, plan, paths = self.parallel_repo(temporary)
-            second_plan = plan.with_name("second.md")
-            second_plan.write_text(
-                plan.read_text().replace(
-                    "max_active_sprints: 3", "max_active_sprints: 1"
+class ParallelAllocationTests(unittest.TestCase):
+    def records(self, count=3):
+        return [
+            dict(
+                path=f"sprint-{i}.md",
+                lifecycle="current",
+                status="in_progress",
+                plan_file="plan.md",
+                owner=f"Named worker {i}",
+                parallel_lane=f"lane-{i}",
+                worktree=f"/tmp/worker-{i}",
+                branch=f"feat/worker-{i}",
+                write_scope=f"src/module-{i}/,tests/module-{i}.py",
+                integration_gate="Alex reviews scope, merges and reruns contract tests",
+            )
+            for i in range(count)
+        ]
+
+    def check(self, records, **values):
+        return checker.check_parallel(
+            records,
+            {
+                "plan.md": {
+                    "parallel_sprint_limit": "3",
+                    "integration_owner": "Alex",
+                    **values,
+                }
+            },
+        )
+
+    def test_three_independent_allocations_pass(self):
+        self.assertEqual(self.check(self.records()), [])
+
+    def test_global_and_per_plan_limits(self):
+        self.assertTrue(
+            any("global reserved" in e for e in self.check(self.records(4)))
+        )
+        self.assertTrue(
+            any(
+                "plan limit 2" in e
+                for e in self.check(self.records(), parallel_sprint_limit="2")
+            )
+        )
+        self.assertTrue(
+            any(
+                "plan limit 1" in e
+                for e in checker.check_parallel(self.records(2), {"plan.md": {}})
+            )
+        )
+
+    def test_global_limit_applies_across_plans(self):
+        records = self.records(4)
+        for record in records[2:]:
+            record["plan_file"] = "other.md"
+        plans = {
+            name: {"parallel_sprint_limit": "2", "integration_owner": "Alex"}
+            for name in ("plan.md", "other.md")
+        }
+        self.assertTrue(
+            any("global reserved" in e for e in checker.check_parallel(records, plans))
+        )
+
+    def test_blocked_keeps_reservation_ready_does_not(self):
+        records = self.records(4)
+        records[-1]["status"] = "blocked"
+        self.assertTrue(any("global reserved" in e for e in self.check(records)))
+        records[-1]["status"] = "ready"
+        self.assertEqual(self.check(records), [])
+
+    def test_invalid_limits_and_missing_integration_owner(self):
+        for value in ("0", "4", "three", "", "1.5"):
+            with self.subTest(value=value):
+                self.assertTrue(
+                    any(
+                        "must be 1, 2, or 3" in e
+                        for e in self.check([], parallel_sprint_limit=value)
+                    )
                 )
+        self.assertTrue(
+            any(
+                "integration_owner" in e
+                for e in self.check([], integration_owner="UNALLOCATED")
             )
-            paths[1].write_text(
-                paths[1]
-                .read_text()
-                .replace("docs/plans/proposed/plan.md", "docs/plans/proposed/second.md")
-                .replace('write_scope: "src/lane-2"', 'write_scope: "src/lane-1"')
-            )
-            result = checker.check_sprints(root, repo)
-            self.assertTrue(any("write_scope overlaps" in e for e in result["errors"]))
+        )
+
+    def test_required_parallel_fields_even_for_first_worker_in_opted_in_plan(self):
+        for key in ("owner", "parallel_lane", "write_scope", "integration_gate"):
+            with self.subTest(key=key):
+                records = self.records(1)
+                records[0][key] = "UNALLOCATED"
+                self.assertTrue(any(key in e for e in self.check(records)))
+
+    def test_duplicate_owners_lanes_worktrees_and_branches(self):
+        for key in ("owner", "parallel_lane", "worktree", "branch"):
+            with self.subTest(key=key):
+                records = self.records(2)
+                records[1][key] = " " + records[0][key].upper() + " "
+                self.assertTrue(
+                    any(f"shared parallel {key}" in e for e in self.check(records))
+                )
+
+    def test_scope_overlap_includes_parent_prefix_and_case(self):
+        for value in (
+            "src/module-0/a.rs",
+            "SRC/MODULE-0/",
+            "src/",
+            "tests/module-0.py",
+        ):
+            with self.subTest(value=value):
+                records = self.records(2)
+                records[1]["write_scope"] = value
+                self.assertTrue(
+                    any("overlapping write_scope" in e for e in self.check(records))
+                )
+
+    def test_invalid_scope_paths(self):
+        for value in (
+            "/",
+            ".",
+            "../src",
+            "src/../file",
+            "src/*",
+            "src/[ab]",
+            "src/**",
+            "C:/src",
+            "src\\file",
+            "src//file",
+            "",
+            "UNALLOCATED",
+        ):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    checker.write_paths(value)
+
+    def test_default_single_worker_does_not_need_parallel_metadata(self):
+        record = self.records(1)[0]
+        for key in ("parallel_lane", "write_scope", "integration_gate"):
+            del record[key]
+        self.assertEqual(checker.check_parallel([record], {"plan.md": {}}), [])
 
 
 if __name__ == "__main__":

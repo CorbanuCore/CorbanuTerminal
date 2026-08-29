@@ -4,14 +4,14 @@ title: "Final integrated automated security qualification"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-26"
-execution_order: 28
+execution_order: 74
 owner: "Jim Ricketts"
 lane: "qualification"
 write_scope: "qa/release"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-26-S01, PF-23-S02, PF-23-S03, PF-25-S01, PF-25-S02, PF-28-S01, PF-29-S02, PF-30-S02, PF-30-S03"
+depends_on: "PF-26-S01, PF-13-S07, PF-21-S02, PF-23-S03, PF-25-S02, PF-36-S02, PF-41-S02"
 created: 2026-08-27
 updated: 2026-08-27
 ---
@@ -50,7 +50,7 @@ updated: 2026-08-27
 ## Remaining
 
 - [ ] Pin version, candidate commit/binary digests, dependency commits, environment, and exact baseline; reject stale or mixed-candidate evidence.
-- [ ] Run complete affected suites including codex-core, security-policy, config, vault, network-proxy, and tui; no filtering around failures.
+- [ ] Run complete affected suites including codex-core, security-policy, config, vault, network-proxy, browser-isolation and tui; no filtering around failures.
 - [ ] Run compatibility, all-source/all-sink canaries, protected-action/race/taint fixtures, and real browser isolation/egress probes.
 - [ ] Audit every upstream-touch row and ingress adapter against the final candidate; run native schema/child/history/transport-recovery contracts and separate non-secret task-integrity assertions.
 - [ ] Record verified upstream and fork SHAs, per-adapter retain/adapt/remove disposition, exact commands and evidence; unresolved compatibility cannot be marked qualified.

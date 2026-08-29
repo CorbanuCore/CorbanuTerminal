@@ -63,6 +63,8 @@ activate when it records:
 - scope and non-goals;
 - owner, target release, and exact implementation worktree paths, branches, and
   base commits;
+- optional parallel allocation, integration owner and disjoint work ownership
+  under the [sprint concurrency rules](../sprints/index.md#bounded-parallel-implementation);
 - useful code references;
 - an upstream-touch record under the [upstream integration contract](upstream-integration.md),
   including verified baseline, adapter ownership, and compatibility evidence;

@@ -1,0 +1,907 @@
+{
+  "parents": [
+    "1b98a170a00bd7152709d947b657e991109d588e",
+    "1bdc515bff48a4d9048dae7d06c6214e884265bc"
+  ],
+  "current": 64,
+  "completed": 9,
+  "longest_total": 34,
+  "longest_remaining": 31,
+  "preservation": "PASS",
+  "preserved_paths": [
+    "codex-rs",
+    ".github",
+    "scripts",
+    "benchmarks",
+    "research",
+    "qa/work-packages",
+    "qa/security-levels/sprints",
+    "qa/security-levels/permissive-baseline-v1.json",
+    "docs/sprints/archive"
+  ],
+  "preserved": [
+    {
+      "path": "docs/sprints/archive/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md",
+      "git_blob": "e6743cb4203259dd3f68804057b2746de6723fd4"
+    },
+    {
+      "path": "docs/sprints/archive/p0-security-levels/pf-15-s01-security-level-domain-foundation.md",
+      "git_blob": "fbc0b3077fb4e82fc3d0e077aaf4ec57afb91e2f"
+    },
+    {
+      "path": "docs/sprints/archive/p0-security-levels/pf-16-s01-authorization-decision-contract.md",
+      "git_blob": "62a89205e0267fb85b824c8fb66e042dc34d376a"
+    },
+    {
+      "path": "docs/sprints/archive/p0-security-levels/pf-17-s01-bounded-delegation-grants.md",
+      "git_blob": "33cc34702b5acc8dba04e08c4feb1f49cca1906c"
+    },
+    {
+      "path": "docs/sprints/archive/p0-security-levels/pf-18-s01-human-mandates-and-receipts.md",
+      "git_blob": "9aed0475a07732d6cf90bc2576b19ca717df188e"
+    },
+    {
+      "path": "docs/sprints/archive/p0-security-levels/pf-19-s01-revocation-contract.md",
+      "git_blob": "2401492f00d344f34338064f29fb616ca25c10be"
+    },
+    {
+      "path": "docs/sprints/archive/p0-security-levels/pf-20-s01-versioned-security-persistence.md",
+      "git_blob": "0a886a0eb158ee26fcf994ec65c4367efb094e49"
+    },
+    {
+      "path": "docs/sprints/archive/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md",
+      "git_blob": "2ebb3a45f8e384def4deecb57af1efc3b9b6c5e4"
+    },
+    {
+      "path": "docs/sprints/archive/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md",
+      "git_blob": "bca0f3a6e52f5e11673bc7d45f5628e70009ebd8"
+    },
+    {
+      "path": "qa/security-levels/permissive-baseline-v1.json",
+      "git_blob": "7ca43948f7e989a65a34b7803a1e2593882bb2e6"
+    },
+    {
+      "path": "qa/security-levels/sprints/PF-13-S01/evidence.md",
+      "git_blob": "8e9197d548e804aa6b7fdb9bb377684e73c7b76f"
+    },
+    {
+      "path": "qa/security-levels/sprints/PF-15-S01/evidence.md",
+      "git_blob": "fc40528c1beddb214ccb939f24df7006aeb136b0"
+    },
+    {
+      "path": "qa/security-levels/sprints/PF-16-S01/evidence.md",
+      "git_blob": "fe39a0ecb8d9807cf5653fadf8b7302cdd92997b"
+    },
+    {
+      "path": "qa/security-levels/sprints/PF-17-S01/evidence.md",
+      "git_blob": "f81a2244358cb2d7a7becf9cef81e2c67fea21b2"
+    },
+    {
+      "path": "qa/security-levels/sprints/PF-18-S01/evidence.md",
+      "git_blob": "151ca8133f1c02b7b612022314515aefb659998f"
+    },
+    {
+      "path": "qa/security-levels/sprints/PF-19-S01/evidence.md",
+      "git_blob": "a28d688905586d15669acd5c073e1e1e7932b884"
+    },
+    {
+      "path": "qa/security-levels/sprints/PF-20-S01/evidence.md",
+      "git_blob": "95cb1a122b3a30ceb6cfa403c894314775710e93"
+    },
+    {
+      "path": "qa/security-levels/sprints/PF-21-S01/evidence.md",
+      "git_blob": "b27f77b033ca976e1a6a3333089d530f2e67799f"
+    },
+    {
+      "path": "qa/security-levels/sprints/PF-21-S01/harness/compatibility-report.json",
+      "git_blob": "82e274304c9997124cc9988185d7ff29b9b0aeb3"
+    },
+    {
+      "path": "qa/security-levels/sprints/PF-22-S01/evidence.md",
+      "git_blob": "5759339223964909d20db44fad99ee3efd806dc7"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "PF-15-S01",
+      "lifecycle": "archive",
+      "file": "pf-15-s01-security-level-domain-foundation.md",
+      "status": "completed",
+      "order": 1,
+      "deps": []
+    },
+    {
+      "id": "PF-16-S01",
+      "lifecycle": "archive",
+      "file": "pf-16-s01-authorization-decision-contract.md",
+      "status": "completed",
+      "order": 2,
+      "deps": [
+        "PF-15-S01"
+      ]
+    },
+    {
+      "id": "PF-17-S01",
+      "lifecycle": "archive",
+      "file": "pf-17-s01-bounded-delegation-grants.md",
+      "status": "completed",
+      "order": 3,
+      "deps": [
+        "PF-16-S01"
+      ]
+    },
+    {
+      "id": "PF-18-S01",
+      "lifecycle": "archive",
+      "file": "pf-18-s01-human-mandates-and-receipts.md",
+      "status": "completed",
+      "order": 4,
+      "deps": [
+        "PF-16-S01"
+      ]
+    },
+    {
+      "id": "PF-19-S01",
+      "lifecycle": "archive",
+      "file": "pf-19-s01-revocation-contract.md",
+      "status": "completed",
+      "order": 5,
+      "deps": [
+        "PF-17-S01",
+        "PF-18-S01"
+      ]
+    },
+    {
+      "id": "PF-20-S01",
+      "lifecycle": "archive",
+      "file": "pf-20-s01-versioned-security-persistence.md",
+      "status": "completed",
+      "order": 6,
+      "deps": [
+        "PF-15-S01"
+      ]
+    },
+    {
+      "id": "PF-21-S01",
+      "lifecycle": "archive",
+      "file": "pf-21-s01-permissive-compatibility-baseline.md",
+      "status": "completed",
+      "order": 7,
+      "deps": [
+        "PF-16-S01",
+        "PF-20-S01"
+      ]
+    },
+    {
+      "id": "PF-22-S01",
+      "lifecycle": "archive",
+      "file": "pf-22-s01-runtime-policy-and-agent-inheritance.md",
+      "status": "completed",
+      "order": 8,
+      "deps": [
+        "PF-19-S01",
+        "PF-20-S01",
+        "PF-21-S01"
+      ]
+    },
+    {
+      "id": "PF-13-S01",
+      "lifecycle": "archive",
+      "file": "pf-13-s01-vault-backed-exact-host-credential-substitution.md",
+      "status": "completed",
+      "order": 9,
+      "deps": [
+        "PF-16-S01",
+        "PF-17-S01",
+        "PF-19-S01",
+        "PF-22-S01"
+      ]
+    },
+    {
+      "id": "PF-13-S02",
+      "lifecycle": "current",
+      "file": "pf-13-s02-scoped-vault-resolver.md",
+      "status": "ready",
+      "order": 10,
+      "deps": [
+        "PF-13-S01"
+      ]
+    },
+    {
+      "id": "PF-27-S03",
+      "lifecycle": "current",
+      "file": "pf-27-s03-platform-containment-contract.md",
+      "status": "draft",
+      "order": 11,
+      "deps": []
+    },
+    {
+      "id": "PF-31-S04",
+      "lifecycle": "current",
+      "file": "pf-31-s04-retriever-artifact-preparation.md",
+      "status": "draft",
+      "order": 12,
+      "deps": []
+    },
+    {
+      "id": "PF-33-S03",
+      "lifecycle": "current",
+      "file": "pf-33-s03-destination-policy-contract.md",
+      "status": "draft",
+      "order": 13,
+      "deps": []
+    },
+    {
+      "id": "PF-34-S04",
+      "lifecycle": "current",
+      "file": "pf-34-s04-screening-contract-and-fixtures.md",
+      "status": "draft",
+      "order": 14,
+      "deps": []
+    },
+    {
+      "id": "PF-35-S01",
+      "lifecycle": "current",
+      "file": "pf-35-s01-classifier-corpus-and-evaluation.md",
+      "status": "draft",
+      "order": 15,
+      "deps": [
+        "PF-34-S04"
+      ]
+    },
+    {
+      "id": "PF-35-S02",
+      "lifecycle": "current",
+      "file": "pf-35-s02-local-cpu-detector-artifact.md",
+      "status": "draft",
+      "order": 16,
+      "deps": [
+        "PF-35-S01"
+      ]
+    },
+    {
+      "id": "PF-13-S06",
+      "lifecycle": "current",
+      "file": "pf-13-s06-credential-usage-reservations.md",
+      "status": "draft",
+      "order": 17,
+      "deps": [
+        "PF-13-S01",
+        "PF-17-S01"
+      ]
+    },
+    {
+      "id": "PF-19-S02",
+      "lifecycle": "current",
+      "file": "pf-19-s02-dispatch-revocation-fence.md",
+      "status": "draft",
+      "order": 18,
+      "deps": [
+        "PF-19-S01"
+      ]
+    },
+    {
+      "id": "PF-20-S02",
+      "lifecycle": "current",
+      "file": "pf-20-s02-protected-authoritative-state.md",
+      "status": "draft",
+      "order": 19,
+      "deps": [
+        "PF-20-S01",
+        "PF-27-S03"
+      ]
+    },
+    {
+      "id": "PF-41-S03",
+      "lifecycle": "current",
+      "file": "pf-41-s03-durable-security-event-foundation.md",
+      "status": "draft",
+      "order": 20,
+      "deps": [
+        "PF-19-S02",
+        "PF-20-S02"
+      ]
+    },
+    {
+      "id": "PF-21-S02",
+      "lifecycle": "current",
+      "file": "pf-21-s02-expanded-compatibility-and-upstream-drift.md",
+      "status": "draft",
+      "order": 21,
+      "deps": [
+        "PF-21-S01"
+      ]
+    },
+    {
+      "id": "PF-22-S02",
+      "lifecycle": "current",
+      "file": "pf-22-s02-protected-runtime-and-upstream-seams.md",
+      "status": "draft",
+      "order": 22,
+      "deps": [
+        "PF-22-S01",
+        "PF-19-S02",
+        "PF-20-S02",
+        "PF-21-S02",
+        "PF-41-S03"
+      ]
+    },
+    {
+      "id": "PF-13-S03",
+      "lifecycle": "current",
+      "file": "pf-13-s03-openai-exact-host-proxy-substitution.md",
+      "status": "draft",
+      "order": 23,
+      "deps": [
+        "PF-13-S02",
+        "PF-13-S06",
+        "PF-22-S02"
+      ]
+    },
+    {
+      "id": "PF-13-S04",
+      "lifecycle": "current",
+      "file": "pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md",
+      "status": "draft",
+      "order": 24,
+      "deps": [
+        "PF-13-S03"
+      ]
+    },
+    {
+      "id": "PF-27-S01",
+      "lifecycle": "current",
+      "file": "pf-27-s01-isolated-credential-broker.md",
+      "status": "draft",
+      "order": 25,
+      "deps": [
+        "PF-13-S04",
+        "PF-27-S03",
+        "PF-41-S03"
+      ]
+    },
+    {
+      "id": "PF-27-S02",
+      "lifecycle": "current",
+      "file": "pf-27-s02-secretless-agent-launch.md",
+      "status": "draft",
+      "order": 26,
+      "deps": [
+        "PF-27-S01"
+      ]
+    },
+    {
+      "id": "PF-28-S01",
+      "lifecycle": "current",
+      "file": "pf-28-s01-central-secret-output-gate.md",
+      "status": "draft",
+      "order": 27,
+      "deps": [
+        "PF-27-S02"
+      ]
+    },
+    {
+      "id": "PF-28-S02",
+      "lifecycle": "current",
+      "file": "pf-28-s02-reflected-secret-response-scrubbing.md",
+      "status": "draft",
+      "order": 28,
+      "deps": [
+        "PF-28-S01"
+      ]
+    },
+    {
+      "id": "PF-33-S01",
+      "lifecycle": "current",
+      "file": "pf-33-s01-url-dns-and-redirect-policy.md",
+      "status": "draft",
+      "order": 29,
+      "deps": [
+        "PF-27-S02",
+        "PF-33-S03"
+      ]
+    },
+    {
+      "id": "PF-33-S02",
+      "lifecycle": "current",
+      "file": "pf-33-s02-connection-pinning-and-bypass.md",
+      "status": "draft",
+      "order": 30,
+      "deps": [
+        "PF-33-S01"
+      ]
+    },
+    {
+      "id": "PF-24-S01",
+      "lifecycle": "current",
+      "file": "pf-24-s01-security-command-and-profile-view.md",
+      "status": "draft",
+      "order": 31,
+      "deps": [
+        "PF-20-S02",
+        "PF-22-S02"
+      ]
+    },
+    {
+      "id": "PF-29-S01",
+      "lifecycle": "current",
+      "file": "pf-29-s01-protected-mode-inventory.md",
+      "status": "draft",
+      "order": 32,
+      "deps": [
+        "PF-28-S02",
+        "PF-20-S02"
+      ]
+    },
+    {
+      "id": "PF-29-S02",
+      "lifecycle": "current",
+      "file": "pf-29-s02-human-secret-migration.md",
+      "status": "draft",
+      "order": 33,
+      "deps": [
+        "PF-29-S01",
+        "PF-24-S01"
+      ]
+    },
+    {
+      "id": "PF-13-S05",
+      "lifecycle": "current",
+      "file": "pf-13-s05-credential-boundary-adversarial-qualification.md",
+      "status": "draft",
+      "order": 34,
+      "deps": [
+        "PF-13-S04",
+        "PF-27-S02",
+        "PF-28-S02",
+        "PF-29-S02",
+        "PF-33-S02"
+      ]
+    },
+    {
+      "id": "PF-30-S01",
+      "lifecycle": "current",
+      "file": "pf-30-s01-typed-source-envelope.md",
+      "status": "draft",
+      "order": 35,
+      "deps": [
+        "PF-22-S02"
+      ]
+    },
+    {
+      "id": "PF-30-S02",
+      "lifecycle": "current",
+      "file": "pf-30-s02-persistent-taint-and-memory.md",
+      "status": "draft",
+      "order": 36,
+      "deps": [
+        "PF-30-S01"
+      ]
+    },
+    {
+      "id": "PF-30-S03",
+      "lifecycle": "current",
+      "file": "pf-30-s03-post-taint-authority-checks.md",
+      "status": "draft",
+      "order": 37,
+      "deps": [
+        "PF-30-S02",
+        "PF-13-S05"
+      ]
+    },
+    {
+      "id": "PF-23-S01",
+      "lifecycle": "current",
+      "file": "pf-23-s01-moderate-ingress-and-disclosure-enforcement.md",
+      "status": "draft",
+      "order": 38,
+      "deps": [
+        "PF-13-S05",
+        "PF-22-S02",
+        "PF-30-S03"
+      ]
+    },
+    {
+      "id": "PF-23-S02",
+      "lifecycle": "current",
+      "file": "pf-23-s02-aggressive-deny-and-grant-enforcement.md",
+      "status": "draft",
+      "order": 39,
+      "deps": [
+        "PF-17-S01",
+        "PF-23-S01"
+      ]
+    },
+    {
+      "id": "PF-23-S03",
+      "lifecycle": "current",
+      "file": "pf-23-s03-downgrade-restart-and-inheritance-enforcement.md",
+      "status": "draft",
+      "order": 40,
+      "deps": [
+        "PF-19-S02",
+        "PF-20-S02",
+        "PF-23-S02"
+      ]
+    },
+    {
+      "id": "PF-24-S02",
+      "lifecycle": "current",
+      "file": "pf-24-s02-security-confirm-cancel-and-downgrade.md",
+      "status": "draft",
+      "order": 41,
+      "deps": [
+        "PF-23-S03",
+        "PF-24-S01",
+        "PF-29-S02"
+      ]
+    },
+    {
+      "id": "PF-25-S01",
+      "lifecycle": "current",
+      "file": "pf-25-s01-temporary-grant-tui.md",
+      "status": "draft",
+      "order": 42,
+      "deps": [
+        "PF-17-S01",
+        "PF-23-S02",
+        "PF-24-S02"
+      ]
+    },
+    {
+      "id": "PF-25-S02",
+      "lifecycle": "current",
+      "file": "pf-25-s02-revocation-and-kill-switch-tui.md",
+      "status": "draft",
+      "order": 43,
+      "deps": [
+        "PF-19-S02",
+        "PF-23-S03",
+        "PF-25-S01"
+      ]
+    },
+    {
+      "id": "PF-31-S01",
+      "lifecycle": "current",
+      "file": "pf-31-s01-pinned-retriever-isolation.md",
+      "status": "draft",
+      "order": 44,
+      "deps": [
+        "PF-33-S02",
+        "PF-27-S02",
+        "PF-31-S04"
+      ]
+    },
+    {
+      "id": "PF-31-S02",
+      "lifecycle": "current",
+      "file": "pf-31-s02-bounded-fetch-no-fallback.md",
+      "status": "draft",
+      "order": 45,
+      "deps": [
+        "PF-31-S01",
+        "PF-30-S01"
+      ]
+    },
+    {
+      "id": "PF-31-S03",
+      "lifecycle": "current",
+      "file": "pf-31-s03-download-quarantine-promotion.md",
+      "status": "draft",
+      "order": 46,
+      "deps": [
+        "PF-31-S02",
+        "PF-24-S01"
+      ]
+    },
+    {
+      "id": "PF-34-S01",
+      "lifecycle": "current",
+      "file": "pf-34-s01-render-aware-sanitization.md",
+      "status": "draft",
+      "order": 47,
+      "deps": [
+        "PF-31-S02",
+        "PF-30-S01",
+        "PF-34-S04"
+      ]
+    },
+    {
+      "id": "PF-35-S03",
+      "lifecycle": "current",
+      "file": "pf-35-s03-calibration-and-ingress-gate.md",
+      "status": "draft",
+      "order": 48,
+      "deps": [
+        "PF-35-S02",
+        "PF-34-S01",
+        "PF-30-S03",
+        "PF-23-S01"
+      ]
+    },
+    {
+      "id": "PF-34-S02",
+      "lifecycle": "current",
+      "file": "pf-34-s02-quarantine-state-and-store.md",
+      "status": "draft",
+      "order": 49,
+      "deps": [
+        "PF-35-S03",
+        "PF-41-S03"
+      ]
+    },
+    {
+      "id": "PF-34-S03",
+      "lifecycle": "current",
+      "file": "pf-34-s03-safe-quarantine-review.md",
+      "status": "draft",
+      "order": 50,
+      "deps": [
+        "PF-34-S02",
+        "PF-24-S01"
+      ]
+    },
+    {
+      "id": "PF-32-S01",
+      "lifecycle": "current",
+      "file": "pf-32-s01-web-facade-and-registry.md",
+      "status": "draft",
+      "order": 51,
+      "deps": [
+        "PF-34-S03",
+        "PF-31-S03",
+        "PF-13-S05"
+      ]
+    },
+    {
+      "id": "PF-32-S02",
+      "lifecycle": "current",
+      "file": "pf-32-s02-existing-search-and-native-bypass.md",
+      "status": "draft",
+      "order": 52,
+      "deps": [
+        "PF-32-S01"
+      ]
+    },
+    {
+      "id": "PF-32-S03",
+      "lifecycle": "current",
+      "file": "pf-32-s03-exa-search-adapter.md",
+      "status": "draft",
+      "order": 53,
+      "deps": [
+        "PF-32-S02"
+      ]
+    },
+    {
+      "id": "PF-32-S04",
+      "lifecycle": "current",
+      "file": "pf-32-s04-brave-search-adapter.md",
+      "status": "draft",
+      "order": 54,
+      "deps": [
+        "PF-32-S02"
+      ]
+    },
+    {
+      "id": "PF-32-S05",
+      "lifecycle": "current",
+      "file": "pf-32-s05-searxng-search-adapter.md",
+      "status": "draft",
+      "order": 55,
+      "deps": [
+        "PF-32-S02"
+      ]
+    },
+    {
+      "id": "PF-32-S06",
+      "lifecycle": "current",
+      "file": "pf-32-s06-privacy-routing-and-failover.md",
+      "status": "draft",
+      "order": 56,
+      "deps": [
+        "PF-32-S03",
+        "PF-32-S04",
+        "PF-32-S05"
+      ]
+    },
+    {
+      "id": "PF-36-S01",
+      "lifecycle": "current",
+      "file": "pf-36-s01-hosted-detector-consent-contract.md",
+      "status": "draft",
+      "order": 57,
+      "deps": [
+        "PF-35-S03",
+        "PF-33-S02"
+      ]
+    },
+    {
+      "id": "PF-36-S02",
+      "lifecycle": "current",
+      "file": "pf-36-s02-hosted-bakeoff-and-local-fallback.md",
+      "status": "draft",
+      "order": 58,
+      "deps": [
+        "PF-36-S01"
+      ]
+    },
+    {
+      "id": "PF-37-S01",
+      "lifecycle": "current",
+      "file": "pf-37-s01-origin-bound-browser-login.md",
+      "status": "draft",
+      "order": 59,
+      "deps": [
+        "PF-31-S03",
+        "PF-28-S02",
+        "PF-30-S03",
+        "PF-34-S03"
+      ]
+    },
+    {
+      "id": "PF-37-S02",
+      "lifecycle": "current",
+      "file": "pf-37-s02-human-auth-handoff-lifecycle.md",
+      "status": "draft",
+      "order": 60,
+      "deps": [
+        "PF-37-S01",
+        "PF-25-S02"
+      ]
+    },
+    {
+      "id": "PF-38-S01",
+      "lifecycle": "current",
+      "file": "pf-38-s01-typed-financial-executor.md",
+      "status": "draft",
+      "order": 61,
+      "deps": [
+        "PF-30-S03",
+        "PF-27-S02",
+        "PF-18-S01"
+      ]
+    },
+    {
+      "id": "PF-38-S02",
+      "lifecycle": "current",
+      "file": "pf-38-s02-full-effect-preview-and-mandate.md",
+      "status": "draft",
+      "order": 62,
+      "deps": [
+        "PF-38-S01",
+        "PF-25-S01"
+      ]
+    },
+    {
+      "id": "PF-38-S03",
+      "lifecycle": "current",
+      "file": "pf-38-s03-sign-broadcast-and-receipts.md",
+      "status": "draft",
+      "order": 63,
+      "deps": [
+        "PF-38-S02",
+        "PF-41-S03"
+      ]
+    },
+    {
+      "id": "PF-39-S01",
+      "lifecycle": "current",
+      "file": "pf-39-s01-protected-financial-derived-views.md",
+      "status": "draft",
+      "order": 64,
+      "deps": [
+        "PF-28-S01",
+        "PF-38-S01"
+      ]
+    },
+    {
+      "id": "PF-39-S02",
+      "lifecycle": "current",
+      "file": "pf-39-s02-outbound-disclosure-controls.md",
+      "status": "draft",
+      "order": 65,
+      "deps": [
+        "PF-39-S01",
+        "PF-30-S03",
+        "PF-32-S06"
+      ]
+    },
+    {
+      "id": "PF-40-S01",
+      "lifecycle": "current",
+      "file": "pf-40-s01-sweep-events-and-rules.md",
+      "status": "draft",
+      "order": 66,
+      "deps": [
+        "PF-30-S03",
+        "PF-38-S03",
+        "PF-39-S02",
+        "PF-41-S03"
+      ]
+    },
+    {
+      "id": "PF-40-S02",
+      "lifecycle": "current",
+      "file": "pf-40-s02-isolated-sweep-reviewer.md",
+      "status": "draft",
+      "order": 67,
+      "deps": [
+        "PF-40-S01",
+        "PF-36-S01"
+      ]
+    },
+    {
+      "id": "PF-40-S03",
+      "lifecycle": "current",
+      "file": "pf-40-s03-sweep-alerts-and-recovery.md",
+      "status": "draft",
+      "order": 68,
+      "deps": [
+        "PF-40-S02",
+        "PF-25-S02"
+      ]
+    },
+    {
+      "id": "PF-41-S01",
+      "lifecycle": "current",
+      "file": "pf-41-s01-effective-security-inspector.md",
+      "status": "draft",
+      "order": 69,
+      "deps": [
+        "PF-23-S03",
+        "PF-29-S02",
+        "PF-32-S06",
+        "PF-37-S02",
+        "PF-40-S03",
+        "PF-24-S02"
+      ]
+    },
+    {
+      "id": "PF-41-S02",
+      "lifecycle": "current",
+      "file": "pf-41-s02-tamper-evident-security-audit.md",
+      "status": "draft",
+      "order": 70,
+      "deps": [
+        "PF-41-S01",
+        "PF-41-S03"
+      ]
+    },
+    {
+      "id": "PF-26-S01",
+      "lifecycle": "current",
+      "file": "pf-26-s01-security-harnesses-and-standards-crosswalk.md",
+      "status": "draft",
+      "order": 71,
+      "deps": [
+        "PF-13-S05",
+        "PF-21-S02",
+        "PF-23-S03",
+        "PF-25-S02",
+        "PF-36-S02",
+        "PF-41-S02"
+      ]
+    },
+    {
+      "id": "PF-26-S02",
+      "lifecycle": "current",
+      "file": "pf-26-s02-true-tui-and-live-repository-qualification.md",
+      "status": "draft",
+      "order": 72,
+      "deps": [
+        "PF-26-S01"
+      ]
+    },
+    {
+      "id": "PF-26-S03",
+      "lifecycle": "current",
+      "file": "pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md",
+      "status": "draft",
+      "order": 73,
+      "deps": [
+        "PF-26-S02"
+      ]
+    }
+  ]
+}
