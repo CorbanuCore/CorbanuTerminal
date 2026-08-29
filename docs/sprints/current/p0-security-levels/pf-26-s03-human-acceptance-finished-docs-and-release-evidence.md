@@ -4,14 +4,16 @@ title: "Human acceptance, finished docs, and release evidence"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-26"
-execution_order: 73
+execution_order: 76
 owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+lane: "qualification"
+write_scope: "qa/release, docs/features, docs/authentication.md, docs/slash_commands.md"
+worktree: "UNALLOCATED"
+branch: "UNALLOCATED"
+base_commit: "UNALLOCATED"
 depends_on: "PF-26-S02"
 created: 2026-08-24
-updated: 2026-08-28
+updated: 2026-08-27
 ---
 
 # PF-26-S03 — Human acceptance, finished docs, and release evidence
@@ -23,10 +25,9 @@ updated: 2026-08-28
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/active/p0-security-levels.md#upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
 - Feature: `PF-26`
-- Reconciliation: [source decisions and archive mapping](../../../plans/security-source-reconciliation.md).
-- Product citation: **P0 `/security` levels** — “Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged.”
 - Acceptance advanced: users receive accurate security/vault guidance only after the final candidate passes required evidence.
 
 ## Code boundaries
@@ -37,18 +38,19 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] PF-26-S02 is completed and archived.
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
+- [ ] Every listed dependency is completed and archived.
 - [ ] A named human tester and independent security reviewer are recorded.
 - [ ] Candidate version/commit and benchmark state are fixed.
+
+- [ ] Allocate lane/worktree/base in the plan and validate disjoint write scopes before readiness.
 
 ## Done
 
 - [x] Sprint record is linked only to PF-26.
+- [x] Travis Good named himself as human tester on 2026-08-27 and selected Fable High (`claude-fable-5`, high effort) as independent reviewer; no review or human acceptance recorded by these selections.
 
 ## Remaining
-
-- [ ] Obtain named human acceptance and independent security review of the full reconciled scope, not only the original 23-sprint slice; link each finding/disposition and every new feature's final-tree evidence.
-- [ ] Document only supported/qualified adapters and platforms, Permissive compatibility, protected-mode broker requirements and optional detectors' enabled/disabled state; no blanket no-secret or OpenClaw-equivalence claim.
 
 - [ ] Have the named human perform the accepted level, cancel, downgrade, grant, revoke, kill, restart, and credential workflows on the exact candidate.
 - [ ] Record tester, date, candidate, flow, result, and artifact without secrets or protected financial values.
@@ -59,6 +61,7 @@ updated: 2026-08-28
 
 ## Verification
 
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
 - [ ] Documentation build: `mkdocs build --strict`.
 - [ ] Governance: `python3 docs/plans/check.py && python3 docs/sprints/check.py`.
 - [ ] Human record matches the final candidate commit and required flows.

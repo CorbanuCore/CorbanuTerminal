@@ -4,7 +4,7 @@ title: "Calibrated detector and ingress enforcement"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-35"
-execution_order: 48
+execution_order: 50
 owner: "Jim Ricketts"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"

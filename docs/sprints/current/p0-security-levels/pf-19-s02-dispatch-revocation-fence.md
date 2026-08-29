@@ -4,7 +4,7 @@ title: "Dispatch revocation fence contract"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-19"
-execution_order: 18
+execution_order: 23
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"

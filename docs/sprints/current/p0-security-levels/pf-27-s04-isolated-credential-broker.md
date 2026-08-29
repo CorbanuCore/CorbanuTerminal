@@ -1,20 +1,20 @@
 ---
-sprint_id: "PF-27-S01"
+sprint_id: "PF-27-S04"
 title: "Isolated credential broker process"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
-execution_order: 25
+execution_order: 28
 owner: "Jim Ricketts"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
-depends_on: "PF-13-S04, PF-27-S03, PF-41-S03"
+depends_on: "PF-27-S01, PF-13-S04, PF-27-S03, PF-41-S03"
 created: 2026-08-28
 updated: 2026-08-28
 ---
 
-# PF-27-S01 — Isolated credential broker process
+# PF-27-S04 — Isolated credential broker process
 
 ## Execution mandate
 
@@ -71,7 +71,7 @@ updated: 2026-08-28
 
 ## Exit evidence
 
-- [ ] Implementation commit and final-tree outputs under `qa/security-levels/sprints/PF-27-S01/`.
+- [ ] Implementation commit and final-tree outputs under `qa/security-levels/sprints/PF-27-S04/`.
 - [ ] Acceptance and source-mapping assertions proven; applicable true-TUI keys/checkpoints captured after formatting.
 - [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
 - [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.

@@ -4,7 +4,7 @@ title: "Connection pinning and alternate-egress denial"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-33"
-execution_order: 30
+execution_order: 33
 owner: "Jim Ricketts"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"

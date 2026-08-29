@@ -66,7 +66,9 @@ def parse_front_matter(path):
         return text, {}, ""
     front = match.group(1)
     values = {}
-    for key, value in re.findall(r"^([a-z][a-z0-9_-]*):[ \t]*(.*?)\s*$", front, re.MULTILINE):
+    for key, value in re.findall(
+        r"^([a-z][a-z0-9_-]*):[ \t]*(.*?)\s*$", front, re.MULTILINE
+    ):
         values[key] = scalar(value)
     return text, values, front
 
@@ -150,11 +152,27 @@ def check_active(path, text, values, front, root):
     if values.get("priority") not in {"P0", "P1", "P2"}:
         errors.append(f"{relative}: priority must be P0, P1, or P2")
 
+    try:
+        sprint_limit = int(values.get("max_active_sprints", "1"))
+        if sprint_limit not in (1, 2, 3):
+            raise ValueError
+    except ValueError:
+        errors.append(f"{relative}: max_active_sprints must be 1, 2, or 3")
+        sprint_limit = 1
+    if sprint_limit > 1:
+        owner = values.get("integration_owner", "")
+        if owner in {"", "UNALLOCATED", "TBD"} or "<" in owner:
+            errors.append(
+                f"{relative}: concurrent plan requires a concrete integration_owner"
+            )
+
     product_file = nested_value(front, "product_spec", "file")
     heading = nested_value(front, "product_spec", "heading")
     excerpt = nested_value(front, "product_spec", "requirement_excerpt")
     if product_file != "docs/corbanu-product-spec.md":
-        errors.append(f"{relative}: product_spec.file must name the canonical specification")
+        errors.append(
+            f"{relative}: product_spec.file must name the canonical specification"
+        )
     if not heading or "<" in heading:
         errors.append(f"{relative}: product_spec.heading must be concrete")
     if not excerpt or "<" in excerpt:
@@ -168,7 +186,9 @@ def check_active(path, text, values, front, root):
     if not branch or "<" in branch:
         errors.append(f"{relative}: an implementation branch is required")
     if not base_commit or re.fullmatch(r"[0-9a-f]{40}", base_commit) is None:
-        errors.append(f"{relative}: base_commit must be a 40-character lowercase Git hash")
+        errors.append(
+            f"{relative}: base_commit must be a 40-character lowercase Git hash"
+        )
 
     sections = set(re.findall(r"^## (.+?)\s*$", text, re.MULTILINE))
     for section in REQUIRED_ACTIVE_SECTIONS:
@@ -179,7 +199,9 @@ def check_active(path, text, values, front, root):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--json", action="store_true", help="emit the complete result as JSON")
+    parser.add_argument(
+        "--json", action="store_true", help="emit the complete result as JSON"
+    )
     args = parser.parse_args()
     result = check_plan_root()
     if args.json:

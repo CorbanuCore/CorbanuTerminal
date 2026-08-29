@@ -1,0 +1,175 @@
+Fable 5 High / Manual permissions — final platform-fix review
+Date: 2026-08-27 Arizona time (2026-08-28 UTC)
+Source: Claude app accessibility capture, Message 10
+Session: claude.ai/epitaxy/local_11570510-8846-4178-8837-761f35b2aa20
+Snapshot: /private/tmp/corbanu-pf30-review.9sEDqj
+Candidate: ddfb27b4daed6d022403ae0c4e2d869f1910f02a plus platform-fix-candidate.sha256
+Scope: four browser-isolation files, 170 additions / 15 deletions.
+Review mode: read-only source/diff/hash inspection; no test execution, edits,
+home/credential access, project hooks, nested reviewers or fallback model.
+Verdict: clean scoped review; no in-scope findings. Qualification follow-ups
+are not platform certification and remain open in platform-fixes.md.
+
+BEGIN ACCESSIBILITY CAPTURE
+container Message 10
+															136 container
+																137 heading Value: 2, Claude responded: All four changed files, their diffs against platform-before/, and the affected call paths (verify() → ensureready/probe/acquireworker, the image-embedded worke…
+																	138 text Claude responded: All four changed files, their diffs against platform-before/, and the affected call paths (verify() → ensureready/probe/acquireworker, the image-embedded worke…
+																139 button Read PLATFORM_FIX_REVIEW_SCOPE.md, ran 7 commands
+																	140 text Read
+																	141 text PLATFORM_FIX_REVIEW_SCOPE.md
+																	142 text ,
+																	143 text ran
+																	144 text 7 commands
+														145 container
+															146 text All four changed files, their diffs against
+															147 text platform-before/
+															148 text , and the affected call paths (
+															149 text verify()
+															150 text  →
+															151 text ensure_ready
+															152 text /
+															153 text probe
+															154 text /
+															155 text acquire_worker
+															156 text , the image-embedded worker gate, and the unchanged
+															157 text remove_owned
+															158 text /
+															159 text exec_args
+															160 text ) are reviewed. The manifest validates (28/28 OK) and the change surface is exactly the four listed files.
+															161 heading Assessment of the three repairs, Value: 3
+																162 text Assessment of the three repairs
+															163 text 1. Docker private PID/UTS by omission
+															164 text  (
+															165 button container.rs:47-82
+															166 text ). Correct: Docker has no daemon-level override that turns default PID/UTS namespaces into host mode, so omission is safe there, and the verifier now compensates by checking the inspected modes on both engines —
+															167 text PidMode
+															168 text /
+															169 text UTSMode
+															170 text  accept only
+															171 text "private"
+															172 text  or
+															173 text ""
+															174 text  (host mode reports
+															175 text "host"
+															176 text  and fails), and the previously-requested-but-never-verified cgroup namespace is now checked engine-natively (
+															177 text CgroupnsMode
+															178 text  for Docker,
+															179 text CgroupMode
+															180 text  for Podman) at
+															181 button container.rs:286-291
+															182 text . Podman keeps its explicit flags. Rejection rows for
+															183 text UTSMode: "host"
+															184 text  and
+															185 text CgroupnsMode: "host"
+															186 text  are in the tests.
+															187 text 2. Podman computed-capability verification
+															188 text  (
+															189 button container.rs:257-270
+															190 text ). Correct and strictly stronger than the old literal-
+															191 text ALL
+															192 text  match for Podman: top-level
+															193 text EffectiveCaps
+															194 text and
+															195 text BoundingCaps
+															196 text  must each be present and null-or-empty; a missing key, a non-array, or any listed capability fails closed. The test models the real Podman 5.7 shape (expanded
+															197 text CapDrop
+															198 text  names,
+															199 text rprivate,tmpcopyup
+															200 text  tmpfs suffix — which
+															201 text bounded_tmpfs
+															202 text  correctly tolerates) and covers the partial-drop diagnostic case. Docker retains the echoed
+															203 text CapDrop: ["ALL"]
+															204 text  check.
+															205 text 3. Kernel confinement gating in the worker
+															206 text  (
+															207 button worker.py:40-52
+															208 text , called at
+															209 button worker.py:144
+															210 text ). Correct placement and semantics: it runs in
+															211 text main()
+															212 text  before
+															213 text all
+															214 text  modes — including PID1
+															215 text idle
+															216 text  and every
+															217 text exec
+															218 text 'd probe/acquire, which join the container's seccomp/NNP config — and checks actual kernel state (
+															219 text Seccomp: 2
+															220 text ,
+															221 text NoNewPrivs: 1
+															222 text , all four Uid/Gid fields 65532, all five capability sets hex-zero) rather than engine metadata. Missing keys fail closed. The 16 KiB read cannot produce a false pass:
+															223 text Seccomp
+															224 text  appears after the
+															225 text Cap*
+															226 text  lines in
+															227 text /proc/self/status
+															228 text , so any truncation removes required keys and fails. Host-side, Docker's
+															229 text seccomp=builtin
+															230 text  is both requested and required in inspected
+															231 text SecurityOpt
+															232 text  (
+															233 button container.rs:296
+															234 text ), the
+															235 text unconfined
+															236 text  rejection is retained, and Podman's
+															237 text --seccomp-policy=default
+															238 text  prevents image-selected profiles with the worker gate as the actual-state proof. The two new Python tests cover field/value mutations and the before-every-mode ordering; the new Rust test pins the per-engine argument split and that image+command stay last.
+															239 text In-scope findings: none.
+															240 text  I looked specifically for weakenings and found the change monotonic: every previously verified property is still verified, three new properties are added (UTS, cgroupns, seccomp), and the Podman capability check moved from configuration echo to computed state.
+															241 heading Follow-ups (not in-scope defects; fail-closed by design), Value: 3
+																242 text Follow-ups (not in-scope defects; fail-closed by design)
+															243 content list
+																244 container
+																	245 AXListMarker 1.
+																	246 text Legacy-host availability:  Docker on a cgroups-v1 daemon will report  CgroupnsMode: "host"  and now fail closed; likewise Podman versions that don't emit  EffectiveCaps / BoundingCaps  fail closed. Both are correct-direction outcomes but should be noted in the platform matrix so a qualification failure there is diagnosed as expected behavior.
+																247 container
+																	248 AXListMarker 2.
+																	249 text Seccomp profile content  remains engine-version dependent ( builtin / default  select the engine's own profile); the scope already disclaims a pinned syscall allowlist — keep tracked.
+																250 container
+																	251 AXListMarker 3.
+																	252 text Carried unchanged: native not-allowlisted DNS ordering, 128 KiB engine-JSON stdout cap (unconfirmed), broader adversarial/lifecycle matrix, Windows, TUI/S02 joins, human/release gates.
+															253 container
+																254 container
+																	255 text { " findings " : [], " follow_ups " : [ { " class " : "qualification-note" , " summary " : "Docker cgroups-v1 hosts (CgroupnsMode 'host') and older Podman without EffectiveCaps/BoundingCaps now fail closed at verify_confinement; record as expected in the platform matrix." , " refs " : [ "codex-rs/browser-isolation/src/container.rs:286-291" , "codex-rs/browser-isolation/src/container.rs:257-270" ] }, { " class " : "tracked-existing" , " summary " : "Engine-default seccomp profile contents are engine-version dependent; no pinned syscall allowlist claimed. Native not-allowlisted DNS ordering, 128KiB engine-JSON stdout cap, adversarial/lifecycle matrix, Windows, S02/S03 joins and human/release gates remain open as previously tracked." } ], " verdict " : "clean-scoped-review: the three platform repairs are correctly implemented with no in-scope security or correctness regression; confinement verification is strictly stronger than the committed baseline; no platform certification claimed" }
+																256 button Copy code
+															257 toolbar Message actions
+																258 button Copy
+																259 button Fork from here
+																260 toggle button Description: Pin as chapter, Value: 0
+																261 button Read aloud
+																262 text 2 minutes ago
+											263 container
+												264 text Chat mode
+												265 container
+													266 text entry area (settable) Description: Prompt, Value: Type / for commands
+
+														267 text Type / for commands
+												268 button (disabled) Send
+											269 pop up button Manual
+											270 pop up button Add
+											271 container Press and hold to record
+												272 toggle button Description: Press and hold to record, Value: 0
+												273 pop up button Dictation settings
+											274 pop up button Fable 5
+											275 pop up button Effort: High
+												276 text Effort:
+												277 text High
+											278 pop up button Usage · Context 236.4k / 1M (24%) · Plan 27%
+											279 text Fast mode off
+										280 text Arrow keys move the tile. Perpendicular arrows preview a split; press Enter to commit or Escape to cancel.
+					281 container
+						282 container Notifications
+	283 close button
+	284 full screen button Help: this button also has an action to zoom the window, Secondary Actions: zoom the window
+	285 minimize button
+286 menu bar
+	287 Claude
+	288 File
+	289 Edit
+	290 View
+	291 Window
+	292 Help
+
+The focused UI element is 4 HTML content Claude, URL: claude.ai/epitaxy/local_11570510-8846-4178-8837-761f35b2aa20
+END ACCESSIBILITY CAPTURE

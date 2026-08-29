@@ -4,7 +4,7 @@ title: "Aggressive deny and grant enforcement"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-23"
-execution_order: 39
+execution_order: 41
 owner: "Jim Ricketts"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"

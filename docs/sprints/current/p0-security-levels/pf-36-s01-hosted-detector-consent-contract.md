@@ -4,7 +4,7 @@ title: "Optional hosted detector consent contract"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-36"
-execution_order: 57
+execution_order: 59
 owner: "Jim Ricketts"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"

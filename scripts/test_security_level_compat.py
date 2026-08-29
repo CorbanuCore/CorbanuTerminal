@@ -12,6 +12,32 @@ import security_level_compat as compat
 
 
 class SecurityLevelCompatTests(unittest.TestCase):
+    def test_prepare_validates_frozen_baseline_without_running_a_candidate(self):
+        root = Path(__file__).resolve().parent.parent
+        baseline = json.loads((root / compat.BASELINE_PATH).read_text())[
+            "captured_from_commit"
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = compat.prepare_compatibility(
+                root, baseline, Path(directory) / "prepared"
+            )
+            report = json.loads(path.read_text())
+            self.assertEqual(report["status"], "pending")
+            self.assertIsNone(report["candidate"])
+            self.assertEqual(report["immutable_probes_validated"], 5)
+            self.assertEqual(report["surfaces"], 10)
+
+    def test_prepare_rejects_rewritten_baseline_before_any_build(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / compat.BASELINE_PATH
+            path.parent.mkdir(parents=True)
+            path.write_text('{"schema_version":1}')
+            with self.assertRaisesRegex(
+                compat.CompatibilityError, "baseline bytes changed"
+            ):
+                compat.prepare_compatibility(root, "a" * 40, root / "output")
+
     def test_extract_test_source_stops_at_next_test(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "tests.rs"

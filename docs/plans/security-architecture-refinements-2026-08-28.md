@@ -20,7 +20,7 @@ Source claims refer to OpenClaw pin
 | Review / validation | Decision | Execution owner |
 | --- | --- | --- |
 | OR-01 | Bounded three-worker allocation; measure effort/capacity, do not infer calendar duration from node counts | Plan delivery/integration owner; sprint process/checker |
-| OR-02, OR-03 | Per-OS trusted-process design and tamper-resistant authoritative policy state | PF-27-S03 → PF-20-S02, PF-27-S01/S02 → PF-13-S05 |
+| OR-02, OR-03 | Per-OS trusted-process design and tamper-resistant authoritative policy state | PF-27-S03 → PF-20-S02, PF-27-S04/S02 → PF-13-S05 |
 | OR-04, OR-05 | Independent baseline plus upstream control/drift evidence; explicit hook/owner/test register | PF-21-S02, PF-22-S02, every hook-owning sprint, PF-26 |
 | OR-06, OR-07, OR-08 | Completed preparation/interface sprints unblock construction, not protected activation | PF-31-S04, PF-33-S03, PF-34-S04; early PF-35-S01/S02 |
 | OR-09 | Quantitative reservations/metering at credential transport reuse BoundedGrant | PF-13-S06/S03/S04 |
@@ -29,7 +29,7 @@ Source claims refer to OpenClaw pin
 | OR-12 | Typed, bounded descendant request UI; requests do not grant authority | PF-25-S01 |
 | OR-13, OR-15 | New-route closed-world tests and named final capture-sink tests | PF-30-S01, PF-22, PF-28, PF-13-S05 |
 | OR-16 | Preserve distinction between code present and behavior accepted | Existing Done/Remaining ledgers; no historical-evidence rewriting |
-| OR-17 | Same-run re-registration with cached TLS handlers and fresh connections | PF-13-S04, PF-27-S01 |
+| OR-17 | Same-run re-registration with cached TLS handlers and fresh connections | PF-13-S04, PF-27-S04 |
 | OR-18, OR-19 | Explicit absent/empty/public/private policy semantics and actual-peer checks | PF-33-S03/S01/S02 |
 | OR-20 | Reject claimed capacity exploit; retain capacity-before-commit and filename/hash tests | PF-30-S02; corrected assessment |
 | OR-21 | Protocol-specific buffer/latency targets; no unexamined ingress prefixes | PF-28-S02, PF-34-S04, PF-35-S03, PF-26-S02 |

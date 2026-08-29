@@ -4,7 +4,7 @@ title: "Typed source envelope and trusted ingress"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-30"
-execution_order: 35
+execution_order: 37
 owner: "Jim Ricketts"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"

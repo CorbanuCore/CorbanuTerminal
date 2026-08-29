@@ -4,7 +4,7 @@ title: "Platform containment contract and probes"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
-execution_order: 11
+execution_order: 16
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
@@ -48,7 +48,7 @@ updated: 2026-08-28
 
 - [ ] Record a Linux/macOS/Windows matrix: trusted identities/processes, agent shell/plugin/MCP/child threat, filesystem/config/IPC/network access, inherited handles, process-memory/debug permissions, signing/entitlements and elevation actually required. Same-user process separation alone is not proof.
 - [ ] Implement bounded capability probes from the untrusted execution context with synthetic process, file, handle and IPC canaries; distinguish supported, unsupported and untested mechanisms. Record OS/engine versions and rerun triggers; do not equate installation, notarization or a configuration flag with containment.
-- [ ] Specify authenticated human controller IPC and protected policy-store ownership, including delete/rename/symlink/rollback/restart attacks; PF-20 implements the store and PF-27-S01/S02 implement and qualify the production boundary.
+- [ ] Specify authenticated human controller IPC and protected policy-store ownership, including delete/rename/symlink/rollback/restart attacks; PF-20 implements the store and PF-27-S04/S02 implement and qualify the production boundary.
 - [ ] Version the capability-result schema and fixture protocol; no runtime secret resolution, host-wide trust changes or automatic administrator setup. Any needed elevation uses human approval without password persistence.
 - [ ] Require reviewed per-OS mechanism choices and successful design probes before this contract completes; unavailable target access is not a platform pass. Update estimates with measured feasibility, not universal OS assumptions.
 
@@ -62,5 +62,5 @@ updated: 2026-08-28
 ## Exit evidence
 
 - [ ] Commit, contract/fixture versions, owner review and final-tree outputs under `qa/security-levels/sprints/PF-27-S03/`.
-- [ ] PF-27-S01/S02 rerun all probes against the final actual launch path; this contract cannot activate a protected mode.
+- [ ] PF-27-S04/S02 rerun all probes against the final actual launch path; this contract cannot activate a protected mode.
 - [ ] Record integration handoff and scope audit; complete all ledgers before archive and update plan/navigation.

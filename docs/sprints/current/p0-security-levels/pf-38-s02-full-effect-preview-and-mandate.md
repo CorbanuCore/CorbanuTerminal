@@ -4,7 +4,7 @@ title: "Full-effect financial preview and exact mandate"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-38"
-execution_order: 62
+execution_order: 64
 owner: "Jim Ricketts"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"

@@ -12,7 +12,10 @@ SPEC.loader.exec_module(checker)
 
 
 def active_plan(title):
-    sections = "\n\n".join(f"## {section}\n\nEvidence pending." for section in checker.REQUIRED_ACTIVE_SECTIONS)
+    sections = "\n\n".join(
+        f"## {section}\n\nEvidence pending."
+        for section in checker.REQUIRED_ACTIVE_SECTIONS
+    )
     return f"""---
 title: "{title}"
 status: active
@@ -89,6 +92,28 @@ class PlanCheckerTests(unittest.TestCase):
             self.assertTrue(
                 any("does not match directory" in error for error in result["errors"])
             )
+
+    def test_concurrency_metadata_before_sprint_allocation(self):
+        for limit, owner, valid in (
+            (3, "Owner", True),
+            (2, "", False),
+            (0, "Owner", False),
+            (4, "Owner", False),
+            ("many", "Owner", False),
+            (3, "<owner>", False),
+        ):
+            with (
+                self.subTest(limit=limit, owner=owner),
+                tempfile.TemporaryDirectory() as temporary,
+            ):
+                root = self.make_root(temporary)
+                text = active_plan("Security").replace(
+                    "status: active",
+                    f'status: active\nmax_active_sprints: {limit}\nintegration_owner: "{owner}"',
+                )
+                (root / "active/security.md").write_text(text, encoding="utf-8")
+                result = checker.check_plan_root(root)
+                self.assertEqual(result["ok"], valid, result["errors"])
 
 
 if __name__ == "__main__":

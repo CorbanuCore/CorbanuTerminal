@@ -4,7 +4,7 @@ title: "Quarantine state and encrypted retention"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-34"
-execution_order: 49
+execution_order: 51
 owner: "Jim Ricketts"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"

@@ -4,7 +4,7 @@ title: "Protected runtime integration and upstream seams"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-22"
-execution_order: 22
+execution_order: 27
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"

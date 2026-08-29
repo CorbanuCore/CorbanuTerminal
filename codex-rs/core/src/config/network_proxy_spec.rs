@@ -202,7 +202,7 @@ impl NetworkProxySpec {
             })
     }
 
-    fn build_state_with_audit_metadata(
+    pub(super) fn build_state_with_audit_metadata(
         &self,
         audit_metadata: NetworkProxyAuditMetadata,
     ) -> std::io::Result<NetworkProxyState> {

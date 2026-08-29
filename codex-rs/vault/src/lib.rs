@@ -40,6 +40,7 @@ use codex_secrets::SecretScope;
 use codex_secrets::SecretsBackendKind;
 use codex_secrets::SecretsManager;
 use codex_secrets::local_keyring_fallback_path;
+use codex_security_policy::SecurityLevel;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -49,6 +50,14 @@ use strum_macros::AsRefStr;
 use strum_macros::Display;
 use thiserror::Error;
 use zeroize::Zeroizing;
+
+mod capability;
+mod credential_panic;
+
+pub use capability::ScopedCredentialCallbackError;
+pub use capability::ScopedCredentialError;
+pub use capability::VaultCredentialRef;
+pub use credential_panic::scoped_credential_callback_active;
 
 #[cfg(test)]
 mod tests;
@@ -90,6 +99,11 @@ pub enum VaultError {
         label: String,
         credential_type: CredentialType,
     },
+    /// Raw programmatic export is unavailable outside Permissive.
+    #[error(
+        "vault auth-helper is unavailable under {level}; use a brokered credential label instead"
+    )]
+    ProgrammaticUseSecurityLevelDenied { level: SecurityLevel },
     /// An underlying storage/encryption error occurred.
     #[error(transparent)]
     Storage(#[from] anyhow::Error),
@@ -470,7 +484,16 @@ impl Vault {
     /// The caller must keep the returned value out of model context, logs, and
     /// persistent process state. Key custody material is rejected even when it
     /// exists in the vault.
-    pub fn reveal_for_programmatic_use(&self, label: &str) -> Result<String, VaultError> {
+    pub fn reveal_for_programmatic_use(
+        &self,
+        label: &str,
+        security_level: SecurityLevel,
+    ) -> Result<String, VaultError> {
+        if security_level != SecurityLevel::Permissive {
+            return Err(VaultError::ProgrammaticUseSecurityLevelDenied {
+                level: security_level,
+            });
+        }
         let normalized = normalize_label(label)?;
         self.with_storage_lock(|| {
             let index = self.load_index()?;
@@ -575,7 +598,7 @@ impl Vault {
 ///
 /// Labels must be 1..=128 chars and may contain ASCII alphanumerics, `-`, `_`,
 /// `.`, and `/` (so provider-scoped labels like `ambient/api-key` work). They
-/// are trimmed and lowercased for stable lookups.
+/// are trimmed for stable lookups; case-distinct labels remain distinct.
 fn normalize_label(raw: &str) -> Result<String, VaultError> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {

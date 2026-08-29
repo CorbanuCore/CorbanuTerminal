@@ -4,7 +4,7 @@ title: "Screening segment contract and fixtures"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-34"
-execution_order: 14
+execution_order: 19
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"

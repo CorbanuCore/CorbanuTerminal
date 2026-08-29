@@ -6,12 +6,14 @@ plan_file: "docs/plans/proposed/arbitrary-model-autoreview.md"
 plan_feature: "PF-14"
 execution_order: 4
 owner: "Jim Ricketts"
+lane: "autoreview"
+write_scope: "UNALLOCATED"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-14-S03"
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-08-27
 ---
 
 # PF-14-S04 — Deterministic exact-runtime dispatch
@@ -23,6 +25,7 @@ updated: 2026-08-24
 
 ## Plan linkage
 
+- Upstream: [plan touch record](../../../plans/proposed/arbitrary-model-autoreview.md#native-lifecycle-and-upstream-touch-record); resolve this sprint's adapter rows.
 - Plan: [Arbitrary-model Autoreview](../../../plans/proposed/arbitrary-model-autoreview.md)
 - Feature: `PF-14`
 - Acceptance advanced: observed reviewer route exactly matches the explicit request.
@@ -36,6 +39,8 @@ updated: 2026-08-24
 
 ## Preconditions
 
+- [ ] Allocate literal implementation/test/registration scopes and check cross-plan collisions before readiness.
+- [ ] Plan upstream baseline, adapter ownership, and exact contract tests are resolved before readiness.
 - [ ] Plan is active.
 - [ ] Dependencies are completed.
 - [ ] Worktree, branch, and base commit are exact and match the plan.
@@ -54,13 +59,16 @@ updated: 2026-08-24
 - [ ] Remove retry-only guidance that asks a model to infer transport after failure.
 - [ ] Prove OpenAI-parent to Anthropic, OpenRouter, Kimi, Z.AI, local, and custom configured targets preserves exact assignment bytes and creates one child.
 - [ ] Preserve same-provider native behavior and fail closed on unknown or mismatched provider/model pairs.
+- [ ] Keep Corbanu runtime fields outside provider-reserved wire schemas; retain native lifecycle/cancellation with thin adapters and no replacement scheduler.
 
 ## Verification
 
-- [ ] Focused test: `cargo test -p codex-core spawn_agent_explicit_runtime_supports_required_multimodel_pairs`
-- [ ] Cross-provider test: `cargo test -p codex-core exact_runtime_dispatch`
-- [ ] Schema test: `cargo test -p codex-core openai_reserved_collaboration_schema`
-- [ ] TUI applicability resolved; exact route evidence is surfaced in PF-14-S07.
+- [ ] Run fix/format before final tests; execute Rust commands below from `codex-rs`.
+- [ ] Record applicable upstream adapter evidence or justified non-applicability; structural checks alone are not qualification.
+- [ ] Focused test: `just test -p codex-core spawn_agent_explicit_runtime_supports_required_multimodel_pairs`
+- [ ] Cross-provider test: `just test -p codex-core exact_runtime_dispatch`
+- [ ] Schema test: `just test -p codex-core openai_reserved_collaboration_schema`
+- [ ] If this sprint changes an interactive path, complete its actual-key success/failure/recovery proof before completion; otherwise record why internal-only. S07 repeats integrated proof.
 
 ## Exit evidence
 

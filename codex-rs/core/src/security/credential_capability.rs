@@ -9,6 +9,8 @@ use codex_security_policy::CapabilityId;
 use codex_security_policy::CredentialCapabilityError;
 use codex_security_policy::CredentialCapabilityRequest;
 use codex_security_policy::RevocationState;
+use codex_vault::ScopedCredentialError;
+use codex_vault::VaultCredentialRef;
 use rand::TryRngCore;
 use rand::rngs::OsRng;
 use sha2::Digest as _;
@@ -113,6 +115,14 @@ pub(crate) struct AuthorizedCredentialCapability {
     pub(crate) request: CredentialCapabilityRequest,
 }
 
+impl AuthorizedCredentialCapability {
+    /// Cross the trusted Core-to-vault boundary after opaque bearer
+    /// authorization has succeeded.
+    pub(crate) fn into_vault_ref(self) -> Result<VaultCredentialRef, ScopedCredentialError> {
+        VaultCredentialRef::from_authorized(self.capability_id, self.request)
+    }
+}
+
 #[derive(Clone, Debug)]
 struct StoredCapability {
     request: CredentialCapabilityRequest,
@@ -121,8 +131,8 @@ struct StoredCapability {
 /// Hard-bounded concurrent lifecycle store for opaque credential capabilities.
 ///
 /// The store never holds a credential value. It binds bearer entropy to one
-/// complete secret-free request and revalidates time and revocation state on
-/// every use.
+/// complete secret-free request, revalidates time and revocation state, and
+/// atomically removes valid authority before returning it for one use.
 pub(crate) struct CredentialCapabilityStore<C = SystemCredentialClock, E = OsCredentialEntropy> {
     entries: RwLock<HashMap<CapabilityId, StoredCapability>>,
     capacity: usize,
@@ -198,7 +208,7 @@ where
         Err(CredentialCapabilityStoreError::TokenCollision)
     }
 
-    pub(crate) fn authorize(
+    pub(crate) fn consume(
         &self,
         capability: &IssuedCredentialCapability,
         presented_request: &CredentialCapabilityRequest,
@@ -221,9 +231,11 @@ where
         if &stored.request != presented_request {
             return Err(CredentialCapabilityStoreError::AuthorityMismatch);
         }
+        let request = stored.request.clone();
+        entries.remove(capability.capability_id());
         Ok(AuthorizedCredentialCapability {
             capability_id: capability.capability_id.clone(),
-            request: stored.request.clone(),
+            request,
         })
     }
 

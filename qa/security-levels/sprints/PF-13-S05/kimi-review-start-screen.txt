@@ -1,0 +1,29 @@
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.35)                         │
+│                                                       │
+│ model:     moonshotai/kimi-k3 high   /model to change │
+│ directory: /tmp/corbanu-pf13-kimi-review.9R9N0P       │
+╰───────────────────────────────────────────────────────╯
+
+
+› Write tests for @filename
+
+  OpenRouter Kimi K3 high · /tmp/corbanu-pf13-kimi-review.9R9N0P · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

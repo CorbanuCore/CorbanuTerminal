@@ -1,0 +1,6 @@
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "I found no actionable defects in the provided PF-27-S01 change bundle. The shared contracts keep the new security facts observational rather than authoritative, bind action/request state to live Core identity and authority epochs, distinguish requested versus effective levels without widening, and avoid activating runtime browser/firewall/TUI enforcement paths that are explicitly out of scope.",
+  "overall_confidence": 0.84
+}

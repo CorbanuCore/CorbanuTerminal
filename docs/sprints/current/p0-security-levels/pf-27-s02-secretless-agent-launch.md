@@ -4,12 +4,12 @@ title: "Secretless agent launch and bypass containment"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
-execution_order: 26
+execution_order: 29
 owner: "Jim Ricketts"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"
 base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
-depends_on: "PF-27-S01"
+depends_on: "PF-27-S04"
 created: 2026-08-28
 updated: 2026-08-28
 ---
@@ -40,7 +40,7 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Active plan; PF-27-S01 completed and archived.
+- [ ] Active plan; PF-27-S04 completed and archived.
 - [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
 - [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
 

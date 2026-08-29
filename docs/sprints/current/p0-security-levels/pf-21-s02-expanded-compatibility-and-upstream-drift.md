@@ -4,7 +4,7 @@ title: "Expanded compatibility and upstream drift"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-21"
-execution_order: 21
+execution_order: 26
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"

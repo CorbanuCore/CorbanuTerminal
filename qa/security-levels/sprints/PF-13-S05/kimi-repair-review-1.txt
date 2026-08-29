@@ -1,0 +1,84 @@
+All 15 frozen repair files verified (15/15 OK). The delta is small and I've traced every changed path in the new snapshot only. Below is the bounded fix-cycle review.
+
+# PF-13 Repair-Delta Review — base `f0a160eee5b820bc16fcd116013274d44e7d9be4`
+
+## Delta verification, per accepted fix
+
+**C1 — complete subprocess capture scanning (scripts/security_credential_canary.py).** The truncation-then-scan bug is genuinely fixed: `run_command` now scans **full, untruncated** stdout/stderr with `assert_secret_free` *before* enforcing `MAX_CAPTURE_BYTES` (scripts/security_credential_canary.py:285–291), so a canary pushed past the retention limit fails explicitly rather than being discarded unscanned. Timeout now denies instead of certifying partial output, and the timeout exception message does not echo captured bytes (verified: the `TimeoutExpired` payload is dropped, `from None` suppresses chaining). Byte-vs-char accounting is now explicit UTF-8 byte length. Regression tests cover real-subprocess overflow on both streams, mocked offsets around the boundary (−32/0/+32), multi-byte UTF-8 at the limit, and timeout non-disclosure. Sound. One residual gap noted below (C1 is closed; the residual is a distinct limitation, not a re-open).
+
+**C2 — secret-bearing panic suppression before host hooks (vault/src/credential_panic.rs).** The design is correct and materially better than a swap/restore approach: a thread-local `Cell<bool>` flag plus a `PhantomData<Rc<()>>` non-`Send` guard, nested-restore semantics, and a **process-global hook installed exactly once** via `Once` at first guarded callback — so no per-use hook churn and no concurrency hazard around hook installation. The vault's own tests prove nesting, unwinding, thread-locality, and that ordinary/concurrent panics still report. The TUI hook now checks `scoped_credential_callback_active()` *before* `tracing::error!("panic: {info}")` and before chaining (tui/src/lib.rs:230–241). This correctly closes the pre-existing hole where the hook ran before `catch_unwind` could discard the payload.
+
+**C2 residual (accepted-limit, not a new defect):** `tui/src/tui.rs:537–544` (`set_panic_hook`, terminal-restore chaining) is installed *after* `install_panic_hook()` during `tui::init()` (lib.rs:1423 → tui.rs:420) and does **not** check the flag — it chains into the vault-aware hook, so formatting of the secret payload is still suppressed there, but the hook chain now relies on the inner hook for suppression. That is consistent with the repair's stated contract ("host hooks installed after first use must honor `scoped_credential_callback_active`"). It is honored transitively here, but the invariant is undocumented at the `tui.rs` hook itself. Flagged as a follow-up, not a defect.
+
+**F3 — alternate/canonical-home tests.** `copied_vault_in_another_home_cannot_use_the_original_keyring_account` correctly asserts the keyring account differs per home and that copied ciphertext cannot be revealed under a copied home (without claiming to prevent fallback-key copying — matches scope note). `canonical_home_alias_preserves_keyring_identity_and_label_case` proves canonicalization (`home/.`) preserves the account and pins case-distinct label behavior. The CLI symlink test asserts both `CODEX_HOME` and `CORBANU_HOME` alias paths cannot downgrade a persisted aggressive posture. These are valid, well-targeted regression tests for the P3-3 reliance I flagged. (They verify the keyring-keying invariant holds, which is the correct bounded remedy; they do not change the env-mediated posture read itself — that architectural hardening was not in the accepted set.)
+
+**F4 — header temporary wiping + sensitive Debug (network-proxy/src/credential_broker/providers.rs:97–107).** `scoped_openai_header_value` builds the bearer string inside `Zeroizing<String>` and marks the resulting `HeaderValue` sensitive, with an accurate comment that the wire copy still exists and the flag is not memory zeroization. Only the scoped route uses it (`credential_broker.rs:349`); legacy/Permissive `openai.rs`/`github.rs` paths are untouched, preserving prior behavior as scoped. The test asserts `is_sensitive()` and that `format!("{headers:?}")` does not contain the canary. Correct.
+
+**F6 — label comment.** `normalize_label` doc now says "trimmed for stable lookups; case-distinct labels remain distinct" (vault/src/lib.rs:601). Accurate.
+
+## Findings
+
+I found **no P1 and no new P2 defect** introduced by this delta. Two P3 items:
+
+### P3-A — C2's thread-local suppression relies on hook-chaining for hooks installed after `install_panic_hook`; invariant is not asserted at `tui.rs`'s hook
+- **File/line:** `codex-rs/tui/src/tui.rs:537`
+- **Failure path:** `set_panic_hook` (installed after `install_panic_hook`) does not itself check `scoped_credential_callback_active()`; suppression of a secret-bearing panic payload depends on it chaining into the vault-aware hook and on no future hook formatting `info` before chaining. Today that chain is correct (it does not format), so this is **not** a reachable leak — it is an undocumented load-bearing invariant. If a later edit adds any `format!`/`tracing` of `panic_info` before `hook(panic_info)` in `tui.rs:539–541`, a scoped-callback panic could surface the secret.
+- **Recommendation:** Add the same `scoped_credential_callback_active()` early-return (before any formatting) inside `set_panic_hook`, or add a comment there pinning the "check before format" invariant; ideally a subprocess test that installs a post-vault hook and asserts suppression.
+- **Regression test:** Subprocess test that installs an additional hook after the vault hook and panics with a canary secret inside a scoped callback; assert the canary is absent from stderr/logs.
+- **Confidence:** medium (invariant verified transitively today; risk is future regression, not current behavior).
+
+### P3-B — Canary subprocess scan now enforces a 1 MiB ceiling but never *reduces* stored report size for legitimately large output
+- **File/line:** `scripts/security_credential_canary.py:288–291`
+- **Failure path:** Removing `bounded_output` means any probe whose combined stream exceeds 1 MiB now hard-fails qualification. That is the intended fail-closed behavior, but it converts a previously-passing verbose `--nocapture` transcript into a hard `QualificationError` with no opt-in truncation, so a noisy (but secret-free) dependency's future output could break the gate with a misleading "exceeds the capture limit" error rather than a clear "output too large to retain."
+- **Recommendation:** Acceptable as-is (fail-closed is correct for a security gate); optionally include the measured byte count in the error so operators can distinguish "secret found" from "transcript too large."
+- **Regression test:** Already covered by `test_run_command_capture_limit_is_utf8_bytes_and_fails_closed`.
+- **Confidence:** high that behavior is intended; low severity.
+
+## Explicitly out of scope / not re-litigated
+- PF-23 native wiring (P2-1 from the full review) remains deferred — unchanged by this delta.
+- Legacy/Permissive provider dummy shaping (rejected P3-5) — untouched, as scoped.
+- Historical full-Core 135 failures — unrelated to this delta; full qualification is running separately and no readiness claim is made here.
+
+## Coverage
+Read and traced: `REPAIR_DIFF.patch` in full; the three named new files (`vault/src/credential_panic.rs`, `vault/src/credential_panic_tests.rs`, `tui/src/credential_panic_tests.rs`); and, for context, the touched regions of `vault/src/capability.rs`, `vault/src/lib.rs`, `vault/src/tests.rs`, `network-proxy/src/credential_broker.rs`, `network-proxy/src/credential_broker/providers.rs`, `network-proxy/src/credential_broker_tests.rs`, `cli/tests/vault.rs`, `tui/src/lib.rs`, `tui/src/tui.rs`, `scripts/security_credential_canary.py`, `scripts/test_security_credential_canary.py`, plus `security-policy/src/grant.rs` schema constant and `compute_keyring_account`. Verified hook-installation order (color-eyre → `install_panic_hook` → `tui::init` `set_panic_hook`) and that no other panic-hook setter exists in the tree.
+
+## Verdict
+**Repairs correctly implement all five accepted fixes with no new concrete defect.** C1 and C2 are properly closed; F3/F4/F6 are accurate and well-tested. Two P3 hardening items remain (hook-chain invariant at `tui.rs`; canary large-output error clarity). This delta is acceptable to fold into the qualification run; final PF-13 readiness still depends on the separately-running Core/platform tests and the deferred PF-23 wiring.
+
+```json
+{
+  "reviewed_base": "f0a160eee5b820bc16fcd116013274d44e7d9be4",
+  "findings": [
+    {
+      "priority": "P3",
+      "file": "codex-rs/tui/src/tui.rs",
+      "line": 537,
+      "title": "Terminal-restore panic hook does not itself check scoped_credential_callback_active; suppression relies on chaining into the vault-aware hook",
+      "failure_path": "set_panic_hook is installed after install_panic_hook (lib.rs:1423 -> tui.rs:420) and chains to the vault-aware hook without checking the thread-local flag first; formatting is suppressed only because the inner hook checks. A future edit that formats panic_info before chaining could leak a secret-bearing payload.",
+      "recommendation": "Add the scoped_credential_callback_active() early-return inside set_panic_hook before any formatting, or pin the check-before-format invariant with a comment and test.",
+      "regression_test": "Subprocess test installing an additional hook after the vault hook, panicking with a canary secret inside a scoped callback, asserting the canary is absent from stderr/logs."
+    },
+    {
+      "priority": "P3",
+      "file": "scripts/security_credential_canary.py",
+      "line": 288,
+      "title": "Fail-closed 1 MiB capture ceiling yields an undifferentiated 'exceeds the capture limit' error for large secret-free transcripts",
+      "failure_path": "With bounded_output removed, any probe stream over 1 MiB hard-fails qualification; the error does not report measured bytes, so a noisy secret-free transcript is indistinguishable in message from a true overflow-denial.",
+      "recommendation": "Include the measured byte count in the QualificationError message so operators can distinguish 'secret found' from 'transcript too large'; behavior itself (fail closed) is correct.",
+      "regression_test": "Existing test_run_command_capture_limit_is_utf8_bytes_and_fails_closed covers the boundary; extend to assert the message includes the byte count if added."
+    }
+  ],
+  "coverage": [
+    "REPAIR_DIFF.patch read in full; all 15 REPAIR_FILES.sha256 entries verified (15/15 OK)",
+    "vault/src/credential_panic.rs: thread-local flag, Once-installed global hook, nested/non-Send guard, Drop restore",
+    "vault/src/credential_panic_tests.rs + tui/src/credential_panic_tests.rs: nesting, thread-locality, ordinary-panic preservation, vault-first/tui-first hook ordering, recovery after panic",
+    "vault/src/capability.rs: guard entered before callback, dropped before outcome mapping",
+    "tui/src/lib.rs install_panic_hook + tui/src/tui.rs set_panic_hook: installation order and chaining",
+    "network-proxy providers.rs scoped_openai_header_value (Zeroizing + set_sensitive), credential_broker.rs scoped call site, is_sensitive/Debug test",
+    "cli/tests/vault.rs symlink/alias downgrade test; vault/src/tests.rs canonical-home and copied-ciphertext tests",
+    "scripts/security_credential_canary.py run_command full-capture scan-before-limit, timeout denial; test_security_credential_canary.py overflow/UTF-8/timeout tests",
+    "security-policy GRANT_SCHEMA_VERSION=2 (TUI fixture validity), compute_keyring_account canonicalization"
+  ],
+  "verdict": "Repair delta correctly implements all five accepted fixes (C1, C2, F3, F4, F6) with no new P1/P2 defect. Two P3 hardening items remain (post-vault panic-hook invariant at tui.rs; canary large-output error clarity). Acceptable to include in the running qualification; final PF-13 readiness remains gated on the separately-executing Core/platform tests and deferred PF-23 native wiring, which this review does not certify."
+}
+```

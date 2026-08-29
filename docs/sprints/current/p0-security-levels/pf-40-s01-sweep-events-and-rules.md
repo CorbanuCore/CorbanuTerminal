@@ -4,7 +4,7 @@ title: "Agent Sweep sanitized events and deterministic rules"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-40"
-execution_order: 66
+execution_order: 68
 owner: "Jim Ricketts"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"

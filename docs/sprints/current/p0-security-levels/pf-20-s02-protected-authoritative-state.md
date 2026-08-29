@@ -4,7 +4,7 @@ title: "Protected authoritative-state persistence"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-20"
-execution_order: 19
+execution_order: 24
 owner: "Jim Ricketts"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"

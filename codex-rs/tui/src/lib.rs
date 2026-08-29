@@ -168,6 +168,7 @@ pub(crate) mod public_widgets;
 mod render;
 mod resize_reflow_cap;
 mod resume_picker;
+mod security;
 mod selection_list;
 mod service_tier_resolution;
 mod session_archive_commands;
@@ -218,11 +219,26 @@ mod workspace_messages;
 
 mod wrapping;
 
+#[cfg(test)]
+mod credential_panic_tests;
 mod table_detect;
 #[cfg(test)]
 pub(crate) mod test_backend;
 #[cfg(test)]
 pub(crate) mod test_support;
+
+fn install_panic_hook() {
+    // Keep ordinary rich panic reports, including the previous color-eyre hook.
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        // Check before formatting: catch_unwind runs only after the panic hook.
+        if codex_vault::scoped_credential_callback_active() {
+            return;
+        }
+        tracing::error!("panic: {info}");
+        previous(info);
+    }));
+}
 
 use crate::onboarding::onboarding_screen::OnboardingScreenArgs;
 use crate::onboarding::onboarding_screen::run_onboarding_app;
@@ -1404,15 +1420,7 @@ async fn run_ratatui_app(
 
     tooltips::announcement::prewarm(initial_config.http_client_factory());
 
-    // Forward panic reports through tracing so they appear in the UI status
-    // line, but do not swallow the default/color-eyre panic handler.
-    // Chain to the previous hook so users still get a rich panic report
-    // (including backtraces) after we restore the terminal.
-    let prev_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info| {
-        tracing::error!("panic: {info}");
-        prev_hook(info);
-    }));
+    install_panic_hook();
     let mut initialized_terminal = tui::init()?;
     initialized_terminal.terminal.clear()?;
 

@@ -1,0 +1,66 @@
+text Both fixes verify cleanly against the code, and the snapshot diff confirms the change surface is exactly the five files listed in FIX_REVIEW_SCOPE.md (the other "only in codex-rs" entries are dependency-context files that
+															154 text before-fixes/
+															155 text  simply doesn't carry). All 28 manifest hashes verify.
+															156 heading Fix-cycle 1 verdict — clean scoped review, no remaining actionable findings, Value: 2
+																157 text Fix-cycle 1 verdict — clean scoped review, no remaining actionable findings
+															158 text P1 (DNS-before-explicit-denial) — fixed correctly.
+															159 button browser_policy.rs:73-127
+															160 text  now orders parse →
+															161 text method_allowed
+															162 text  +
+															163 text evaluate_host_policy
+															164 text  → resolver →
+															165 text validate_addresses
+															166 text . Since the native
+															167 text host_blocked
+															168 text  matches the deny list before its own DNS preflight, deny-listed names now generate zero resolver traffic from this adapter. The resolver is injected through a private
+															169 text FnOnce
+															170 text  seam with no fallback path, and the public wrapper (
+															171 button lines 59-69
+															172 text ) keeps the same bounded
+															173 text lookup_host
+															174 text  +
+															175 text take(17)
+															176 text  + 3-second timeout semantics as before. The regression test I asked for is present and stronger than requested:
+															177 button codex-rs/network-proxy/src/browser_policy_tests.rs:5
+															178 text  proves via a call-counting stub that both
+															179 text blocked.example
+															180 text  and the dotted
+															181 text blocked.example.
+															182 text  are denied without any resolver call, and
+															183 button codex-rs/network-proxy/src/browser_policy_tests.rs:36
+															184 text  proves the reorder didn't weaken post-resolution address validation (a private answer for an allowlisted host is still denied). Callers in
+															185 text broker.rs
+															186 text  (redirect precheck) and
+															187 text runtime.rs
+															188 text  (initial URL) are unchanged and inherit the ordering through the same public function. No behavioral regression found: error precedence changes only in that policy denials can no longer be masked by resolution failures, which is the intended direction.
+															189 text P2 (Podman image-ID format) — fixed correctly.
+															190 button codex-rs/browser-isolation/src/image.rs:20
+															191 text  now strips an optional
+															192 text sha256:
+															193 text  prefix and requires exactly 64 hex digits;
+															194 text prepare_image
+															195 text  returns the engine-native form, which
+															196 text create
+															197 text  passes verbatim and the unchanged
+															198 text verify_owner
+															199 text  already normalizes on both sides — so Docker and Podman stay internally consistent.
+															200 button image_tests.rs
+															201 text  covers both ID forms, truncated/over-long/non-hex/wrong-algorithm/double-prefix/trailing-space rejects, and drives
+															202 text prepare_image
+															203 text  end-to-end through the extended
+															204 button fixture_engine.py
+															205 text  image-inspect arm for both engine kinds, including a recipe-label mismatch. The fixture change doesn't disturb the container tests (the container path never issues
+															206 text image inspect
+															207 text , and an unexpected call would fail closed on the missing state key). Two minor observations, neither actionable for this cycle: the allowed-host test's
+															208 text allow_local_binding: true
+															209 text  is a test-only device to keep the offline fixture deterministic (commented as such, and the browser layer's own public-address check is what the test exercises); and real-Podman acceptance of a bare-hex ID by
+															210 text create
+															211 text  remains an assumption until the already-planned Linux qualification, consistent with the sprint's open evidence items. Carried tracked items, unchanged and not claimed fixed, per scope: native
+															212 text host_blocked
+															213 text  not-allowlisted DNS ordering (out of write scope), the 128 KiB engine-JSON stdout cap (unconfirmed qualification risk), the remaining test gaps from the initial review (broker redirect branch, worker
+															214 text route_request
+															215 text  paths,
+															216 text pin_local_endpoint
+															217 text  parsing), and all real-platform qualification. The focused Rust test run's pass is not asserted here — collect its output before commit as the checkpoint requires. No platform certification is claimed.
+															218

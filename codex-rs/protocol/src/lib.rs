@@ -34,5 +34,6 @@ pub mod protocol;
 pub mod request_permissions;
 pub mod request_user_input;
 pub mod review_format;
+pub mod security;
 pub mod shell_environment;
 pub mod user_input;

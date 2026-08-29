@@ -4,7 +4,7 @@ title: "Stable web facade and provider registry"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-32"
-execution_order: 51
+execution_order: 53
 owner: "Jim Ricketts"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"

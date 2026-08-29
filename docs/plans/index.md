@@ -66,8 +66,13 @@ activate when it records:
 - optional parallel allocation, integration owner and disjoint work ownership
   under the [sprint concurrency rules](../sprints/index.md#bounded-parallel-implementation);
 - useful code references;
+- an upstream-touch record under the [upstream integration contract](upstream-integration.md),
+  including verified baseline, adapter ownership, and compatibility evidence;
 - a sprint execution map that assigns every implementation unit to exactly one
   plan feature;
+- a hard dependency graph, requirement-to-evidence traceability, and, when
+  opting into sprint concurrency, an integration owner and lane allocations
+  under `docs/sprints/index.md`;
 - measurable success, failure, recovery, and resume flows;
 - applicable automated, true-TUI, live-repository, human, documentation, and
   benchmark evidence fields; and

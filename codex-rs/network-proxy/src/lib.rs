@@ -1,6 +1,8 @@
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 
 mod attribution;
+// Public module seam avoids shared root registrations in the parallel browser lane.
+pub mod browser_policy;
 mod certs;
 mod config;
 mod connect_policy;
@@ -38,6 +40,13 @@ pub use config::NetworkUnixSocketPermissions;
 pub use config::host_and_port_from_network_addr;
 pub use config::managed_proxy_ports;
 pub use credential_broker::CREDENTIAL_BROKER_ACTIVE_ENV_KEY;
+pub use credential_broker::ScopedCredentialCallbackError;
+pub use credential_broker::ScopedCredentialInjectionError;
+pub use credential_broker::ScopedCredentialResolver;
+pub use credential_broker::ScopedCredentialResolverError;
+pub use credential_broker::ScopedCredentialRoute;
+pub use credential_broker::ScopedCredentialRouteError;
+pub use credential_broker::ScopedCredentialUse;
 pub use credential_broker::brokered_credential_dummy_env_keys;
 pub use credential_broker::brokered_credential_env_keys;
 pub use mitm_hook::InjectedHeaderConfig;

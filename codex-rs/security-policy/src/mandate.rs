@@ -8,6 +8,8 @@ use thiserror::Error;
 use crate::ActorChain;
 use crate::AuthorizationRequest;
 use crate::BoundedText;
+use crate::CapabilityId;
+use crate::DecisionReason;
 use crate::PolicyPrincipal;
 use crate::PrincipalKind;
 use crate::digest::canonical_sha256;
@@ -240,6 +242,19 @@ pub enum MandateOutcome {
     Failed,
 }
 
+/// Secret-free metadata emitted for a scoped credential action.
+///
+/// The operation and destination are bounded authority metadata. The schema
+/// deliberately has no credential-label or credential-value field.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CredentialUseReceiptMetadata {
+    pub capability_id: CapabilityId,
+    pub policy_reason: DecisionReason,
+    pub operation: BoundedText,
+    pub destination: BoundedText,
+}
+
 /// Secret-free result of a protected action.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -250,6 +265,8 @@ pub struct ActionReceipt {
     pub preview_digest: BoundedText,
     pub outcome: MandateOutcome,
     pub completed_at_unix_seconds: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credential_use: Option<CredentialUseReceiptMetadata>,
 }
 
 #[derive(Serialize)]
@@ -259,6 +276,8 @@ struct ReceiptBinding<'a> {
     preview_digest: &'a BoundedText,
     outcome: MandateOutcome,
     completed_at_unix_seconds: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    credential_use: &'a Option<CredentialUseReceiptMetadata>,
 }
 
 impl ActionReceipt {
@@ -278,12 +297,51 @@ impl ActionReceipt {
             preview_digest: mandate.preview_digest.clone(),
             outcome,
             completed_at_unix_seconds,
+            credential_use: None,
         };
         receipt.receipt_id = BoundedText::new(receipt.expected_id()?)?;
         Ok(receipt)
     }
 
+    /// Complete a scoped credential action without carrying its vault label or
+    /// credential value into the receipt.
+    pub fn complete_credential_use(
+        capability_id: CapabilityId,
+        policy_reason: DecisionReason,
+        operation: BoundedText,
+        destination: BoundedText,
+        authority_digest: BoundedText,
+        outcome: MandateOutcome,
+        completed_at_unix_seconds: i64,
+    ) -> Result<Self, MandateError> {
+        let mut receipt = Self {
+            schema_version: MANDATE_SCHEMA_VERSION,
+            receipt_id: BoundedText::new("pending")?,
+            mandate_id: BoundedText::new(capability_id.as_str())?,
+            preview_digest: authority_digest,
+            outcome,
+            completed_at_unix_seconds,
+            credential_use: Some(CredentialUseReceiptMetadata {
+                capability_id,
+                policy_reason,
+                operation,
+                destination,
+            }),
+        };
+        receipt.validate_fields()?;
+        receipt.receipt_id = BoundedText::new(receipt.expected_id()?)?;
+        Ok(receipt)
+    }
+
     pub fn validate(&self) -> Result<(), MandateError> {
+        self.validate_fields()?;
+        if self.receipt_id.as_str() != self.expected_id()? {
+            return Err(MandateError::ReceiptIntegrityMismatch);
+        }
+        Ok(())
+    }
+
+    fn validate_fields(&self) -> Result<(), MandateError> {
         if self.schema_version != MANDATE_SCHEMA_VERSION {
             return Err(MandateError::UnsupportedSchemaVersion {
                 found: self.schema_version,
@@ -293,8 +351,12 @@ impl ActionReceipt {
         if self.completed_at_unix_seconds < 0 {
             return Err(MandateError::NegativeTimestamp);
         }
-        if self.receipt_id.as_str() != self.expected_id()? {
-            return Err(MandateError::ReceiptIntegrityMismatch);
+        if self
+            .credential_use
+            .as_ref()
+            .is_some_and(|metadata| metadata.capability_id.as_str() != self.mandate_id.as_str())
+        {
+            return Err(MandateError::CredentialReceiptMismatch);
         }
         Ok(())
     }
@@ -306,6 +368,7 @@ impl ActionReceipt {
             preview_digest: &self.preview_digest,
             outcome: self.outcome,
             completed_at_unix_seconds: self.completed_at_unix_seconds,
+            credential_use: &self.credential_use,
         })
         .map_err(MandateError::Serialization)
     }
@@ -329,6 +392,8 @@ pub enum MandateError {
     IntegrityMismatch,
     #[error("receipt integrity digest does not match its bound fields")]
     ReceiptIntegrityMismatch,
+    #[error("credential receipt capability does not match its action binding")]
+    CredentialReceiptMismatch,
     #[error("timestamps must be non-negative")]
     NegativeTimestamp,
     #[error("unsupported mandate schema version {found}; supported version is {supported}")]

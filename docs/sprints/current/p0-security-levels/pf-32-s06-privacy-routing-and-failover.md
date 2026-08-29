@@ -4,7 +4,7 @@ title: "Private query routing and bounded failover"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-32"
-execution_order: 56
+execution_order: 58
 owner: "Jim Ricketts"
 worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
 branch: "feat/p0-security-levels"

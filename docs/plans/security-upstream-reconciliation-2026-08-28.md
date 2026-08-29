@@ -73,6 +73,10 @@ No runtime test pass is inferred from documentation validation.
 
 ## Qualification still outstanding
 
+This record describes the earlier `main` reconciliation. The later Sprint 13
+integration is recorded in the active plan and supersedes its 64/9 and ready-S02
+portfolio counts without rewriting this historical validation artifact.
+
 The retained PF-22-S01 evidence explicitly records a non-green workspace run:
 15,788 ran, 15,617 passed, 169 failed, two timed out and 28 were skipped.
 That historical result is neither replaced nor relabeled by this merge.

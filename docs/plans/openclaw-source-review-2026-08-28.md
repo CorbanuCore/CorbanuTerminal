@@ -72,7 +72,7 @@ handoffs as well as obvious HTTP headers.
 
 Evidence: sentinel test cases inspected; synthetic round-trip, tamper and raw
 opt-out probes executed. Full provider/SDK suites not run.
-Owners: PF-13-S02/S03, PF-27-S01/S02, PF-29-S01.
+Owners: PF-13-S02/S03, PF-27-S04/S02, PF-29-S01.
 
 <a id="oc-2"></a>
 
@@ -120,7 +120,7 @@ in a stream. Full effect authorization belongs before dispatch.
 
 Evidence: proxy implementation and selected test bodies inspected; split-sentinel
 and late-refusal stream probes executed. Proxy network tests not executed.
-Owners: PF-13-S03/S04/S05, PF-27-S01, PF-28-S02, PF-33-S01/S02.
+Owners: PF-13-S03/S04/S05, PF-27-S04, PF-28-S02, PF-33-S01/S02.
 
 <a id="oc-3"></a>
 
