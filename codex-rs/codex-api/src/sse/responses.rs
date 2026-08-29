@@ -352,7 +352,10 @@ pub fn process_responses_event(
         }
         "response.output_text.delta" => {
             if let Some(delta) = event.delta {
-                return Ok(Some(ResponseEvent::OutputTextDelta(delta)));
+                return Ok(Some(ResponseEvent::OutputTextDelta {
+                    item_id: event.item_id,
+                    delta,
+                }));
             }
         }
         "response.custom_tool_call_input.delta" => {
@@ -1513,6 +1516,7 @@ mod tests {
             }),
             json!({
                 "type": "response.output_text.delta",
+                "item_id": "msg-1",
                 "delta": "hello",
                 "safety_buffering": {
                     "use_cases": ["cyber"],
@@ -1522,6 +1526,7 @@ mod tests {
             }),
             json!({
                 "type": "response.output_text.delta",
+                "item_id": "msg-1",
                 "delta": " world",
                 "safety_buffering": {
                     "use_cases": ["cyber"],
@@ -1549,13 +1554,21 @@ mod tests {
                     && buffering.show_buffering_ui
                     && buffering.faster_model.as_deref() == Some("gpt-fast-wire")
         );
-        assert_matches!(&events[2], ResponseEvent::OutputTextDelta(delta) if delta == "hello");
+        assert_matches!(
+            &events[2],
+            ResponseEvent::OutputTextDelta { item_id: Some(item_id), delta }
+                if item_id == "msg-1" && delta == "hello"
+        );
         assert_matches!(
             &events[3],
             ResponseEvent::SafetyBuffering(buffering)
                 if buffering.use_cases == ["cyber"] && buffering.reasons == ["user_risk"]
         );
-        assert_matches!(&events[4], ResponseEvent::OutputTextDelta(delta) if delta == " world");
+        assert_matches!(
+            &events[4],
+            ResponseEvent::OutputTextDelta { item_id: Some(item_id), delta }
+                if item_id == "msg-1" && delta == " world"
+        );
         assert_matches!(
             &events[5],
             ResponseEvent::SafetyBuffering(buffering)

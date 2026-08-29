@@ -643,7 +643,7 @@ fn response_event_name(event: &ResponseEvent) -> &'static str {
         ResponseEvent::TurnModerationMetadata(_) => "turn_moderation_metadata",
         ResponseEvent::ServerReasoningIncluded(_) => "server_reasoning_included",
         ResponseEvent::Completed { .. } => "completed",
-        ResponseEvent::OutputTextDelta(_) => "output_text_delta",
+        ResponseEvent::OutputTextDelta { .. } => "output_text_delta",
         ResponseEvent::ToolCallInputDelta { .. } => "tool_call_input_delta",
         ResponseEvent::ReasoningSummaryDelta { .. } => "reasoning_summary_delta",
         ResponseEvent::ReasoningContentDelta { .. } => "reasoning_content_delta",

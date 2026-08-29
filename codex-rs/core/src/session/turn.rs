@@ -47,6 +47,7 @@ use crate::responses_retry::guard_same_request_idle_retry;
 use crate::responses_retry::handle_retryable_response_stream_error;
 use crate::session::PreviousTurnSettings;
 use crate::session::TurnInput;
+use crate::session::output_text_stream::PendingOutputText;
 use crate::session::session::Session;
 use crate::session::step_context::StepContext;
 use crate::session::turn_completion::CompletionAction;
@@ -2261,6 +2262,31 @@ async fn emit_streamed_assistant_text_delta(
         .await;
 }
 
+async fn emit_output_text_delta_for_active_item(
+    sess: &Session,
+    turn_context: &TurnContext,
+    plan_mode_state: Option<&mut PlanModeStreamState>,
+    parsers: &mut AssistantMessageStreamParsers,
+    active_item: &TurnItem,
+    delta: String,
+) {
+    let item_id = active_item.id();
+    if matches!(active_item, TurnItem::AgentMessage(_)) {
+        let parsed = parsers.parse_delta(&item_id, &delta);
+        emit_streamed_assistant_text_delta(sess, turn_context, plan_mode_state, &item_id, parsed)
+            .await;
+    } else {
+        let event = AgentMessageContentDeltaEvent {
+            thread_id: sess.thread_id.to_string(),
+            turn_id: turn_context.sub_id.clone(),
+            item_id,
+            delta,
+        };
+        sess.send_event(turn_context, EventMsg::AgentMessageContentDelta(event))
+            .await;
+    }
+}
+
 /// Flush buffered assistant text parser state when an assistant message item ends.
 async fn flush_assistant_text_segments_for_item(
     sess: &Session,
@@ -3145,6 +3171,7 @@ async fn try_run_sampling_request(
     let reasoning_effort = turn_context.effective_reasoning_effort_for_tracing();
     let plan_mode = turn_context.mode == ModeKind::Plan;
     let mut assistant_message_stream_parsers = AssistantMessageStreamParsers::new(plan_mode);
+    let mut pending_output_text = PendingOutputText::default();
     let mut plan_mode_state = plan_mode.then(|| PlanModeStreamState::new(&turn_context.sub_id));
     let defer_streamed_turn_items_for_contributors =
         !sess.services.extensions.turn_item_contributors().is_empty();
@@ -3197,18 +3224,45 @@ async fn try_run_sampling_request(
             ResponseEvent::Created => {}
             ResponseEvent::OutputItemDone(mut item) => {
                 assign_missing_streamed_response_item_id(&mut item, active_item.as_ref());
+                let completed_item_id = item.id().map(|item_id| item_id.as_str().to_string());
                 if let Some((_, mut consumer)) = active_tool_argument_diff_consumer.take()
                     && let Ok(Some(event)) = consumer.finish()
                 {
                     sess.send_event(&turn_context, event).await;
                 }
-                let previously_active_item = active_item.take();
+                let completes_active_item = active_item.as_ref().is_some_and(|active| {
+                    completed_item_id
+                        .as_deref()
+                        .is_none_or(|completed_id| active.id() == completed_id)
+                });
+                if active_item.is_some() && !completes_active_item {
+                    warn!(
+                        active_item_id = active_item.as_ref().map(TurnItem::id),
+                        completed_item_id,
+                        "received output item completion while a different item was active"
+                    );
+                }
+                let previously_active_item =
+                    completes_active_item.then(|| active_item.take()).flatten();
                 let previously_streamed_item = if active_item_is_streaming_to_client {
                     previously_active_item
                 } else {
                     None
                 };
-                active_item_is_streaming_to_client = false;
+                if completes_active_item {
+                    active_item_is_streaming_to_client = false;
+                }
+                if let Some(completed_item_id) = completed_item_id.as_deref() {
+                    let discarded_len =
+                        pending_output_text.discard_for_completed_item(completed_item_id);
+                    if discarded_len > 0 {
+                        warn!(
+                            item_id = completed_item_id,
+                            discarded_len,
+                            "discarding buffered early output text because the completed item is canonical"
+                        );
+                    }
+                }
                 if let Some(previous) = previously_streamed_item.as_ref()
                     && matches!(previous, TurnItem::AgentMessage(_))
                 {
@@ -3370,6 +3424,36 @@ async fn try_run_sampling_request(
                     }
                     active_item = Some(turn_item);
                     active_item_is_streaming_to_client = stream_item_to_client;
+                    if let Some(active) = active_item.as_ref() {
+                        let active_item_id = active.id();
+                        if let Some(mut pending_delta) =
+                            pending_output_text.take_for_item(&active_item_id)
+                        {
+                            if let Some(seeded_text) = raw_assistant_output_text_from_item(&item) {
+                                if pending_delta.starts_with(&seeded_text) {
+                                    pending_delta.drain(..seeded_text.len());
+                                } else if seeded_text.starts_with(&pending_delta) {
+                                    pending_delta.clear();
+                                } else if !seeded_text.is_empty() && !pending_delta.is_empty() {
+                                    break Err(CodexErr::Stream(format!(
+                                        "early output text for item `{active_item_id}` could not be \
+                                         reconciled with the text in output_item.added"
+                                    )));
+                                }
+                            }
+                            if stream_item_to_client && !pending_delta.is_empty() {
+                                emit_output_text_delta_for_active_item(
+                                    sess.as_ref(),
+                                    &turn_context,
+                                    plan_mode_state.as_mut(),
+                                    &mut assistant_message_stream_parsers,
+                                    active,
+                                    pending_delta,
+                                )
+                                .await;
+                            }
+                        }
+                    }
                 }
             }
             ResponseEvent::ServerModel(server_model) => {
@@ -3434,6 +3518,14 @@ async fn try_run_sampling_request(
                 end_turn,
                 finish_reason,
             } => {
+                if !pending_output_text.is_empty() {
+                    break Err(CodexErr::Stream(format!(
+                        "response completed with {} bytes of output text that could not be matched \
+                         to item `{}`",
+                        pending_output_text.len(),
+                        pending_output_text.item_id().unwrap_or("<missing>")
+                    )));
+                }
                 flush_assistant_text_segments_all(
                     &sess,
                     &turn_context,
@@ -3520,36 +3612,51 @@ async fn try_run_sampling_request(
                     provider_stopped,
                 });
             }
-            ResponseEvent::OutputTextDelta(delta) => {
+            ResponseEvent::OutputTextDelta { item_id, delta } => {
                 // In review child threads, suppress assistant text deltas; the
                 // UI will show a selection popup from the final ReviewOutput.
                 if let Some(active) = active_item.as_ref() {
-                    if !active_item_is_streaming_to_client {
-                        continue;
-                    }
-                    let item_id = active.id();
-                    if matches!(active, TurnItem::AgentMessage(_)) {
-                        let parsed = assistant_message_stream_parsers.parse_delta(&item_id, &delta);
-                        emit_streamed_assistant_text_delta(
-                            &sess,
+                    let active_item_id = active.id();
+                    if item_id
+                        .as_deref()
+                        .is_none_or(|delta_item_id| delta_item_id == active_item_id.as_str())
+                    {
+                        if !active_item_is_streaming_to_client {
+                            continue;
+                        }
+                        emit_output_text_delta_for_active_item(
+                            sess.as_ref(),
                             &turn_context,
                             plan_mode_state.as_mut(),
-                            &item_id,
-                            parsed,
+                            &mut assistant_message_stream_parsers,
+                            active,
+                            delta,
                         )
                         .await;
                     } else {
-                        let event = AgentMessageContentDeltaEvent {
-                            thread_id: sess.thread_id.to_string(),
-                            turn_id: turn_context.sub_id.clone(),
-                            item_id,
-                            delta,
-                        };
-                        sess.send_event(&turn_context, EventMsg::AgentMessageContentDelta(event))
-                            .await;
+                        let was_empty = pending_output_text.is_empty();
+                        if let Err(message) = pending_output_text.push(item_id.clone(), delta) {
+                            break Err(CodexErr::Stream(message));
+                        }
+                        if was_empty {
+                            warn!(
+                                delta_item_id = item_id,
+                                active_item_id,
+                                "buffering output text delta until its item becomes active"
+                            );
+                        }
                     }
                 } else {
-                    error_or_panic("OutputTextDelta without active item".to_string());
+                    let was_empty = pending_output_text.is_empty();
+                    if let Err(message) = pending_output_text.push(item_id.clone(), delta) {
+                        break Err(CodexErr::Stream(message));
+                    }
+                    if was_empty {
+                        warn!(
+                            delta_item_id = item_id,
+                            "buffering output text delta before its item becomes active"
+                        );
+                    }
                 }
             }
             ResponseEvent::ToolCallInputDelta {

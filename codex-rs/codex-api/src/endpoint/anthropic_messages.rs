@@ -641,7 +641,10 @@ impl AnthropicStreamState {
             self.message_added = true;
         }
         tx_event
-            .send(Ok(ResponseEvent::OutputTextDelta(text)))
+            .send(Ok(ResponseEvent::OutputTextDelta {
+                item_id: Some(self.message_id()),
+                delta: text,
+            }))
             .await
             .is_ok()
     }
@@ -1339,7 +1342,11 @@ data: {"type":"message_stop"}
             &events[1],
             Ok(ResponseEvent::OutputItemAdded(ResponseItem::Message { .. }))
         );
-        assert_matches!(&events[2], Ok(ResponseEvent::OutputTextDelta(delta)) if delta == "OK");
+        assert_matches!(
+            &events[2],
+            Ok(ResponseEvent::OutputTextDelta { item_id: Some(item_id), delta })
+                if item_id == "msg_msg_1" && delta == "OK"
+        );
         assert_matches!(
             &events[3],
             Ok(ResponseEvent::OutputItemDone(ResponseItem::Message { content, .. }))
@@ -1520,7 +1527,7 @@ data: {"type":"message_stop"}
             &events[5],
             Ok(ResponseEvent::OutputItemAdded(ResponseItem::Message { .. }))
         );
-        assert_matches!(&events[6], Ok(ResponseEvent::OutputTextDelta(delta)) if delta == "visible");
+        assert_matches!(&events[6], Ok(ResponseEvent::OutputTextDelta { delta, .. }) if delta == "visible");
     }
 
     #[tokio::test]

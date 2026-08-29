@@ -133,7 +133,11 @@ pub enum ResponseEvent {
         /// filtering, tool handoff, and unknown terminal states.
         finish_reason: Option<CompletionFinishReason>,
     },
-    OutputTextDelta(String),
+    /// A chunk of assistant text and, when available, the output item it belongs to.
+    OutputTextDelta {
+        item_id: Option<String>,
+        delta: String,
+    },
     ToolCallInputDelta {
         item_id: String,
         call_id: Option<String>,

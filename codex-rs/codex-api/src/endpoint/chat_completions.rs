@@ -997,7 +997,10 @@ impl ChatStreamState {
         let delta = self.message_text[self.emitted_text_len..].to_string();
         self.emitted_text_len = self.message_text.len();
         tx_event
-            .send(Ok(ResponseEvent::OutputTextDelta(delta)))
+            .send(Ok(ResponseEvent::OutputTextDelta {
+                item_id: Some(self.message_id()),
+                delta,
+            }))
             .await
             .is_ok()
     }
@@ -1473,8 +1476,16 @@ mod tests {
             &events[1],
             Ok(ResponseEvent::OutputItemAdded(ResponseItem::Message { .. }))
         );
-        assert_matches!(&events[2], Ok(ResponseEvent::OutputTextDelta(delta)) if delta == "he");
-        assert_matches!(&events[3], Ok(ResponseEvent::OutputTextDelta(delta)) if delta == "llo");
+        assert_matches!(
+            &events[2],
+            Ok(ResponseEvent::OutputTextDelta { item_id: Some(item_id), delta })
+                if item_id == "msg_chatcmpl-1" && delta == "he"
+        );
+        assert_matches!(
+            &events[3],
+            Ok(ResponseEvent::OutputTextDelta { item_id: Some(item_id), delta })
+                if item_id == "msg_chatcmpl-1" && delta == "llo"
+        );
         assert_matches!(
             &events[4],
             Ok(ResponseEvent::OutputItemDone(ResponseItem::Message { content, .. }))
@@ -1522,7 +1533,7 @@ mod tests {
         );
         assert_matches!(
             &events[2],
-            Ok(ResponseEvent::OutputTextDelta(delta)) if delta == "RENTED_GPU_OK"
+            Ok(ResponseEvent::OutputTextDelta { delta, .. }) if delta == "RENTED_GPU_OK"
         );
         assert_matches!(
             &events[3],
@@ -1680,7 +1691,7 @@ mod tests {
         );
         assert_matches!(
             &events[5],
-            Ok(ResponseEvent::OutputTextDelta(delta)) if delta == "visible answer"
+            Ok(ResponseEvent::OutputTextDelta { delta, .. }) if delta == "visible answer"
         );
         assert_matches!(
             &events[6],
@@ -1741,7 +1752,7 @@ mod tests {
             &events[0],
             Ok(ResponseEvent::OutputItemAdded(ResponseItem::Message { .. }))
         );
-        assert_matches!(&events[1], Ok(ResponseEvent::OutputTextDelta(delta)) if delta == &content);
+        assert_matches!(&events[1], Ok(ResponseEvent::OutputTextDelta { delta, .. }) if delta == &content);
         assert_matches!(
             &events[2],
             Ok(ResponseEvent::OutputItemDone(ResponseItem::Message { content: final_content, .. }))

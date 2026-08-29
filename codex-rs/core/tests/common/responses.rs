@@ -802,6 +802,14 @@ pub fn ev_output_text_delta(delta: &str) -> Value {
     })
 }
 
+pub fn ev_output_text_delta_for_item(item_id: &str, delta: &str) -> Value {
+    serde_json::json!({
+        "type": "response.output_text.delta",
+        "item_id": item_id,
+        "delta": delta,
+    })
+}
+
 pub fn ev_reasoning_item(id: &str, summary: &[&str], raw_content: &[&str]) -> Value {
     let summary_entries: Vec<Value> = summary
         .iter()

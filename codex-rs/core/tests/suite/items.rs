@@ -25,6 +25,7 @@ use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_message_item_added;
 use core_test_support::responses::ev_output_text_delta;
+use core_test_support::responses::ev_output_text_delta_for_item;
 use core_test_support::responses::ev_reasoning_item;
 use core_test_support::responses::ev_reasoning_item_added;
 use core_test_support::responses::ev_reasoning_summary_text_delta;
@@ -477,6 +478,63 @@ async fn agent_message_content_delta_has_item_metadata() -> anyhow::Result<()> {
     assert_eq!(delta_event.delta, "streamed response");
     assert_eq!(completed_item.id, started_item.id);
 
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn output_text_delta_before_item_added_is_recovered() -> anyhow::Result<()> {
+    skip_if_no_network!(Ok(()));
+
+    let server = start_mock_server().await;
+    let TestCodex { codex, .. } = test_codex().build_with_auto_env(&server).await?;
+
+    let stream = sse(vec![
+        ev_response_created("resp-1"),
+        ev_output_text_delta_for_item("msg-1", "Hello "),
+        ev_message_item_added("msg-1", ""),
+        ev_output_text_delta_for_item("msg-1", "world"),
+        ev_assistant_message("msg-1", "Hello world"),
+        ev_completed("resp-1"),
+    ]);
+    mount_sse_once(&server, stream).await;
+
+    codex
+        .submit(Op::UserInput {
+            items: vec![UserInput::Text {
+                text: "please recover early output".into(),
+                text_elements: Vec::new(),
+            }],
+            final_output_json_schema: None,
+            responsesapi_client_metadata: None,
+            additional_context: Default::default(),
+            thread_settings: Default::default(),
+        })
+        .await?;
+
+    let mut deltas = Vec::new();
+    let mut completed_item = None;
+    loop {
+        match wait_for_event(&codex, |_| true).await {
+            EventMsg::AgentMessageContentDelta(event) => deltas.push(event.delta),
+            EventMsg::ItemCompleted(ItemCompletedEvent {
+                item: TurnItem::AgentMessage(item),
+                ..
+            }) => completed_item = Some(item),
+            EventMsg::TurnComplete(_) => break,
+            _ => {}
+        }
+    }
+
+    assert_eq!(deltas.concat(), "Hello world");
+    let completed_text = completed_item
+        .expect("assistant message should complete")
+        .content
+        .into_iter()
+        .map(|content| match content {
+            AgentMessageContent::Text { text } => text,
+        })
+        .collect::<String>();
+    assert_eq!(completed_text, "Hello world");
     Ok(())
 }
 

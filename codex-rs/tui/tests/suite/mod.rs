@@ -1,6 +1,8 @@
 // Aggregates all former standalone integration tests as modules.
 #[cfg(unix)]
 mod focus_palette;
+#[cfg(unix)]
+mod output_text_stream;
 mod resize_reflow;
 #[cfg(unix)]
 mod slash_dispatch;
