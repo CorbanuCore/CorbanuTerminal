@@ -47,8 +47,6 @@ pub struct ActiveSession {
     #[serde(default)]
     pub github_username: Option<String>,
     pub terminal_token: String,
-    #[serde(default)]
-    pub expires_at: Option<String>,
 }
 
 /// An in-flight link attempt: authority to poll, not authority to act.
@@ -81,8 +79,6 @@ struct LegacyRecord {
     github_username: Option<String>,
     #[serde(default)]
     terminal_token: Option<String>,
-    #[serde(default)]
-    expires_at: Option<String>,
     #[serde(default)]
     pending_request_id: Option<String>,
     #[serde(default)]
@@ -135,7 +131,6 @@ fn load_from_store<S: SessionStore + ?Sized>(store: &S) -> Result<LocalState, Se
                     account_id: record.account_id,
                     github_username: record.github_username,
                     terminal_token: token,
-                    expires_at: record.expires_at,
                 });
             }
             _ => {
@@ -238,8 +233,7 @@ pub fn state_summary(state: &LocalState) -> serde_json::Value {
             "origin": active.origin,
             "accountId": active.account_id,
             "githubUsername": active.github_username,
-            "expiresAt": active.expires_at,
-            "expired": active.is_expired(),
+            "validUntil": "revoked",
         })),
         "pendingLink": state.pending.as_ref().map(|pending| serde_json::json!({
             "origin": pending.origin,
@@ -272,34 +266,15 @@ pub struct TerminalSessionIssued {
     pub github_username: Option<String>,
     #[serde(rename = "terminalToken")]
     pub terminal_token: String,
-    #[serde(rename = "expiresAt", default)]
-    pub expires_at: Option<String>,
 }
 
 impl ActiveSession {
-    /// Whether the server-provided expiry has passed at `now`.
-    ///
-    /// A missing or unparsable expiry counts as "not expired": the server is
-    /// the authority, and guessing a session dead when the metadata is absent
-    /// would lock users out of a working session.
-    pub fn is_expired_at(&self, now: chrono::DateTime<chrono::Utc>) -> bool {
-        self.expires_at
-            .as_deref()
-            .and_then(|raw| chrono::DateTime::parse_from_rfc3339(raw).ok())
-            .is_some_and(|expires_at| expires_at <= now)
-    }
-
-    pub fn is_expired(&self) -> bool {
-        self.is_expired_at(chrono::Utc::now())
-    }
-
     pub fn from_issued(origin: String, issued: TerminalSessionIssued) -> Self {
         Self {
             origin,
             account_id: Some(issued.account_id),
             github_username: issued.github_username,
             terminal_token: issued.terminal_token,
-            expires_at: issued.expires_at,
         }
     }
 }

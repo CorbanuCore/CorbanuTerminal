@@ -930,7 +930,7 @@ async fn run_link_poll(
 ) -> anyhow::Result<i32> {
     let state = load_tasknode_state(codex_home)?;
     let Some(pending) = state.pending else {
-        if state.active.as_ref().is_some_and(|a| !a.is_expired()) {
+        if state.active.is_some() {
             print_json(&json!({
                 "ok": true,
                 "state": "linked",
@@ -992,7 +992,7 @@ async fn run_link_poll(
                     "state": "linked",
                     "accountId": candidate.account_id,
                     "githubUsername": candidate.github_username,
-                    "expiresAt": candidate.expires_at,
+                    "expiresAt": serde_json::Value::Null,
                 }))?;
                 return Ok(0);
             }
@@ -1173,19 +1173,8 @@ fn require_active_session(
     codex_home: &std::path::Path,
 ) -> anyhow::Result<codex_tasknode_session::ActiveSession> {
     let state = load_tasknode_state(codex_home)?;
-    let expired_active = match state.active {
-        Some(active) if !active.is_expired() => return Ok(active),
-        other => other,
-    };
-    if expired_active.is_some() {
-        match state.pending {
-            Some(_) => anyhow::bail!(
-                "Task Node session expired and a link attempt is pending. Finish GitHub auth, then run `corbanu tasknode link poll`."
-            ),
-            None => anyhow::bail!(
-                "Task Node session expired. Run `corbanu tasknode link` to re-authenticate."
-            ),
-        }
+    if let Some(active) = state.active {
+        return Ok(active);
     }
     match state.pending {
         Some(pending) if !pending.verification_url.trim().is_empty() => anyhow::bail!(

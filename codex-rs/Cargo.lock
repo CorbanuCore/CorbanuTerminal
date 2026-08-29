@@ -4282,7 +4282,6 @@ dependencies = [
 name = "codex-tasknode-session"
 version = "0.1.35"
 dependencies = [
- "chrono",
  "codex-vault",
  "pretty_assertions",
  "serde",

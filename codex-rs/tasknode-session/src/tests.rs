@@ -59,7 +59,6 @@ fn active(token: &str) -> ActiveSession {
         account_id: Some("acct_1".to_string()),
         github_username: Some("tester".to_string()),
         terminal_token: token.to_string(),
-        expires_at: Some("2027-01-01T00:00:00Z".to_string()),
     }
 }
 
@@ -210,45 +209,37 @@ fn state_summary_never_contains_secrets() {
     assert!(summary.contains("req-1"));
 }
 
-/// The field scenario from 2026-08-07: a daily-TTL-expired active session must
-/// not be treated as usable, and must not block completing a pending link.
 #[test]
-fn expired_active_session_is_detected() {
-    let mut session = active("tok-expired");
-    session.expires_at = Some("2026-08-07T13:07:07.100Z".to_string());
-    let after = chrono::DateTime::parse_from_rfc3339("2026-08-07T17:00:00Z")
-        .expect("parse")
-        .with_timezone(&chrono::Utc);
-    let before = chrono::DateTime::parse_from_rfc3339("2026-08-07T10:00:00Z")
-        .expect("parse")
-        .with_timezone(&chrono::Utc);
-    assert!(session.is_expired_at(after));
-    assert!(!session.is_expired_at(before));
-}
+fn legacy_expiry_metadata_never_invalidates_a_credential() {
+    for legacy_expiry in [
+        serde_json::Value::Null,
+        serde_json::json!("2000-01-01T00:00:00Z"),
+        serde_json::json!("not-a-date"),
+        serde_json::json!("2999-01-01T00:00:00Z"),
+    ] {
+        let store = MemoryStore::default();
+        let legacy = serde_json::json!({
+            "origin": "https://tasknode.example",
+            "account_id": "acct_9",
+            "github_username": "legacy-user",
+            "terminal_token": "tok-legacy",
+            "expires_at": legacy_expiry,
+        });
+        store.seed_raw(TASKNODE_ACTIVE_SESSION_LABEL, legacy.to_string());
 
-/// Missing or malformed expiry metadata must never lock a user out.
-#[test]
-fn absent_or_invalid_expiry_counts_as_fresh() {
-    let now = chrono::Utc::now();
-    let mut session = active("tok");
-    session.expires_at = None;
-    assert!(!session.is_expired_at(now));
-    session.expires_at = Some("not-a-date".to_string());
-    assert!(!session.is_expired_at(now));
-}
-
-#[test]
-fn state_summary_reports_expiry() {
-    let store = MemoryStore::default();
-    let mut session = active("tok");
-    session.expires_at = Some("2000-01-01T00:00:00Z".to_string());
-    promote_active_to_store(&store, &session).expect("seed");
-    let summary = state_summary(&load_from_store(&store).expect("load"));
-    assert_eq!(
-        summary
-            .get("activeSession")
-            .and_then(|active| active.get("expired"))
-            .and_then(serde_json::Value::as_bool),
-        Some(true)
-    );
+        let state = load_from_store(&store).expect("load");
+        assert_eq!(
+            state.active,
+            Some(ActiveSession {
+                origin: "https://tasknode.example".to_string(),
+                account_id: Some("acct_9".to_string()),
+                github_username: Some("legacy-user".to_string()),
+                terminal_token: "tok-legacy".to_string(),
+            })
+        );
+        let summary = state_summary(&state).to_string();
+        assert!(!summary.contains("expiresAt"));
+        assert!(!summary.contains("expired"));
+        assert!(summary.contains("revoked"));
+    }
 }
