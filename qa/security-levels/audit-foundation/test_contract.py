@@ -60,8 +60,22 @@ class DurableAuditContractTests(unittest.TestCase):
             True,
         )
         self.assertIs(
-            self.contract["dispatch_contract"]["pending_intents_block_new_dispatch"],
+            self.contract["dispatch_contract"][
+                "recovered_pending_intents_block_new_dispatch"
+            ],
             True,
+        )
+        self.assertIs(
+            self.contract["dispatch_contract"][
+                "duplicate_identity_spans_generation_and_timestamp"
+            ],
+            True,
+        )
+        self.assertEqual(
+            self.contract["dispatch_contract"][
+                "ambiguous_commit_operator_reconciliation"
+            ],
+            "exactly_one_matching_event_then_recover",
         )
 
 

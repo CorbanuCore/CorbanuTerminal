@@ -159,6 +159,7 @@ impl From<&JournalError> for AuditGapReason {
             | JournalError::InvalidOwner
             | JournalError::InvalidConfig
             | JournalError::WrongEventKind
+            | JournalError::AmbiguousCommitMismatch
             | JournalError::Serialization => Self::InvalidEvent,
         }
     }

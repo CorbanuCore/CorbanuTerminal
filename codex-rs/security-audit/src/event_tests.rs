@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used)]
+
 use codex_security_policy::ActorChain;
 use codex_security_policy::AuthorizationContext;
 use codex_security_policy::AuthorizationRequest;

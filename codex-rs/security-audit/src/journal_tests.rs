@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used)]
+
 use std::fs;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -38,6 +40,7 @@ use crate::RecoveryBlocker;
 use crate::RecoveryState;
 use crate::ReferenceJournal;
 use crate::SecurityEvent;
+use crate::SecurityEventId;
 use crate::apply_emergency_restriction;
 use crate::journal::FaultPoint;
 use crate::journal::InjectedFault;
@@ -449,6 +452,54 @@ fn ambiguous_commit_after_rename_remains_fail_closed() {
 }
 
 #[test]
+fn operator_can_reconcile_exactly_one_ambiguous_commit_without_replay() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    fixture.append_decision();
+    fixture
+        .journal
+        .inject_once(FaultPoint::AfterRecordRename, InjectedFault::Crash);
+    let event_id = match fixture.journal.reserve_dispatch(
+        fixture.context(),
+        None,
+        &request(),
+        AuthorityIdentity::Grant {
+            grant_id: text("grant-1"),
+        },
+        text("dispatch-1"),
+        12,
+    ) {
+        Err(JournalError::CommitUnknown { event_id }) => event_id,
+        other => panic!("expected ambiguous commit, got {other:?}"),
+    };
+    let wrong_id = serde_json::from_str::<SecurityEventId>(&format!("\"{}\"", "0".repeat(64)))
+        .expect("synthetic digest");
+    let mismatch = fixture
+        .journal
+        .reconcile_ambiguous_commit(&wrong_id, 1, &RevocationState::new())
+        .expect_err("operator must identify the exact failed event");
+    assert!(matches!(mismatch, JournalError::AmbiguousCommitMismatch));
+
+    let checkpoint = fixture
+        .journal
+        .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new())
+        .expect("operator-selected record can advance the protected root");
+    assert_eq!(checkpoint.sequence, 2);
+    let report = fixture.journal.recover(1, &RevocationState::new());
+    assert_eq!(report.state, RecoveryState::ReconciliationRequired);
+    assert_eq!(report.pending_dispatches.len(), 1);
+    fixture
+        .journal
+        .reconcile_dispatch_as_unknown(
+            &report.pending_dispatches[0],
+            fixture.context(),
+            crate::UnknownOutcomeReason::PersistenceUncertain,
+            13,
+        )
+        .expect("external effect remains unknown and is never replayed");
+    healthy_recovery(&mut fixture);
+}
+
+#[test]
 fn lost_ack_retry_never_reissues_a_dispatch_permit() {
     let mut fixture = Fixture::new(JournalConfig::default());
     fixture.append_decision();
@@ -481,10 +532,105 @@ fn lost_ack_retry_never_reissues_a_dispatch_permit() {
                 grant_id: text("grant-1"),
             },
             text("dispatch-1"),
-            12,
+            13,
         )
         .expect_err("retry must reconcile instead of replaying");
     assert!(matches!(retry, JournalError::AlreadyReserved));
+}
+
+#[test]
+fn duplicate_dispatch_is_generation_independent() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    let request = request();
+    let authority = AuthorityIdentity::Grant {
+        grant_id: text("grant-1"),
+    };
+    let (permit, _) = fixture
+        .journal
+        .reserve_dispatch(
+            fixture.context(),
+            None,
+            &request,
+            authority.clone(),
+            text("dispatch-1"),
+            12,
+        )
+        .expect("first permit");
+
+    let forward_policy = fixture
+        .journal
+        .reserve_dispatch(
+            fixture.context_at(2, 1),
+            None,
+            &request,
+            authority.clone(),
+            text("dispatch-1"),
+            13,
+        )
+        .expect_err("policy reload must not issue a second permit");
+    assert!(matches!(forward_policy, JournalError::AlreadyReserved));
+
+    fixture
+        .journal
+        .resolve_dispatch(
+            permit,
+            fixture.context_at(2, 2),
+            DispatchResolution::Unknown {
+                reason: crate::UnknownOutcomeReason::SettlementUncertain,
+            },
+            14,
+        )
+        .expect("terminal receipt");
+    let forward_run = fixture
+        .journal
+        .reserve_dispatch(
+            fixture.context_at(2, 2),
+            None,
+            &request,
+            authority,
+            text("dispatch-1"),
+            15,
+        )
+        .expect_err("run reload must not issue a terminal duplicate");
+    assert!(matches!(forward_run, JournalError::AlreadyResolved));
+}
+
+#[test]
+fn validated_tail_cache_avoids_rescanning_until_recovery() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    assert_eq!(fixture.journal.scan_count(), 1);
+    fixture.append_decision();
+    let request = request();
+    let decision = permissive_decision(&request).expect("decision");
+    let event = SecurityEvent::decision(fixture.context(), None, &request, decision, 12)
+        .expect("second decision");
+    fixture
+        .journal
+        .record_decision(event)
+        .expect("cached append");
+    assert_eq!(fixture.journal.scan_count(), 1);
+
+    assert_eq!(
+        fixture.journal.recover(1, &RevocationState::new()).state,
+        RecoveryState::Ready
+    );
+    assert_eq!(fixture.journal.scan_count(), 2);
+}
+
+#[test]
+fn protected_root_change_invalidates_cached_tail() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    fixture.append_decision();
+    fixture.roots.force_checkpoint(None);
+    let request = request();
+    let decision = permissive_decision(&request).expect("decision");
+    let event = SecurityEvent::decision(fixture.context(), None, &request, decision, 12)
+        .expect("second decision");
+    let error = fixture
+        .journal
+        .record_decision(event)
+        .expect_err("changed protected root must invalidate cache");
+    assert!(matches!(error, JournalError::RecoveryRequired));
 }
 
 #[test]

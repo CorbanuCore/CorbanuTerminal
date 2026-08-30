@@ -1,3 +1,5 @@
+#[cfg(test)]
+use std::cell::Cell;
 use std::fs;
 #[cfg(not(windows))]
 use std::fs::File;
@@ -27,6 +29,7 @@ use crate::SecurityEventKind;
 use crate::recovery::RecoveryBlocker;
 use crate::recovery::RecoveryReport;
 use crate::recovery::RecoveryState;
+use crate::storage::EventChainState;
 use crate::storage::GENESIS_HASH;
 use crate::storage::JournalRecord;
 use crate::storage::ScanResult;
@@ -209,8 +212,19 @@ pub struct ReferenceJournal {
     pub(crate) blocked: bool,
     pub(crate) reconciliation_required: bool,
     pub(crate) minimum_policy_generation: u64,
+    validated: Option<ValidatedJournalState>,
     #[cfg(test)]
     fault: Option<(FaultPoint, InjectedFault)>,
+    #[cfg(test)]
+    scan_count: Cell<usize>,
+}
+
+#[derive(Clone, Debug)]
+struct ValidatedJournalState {
+    event_count: usize,
+    tail_record_sha256: String,
+    checkpoint: Option<IntegrityCheckpoint>,
+    chain: EventChainState,
 }
 
 impl std::fmt::Debug for ReferenceJournal {
@@ -241,8 +255,11 @@ impl ReferenceJournal {
             blocked: true,
             reconciliation_required: false,
             minimum_policy_generation: 0,
+            validated: None,
             #[cfg(test)]
             fault: None,
+            #[cfg(test)]
+            scan_count: Cell::new(0),
         }
     }
 
@@ -319,9 +336,9 @@ impl ReferenceJournal {
         validate_resolution(&permit.authority, &resolution)?;
         let event = SecurityEvent::dispatch_resolution(
             current_context,
-            permit.intent_event_id.clone(),
-            permit.action_id.clone(),
-            permit.reservation_id.clone(),
+            permit.intent_event_id,
+            permit.action_id,
+            permit.reservation_id,
             resolution,
             occurred_at_unix_seconds,
         )?;
@@ -378,13 +395,72 @@ impl ReferenceJournal {
             self.blocked = true;
             return RecoveryReport::blocked(RecoveryBlocker::InterruptedWrite);
         }
-        let report = self.inspect(Some((expected_policy_generation, expected_revocations)));
+        let (report, validated) =
+            self.inspect(Some((expected_policy_generation, expected_revocations)));
         self.blocked = !report.permits_journal_writes();
         self.reconciliation_required = !self.blocked && !report.pending_dispatches.is_empty();
         if !self.blocked {
             self.minimum_policy_generation = expected_policy_generation;
         }
+        self.validated = validated;
         report
+    }
+
+    /// Accepts the single fully published record left by an ambiguous root
+    /// commit after an operator has matched its event identity to the failed
+    /// operation.
+    ///
+    /// This advances only the protected integrity root. It never creates a
+    /// dispatch permit, replays an effect, or unblocks the journal. The caller
+    /// must run [`Self::recover`] successfully afterwards, and a recovered
+    /// dispatch intent must still be reconciled as explicitly unknown.
+    pub fn reconcile_ambiguous_commit(
+        &mut self,
+        expected_event_id: &SecurityEventId,
+        expected_policy_generation: u64,
+        expected_revocations: &RevocationState,
+    ) -> Result<IntegrityCheckpoint, JournalError> {
+        if !self.blocked {
+            return Err(JournalError::AmbiguousCommitMismatch);
+        }
+        let _lock = self.writer_lock()?;
+        let scan = self.scan_records().map_err(map_blocker)?;
+        if scan.interrupted_temps != 0 || scan.chain.revocations() != expected_revocations {
+            return Err(JournalError::AmbiguousCommitMismatch);
+        }
+        let checkpoint = self.load_checkpoint().map_err(map_blocker)?;
+        let committed_count = checkpoint.as_ref().map_or(0, |root| {
+            usize::try_from(root.sequence).unwrap_or(usize::MAX)
+        });
+        if scan.records.len() != committed_count.saturating_add(1) {
+            return Err(JournalError::AmbiguousCommitMismatch);
+        }
+        let last = scan
+            .records
+            .last()
+            .ok_or(JournalError::AmbiguousCommitMismatch)?;
+        if &last.event.event_id != expected_event_id
+            || last.event.context.policy_generation > expected_policy_generation
+        {
+            return Err(JournalError::AmbiguousCommitMismatch);
+        }
+        let next = IntegrityCheckpoint {
+            schema_version: INTEGRITY_CHECKPOINT_SCHEMA_VERSION,
+            sequence: last.sequence,
+            record_sha256: last.record_sha256.clone(),
+            producer: self.owner.producer.clone(),
+            owner_generation: self.owner.owner_generation,
+            integrity_key_id: self.owner.integrity_key_id.clone(),
+            policy_generation: last.event.context.policy_generation,
+            run_generation: last.event.context.run_generation,
+        };
+        self.root_store
+            .compare_and_store(checkpoint.as_ref(), &next)
+            .map_err(|_| JournalError::CommitUnknown {
+                event_id: expected_event_id.clone(),
+            })?;
+        self.validated = None;
+        Ok(next)
     }
 
     fn append(
@@ -402,62 +478,78 @@ impl ReferenceJournal {
             return Err(JournalError::InvalidEventSequence);
         }
         let _lock = self.writer_lock()?;
-        let scan = self.scan_records().map_err(|blocker| {
-            self.blocked = true;
-            map_blocker(blocker)
-        })?;
-        if scan.interrupted_temps != 0 {
-            self.blocked = true;
-            return Err(JournalError::RecoveryRequired);
-        }
+        let validated = self
+            .validated
+            .clone()
+            .ok_or(JournalError::RecoveryRequired)?;
         let checkpoint = self.load_checkpoint().map_err(|blocker| {
             self.blocked = true;
+            self.validated = None;
             map_blocker(blocker)
         })?;
-        compare_checkpoint(&scan.records, checkpoint.as_ref(), &self.owner).map_err(|blocker| {
+        if checkpoint != validated.checkpoint {
             self.blocked = true;
-            map_blocker(blocker)
-        })?;
+            self.validated = None;
+            return Err(JournalError::RecoveryRequired);
+        }
 
-        if let Some(existing) = scan
-            .records
-            .iter()
-            .find(|record| record.event.event_id == event.event_id)
-        {
+        if let Some(sequence) = validated.chain.event_sequence(&event.event_id) {
             let checkpoint = checkpoint.ok_or(JournalError::RecoveryRequired)?;
             let duplicate_terminal = match &event.kind {
                 SecurityEventKind::DispatchIntent { reservation_id, .. } => {
-                    scan.chain.reservation_is_resolved(reservation_id)
+                    validated.chain.reservation_is_resolved(reservation_id)
                 }
                 _ => false,
             };
             return Ok((
                 AppendAcknowledgement {
                     event_id: event.event_id,
-                    sequence: existing.sequence,
+                    sequence,
                     checkpoint,
                     duplicate: true,
                 },
                 duplicate_terminal,
             ));
         }
-        if scan.records.len() >= self.config.max_records {
+        if let SecurityEventKind::DispatchIntent {
+            action_id,
+            deduplication_digest,
+            ..
+        } = &event.kind
+            && let Some((existing_event_id, sequence, resolved)) = validated
+                .chain
+                .matching_dispatch(action_id, deduplication_digest)
+        {
+            let checkpoint = checkpoint.ok_or(JournalError::RecoveryRequired)?;
+            return Ok((
+                AppendAcknowledgement {
+                    event_id: existing_event_id,
+                    sequence,
+                    checkpoint,
+                    duplicate: true,
+                },
+                resolved,
+            ));
+        }
+        if validated.event_count >= self.config.max_records {
             self.blocked = true;
+            self.validated = None;
             return Err(JournalError::CapacityExceeded);
         }
 
-        let sequence = u64::try_from(scan.records.len())
+        let sequence = u64::try_from(validated.event_count)
             .map_err(|_| JournalError::CapacityExceeded)?
             .checked_add(1)
             .ok_or(JournalError::CapacityExceeded)?;
-        let previous = scan.records.last().map_or_else(
-            || GENESIS_HASH.to_string(),
-            |record| record.record_sha256.clone(),
-        );
+        let next_event_count = validated
+            .event_count
+            .checked_add(1)
+            .ok_or(JournalError::CapacityExceeded)?;
+        let previous = validated.tail_record_sha256;
         let record = JournalRecord::new(sequence, previous, event)?;
-        let mut candidate_chain = scan.chain;
+        let mut candidate_chain = validated.chain;
         candidate_chain
-            .apply(&record.event, &self.owner)
+            .apply(&record.event, sequence, &self.owner)
             .map_err(|_| JournalError::InvalidEventSequence)?;
 
         #[cfg(test)]
@@ -484,16 +576,22 @@ impl ReferenceJournal {
             .compare_and_store(checkpoint.as_ref(), &next_checkpoint)
             .map_err(|_| {
                 self.blocked = true;
+                self.validated = None;
                 JournalError::CommitUnknown {
                     event_id: record.event.event_id.clone(),
                 }
             })?;
-        #[cfg(test)]
-        self.maybe_fault(FaultPoint::AfterRootCommit, &record.event.event_id)?;
-
         if self.reconciliation_required && candidate_chain.pending_dispatches().is_empty() {
             self.reconciliation_required = false;
         }
+        self.validated = Some(ValidatedJournalState {
+            event_count: next_event_count,
+            tail_record_sha256: next_checkpoint.record_sha256.clone(),
+            checkpoint: Some(next_checkpoint.clone()),
+            chain: candidate_chain,
+        });
+        #[cfg(test)]
+        self.maybe_fault(FaultPoint::AfterRootCommit, &record.event.event_id)?;
         Ok((
             AppendAcknowledgement {
                 event_id: record.event.event_id,
@@ -505,31 +603,43 @@ impl ReferenceJournal {
         ))
     }
 
-    fn inspect(&self, expected: Option<(u64, &RevocationState)>) -> RecoveryReport {
+    fn inspect(
+        &self,
+        expected: Option<(u64, &RevocationState)>,
+    ) -> (RecoveryReport, Option<ValidatedJournalState>) {
         let scan = match self.scan_records() {
             Ok(scan) => scan,
-            Err(blocker) => return RecoveryReport::blocked(blocker),
+            Err(blocker) => return (RecoveryReport::blocked(blocker), None),
         };
         if scan.interrupted_temps != 0 {
-            return RecoveryReport::blocked(RecoveryBlocker::InterruptedWrite);
+            return (
+                RecoveryReport::blocked(RecoveryBlocker::InterruptedWrite),
+                None,
+            );
         }
         let checkpoint = match self.load_checkpoint() {
             Ok(checkpoint) => checkpoint,
-            Err(blocker) => return RecoveryReport::blocked(blocker),
+            Err(blocker) => return (RecoveryReport::blocked(blocker), None),
         };
         let state = match compare_checkpoint(&scan.records, checkpoint.as_ref(), &self.owner) {
             Ok(state) => state,
-            Err(blocker) => return RecoveryReport::blocked(blocker),
+            Err(blocker) => return (RecoveryReport::blocked(blocker), None),
         };
         if let Some((policy_generation, revocations)) = expected {
             if checkpoint
                 .as_ref()
                 .is_some_and(|root| root.policy_generation > policy_generation)
             {
-                return RecoveryReport::blocked(RecoveryBlocker::PolicyGenerationMismatch);
+                return (
+                    RecoveryReport::blocked(RecoveryBlocker::PolicyGenerationMismatch),
+                    None,
+                );
             }
             if scan.chain.revocations() != revocations {
-                return RecoveryReport::blocked(RecoveryBlocker::RestrictionAuditGap);
+                return (
+                    RecoveryReport::blocked(RecoveryBlocker::RestrictionAuditGap),
+                    None,
+                );
             }
         }
         let pending_dispatches = scan.chain.pending_dispatches();
@@ -538,12 +648,26 @@ impl ReferenceJournal {
         } else {
             RecoveryState::ReconciliationRequired
         };
-        RecoveryReport {
-            state,
-            event_count: scan.records.len(),
-            checkpoint,
-            pending_dispatches,
-        }
+        let event_count = scan.records.len();
+        let tail_record_sha256 = scan.records.last().map_or_else(
+            || GENESIS_HASH.to_string(),
+            |record| record.record_sha256.clone(),
+        );
+        let validated = ValidatedJournalState {
+            event_count,
+            tail_record_sha256,
+            checkpoint: checkpoint.clone(),
+            chain: scan.chain,
+        };
+        (
+            RecoveryReport {
+                state,
+                event_count,
+                checkpoint,
+                pending_dispatches,
+            },
+            Some(validated),
+        )
     }
 
     fn load_checkpoint(&self) -> Result<Option<IntegrityCheckpoint>, RecoveryBlocker> {
@@ -563,6 +687,8 @@ impl ReferenceJournal {
     }
 
     fn scan_records(&self) -> Result<ScanResult, RecoveryBlocker> {
+        #[cfg(test)]
+        self.scan_count.set(self.scan_count.get().saturating_add(1));
         ensure_directory(self.root.as_path()).map_err(|_| RecoveryBlocker::InvalidRecord)?;
         let mut paths = Vec::new();
         let mut interrupted_temps = 0;
@@ -768,6 +894,11 @@ impl ReferenceJournal {
     }
 
     #[cfg(test)]
+    pub(crate) fn scan_count(&self) -> usize {
+        self.scan_count.get()
+    }
+
+    #[cfg(test)]
     fn maybe_fault(
         &mut self,
         point: FaultPoint,
@@ -967,8 +1098,12 @@ pub enum JournalError {
     DeadlineExceeded,
     #[error("event commit is ambiguous; do not dispatch or replay {event_id}")]
     CommitUnknown { event_id: SecurityEventId },
-    #[error("event committed but acknowledgment was lost; retry the same identity {event_id}")]
+    #[error(
+        "event committed but acknowledgment was lost; retry the same action and deduplication key for {event_id}"
+    )]
     AcknowledgementLost { event_id: SecurityEventId },
+    #[error("published record does not match the operator-selected ambiguous commit")]
+    AmbiguousCommitMismatch,
     #[error("journal serialization failed")]
     Serialization,
 }

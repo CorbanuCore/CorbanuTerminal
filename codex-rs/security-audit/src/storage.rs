@@ -82,7 +82,9 @@ impl JournalRecord {
 #[derive(Clone, Debug)]
 struct IntentState {
     event_id: SecurityEventId,
+    sequence: u64,
     action_id: ActionId,
+    deduplication_digest: codex_security_policy::BoundedText,
     authority: AuthorityIdentity,
     occurred_at_unix_seconds: i64,
     resolved: bool,
@@ -90,9 +92,10 @@ struct IntentState {
 
 #[derive(Clone, Debug)]
 pub(crate) struct EventChainState {
-    event_ids: BTreeSet<SecurityEventId>,
+    event_ids: BTreeMap<SecurityEventId, u64>,
     restrictions: BTreeSet<codex_security_policy::BoundedText>,
     intents: BTreeMap<ReservationId, IntentState>,
+    dispatch_identities: BTreeMap<(ActionId, codex_security_policy::BoundedText), ReservationId>,
     revocations: RevocationState,
     policy_generation: u64,
     run_generation: u64,
@@ -101,9 +104,10 @@ pub(crate) struct EventChainState {
 impl EventChainState {
     fn new() -> Self {
         Self {
-            event_ids: BTreeSet::new(),
+            event_ids: BTreeMap::new(),
             restrictions: BTreeSet::new(),
             intents: BTreeMap::new(),
+            dispatch_identities: BTreeMap::new(),
             revocations: RevocationState::new(),
             policy_generation: 0,
             run_generation: 0,
@@ -113,10 +117,14 @@ impl EventChainState {
     pub(crate) fn apply(
         &mut self,
         event: &SecurityEvent,
+        sequence: u64,
         owner: &JournalOwner,
     ) -> Result<(), RecoveryBlocker> {
         if event.context.producer != owner.producer
-            || !self.event_ids.insert(event.event_id.clone())
+            || self
+                .event_ids
+                .insert(event.event_id.clone(), sequence)
+                .is_some()
             || event.context.policy_generation < self.policy_generation
             || event.context.run_generation < self.run_generation
         {
@@ -130,15 +138,28 @@ impl EventChainState {
                 action_id,
                 reservation_id,
                 authority,
+                deduplication_digest,
                 ..
             } => {
+                if self
+                    .dispatch_identities
+                    .insert(
+                        (action_id.clone(), deduplication_digest.clone()),
+                        reservation_id.clone(),
+                    )
+                    .is_some()
+                {
+                    return Err(RecoveryBlocker::InvalidRecord);
+                }
                 if self
                     .intents
                     .insert(
                         reservation_id.clone(),
                         IntentState {
                             event_id: event.event_id.clone(),
+                            sequence,
                             action_id: action_id.clone(),
+                            deduplication_digest: deduplication_digest.clone(),
                             authority: authority.clone(),
                             occurred_at_unix_seconds: event.occurred_at_unix_seconds,
                             resolved: false,
@@ -201,6 +222,24 @@ impl EventChainState {
             .get(reservation_id)
             .is_some_and(|intent| intent.resolved)
     }
+
+    pub(crate) fn event_sequence(&self, event_id: &SecurityEventId) -> Option<u64> {
+        self.event_ids.get(event_id).copied()
+    }
+
+    pub(crate) fn matching_dispatch(
+        &self,
+        action_id: &ActionId,
+        deduplication_digest: &codex_security_policy::BoundedText,
+    ) -> Option<(SecurityEventId, u64, bool)> {
+        let reservation_id = self
+            .dispatch_identities
+            .get(&(action_id.clone(), deduplication_digest.clone()))?;
+        let intent = self.intents.get(reservation_id)?;
+        debug_assert_eq!(&intent.action_id, action_id);
+        debug_assert_eq!(&intent.deduplication_digest, deduplication_digest);
+        Some((intent.event_id.clone(), intent.sequence, intent.resolved))
+    }
 }
 
 pub(crate) fn validate_event_chain(
@@ -209,7 +248,7 @@ pub(crate) fn validate_event_chain(
 ) -> Result<EventChainState, RecoveryBlocker> {
     let mut state = EventChainState::new();
     for record in records {
-        state.apply(&record.event, owner)?;
+        state.apply(&record.event, record.sequence, owner)?;
     }
     Ok(state)
 }

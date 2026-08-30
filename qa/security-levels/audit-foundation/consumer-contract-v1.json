@@ -27,9 +27,12 @@
     "intent_before_external_effect": true,
     "permit_serializable": false,
     "duplicate_intent_returns_permit": false,
+    "duplicate_identity_spans_generation_and_timestamp": true,
     "recovery_required_before_append": true,
-    "pending_intents_block_new_dispatch": true,
+    "recovered_pending_intents_block_new_dispatch": true,
     "pending_intents_reconcile_as_unknown": true,
+    "ambiguous_commit_operator_reconciliation": "exactly_one_matching_event_then_recover",
+    "append_uses_recovery_validated_tail_cache": true,
     "terminal_receipts": [
       "completed",
       "unknown"
