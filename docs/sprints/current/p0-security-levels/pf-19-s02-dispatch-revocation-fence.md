@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-19-S02"
 title: "Dispatch revocation fence contract"
-status: ready
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-19"
 execution_order: 23
@@ -44,7 +44,7 @@ updated: 2026-08-30
 
 - [x] Plan active; all dependencies completed and archived.
 - [x] Assign a named execution owner and exact plan-matching worktree/branch/base; reserve disjoint scopes and integration gate if parallel.
-- [ ] Read root and nearest implementation AGENTS.md; run the sprint checker before readiness.
+- [x] Read root and nearest implementation AGENTS.md; run the sprint checker before readiness.
 
 ## Done
 
