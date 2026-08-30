@@ -1,0 +1,15 @@
+{
+  "fixture_version": 1,
+  "snapshot": {
+    "fixture_version": 1,
+    "host": {"os": "linux", "arch": "amd64", "online": true},
+    "preference": "podman",
+    "engines": {
+      "podman": {
+        "installed": true, "daemon_state": "running", "api_compatible": true, "architecture": "amd64",
+        "image": {"present": true, "digest": "sha256:1bacbc8ec90b3090d462e12f6555e241daf0dfeb684ab326ffa09d52d8226e69", "verified": false, "tampered": true}
+      }
+    }
+  },
+  "expected": {"status": "blocked", "engine": "podman", "worker": null, "reason_code": "image_tampered", "actions": ["quarantine_owned_image_reference", "obtain_reviewed_artifact"]}
+}

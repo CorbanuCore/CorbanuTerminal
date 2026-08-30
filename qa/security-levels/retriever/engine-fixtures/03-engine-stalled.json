@@ -1,0 +1,10 @@
+{
+  "fixture_version": 1,
+  "snapshot": {
+    "fixture_version": 1,
+    "host": {"os": "windows", "arch": "amd64", "container_mode": "linux", "online": true},
+    "preference": "docker",
+    "engines": {"docker": {"installed": true, "daemon_state": "stalled"}}
+  },
+  "expected": {"status": "blocked", "engine": "docker", "worker": null, "reason_code": "engine_stalled", "actions": ["recover_selected_engine_manually", "rerun_check"]}
+}

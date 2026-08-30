@@ -1,0 +1,529 @@
+#!/usr/bin/env python3
+"""Validate the PF-31 retriever artifact and its pure fake-engine fixtures.
+
+This tool is deliberately side-effect free. It never invokes an engine, pulls an
+image, starts a worker, opens a socket, or changes a user's engine selection.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+import sys
+from pathlib import Path
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_MANIFEST = ROOT / "qa/security-levels/retriever/artifact-manifest.json"
+DEFAULT_FIXTURES = ROOT / "qa/security-levels/retriever/engine-fixtures"
+SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
+HEX40 = re.compile(r"^[0-9a-f]{40}$")
+SUPPORTED_HOSTS = {"linux", "macos", "windows"}
+SUPPORTED_ARCHES = {"amd64", "arm64"}
+ENGINE_ORDER = ("podman", "docker")
+
+
+class ContractError(ValueError):
+    pass
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise ContractError(message)
+
+
+def load_json(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ContractError(f"{path}: {exc}") from exc
+    require(isinstance(value, dict), f"{path}: top level must be an object")
+    return value
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def validate_manifest(path: Path) -> dict[str, Any]:
+    manifest = load_json(path)
+    require(manifest.get("schema_version") == 1, "schema_version must be 1")
+    require(
+        manifest.get("contract_version") == "pf31-retriever-artifact/v1",
+        "unsupported contract_version",
+    )
+    require(
+        manifest.get("qualification_status") == "preparation_only",
+        "artifact must remain preparation_only",
+    )
+    require(
+        manifest.get("protected_route_enabled") is False,
+        "preparation must not enable a protected route",
+    )
+
+    artifact = manifest.get("artifact")
+    require(isinstance(artifact, dict), "artifact must be an object")
+    index_digest = artifact.get("index_digest")
+    require(
+        isinstance(index_digest, str) and SHA256.fullmatch(index_digest) is not None,
+        "invalid index digest",
+    )
+    require(
+        artifact.get("reference") == f"ghcr.io/d4vinci/scrapling@{index_digest}",
+        "artifact reference must use the index digest",
+    )
+    require(
+        artifact.get("observed_tag") == "0.4.15",
+        "observed tag must be informational 0.4.15",
+    )
+    require(
+        artifact.get("tag_is_install_identity") is False,
+        "a mutable tag cannot be the install identity",
+    )
+
+    source = artifact.get("source")
+    require(isinstance(source, dict), "artifact.source must be an object")
+    require(source.get("tag") == "v0.4.15", "source tag mismatch")
+    require(
+        isinstance(source.get("commit"), str)
+        and HEX40.fullmatch(source["commit"]) is not None,
+        "invalid source commit",
+    )
+    require(
+        source.get("tag_kind") == "lightweight",
+        "tag signature semantics must be explicit",
+    )
+
+    platforms = artifact.get("platforms")
+    require(
+        isinstance(platforms, list) and len(platforms) == 2,
+        "exactly two Linux image manifests are required",
+    )
+    by_platform: dict[str, dict[str, Any]] = {}
+    for item in platforms:
+        require(isinstance(item, dict), "platform entry must be an object")
+        name = item.get("platform")
+        require(
+            name in {"linux/amd64", "linux/arm64"},
+            f"unsupported image platform {name!r}",
+        )
+        require(name not in by_platform, f"duplicate image platform {name}")
+        require(
+            isinstance(item.get("manifest_digest"), str)
+            and SHA256.fullmatch(item["manifest_digest"]) is not None,
+            f"invalid manifest digest for {name}",
+        )
+        require(
+            isinstance(item.get("config_digest"), str)
+            and SHA256.fullmatch(item["config_digest"]) is not None,
+            f"invalid config digest for {name}",
+        )
+        require(
+            isinstance(item.get("compressed_bytes"), int)
+            and item["compressed_bytes"] > 0,
+            f"invalid compressed size for {name}",
+        )
+        by_platform[name] = item
+    require(
+        set(by_platform) == {"linux/amd64", "linux/arm64"}, "platform coverage mismatch"
+    )
+
+    hosts = manifest.get("host_platforms")
+    require(
+        isinstance(hosts, list) and len(hosts) >= 3,
+        "Mac, Linux, and Windows host identities are required",
+    )
+    seen_hosts: set[str] = set()
+    for host in hosts:
+        require(isinstance(host, dict), "host platform entry must be an object")
+        host_os = host.get("host_os")
+        arch = host.get("host_arch")
+        require(host_os in SUPPORTED_HOSTS, f"unsupported host OS {host_os!r}")
+        require(arch in SUPPORTED_ARCHES, f"unsupported host architecture {arch!r}")
+        key = f"{host_os}/{arch}"
+        require(key not in seen_hosts, f"duplicate host identity {key}")
+        seen_hosts.add(key)
+        image_platform = host.get("image_platform")
+        require(
+            image_platform in by_platform,
+            f"host {key} references an unknown image platform",
+        )
+        require(
+            host.get("manifest_digest")
+            == by_platform[image_platform]["manifest_digest"],
+            f"host {key} digest mismatch",
+        )
+        if host_os == "windows":
+            require(
+                host.get("container_mode") == "linux",
+                "Windows requires Linux-container mode",
+            )
+            require(
+                host.get("windows_container_supported") is False,
+                "native Windows containers are unsupported",
+            )
+    require(
+        {"macos", "linux", "windows"}.issubset(
+            {key.split("/", 1)[0] for key in seen_hosts}
+        ),
+        "three-host coverage is incomplete",
+    )
+
+    dependencies = manifest.get("runtime_dependencies")
+    require(
+        isinstance(dependencies, list) and dependencies,
+        "runtime_dependencies must be non-empty",
+    )
+    for dependency in dependencies:
+        require(isinstance(dependency, dict), "dependency entry must be an object")
+        require(
+            isinstance(dependency.get("name"), str) and dependency["name"],
+            "dependency name missing",
+        )
+        version = dependency.get("version")
+        require(
+            isinstance(version, str)
+            and version
+            and not any(marker in version for marker in (">", "<", "*", "latest")),
+            f"dependency {dependency['name']} is not exact",
+        )
+
+    supply_chain = manifest.get("supply_chain")
+    require(isinstance(supply_chain, dict), "supply_chain must be an object")
+    require(
+        supply_chain.get("publisher_image_signature") == "absent",
+        "publisher signature absence must remain explicit",
+    )
+    require(
+        supply_chain.get("publisher_sbom") == "absent",
+        "publisher SBOM absence must remain explicit",
+    )
+    require(
+        supply_chain.get("corbanu_signature_required_before_activation") is True,
+        "activation must require a Corbanu signature",
+    )
+    require(
+        supply_chain.get("floating_upstream_build_inputs_detected") is True,
+        "floating upstream build inputs must remain visible",
+    )
+
+    evidence = manifest.get("evidence_files")
+    require(isinstance(evidence, list) and evidence, "evidence_files must be non-empty")
+    evidence_paths: set[str] = set()
+    for item in evidence:
+        require(isinstance(item, dict), "evidence file entry must be an object")
+        relative = item.get("path")
+        expected_hash = item.get("sha256")
+        require(
+            isinstance(relative, str)
+            and relative.startswith("qa/security-levels/retriever/"),
+            "evidence path escapes retriever scope",
+        )
+        require(relative not in evidence_paths, f"duplicate evidence path {relative}")
+        require(
+            isinstance(expected_hash, str)
+            and re.fullmatch(r"[0-9a-f]{64}", expected_hash) is not None,
+            f"invalid evidence hash for {relative}",
+        )
+        target = ROOT / relative
+        require(target.is_file(), f"missing evidence file {relative}")
+        require(
+            sha256_file(target) == expected_hash,
+            f"evidence hash mismatch for {relative}",
+        )
+        evidence_paths.add(relative)
+    require(
+        any(
+            "linux-amd64" in path and path.endswith(".cdx.json")
+            for path in evidence_paths
+        ),
+        "amd64 SBOM missing",
+    )
+    require(
+        any(
+            "linux-arm64" in path and path.endswith(".cdx.json")
+            for path in evidence_paths
+        ),
+        "arm64 SBOM missing",
+    )
+
+    limits = manifest.get("resource_policy")
+    require(isinstance(limits, dict), "resource_policy must be an object")
+    for field in (
+        "cpu_cores",
+        "memory_bytes",
+        "pids",
+        "temporary_bytes",
+        "disk_reservation_bytes",
+    ):
+        require(
+            isinstance(limits.get(field), int) and limits[field] > 0,
+            f"resource_policy.{field} must be positive",
+        )
+    require(
+        limits.get("default_network") == "none",
+        "preparation default network must be none",
+    )
+    require(limits.get("read_only_root") is True, "read-only root policy missing")
+
+    engine = manifest.get("engine_contract")
+    require(isinstance(engine, dict), "engine_contract must be an object")
+    require(
+        engine.get("automatic_install") is False,
+        "automatic engine installation is forbidden",
+    )
+    require(
+        engine.get("automatic_elevation") is False, "automatic elevation is forbidden"
+    )
+    require(
+        engine.get("automatic_unrelated_cleanup") is False,
+        "unrelated cleanup is forbidden",
+    )
+    require(
+        engine.get("auto_preference") == ["podman", "docker"],
+        "auto preference must be Podman then Docker",
+    )
+    require(
+        engine.get("explicit_selection_preserved") is True,
+        "explicit engine selection must be preserved",
+    )
+    return manifest
+
+
+def engine_failure(code: str, engine: str | None, actions: list[str]) -> dict[str, Any]:
+    return {
+        "status": "blocked",
+        "engine": engine,
+        "worker": None,
+        "reason_code": code,
+        "actions": actions,
+    }
+
+
+def evaluate_snapshot(
+    snapshot: dict[str, Any], manifest: dict[str, Any]
+) -> dict[str, Any]:
+    require(snapshot.get("fixture_version") == 1, "fixture_version must be 1")
+    host = snapshot.get("host")
+    require(isinstance(host, dict), "host must be an object")
+    host_os = host.get("os")
+    host_arch = host.get("arch")
+    if host_os not in SUPPORTED_HOSTS or host_arch not in SUPPORTED_ARCHES:
+        return engine_failure(
+            "unsupported_host", None, ["report_unsupported_configuration"]
+        )
+    if host_os == "windows" and host.get("container_mode") != "linux":
+        return engine_failure(
+            "windows_container_mode_unsupported",
+            None,
+            ["select_linux_containers_manually"],
+        )
+
+    preference = snapshot.get("preference", "auto")
+    require(
+        preference in {"auto", *ENGINE_ORDER},
+        "preference must be auto, podman, or docker",
+    )
+    engines = snapshot.get("engines")
+    require(isinstance(engines, dict), "engines must be an object")
+    candidates = list(ENGINE_ORDER if preference == "auto" else (preference,))
+    installed = [
+        name
+        for name in candidates
+        if isinstance(engines.get(name), dict)
+        and engines[name].get("installed") is True
+    ]
+    if not installed:
+        code = "engine_absent" if preference == "auto" else "explicit_engine_absent"
+        return engine_failure(
+            code,
+            None if preference == "auto" else preference,
+            ["install_engine_manually", "rerun_check"],
+        )
+
+    name = installed[0]
+    state = engines[name]
+    daemon_state = state.get("daemon_state")
+    if daemon_state == "stopped":
+        return engine_failure(
+            "engine_stopped", name, ["start_selected_engine_manually", "rerun_check"]
+        )
+    if daemon_state == "stalled":
+        return engine_failure(
+            "engine_stalled", name, ["recover_selected_engine_manually", "rerun_check"]
+        )
+    if daemon_state != "running":
+        return engine_failure(
+            "engine_state_unknown", name, ["inspect_selected_engine_manually"]
+        )
+    if state.get("api_compatible") is not True:
+        return engine_failure(
+            "engine_api_incompatible", name, ["select_supported_engine_manually"]
+        )
+    if state.get("architecture") != host_arch:
+        return engine_failure(
+            "wrong_architecture", name, ["select_matching_architecture_manually"]
+        )
+
+    image = state.get("image")
+    require(isinstance(image, dict), f"{name}.image must be an object")
+    expected_digest = manifest["artifact"]["index_digest"]
+    if image.get("present") is not True:
+        action = (
+            "pull_pinned_image_manually"
+            if host.get("online") is True
+            else "restore_connectivity_without_fallback"
+        )
+        return engine_failure(
+            "image_missing" if host.get("online") is True else "offline_image_missing",
+            name,
+            [action, "rerun_check"],
+        )
+    if image.get("digest") != expected_digest:
+        return engine_failure(
+            "image_digest_mismatch",
+            name,
+            ["pull_pinned_image_manually", "do_not_run_mismatched_image"],
+        )
+    if image.get("verified") is not True or image.get("tampered") is True:
+        return engine_failure(
+            "image_tampered",
+            name,
+            ["quarantine_owned_image_reference", "obtain_reviewed_artifact"],
+        )
+    if host.get("online") is not True:
+        return engine_failure(
+            "offline_verification_unavailable",
+            name,
+            ["restore_connectivity_without_fallback", "rerun_check"],
+        )
+
+    workers = state.get("workers")
+    require(isinstance(workers, list), f"{name}.workers must be a list")
+    owned = [
+        worker
+        for worker in workers
+        if isinstance(worker, dict) and worker.get("owner_label") == "PF-31"
+    ]
+    if len(owned) > 1:
+        return engine_failure(
+            "duplicate_owned_workers",
+            name,
+            ["reconcile_owned_workers_manually", "do_not_remove_unrelated_resources"],
+        )
+    if not owned:
+        return {
+            "status": "action_required",
+            "engine": name,
+            "worker": None,
+            "reason_code": "owned_worker_absent",
+            "actions": ["create_single_owned_worker_manually", "rerun_check"],
+        }
+
+    worker = owned[0]
+    worker_name = worker.get("name")
+    require(isinstance(worker_name, str) and worker_name, "owned worker name missing")
+    if worker.get("state") == "stopped":
+        return {
+            "status": "action_required",
+            "engine": name,
+            "worker": worker_name,
+            "reason_code": "owned_worker_stopped",
+            "actions": ["start_owned_worker_manually", "rerun_check"],
+        }
+    if worker.get("state") == "stalled":
+        return {
+            "status": "action_required",
+            "engine": name,
+            "worker": worker_name,
+            "reason_code": "owned_worker_stalled",
+            "actions": ["restart_owned_worker_manually", "rerun_check"],
+        }
+    if worker.get("state") != "running":
+        return engine_failure(
+            "owned_worker_state_unknown", name, ["inspect_owned_worker_manually"]
+        )
+
+    lock = state.get("lock")
+    require(isinstance(lock, dict), f"{name}.lock must be an object")
+    if lock.get("corbanu_owned") is not True or lock.get("worker") != worker_name:
+        return engine_failure(
+            "worker_lock_mismatch",
+            name,
+            ["repair_corbanu_lock_manually", "do_not_create_duplicate"],
+        )
+    clients = state.get("active_clients", 0)
+    require(
+        isinstance(clients, int) and clients >= 0,
+        "active_clients must be a non-negative integer",
+    )
+    return {
+        "status": "ready",
+        "engine": name,
+        "worker": worker_name,
+        "reason_code": "reuse_owned_worker"
+        if clients == 0
+        else "reuse_owned_worker_concurrently",
+        "actions": ["reuse_owned_worker", "preserve_unrelated_resources"],
+    }
+
+
+def run_fixtures(directory: Path, manifest: dict[str, Any]) -> tuple[int, int]:
+    paths = sorted(
+        path for path in directory.glob("*.json") if not path.name.startswith(".")
+    )
+    require(paths, f"no fixtures found in {directory}")
+    passed = 0
+    idempotent = 0
+    for path in paths:
+        fixture = load_json(path)
+        snapshot = fixture.get("snapshot")
+        expected = fixture.get("expected")
+        require(isinstance(snapshot, dict), f"{path}: snapshot must be an object")
+        require(isinstance(expected, dict), f"{path}: expected must be an object")
+        first = evaluate_snapshot(snapshot, manifest)
+        second = evaluate_snapshot(snapshot, manifest)
+        require(first == second, f"{path}: evaluation is not idempotent")
+        idempotent += 1
+        require(first == expected, f"{path}: expected {expected!r}, got {first!r}")
+        passed += 1
+    return passed, idempotent
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=("validate", "evaluate", "self-test", "all"))
+    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument("--fixtures", type=Path, default=DEFAULT_FIXTURES)
+    parser.add_argument("--snapshot", type=Path)
+    args = parser.parse_args()
+    try:
+        manifest = validate_manifest(args.manifest)
+        if args.command in {"validate", "all"}:
+            print(f"manifest: valid ({args.manifest.relative_to(ROOT)})")
+        if args.command == "evaluate":
+            require(args.snapshot is not None, "evaluate requires --snapshot")
+            print(
+                json.dumps(
+                    evaluate_snapshot(load_json(args.snapshot), manifest),
+                    sort_keys=True,
+                )
+            )
+        if args.command in {"self-test", "all"}:
+            passed, idempotent = run_fixtures(args.fixtures, manifest)
+            print(f"fixtures: {passed} passed; {idempotent} idempotency checks passed")
+    except ContractError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
