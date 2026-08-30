@@ -53,10 +53,11 @@ impl ContentDigest {
     }
 
     pub fn to_hex(self) -> String {
+        const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
         let mut hex = String::with_capacity(64);
         for byte in self.0 {
-            use std::fmt::Write as _;
-            write!(hex, "{byte:02x}").expect("writing to String cannot fail");
+            hex.push(char::from(HEX_DIGITS[usize::from(byte >> 4)]));
+            hex.push(char::from(HEX_DIGITS[usize::from(byte & 0x0f)]));
         }
         hex
     }

@@ -77,3 +77,15 @@ exports_files([
     "workspace_root_test_launcher.bat.tpl",
     "workspace_root_test_launcher.sh.tpl",
 ])
+
+exports_files(
+    [
+        "qa/security-levels/ingress-contract/fixtures/benign-v1/raw.txt",
+        "qa/security-levels/ingress-contract/fixtures/benign-v1/rendered.txt",
+        "qa/security-levels/ingress-contract/fixtures/benign-v1/sanitized.txt",
+        "qa/security-levels/ingress-contract/fixtures/cross-segment-hostile-v1/raw.txt",
+        "qa/security-levels/ingress-contract/fixtures/cross-segment-hostile-v1/rendered.txt",
+        "qa/security-levels/ingress-contract/fixtures/cross-segment-hostile-v1/sanitized.txt",
+    ],
+    visibility = ["//codex-rs/content-security:__pkg__"],
+)

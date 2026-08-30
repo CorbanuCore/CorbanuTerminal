@@ -2782,6 +2782,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-content-security"
+version = "0.1.35"
+dependencies = [
+ "pretty_assertions",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "codex-context-fragments"
 version = "0.1.35"
 dependencies = [
