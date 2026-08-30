@@ -9,7 +9,7 @@ or unscreened execution.”
 - Dispatch base: `ea23dfa38bc4f2cbfe0aceadd6777c3e436a53d4`
 - Worktree: `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval`
 - Branch: `feat/p0-security-browser-retrieval`
-- Candidate commit: recorded after this evidence lands.
+- Implementation candidate: `d93a8e4787aeacb4294a318243730ec35384bc39`
 - Contract: `pf31-retriever-artifact/v1`
 - Artifact: `ghcr.io/d4vinci/scrapling@sha256:1bacbc8ec90b3090d462e12f6555e241daf0dfeb684ab326ffa09d52d8226e69`
 - Source: Scrapling `v0.4.15` at `333fa22b7a5821194ce66b59b11f4b16a6484f02`
@@ -100,7 +100,8 @@ containment qualification.
   inventory is not approved.
 - A digest-locked Corbanu rebuild, signature identity and verification policy
   implementation belong to PF-31-S01 and need integration-owner approval.
-- Claude Opus 5.0 Max review and finding disposition are pending.
+- Claude Opus 5.0 Max review and finding disposition are pending because the Mac
+  remained locked during two Computer Use attempts.
 
 Hand back the final candidate commit and this evidence to Jim Ricketts. The
 integration owner audits scope and reruns the manifest, fixture and governance

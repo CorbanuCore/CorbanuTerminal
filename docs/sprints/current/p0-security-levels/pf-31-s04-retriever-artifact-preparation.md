@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-31-S04"
 title: "Retriever artifact and engine preparation"
-status: in_progress
+status: blocked
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-31"
 execution_order: 17
@@ -47,24 +47,30 @@ updated: 2026-08-28
 
 - [x] Bounded preparation/foundation mandate created from the accepted review; no implementation or platform acceptance claimed.
 - [x] Browser/retrieval lane allocated from dispatch base `ea23dfa38bc4f2cbfe0aceadd6777c3e436a53d4` with Jim Ricketts as receiving integration owner.
+- [x] Pinned Scrapling 0.4.15 source, PyPI artifacts, OCI index/platform/config/provenance digests, exact observed runtime/browser versions, independent per-architecture SBOMs, license findings, signature gap and locked-rebuild policy.
+- [x] Frozen side-effect-free existing-engine selection: preserve explicit choice; otherwise prefer eligible Podman over eligible Docker; never install, elevate, change defaults or touch unrelated resources.
+- [x] Defined Corbanu ownership labels, one-worker/profile locking, reinspection and human-only pull/start/restart/reconciliation actions with visible no-fallback failures.
+- [x] Added 14 fake-engine fixtures covering absence, stopped/stalled states, mismatch, tamper, offline, architecture, duplicates, concurrency, explicit/automatic choice and unrelated resources; every fixture passes repeated idempotency evaluation on macOS and Linux.
+- [x] Measured the exact no-network image on macOS arm64 and Linux amd64, generated 5,332/5,323-component SBOMs and recorded conservative preparation resource limits.
+- [x] Codex GPT-5.5 autoreview finding fixed and regression-tested; clean rerun reports no accepted/actionable findings.
 
 ## Remaining
 
-- [ ] Evaluate current supported Scrapling/runtime/browser dependencies; record exact image/platform digests, source/build lock, signature policy, licenses, SBOM, security review date and rebuild/update policy. No floating latest tag as the installed identity.
-- [ ] Specify existing Podman/Docker detection: reuse a supported existing engine without replacing it, prefer Podman when both are equally eligible and no user choice exists; explain unsupported configurations and preserve explicit selection.
-- [ ] Define idempotent check/start/restart/pull/test flow with ownership labels and concurrency locking; distinguish Corbanu-owned workers from shared/unrelated engines and containers. Never stop or remove unrelated resources or create duplicate workers on retries.
-- [ ] Build manifest validators and fake-engine tests for absent/stopped/stalled/mismatched workers, multiple clients, wrong architecture, tampered images and offline failure; measure image/disk/CPU/RAM needs on all three OSes.
-- [ ] Record the human installation/elevation contract and cancellation path without storing credentials; no automatic install/start on a user's machine in this preparation sprint. Final UI/install work and actual containment remain PF-31-S01.
+- [ ] Restore access to the supplied Windows host; run the 14-fixture portable suite and the digest-pinned Linux-container browser/resource probe, then record the exact Windows/engine identity and measured disk/CPU/RAM/PID results.
+- [ ] Select and review an exact supported Podman version; run the engine/resource matrix on Mac, Linux and Windows rather than inferring support from the pure fixture contract.
+- [ ] Obtain integration-owner decisions for the Corbanu signing identity/rebuild and for the unresolved SBOM license records; do not activate the unsigned floating-input upstream image.
+- [ ] Unlock the Mac and complete the mandated Computer Use review in a fresh Claude UI with Claude Opus 5.0 and Max visibly selected; preserve packet/model/effort/result evidence and disposition.
+- [ ] Hand the final candidate to Jim Ricketts for scope audit, combined-tree reruns, archive transition and explicit G2 slot rotation before PF-33-S03 starts.
 
 ## Verification
 
-- [ ] Run affected format/fix tools before final tests; record exact commands and actual test counts.
-- [ ] Run artifact-manifest and engine-fixture tests using the planned validator; record all three platform artifact identities and measured resource requirements.
-- [ ] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
-- [ ] Verify no runtime route or profile becomes available from fixture-only preparation.
+- [x] Affected format/fix tools run before tests; exact commands and 14 fixture/14 idempotency counts recorded.
+- [ ] Artifact-manifest and engine-fixture tests pass on macOS and Linux; Windows execution and resource measurements remain blocked by host reachability.
+- [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
+- [x] Scope audit proves no runtime route or profile becomes available from fixture-only preparation.
 
 ## Exit evidence
 
-- [ ] Commit, contract/fixture versions, owner review and final-tree outputs under `qa/security-levels/sprints/PF-31-S04/`.
+- [ ] Candidate commits, contract/fixture versions, local review and final-tree outputs are recorded under `qa/security-levels/sprints/PF-31-S04/`; mandated Claude review remains blocked.
 - [ ] PF-31-S01 consumes these frozen pins and reruns actual engine/launch/egress/isolation tests; preparation does not qualify protected retrieval.
-- [ ] Record integration handoff and scope audit; complete all ledgers before archive and update plan/navigation.
+- [ ] Scope audit and provisional handoff are recorded; integration owner must resolve blockers, rerun the combined tree and complete/archive the ledger.

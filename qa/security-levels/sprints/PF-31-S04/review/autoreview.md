@@ -22,5 +22,7 @@ that engine's visible failure without fallback. Fixture
 automatic-Podman fixture continues to prove the tie preference.
 
 Post-fix local and Linux results: one manifest valid, 14/14 fixtures passed, and
-14/14 repeated idempotency checks passed. A clean autoreview rerun is required
-after the fix commit.
+14/14 repeated idempotency checks passed. The branch was rerun through Codex
+GPT-5.5 autoreview after fix commit
+`d93a8e4787aeacb4294a318243730ec35384bc39`; it returned clean with no
+accepted/actionable findings and a `patch is correct` verdict (confidence 0.87).
