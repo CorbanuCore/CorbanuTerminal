@@ -21,6 +21,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "qa/security-levels/retriever/artifact-manifest.json"
 DEFAULT_FIXTURES = ROOT / "qa/security-levels/retriever/engine-fixtures"
+BROWSER_IMAGE_SOURCE = ROOT / "codex-rs/browser-isolation/src/image.rs"
+BROWSER_RECIPE_SOURCE = ROOT / "codex-rs/browser-isolation/worker/Dockerfile"
+RUNTIME_SOURCE_ROOT = ROOT / "codex-rs/browser-isolation"
 EVIDENCE_ROOT = ROOT / "qa/security-levels/retriever"
 EVIDENCE_PREFIX = PurePosixPath("qa/security-levels/retriever")
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -29,6 +32,10 @@ DATE = re.compile(r"^20[0-9]{2}-[0-9]{2}-[0-9]{2}$")
 PACKAGE_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?$")
 OS_VERSION = re.compile(r"^[0-9]+\.[0-9]+$")
 REVISION = re.compile(r"^[0-9]+$")
+BASE_IMAGE_LITERAL = re.compile(
+    r'^pub\(crate\) const BASE_IMAGE: &str = "([^"]+)";$', re.MULTILINE
+)
+RECIPE_FROM_LITERAL = re.compile(r"^FROM (\S+)$", re.MULTILINE)
 SUPPORTED_HOSTS = {"linux", "macos", "windows"}
 SUPPORTED_ARCHES = {"amd64", "arm64"}
 ENGINE_ORDER = ("podman", "docker")
@@ -178,6 +185,7 @@ def validate_preparation_invariants(manifest: dict[str, Any]) -> None:
 
     artifact = manifest.get("artifact")
     require(isinstance(artifact, dict), "artifact must be an object")
+    validate_runtime_image_pin(artifact)
     build = artifact.get("build_provenance")
     require(isinstance(build, dict), "artifact.build_provenance must be an object")
     require(
@@ -222,6 +230,54 @@ def validate_preparation_invariants(manifest: dict[str, Any]) -> None:
             isinstance(engine.get(field), str) and engine[field].strip(),
             f"engine_contract.{field} must be non-empty",
         )
+
+
+def read_runtime_source(path: Path, label: str) -> str:
+    source_path = resolve_canonical_scoped_file(
+        path,
+        evidence_root=RUNTIME_SOURCE_ROOT,
+        repository_root=ROOT,
+        label=label,
+    )
+    try:
+        return source_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ContractError(f"cannot read {label}: {exc}") from exc
+
+
+def validate_runtime_image_pin(
+    artifact: dict[str, Any],
+    *,
+    image_source: str | None = None,
+    recipe_source: str | None = None,
+) -> None:
+    if image_source is None:
+        image_source = read_runtime_source(
+            BROWSER_IMAGE_SOURCE, "browser-isolation image source"
+        )
+    if recipe_source is None:
+        recipe_source = read_runtime_source(
+            BROWSER_RECIPE_SOURCE, "browser-isolation worker recipe"
+        )
+    image_references = BASE_IMAGE_LITERAL.findall(image_source)
+    require(
+        len(image_references) == 1,
+        "browser-isolation BASE_IMAGE must be one canonical string literal",
+    )
+    recipe_references = RECIPE_FROM_LITERAL.findall(recipe_source)
+    require(
+        len(recipe_references) == 1,
+        "browser-isolation worker recipe must have one canonical FROM literal",
+    )
+    expected_reference = artifact.get("reference")
+    require(
+        image_references[0] == expected_reference,
+        "retriever manifest reference differs from browser-isolation BASE_IMAGE",
+    )
+    require(
+        recipe_references[0] == expected_reference,
+        "retriever manifest reference differs from browser-isolation worker FROM",
+    )
 
 
 def validate_manifest(path: Path) -> dict[str, Any]:
@@ -887,6 +943,13 @@ def run_manifest_policy_checks(manifest: dict[str, Any]) -> int:
                 "provenance_manifest_digest", "sha256:invalid"
             ),
         ),
+        (
+            "runtime image reference drift",
+            lambda item: item["artifact"].__setitem__(
+                "reference",
+                "ghcr.io/d4vinci/scrapling@sha256:" + "0" * 64,
+            ),
+        ),
     )
     passed = 0
     for label, mutate in mutations:
@@ -898,6 +961,58 @@ def run_manifest_policy_checks(manifest: dict[str, Any]) -> int:
             passed += 1
         else:
             raise ContractError(f"manifest policy mutation was accepted: {label}")
+    image_source = read_runtime_source(
+        BROWSER_IMAGE_SOURCE, "browser-isolation image source"
+    )
+    recipe_source = read_runtime_source(
+        BROWSER_RECIPE_SOURCE, "browser-isolation worker recipe"
+    )
+    image_literal = BASE_IMAGE_LITERAL.search(image_source)
+    recipe_literal = RECIPE_FROM_LITERAL.search(recipe_source)
+    require(image_literal is not None, "runtime BASE_IMAGE test literal is missing")
+    require(recipe_literal is not None, "worker FROM test literal is missing")
+    source_mutations = (
+        (
+            "missing runtime BASE_IMAGE literal",
+            image_source.replace(image_literal.group(0), "", 1),
+            recipe_source,
+        ),
+        (
+            "duplicate runtime BASE_IMAGE literal",
+            image_source + image_literal.group(0) + "\n",
+            recipe_source,
+        ),
+        (
+            "missing worker FROM literal",
+            image_source,
+            recipe_source.replace(recipe_literal.group(0), "", 1),
+        ),
+        (
+            "duplicate worker FROM literal",
+            image_source,
+            recipe_source + recipe_literal.group(0) + "\n",
+        ),
+        (
+            "runtime worker FROM drift",
+            image_source,
+            recipe_source.replace(
+                recipe_literal.group(1),
+                "ghcr.io/d4vinci/scrapling@sha256:" + "1" * 64,
+                1,
+            ),
+        ),
+    )
+    for label, mutated_image_source, mutated_recipe_source in source_mutations:
+        try:
+            validate_runtime_image_pin(
+                manifest["artifact"],
+                image_source=mutated_image_source,
+                recipe_source=mutated_recipe_source,
+            )
+        except ContractError:
+            passed += 1
+        else:
+            raise ContractError(f"runtime source mutation was accepted: {label}")
     return passed
 
 

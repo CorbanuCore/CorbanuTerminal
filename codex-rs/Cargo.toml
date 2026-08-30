@@ -35,6 +35,7 @@ members = [
     "collaboration-mode-templates",
     "connectors",
     "config",
+    "content-security",
     "context-fragments",
     "shell-command",
     "shell-escalation",

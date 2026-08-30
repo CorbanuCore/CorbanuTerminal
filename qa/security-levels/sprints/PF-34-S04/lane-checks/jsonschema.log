@@ -1,0 +1,4 @@
+$ PYTHONPATH=/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/python-packages /Users/Neo/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 -c 'import json,pathlib; from jsonschema import Draft202012Validator; p=pathlib.Path("qa/security-levels/ingress-contract"); s=json.loads((p/"schema.json").read_text()); m=json.loads((p/"manifest.json").read_text()); Draft202012Validator.check_schema(s); Draft202012Validator(s).validate(m); print("jsonschema 4.25.1: schema valid; bundled manifest valid")'
+candidate=a75efecc0a37d5544e123ad19d57867cac360a68
+exit=0
+jsonschema 4.25.1: schema valid; bundled manifest valid

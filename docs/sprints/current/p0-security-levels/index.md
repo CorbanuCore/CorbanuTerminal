@@ -1,7 +1,7 @@
 # P0 security-level execution sprints
 
 The active [P0 security plan](../../../plans/active/p0-security-levels.md) owns
-**60 current sprints** and **16 completed archives**.
+**59 current sprints** and **17 completed archives**.
 The integrated Sprint 13 branch completes PF-13-S02–S04 and the early PF-26-S01
 harness; PF-13-S05 is also completed and archived after its integrated Core and
 platform qualification. PF-13-S07 is the final composed credential-boundary gate. PF-27-S01 is the
@@ -16,7 +16,6 @@ archived evidence proves only its recorded candidate and scope.
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
 | 16 | [PF-27-S03](pf-27-s03-platform-containment-contract.md) | Platform containment contract and probes | in_progress | — |
-| 19 | [PF-34-S04](pf-34-s04-screening-contract-and-fixtures.md) | Screening segment contract and fixtures | draft | — |
 | 20 | [PF-35-S01](pf-35-s01-classifier-corpus-and-evaluation.md) | Classifier corpus and leakage-free evaluation | draft | PF-34-S04 |
 | 21 | [PF-35-S02](pf-35-s02-local-cpu-detector-artifact.md) | Reproducible local CPU detector artifact | draft | PF-35-S01 |
 | 22 | [PF-13-S06](pf-13-s06-credential-usage-reservations.md) | Credential usage reservations | draft | PF-13-S01, PF-17-S01 |

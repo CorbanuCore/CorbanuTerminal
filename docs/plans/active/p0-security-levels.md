@@ -17,6 +17,9 @@ product_spec:
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval"
+    branch: "feat/p0-security-browser-retrieval-pf33"
+    base_commit: "80a2469e401066ebaf04d95ba603ab68cb341854"
   - path: "/Users/travisgood/Documents/ChatGPT/corbanu-pf13-s02"
     branch: "feat/pf-13-s02-scoped-vault-resolver"
     base_commit: "1bdc515bff48a4d9048dae7d06c6214e884265bc"
@@ -26,6 +29,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform"
     branch: "feat/p0-security-foundation-platform"
     base_commit: "1907d99aed9714f05a5f54fca1703658017d616c"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier"
+    branch: "feat/p0-security-ingress-classifier"
+    base_commit: "6a35712cd5731b191d875e8c6468f1abe23eb66e"
 ---
 
 # P0 `/security` levels
@@ -66,6 +72,13 @@ complete reflected-secret removal, missing-lineage handling, proxy/DNS bypasses
 and migration ownership. Upstream's trusted-host defaults are not Moderate or
 Aggressive guarantees.
 
+Local source-reference input: `/Volumes/CorbanuDrive/Corbanu/.codex-work/references/openclaw-13adff02`.
+It is a clean detached checkout of `https://github.com/openclaw/openclaw.git` at
+the exact review pin above, with Git hooks disabled; all 42 files in the recorded
+source manifest matched their SHA-256 values on 2026-08-30. Agents should use it
+for local source reads without fetching, switching revisions, installing or
+running OpenClaw. A pin change requires an explicit review update first.
+
 For each adaptation, record the pinned upstream function/test, Corbanu owner and
 small Codex integration hook, license notice, deliberate differences and final-tree
 regression evidence. Keep the source checkout/reference outside the Corbanu runtime
@@ -80,8 +93,8 @@ passing candidate evidence; no source citation alone closes an acceptance item.
   launch and deterministic ingress/disclosure policy. Unsupported adapters or
   isolation fail visibly; they never fall back to raw credentials.
 - **All source requirements have owners.** Earlier 68/73-record snapshots are
-  historical. Sprint 13 integration preserves 16 completed archives and leaves
-  **60 current units**. All 72
+  historical. Sprint 13 and PF-34-S04 integration preserve 17 completed archives
+  and leave **59 current units**. All 72
   cancelled firewall records and seven unrelated Autoreview drafts are unchanged.
 - **No evidence is retroactively accepted.** Upstream's PF-15–22 and PF-13-S01
   completions remain accepted for their original scope. The stronger review
@@ -106,7 +119,7 @@ segment contract, while real screening still depends on sanitizer and policy
 integration. Browser login gains its missing screening dependency.
 
 The plan opts into the [bounded parallel process](../../sprints/index.md#bounded-parallel-implementation)
-with Jim Ricketts as integration owner. No extra execution owner or worktree has
+with the exact integration owner recorded in front matter. No extra execution owner or worktree has
 been allocated and no sprint is activated by this amendment. Keep PF-13-S05 and
 PF-26 final qualification, full Moderate/Aggressive guarantees, independent
 Permissive evidence and the existing deadline pending measured capacity review.
@@ -150,6 +163,17 @@ per cross-lane convergence gate and two days for final PF-26 convergence;
 reforecast after every gate. Reviewer availability itself is not charged, but
 finding remediation is. No calendar feasibility claim is made until raw sprint
 estimates, retriever pins, corpus/licensing and the weakest-supported CPU exist.
+
+The browser/retrieval worktree was reallocated on 2026-08-30 at
+`1a5562738cb3d53bd4d0b6668761cfe76bd4b93e` for bounded remediation of the
+post-archive tmux/Corbanu Terminal/Claude Opus 5 Max findings. PF-31-S04 and
+PF-33-S03 rotate through that one lane sequentially; no protected route is
+activated by this follow-up.
+[PF-31-S04 remediation](../../sprints/archive/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md)
+completed at `c2168575695dfb2ad015bf45ef24d9e4b173b571`.
+[PF-33-S03 remediation](../../sprints/archive/p0-security-levels/pf-33-s03-destination-policy-contract.md)
+then completed sequentially at `80a2469e401066ebaf04d95ba603ab68cb341854`;
+the browser/retrieval lane is returned after re-archive.
 
 Credentials and machine login details remain only in the local gitignored
 `AgentCredentials.md` chain and must never enter a branch, evidence bundle,
@@ -357,6 +381,30 @@ update; it cannot silently change Permissive or an accepted security level.
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
 | Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-security-levels` | `feat/p0-security-levels` | `7cc15ae0762664d6d01765de407329887da9f876` | Complete reconciled security program, policy/broker/ingress/financial adapters, TUI and evidence |
+| Codex ingress/classifier lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier` | `feat/p0-security-ingress-classifier` | `6a35712cd5731b191d875e8c6468f1abe23eb66e` | PF-34-S04 screening contract, immutable fixtures and user-authorized serialized G1/G2 crate/workspace/Bazel/lock/CI integration |
+
+The PF-34-S04 creation coordinate remains the immutable base recorded above.
+After allocation, the lane rebased onto `main` at
+`1a5562738cb3d53bd4d0b6668761cfe76bd4b93e` to include the corrected TMUX and
+provider behavior before independent review. The final lane-owned remediation
+candidate is `a75efecc0a37d5544e123ad19d57867cac360a68`. On 2026-08-30 the user
+transferred Jim Ricketts's unavailable G1/G2 integration responsibility to the
+Codex ingress/classifier lane. The reviewed commits remain immutable. The lane
+combined `main` first at `1907d99aed9714f05a5f54fca1703658017d616c`,
+registered the crate at `de99c7af1774cb964f9fcf0cbbfaf2a07c1a059d`,
+removed the unused dependency alias at
+`279ce48a9e8d3b28ab518ff184aae770d7462d2f`, and reconciled the subsequently
+advanced `main` at `3232f5e65bae60bc86122a5495ebb4c280f7c8fb` in merge
+`158b9b0ebe4b06a81c98be6a58a0d1c7919a0d08` before final qualification.
+
+Literal PF-34-S04 write scope: `codex-rs/content-security/`,
+`codex-rs/Cargo.toml`, `codex-rs/Cargo.lock`, root `BUILD.bazel`, root
+`MODULE.bazel.lock`, `.github/workflows/security-ingress-contract.yml`,
+`qa/security-levels/ingress-contract/`, `qa/security-levels/sprints/PF-34-S04/`,
+the current and archive PF-34-S04 sprint-record paths, the current security sprint
+index, the global sprint index, `mkdocs.yml`, and this active-plan allocation.
+Its `parallel_lane` is `ingress-classifier`. Shared registration is now serialized
+inside this one lane; no concurrent sprint owns any listed path.
 
 Implementation does not occur in the documentation checkout. Update this plan
 before changing the implementation worktree, base, owner, or scope.
@@ -389,13 +437,14 @@ coordinates are not permission for concurrent workers in the same checkout.
 
 ## Sprint execution map
 
-This map covers **60 current and 16 completed archived sprints**.
+This map covers **59 current and 17 completed archived sprints**.
 The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
 is dependency-correct; feature IDs are not execution order. Archive orders 1–9
 stay unchanged and current orders start at 10. Existing allocation coordinates
 follow upstream; the five preparation/foundation drafts and five new follow-ups
 remain `UNALLOCATED` until assigned. PF-27-S03 is the checked foundation/platform
-allocation; other current records are `draft`, with completed prerequisites and checked allocation
+allocation, PF-34-S04 is completed and archived, and other current records are
+`draft`, with completed prerequisites and checked allocation
 required before execution. Archived links document original scope, not new passes.
 
 | Feature ID | Plan feature | Sprint records (completed links are archived) | State |
@@ -420,7 +469,7 @@ required before execution. Archived links document original scope, not new passe
 | `PF-31` | Isolated retrieval and download promotion | [S01](../../sprints/current/p0-security-levels/pf-31-s01-pinned-retriever-isolation.md), [S02](../../sprints/current/p0-security-levels/pf-31-s02-bounded-fetch-no-fallback.md), [S03](../../sprints/current/p0-security-levels/pf-31-s03-download-quarantine-promotion.md), [S04 completed](../../sprints/archive/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md) | draft |
 | `PF-32` | Screened web facade and search providers | [S01](../../sprints/current/p0-security-levels/pf-32-s01-web-facade-and-registry.md), [S02](../../sprints/current/p0-security-levels/pf-32-s02-existing-search-and-native-bypass.md), [S03](../../sprints/current/p0-security-levels/pf-32-s03-exa-search-adapter.md), [S04](../../sprints/current/p0-security-levels/pf-32-s04-brave-search-adapter.md), [S05](../../sprints/current/p0-security-levels/pf-32-s05-searxng-search-adapter.md), [S06](../../sprints/current/p0-security-levels/pf-32-s06-privacy-routing-and-failover.md) | draft |
 | `PF-33` | Destination validation and connection enforcement | [S01](../../sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md), [S02](../../sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md), [S03 completed](../../sprints/archive/p0-security-levels/pf-33-s03-destination-policy-contract.md) | S03 completed; S01/S02 draft |
-| `PF-34` | Sanitization quarantine and safe review | [S01](../../sprints/current/p0-security-levels/pf-34-s01-render-aware-sanitization.md), [S02](../../sprints/current/p0-security-levels/pf-34-s02-quarantine-state-and-store.md), [S03](../../sprints/current/p0-security-levels/pf-34-s03-safe-quarantine-review.md), [S04](../../sprints/current/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md) | draft |
+| `PF-34` | Sanitization quarantine and safe review | [S01](../../sprints/current/p0-security-levels/pf-34-s01-render-aware-sanitization.md), [S02](../../sprints/current/p0-security-levels/pf-34-s02-quarantine-state-and-store.md), [S03](../../sprints/current/p0-security-levels/pf-34-s03-safe-quarantine-review.md), [S04 completed](../../sprints/archive/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md) | S04 completed; S01-S03 draft |
 | `PF-35` | Local classifier and blind qualification | [S01](../../sprints/current/p0-security-levels/pf-35-s01-classifier-corpus-and-evaluation.md), [S02](../../sprints/current/p0-security-levels/pf-35-s02-local-cpu-detector-artifact.md), [S03](../../sprints/current/p0-security-levels/pf-35-s03-calibration-and-ingress-gate.md) | draft |
 | `PF-36` | Optional hosted detector and safe fallback | [S01](../../sprints/current/p0-security-levels/pf-36-s01-hosted-detector-consent-contract.md), [S02](../../sprints/current/p0-security-levels/pf-36-s02-hosted-bakeoff-and-local-fallback.md) | draft |
 | `PF-37` | Origin-bound browser login and human handoff | [S01](../../sprints/current/p0-security-levels/pf-37-s01-origin-bound-browser-login.md), [S02](../../sprints/current/p0-security-levels/pf-37-s02-human-auth-handoff-lifecycle.md) | draft |
@@ -598,9 +647,9 @@ incomplete; do not substitute a wrapper heuristic or optional hosted service.
 
 ## Implementation sequence
 
-Use the [60-record current index](../../sprints/current/p0-security-levels/index.md)
+Use the [59-record current index](../../sprints/current/p0-security-levels/index.md)
 for exact dependencies. Bounded parallel allocations follow the sprint process;
-reading order is not a serial lock. Including 16 completed archives, the graph
+reading order is not a serial lock. Including 17 completed archives, the graph
 has 76 nodes; exact merged-tree ordering is maintained by the checked current
 index rather than inherited historical snapshot arithmetic.
 
@@ -736,7 +785,7 @@ before qualification.
 - [ ] Accepted architecture refinements and upstream-seam register have final-tree evidence.
 - [ ] Parallel allocations, scope audits and combined-tree integration evidence are complete.
 
-- [x] Complete source scope maps to 60 current and 16 completed single-feature sprints; all 72 cancelled records have explicit dispositions.
+- [x] Complete source scope maps to 59 current and 17 completed single-feature sprints; all 72 cancelled records have explicit dispositions.
 - [ ] Every PF-27–41 contract and protected-mode readiness condition passes final-candidate evidence.
 - [ ] Optional hosted/reviewer lanes are explicitly qualified-enabled or disabled with an auditable reason.
 - [ ] Permissive compatibility is proven against the frozen pre-feature baseline.

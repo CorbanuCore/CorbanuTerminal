@@ -151,7 +151,6 @@ nav:
                   - "PF-34-S01 — Render-aware content sanitization": sprints/current/p0-security-levels/pf-34-s01-render-aware-sanitization.md
                   - "PF-34-S02 — Quarantine state and encrypted retention": sprints/current/p0-security-levels/pf-34-s02-quarantine-state-and-store.md
                   - "PF-34-S03 — Safe quarantine review and recovery": sprints/current/p0-security-levels/pf-34-s03-safe-quarantine-review.md
-                  - "PF-34-S04: Screening segment contract and fixtures": sprints/current/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md
               - "Local classifier":
                   - "PF-35-S01 — Classifier corpus and leakage-free evaluation": sprints/current/p0-security-levels/pf-35-s01-classifier-corpus-and-evaluation.md
                   - "PF-35-S02 — Reproducible local CPU detector artifact": sprints/current/p0-security-levels/pf-35-s02-local-cpu-detector-artifact.md

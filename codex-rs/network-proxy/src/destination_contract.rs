@@ -55,14 +55,34 @@ pub struct RequestInput<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NormalizedDestination {
-    pub scheme: String,
-    pub host: String,
-    pub port: u16,
-    pub method: String,
-    pub path: String,
+    scheme: String,
+    host: String,
+    port: u16,
+    method: String,
+    path: String,
 }
 
 impl NormalizedDestination {
+    pub fn scheme(&self) -> &str {
+        &self.scheme
+    }
+
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn method(&self) -> &str {
+        &self.method
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
     pub fn origin_matches(&self, other: &Self) -> bool {
         self.scheme == other.scheme && self.host == other.host && self.port == other.port
     }
@@ -174,14 +194,20 @@ fn normalize_domain(domain: &str) -> Result<String, ContractError> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PolicySpec {
     pub version: String,
-    /// `None` deliberately means no additional public destination restriction,
-    /// not a missing or malformed policy. Configuration loaders must distinguish
-    /// that intentional state from absent/unknown protected configuration.
-    /// `Some([])` is an explicit deny-all. A rule with host `*` is wildcard
-    /// public scope.
-    pub public_rules: Option<Vec<RuleSpec>>,
+    /// Public scope must be named explicitly. `Rules([])` is an explicit
+    /// deny-all; a rule with host `*` is wildcard public scope.
+    pub public_scope: PublicScope,
     /// Private services are separate exact-host grants with pinned address sets.
     pub private_services: Vec<PrivateServiceSpec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PublicScope {
+    /// Deliberately impose no additional restriction on public destinations.
+    /// Configuration loaders must never infer this from absent, unknown, or
+    /// malformed protected configuration.
+    Unrestricted,
+    Rules(Vec<RuleSpec>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -204,8 +230,14 @@ pub struct PrivateServiceSpec {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DestinationPolicy {
-    public_rules: Option<Vec<CompiledRule>>,
+    public_scope: CompiledPublicScope,
     private_services: Vec<CompiledPrivateService>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CompiledPublicScope {
+    Unrestricted,
+    Rules(Vec<CompiledRule>),
 }
 
 impl DestinationPolicy {
@@ -213,10 +245,15 @@ impl DestinationPolicy {
         if spec.version != DESTINATION_CONTRACT_VERSION {
             return Err(ContractError::UnsupportedVersion(spec.version));
         }
-        let public_rules = spec
-            .public_rules
-            .map(|rules| rules.into_iter().map(CompiledRule::compile).collect())
-            .transpose()?;
+        let public_scope = match spec.public_scope {
+            PublicScope::Unrestricted => CompiledPublicScope::Unrestricted,
+            PublicScope::Rules(rules) => CompiledPublicScope::Rules(
+                rules
+                    .into_iter()
+                    .map(CompiledRule::compile)
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+        };
         let private_services = spec
             .private_services
             .into_iter()
@@ -232,7 +269,7 @@ impl DestinationPolicy {
             }
         }
         Ok(Self {
-            public_rules,
+            public_scope,
             private_services,
         })
     }
@@ -557,11 +594,19 @@ pub enum DecisionReason {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DestinationDecision {
-    pub allowed: bool,
-    pub reason: DecisionReason,
+    allowed: bool,
+    reason: DecisionReason,
 }
 
 impl DestinationDecision {
+    pub fn allowed(&self) -> bool {
+        self.allowed
+    }
+
+    pub fn reason(&self) -> DecisionReason {
+        self.reason
+    }
+
     fn allow(reason: DecisionReason) -> Self {
         Self {
             allowed: true,
@@ -626,7 +671,7 @@ fn evaluate_public(
     policy: &DestinationPolicy,
     destination: &NormalizedDestination,
 ) -> DestinationDecision {
-    let Some(rules) = &policy.public_rules else {
+    let CompiledPublicScope::Rules(rules) = &policy.public_scope else {
         return DestinationDecision::allow(DecisionReason::PublicPolicyAbsent);
     };
     if rules.is_empty() {

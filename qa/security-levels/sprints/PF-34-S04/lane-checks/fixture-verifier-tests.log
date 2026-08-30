@@ -1,0 +1,8 @@
+$ python3 qa/security-levels/ingress-contract/test_verify.py
+candidate=a75efecc0a37d5544e123ad19d57867cac360a68
+exit=0
+..............
+----------------------------------------------------------------------
+Ran 14 tests in 0.100s
+
+OK

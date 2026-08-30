@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "candidate": "a75efecc0a37d5544e123ad19d57867cac360a68",
+  "rebased_main": "1a5562738cb3d53bd4d0b6668761cfe76bd4b93e",
+  "checks": [
+    {
+      "name": "fmt-check",
+      "result": "pass"
+    },
+    {
+      "name": "clippy",
+      "result": "pass"
+    },
+    {
+      "name": "focused-tests",
+      "result": "20 passed; 0 failed; 0 ignored"
+    },
+    {
+      "name": "full-harness-tests",
+      "result": "20 passed; 0 failed; 0 ignored"
+    },
+    {
+      "name": "argument-comment-lint",
+      "result": "pass"
+    },
+    {
+      "name": "fixture-verifier",
+      "result": "7 fixtures verified; schema=1; contract=1"
+    },
+    {
+      "name": "fixture-verifier-tests",
+      "result": "14 passed; 0 failed"
+    },
+    {
+      "name": "jsonschema",
+      "result": "Draft 2020-12 schema and manifest valid with jsonschema 4.25.1"
+    },
+    {
+      "name": "fixture-attributes",
+      "result": "text unset; eol lf"
+    },
+    {
+      "name": "plan-governance",
+      "result": "active 1/2; available slots 1"
+    },
+    {
+      "name": "sprint-governance",
+      "result": "current 67; archived 88"
+    },
+    {
+      "name": "lane-hashes",
+      "result": "15 files verified"
+    },
+    {
+      "name": "evidence-consistency",
+      "result": "15 hashes and narrative identities agree"
+    },
+    {
+      "name": "diff-check",
+      "result": "pass"
+    }
+  ]
+}

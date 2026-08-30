@@ -1,0 +1,4 @@
+$ CARGO_HOME=/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/cargo-home CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/target TMPDIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/tmp cargo fmt --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/Cargo.toml -- --check
+candidate=a75efecc0a37d5544e123ad19d57867cac360a68
+exit=0
+Warning: can't set `imports_granularity = Item`, unstable features are only available in nightly channel.
