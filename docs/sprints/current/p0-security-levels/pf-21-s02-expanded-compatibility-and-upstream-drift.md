@@ -48,15 +48,15 @@ updated: 2026-08-30
 
 - [x] Follow-up separated from the accepted upstream foundation; no new implementation or qualification claimed.
 - [x] Read the repository and Rust workspace policies, exact product requirement, active plan, sprint contract and compatibility-lane handoff; validated the allocated branch with both governance checkers before implementation.
-- [x] Preserved the accepted baseline manifest byte-for-byte and its pre-feature commit `3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb`; independently built the last qualified pre-baseline upstream-aligned control and added a reviewed, fail-closed drift ledger. Candidate output never sources golden expectations.
-- [x] Expanded exact executable inventory to inherited environment/auth helpers, web.run history/native search, browser, MCP/plugins/children, wallet, clipboard/export and persisted sessions. The control declares protected behavior opt-in above Permissive and no Rust/runtime path changed.
-- [x] Recorded baseline/upstream/candidate identities, configuration/environment digests, exact probes and the zero-entry reviewed drift result. Unknown, stale, future-dated, candidate-derived or unobserved drift fails acceptance.
-- [x] Added self-tests for the mandated failure modes plus broad test filters, dirty runtime masking, future-dated review and ambient secret exclusion; retained the five immutable probes and fail-closed behavior.
+- [x] Preserved the accepted baseline manifest byte-for-byte and its pre-feature commit `3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb`; selected the buildable, genuinely Rust-distinct upstream-aligned 0.1.34 control `af5a4e39b590e7517120fd935ccfac8cbf7cf131` with pinned unequal `codex-rs` tree identities and added a reviewed, fail-closed drift ledger. Candidate output never sources golden expectations.
+- [x] Expanded exact executable inventory to inherited environment/auth helpers, web.run history/native search, browser, MCP/plugins/children, wallet, clipboard/export and persisted sessions. Added dispatch-base-anchored exact protected-boundary cases that directly exercise `codex-secret-broker`, `codex-network-proxy`, `codex-browser-isolation`, and `codex-content-security`; no self-asserted behavior string is treated as evidence and no Rust/runtime path changed.
+- [x] Recorded baseline/upstream/candidate identities, configuration/environment digests, exact probes and the zero-entry reviewed drift result. Unknown, duplicate, unaccepted, stale, future-dated, candidate-derived, mismatched or unobserved drift fails acceptance; protected-boundary source drift is never ledger-allowlisted.
+- [x] Added self-tests for every mandated drift branch plus broad test filters, dirty recipe/runtime masking, fixed-time ledger checks, bounded external artifact roots, cleanup failures, lexical test extraction and ambient secret exclusion; retained the five immutable probes and fail-closed behavior.
 
 ## Verification
 
-- [x] Formatted and linted affected Python; `python3 -m unittest scripts.test_security_level_compat -v` passed 22/22. No Rust file or fixture changed.
-- [x] The extended harness passed 32/32 against independently built baseline/upstream controls and the clean final implementation candidate; exact CLI arguments, identities and hashes are recorded in the candidate evidence.
+- [x] Formatted and linted affected Python; `python3 -m unittest scripts.test_security_level_compat -v` passed 37/37. No Rust file or fixture changed.
+- [ ] The remediated extended harness must pass 36/36 against independently built baseline/upstream controls and the clean final implementation candidate; exact CLI arguments, identities and hashes will be recorded in the candidate evidence.
 - [x] Rust fix/format is not applicable because no Rust path changed.
 - [x] TUI applicability is automated-oracle-only; a supporting real-candidate TMUX `/status`/clean-exit smoke passed, while PF-26-S02 still owns both live repositories with actual keys.
 - [ ] Complete the mandatory read-only Corbanu Terminal + Claude Opus 5 Plan/max independent review and record its transcript hash.
@@ -64,10 +64,11 @@ updated: 2026-08-30
 ## Exit evidence
 
 - [x] Recorded implementation commit, changed paths, contract version and exact clean-tree commands/results under `qa/security-levels/sprints/PF-21-S02/`.
-- [x] Preserved the S01 archive/evidence unchanged; the new three-source 32-test report is separate from historical qualification.
+- [ ] Preserve the S01 archive/evidence unchanged and record the remediated three-source plus protected-boundary 36-test report separately from historical qualification.
 - [ ] Integration owner merges after PF-19/PF-20, reruns combined-tree checks, updates shared plan/navigation and archives PF-21-S02.
 
 ## Remaining
 
 - [ ] Close the independent-review Verification item above.
+- [ ] Close the remediated 36-test report Verification and Exit evidence items above.
 - [ ] Close the integration-owner Exit evidence item above.

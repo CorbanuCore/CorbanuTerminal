@@ -8,7 +8,9 @@ import json
 import os
 import platform
 import re
+import shutil
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,8 +26,15 @@ UPSTREAM_CONVERGENCE_COMMIT = "45a60f03d2f6c041d284b41cc3f33c416d9eeed1"
 UPSTREAM_CODEX_PARENT = "413492cd6c3a4d4f8dff6f406247ccda5a9d88aa"
 REPORT_NAME = "compatibility-report.json"
 MAX_CAPTURE_BYTES = 64 * 1024
+MAX_LEDGER_AGE_DAYS = 30
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9_:-]+$")
+RUNTIME_INPUT_PATHS = (
+    "codex-rs",
+    "justfile",
+    "scripts/just-shell.py",
+    "codex-rs/.cargo/config.toml",
+)
 REQUIRED_EXPANDED_SURFACES = frozenset(
     {
         "environment-auth",
@@ -37,6 +46,14 @@ REQUIRED_EXPANDED_SURFACES = frozenset(
         "wallet",
         "clipboard-export",
         "persisted-sessions",
+    }
+)
+REQUIRED_PROTECTED_PACKAGES = frozenset(
+    {
+        "codex-secret-broker",
+        "codex-network-proxy",
+        "codex-browser-isolation",
+        "codex-content-security",
     }
 )
 
@@ -90,15 +107,20 @@ def run_command(
     env: dict[str, str] | None = None,
     timeout_seconds: int = 600,
 ) -> CommandResult:
-    completed = subprocess.run(
-        command,
-        cwd=cwd,
-        env=env,
-        text=True,
-        capture_output=True,
-        timeout=timeout_seconds,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=cwd,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=timeout_seconds,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise CompatibilityError(
+            f"command timed out after {timeout_seconds}s: {' '.join(command)}"
+        ) from error
     return CommandResult(
         command=command,
         returncode=completed.returncode,
@@ -233,21 +255,115 @@ def canonical_json_digest(value: Any) -> str:
     )
 
 
+def _rust_code_mask(text: str) -> str:
+    """Return same-length Rust text with comments and literals blanked."""
+    masked = list(text)
+    index = 0
+    block_depth = 0
+    state = "code"
+    raw_hashes = 0
+    while index < len(text):
+        if state == "code":
+            if text.startswith("//", index):
+                masked[index : index + 2] = "  "
+                index += 2
+                state = "line-comment"
+                continue
+            if text.startswith("/*", index):
+                masked[index : index + 2] = "  "
+                index += 2
+                block_depth = 1
+                state = "block-comment"
+                continue
+            raw = re.match(r'r(#{0,255})"', text[index:])
+            if raw is not None:
+                raw_hashes = len(raw.group(1))
+                length = raw.end()
+                masked[index : index + length] = " " * length
+                index += length
+                state = "raw-string"
+                continue
+            if text[index] == '"':
+                masked[index] = " "
+                index += 1
+                state = "string"
+                continue
+            if text[index] == "'" and re.match(r"'(?:\\.|[^\\'\n])'", text[index:]):
+                end = index + re.match(r"'(?:\\.|[^\\'\n])'", text[index:]).end()
+                masked[index:end] = " " * (end - index)
+                index = end
+                continue
+            index += 1
+            continue
+        if state == "line-comment":
+            if text[index] == "\n":
+                state = "code"
+            else:
+                masked[index] = " "
+            index += 1
+            continue
+        if state == "block-comment":
+            if text.startswith("/*", index):
+                masked[index : index + 2] = "  "
+                block_depth += 1
+                index += 2
+            elif text.startswith("*/", index):
+                masked[index : index + 2] = "  "
+                block_depth -= 1
+                index += 2
+                if block_depth == 0:
+                    state = "code"
+            else:
+                if text[index] != "\n":
+                    masked[index] = " "
+                index += 1
+            continue
+        if state == "raw-string":
+            terminator = '"' + ("#" * raw_hashes)
+            if text.startswith(terminator, index):
+                masked[index : index + len(terminator)] = " " * len(terminator)
+                index += len(terminator)
+                state = "code"
+            else:
+                if text[index] != "\n":
+                    masked[index] = " "
+                index += 1
+            continue
+        if state == "string":
+            if text[index] == "\\" and index + 1 < len(text):
+                masked[index : index + 2] = "  "
+                index += 2
+            elif text[index] == '"':
+                masked[index] = " "
+                index += 1
+                state = "code"
+            else:
+                if text[index] != "\n":
+                    masked[index] = " "
+                index += 1
+    return "".join(masked)
+
+
 def extract_expanded_test_source(text: str, function_name: str) -> str:
+    masked = _rust_code_mask(text)
     marker = re.compile(
-        rf"(?m)^(?P<indent>[ \t]*)(?:#\[[^\n]+\]\n(?P=indent))*"
+        rf"(?m)^(?P<indent>[ \t]*)"
+        rf"(?P<attributes>(?:#\[(?:[^\[\]]|\n)*\][ \t]*\n(?P=indent))*)"
         rf"(?:async\s+)?fn\s+{re.escape(function_name)}\s*\("
     )
-    match = marker.search(text)
+    match = marker.search(masked)
     if match is None:
         raise CompatibilityError(f"expanded probe function is missing: {function_name}")
-    opening_brace = text.find("{", match.end())
+    attributes = match.group("attributes")
+    if re.search(r"#\[(?:tokio::)?test(?:\s*\([^]]*\))?\]", attributes) is None:
+        raise CompatibilityError(f"expanded probe is not a test: {function_name}")
+    opening_brace = masked.find("{", match.end())
     if opening_brace < 0:
         raise CompatibilityError(f"expanded probe has no body: {function_name}")
     depth = 0
-    for index in range(opening_brace, len(text)):
-        depth += text[index] == "{"
-        depth -= text[index] == "}"
+    for index in range(opening_brace, len(masked)):
+        depth += masked[index] == "{"
+        depth -= masked[index] == "}"
         if depth == 0:
             return text[match.start() : index + 1].rstrip() + "\n"
     raise CompatibilityError(f"expanded probe body is incomplete: {function_name}")
@@ -279,7 +395,7 @@ def expanded_source_digest(
 def parse_utc(value: str) -> datetime.datetime:
     try:
         parsed = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as error:
+    except (TypeError, ValueError) as error:
         raise CompatibilityError("control review timestamp is invalid") from error
     if parsed.tzinfo is None:
         raise CompatibilityError("control review timestamp requires a timezone")
@@ -319,6 +435,16 @@ def validate_expanded_control(
     git_output(
         repo_root, ["merge-base", "--is-ancestor", upstream_commit, baseline_commit]
     )
+    upstream_tree = git_output(repo_root, ["rev-parse", f"{upstream_commit}:codex-rs"])
+    baseline_tree = git_output(repo_root, ["rev-parse", f"{baseline_commit}:codex-rs"])
+    if (
+        identity.get("upstream_codex_rs_tree") != upstream_tree
+        or identity.get("baseline_codex_rs_tree") != baseline_tree
+        or upstream_tree == baseline_tree
+    ):
+        raise CompatibilityError(
+            "upstream and baseline controls require pinned, distinct Rust trees"
+        )
     git_output(
         repo_root,
         ["merge-base", "--is-ancestor", UPSTREAM_CONVERGENCE_COMMIT, upstream_commit],
@@ -333,8 +459,14 @@ def validate_expanded_control(
 
     reviewed_at = parse_utc(str(ledger.get("reviewed_at_utc", "")))
     max_age_days = ledger.get("max_age_days")
-    if not isinstance(max_age_days, int) or max_age_days < 1:
-        raise CompatibilityError("drift ledger requires a positive max_age_days")
+    if (
+        not isinstance(max_age_days, int)
+        or max_age_days < 1
+        or max_age_days > MAX_LEDGER_AGE_DAYS
+    ):
+        raise CompatibilityError(
+            f"drift ledger max_age_days must be between 1 and {MAX_LEDGER_AGE_DAYS}"
+        )
     current = now or datetime.datetime.now(datetime.timezone.utc)
     if reviewed_at > current + datetime.timedelta(minutes=5):
         raise CompatibilityError("drift ledger review timestamp is in the future")
@@ -351,15 +483,10 @@ def validate_expanded_control(
     }
     if surface_ids != REQUIRED_EXPANDED_SURFACES or len(surfaces) != len(surface_ids):
         raise CompatibilityError("expanded surface inventory is incomplete")
-    for surface in surfaces:
-        if surface.get("permissive_behavior") != "upstream-aligned":
-            raise CompatibilityError(
-                "every expanded surface must stay upstream-aligned"
-            )
-        if surface.get("protected_behavior") != "opt-in-above-permissive":
-            raise CompatibilityError(
-                "protected behavior must remain opt-in above Permissive"
-            )
+    if any(set(surface) != {"id"} for surface in surfaces):
+        raise CompatibilityError(
+            "expanded surfaces are executable inventory ids, not behavior declarations"
+        )
 
     entries = ledger.get("entries")
     if not isinstance(entries, list):
@@ -427,6 +554,67 @@ def validate_expanded_control(
         raise CompatibilityError("expanded cases do not cover every required surface")
     if set(drift_by_key) != observed_drift:
         raise CompatibilityError("drift ledger contains stale or unobserved entries")
+    return cases
+
+
+def validate_protected_cases(
+    control: dict[str, Any], repo_root: Path, candidate_commit: str
+) -> list[dict[str, Any]]:
+    identity = control.get("identity")
+    if not isinstance(identity, dict):
+        raise CompatibilityError("expanded control identity is missing")
+    anchor_commit = identity.get("protected_expectations_commit")
+    if (
+        not isinstance(anchor_commit, str)
+        or COMMIT_PATTERN.fullmatch(anchor_commit) is None
+    ):
+        raise CompatibilityError("protected expectations require a full anchor commit")
+    if anchor_commit == candidate_commit:
+        raise CompatibilityError(
+            "candidate-derived protected expectations are forbidden"
+        )
+    git_output(
+        repo_root, ["merge-base", "--is-ancestor", anchor_commit, candidate_commit]
+    )
+
+    cases = control.get("protected_cases")
+    if not isinstance(cases, list) or not cases:
+        raise CompatibilityError("protected boundary control requires executable cases")
+    packages: set[str] = set()
+    case_ids: set[str] = set()
+    for case in cases:
+        if not isinstance(case, dict):
+            raise CompatibilityError("protected case must be an object")
+        for key in ("id", "package", "test_filter", "source", "function", "guarantee"):
+            if not isinstance(case.get(key), str) or not case[key]:
+                raise CompatibilityError(f"protected case requires non-empty {key}")
+        for key in ("id", "package", "test_filter", "function"):
+            if IDENTIFIER_PATTERN.fullmatch(case[key]) is None:
+                raise CompatibilityError(
+                    f"protected case {key} contains unsupported characters"
+                )
+        if case["test_filter"] != case["function"]:
+            raise CompatibilityError(
+                "protected test filters must name the exact function"
+            )
+        if case["id"] in case_ids or case["package"] in packages:
+            raise CompatibilityError(
+                "protected cases must have unique ids and packages"
+            )
+        case_ids.add(case["id"])
+        packages.add(case["package"])
+        anchor_digest = expanded_source_digest(
+            repo_root, anchor_commit, case["source"], case["function"]
+        )
+        if anchor_digest != case.get("anchor_source_sha256"):
+            raise CompatibilityError(f"protected anchor drift for {case['id']}")
+        candidate_digest = expanded_source_digest(
+            repo_root, candidate_commit, case["source"], case["function"]
+        )
+        if candidate_digest != anchor_digest:
+            raise CompatibilityError(f"protected candidate drift for {case['id']}")
+    if packages != REQUIRED_PROTECTED_PACKAGES:
+        raise CompatibilityError("protected boundary inventory is incomplete")
     return cases
 
 
@@ -499,7 +687,7 @@ def build_workspace_candidate(
 
 def require_clean_runtime_tree(repo_root: Path) -> None:
     result = run_command(
-        ["git", "status", "--porcelain", "--", "codex-rs"],
+        ["git", "status", "--porcelain", "--", *RUNTIME_INPUT_PATHS],
         cwd=repo_root,
         timeout_seconds=30,
     )
@@ -509,6 +697,57 @@ def require_clean_runtime_tree(repo_root: Path) -> None:
         raise CompatibilityError(
             "candidate runtime tree is dirty; commit or remove Rust/runtime changes"
         )
+
+
+def runtime_input_digests(repo_root: Path) -> dict[str, str]:
+    digests: dict[str, str] = {}
+    for relative in RUNTIME_INPUT_PATHS[1:]:
+        path = repo_root / relative
+        if not path.is_file():
+            raise CompatibilityError(f"candidate runtime input is missing: {relative}")
+        digests[relative] = sha256_file(path)
+    return digests
+
+
+def require_external_artifact_roots(repo_root: Path, *roots: Path) -> None:
+    repository = repo_root.resolve()
+    for root in roots:
+        resolved = root.resolve()
+        if resolved == repository or repository in resolved.parents:
+            raise CompatibilityError(
+                f"artifact root must be outside the repository worktree: {resolved}"
+            )
+
+
+def prune_stale_control_targets(
+    target_root: Path, *, keep_names: frozenset[str]
+) -> list[str]:
+    removed: list[str] = []
+    if not target_root.exists():
+        return removed
+    for child in target_root.iterdir():
+        if child.name not in keep_names and (
+            child.name.startswith("baseline-") or child.name.startswith("upstream-")
+        ):
+            original_name = child.name
+            tombstone = target_root / f".prune-{original_name}-{os.getpid()}"
+            child.replace(tombstone)
+            child = tombstone
+            if child.is_dir() and not child.is_symlink():
+                for _attempt in range(3):
+                    shutil.rmtree(child, ignore_errors=True)
+                    if not child.exists():
+                        break
+                    for finder_file in child.rglob(".DS_Store"):
+                        finder_file.unlink(missing_ok=True)
+                if child.exists():
+                    raise CompatibilityError(
+                        f"failed to prune stale control target: {original_name}"
+                    )
+            else:
+                child.unlink()
+            removed.append(original_name)
+    return sorted(removed)
 
 
 def controlled_environment(
@@ -611,15 +850,17 @@ def run_expanded_cases(
         ]
         result = run_command(command, cwd=workspace, env=env)
         count = executed_test_count(result)
-        results.append(
-            {
-                "id": case["id"],
-                "surface": case["surface"],
-                "passed": result.returncode == 0 and count == 1,
-                "executed_tests": count,
-                "result": result.as_json(),
-            }
-        )
+        recorded = {
+            "id": case["id"],
+            "passed": result.returncode == 0 and count == 1,
+            "executed_tests": count,
+            "result": result.as_json(),
+        }
+        if "surface" in case:
+            recorded["surface"] = case["surface"]
+        if "guarantee" in case:
+            recorded["guarantee"] = case["guarantee"]
+        results.append(recorded)
     return results
 
 
@@ -637,7 +878,7 @@ def add_detached_worktree(repo_root: Path, destination: Path, commit: str) -> No
         raise CompatibilityError(f"failed to materialize control {commit}")
 
 
-def remove_detached_worktree(repo_root: Path, destination: Path) -> None:
+def remove_detached_worktree(repo_root: Path, destination: Path) -> CommandResult:
     result = run_command(
         ["git", "worktree", "remove", "--force", str(destination)],
         cwd=repo_root,
@@ -645,6 +886,17 @@ def remove_detached_worktree(repo_root: Path, destination: Path) -> None:
     )
     if result.returncode != 0:
         raise CompatibilityError(f"failed to remove control worktree {destination}")
+    return result
+
+
+def cleanup_control_worktrees(repo_root: Path, worktrees: list[Path]) -> list[str]:
+    errors: list[str] = []
+    for workspace in reversed(worktrees):
+        try:
+            remove_detached_worktree(repo_root, workspace)
+        except (CompatibilityError, OSError) as error:
+            errors.append(str(error))
+    return errors
 
 
 def write_report(output_dir: Path, report: dict[str, Any]) -> Path:
@@ -693,11 +945,25 @@ def run_compatibility(
         upstream_commit,
         source_commit,
     )
+    protected_cases = validate_protected_cases(control, repo_root, source_commit)
     require_clean_runtime_tree(repo_root)
 
+    candidate_target = candidate.resolve().parent.parent
+    require_external_artifact_roots(
+        repo_root, output_dir, cache_root, temp_root, candidate_target
+    )
     cache_root.mkdir(parents=True, exist_ok=True)
     temp_root.mkdir(parents=True, exist_ok=True)
-    candidate_target = candidate.resolve().parent.parent
+    target_root = cache_root / "targets"
+    retained_target_names = frozenset(
+        {
+            f"baseline-{baseline_commit}",
+            f"upstream-{upstream_commit}",
+        }
+    )
+    pruned_targets = prune_stale_control_targets(
+        target_root, keep_names=retained_target_names
+    )
     candidate_temp = temp_root / "candidate-temp"
     candidate_temp.mkdir(parents=True, exist_ok=True)
     candidate_env = controlled_environment(cache_root, candidate_target, candidate_temp)
@@ -706,6 +972,9 @@ def run_compatibility(
     )
     identity, version_result = candidate_identity(candidate, repo_root)
     candidate_cases = run_expanded_cases(repo_root, cases, candidate_env)
+    candidate_protected_cases = run_expanded_cases(
+        repo_root, protected_cases, candidate_env
+    )
 
     baseline_identity: dict[str, Any]
     upstream_identity: dict[str, Any]
@@ -714,6 +983,8 @@ def run_compatibility(
     control_commands: dict[str, Any] = {}
     controls_root = Path(tempfile.mkdtemp(prefix="controls-", dir=temp_root))
     worktrees: list[Path] = []
+    primary_error: BaseException | None = None
+    cleanup_errors: list[str] = []
     try:
         for label, commit, binary_name in (
             ("baseline", baseline_commit, "corbanu"),
@@ -738,9 +1009,24 @@ def run_compatibility(
                 baseline_identity, baseline_cases = binary_identity, results
             else:
                 upstream_identity, upstream_cases = binary_identity, results
+    except BaseException as error:
+        primary_error = error
     finally:
-        for workspace in reversed(worktrees):
-            remove_detached_worktree(repo_root, workspace)
+        cleanup_errors.extend(cleanup_control_worktrees(repo_root, worktrees))
+        try:
+            shutil.rmtree(controls_root)
+        except OSError as error:
+            cleanup_errors.append(f"failed to remove control run root: {error}")
+    if primary_error is not None:
+        if cleanup_errors:
+            print(
+                "security-level-compat: cleanup warnings after primary failure: "
+                + "; ".join(cleanup_errors),
+                file=sys.stderr,
+            )
+        raise primary_error
+    if cleanup_errors:
+        raise CompatibilityError("; ".join(cleanup_errors))
 
     dirty_paths = git_output(repo_root, ["status", "--short"]).splitlines()
     configuration = {
@@ -749,6 +1035,7 @@ def run_compatibility(
         "cargo_features": "workspace-default",
         "color": "never",
         "control_isolation": "separate-source-and-target-directories",
+        "runtime_input_sha256": runtime_input_digests(repo_root),
     }
     report: dict[str, Any] = {
         "schema_version": 2,
@@ -781,8 +1068,10 @@ def run_compatibility(
         "candidate_runtime_tree": "clean",
         "control_commands": control_commands,
         "retained_control_artifacts": {
-            "run_root": str(controls_root),
-            "target_root": str(cache_root / "targets"),
+            "run_root": None,
+            "target_root": str(target_root),
+            "retained_targets": sorted(retained_target_names),
+            "pruned_stale_targets": pruned_targets,
         },
         "candidate_build_command": build_result.as_json(),
         "candidate_version_command": version_result.as_json(),
@@ -792,9 +1081,15 @@ def run_compatibility(
             "upstream": upstream_cases,
             "candidate": candidate_cases,
         },
+        "protected_cases": candidate_protected_cases,
     }
 
-    all_passed = expanded_results_pass(baseline_cases, upstream_cases, candidate_cases)
+    all_passed = expanded_results_pass(
+        baseline_cases,
+        upstream_cases,
+        candidate_cases,
+        candidate_protected_cases,
+    )
     with tempfile.TemporaryDirectory(
         prefix="immutable-probes-", dir=temp_root
     ) as clean_tmp:
@@ -854,6 +1149,8 @@ def prepare_compatibility(
         upstream_commit,
         candidate_commit,
     )
+    protected_cases = validate_protected_cases(control, repo_root, candidate_commit)
+    require_external_artifact_roots(repo_root, output_dir)
     output_dir.mkdir(parents=True, exist_ok=False)
     return write_report(
         output_dir,
@@ -869,6 +1166,7 @@ def prepare_compatibility(
             "immutable_probes_validated": len(probes),
             "surfaces": len(manifest["surfaces"]),
             "expanded_cases_validated": len(cases),
+            "protected_cases_validated": len(protected_cases),
             "expanded_surfaces": len(REQUIRED_EXPANDED_SURFACES),
             "qualification": "pending final candidate build and executed compatibility probes",
         },
@@ -914,7 +1212,7 @@ def main() -> int:
             cache_root,
             temp_root,
         )
-    except (CompatibilityError, json.JSONDecodeError, OSError) as error:
+    except Exception as error:
         print(f"security-level-compat: {error}")
         return 2
     print(f"security-level-compat: {'PASS' if passed else 'FAIL'}: {report_path}")
