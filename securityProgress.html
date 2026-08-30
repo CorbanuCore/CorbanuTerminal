@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Corbanu Terminal security sprint progress and dependency dashboard">
+  <title>Corbanu Security Progress</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --surface: #131923;
+      --surface-2: #1a2230;
+      --text: #f4f7fb;
+      --muted: #aab4c3;
+      --line: #2c3748;
+      --complete: #4bd093;
+      --complete-soft: rgba(75, 208, 147, .13);
+      --next: #62aeff;
+      --next-soft: rgba(98, 174, 255, .14);
+      --blocked: #f2b84b;
+      --blocked-soft: rgba(242, 184, 75, .14);
+      --queued: #7d899a;
+      --queued-soft: rgba(125, 137, 154, .12);
+      --integration: #a78bfa;
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 10% -5%, rgba(98, 174, 255, .15), transparent 30rem),
+        radial-gradient(circle at 96% 3%, rgba(75, 208, 147, .10), transparent 27rem),
+        var(--bg);
+      color: var(--text);
+      font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    a { color: inherit; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    main {
+      width: min(1160px, calc(100% - 36px));
+      margin: 0 auto;
+      padding: 58px 0 78px;
+    }
+
+    .eyebrow {
+      margin: 0 0 14px;
+      color: var(--next);
+      font-size: .78rem;
+      font-weight: 700;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+    h1 {
+      max-width: 760px;
+      margin-bottom: 18px;
+      font-size: clamp(2.7rem, 7vw, 5.8rem);
+      line-height: .96;
+      letter-spacing: -.055em;
+    }
+    h2 { margin-bottom: 9px; font-size: clamp(1.55rem, 3vw, 2.15rem); letter-spacing: -.025em; }
+    h3 { margin-bottom: 6px; font-size: 1.04rem; }
+    .lede { max-width: 720px; color: #d4dbe5; font-size: 1.15rem; }
+    .subtle { color: var(--muted); }
+
+    .snapshot {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 22px;
+      margin: 26px 0 38px;
+      padding: 13px 17px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(19, 25, 35, .82);
+      color: var(--muted);
+      font-size: .84rem;
+    }
+    .snapshot strong { color: var(--text); }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.35fr repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 54px;
+    }
+
+    .metric {
+      min-height: 150px;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+
+    .metric.primary {
+      display: grid;
+      grid-template-columns: 112px 1fr;
+      align-items: center;
+      gap: 18px;
+      background: linear-gradient(145deg, rgba(98, 174, 255, .13), var(--surface) 66%);
+    }
+
+    .donut {
+      display: grid;
+      width: 110px;
+      height: 110px;
+      place-items: center;
+      border-radius: 50%;
+      background: conic-gradient(var(--complete) 0 29%, var(--line) 29% 100%);
+    }
+    .donut::after {
+      display: grid;
+      width: 78px;
+      height: 78px;
+      place-items: center;
+      border-radius: 50%;
+      background: var(--surface);
+      color: var(--text);
+      content: "29%";
+      font-size: 1.45rem;
+      font-weight: 750;
+    }
+
+    .metric-number { display: block; margin-bottom: 5px; font-size: 2rem; font-weight: 750; letter-spacing: -.035em; }
+    .metric-label { display: block; color: var(--muted); font-size: .86rem; }
+    .green { color: var(--complete); }
+    .blue { color: var(--next); }
+    .amber { color: var(--blocked); }
+
+    section { margin-top: 54px; }
+    .section-head { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+    .section-head p { max-width: 560px; margin-bottom: 2px; color: var(--muted); }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 18px;
+      color: var(--muted);
+      font-size: .8rem;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 7px; }
+    .swatch { width: 10px; height: 10px; border-radius: 3px; }
+    .swatch.complete { background: var(--complete); }
+    .swatch.next { background: var(--next); }
+    .swatch.blocked { background: var(--blocked); }
+    .swatch.queued { background: var(--queued); }
+
+    .lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .lane {
+      display: flex;
+      min-height: 370px;
+      flex-direction: column;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-top: 4px solid var(--next);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    .lane.blocked { border-top-color: var(--blocked); }
+    .lane-order { color: var(--muted); font-size: .76rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+    .lane h3 { margin: 12px 0 7px; font-size: 1.28rem; }
+    .sprint-id { color: var(--next); font: .9rem ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .lane.blocked .sprint-id { color: var(--blocked); }
+    .lane > p { color: #d0d7e1; }
+    .status-line { margin-top: auto; padding-top: 20px; }
+
+    .bar-row { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 7px; color: var(--muted); font-size: .8rem; }
+    .bar-row strong { color: var(--text); }
+    .track { height: 9px; overflow: hidden; border-radius: 999px; background: var(--line); }
+    .fill { height: 100%; background: var(--next); }
+    .fill.complete { background: var(--complete); }
+    .fill.blocked { background: var(--blocked); }
+
+    .gate-list { display: grid; gap: 6px; margin: 14px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: .83rem; }
+    .gate-list li::before { margin-right: 8px; color: var(--blocked); content: "◇"; }
+
+    .dependency-map {
+      display: grid;
+      gap: 14px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #0e131b;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: minmax(190px, 1fr) 42px minmax(220px, 1.12fr) 42px minmax(260px, 1.3fr);
+      align-items: stretch;
+      gap: 8px;
+    }
+
+    .flow-arrow {
+      display: grid;
+      place-items: center;
+      color: var(--queued);
+      font-size: 1.7rem;
+    }
+
+    .node {
+      padding: 15px 16px;
+      border: 1px solid transparent;
+      border-radius: 13px;
+    }
+    .node strong { display: block; margin-bottom: 3px; }
+    .node small { display: block; color: var(--muted); }
+    .node.complete { border-color: rgba(75, 208, 147, .32); background: var(--complete-soft); }
+    .node.next { border-color: rgba(98, 174, 255, .42); background: var(--next-soft); }
+    .node.blocked { border-color: rgba(242, 184, 75, .42); background: var(--blocked-soft); }
+    .node.queued { border-color: rgba(125, 137, 154, .25); background: var(--queued-soft); }
+
+    .fanout { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .mini-node { padding: 8px 10px; border-radius: 8px; background: var(--queued-soft); color: var(--muted); font-size: .78rem; }
+
+    .capacity {
+      display: grid;
+      grid-template-columns: 1.85fr 1fr;
+      height: 48px;
+      overflow: hidden;
+      border-radius: 12px;
+      color: #071018;
+      font-size: .84rem;
+      font-weight: 750;
+    }
+    .capacity-delivery, .capacity-integration { display: grid; place-items: center; text-align: center; }
+    .capacity-delivery { background: var(--next); }
+    .capacity-integration { background: var(--integration); }
+
+    .phases { display: grid; gap: 10px; }
+    .phase {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.15fr) minmax(210px, 2fr) 90px;
+      align-items: center;
+      gap: 18px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .phase-name strong { display: block; }
+    .phase-name small { color: var(--muted); }
+    .phase-value { text-align: right; }
+    .phase-value strong { display: block; }
+    .phase-value small { color: var(--muted); }
+
+    .footnote {
+      margin-top: 34px;
+      padding: 18px 20px;
+      border-left: 4px solid var(--next);
+      border-radius: 5px 12px 12px 5px;
+      background: var(--next-soft);
+      color: #d7e3f2;
+    }
+    .footnote strong { color: var(--text); }
+
+    details { margin-top: 22px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+    summary { padding: 15px 17px; cursor: pointer; font-weight: 700; }
+    details div { padding: 0 17px 17px; color: var(--muted); }
+    details ul { margin-bottom: 0; }
+
+    footer { margin-top: 52px; color: var(--muted); font-size: .78rem; }
+
+    @media (max-width: 880px) {
+      .hero-grid { grid-template-columns: 1fr 1fr; }
+      .lanes { grid-template-columns: 1fr; }
+      .lane { min-height: 0; }
+      .flow { grid-template-columns: 1fr; }
+      .flow-arrow { transform: rotate(90deg); }
+      .section-head { align-items: start; flex-direction: column; }
+    }
+
+    @media (max-width: 600px) {
+      main { width: min(100% - 24px, 1160px); padding-top: 34px; }
+      .hero-grid { grid-template-columns: 1fr; }
+      .metric.primary { grid-template-columns: 92px 1fr; }
+      .donut { width: 90px; height: 90px; }
+      .donut::after { width: 64px; height: 64px; font-size: 1.15rem; }
+      .dependency-map { padding: 14px; }
+      .fanout { grid-template-columns: 1fr; }
+      .phase { grid-template-columns: 1fr 70px; gap: 9px 12px; }
+      .phase .track { grid-column: 1 / -1; grid-row: 2; }
+      .capacity { grid-template-columns: 1.86fr 1fr; font-size: .73rem; }
+    }
+
+    @media print {
+      :root { color-scheme: light; --bg: #fff; --surface: #fff; --surface-2: #fff; --text: #10151d; --muted: #4e5968; --line: #c9d0d9; }
+      body { background: #fff; }
+      main { width: 100%; padding: 0; }
+      .lane, .dependency-map, .metric, .phase { break-inside: avoid; }
+      .hero-grid, .lanes { grid-template-columns: repeat(3, 1fr); }
+      .hero-grid { grid-template-columns: 1.35fr repeat(3, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">Corbanu Terminal · P0 security program</p>
+      <h1>Security sprint progress</h1>
+      <p class="lede">A shareable view of what is finished, what can run next, and which dependencies those next sprints unlock.</p>
+      <div class="snapshot">
+        <span><strong>Snapshot:</strong> 30 August 2026</span>
+        <span><strong>Program base:</strong> <code>main @ be800fd2e</code></span>
+        <span><strong>Scope:</strong> 76 checked P0 sprint records</span>
+        <span><strong>Deadline:</strong> 8 October 2026</span>
+      </div>
+    </header>
+
+    <section class="hero-grid" aria-label="Program summary">
+      <div class="metric primary">
+        <div class="donut" role="img" aria-label="29 percent of planned security sprints are completed"></div>
+        <div>
+          <span class="metric-number">22 of 76</span>
+          <span class="metric-label">sprints completed and archived</span>
+        </div>
+      </div>
+      <div class="metric">
+        <span class="metric-number green">100%</span>
+        <span class="metric-label">Round two landed: PF-19-S02, PF-20-S02 and PF-21-S02</span>
+      </div>
+      <div class="metric">
+        <span class="metric-number blue">2</span>
+        <span class="metric-label">implementation lanes ready for fresh allocation</span>
+      </div>
+      <div class="metric">
+        <span class="metric-number amber">1</span>
+        <span class="metric-label">parallel readiness lane blocked on recorded decisions</span>
+      </div>
+    </section>
+
+    <section aria-labelledby="next-title">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Recommended next cycle</p>
+          <h2 id="next-title">Three parallel workstreams</h2>
+        </div>
+        <div class="legend" aria-label="Status legend">
+          <span><i class="swatch complete"></i>Complete</span>
+          <span><i class="swatch next"></i>Next</span>
+          <span><i class="swatch blocked"></i>Decision-blocked</span>
+          <span><i class="swatch queued"></i>Queued</span>
+        </div>
+      </div>
+
+      <div class="lanes">
+        <article class="lane">
+          <span class="lane-order">Lane 1 · highest leverage</span>
+          <h3>Durable event foundation</h3>
+          <a class="sprint-id" href="docs/sprints/current/p0-security-levels/pf-41-s03-durable-security-event-foundation.md">PF-41-S03</a>
+          <p>Build the shared secret-free event, journal, commit, failure and recovery contract. This is the best first lane because four major consumers wait on it.</p>
+          <p><strong>Immediate unlocks:</strong> protected runtime, isolated credential broker, financial receipts and Agent Sweep events.</p>
+          <div class="status-line">
+            <div class="bar-row"><span>PF-41 feature completion</span><strong>0 / 3 · 0%</strong></div>
+            <div class="track" role="progressbar" aria-label="PF-41 feature completion" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:0%"></div></div>
+            <p class="subtle" style="margin:9px 0 0;font-size:.79rem">Dependencies complete; exact owner, worktree, scope and integration gate still must be allocated.</p>
+          </div>
+        </article>
+
+        <article class="lane">
+          <span class="lane-order">Lane 2 · independent contract</span>
+          <h3>Credential usage reservations</h3>
+          <a class="sprint-id" href="docs/sprints/current/p0-security-levels/pf-13-s06-credential-usage-reservations.md">PF-13-S06</a>
+          <p>Add per-request and aggregate token, byte, request and spend accounting to the accepted opaque credential capability—without adding transport or TUI scope.</p>
+          <p><strong>Immediate unlock:</strong> advances the final integrated credential-boundary qualification chain.</p>
+          <div class="status-line">
+            <div class="bar-row"><span>PF-13 feature completion</span><strong>5 / 7 · 71%</strong></div>
+            <div class="track" role="progressbar" aria-label="PF-13 feature completion" aria-valuenow="71" aria-valuemin="0" aria-valuemax="100"><div class="fill complete" style="width:71%"></div></div>
+            <p class="subtle" style="margin:9px 0 0;font-size:.79rem">Dependencies complete; exact owner, worktree, scope and integration gate still must be allocated.</p>
+          </div>
+        </article>
+
+        <article class="lane blocked">
+          <span class="lane-order">Lane 3 · unblock before coding</span>
+          <h3>Classifier evidence readiness</h3>
+          <a class="sprint-id" href="docs/sprints/current/p0-security-levels/pf-35-s01-classifier-corpus-and-evaluation.md">PF-35-S01</a>
+          <p>Close the decisions required for a licensed, leakage-free blind classifier evaluation. Its code work must remain paused until this record is complete.</p>
+          <ul class="gate-list" aria-label="Unresolved classifier readiness decisions">
+            <li>Corpus licenses</li>
+            <li>Blind-evaluator custody</li>
+            <li>Weakest-supported CPU</li>
+            <li>Model and runtime</li>
+            <li>Signing root</li>
+            <li>Artifact distribution owner</li>
+          </ul>
+          <div class="status-line">
+            <div class="bar-row"><span>PF-35 feature completion</span><strong>0 / 3 · 0%</strong></div>
+            <div class="track" role="progressbar" aria-label="PF-35 feature completion" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><div class="fill blocked" style="width:0%"></div></div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="dependencies-title">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Dependency view</p>
+          <h2 id="dependencies-title">What each lane connects</h2>
+        </div>
+        <p>Arrows read left to right. Green foundations are already merged; blue is the next implementation; amber is a mandatory decision gate.</p>
+      </div>
+
+      <div class="dependency-map" role="img" aria-label="Three next security dependency lanes and their downstream unlocks">
+        <div class="flow">
+          <div class="node complete"><strong>PF-19-S02 + PF-20-S02</strong><small>Revocation fence and authoritative state complete</small></div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="node next"><strong>PF-41-S03</strong><small>Durable event and recovery foundation</small></div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="fanout">
+            <div class="mini-node">PF-22-S02 · runtime</div>
+            <div class="mini-node">PF-27-S04 · broker</div>
+            <div class="mini-node">PF-38-S03 · receipts</div>
+            <div class="mini-node">PF-40-S01 · Sweep</div>
+          </div>
+        </div>
+
+        <div class="flow">
+          <div class="node complete"><strong>PF-13-S01 + PF-17-S01</strong><small>Opaque capability and bounded grants complete</small></div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="node next"><strong>PF-13-S06</strong><small>Usage reservations and trusted settlement</small></div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="node queued"><strong>PF-13-S07</strong><small>Final integrated boundary qualification after other consumer dependencies</small></div>
+        </div>
+
+        <div class="flow">
+          <div class="node complete"><strong>PF-34-S04</strong><small>Screening contract and fixtures complete</small></div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="node blocked"><strong>Six readiness decisions</strong><small>Licensing, custody, CPU, runtime, signing and distribution</small></div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="node queued"><strong>PF-35-S01 → S02 → S03</strong><small>Blind corpus, CPU artifact, then calibrated ingress gate</small></div>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="capacity-title">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Capacity guardrail</p>
+          <h2 id="capacity-title">Keep 35% for integration</h2>
+        </div>
+        <p>No midpoint sprint estimates exist yet, so the checked plan’s provisional split remains the honest scheduling assumption.</p>
+      </div>
+      <div class="capacity" role="img" aria-label="65 percent delivery capacity and 35 percent integration capacity">
+        <div class="capacity-delivery">65% delivery</div>
+        <div class="capacity-integration">35% integration, rebases, remediation, reruns and evidence</div>
+      </div>
+    </section>
+
+    <section aria-labelledby="roadmap-title">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Whole-program view</p>
+          <h2 id="roadmap-title">Progress by security area</h2>
+        </div>
+        <p>Each percentage is completed-and-archived sprint records divided by all planned records in that area.</p>
+      </div>
+
+      <div class="phases">
+        <div class="phase">
+          <div class="phase-name"><strong>Core policy foundations</strong><small>PF-15 through PF-21</small></div>
+          <div class="track" role="progressbar" aria-label="Core policy foundations" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"><div class="fill complete" style="width:100%"></div></div>
+          <div class="phase-value"><strong class="green">100%</strong><small>10 / 10</small></div>
+        </div>
+        <div class="phase">
+          <div class="phase-name"><strong>Credential boundary</strong><small>PF-13</small></div>
+          <div class="track" role="progressbar" aria-label="Credential boundary" aria-valuenow="71" aria-valuemin="0" aria-valuemax="100"><div class="fill complete" style="width:71%"></div></div>
+          <div class="phase-value"><strong>71%</strong><small>5 / 7</small></div>
+        </div>
+        <div class="phase">
+          <div class="phase-name"><strong>Protected runtime and broker</strong><small>PF-22 and PF-27</small></div>
+          <div class="track" role="progressbar" aria-label="Protected runtime and broker" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:50%"></div></div>
+          <div class="phase-value"><strong>50%</strong><small>3 / 6</small></div>
+        </div>
+        <div class="phase">
+          <div class="phase-name"><strong>Content, network and provenance</strong><small>PF-28 through PF-35</small></div>
+          <div class="track" role="progressbar" aria-label="Content network and provenance" aria-valuenow="11" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:11%"></div></div>
+          <div class="phase-value"><strong>11%</strong><small>3 / 27</small></div>
+        </div>
+        <div class="phase">
+          <div class="phase-name"><strong>Operator and protected workflows</strong><small>PF-23–25 and PF-36–41</small></div>
+          <div class="track" role="progressbar" aria-label="Operator and protected workflows" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:0%"></div></div>
+          <div class="phase-value"><strong>0%</strong><small>0 / 22</small></div>
+        </div>
+        <div class="phase">
+          <div class="phase-name"><strong>Final qualification and acceptance</strong><small>PF-26</small></div>
+          <div class="track" role="progressbar" aria-label="Final qualification and acceptance" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:25%"></div></div>
+          <div class="phase-value"><strong>25%</strong><small>1 / 4</small></div>
+        </div>
+      </div>
+
+      <div class="footnote">
+        <strong>Scheduling conclusion:</strong> start PF-41-S03 and PF-13-S06 together after a fresh checked allocation. Run PF-35-S01’s six decision closures in parallel, but do not mark that sprint ready or begin implementation until every readiness item is recorded.
+      </div>
+
+      <details>
+        <summary>How to interpret the percentages</summary>
+        <div>
+          <ul>
+            <li>“Completed” means a sprint is accepted and archived—not merely planned, drafted or partially coded.</li>
+            <li>Feature percentages count only that feature’s sprint records; a dependency completed in another feature does not inflate the percentage.</li>
+            <li>The 35% integration reserve is provisional until midpoint estimates replace it with the plan’s worker-day formula.</li>
+            <li>Protected-mode activation remains unavailable; this dashboard reports engineering progress, not release readiness.</li>
+          </ul>
+        </div>
+      </details>
+    </section>
+
+    <footer>
+      Source of truth: <code>docs/plans/active/p0-security-levels.md</code> and the checked sprint records under <code>docs/sprints/</code>. Product citation: “Reconciled security scope — TO BUILD” — unsupported protected paths fail visibly rather than falling back to raw secrets or unscreened execution.
+    </footer>
+  </main>
+</body>
+</html>
