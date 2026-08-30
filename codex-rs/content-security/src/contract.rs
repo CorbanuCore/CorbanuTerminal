@@ -10,6 +10,8 @@ use std::fmt;
 
 pub const SCREENING_CONTRACT_VERSION: u32 = 1;
 pub const SCREENING_FIXTURE_SCHEMA_VERSION: u32 = 1;
+pub const MAX_SCREENED_CONTENT_BYTES: usize = 64 * 1024 * 1024;
+pub const MAX_SCREENING_SEGMENTS: u32 = 4_096;
 const MAX_ID_BYTES: usize = 128;
 
 /// A SHA-256 identity used to bind content and immutable configuration.
@@ -301,7 +303,9 @@ impl ScreeningBudget {
         if self.max_content_bytes == 0
             || self.max_segment_bytes == 0
             || self.max_segment_bytes > self.max_content_bytes
+            || self.max_content_bytes > MAX_SCREENED_CONTENT_BYTES
             || self.max_segments == 0
+            || self.max_segments > MAX_SCREENING_SEGMENTS
             || usize::try_from(self.max_segments)
                 .map_or(true, |count| count > self.max_content_bytes)
             || self.max_elapsed_ms == 0
@@ -449,6 +453,7 @@ pub enum UnavailableReason {
     FutureVerdict,
     VerdictBindingMismatch,
     VerdictIdentityMismatch,
+    ResourceExhausted,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -550,10 +555,20 @@ impl ScreeningSession {
     ) -> Result<Self, ContractError> {
         let budget = budget.validate()?;
         let too_many_segments = target.segment_count > budget.max_segments;
-        let segments = if too_many_segments {
-            Vec::new()
+        let mut segments = Vec::new();
+        let allocation_failed = !too_many_segments
+            && segments
+                .try_reserve_exact(target.segment_count as usize)
+                .is_err();
+        if !too_many_segments && !allocation_failed {
+            segments.resize_with(target.segment_count as usize, || None);
+        }
+        let failure = if too_many_segments {
+            Some(UnavailableReason::TooManySegments)
+        } else if allocation_failed {
+            Some(UnavailableReason::ResourceExhausted)
         } else {
-            vec![None; target.segment_count as usize]
+            None
         };
         Ok(Self {
             target,
@@ -562,7 +577,7 @@ impl ScreeningSession {
             segments,
             received_segments: 0,
             received_bytes: 0,
-            failure: too_many_segments.then_some(UnavailableReason::TooManySegments),
+            failure,
         })
     }
 
@@ -651,7 +666,10 @@ impl ScreeningSession {
         if self.received_segments != self.target.segment_count {
             return unavailable(UnavailableReason::PartialSegments);
         }
-        let mut bytes = Vec::with_capacity(self.received_bytes);
+        let mut bytes = Vec::new();
+        if bytes.try_reserve_exact(self.received_bytes).is_err() {
+            return unavailable(UnavailableReason::ResourceExhausted);
+        }
         for segment in &mut self.segments {
             let Some(segment) = segment.take() else {
                 return unavailable(UnavailableReason::PartialSegments);

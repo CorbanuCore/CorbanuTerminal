@@ -348,6 +348,14 @@ fn pf_34_s04_size_and_segment_budgets_fail_closed() {
         )),
         Some(UnavailableReason::TooManySegments)
     );
+
+    let mut unsafe_budget = budget();
+    unsafe_budget.max_content_bytes = MAX_SCREENED_CONTENT_BYTES + 1;
+    unsafe_budget.max_segment_bytes = MAX_SCREENED_CONTENT_BYTES + 1;
+    assert_eq!(unsafe_budget.validate(), Err(ContractError::InvalidBudget));
+    unsafe_budget = budget();
+    unsafe_budget.max_segments = MAX_SCREENING_SEGMENTS + 1;
+    assert_eq!(unsafe_budget.validate(), Err(ContractError::InvalidBudget));
 }
 
 #[test]
