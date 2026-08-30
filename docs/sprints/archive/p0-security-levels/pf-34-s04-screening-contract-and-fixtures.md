@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-34-S04"
 title: "Screening segment contract and fixtures"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-34"
 execution_order: 19
@@ -63,16 +63,16 @@ updated: 2026-08-30
 
 ## Remaining
 
-- [ ] Close the integration review's stale-evidence P2 with a clean checksum-verified follow-up, then archive this record.
+- [x] Closed the integration review's stale-evidence P2 with checksum-verified packet `dec900c90c5b7a0e649eef942b4dda12f605f0bc751aa708036102067188d829`; the follow-up returned `clean` with 0 P0/P1/P2 and explicitly authorized archive.
 
 ## Verification
 
-- [x] Run affected lane-local format/lint tools before final tests; record exact commands and actual test counts. Repository `just fix` remains G1-only because the crate is deliberately unregistered.
+- [x] Ran affected lane-local format/lint tools before final tests and recorded exact commands and actual test counts; repository `just fix` then ran after transferred G1 registration.
 - [x] Run planned content-security contract tests including malformed/partial/duplicate segments, digest/version mismatch, timeout and forced-allow safety assertions at the interface.
 - [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
-- [x] Verified no runtime route or profile becomes available: the lane does not add `lib.rs`, Cargo/Bazel registration, Core/provider adapters or profile changes.
+- [x] Verified no runtime route or profile becomes available: G1 adds only a private-module `lib.rs`, Cargo/Bazel registration and CI; it adds no consumer dependency, Core/provider adapter or profile change.
 - [x] At G1, registered-crate `just fix`, `just fmt`, named/full crate tests, lock regeneration, Bazel parity and recurring-CI contract checks ran on the combined tree.
-- [ ] Confirm the evidence-only remediation through the checksum-verified TMUX/Corbanu Terminal/Claude Opus 5.0 Max follow-up.
+- [x] Confirmed the evidence-only remediation through the checksum-verified TMUX/Corbanu Terminal/Claude Opus 5.0 Max follow-up.
 
 ## Exit evidence
 
@@ -80,4 +80,4 @@ updated: 2026-08-30
 - [x] PF-34-S01 and PF-35-S03 remain assigned actual rendering, PF-30 provenance and deterministic policy; fixture completion is not detector or ingestion qualification.
 - [x] Record the exact integration handoff and lane scope audit; archive and navigation changes remain after G1 combined-tree acceptance.
 - [x] Record the transferred integration commit and combined-tree source hashes.
-- [ ] Archive PF-34-S04 after the clean follow-up review; PF-35-S01 remains unallocated here.
+- [x] Archive PF-34-S04 after the clean follow-up review; PF-35-S01 remains unallocated here.

@@ -1,7 +1,7 @@
 # PF-34-S04 lane evidence
 
-Date: 2026-08-30. Status: **registered combined-tree candidate; independent
-integration follow-up and archive pending**.
+Date: 2026-08-30. Status: **registered combined tree accepted and sprint
+completed**.
 
 Product citations:
 
@@ -130,6 +130,9 @@ and reasoning effort `max`. Four checksum-verified immutable packets produced:
    behavior-preserving hex rewrite were accepted. The sole P2 was the stale
    lane ledger and evidence after that rewrite; the ledger, guard, workflow,
    dedicated known-answer test, and explicit no-unsafe policy were remediated.
+6. Integration remediation follow-up: **clean**, with 0 P0/P1/P2 and 5
+   non-blocking P3 observations. Packet SHA-256:
+   `dec900c90c5b7a0e649eef942b4dda12f605f0bc751aa708036102067188d829`.
 
 The complete runtime attestation, packet hashes, dispositions, and transient
 artifact hashes are recorded in
@@ -158,10 +161,11 @@ artifact hashes are recorded in
   `//codex-rs/content-security:all`.
 - Exact final-tree commands and outcomes: [integration qualification](integration-qualification.md).
 
-## Remaining
+## Completion
 
-- Obtain a clean checksum-verified follow-up integration review through TMUX,
-  Corbanu Terminal, Claude Opus 5.0 Max, then archive PF-34-S04.
+- The checksum-verified follow-up ran through TMUX, Corbanu Terminal and Claude
+  Opus 5.0 Max and returned `clean`, explicitly authorizing archive.
+- PF-34-S04 is archived with no PF-35 allocation or release claim.
 
 No human or release acceptance is claimed; downstream PF-34/PF-35 consumers and
 PF-26 retain those gates.
