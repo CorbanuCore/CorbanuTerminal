@@ -354,8 +354,8 @@ update; it cannot silently change Permissive or an accepted security level.
 The PF-34-S04 creation coordinate remains the immutable base recorded above.
 After allocation, the lane rebased onto current `main` at
 `1a5562738cb3d53bd4d0b6668761cfe76bd4b93e` to include the corrected TMUX and
-provider behavior before independent review. The lane-owned implementation is
-at `74e97148701ef541ff9ef2d0a9194ba472b2801c`; no shared Cargo, Bazel, lock, or
+provider behavior before independent review. The final lane-owned remediation
+candidate is `a75efecc0a37d5544e123ad19d57867cac360a68`; no shared Cargo, Bazel, lock, or
 module-registration file was edited. Jim Ricketts remains the G1 integration
 owner.
 

@@ -1,0 +1,5 @@
+$ git check-attr text eol -- qa/security-levels/ingress-contract/fixtures/benign-v1/raw.txt
+candidate=a75efecc0a37d5544e123ad19d57867cac360a68
+exit=0
+qa/security-levels/ingress-contract/fixtures/benign-v1/raw.txt: text: unset
+qa/security-levels/ingress-contract/fixtures/benign-v1/raw.txt: eol: lf

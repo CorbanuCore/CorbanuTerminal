@@ -53,7 +53,7 @@ updated: 2026-08-30
 - [x] Versioned benign, cross-segment hostile and quarantine-transition fixtures freeze hashes, schema, taint/no-authority and forbidden transitions.
 - [x] Full-content one-shot release and cancellation semantics prevent partial/prefix release and forced allow after any terminal fault.
 - [x] Pure constructors and fixture verifier add no Core/provider/runtime route; PF-30 source authority and PF-34/PF-35 change ownership remain separate.
-- [x] Lane-local formatting, Clippy, argument-comment lint, 20 named contract tests, 13 verifier regressions, seven-fixture/schema verification, governance and `git diff --check` pass at Opus-remediated implementation commit `74e97148701ef541ff9ef2d0a9194ba472b2801c`.
+- [x] Lane-local formatting, Clippy, argument-comment lint, 20 named contract tests, 14 verifier regressions, seven-fixture/schema verification, governance and `git diff --check` pass at final Opus-remediated implementation commit `a75efecc0a37d5544e123ad19d57867cac360a68`.
 - [x] Supplemental structured Codex review verified four in-scope findings, drove bounded remediation and finished clean on the complete committed branch.
 
 ## Remaining

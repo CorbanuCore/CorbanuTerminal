@@ -15,6 +15,8 @@ only after auditing collision order with PF-27-S03.
   `475ed05147fb8801672556048014a3ae28bcba86`
 - Opus-remediated implementation commit:
   `74e97148701ef541ff9ef2d0a9194ba472b2801c`
+- Final redacted-debug remediation commit:
+  `a75efecc0a37d5544e123ad19d57867cac360a68`
 - Contract version: `1`
 - Fixture schema version: `1`
 - Fixture manifest SHA-256: `7e8a4850f67052b2b5b2e0d17f5227116f226c65ee25a6945d04ff7a2a1a1fc3`

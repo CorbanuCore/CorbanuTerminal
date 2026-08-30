@@ -1,114 +1,63 @@
 {
   "schema_version": 1,
+  "candidate": "a75efecc0a37d5544e123ad19d57867cac360a68",
+  "rebased_main": "1a5562738cb3d53bd4d0b6668761cfe76bd4b93e",
   "checks": [
     {
       "name": "fmt-check",
-      "command": [
-        "cargo",
-        "fmt",
-        "--manifest-path",
-        "/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/Cargo.toml",
-        "--all",
-        "--",
-        "--check",
-        "--config",
-        "edition=2024"
-      ],
-      "exit": 0
+      "result": "pass"
     },
     {
       "name": "clippy",
-      "command": [
-        "cargo",
-        "clippy",
-        "--manifest-path",
-        "/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/Cargo.toml",
-        "--all-targets",
-        "--",
-        "-D",
-        "warnings"
-      ],
-      "exit": 0
+      "result": "pass"
     },
     {
       "name": "focused-tests",
-      "command": [
-        "cargo",
-        "test",
-        "--manifest-path",
-        "/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/Cargo.toml",
-        "pf_34_s04",
-        "--",
-        "--nocapture"
-      ],
-      "exit": 0
+      "result": "20 passed; 0 failed; 0 ignored"
     },
     {
       "name": "full-harness-tests",
-      "command": [
-        "cargo",
-        "test",
-        "--manifest-path",
-        "/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/Cargo.toml",
-        "--",
-        "--nocapture"
-      ],
-      "exit": 0
+      "result": "20 passed; 0 failed; 0 ignored"
+    },
+    {
+      "name": "argument-comment-lint",
+      "result": "pass"
     },
     {
       "name": "fixture-verifier",
-      "command": [
-        "python3",
-        "qa/security-levels/ingress-contract/verify.py"
-      ],
-      "exit": 0
+      "result": "7 fixtures verified; schema=1; contract=1"
     },
     {
       "name": "fixture-verifier-tests",
-      "command": [
-        "python3",
-        "qa/security-levels/ingress-contract/test_verify.py"
-      ],
-      "exit": 0
+      "result": "14 passed; 0 failed"
     },
     {
       "name": "jsonschema",
-      "command": [
-        "uv",
-        "run",
-        "--isolated",
-        "--with",
-        "jsonschema==4.25.1",
-        "python",
-        "-c",
-        "import json; from pathlib import Path; from jsonschema import Draft202012Validator; root=Path('qa/security-levels/ingress-contract'); schema=json.loads((root/'schema.json').read_text()); manifest=json.loads((root/'manifest.json').read_text()); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(manifest); print('jsonschema: schema valid; bundled manifest valid')"
-      ],
-      "exit": 0
+      "result": "Draft 2020-12 schema and manifest valid with jsonschema 4.25.1"
+    },
+    {
+      "name": "fixture-attributes",
+      "result": "text unset; eol lf"
     },
     {
       "name": "plan-governance",
-      "command": [
-        "python3",
-        "docs/plans/check.py"
-      ],
-      "exit": 0
+      "result": "active 1/2; available slots 1"
     },
     {
       "name": "sprint-governance",
-      "command": [
-        "python3",
-        "docs/sprints/check.py"
-      ],
-      "exit": 0
+      "result": "current 67; archived 88"
+    },
+    {
+      "name": "lane-hashes",
+      "result": "15 files verified"
+    },
+    {
+      "name": "evidence-consistency",
+      "result": "15 hashes and narrative identities agree"
     },
     {
       "name": "diff-check",
-      "command": [
-        "git",
-        "diff",
-        "--check"
-      ],
-      "exit": 0
+      "result": "pass"
     }
   ]
 }

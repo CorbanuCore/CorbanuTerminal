@@ -1,0 +1,4 @@
+$ python3 qa/security-levels/sprints/PF-34-S04/verify_evidence.py
+candidate=a75efecc0a37d5544e123ad19d57867cac360a68
+exit=0
+PF-34-S04 evidence: 15 hashes and narrative identities agree
