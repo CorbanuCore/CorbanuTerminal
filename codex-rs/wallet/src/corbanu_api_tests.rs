@@ -63,3 +63,32 @@ fn created_keys_accept_the_public_api_shape_without_changing_daemon_ipc() {
         })
     );
 }
+
+#[test]
+fn post_settlement_account_creates_a_key_only_without_an_active_one() {
+    let account = |keys| CorbanuApiAccount {
+        balance: CorbanuApiBalance {
+            balance_microusd: "1000000".to_string(),
+            reserved_microusd: "0".to_string(),
+            available_microusd: "1000000".to_string(),
+            balance_usd: "1".to_string(),
+            reserved_usd: "0".to_string(),
+            available_usd: "1".to_string(),
+        },
+        keys,
+        models: Vec::new(),
+    };
+    let key = |revoked_at| CorbanuApiKeySummary {
+        id: "2f9350c1-0cf6-4af1-bb90-cc693c923bb3".to_string(),
+        display_prefix: "cbn_live_4D7K".to_string(),
+        created_at: "2026-08-30T00:00:00.000Z".to_string(),
+        revoked_at,
+        last_used_at: None,
+    };
+
+    assert!(needs_initial_api_key(&account(Vec::new())));
+    assert!(needs_initial_api_key(&account(vec![key(Some(
+        "2026-08-30T01:00:00.000Z".to_string(),
+    ))])));
+    assert!(!needs_initial_api_key(&account(vec![key(None)])));
+}

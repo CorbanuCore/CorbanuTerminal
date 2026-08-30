@@ -129,7 +129,7 @@ pub(crate) async fn execute(
                 wallet,
                 PaymentIntent {
                     payment_url: intent.payment.url,
-                    gateway_origin,
+                    gateway_origin: gateway_origin.clone(),
                     network: intent.payment.network,
                     rpc_url: intent.payment.rpc_url,
                     asset: intent.payment.asset,
@@ -139,11 +139,32 @@ pub(crate) async fn execute(
             )
             .await?;
             let transaction = payment_transaction(&receipt);
-            let funded: CorbanuApiFunded =
-                serde_json::from_value(receipt.body).map_err(transport)?;
+            let account =
+                signed_wallet_operation(wallet, &gateway_origin, &CorbanuApiOperation::Account)
+                    .await
+                    .and_then(|response| {
+                        serde_json::from_value::<CorbanuApiAccount>(response).map_err(transport)
+                    })?;
+            let api_key = if !needs_initial_api_key(&account) {
+                None
+            } else {
+                Some(
+                    signed_wallet_operation(
+                        wallet,
+                        &gateway_origin,
+                        &CorbanuApiOperation::CreateKey,
+                    )
+                    .await
+                    .and_then(|response| {
+                        serde_json::from_value::<CreatedApiKey>(response)
+                            .map(Into::into)
+                            .map_err(transport)
+                    })?,
+                )
+            };
             Ok(CorbanuApiOperationResult::TopUp {
-                balance: funded.balance,
-                api_key: funded.api_key.map(Into::into),
+                balance: account.balance,
+                api_key,
                 transaction,
             })
         }
@@ -160,6 +181,10 @@ pub(crate) async fn execute(
             Ok(CorbanuApiOperationResult::KeyRevoked { key_id })
         }
     }
+}
+
+fn needs_initial_api_key(account: &CorbanuApiAccount) -> bool {
+    !account.keys.iter().any(|key| key.revoked_at.is_none())
 }
 
 async fn signed_wallet_operation(
@@ -237,13 +262,6 @@ struct CorbanuApiPayment {
     asset: String,
     pay_to: String,
     rpc_url: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct CorbanuApiFunded {
-    balance: CorbanuApiBalance,
-    api_key: Option<CreatedApiKey>,
 }
 
 #[derive(Deserialize)]
