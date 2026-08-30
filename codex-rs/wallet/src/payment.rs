@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -271,7 +272,7 @@ async fn build_transaction(
     let owner = signer.pubkey();
     let mint = pubkey(&intent.asset, "asset")?;
     let receiver = pubkey(&intent.pay_to, "receiver")?;
-    let fee_payer = pubkey(&requirement.extra.fee_payer, "fee payer")?;
+    let fee_payer = pubkey(requirement.sponsored_fee_payer()?, "fee payer")?;
     let token_program = spl_token::id();
     let ata_program = pubkey(ATA_PROGRAM, "associated token program")?;
     let source = Pubkey::find_program_address(
@@ -544,11 +545,15 @@ impl PaymentRequirement {
             && self.asset == intent.asset
             && self.pay_to == intent.pay_to
             && self.max_timeout_seconds > 0
-            && !self.extra.fee_payer.is_empty()
+            && self
+                .extra
+                .fee_payer
+                .as_deref()
+                .is_some_and(|fee_payer| !fee_payer.is_empty())
     }
 
     fn validate_fee_payer(&self, wallet: &UnlockedWallet) -> Result<(), X402PaymentError> {
-        let fee_payer = pubkey(&self.extra.fee_payer, "fee payer")?;
+        let fee_payer = pubkey(self.sponsored_fee_payer()?, "fee payer")?;
         let owner = pubkey(&wallet.manifest().address, "wallet owner")?;
         if fee_payer == owner {
             return Err(invalid(
@@ -557,14 +562,25 @@ impl PaymentRequirement {
         }
         Ok(())
     }
+
+    fn sponsored_fee_payer(&self) -> Result<&str, X402PaymentError> {
+        self.extra
+            .fee_payer
+            .as_deref()
+            .filter(|fee_payer| !fee_payer.is_empty())
+            .ok_or_else(|| invalid("payment requirement has no sponsored fee payer"))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PaymentExtra {
-    fee_payer: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    fee_payer: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     memo: Option<String>,
+    #[serde(flatten)]
+    fields: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -623,8 +639,9 @@ mod tests {
             pay_to: "G3s13pAE8f72jPPWSvwEfLr6Gg1WRh6Nv7i98HNMoVcd".to_string(),
             max_timeout_seconds: 300,
             extra: PaymentExtra {
-                fee_payer: "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4".to_string(),
+                fee_payer: Some("2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4".to_string()),
                 memo: None,
+                fields: BTreeMap::new(),
             },
         }
     }
@@ -693,7 +710,7 @@ mod tests {
         changed.max_timeout_seconds = 0;
         cases.push(("timeout", changed));
         let mut changed = valid;
-        changed.extra.fee_payer.clear();
+        changed.extra.fee_payer = None;
         cases.push(("sponsor", changed));
 
         for (field, tampered) in cases {
@@ -735,6 +752,63 @@ mod tests {
                 .expect("serialize payload")
                 .get("extensions")
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn heterogeneous_chain_offers_preserve_fields_and_select_exact_solana_payment() {
+        let value = serde_json::json!({
+            "x402Version": 2,
+            "resource": {
+                "url": "https://gateway.example/v1/topups?intent=top-up-1",
+                "description": "Fund a dollar balance",
+                "mimeType": "application/json"
+            },
+            "accepts": [
+                {
+                    "scheme": "exact",
+                    "network": "eip155:8453",
+                    "amount": "1000000",
+                    "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                    "payTo": "0x1455Bd7FBfBF92a171eF36025E13959E3b0ad8c0",
+                    "maxTimeoutSeconds": 300,
+                    "extra": { "name": "USD Coin", "version": "2" }
+                },
+                {
+                    "scheme": "exact",
+                    "network": SOLANA_MAINNET,
+                    "amount": "1000000",
+                    "asset": crate::SOLANA_MAINNET_USDC_MINT,
+                    "payTo": "G3s13pAE8f72jPPWSvwEfLr6Gg1WRh6Nv7i98HNMoVcd",
+                    "maxTimeoutSeconds": 300,
+                    "extra": {
+                        "feePayer": "2wKupLR9q6wXYppw8Gr2NvWxKBUqm4PPJKkQfoxHDBg4"
+                    }
+                }
+            ],
+            "error": "Payment required"
+        });
+        let challenge: PaymentRequired =
+            serde_json::from_value(value).expect("heterogeneous x402 challenge");
+        let intent = valid_intent();
+        let selected = challenge
+            .accepts
+            .iter()
+            .find(|requirement| requirement.matches(&intent))
+            .expect("exact Solana payment offer");
+
+        assert_eq!(selected.network, SOLANA_MAINNET);
+        assert_eq!(
+            serde_json::to_value(&challenge.accepts[0]).expect("serialize EVM alternative"),
+            serde_json::json!({
+                "scheme": "exact",
+                "network": "eip155:8453",
+                "amount": "1000000",
+                "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+                "payTo": "0x1455Bd7FBfBF92a171eF36025E13959E3b0ad8c0",
+                "maxTimeoutSeconds": 300,
+                "extra": { "name": "USD Coin", "version": "2" }
+            })
         );
     }
 
@@ -781,8 +855,9 @@ mod tests {
             pay_to: "G3s13pAE8f72jPPWSvwEfLr6Gg1WRh6Nv7i98HNMoVcd".to_string(),
             max_timeout_seconds: 300,
             extra: PaymentExtra {
-                fee_payer: created.manifest.address,
+                fee_payer: Some(created.manifest.address),
                 memo: None,
+                fields: BTreeMap::new(),
             },
         };
 

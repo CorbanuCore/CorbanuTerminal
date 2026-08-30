@@ -7,7 +7,7 @@ plan_feature: "PF-34"
 execution_order: 7
 owner: "Jim Ricketts"
 lane: "terminal-tui"
-write_scope: "codex-rs/model-provider-info/src/lib.rs, codex-rs/model-provider-info/src/model_provider_info_tests.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/bottom_pane/mod.rs, codex-rs/tui/src/bottom_pane/snapshots, codex-rs/tui/src/chatwidget.rs, codex-rs/tui/src/chatwidget/model_popups.rs, codex-rs/tui/src/chatwidget/wallet_account_actions.rs, codex-rs/tui/src/chatwidget/wallet_api.rs, codex-rs/tui/src/chatwidget/wallet_api_tests.rs, codex-rs/tui/src/chatwidget/wallet_menu.rs, codex-rs/tui/src/chatwidget/wallet_unlock.rs, codex-rs/tui/src/chatwidget/wallet_unlock_tests.rs, codex-rs/tui/src/slash_command.rs"
+write_scope: "codex-rs/model-provider-info/src/lib.rs, codex-rs/model-provider-info/src/model_provider_info_tests.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/bottom_pane/mod.rs, codex-rs/tui/src/bottom_pane/snapshots, codex-rs/tui/src/chatwidget.rs, codex-rs/tui/src/chatwidget/model_popups.rs, codex-rs/tui/src/chatwidget/wallet_account_actions.rs, codex-rs/tui/src/chatwidget/wallet_api.rs, codex-rs/tui/src/chatwidget/wallet_api_tests.rs, codex-rs/tui/src/chatwidget/wallet_menu.rs, codex-rs/tui/src/chatwidget/wallet_unlock.rs, codex-rs/tui/src/chatwidget/wallet_unlock_tests.rs, codex-rs/tui/src/slash_command.rs, codex-rs/wallet/src/payment.rs"
 worktree: "/home/pfrpc/repos/CorbanuTerminal"
 branch: "feat/corbanu-api-wallet"
 base_commit: "4ff38e974b4e63cebffc5d608c5584e2d453cf1b"
@@ -56,6 +56,7 @@ updated: 2026-08-30
 - [x] Exercised `/wallet` -> `Corbanu API` against the deployed backend and confirmed the zero-dollar balance, arbitrary top-up, key actions, and all six priced models render without exposing upstream vendors.
 - [x] Removed the legacy status request and all Plan status, details, receipt, recovery, and mixed-credential copy from `/wallet`; stored credentials now expose only Corbanu API disconnect behavior.
 - [x] Rebuilt `corbanu-debug` and exercised `/wallet` against the production database after legacy deletion; only Receive, Corbanu API, unlock, API disconnect, backup/removal, and refresh actions remain.
+- [x] Generalized the x402 parser to preserve heterogeneous chain alternatives and select only the exact confirmed Solana offer; the production Solana-plus-Base challenge now passes typed parsing while retaining its wire fields.
 
 ## Remaining
 
@@ -64,7 +65,7 @@ updated: 2026-08-30
 
 ## Verification
 
-- [x] Focused tests: 14 wallet, 9 wallet-daemon, 58 provider, 4 wallet-API snapshots, and 17 API-only wallet-menu tests pass.
+- [x] Focused tests: 15 wallet, 9 wallet-daemon, 58 provider, 4 wallet-API snapshots, and 17 API-only wallet-menu tests pass.
 - [x] Integration tests cover provider mapping, operation-preserving daemon IPC, backend public-key conversion, and exact microdollars.
 - [x] TUI applicability is resolved and non-secret read-only checkpoints are recorded; human passcode/key lifecycle remains pending.
 - [x] Integrated interfaces in `594d618306d922963cf6676d3600cd381922759c`, `865ea2edd2`, and API-only wallet commit `66ff6579d7` match PF-34-S01 and backend `6cc7894`.
@@ -78,5 +79,6 @@ updated: 2026-08-30
 - [x] Production true-TUI log is `/tmp/corbanu-api-prod-qa-final.nuVmDv/codex-tui.log` with no panic, malformed-catalog, or unavailable-screen signature.
 - [x] API-only wallet true-TUI log is `/tmp/corbanu-no-legacy-final.Zn0gYI/codex-tui.log` with no Plan copy, Plan-status request failure, panic, malformed, or unavailable signature.
 - [x] Removed the deleted server credential from the local encrypted store through the API-only confirmation flow; `/tmp/corbanu-credential-clean-final.nzi7jm/codex-tui.log` records the successful disconnect notice and a reopened wallet without the disconnect action or legacy Plan surface.
+- [x] The failed production `$20` top-up remained pending with no transaction and no credited balance; the installed `corbanu-debug` now matches the rebuilt parser-fix binary byte-for-byte. Human payment retry remains explicit and pending.
 - [x] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/corbanu-api-balance/`.
