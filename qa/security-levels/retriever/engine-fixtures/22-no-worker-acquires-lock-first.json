@@ -3,15 +3,8 @@
   "snapshot": {
     "fixture_version": 1,
     "host": {"os": "linux", "arch": "amd64", "online": true},
-    "preference": "auto",
+    "preference": "docker",
     "engines": {
-      "podman": {
-        "installed": true,
-        "daemon_state": "running",
-        "api_compatible": true,
-        "architecture": "arm64",
-        "workers": []
-      },
       "docker": {
         "installed": true,
         "daemon_state": "running",
@@ -26,21 +19,15 @@
           "verified": true,
           "tampered": false
         },
-        "workers": [],
-        "lock": {
-          "corbanu_owned": true,
-          "worker": null,
-          "reinspected": true,
-          "owned_worker_snapshot": "[]"
-        }
+        "workers": []
       }
     }
   },
   "expected": {
-    "status": "blocked",
-    "engine": "podman",
+    "status": "action_required",
+    "engine": "docker",
     "worker": null,
-    "reason_code": "wrong_architecture",
-    "actions": ["select_matching_architecture_manually"]
+    "reason_code": "corbanu_lock_absent",
+    "actions": ["acquire_corbanu_lock_manually", "rerun_check"]
   }
 }

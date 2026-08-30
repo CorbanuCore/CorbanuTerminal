@@ -9,7 +9,8 @@
         "installed": true,
         "daemon_state": "running",
         "api_compatible": true,
-        "architecture": "arm64",
+        "architecture": "amd64",
+        "image": {"present": false},
         "workers": []
       },
       "docker": {
@@ -23,24 +24,18 @@
           "resolved_platform": "linux/amd64",
           "manifest_digest": "sha256:65fc31598af6cc5053c63b5f5205524a94964d82fd33b24b6c96c7cb0be35ada",
           "config_digest": "sha256:c58b6a795739d36a29eb400deb000c35fdcb2834799aad6b90bdec5feca0e24f",
-          "verified": true,
-          "tampered": false
+          "verified": false,
+          "tampered": true
         },
-        "workers": [],
-        "lock": {
-          "corbanu_owned": true,
-          "worker": null,
-          "reinspected": true,
-          "owned_worker_snapshot": "[]"
-        }
+        "workers": []
       }
     }
   },
   "expected": {
     "status": "blocked",
-    "engine": "podman",
+    "engine": "docker",
     "worker": null,
-    "reason_code": "wrong_architecture",
-    "actions": ["select_matching_architecture_manually"]
+    "reason_code": "image_tampered",
+    "actions": ["quarantine_owned_image_reference", "obtain_reviewed_artifact"]
   }
 }

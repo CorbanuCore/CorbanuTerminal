@@ -12,7 +12,7 @@
         "lock": {"corbanu_owned": true, "worker": "corbanu-retriever", "reinspected": true, "owned_worker_snapshot": "[[\"corbanu-retriever\",\"running\"]]"},
         "active_clients": 0
       },
-      "docker": {"installed": true, "daemon_state": "running", "api_compatible": true, "architecture": "amd64"}
+      "docker": {"installed": true, "daemon_state": "running", "api_compatible": true, "architecture": "amd64", "image": {"present": false}, "workers": []}
     }
   },
   "expected": {"status": "ready", "engine": "podman", "worker": "corbanu-retriever", "reason_code": "reuse_owned_worker", "actions": ["reuse_owned_worker", "preserve_unrelated_resources"]}

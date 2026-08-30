@@ -37,6 +37,15 @@ AUTO_SKIPPABLE_REASONS = {
     "engine_state_unknown",
     "engine_api_incompatible",
 }
+AUTO_REMEDIABLE_REASONS = {
+    "corbanu_lock_absent",
+    "image_missing",
+    "offline_image_missing",
+    "offline_verification_unavailable",
+    "owned_worker_absent",
+    "owned_worker_stalled",
+    "owned_worker_stopped",
+}
 
 
 class ContractError(ValueError):
@@ -93,11 +102,19 @@ def resolve_evidence_path(relative: object) -> tuple[str, Path]:
     try:
         target = unresolved.resolve(strict=True)
         evidence_root = EVIDENCE_ROOT.resolve(strict=True)
-    except (OSError, RuntimeError) as exc:
+    except (OSError, RuntimeError, ValueError) as exc:
         raise ContractError(f"missing evidence file {relative_string}: {exc}") from exc
     require(
         target.is_relative_to(evidence_root),
         f"evidence path resolves outside retriever scope: {relative_string}",
+    )
+    require(
+        target.is_relative_to(ROOT.resolve(strict=True)),
+        f"evidence path resolves outside repository scope: {relative_string}",
+    )
+    require(
+        target == unresolved,
+        f"evidence path contains a symlink: {relative_string}",
     )
     require(target.is_file(), f"missing evidence file {relative_string}")
     return relative_string, target
@@ -109,7 +126,7 @@ def resolve_repository_input(path: Path, kind: str) -> Path:
     try:
         resolved = unresolved.resolve(strict=True)
         root = ROOT.resolve(strict=True)
-    except (OSError, RuntimeError) as exc:
+    except (OSError, RuntimeError, ValueError) as exc:
         raise ContractError(f"invalid {kind} input: {exc}") from exc
     require(
         resolved.is_relative_to(root),
@@ -533,6 +550,29 @@ def evaluate_snapshot(
     )
     engines = snapshot.get("engines")
     require(isinstance(engines, dict), "engines must be an object")
+    installed_supported_engines: list[str] = []
+    for engine_name in ENGINE_ORDER:
+        engine_state = engines.get(engine_name)
+        if engine_state is None:
+            continue
+        require(isinstance(engine_state, dict), f"{engine_name} must be an object")
+        require(
+            isinstance(engine_state.get("installed"), bool),
+            f"{engine_name}.installed must be a boolean",
+        )
+        if engine_state["installed"] is True:
+            installed_supported_engines.append(engine_name)
+        if "workers" in engine_state:
+            require(
+                isinstance(engine_state["workers"], list),
+                f"{engine_name}.workers must be a list",
+            )
+    if len(installed_supported_engines) > 1:
+        for engine_name in installed_supported_engines:
+            require(
+                isinstance(engines[engine_name].get("workers"), list),
+                f"{engine_name}.workers inventory is required for multi-engine selection",
+            )
     owned_by_engine = {
         name: owned_workers(state)
         for name, state in engines.items()
@@ -566,21 +606,35 @@ def evaluate_snapshot(
 
     if preference == "auto":
         first_unselectable: dict[str, Any] | None = None
+        first_remediable: dict[str, Any] | None = None
+        first_ready: dict[str, Any] | None = None
         for name in installed:
             result = evaluate_snapshot({**snapshot, "preference": name}, manifest)
-            if result["reason_code"] not in AUTO_SKIPPABLE_REASONS:
+            reason_code = result.get("reason_code")
+            if reason_code in AUTO_SKIPPABLE_REASONS:
+                if owned_by_engine.get(name):
+                    return engine_failure(
+                        "owned_worker_on_unavailable_engine",
+                        name,
+                        [
+                            "recover_selected_engine_manually",
+                            "do_not_create_duplicate",
+                        ],
+                    )
+                if first_unselectable is None:
+                    first_unselectable = result
+            elif reason_code in AUTO_REMEDIABLE_REASONS:
+                if first_remediable is None:
+                    first_remediable = result
+            elif result.get("status") == "ready":
+                if first_ready is None:
+                    first_ready = result
+            else:
                 return result
-            if owned_by_engine.get(name):
-                return engine_failure(
-                    "owned_worker_on_unavailable_engine",
-                    name,
-                    [
-                        "recover_selected_engine_manually",
-                        "do_not_create_duplicate",
-                    ],
-                )
-            if first_unselectable is None:
-                first_unselectable = result
+        if first_ready is not None:
+            return first_ready
+        if first_remediable is not None:
+            return first_remediable
         require(
             first_unselectable is not None,
             "auto selection produced no result",
@@ -678,6 +732,14 @@ def evaluate_snapshot(
             ["reconcile_owned_workers_manually", "do_not_remove_unrelated_resources"],
         )
     if not owned:
+        if state.get("lock") is None:
+            return {
+                "status": "action_required",
+                "engine": name,
+                "worker": None,
+                "reason_code": "corbanu_lock_absent",
+                "actions": ["acquire_corbanu_lock_manually", "rerun_check"],
+            }
         lock_failure = validate_worker_lock(state, name, None, owned)
         if lock_failure is not None:
             return lock_failure
@@ -746,8 +808,11 @@ def run_fixtures(directory: Path, manifest: dict[str, Any]) -> tuple[int, int]:
         expected = fixture.get("expected")
         require(isinstance(snapshot, dict), f"{path}: snapshot must be an object")
         require(isinstance(expected, dict), f"{path}: expected must be an object")
-        first = evaluate_snapshot(snapshot, manifest)
-        second = evaluate_snapshot(snapshot, manifest)
+        try:
+            first = evaluate_snapshot(snapshot, manifest)
+            second = evaluate_snapshot(snapshot, manifest)
+        except ContractError as exc:
+            raise ContractError(f"{path}: {exc}") from exc
         require(first == second, f"{path}: evaluation is not deterministic")
         deterministic += 1
         require(first == expected, f"{path}: expected {expected!r}, got {first!r}")
@@ -800,6 +865,11 @@ def run_evidence_path_checks() -> int:
         validate_evidence_relative_path(valid) == PurePosixPath(valid),
         "canonical evidence path was rejected",
     )
+    resolved_relative, resolved_target = resolve_evidence_path(valid)
+    require(
+        resolved_relative == valid and resolved_target.is_file(),
+        "canonical evidence file did not resolve",
+    )
     rejected = (
         "qa/security-levels/retriever/../artifact-manifest.json",
         "qa/security-levels/retriever/licenses/../../outside.txt",
@@ -807,7 +877,7 @@ def run_evidence_path_checks() -> int:
         "qa//security-levels/retriever/licenses/README.md",
         r"qa\security-levels\retriever\licenses\README.md",
     )
-    passed = 1
+    passed = 2
     for relative in rejected:
         try:
             validate_evidence_relative_path(relative)
@@ -815,6 +885,12 @@ def run_evidence_path_checks() -> int:
             passed += 1
         else:
             raise ContractError(f"unsafe evidence path was accepted: {relative!r}")
+    try:
+        resolve_repository_input(Path(ROOT.anchor), "fixture")
+    except ContractError:
+        passed += 1
+    else:
+        raise ContractError("out-of-repository fixture input was accepted")
     return passed
 
 
