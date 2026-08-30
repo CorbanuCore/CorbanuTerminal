@@ -1420,6 +1420,18 @@ mod tests {
     }
 
     #[test]
+    fn wallet_api_disconnect_confirmation_copy_snapshot() {
+        let rendered = [
+            "Disconnect Corbanu API",
+            "This removes the stored API credential from this device. Your wallet and dollar balance remain unchanged.",
+            "Cancel — Keep this device connected",
+            "Disconnect API — Remove only the stored API credential",
+        ]
+        .join("\n");
+        insta::assert_snapshot!(rendered);
+    }
+
+    #[test]
     fn wallet_upgrade_flow_copy_snapshot() {
         let upgrade_intro = "Choose a tier above Starter. It starts 2026-08-19T00:35:20Z after the paid period you already own.";
         let rendered = [

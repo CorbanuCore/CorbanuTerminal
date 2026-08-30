@@ -22,8 +22,8 @@ impl ChatWidget {
                     AppEvent::OpenWallet
                 }),
                 confirmation_item(
-                    "Disconnect plan",
-                    "Remove only the metered-inference credential",
+                    "Disconnect API",
+                    "Remove only the stored API credential",
                     || AppEvent::WalletPlanDisconnectRequested,
                 ),
             ],
