@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-33-S03"
 title: "Pure destination-policy contract"
-status: ready
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-33"
 execution_order: 18
@@ -49,21 +49,23 @@ updated: 2026-08-30
 - [x] Frozen `pf33-destination-policy/v1` pure normalization, policy-polarity, DNS-answer, private-service and redirect/replay decisions without runtime registration or socket access.
 - [x] Added standalone deterministic table/property coverage for URL ambiguity, IDNA, suffix/trailing-dot/path boundaries, unusual IPv4, mapped/translation/tunnel IPv6, reserved names, answer-set polarity and malformed policy.
 - [x] Recorded a hashed versioned representative fixture and the isolated 239/239 network-proxy result under `qa/security-levels/sprints/PF-33-S03/`; the suite executes every frozen fixture case.
+- [x] Completed Claude Opus 5 Max Computer Use review (`PASS`) and Codex GPT-5.5 Autoreview (clean, 0.86 confidence); resolved accepted findings in scope and retained immutable evidence.
+- [x] Integration owner received the candidate, audited the literal scope, reran the ordered Rust and governance gates on the combined tree, archived the sprint, updated plan/navigation and returned the active lane slot.
 
 ## Remaining
 
-- [x] Completed Claude Opus 5 Max Computer Use review (`PASS`) and Codex GPT-5.5 Autoreview (clean, 0.86 confidence); resolved accepted findings in scope and retained immutable evidence.
-- [ ] Integration owner audits the literal scope, reruns the ordered Rust and governance gates on the combined tree, archives the sprint, updates plan/navigation and returns the active lane slot.
+- None.
 
 ## Verification
 
-- [x] Ran `just fix -p codex-network-proxy`, `just fmt`, then `just test -p codex-network-proxy`: pre-final-review 239 passed, zero skipped across three binaries; sixteen destination-contract tests.
+- [x] Ran `just fix -p codex-network-proxy`, `just fmt`, then `just test -p codex-network-proxy` on the isolated and canonical trees: 239 passed, zero skipped across three binaries; sixteen destination-contract tests.
 - [x] Ran standalone deterministic table/property tests with synthetic address sets; proved empty/absent/wildcard/private polarity and bounded normalization.
 - [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
 - [x] Verified the source has no socket/client call and remains absent from runtime/module/manifests; fixture-only preparation exposes no route or profile.
+- [x] Receiving integration owner reran plan/sprint governance and whitespace checks on the completed combined archive tree.
 
 ## Exit evidence
 
-- [x] Reviewed source commit, source/test/fixture hashes, owner review and final isolated outputs recorded under `qa/security-levels/sprints/PF-33-S03/`.
+- [x] Reviewed source commit, source/test/fixture hashes, owner reviews and final-tree outputs recorded under `qa/security-levels/sprints/PF-33-S03/`.
 - [x] No SSRF-prevention claim; PF-33-S01/S02 retain real resolver, connected-peer, pool/proxy and alternate-egress qualification.
-- [ ] Record integration handoff and scope audit; complete all ledgers before archive and update plan/navigation.
+- [x] Scope audit, integration handoff, combined-tree reruns and completed archive transition recorded; all ledgers updated.

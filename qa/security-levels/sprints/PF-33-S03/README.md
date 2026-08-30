@@ -25,11 +25,11 @@ just test -p codex-network-proxy
 
 Result on macOS arm64 on 2026-08-30 before final review: fix and formatting passed; nextest ran 239 tests across three binaries, 239 passed, zero skipped. Sixteen tests are the standalone destination-contract table/property and executable-fixture suite. `git diff --check` passed.
 
-`python3 docs/plans/check.py` passed in the lane checkout. `python3 docs/sprints/check.py` correctly reported that the PF-33 worktree coordinate was absent from the lane's frozen pre-allocation base; the canonical main allocation commit contains that serialized plan record. The integration owner must rerun both governance checkers after merge, before archive.
+Integration merge `1b07aef5d1a22aedd6c12140e36beaf89c0eede1` received the reviewed source unchanged. On canonical `main`, the integration owner reran the same required sequence: clippy fix and formatting passed without edits; nextest ran 239 tests across three binaries, 239 passed, zero skipped (one existing test carried nextest's leaky annotation). Both governance checkers and `git diff --check` passed on the completed archive tree.
 
 ## Security boundary and handoff
 
-This sprint makes no SSRF-prevention or live-route claim. PF-33-S01/S02 still own real resolver acquisition, complete-answer enforcement, connect-to-approved-address behavior, connected-peer verification, redirect/retry re-resolution and chain limits, pool partitioning/expiry, inherited proxy and `NO_PROXY` resistance, operator-specific translation prefixes, raw socket/UDP/QUIC and alternate-egress controls, and IPC/isolation. Consumer code must use this versioned contract without a permissive fallback.
+This sprint makes no SSRF-prevention or live-route claim. PF-33-S01/S02 still own real resolver acquisition, complete-answer enforcement, connect-to-approved-address behavior, connected-peer verification, redirect/retry re-resolution and chain limits, pool partitioning/expiry, inherited proxy and `NO_PROXY` resistance, operator-specific translation prefixes, raw socket/UDP/QUIC and alternate-egress controls, and IPC/isolation. Consumer code must use this versioned contract without a permissive fallback. The receiving owner audited the literal scope, archived PF-33-S03 and returned the parallel slot.
 
 The product requirement advanced is **Reconciled security scope — TO BUILD**: “Unknown or unsupported protected paths fail visibly rather than falling back to raw secrets or unscreened execution.”
 
