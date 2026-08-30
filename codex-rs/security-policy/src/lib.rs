@@ -45,6 +45,8 @@ pub use bounded::BoundedTextError;
 pub use bounded::MAX_POLICY_TEXT_BYTES;
 pub use credential::CAPABILITY_ID_HEX_LENGTH;
 pub use credential::CREDENTIAL_CAPABILITY_SCHEMA_VERSION;
+pub use credential::CREDENTIAL_USAGE_MAX_REQUESTS;
+pub use credential::CREDENTIAL_USAGE_SCHEMA_VERSION;
 pub use credential::CapabilityId;
 pub use credential::CredentialCapabilityError;
 pub use credential::CredentialCapabilityRequest;
