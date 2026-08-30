@@ -59,6 +59,7 @@ updated: 2026-08-30
 - [x] Generalized the x402 parser to preserve heterogeneous chain alternatives and select only the exact confirmed Solana offer; the production Solana-plus-Base challenge now passes typed parsing while retaining its wire fields.
 - [x] Corrected the shared unlock-capability lifecycle so one-action grants are removed from TUI state when any signing request begins, while timed grants remain reusable; successful top-ups no longer poison the following account refresh with a daemon `capability_invalid` refusal.
 - [x] Replaced the legacy four-row Plan relabeling with the six provider-neutral Corbanu API routes while preserving the supported Ambient GLM 5.2 option; Flash is marked recommended and GLM 5.3 is labeled as using balance faster.
+- [x] Replaced `/wallet` pricing referrals in the model picker with each route's explicit input, cache-read, cache-write, and output rates, including the Luna/Sol 272K+ context schedule.
 
 ## Remaining
 

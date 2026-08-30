@@ -7,18 +7,20 @@ expression: popup
 
   OpenAI  Ambient  [Corbanu API]  Kimi Code  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta  Vercel  Baseten  OpenRouter
 
-› 1. GLM 5.3 Flash (Recommended) (current)  Model: corbanu/glm-5.3-flash. Recommended. Wallet-funded at exact cost with zero markup.
-                                            Current prices are shown in /wallet. Third-party inference.
+› 1. GLM 5.3 Flash (Recommended) (current)  Model: corbanu/glm-5.3-flash. At cost: $0.15/M input · $0.03/M cache read · $0.15/M cache
+                                            write · $0.50/M output. Third-party inference.
   2. Ambient GLM 5.2                        Model: z-ai/glm-5.2. Ambient: GLM 5.2 - $0.76/M input, $0.14/M cached input, $2.42/M output.
-  3. GLM 5.3                                Model: corbanu/glm-5.3. Uses balance faster. Wallet-funded at exact cost with zero markup.
-                                            Current prices are shown in /wallet. Third-party inference.
-  4. GPT-5.6 Luna (xhigh)                   Model: corbanu/gpt-5.6-luna. Wallet-funded at exact cost with zero markup. Current prices are
-                                            shown in /wallet. Third-party inference.
-  5. GPT-5.6 Sol                            Model: corbanu/gpt-5.6-sol. Wallet-funded at exact cost with zero markup. Current prices are
-                                            shown in /wallet. Third-party inference.
-  6. Claude Fable 5                         Model: corbanu/claude-fable-5. Wallet-funded at exact cost with zero markup. Current prices
-                                            are shown in /wallet. Third-party inference.
-  7. DeepSeek V4 Pro                        Model: corbanu/deepseek-v4-pro. Wallet-funded at exact cost with zero markup. Current prices
-                                            are shown in /wallet. Third-party inference.
+  3. GLM 5.3                                Model: corbanu/glm-5.3. Uses balance faster. At cost: $1.40/M input · $0.14/M cache read ·
+                                            $1.40/M cache write · $4.40/M output. Third-party inference.
+  4. GPT-5.6 Luna (xhigh)                   Model: corbanu/gpt-5.6-luna. At cost: $0.20/M input · $0.02/M cache read · $0.25/M cache write
+                                            · $1.20/M output. At 272K+ context: $0.40/M · $0.04/M · $0.50/M · $1.80/M. Third-party
+                                            inference.
+  5. GPT-5.6 Sol                            Model: corbanu/gpt-5.6-sol. At cost: $2.00/M input · $0.20/M cache read · $2.50/M cache write
+                                            · $10.00/M output. At 272K+ context: $4.00/M · $0.40/M · $5.00/M · $15.00/M. Third-party
+                                            inference.
+  6. Claude Fable 5                         Model: corbanu/claude-fable-5. At cost: $2.00/M input · $1.00/M cache read · $2.50/M cache
+                                            write · $10.00/M output. Third-party inference.
+  7. DeepSeek V4 Pro                        Model: corbanu/deepseek-v4-pro. At cost: $0.02175/M input · $0/M cache read · $0.00018125/M
+                                            cache write · $0.0435/M output. Third-party inference.
 
   Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

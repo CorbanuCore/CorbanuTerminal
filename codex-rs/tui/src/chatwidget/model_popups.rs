@@ -98,7 +98,7 @@ const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 7] = [
         public_model: CORBANU_API_GLM_5_3_FLASH_MODEL,
         display_name: Some("GLM 5.3 Flash (Recommended)"),
         description: Some(
-            "Recommended. Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+            "At cost: $0.15/M input · $0.03/M cache read · $0.15/M cache write · $0.50/M output. Third-party inference.",
         ),
         provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
         is_default: true,
@@ -116,7 +116,7 @@ const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 7] = [
         public_model: CORBANU_API_GLM_5_3_MODEL,
         display_name: Some("GLM 5.3"),
         description: Some(
-            "Uses balance faster. Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+            "Uses balance faster. At cost: $1.40/M input · $0.14/M cache read · $1.40/M cache write · $4.40/M output. Third-party inference.",
         ),
         provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
         is_default: false,
@@ -126,7 +126,7 @@ const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 7] = [
         public_model: CORBANU_API_GPT_5_6_LUNA_MODEL,
         display_name: Some("GPT-5.6 Luna (xhigh)"),
         description: Some(
-            "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+            "At cost: $0.20/M input · $0.02/M cache read · $0.25/M cache write · $1.20/M output. At 272K+ context: $0.40/M · $0.04/M · $0.50/M · $1.80/M. Third-party inference.",
         ),
         provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
         is_default: false,
@@ -136,7 +136,7 @@ const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 7] = [
         public_model: CORBANU_API_GPT_5_6_SOL_MODEL,
         display_name: Some("GPT-5.6 Sol"),
         description: Some(
-            "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+            "At cost: $2.00/M input · $0.20/M cache read · $2.50/M cache write · $10.00/M output. At 272K+ context: $4.00/M · $0.40/M · $5.00/M · $15.00/M. Third-party inference.",
         ),
         provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
         is_default: false,
@@ -146,7 +146,7 @@ const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 7] = [
         public_model: CORBANU_API_CLAUDE_FABLE_5_MODEL,
         display_name: Some("Claude Fable 5"),
         description: Some(
-            "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+            "At cost: $2.00/M input · $1.00/M cache read · $2.50/M cache write · $10.00/M output. Third-party inference.",
         ),
         provider_id: PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
         is_default: false,
@@ -156,7 +156,7 @@ const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 7] = [
         public_model: CORBANU_API_DEEPSEEK_V4_PRO_MODEL,
         display_name: Some("DeepSeek V4 Pro"),
         description: Some(
-            "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+            "At cost: $0.02175/M input · $0/M cache read · $0.00018125/M cache write · $0.0435/M output. Third-party inference.",
         ),
         provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
         is_default: false,
@@ -1626,7 +1626,7 @@ mod tests {
                 preset.display_name.contains(vendor) || preset.description.contains(vendor)
             })
         }));
-        assert!(presets[0].description.contains("Recommended"));
+        assert!(presets[0].description.contains("$0.15/M input"));
         assert_eq!(
             presets[1].description,
             format!("{AMBIENT_DEFAULT_MODEL} description")
