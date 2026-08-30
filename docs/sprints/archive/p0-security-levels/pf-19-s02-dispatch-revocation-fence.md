@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-19-S02"
 title: "Dispatch revocation fence contract"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-19"
 execution_order: 23
@@ -56,18 +56,18 @@ updated: 2026-08-30
 
 ## Remaining
 
-- [ ] Integration owner adds the reserved public re-exports, validates the combined tree, and archives the accepted sprint without activating a transport consumer.
+- [x] Integration owner added the reserved public re-exports, validated the combined tree, and archived the accepted sprint without activating a transport consumer.
 
 ## Verification
 
 - [x] `cd codex-rs && just fix -p codex-security-policy && just fmt` before final affected tests.
 - [x] `cd codex-rs && just test -p codex-security-policy revocation && just test -p codex-security-policy`.
 - [x] TUI applicability: none; PF-25 and PF-26 retain interactive kill/recovery proof. The focused suite also passed in a real TMUX PTY.
-- [ ] Integration-owner final-tree rerun after the shared export-only edit and serialized merge.
+- [x] Integration-owner final-tree rerun after the shared export-only edit and serialized merge: `codex-security-policy` passed 46/46 on the final combined tree.
 
 ## Exit evidence
 
 - [x] Record implementation commit, changed paths, contract version and exact final-tree commands/results under `qa/security-levels/sprints/PF-19-S02/`.
 - [x] Preserve S01 archive/evidence unchanged; do not relabel historical passes as proof of these new cases.
 - [x] Record consumer integration handoff; all lane-owned ledgers are complete. Plan/navigation/archive remain integration-owner-only.
-- [ ] Integration owner records the merged candidate and moves this record to the archive with plan/navigation updates.
+- [x] Integration owner recorded merge `bff3fe02f`, export commit `1f03913ea`, and final combined-tree qualification before moving this record to the archive with plan/navigation updates.

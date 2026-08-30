@@ -101,9 +101,6 @@ nav:
           - Current Security Work:
               - Overview: sprints/current/p0-security-levels/index.md
               - "Foundation follow-ups":
-                  - "PF-19-S02 — Dispatch revocation fence contract": sprints/current/p0-security-levels/pf-19-s02-dispatch-revocation-fence.md
-                  - "PF-20-S02 — Protected authoritative-state persistence": sprints/current/p0-security-levels/pf-20-s02-protected-authoritative-state.md
-                  - "PF-21-S02 — Expanded compatibility and upstream drift": sprints/current/p0-security-levels/pf-21-s02-expanded-compatibility-and-upstream-drift.md
                   - "PF-22-S02 — Protected runtime integration and upstream seams": sprints/current/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md
               - "PF-13 — Credential boundary":
                   - "PF-13-S06 — Credential usage reservations": sprints/current/p0-security-levels/pf-13-s06-credential-usage-reservations.md

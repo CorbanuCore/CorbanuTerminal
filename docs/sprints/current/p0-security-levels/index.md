@@ -1,7 +1,7 @@
 # P0 security-level execution sprints
 
 The active [P0 security plan](../../../plans/active/p0-security-levels.md) owns
-**57 current sprints** and **19 completed archives**.
+**54 current sprints** and **22 completed archives**.
 The integrated Sprint 13 branch completes PF-13-S02–S04 and the early PF-26-S01
 harness; PF-13-S05 is also completed and archived after its integrated Core and
 platform qualification. PF-13-S07 is the final composed credential-boundary gate. PF-27-S01 is the
@@ -18,10 +18,7 @@ archived evidence proves only its recorded candidate and scope.
 | 20 | [PF-35-S01](pf-35-s01-classifier-corpus-and-evaluation.md) | Classifier corpus and leakage-free evaluation | draft | PF-34-S04 |
 | 21 | [PF-35-S02](pf-35-s02-local-cpu-detector-artifact.md) | Reproducible local CPU detector artifact | draft | PF-35-S01 |
 | 22 | [PF-13-S06](pf-13-s06-credential-usage-reservations.md) | Credential usage reservations | draft | PF-13-S01, PF-17-S01 |
-| 23 | [PF-19-S02](pf-19-s02-dispatch-revocation-fence.md) | Dispatch revocation fence contract | ready | PF-19-S01 |
-| 24 | [PF-20-S02](pf-20-s02-protected-authoritative-state.md) | Protected authoritative-state persistence | ready | PF-20-S01, PF-27-S03 |
 | 25 | [PF-41-S03](pf-41-s03-durable-security-event-foundation.md) | Durable security event and recovery foundation | draft | PF-19-S02, PF-20-S02 |
-| 26 | [PF-21-S02](pf-21-s02-expanded-compatibility-and-upstream-drift.md) | Expanded compatibility and upstream drift | ready | PF-21-S01 |
 | 27 | [PF-22-S02](pf-22-s02-protected-runtime-and-upstream-seams.md) | Protected runtime integration and upstream seams | draft | PF-22-S01, PF-19-S02, PF-20-S02, PF-21-S02, PF-41-S03 |
 | 28 | [PF-27-S04](pf-27-s04-isolated-credential-broker.md) | Isolated credential broker process | draft | PF-27-S01, PF-13-S04, PF-27-S03, PF-41-S03 |
 | 29 | [PF-27-S02](pf-27-s02-secretless-agent-launch.md) | Secretless agent launch and bypass containment | draft | PF-27-S04 |

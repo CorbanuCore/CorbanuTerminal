@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-20-S02"
 title: "Protected authoritative-state persistence"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-20"
 execution_order: 24
@@ -54,7 +54,7 @@ updated: 2026-08-30
 
 ## Remaining
 
-- [ ] Integration owner merges after PF-19, reruns combined-tree gates, archives the sprint, and preserves the explicit activation blocker.
+- [x] Integration owner merged after PF-19, reran combined-tree gates, archived the sprint, and preserved the explicit activation blocker.
 
 ## Verification
 
@@ -62,11 +62,11 @@ updated: 2026-08-30
 - [x] `cd codex-rs && just test -p codex-config && just test -p codex-core config:: && just test -p codex-core security::`; `just write-config-schema` produced no diff.
 - [x] Reconcile against current PF-27-S03 macOS, Linux, and Windows probes: all report the protected store unsupported and protected mode ineligible, so activation remains blocked; no unsupported persistence pass is claimed.
 - [x] TUI applicability: storage has no direct UI; an authenticated Corbanu/TMUX smoke passed, while PF-24 and PF-26 retain human transition/recovery proof.
-- [ ] Integration-owner combined-tree config/security and governance rerun.
+- [x] Integration-owner combined-tree config/security and governance rerun: `codex-config` passed 229/229 and focused `codex-core security` passed 53/53 on the final tree.
 
 ## Exit evidence
 
 - [x] Record implementation commit, changed paths, contract version and exact final-tree commands/results under `qa/security-levels/sprints/PF-20-S02/`.
 - [x] Preserve S01 archive/evidence unchanged; do not relabel historical passes as proof of these new cases.
 - [x] Record consumer integration handoff; lane-owned ledgers are complete and plan/navigation/archive remain integration-owner-only.
-- [ ] Integration owner records the merged candidate and moves this record to the archive with plan/navigation updates.
+- [x] Integration owner recorded merge `628c63b3c`, the Windows blocker qualification at `fb54216dc`, and the final combined-tree gates before moving this record to the archive with plan/navigation updates.

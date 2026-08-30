@@ -149,3 +149,19 @@ as its sole finding; its transcript is outside the repository at
 `tmux-review/fourth-review-one-finding-transcript.txt`, SHA-256
 `7982da1cc02fe8e22156154f700cfaad978168a36c2fd6484565fb6266b968d0`.
 This lane does not edit those shared/out-of-scope surfaces.
+
+## Integration result
+
+The integration owner merged the lane at `c02568c71` and updated all four shared
+callers at `c8ada313d`. The final merged-source compatibility run passed 36/36
+with `source_commit: c8ada313db6dc7cfade42d886db2758900113f4c`, an empty
+`source_dirty_paths` array, `candidate_runtime_tree: clean`, zero accepted drift,
+no cleanup warnings, and no retained per-run source root. Report:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/round2-final/compatibility-final/compatibility-report.json`,
+SHA-256 `eecca72703bfc6d1667c77645d836fa03d2e6b2bfe60709bbfbfbaad90549e44`.
+
+The final merged Corbanu binary also passed a real TMUX `/status` and clean-exit
+smoke. Status capture SHA-256:
+`1a8c0d064c190daf3f3e3fce63c397b2ae617dac2dafd98864b8c8f570656ac9`;
+TUI log SHA-256:
+`c2799c92f9d09f51c025f69707a5b70400cf013b27b6ab689675a10811e42dba`.

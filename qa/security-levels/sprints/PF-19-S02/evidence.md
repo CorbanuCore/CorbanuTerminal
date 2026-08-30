@@ -88,3 +88,10 @@ This sprint proves the pure contract and deterministic interleavings only. It
 does not claim transport adoption, cross-process propagation, durable restart,
 financial reconciliation, kill-switch TUI behavior, or final release
 qualification. Those remain with the named consumer sprints and PF-26.
+
+## Integration result
+
+The integration owner merged the lane at `bff3fe02f`, added only the reserved
+public contract exports at `1f03913ea`, and preserved the absence of a transport
+consumer. On the final three-lane tree, `just test -p codex-security-policy`
+passed 46/46. The shared governance checks and `git diff --check` also passed.

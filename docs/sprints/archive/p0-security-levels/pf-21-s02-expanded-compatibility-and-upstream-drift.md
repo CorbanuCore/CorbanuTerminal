@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-21-S02"
 title: "Expanded compatibility and upstream drift"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-21"
 execution_order: 26
@@ -60,14 +60,14 @@ updated: 2026-08-30
 - [x] Rust fix/format is not applicable because no Rust path changed.
 - [x] TUI applicability is automated-oracle-only; a supporting real-candidate TMUX `/status`/clean-exit smoke passed, while PF-26-S02 still owns both live repositories with actual keys.
 - [x] Completed the mandatory read-only Corbanu Terminal + Claude Opus 5 Plan/max independent review in TMUX session `pf27-opus5-g1-review`; the final transcript SHA-256 is `72dd6300b905da2ef3e703e28dc9d038fdb09f36b1678c6d88130e77b6feb86c` and the exact verdict was `NO FINDINGS`.
-- [ ] Integration owner reruns the combined-tree qualification after merging this lane and the prerequisite PF-19/PF-20 lanes; see the Exit evidence handback below.
+- [x] Integration owner reran the combined-tree qualification after merging this lane and the prerequisite PF-19/PF-20 lanes; the final report passed 36/36 with a clean source tree.
 
 ## Exit evidence
 
 - [x] Recorded implementation commit, changed paths, contract version and exact clean-tree commands/results under `qa/security-levels/sprints/PF-21-S02/`.
 - [x] Preserved the S01 archive/evidence unchanged and recorded the remediated three-source plus protected-boundary 36-test report separately from historical qualification.
-- [ ] Integration owner merges after PF-19/PF-20; updates all four out-of-scope callers with required `--upstream <commit>` (`docs/plans/active/p0-security-levels.md:752`, `scripts/test_security_level_evidence.py:23-31`, `qa/security-levels/fixtures/README.md:48-49`, `docs/sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md:67`); reruns combined-tree checks; updates shared navigation; and archives PF-21-S02.
+- [x] Integration owner merged after PF-19/PF-20; updated all four out-of-scope callers with required `--upstream <commit>`; reran combined-tree checks; updated shared navigation; and archived PF-21-S02.
 
 ## Remaining
 
-- [ ] Close the integration-owner Exit evidence item above.
+- [x] Closed the integration-owner Exit evidence item above at merge `c02568c71` and caller-update commit `c8ada313d`.

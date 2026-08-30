@@ -90,3 +90,11 @@ contract can activate. PF-22 owns runtime policy adoption and PF-24/PF-26 own
 human transition/recovery proof. The integration owner must merge this lane
 after PF-19, rerun the combined config/security suites and governance checkers,
 archive PF-20-S02, and retain the fail-closed activation posture.
+
+## Integration result
+
+The integration owner merged the lane at `628c63b3c`. The explicit non-Unix
+blocker also passed on the remote Windows target at `fb54216dc`; protected
+persistence remains unavailable on every currently measured platform. On the
+final three-lane tree, `codex-config` passed 229/229 and the focused
+`codex-core security` run passed 53/53. Governance and whitespace checks passed.
