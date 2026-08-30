@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-33-S03"
 title: "Pure destination-policy contract"
-status: draft
+status: ready
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-33"
 execution_order: 18
-owner: "Jim Ricketts"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Codex browser/retrieval lane"
+parallel_lane: "browser-retrieval"
+write_scope: "codex-rs/network-proxy/src/destination_contract.rs, codex-rs/network-proxy/tests/destination_contract.rs, qa/security-levels/sprints/PF-33-S03/, docs/sprints/current/p0-security-levels/pf-33-s03-destination-policy-contract.md"
+integration_gate: "Jim Ricketts receives the PF-33-S03 candidate, audits the literal scope, runs fix/format/tests and governance on the combined tree, then archives the sprint and returns the slot."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval"
+branch: "feat/p0-security-browser-retrieval-pf33"
+base_commit: "b415ca43d148c1b40c61e9d1fb7ce12929b33a3e"
 depends_on: "none"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-29
 ---
 
 # PF-33-S03 — Pure destination-policy contract
@@ -36,9 +39,9 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Plan active; dependencies in front matter completed and archived.
-- [ ] Assign a named execution owner and exact plan-matching worktree/branch/base; run the sprint checker before readiness.
-- [ ] Read root and nearest implementation AGENTS.md; reserve disjoint write scope and receiving integration gate if parallel.
+- [x] Plan active; dependencies in front matter are `none`, and PF-31-S04 completed and archived before this slot rotation.
+- [x] Named owner and exact plan-matching worktree/branch/base assigned; both governance checkers pass before implementation.
+- [x] Root and `codex-rs/AGENTS.md` read; disjoint write scope and receiving integration gate reserved.
 
 ## Done
 

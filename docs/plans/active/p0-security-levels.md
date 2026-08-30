@@ -24,8 +24,8 @@ implementation_worktrees:
     branch: "feat/p0-security-levels"
     base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval"
-    branch: "feat/p0-security-browser-retrieval"
-    base_commit: "ea23dfa38bc4f2cbfe0aceadd6777c3e436a53d4"
+    branch: "feat/p0-security-browser-retrieval-pf33"
+    base_commit: "b415ca43d148c1b40c61e9d1fb7ce12929b33a3e"
 ---
 
 # P0 `/security` levels
@@ -349,7 +349,7 @@ update; it cannot silently change Permissive or an accepted security level.
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
 | Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-security-levels` | `feat/p0-security-levels` | `7cc15ae0762664d6d01765de407329887da9f876` | Complete reconciled security program, policy/broker/ingress/financial adapters, TUI and evidence |
-| Codex browser/retrieval lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval` | `feat/p0-security-browser-retrieval` | `ea23dfa38bc4f2cbfe0aceadd6777c3e436a53d4` | PF-31-S04 retriever artifact/engine preparation; the integration owner receives the frozen manifest, fixtures, evidence, and scope audit |
+| Codex browser/retrieval lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval` | `feat/p0-security-browser-retrieval-pf33` | `b415ca43d148c1b40c61e9d1fb7ce12929b33a3e` | PF-33-S03 pure destination-policy contract only; integration owner receives standalone source/tests/evidence and owns registration plus archive transition |
 
 Implementation does not occur in the documentation checkout. Update this plan
 before changing the implementation worktree, base, owner, or scope.
