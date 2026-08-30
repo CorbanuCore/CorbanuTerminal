@@ -324,6 +324,23 @@ fn excluded_exports_regex() -> String {
     )
 }
 
+fn ascii_case_insensitive_regex(regex: &str) -> String {
+    regex
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphabetic() {
+                format!(
+                    "[{}{}]",
+                    character.to_ascii_uppercase(),
+                    character.to_ascii_lowercase()
+                )
+            } else {
+                character.to_string()
+            }
+        })
+        .collect()
+}
+
 fn excluded_exports_shell_patterns() -> String {
     format!(
         "{}|{SECRET_EXPORT_SHELL_PATTERNS}",
@@ -383,7 +400,7 @@ fi
 }
 
 fn bash_snapshot_script() -> String {
-    let excluded = excluded_exports_regex();
+    let excluded = ascii_case_insensitive_regex(&excluded_exports_regex());
     let script = r##"if [ -z "$BASH_ENV" ] && [ -r "$HOME/.bashrc" ]; then
   . "$HOME/.bashrc"
 fi
@@ -405,9 +422,8 @@ echo "# aliases $alias_count"
 alias -p
 echo ''
 export_lines=$(
-  # Keep credential-name filtering on Bash builtins. This runs after .bashrc,
-  # where external commands such as `tr` may be shadowed or unavailable.
-  shopt -s nocasematch
+  # Keep credential-name filtering independent of commands and shell options
+  # that .bashrc may shadow or change.
   while IFS= read -r name; do
     if [[ "$name" =~ ^(EXCLUDED_EXPORTS)$ ]]; then
       continue

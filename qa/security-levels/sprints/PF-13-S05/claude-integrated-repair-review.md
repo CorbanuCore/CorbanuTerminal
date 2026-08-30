@@ -65,6 +65,25 @@ attempts. No production failure was observed.
 
 ## Closeout gate
 
-The repair diff still requires a clean independent re-review through the same
-TMUX + Corbanu Terminal + Claude Opus 5.0 Max harness. The sprint must not be
-archived until that re-review and the affected final qualification are clean.
+The first repair re-review used the same TMUX + Corbanu Terminal + Claude Opus
+5.0 Max harness against immutable commit `ba17fa0da`. Its external pane capture
+is
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-foundation-platform/tmux-artifacts/pf13-opus-max-rereview/pane.txt`,
+SHA-256
+`37f2f69a29011f133d63d9955569858a38156f207da1db9bc8c22c8f254e856a`.
+It found two actionable issues, both accepted:
+
+1. The MCP test's explicit refresh could perform the production work whose
+   ordering the test must verify. The test now first proves the user-turn path
+   cleared the pending state, then observes the published binding without
+   mutating it.
+2. A `.bashrc` function could shadow `shopt` just as it could shadow `tr`.
+   Instead of relying on either command lookup or mutable shell options, Rust
+   now expands the exclusion expression into an ASCII case-insensitive regex
+   before the script runs. The regression shadows both helpers.
+
+Focused nextest run `627c3d10-e746-4885-a25b-829cfa58abc9` passed all five
+accepted-finding tests without retry after the second repair. The repair still
+requires a clean independent re-review through the same mandated harness. The
+sprint must not be archived until that re-review and the affected final
+qualification are clean.

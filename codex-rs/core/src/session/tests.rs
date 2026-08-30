@@ -7394,7 +7394,10 @@ async fn user_turn_updates_approvals_reviewer() {
     )
     .await;
 
-    session.refresh_mcp_if_dirty().await;
+    assert!(
+        !session.mcp_refresh.is_pending(),
+        "the user-turn path must publish the refreshed MCP state before execution"
+    );
     let runtime_binding = session
         .services
         .mcp_runtime

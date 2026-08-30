@@ -160,9 +160,12 @@ fn bash_snapshot_filters_secret_and_invalid_exports() -> Result<()> {
 
 #[cfg(unix)]
 #[test]
-fn bash_snapshot_filters_secrets_when_bashrc_shadows_tr() -> Result<()> {
+fn bash_snapshot_filters_secrets_when_bashrc_shadows_filter_helpers() -> Result<()> {
     let home = tempdir()?;
-    std::fs::write(home.path().join(".bashrc"), "tr() { printf 'BROKEN'; }\n")?;
+    std::fs::write(
+        home.path().join(".bashrc"),
+        "tr() { printf 'BROKEN'; }\nshopt() { return 0; }\n",
+    )?;
     let output = Command::new("/bin/bash")
         .arg("-c")
         .arg(bash_snapshot_script())
