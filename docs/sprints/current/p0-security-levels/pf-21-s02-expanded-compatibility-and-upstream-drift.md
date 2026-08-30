@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-21-S02"
 title: "Expanded compatibility and upstream drift"
-status: draft
+status: ready
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-21"
 execution_order: 26
-owner: "Jim Ricketts"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Codex compatibility/drift lane"
+parallel_lane: "compatibility-drift"
+write_scope: "scripts/security-level-compat, scripts/security_level_compat.py, scripts/test_security_level_compat.py, qa/security-levels/compatibility/, qa/security-levels/sprints/PF-21-S02/, docs/sprints/current/p0-security-levels/pf-21-s02-expanded-compatibility-and-upstream-drift.md"
+integration_gate: "The Codex ingress/classifier integration lane receives the scripts-and-evidence-only PF-21-S02 candidate, verifies the immutable permissive-baseline-v1.json is byte-identical and no Rust/runtime path changed, merges after the PF-19/PF-20 candidates, reruns the compatibility harness plus governance checkers, and archives PF-21-S02 before PF-22-S02 allocation."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-compatibility-drift"
+branch: "feat/p0-security-compatibility-drift"
+base_commit: "5521b681fff0ecb50b17c10bc1dd1356cbecc1b6"
 depends_on: "PF-21-S01"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-30
 ---
 
 # PF-21-S02 — Expanded compatibility and upstream drift
@@ -36,8 +39,8 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Plan active; all dependencies completed and archived.
-- [ ] Assign a named execution owner and exact plan-matching worktree/branch/base; reserve disjoint scopes and integration gate if parallel.
+- [x] Plan active; all dependencies completed and archived.
+- [x] Assign a named execution owner and exact plan-matching worktree/branch/base; reserve disjoint scopes and integration gate if parallel.
 - [ ] Read root and nearest implementation AGENTS.md; run the sprint checker before readiness.
 
 ## Done

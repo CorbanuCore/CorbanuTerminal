@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-20-S02"
 title: "Protected authoritative-state persistence"
-status: draft
+status: ready
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-20"
 execution_order: 24
-owner: "Jim Ricketts"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Codex authoritative-state lane"
+parallel_lane: "authoritative-state"
+write_scope: "codex-rs/config/src/security_state.rs, codex-rs/config/src/lib.rs, codex-rs/core/src/security/authoritative_state.rs, codex-rs/core/src/security/authoritative_state_tests.rs, codex-rs/core/src/security/mod.rs, qa/security-levels/sprints/PF-20-S02/, docs/sprints/current/p0-security-levels/pf-20-s02-protected-authoritative-state.md"
+integration_gate: "The Codex ingress/classifier integration lane receives the PF-20-S02 candidate after PF-19-S02, audits the literal scope, serializes any required generated config schema or shared manifest edits, reruns codex-config plus focused codex-core security/config tests and PF-27-S03 platform probes on the combined tree, archives PF-20-S02, and keeps protected activation unavailable."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-authoritative-state"
+branch: "feat/p0-security-authoritative-state"
+base_commit: "5521b681fff0ecb50b17c10bc1dd1356cbecc1b6"
 depends_on: "PF-20-S01, PF-27-S03"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-30
 ---
 
 # PF-20-S02 — Protected authoritative-state persistence
@@ -37,8 +40,8 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Plan active; all dependencies completed and archived.
-- [ ] Assign a named execution owner and exact plan-matching worktree/branch/base; reserve disjoint scopes and integration gate if parallel.
+- [x] Plan active; all dependencies completed and archived.
+- [x] Assign a named execution owner and exact plan-matching worktree/branch/base; reserve disjoint scopes and integration gate if parallel.
 - [ ] Read root and nearest implementation AGENTS.md; run the sprint checker before readiness.
 
 ## Done

@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-19-S02"
 title: "Dispatch revocation fence contract"
-status: draft
+status: ready
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-19"
 execution_order: 23
-owner: "Jim Ricketts"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Codex revocation/fence lane"
+parallel_lane: "revocation-fence"
+write_scope: "codex-rs/security-policy/src/revocation.rs, codex-rs/security-policy/src/security_policy_tests.rs, qa/security-levels/sprints/PF-19-S02/, docs/sprints/current/p0-security-levels/pf-19-s02-dispatch-revocation-fence.md"
+integration_gate: "The Codex ingress/classifier integration lane receives the PF-19-S02 candidate, audits the literal scope against the other two round-two lanes, rebases and merges it first, reruns the complete codex-security-policy suite and governance checkers, archives PF-19-S02, and does not activate any transport consumer."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-revocation-fence"
+branch: "feat/p0-security-revocation-fence"
+base_commit: "5521b681fff0ecb50b17c10bc1dd1356cbecc1b6"
 depends_on: "PF-19-S01"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-30
 ---
 
 # PF-19-S02 — Dispatch revocation fence contract
@@ -37,8 +40,8 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Plan active; all dependencies completed and archived.
-- [ ] Assign a named execution owner and exact plan-matching worktree/branch/base; reserve disjoint scopes and integration gate if parallel.
+- [x] Plan active; all dependencies completed and archived.
+- [x] Assign a named execution owner and exact plan-matching worktree/branch/base; reserve disjoint scopes and integration gate if parallel.
 - [ ] Read root and nearest implementation AGENTS.md; run the sprint checker before readiness.
 
 ## Done

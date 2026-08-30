@@ -32,6 +32,15 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier"
     branch: "feat/p0-security-ingress-classifier"
     base_commit: "6a35712cd5731b191d875e8c6468f1abe23eb66e"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-revocation-fence"
+    branch: "feat/p0-security-revocation-fence"
+    base_commit: "5521b681fff0ecb50b17c10bc1dd1356cbecc1b6"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-authoritative-state"
+    branch: "feat/p0-security-authoritative-state"
+    base_commit: "5521b681fff0ecb50b17c10bc1dd1356cbecc1b6"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-compatibility-drift"
+    branch: "feat/p0-security-compatibility-drift"
+    base_commit: "5521b681fff0ecb50b17c10bc1dd1356cbecc1b6"
 ---
 
 # P0 `/security` levels
@@ -383,6 +392,9 @@ update; it cannot silently change Permissive or an accepted security level.
 | Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-security-levels` | `feat/p0-security-levels` | `7cc15ae0762664d6d01765de407329887da9f876` | Complete reconciled security program, policy/broker/ingress/financial adapters, TUI and evidence |
 | Codex foundation/platform lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform` | `feat/p0-security-foundation-platform` | `1907d99aed9714f05a5f54fca1703658017d616c` | PF-27-S03 platform contract, probes, three-platform evidence, and user-authorized serialized G1 crate/workspace/Bazel/lock/CI integration |
 | Codex ingress/classifier lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier` | `feat/p0-security-ingress-classifier` | `6a35712cd5731b191d875e8c6468f1abe23eb66e` | PF-34-S04 screening contract, immutable fixtures and user-authorized serialized G1/G2 crate/workspace/Bazel/lock/CI integration |
+| Codex revocation/fence lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-revocation-fence` | `feat/p0-security-revocation-fence` | `5521b681fff0ecb50b17c10bc1dd1356cbecc1b6` | Ready PF-19-S02 revocation dispatch-fence contract and isolated security-policy tests |
+| Codex authoritative-state lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-authoritative-state` | `feat/p0-security-authoritative-state` | `5521b681fff0ecb50b17c10bc1dd1356cbecc1b6` | Ready PF-20-S02 controller-owned authoritative state and focused config/Core adapters |
+| Codex compatibility/drift lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-compatibility-drift` | `feat/p0-security-compatibility-drift` | `5521b681fff0ecb50b17c10bc1dd1356cbecc1b6` | Ready PF-21-S02 scripts-and-evidence-only independent compatibility and upstream-drift work |
 
 The PF-34-S04 creation coordinate remains the immutable base recorded above.
 After allocation, the lane rebased onto `main` at
@@ -406,6 +418,28 @@ the current and archive PF-34-S04 sprint-record paths, the current security spri
 index, the global sprint index, `mkdocs.yml`, and this active-plan allocation.
 Its `parallel_lane` is `ingress-classifier`. Shared registration is now serialized
 inside this one lane; no concurrent sprint owns any listed path.
+
+## Round-two parallel allocation — 2026-08-30
+
+After PF-27-S03 integration, the dependency-complete frontier contains
+PF-19-S02, PF-20-S02, PF-21-S02, PF-13-S06, and PF-35-S01. The three ready
+round-two lanes deliberately select PF-19-S02, PF-20-S02, and PF-21-S02 because
+their literal scopes are disjoint and together unlock PF-41-S03 and then
+PF-22-S02, the shared prerequisite for the broker, retrieval, and ingress
+runtime chains. PF-13-S06 overlaps the active security-policy/Core surfaces and
+waits. PF-35-S01 is dependency-ready but not readiness-safe until corpus
+licenses, blind-evaluator custody, weakest-supported CPU, and artifact ownership
+are recorded.
+
+All three worktrees and branches exist on CorbanuDrive at base
+`5521b681fff0ecb50b17c10bc1dd1356cbecc1b6`. Their sprint records are `ready`,
+not `in_progress`; a receiving agent sets only its assigned sprint to
+`in_progress` before code changes. Shared Cargo/Bazel/lock/schema, plan, index,
+navigation, and archive surfaces remain integration-owner-only. With no
+midpoint estimates yet, the integration allowance remains the calculated
+**35% reserve**: 65 capacity units for lane delivery and 35 for rebases,
+serialized integration, review-finding repair, reruns, and evidence. Reviewer
+availability consumes no reserve; remediation does.
 
 After PF-34-S04 was archived, the user's 2026-08-30 integration instruction kept
 the Codex ingress/classifier lane as integration owner and assigned PF-27-S03's
@@ -461,8 +495,8 @@ is dependency-correct; feature IDs are not execution order. Archive orders 1–9
 stay unchanged and current orders start at 10. Existing allocation coordinates
 follow upstream; the five preparation/foundation drafts and five new follow-ups
 remain `UNALLOCATED` until assigned. PF-27-S03 and PF-34-S04 are completed and
-archived, and other current records are
-`draft`, with completed prerequisites and checked allocation
+archived; PF-19-S02, PF-20-S02, and PF-21-S02 are allocated `ready`; and other
+current records are `draft`, with completed prerequisites and checked allocation
 required before execution. Archived links document original scope, not new passes.
 
 | Feature ID | Plan feature | Sprint records (completed links are archived) | State |
@@ -471,9 +505,9 @@ required before execution. Archived links document original scope, not new passe
 | `PF-16` | Deterministic authorization request/decision | [PF-16-S01](../../sprints/archive/p0-security-levels/pf-16-s01-authorization-decision-contract.md) | S01 completed and archived |
 | `PF-17` | Bounded grants and delegation | [PF-17-S01](../../sprints/archive/p0-security-levels/pf-17-s01-bounded-delegation-grants.md) | S01 completed and archived |
 | `PF-18` | Human mandates and secret-free receipts | [PF-18-S01](../../sprints/archive/p0-security-levels/pf-18-s01-human-mandates-and-receipts.md) | S01 completed and archived |
-| `PF-19` | Revocation and invalidation contract | [PF-19-S01](../../sprints/archive/p0-security-levels/pf-19-s01-revocation-contract.md), [PF-19-S02](../../sprints/current/p0-security-levels/pf-19-s02-dispatch-revocation-fence.md) | S01 completed; S02 follow-up draft |
-| `PF-20` | Versioned security persistence | [PF-20-S01](../../sprints/archive/p0-security-levels/pf-20-s01-versioned-security-persistence.md), [PF-20-S02](../../sprints/current/p0-security-levels/pf-20-s02-protected-authoritative-state.md) | S01 completed; S02 follow-up draft |
-| `PF-21` | Frozen Permissive compatibility | [PF-21-S01](../../sprints/archive/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md), [PF-21-S02](../../sprints/current/p0-security-levels/pf-21-s02-expanded-compatibility-and-upstream-drift.md) | S01 completed; S02 follow-up draft |
+| `PF-19` | Revocation and invalidation contract | [PF-19-S01](../../sprints/archive/p0-security-levels/pf-19-s01-revocation-contract.md), [PF-19-S02](../../sprints/current/p0-security-levels/pf-19-s02-dispatch-revocation-fence.md) | S01 completed; S02 ready |
+| `PF-20` | Versioned security persistence | [PF-20-S01](../../sprints/archive/p0-security-levels/pf-20-s01-versioned-security-persistence.md), [PF-20-S02](../../sprints/current/p0-security-levels/pf-20-s02-protected-authoritative-state.md) | S01 completed; S02 ready |
+| `PF-21` | Frozen Permissive compatibility | [PF-21-S01](../../sprints/archive/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md), [PF-21-S02](../../sprints/current/p0-security-levels/pf-21-s02-expanded-compatibility-and-upstream-drift.md) | S01 completed; S02 ready |
 | `PF-22` | Effective runtime policy and agent inheritance | [PF-22-S01](../../sprints/archive/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md), [PF-22-S02](../../sprints/current/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md) | S01 completed; S02 follow-up draft |
 | `PF-13` | Vault-backed exact-host credential boundary | [S01](../../sprints/archive/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md), [S02](../../sprints/archive/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/archive/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/archive/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/archive/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md), [S06](../../sprints/current/p0-security-levels/pf-13-s06-credential-usage-reservations.md), [S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md) | S01–S05 completed; S06–S07 draft |
 | `PF-23` | Moderate/Aggressive protected-surface enforcement | [S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), [S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md), [S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | draft |
