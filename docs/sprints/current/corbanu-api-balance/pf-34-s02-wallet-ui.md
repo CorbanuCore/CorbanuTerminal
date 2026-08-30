@@ -83,5 +83,6 @@ updated: 2026-08-30
 - [x] Removed the deleted server credential from the local encrypted store through the API-only confirmation flow; `/tmp/corbanu-credential-clean-final.nzi7jm/codex-tui.log` records the successful disconnect notice and a reopened wallet without the disconnect action or legacy Plan surface.
 - [x] The failed production `$20` top-up remained pending with no transaction and no credited balance; the installed `corbanu-debug` now matches the rebuilt parser-fix binary byte-for-byte. Human payment retry remains explicit and pending.
 - [x] The production `$10` top-up settled as `NcLSGL398QdVTLoPpZQyUZ9vU9SC1fNwRaK3pCbBNtmfwuT1TKYk93Zk25TtKGAJgtMNuc9nbZYuh65B96QeiqE`; the subsequent stale-capability failure is covered by the one-action/timed lifecycle regressions.
+- [x] True-TUI read-only recovery on `06e54c4431` in TensorCash opened `/wallet` -> `Corbanu API` and rendered `$10 available` plus the priced catalog without `capability_invalid`, `Unavailable`, or a second signing/payment request; exact installed binary SHA-256 is `cb4bfa6ae28a1ffbcfc7f19a4118655f00cd95dc526bb43cdf347a0054b6e604`, with trace log at `/tmp/corbanu-capability-qa.t06JLR/codex-tui.log`.
 - [x] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/corbanu-api-balance/`.
