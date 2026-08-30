@@ -111,10 +111,16 @@ const fn generations(grant: u64, revocation: u64, kill_switch: u64) -> Authority
 }
 
 fn store() -> (TempDir, AuthoritativeStateStore) {
+    let (root, store, _) = store_with_anchor();
+    (root, store)
+}
+
+fn store_with_anchor() -> (TempDir, AuthoritativeStateStore, Arc<MemoryAnchor>) {
     let root = tempfile::tempdir().expect("protected state root");
     set_private_directory(root.path());
-    let store = AuthoritativeStateStore::new(root.path(), Arc::new(MemoryAnchor::default()));
-    (root, store)
+    let anchor = Arc::new(MemoryAnchor::default());
+    let store = AuthoritativeStateStore::new(root.path(), anchor.clone());
+    (root, store, anchor)
 }
 
 #[derive(Debug, Default)]
@@ -193,6 +199,24 @@ fn model_supplied_identity_cannot_replace_platform_authorization() {
     assert!(matches!(
         err,
         AuthoritativeStateStoreError::PlatformAuthorization(_)
+    ));
+}
+
+#[test]
+fn corrupt_external_anchor_fails_closed_before_record_classification() {
+    let (_root, store, anchor) = store_with_anchor();
+    *anchor.value.lock().unwrap() = Some(AuthoritativeStateAnchor {
+        schema_version: 0,
+        revision: 1,
+        owner: AuthoritativeStateOwner::new(TARGET_ID, "credential-owner-a", 1).unwrap(),
+        state_sha256: "0".repeat(64),
+        commit_sha256: "0".repeat(64),
+    });
+    assert!(matches!(
+        store.load(),
+        Err(AuthoritativeStateStoreError::Anchor(
+            AuthoritativeStateAnchorError::Invalid
+        ))
     ));
 }
 
@@ -293,6 +317,127 @@ fn unanchored_pending_state_is_discarded_only_by_the_authorized_owner() {
             .compare_and_activate(1, &next, &owner_authorization)
             .unwrap(),
         next
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn mismatched_anchored_pending_is_discardable_and_exact_state_resumes() {
+    let (root, store, _anchor) = store_with_anchor();
+    let owner_authorization = authorization("credential-owner-a", 1);
+    let initial = state(
+        1,
+        "credential-owner-a",
+        1,
+        SecurityLevel::Moderate,
+        generations(0, 0, 0),
+        false,
+    );
+    let anchored_next = state(
+        2,
+        "credential-owner-a",
+        1,
+        SecurityLevel::Aggressive,
+        generations(1, 1, 1),
+        true,
+    );
+    store
+        .compare_and_activate(0, &initial, &owner_authorization)
+        .unwrap();
+    store
+        .compare_and_activate(1, &anchored_next, &owner_authorization)
+        .unwrap();
+    for prefix in ["state", "intent", "commit"] {
+        fs::remove_file(root.path().join(format!("{prefix}-{:020}.json", 2))).unwrap();
+    }
+    let attacker_state = state(
+        2,
+        "credential-owner-a",
+        1,
+        SecurityLevel::Permissive,
+        generations(0, 0, 0),
+        false,
+    );
+    let mut bytes = serde_json::to_vec(&attacker_state).unwrap();
+    bytes.push(b'\n');
+    write_private(&root.path().join("state-00000000000000000002.json"), &bytes);
+
+    assert!(matches!(
+        store.load(),
+        Err(AuthoritativeStateStoreError::AnchorMismatch { revision: 2 })
+    ));
+    assert!(matches!(
+        store.discard_unanchored_suffix(2, &authorization("other-owner", 1)),
+        Err(AuthoritativeStateStoreError::UnauthorizedOwner)
+    ));
+    store
+        .discard_unanchored_suffix(2, &owner_authorization)
+        .unwrap();
+    assert_eq!(
+        store
+            .compare_and_activate(1, &anchored_next, &owner_authorization)
+            .unwrap(),
+        anchored_next
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn committed_records_ahead_of_anchor_are_discarded_without_touching_anchor_history() {
+    let (root, store, anchor) = store_with_anchor();
+    let owner_authorization = authorization("credential-owner-a", 1);
+    let initial = state(
+        1,
+        "credential-owner-a",
+        1,
+        SecurityLevel::Moderate,
+        generations(0, 0, 0),
+        false,
+    );
+    let next = state(
+        2,
+        "credential-owner-a",
+        1,
+        SecurityLevel::Aggressive,
+        generations(1, 1, 1),
+        true,
+    );
+    store
+        .compare_and_activate(0, &initial, &owner_authorization)
+        .unwrap();
+    let anchored_first = anchor.value.lock().unwrap().clone();
+    store
+        .compare_and_activate(1, &next, &owner_authorization)
+        .unwrap();
+    *anchor.value.lock().unwrap() = anchored_first;
+
+    assert!(matches!(
+        store.load(),
+        Err(AuthoritativeStateStoreError::UnanchoredRecords { revision: 2 })
+    ));
+    assert!(matches!(
+        store.discard_unanchored_suffix(2, &authorization("other-owner", 1)),
+        Err(AuthoritativeStateStoreError::UnauthorizedOwner)
+    ));
+    store
+        .discard_unanchored_suffix(2, &owner_authorization)
+        .unwrap();
+    for prefix in ["state", "intent", "commit"] {
+        assert!(
+            root.path()
+                .join(format!("{prefix}-{:020}.json", 1))
+                .exists()
+        );
+        assert!(
+            !root
+                .path()
+                .join(format!("{prefix}-{:020}.json", 2))
+                .exists()
+        );
+    }
+    assert_eq!(
+        store.load().unwrap(),
+        AuthoritativeStateLoad::Active(initial)
     );
 }
 

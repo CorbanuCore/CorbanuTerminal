@@ -35,6 +35,7 @@ const STATE_PREFIX: &str = "state-";
 const INTENT_PREFIX: &str = "intent-";
 const COMMIT_PREFIX: &str = "commit-";
 const RECORD_SUFFIX: &str = ".json";
+const AUTHORITATIVE_ANCHOR_SCHEMA_VERSION: u32 = 1;
 
 /// Opaque permission to mutate one authoritative ownership epoch.
 ///
@@ -54,14 +55,19 @@ pub(crate) struct TrustedControllerAuthorization {
 /// from a genuine first install. PF-20 deliberately defines this contract
 /// without selecting an OS mechanism; protected activation remains unavailable
 /// until PF-27 can supply an implementation with its protected-store capability.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct AuthoritativeStateAnchor {
-    revision: u64,
-    owner: AuthoritativeStateOwner,
-    state_sha256: String,
-    commit_sha256: String,
+    pub(crate) schema_version: u32,
+    pub(crate) revision: u64,
+    pub(crate) owner: AuthoritativeStateOwner,
+    pub(crate) state_sha256: String,
+    pub(crate) commit_sha256: String,
 }
 
+/// A provider must atomically compare against the exact expected anchor and
+/// durably commit `next` before returning success. It must never synthesize a
+/// missing anchor, accept rollback, or source values from agent-editable state.
 pub(crate) trait AuthoritativeStateAnchorStore: std::fmt::Debug + Send + Sync {
     fn load_anchor(
         &self,
@@ -80,6 +86,22 @@ pub(crate) enum AuthoritativeStateAnchorError {
     Unavailable,
     #[error("protected authoritative-state anchor changed concurrently")]
     Conflict,
+    #[error("protected authoritative-state anchor is corrupt or unsupported")]
+    Invalid,
+}
+
+impl AuthoritativeStateAnchor {
+    fn validate(&self) -> Result<(), AuthoritativeStateAnchorError> {
+        if self.schema_version != AUTHORITATIVE_ANCHOR_SCHEMA_VERSION
+            || self.revision == 0
+            || !is_lower_hex_sha256(&self.state_sha256)
+            || !is_lower_hex_sha256(&self.commit_sha256)
+            || self.owner.validate().is_err()
+        {
+            return Err(AuthoritativeStateAnchorError::Invalid);
+        }
+        Ok(())
+    }
 }
 
 impl TrustedControllerAuthorization {
@@ -107,6 +129,10 @@ impl TrustedControllerAuthorization {
 
     fn authorizes(&self, state: &AuthoritativeSecurityState) -> bool {
         self.owner == state.owner
+    }
+
+    fn authorizes_owner(&self, owner: &AuthoritativeStateOwner) -> bool {
+        &self.owner == owner
     }
 }
 
@@ -147,6 +173,9 @@ impl AuthoritativeStateStore {
             }
             StoreInspection::Unanchored { revision, .. } => {
                 Err(AuthoritativeStateStoreError::UnanchoredRecords { revision })
+            }
+            StoreInspection::RejectedPending { revision, .. } => {
+                Err(AuthoritativeStateStoreError::AnchorMismatch { revision })
             }
         }
     }
@@ -221,6 +250,11 @@ impl AuthoritativeStateStore {
                     revision: *revision,
                 });
             }
+            StoreInspection::RejectedPending { revision, .. } => {
+                return Err(AuthoritativeStateStoreError::AnchorMismatch {
+                    revision: *revision,
+                });
+            }
         };
 
         let state_bytes = serialize(next)?;
@@ -232,6 +266,7 @@ impl AuthoritativeStateStore {
         )?;
         let commit_bytes = serialize(&commit)?;
         let next_anchor = AuthoritativeStateAnchor {
+            schema_version: AUTHORITATIVE_ANCHOR_SCHEMA_VERSION,
             revision: next.revision,
             owner: next.owner.clone(),
             state_sha256,
@@ -264,25 +299,33 @@ impl AuthoritativeStateStore {
         }
     }
 
-    /// Removes a single unanchored next revision after re-validating the
-    /// controller epoch. Anchored history is never removed by this operation.
+    /// Removes an unanchored suffix or a rejected anchored-pending record after
+    /// re-validating the controller epoch. Anchored committed history is never
+    /// removed by this operation.
     pub(crate) fn discard_unanchored_suffix(
         &self,
         revision: u64,
         authorization: &TrustedControllerAuthorization,
     ) -> Result<(), AuthoritativeStateStoreError> {
-        let StoreInspection::Unanchored {
-            head,
-            revision: found,
-            ..
-        } = self.inspect()?
-        else {
-            return Err(AuthoritativeStateStoreError::NoUnanchoredPending);
+        let (head_revision, found, authorized) = match self.inspect()? {
+            StoreInspection::Unanchored { head, revision, .. } => {
+                (head.revision, revision, authorization.authorizes(&head))
+            }
+            StoreInspection::RejectedPending {
+                head,
+                revision,
+                anchor,
+            } => (
+                head.as_ref().map_or(0, |state| state.revision),
+                revision,
+                authorization.authorizes_owner(&anchor.owner),
+            ),
+            _ => return Err(AuthoritativeStateStoreError::NoUnanchoredPending),
         };
-        if found != revision || revision != head.revision.saturating_add(1) {
+        if found != revision || revision != head_revision.saturating_add(1) {
             return Err(AuthoritativeStateStoreError::UnanchoredRecords { revision: found });
         }
-        if !authorization.authorizes(&head) {
+        if !authorized {
             return Err(AuthoritativeStateStoreError::UnauthorizedOwner);
         }
         let records = scan_records(&self.root)?;
@@ -368,6 +411,9 @@ impl AuthoritativeStateStore {
 
     fn inspect(&self) -> Result<StoreInspection, AuthoritativeStateStoreError> {
         let anchor = self.anchor_store.load_anchor()?;
+        if let Some(anchor) = &anchor {
+            anchor.validate()?;
+        }
         let records = self.inspect_records()?;
         match (anchor, records) {
             (None, RecordInspection::Empty) => Ok(StoreInspection::LegacyFirstInstall),
@@ -515,7 +561,11 @@ impl AuthoritativeStateStore {
                         || pending_state_sha256.as_deref() != Some(anchor.state_sha256.as_str())
                         || pending_commit_sha256.as_deref() != Some(anchor.commit_sha256.as_str()))
                 {
-                    return Err(AuthoritativeStateStoreError::AnchorMismatch { revision });
+                    return Ok(StoreInspection::RejectedPending {
+                        head,
+                        revision,
+                        anchor,
+                    });
                 }
                 Ok(StoreInspection::Interrupted {
                     head,
@@ -659,6 +709,11 @@ enum StoreInspection {
         head_commit_sha256: String,
         revision: u64,
     },
+    RejectedPending {
+        head: Option<AuthoritativeSecurityState>,
+        revision: u64,
+        anchor: AuthoritativeStateAnchor,
+    },
 }
 
 #[derive(Debug)]
@@ -751,6 +806,13 @@ fn deserialize<T: serde::de::DeserializeOwned>(
 
 fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
+}
+
+fn is_lower_hex_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 #[cfg(unix)]
