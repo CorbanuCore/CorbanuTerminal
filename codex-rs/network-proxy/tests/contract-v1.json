@@ -1,0 +1,65 @@
+{
+  "contract_version": "pf33-destination-policy/v1",
+  "fixture_kind": "pure_destination_decisions",
+  "runtime_registered": false,
+  "cases": [
+    {
+      "id": "public-scope-unrestricted",
+      "url": "https://public.example/v1",
+      "method": "GET",
+      "public_scope": {"kind": "unrestricted"},
+      "dns_answers": ["93.184.216.34"],
+      "allowed": true,
+      "reason": "PublicPolicyAbsent"
+    },
+    {
+      "id": "explicit-public-deny-all",
+      "url": "https://public.example/v1",
+      "method": "GET",
+      "public_scope": {"kind": "rules", "rules": []},
+      "dns_answers": ["93.184.216.34"],
+      "allowed": false,
+      "reason": "ExplicitDenyAll"
+    },
+    {
+      "id": "wildcard-does-not-authorize-private",
+      "url": "https://metadata.internal/v1",
+      "method": "GET",
+      "public_scope": {"kind": "rules", "rules": [{"host": "*", "schemes": ["https"], "ports": [443], "methods": ["GET"], "path_prefixes": ["/"]}]},
+      "dns_answers": ["169.254.169.254"],
+      "allowed": false,
+      "reason": "PrivateDestinationNotAuthorized"
+    },
+    {
+      "id": "explicit-private-service",
+      "url": "https://internal.example.test/api/items",
+      "method": "GET",
+      "public_scope": {"kind": "unrestricted"},
+      "private_service": {"host": "internal.example.test", "port": 443, "methods": ["GET"], "path_prefixes": ["/api"], "approved_addresses": ["10.0.0.8"]},
+      "dns_answers": ["10.0.0.8"],
+      "allowed": true,
+      "reason": "ExplicitPrivateService"
+    },
+    {
+      "id": "mixed-answer-set",
+      "url": "https://public.example/",
+      "method": "GET",
+      "public_scope": {"kind": "unrestricted"},
+      "dns_answers": ["93.184.216.34", "127.0.0.1"],
+      "allowed": false,
+      "reason": "MixedPublicAndPrivateAnswers"
+    },
+    {
+      "id": "redirect-downgrade",
+      "from": {"url": "https://a.example/start", "method": "GET"},
+      "to": {"url": "http://a.example/next", "method": "GET"},
+      "status": 301,
+      "credentials": "None",
+      "body": "None",
+      "public_scope": {"kind": "unrestricted"},
+      "dns_answers": ["93.184.216.34"],
+      "allowed": false,
+      "reason": "RedirectDowngrade"
+    }
+  ]
+}

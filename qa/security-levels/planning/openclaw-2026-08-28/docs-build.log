@@ -1,0 +1,93 @@
+WARN `--no-project` was provided, but no project was found
+
+[31m │  ⚠  Warning from the Material for MkDocs team[0m
+[31m │[0m
+[31m │[0m  MkDocs 2.0, the underlying framework of Material for MkDocs,
+[31m │[0m  will introduce backward-incompatible changes, including:
+[31m │[0m
+[31m │  × [0mAll plugins will stop working – the plugin system has been removed
+[31m │  × [0mAll theme overrides will break – the theming system has been rewritten
+[31m │  × [0mNo migration path exists – existing projects cannot be upgraded
+[31m │  × [0mClosed contribution model – community members can't report bugs
+[31m │  × [0mCurrently unlicensed – unsuitable for production use
+[31m │[0m
+[31m │[0m  Our full analysis:
+[31m │[0m
+[31m │[0m  [4mhttps://squidfunk.github.io/mkdocs-material/blog/2026/02/18/mkdocs-2.0/[0m
+[0m
+INFO    -  Cleaning site directory
+INFO    -  Building documentation to directory: /Users/travisgood/Documents/ChatGPT/openclaw-review-2026-08-28.xLJPKK/docs-site
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/index.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-01-s01-protected-data-taxonomy-and-types.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-01-s02-model-visible-secret-denial-gate.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-01-s03-vault-credential-reference-api.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-01-s04-broker-only-secret-resolution.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-01-s05-child-and-container-secret-injection.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-01-s06-secret-redaction-and-canary-regression-suite.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-01-s07-protected-financial-data-derived-views.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-02-s01-protected-action-schema.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-02-s02-canonical-action-encoding.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-02-s03-deterministic-policy-decision-point.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-02-s04-approval-binding-and-trusted-preview.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-02-s05-signing-and-broadcast-separation.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-02-s06-idempotency-and-redacted-receipts.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-03-s01-pinned-retriever-image-and-manifest.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-03-s02-retriever-sandbox-profile.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-03-s03-isolated-fetch-adapter.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-03-s04-no-host-browser-fallback.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-03-s05-interactive-web-human-handoff.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-04-s01-web-run-compatibility-facade.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-04-s02-provider-capability-registry.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-04-s03-existing-search-api-adapter.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-04-s04-exa-search-adapter.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-04-s05-brave-search-adapter.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-04-s06-searxng-metasearch-adapter.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-04-s07-deterministic-provider-router.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-04-s08-normalized-results-and-stable-ids.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-04-s09-query-context-minimization.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-04-s10-provider-health-and-same-role-failover.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-04-s11-provider-cost-privacy-and-route-audit.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-04-s12-provider-native-web-search-bypass-control.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-05-s01-url-canonicalization-gate.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-05-s02-dns-and-address-class-policy.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-05-s03-redirect-chain-enforcement.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-05-s04-dns-rebinding-and-connection-pinning.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-05-s05-proxy-socket-and-local-endpoint-denial.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-06-s01-source-envelope-protocol-types.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-06-s02-trusted-ingress-authority-assignment.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-06-s03-model-context-serialization.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-06-s04-child-agent-provenance-propagation.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-06-s05-provenance-persistence-and-audit.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-07-s01-visible-main-content-extraction.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-07-s02-hidden-and-non-body-content-removal.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-07-s03-unicode-control-link-and-size-normalization.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-07-s04-sealed-raw-artifact-and-digest-chain.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-07-s05-sanitize-and-rescan-pipeline.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-08-s01-classifier-adapter-and-result-schema.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-08-s02-corpus-manifest-and-license-gate.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-08-s03-leak-free-train-validation-test-splits.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-08-s04-small-model-training-pipeline.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-08-s05-cpu-packaging-and-artifact-verification.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-08-s06-calibration-blind-evaluation-and-runtime-gate.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-09-s01-ingress-outcome-state-machine.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-09-s02-quarantine-store-and-retention.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-09-s03-unprivileged-quarantine-review-tui.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-09-s04-quarantine-failure-retry-and-resume.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-10-s01-hosted-classifier-adapter-contract.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-10-s02-hosted-service-opt-in-and-disclosure.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-10-s03-local-fallback-and-vendor-outage-policy.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-10-s04-commercial-detector-bakeoff-and-cost-gate.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-11-s01-behavior-event-schema-and-redaction.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-11-s02-deterministic-behavioral-anomaly-rules.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-11-s03-isolated-behavior-review-model.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-11-s04-pause-revoke-and-kill-escalation.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-11-s05-agent-sweep-tui-and-recovery-flow.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-12-s01-synthetic-hostile-source-fixtures.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-12-s02-canary-secrets-and-fake-financial-systems.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-12-s03-classifier-benchmark-harness.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-12-s04-forced-classifier-miss-harness.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-12-s05-web-isolation-and-egress-adversarial-suite.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-12-s06-true-tui-security-qualification.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-12-s07-tensorcash-and-isometric-live-repo-qualification.md' which is excluded from the built site.
+INFO    -  Doc file 'plans/proposed/prompt-injection-firewall.md' contains a link to 'sprints/archive/prompt-injection-firewall/pf-12-s08-release-security-ledger-and-human-acceptance.md' which is excluded from the built site.
+INFO    -  Documentation built in 1.46 seconds

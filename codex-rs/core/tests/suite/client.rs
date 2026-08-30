@@ -2391,7 +2391,7 @@ async fn skills_use_aliases_in_developer_message_under_budget_pressure() {
     );
     assert!(
         developer_text.contains(
-            "expand the listed short `path` with the matching alias from `### Skill roots`"
+            "a short path that can be expanded into an absolute path using the skill roots table"
         ),
         "expected alias-specific skill instructions: {developer_messages:?}"
     );
@@ -4071,11 +4071,11 @@ async fn history_dedupes_streamed_and_final_messages_across_turns() {
     let request_log = mount_sse_sequence(&server, vec![sse1.clone(), sse1.clone(), sse1]).await;
 
     let mut builder = test_codex().with_auth(CodexAuth::from_api_key("Test API Key"));
-    let codex = builder
+    let test = builder
         .build(&server)
         .await
-        .expect("create new conversation")
-        .codex;
+        .expect("create new conversation");
+    let codex = test.codex.clone();
 
     // Turn 1: user sends U1; wait for completion.
     codex

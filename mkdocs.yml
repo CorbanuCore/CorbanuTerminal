@@ -100,8 +100,14 @@ nav:
           - Workflow: sprints/index.md
           - Current Security Work:
               - Overview: sprints/current/p0-security-levels/index.md
+              - "Foundation follow-ups":
+                  - "PF-19-S02 — Dispatch revocation fence contract": sprints/current/p0-security-levels/pf-19-s02-dispatch-revocation-fence.md
+                  - "PF-20-S02 — Protected authoritative-state persistence": sprints/current/p0-security-levels/pf-20-s02-protected-authoritative-state.md
+                  - "PF-21-S02 — Expanded compatibility and upstream drift": sprints/current/p0-security-levels/pf-21-s02-expanded-compatibility-and-upstream-drift.md
+                  - "PF-22-S02 — Protected runtime integration and upstream seams": sprints/current/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md
               - "PF-13 — Credential boundary":
-                  - "PF-13-S05 — Adversarial qualification": sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md
+                  - "PF-13-S06 — Credential usage reservations": sprints/current/p0-security-levels/pf-13-s06-credential-usage-reservations.md
+                  - "PF-13-S07 — Integrated credential qualification": sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md
               - "Protected-surface enforcement":
                   - "PF-23-S01 — Moderate enforcement": sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md
                   - "PF-23-S02 — Aggressive deny and grant": sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md
@@ -111,19 +117,68 @@ nav:
                   - "PF-24-S02 — Confirm, cancel, downgrade": sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md
                   - "PF-25-S01 — Temporary grants": sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md
                   - "PF-25-S02 — Revocation and kill switch": sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md
+              - "Broker process and launch":
+                  - "PF-27-S04 — Isolated credential broker process": sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md
+                  - "PF-27-S02 — Secretless agent launch and bypass containment": sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md
+              - "Output and reflected secrets":
+                  - "PF-28-S01 — Central secret and protected-output gate": sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md
+                  - "PF-28-S02 — Reflected-secret response scrubbing": sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md
+              - "Inventory and migration":
+                  - "PF-29-S01 — Protected-mode inventory and activation preflight": sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md
+                  - "PF-29-S02 — Human-reviewed credential migration and recovery": sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md
+              - "Durable provenance":
+                  - "PF-30-S01 — Typed source envelope and trusted ingress": sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md
+                  - "PF-30-S02 — Persistent taint across summaries and memory": sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md
+                  - "PF-30-S03 — Post-taint authority checks": sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md
+              - "Isolated retrieval and downloads":
+                  - "PF-31-S01 — Pinned retriever artifact and sandbox": sprints/current/p0-security-levels/pf-31-s01-pinned-retriever-isolation.md
+                  - "PF-31-S02 — Bounded fetch adapter with no host fallback": sprints/current/p0-security-levels/pf-31-s02-bounded-fetch-no-fallback.md
+                  - "PF-31-S03 — Download quarantine and human file promotion": sprints/current/p0-security-levels/pf-31-s03-download-quarantine-promotion.md
+                  - "PF-31-S04: Retriever artifact and engine preparation": sprints/archive/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md
+              - "Screened search providers":
+                  - "PF-32-S01 — Stable web facade and provider registry": sprints/current/p0-security-levels/pf-32-s01-web-facade-and-registry.md
+                  - "PF-32-S02 — Existing search adapter and native bypass closure": sprints/current/p0-security-levels/pf-32-s02-existing-search-and-native-bypass.md
+                  - "PF-32-S03 — Exa brokered search adapter": sprints/current/p0-security-levels/pf-32-s03-exa-search-adapter.md
+                  - "PF-32-S04 — Brave brokered search adapter": sprints/current/p0-security-levels/pf-32-s04-brave-search-adapter.md
+                  - "PF-32-S05 — SearXNG brokered search adapter": sprints/current/p0-security-levels/pf-32-s05-searxng-search-adapter.md
+                  - "PF-32-S06 — Private query routing and bounded failover": sprints/current/p0-security-levels/pf-32-s06-privacy-routing-and-failover.md
+              - "Network enforcement":
+                  - "PF-33-S01 — URL DNS and redirect policy": sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md
+                  - "PF-33-S02 — Connection pinning and alternate-egress denial": sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md
+                  - "PF-33-S03: Pure destination-policy contract": sprints/archive/p0-security-levels/pf-33-s03-destination-policy-contract.md
+              - "Sanitization and quarantine":
+                  - "PF-34-S01 — Render-aware content sanitization": sprints/current/p0-security-levels/pf-34-s01-render-aware-sanitization.md
+                  - "PF-34-S02 — Quarantine state and encrypted retention": sprints/current/p0-security-levels/pf-34-s02-quarantine-state-and-store.md
+                  - "PF-34-S03 — Safe quarantine review and recovery": sprints/current/p0-security-levels/pf-34-s03-safe-quarantine-review.md
+              - "Local classifier":
+                  - "PF-35-S01 — Classifier corpus and leakage-free evaluation": sprints/current/p0-security-levels/pf-35-s01-classifier-corpus-and-evaluation.md
+                  - "PF-35-S02 — Reproducible local CPU detector artifact": sprints/current/p0-security-levels/pf-35-s02-local-cpu-detector-artifact.md
+                  - "PF-35-S03 — Calibrated detector and ingress enforcement": sprints/current/p0-security-levels/pf-35-s03-calibration-and-ingress-gate.md
+              - "Optional hosted detector":
+                  - "PF-36-S01 — Optional hosted detector consent contract": sprints/current/p0-security-levels/pf-36-s01-hosted-detector-consent-contract.md
+                  - "PF-36-S02 — Hosted detector bakeoff and safe local fallback": sprints/current/p0-security-levels/pf-36-s02-hosted-bakeoff-and-local-fallback.md
+              - "Brokered browser login":
+                  - "PF-37-S01 — Origin-bound brokered browser login": sprints/current/p0-security-levels/pf-37-s01-origin-bound-browser-login.md
+                  - "PF-37-S02 — Human authentication handoff and session revocation": sprints/current/p0-security-levels/pf-37-s02-human-auth-handoff-lifecycle.md
+              - "Protected financial execution":
+                  - "PF-38-S01 — Typed financial executor and deterministic limits": sprints/current/p0-security-levels/pf-38-s01-typed-financial-executor.md
+                  - "PF-38-S02 — Full-effect financial preview and exact mandate": sprints/current/p0-security-levels/pf-38-s02-full-effect-preview-and-mandate.md
+                  - "PF-38-S03 — Separate signing broadcasting and idempotent receipts": sprints/current/p0-security-levels/pf-38-s03-sign-broadcast-and-receipts.md
+              - "Financial data and disclosure":
+                  - "PF-39-S01 — Protected financial derived views": sprints/current/p0-security-levels/pf-39-s01-protected-financial-derived-views.md
+                  - "PF-39-S02 — Outbound disclosure clipboard and export controls": sprints/current/p0-security-levels/pf-39-s02-outbound-disclosure-controls.md
+              - "Agent Sweep":
+                  - "PF-40-S01 — Agent Sweep sanitized events and deterministic rules": sprints/current/p0-security-levels/pf-40-s01-sweep-events-and-rules.md
+                  - "PF-40-S02 — Isolated advisory Agent Sweep reviewer": sprints/current/p0-security-levels/pf-40-s02-isolated-sweep-reviewer.md
+                  - "PF-40-S03 — Agent Sweep alerts revocation and recovery": sprints/current/p0-security-levels/pf-40-s03-sweep-alerts-and-recovery.md
+              - "Inspector and audit":
+                  - "PF-41-S01 — Effective security inspector and degradation state": sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md
+                  - "PF-41-S02 — Tamper-evident audit and safe support export": sprints/current/p0-security-levels/pf-41-s02-tamper-evident-security-audit.md
+                  - "PF-41-S03: Durable security event and recovery foundation": sprints/current/p0-security-levels/pf-41-s03-durable-security-event-foundation.md
               - "Qualification and release evidence":
                   - "PF-26-S04 — Final automated qualification": sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md
                   - "PF-26-S02 — True-TUI and live repos": sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md
                   - "PF-26-S03 — Human acceptance and docs": sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md
-              - "Shared contracts and confidentiality":
-                  - "PF-28-S01 — Confidentiality and environments": sprints/current/p0-security-levels/pf-28-s01-confidentiality-and-safe-environments.md
-              - "External Content Firewall":
-                  - "PF-29-S01 — Sources and ingress": sprints/current/p0-security-levels/pf-29-s01-source-envelopes-and-ingress.md
-                  - "PF-29-S02 — Derived taint": sprints/current/p0-security-levels/pf-29-s02-derived-taint-and-action-context.md
-              - "Browser Isolation":
-                  - "PF-30-S01 — Isolated runtime": sprints/current/p0-security-levels/pf-30-s01-isolated-acquisition-runtime.md
-                  - "PF-30-S02 — Integration and recovery": sprints/current/p0-security-levels/pf-30-s02-acquisition-integration-and-recovery.md
-                  - "PF-30-S03 — Runtime setup and recovery TUI": sprints/current/p0-security-levels/pf-30-s03-runtime-setup-and-recovery-tui.md
           - Current Autoreview Work:
               - Overview: sprints/current/arbitrary-model-autoreview/index.md
               - "PF-14 — Arbitrary-model Autoreview":
@@ -140,10 +195,14 @@ nav:
           - Upstream Integration Contract: plans/upstream-integration.md
           - Active Plans: plans/active/index.md
           - P0 Security Levels: plans/active/p0-security-levels.md
+          - Security Source Reconciliation: plans/security-source-reconciliation.md
+          - OpenClaw Source Review: plans/openclaw-source-review-2026-08-28.md
+          - Architecture refinements: plans/security-architecture-refinements-2026-08-28.md
+          - Upstream reconciliation: plans/security-upstream-reconciliation-2026-08-28.md
           - Proposed Plans:
               - Overview: plans/proposed/index.md
               - Arbitrary-model Autoreview: plans/proposed/arbitrary-model-autoreview.md
-              - Prompt-Injection Firewall: plans/proposed/prompt-injection-firewall.md
+              - Historical Firewall Design: plans/proposed/prompt-injection-firewall.md
           - Completed Plans: plans/completed/index.md
           - Cancelled Plans: plans/cancelled/index.md
           - Plan Template: plans/PLAN_TEMPLATE.md

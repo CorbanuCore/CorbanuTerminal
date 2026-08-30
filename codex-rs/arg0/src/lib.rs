@@ -18,6 +18,7 @@ use std::os::unix::fs::symlink;
 use tempfile::TempDir;
 
 const APPLY_PATCH_ARG0: &str = "apply_patch";
+const CORBANU_ARG0: &str = "corbanu";
 const MISSPELLED_APPLY_PATCH_ARG0: &str = "applypatch";
 #[cfg(unix)]
 const EXECVE_WRAPPER_ARG0: &str = "codex-execve-wrapper";
@@ -319,9 +320,9 @@ where
 
 /// Creates a temporary directory with either:
 ///
-/// - UNIX: `apply_patch` symlink to the current executable
-/// - WINDOWS: `apply_patch.bat` batch script to invoke the current executable
-///   with the hidden `--codex-run-as-apply-patch` flag.
+/// - UNIX: `apply_patch` and `corbanu` symlinks to the current executable
+/// - WINDOWS: batch scripts that invoke the current executable as `apply_patch`
+///   or `corbanu`.
 ///
 /// Returns the temporary directory guard and the PATH value that prepends the
 /// temporary directory so `apply_patch` can be on the PATH without requiring the
@@ -379,6 +380,7 @@ fn prepare_path_entry_for_codex_aliases(
         .open(&lock_path)?;
     lock_file.try_lock()?;
 
+    let exe = std::env::current_exe()?;
     for filename in &[
         APPLY_PATCH_ARG0,
         MISSPELLED_APPLY_PATCH_ARG0,
@@ -387,8 +389,6 @@ fn prepare_path_entry_for_codex_aliases(
         #[cfg(unix)]
         EXECVE_WRAPPER_ARG0,
     ] {
-        let exe = std::env::current_exe()?;
-
         #[cfg(unix)]
         {
             let link = path.join(filename);
@@ -409,6 +409,7 @@ fn prepare_path_entry_for_codex_aliases(
             )?;
         }
     }
+    create_corbanu_alias(path, &exe)?;
 
     let updated_path_env_var = path_env_with_entry(path, existing_path);
 
@@ -440,6 +441,42 @@ fn prepare_path_entry_for_codex_aliases(
         Arg0PathEntryGuard::new(temp_dir, lock_file, paths),
         updated_path_env_var,
     ))
+}
+
+fn create_corbanu_alias(alias_dir: &Path, exe: &Path) -> std::io::Result<()> {
+    let Some(exe) = corbanu_cli_from_runtime_executable(exe) else {
+        return Ok(());
+    };
+
+    #[cfg(unix)]
+    symlink(&exe, alias_dir.join(CORBANU_ARG0))?;
+
+    #[cfg(windows)]
+    std::fs::write(
+        alias_dir.join(format!("{CORBANU_ARG0}.bat")),
+        format!(
+            r#"@echo off
+"{}" %*
+"#,
+            exe.display()
+        ),
+    )?;
+
+    Ok(())
+}
+
+fn corbanu_cli_from_runtime_executable(exe: &Path) -> Option<PathBuf> {
+    let file_stem = exe.file_stem()?.to_str()?;
+    if matches!(file_stem, "corbanu" | "corbanu-debug") {
+        return Some(exe.to_path_buf());
+    }
+
+    let sibling = exe.with_file_name(if cfg!(windows) {
+        "corbanu.exe"
+    } else {
+        "corbanu"
+    });
+    sibling.is_file().then_some(sibling)
 }
 
 fn path_env_with_package_path_dir(
@@ -521,7 +558,10 @@ fn try_lock_dir(dir: &Path) -> std::io::Result<Option<File>> {
 mod tests {
     use super::Arg0DispatchPaths;
     use super::Arg0PathEntryGuard;
+    use super::CORBANU_ARG0;
     use super::LOCK_FILENAME;
+    use super::corbanu_cli_from_runtime_executable;
+    use super::create_corbanu_alias;
     use super::janitor_cleanup;
     use super::linux_sandbox_exe_path;
     #[cfg(unix)]
@@ -555,6 +595,68 @@ mod tests {
             .create(true)
             .truncate(false)
             .open(lock_path)
+    }
+
+    #[test]
+    fn corbanu_alias_reexecutes_the_current_binary() -> std::io::Result<()> {
+        let temp_dir = TempDir::new()?;
+        let executable = temp_dir.path().join(if cfg!(windows) {
+            "corbanu-debug.exe"
+        } else {
+            "corbanu-debug"
+        });
+        fs::write(&executable, b"")?;
+
+        create_corbanu_alias(temp_dir.path(), &executable)?;
+
+        #[cfg(unix)]
+        assert_eq!(
+            fs::read_link(temp_dir.path().join(CORBANU_ARG0))?,
+            executable
+        );
+        #[cfg(windows)]
+        assert_eq!(
+            fs::read_to_string(temp_dir.path().join(format!("{CORBANU_ARG0}.bat")))?,
+            format!("@echo off\n\"{}\" %*\n", executable.display())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn non_cli_runtime_uses_an_installed_sibling_corbanu() -> std::io::Result<()> {
+        let temp_dir = TempDir::new()?;
+        let runtime = temp_dir.path().join(if cfg!(windows) {
+            "codex-app-server.exe"
+        } else {
+            "codex-app-server"
+        });
+        let corbanu = temp_dir.path().join(if cfg!(windows) {
+            "corbanu.exe"
+        } else {
+            "corbanu"
+        });
+        fs::write(&runtime, b"")?;
+        fs::write(&corbanu, b"")?;
+
+        assert_eq!(corbanu_cli_from_runtime_executable(&runtime), Some(corbanu));
+        Ok(())
+    }
+
+    #[test]
+    fn non_cli_runtime_without_a_sibling_does_not_create_a_corbanu_alias() -> std::io::Result<()> {
+        let temp_dir = TempDir::new()?;
+        let runtime = temp_dir.path().join(if cfg!(windows) {
+            "codex-app-server.exe"
+        } else {
+            "codex-app-server"
+        });
+        fs::write(&runtime, b"")?;
+
+        create_corbanu_alias(temp_dir.path(), &runtime)?;
+
+        assert!(!temp_dir.path().join(CORBANU_ARG0).exists());
+        assert!(!temp_dir.path().join(format!("{CORBANU_ARG0}.bat")).exists());
+        Ok(())
     }
 
     fn package_path_test_fixture() -> anyhow::Result<PackagePathTestFixture> {

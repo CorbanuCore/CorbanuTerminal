@@ -1,0 +1,3 @@
+$ git diff --check
+candidate=a75efecc0a37d5544e123ad19d57867cac360a68
+exit=0

@@ -1,0 +1,266 @@
+{
+  "kind": "reference-source-manifest",
+  "origin": "https://github.com/openclaw/openclaw.git",
+  "commit": "13adff02ca3897768d80d2bca18f5acf08c55d91",
+  "commitDate": "2026-08-28T17:06:08-04:00",
+  "historicalBaseline": "6ce272c2a662f81b7779507335d91de4d61c589b",
+  "sourceCheckout": "/Users/travisgood/Documents/ChatGPT/openclaw-review-2026-08-28.xLJPKK/source",
+  "trackedStatus": "",
+  "packageVersion": "2026.8.1",
+  "review": "docs/plans/openclaw-source-review-2026-08-28.md",
+  "fileCount": 42,
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "73571b25326281d369087f469842c02444fe39faaecebda4d82ed21ff3a1c29d",
+      "lineCount": 24,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "SECURITY.md",
+      "sha256": "0794cfc7055b70a3333c0c45c1e239904cc37529b02beb461ca85193b2a76252",
+      "lineCount": 388,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "docs/gateway/sandbox-vs-tool-policy-vs-elevated.md",
+      "sha256": "8a5a118715d6f3ba9759cf3dce539db01d93528daea96d7e1e3ff18e03e5c174",
+      "lineCount": 160,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "docs/gateway/secrets.md",
+      "sha256": "047232736d7ce30bfaa006fafcbc682ffe81e5de3f66d02cec3d4d861f9ae673",
+      "lineCount": 925,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "extensions/browser/src/browser/config.ts",
+      "sha256": "620830e56dae48eadf37f6bdc5545c8a1aaaf85c4a8bb96b0a36b0d2b5e7db86",
+      "lineCount": 683,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "extensions/browser/src/browser/ssrf-policy-helpers.ts",
+      "sha256": "1131051ee30f8421ab410b4301c204c1d0b70dc7c95c8b68a0c005f1303ad86b",
+      "lineCount": 60,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "extensions/memory-core/src/memory/memory-path-provenance.ts",
+      "sha256": "8f39e9adad21f99f44266097e37377831fb359d45a8e35b4d5ed1cb32f8ad7c2",
+      "lineCount": 64,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/agents/agent-tools.ts",
+      "sha256": "44fd01d9145736975d2db7a440c0c03bd41e311286dcce403163f75efa318c61",
+      "lineCount": 1053,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/agents/bash-tools.exec-run.ts",
+      "sha256": "0f345f4353f64d8690264732fb73f6e4382a4c10490006725020e221d5cbdc08",
+      "lineCount": 747,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/agents/embedded-agent-runner/cli-backend-dispatch-transcript.ts",
+      "sha256": "99116d2b40479109be273f0faa65dff406621d0f4c8a671ef9a7e6c4f56bd035",
+      "lineCount": 252,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/agents/embedded-agent-runner/run-loop.ts",
+      "sha256": "94309f455d838cf669c4f620da3a2f6a71edece45a799c9456879293f55b6ced",
+      "lineCount": 724,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/agents/embedded-agent-runner/run/turn-taint-state.ts",
+      "sha256": "7fd28e4064c555256feeaace2dbabb8b08d31ce1e0d7baaf1a1d7b20380723fe",
+      "lineCount": 14,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/agents/memory-write-provenance.ts",
+      "sha256": "7dee9d0e8f29ad36dcab87c0954551cf0f5ef313c242a29f41687050f5642729",
+      "lineCount": 161,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/agents/provider-secret-egress.ts",
+      "sha256": "28b2308c0d66b20df123314abb2462d21f43b265da50031609d2c60313e7bbb4",
+      "lineCount": 179,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/agents/provider-stream.ts",
+      "sha256": "473d7abf699cd98c924392b32b2996d52b16a28ecfbfe2c8c973329bbd60086a",
+      "lineCount": 99,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/agents/sandbox/config.ts",
+      "sha256": "631aa8cd12054187663761929f5a1f21e13727ed1f9dd73dec4bcca7818e0b77",
+      "lineCount": 283,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/agents/sandbox/context.ts",
+      "sha256": "f958f851e8e665f1d1850391db3d53de41af8845ac3060440da1b7d85f6cdcd0",
+      "lineCount": 443,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/agents/sandbox/docker.ts",
+      "sha256": "94f51a0e613f629c91f5421725c19ee000f15811e6ec759169829fcb4b859666",
+      "lineCount": 703,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/agents/sandbox/runtime-status.ts",
+      "sha256": "e9d5e1ae30336dd967c16fd2185e4474bfc6f82bc088f8a67f25983f30aa4f9e",
+      "lineCount": 255,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/agents/tools/web-fetch.ts",
+      "sha256": "3c5d1f99364d3d203a5e85ba8ee62fc7bdd5045a6f9b68d4801ab02d7a6c43a8",
+      "lineCount": 1078,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/agents/tools/web-guarded-fetch.ts",
+      "sha256": "3b85dcabfcca445f98b14c6cc07663685db60c6b6f1e1cd05b182e630e495978",
+      "lineCount": 118,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/auto-reply/reply/agent-runner-memory.ts",
+      "sha256": "34054bc2d1c5c5e30f45e6a04a308679ad563fe1008d395ebe11ad2840d678ef",
+      "lineCount": 1713,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/commands/sandbox-explain.ts",
+      "sha256": "a0744cc1c61c58f8e9f3db7c4c779cdff17044b46df04c7e992817252fcde8e5",
+      "lineCount": 456,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/cron/isolated-agent/run-prepare.ts",
+      "sha256": "3c7c97bad70128502bbe8f619de71b476d8970edd8f48934b70523b82a8632d3",
+      "lineCount": 680,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/gateway/server-core-runtime.ts",
+      "sha256": "5c0c806dee52a86b90ffd5591e99e5c384279df0e40de6e540f996458eacc746",
+      "lineCount": 682,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/infra/net/fetch-guard.ts",
+      "sha256": "a0c13ee7e70f28665856d90d398e5924d81a95c82c5bb12cbe648e4bfc73a2e0",
+      "lineCount": 797,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/infra/net/ssrf.ts",
+      "sha256": "348d2372f37ccc28576cf3530a477158eb847b4cc2f7b982ffe3269016c09a99",
+      "lineCount": 791,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/logging/redact.ts",
+      "sha256": "5914b92f5b3c94fe0ee511e6607090d04d6639baaaabb0a0cd54e766177e56bb",
+      "lineCount": 1271,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/logging/secret-redaction-registry.ts",
+      "sha256": "5a04b76c89d0caf3b0a77768faa2f6494f8117d98079b1c86ddf1913533cea7d",
+      "lineCount": 93,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/memory/memory-artifact-provenance.ts",
+      "sha256": "566543e2532a53a3ccdce222096e3f3a025f3d06bd64c44d0e8589bbd02e5794",
+      "lineCount": 229,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/secrets/apply.ts",
+      "sha256": "b7ef70c405abfb3d35be992aed1ffbca05f61704bbca1e43a51075de16cf91b1",
+      "lineCount": 1015,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/secrets/audit.ts",
+      "sha256": "ca734405c8feae64aa662384d1af4882ecd6775d575189d1022388c23a8cc965",
+      "lineCount": 740,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/secrets/egress-proxy/proxy-server.test.ts",
+      "sha256": "fe9f40ceead3166bb850c65e6f812fcc8c3ca81c9140da57d109daeab5dede04",
+      "lineCount": 575,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/secrets/egress-proxy/proxy-server.ts",
+      "sha256": "c3d67bcc8947499bb883c09ca68f8bbffd5f67f2dbbde3252fab1c90c14e8c6f",
+      "lineCount": 663,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/secrets/egress-proxy/registry.ts",
+      "sha256": "1f993d1acaa35ca4eb6e4fa1d7f78aa45180c41c32fdabc313055e801b1b620e",
+      "lineCount": 43,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/secrets/egress-proxy/runtime.ts",
+      "sha256": "8774c757a8c3fa1e31130006f9f31d681dab5a940a0aaf05d2f5d4430b46e8ab",
+      "lineCount": 69,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/secrets/egress-proxy/stream-substitution.ts",
+      "sha256": "1df3b84920f824e50b737e8677dfd7f44cd39923a27a4b34280d69eeda003a56",
+      "lineCount": 121,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/secrets/runtime-state.ts",
+      "sha256": "c241873579c0f45877a9204555497254ce0c52542f88c76ba525953c1eb9b38e",
+      "lineCount": 1266,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/secrets/sentinel.ts",
+      "sha256": "64dcc2f2a1cdd295a6eea062c8fa5325048d5fa9cb4a53ddd1d22fc923ce1d9f",
+      "lineCount": 119,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/security/external-content-source.ts",
+      "sha256": "3d63cc76484787e66b6684260b1b0e999b893b9cb6b4e0d19c77d208b7b6857a",
+      "lineCount": 34,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/security/external-content.test.ts",
+      "sha256": "31c90e664668d96a8e8f36db49189d01079f3bdfd88eb4f554bfb435d48aea84",
+      "lineCount": 665,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    },
+    {
+      "path": "src/security/external-content.ts",
+      "sha256": "54789a5965db70ad23e824e61df807b258550036d681be50cc4617dc5e4d0c8a",
+      "lineCount": 470,
+      "reviewExtent": "See named sections/ranges and limitations in the source review; digest identifies the complete file, not complete audit coverage."
+    }
+  ]
+}

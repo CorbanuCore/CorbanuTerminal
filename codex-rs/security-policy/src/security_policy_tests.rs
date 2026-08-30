@@ -2,7 +2,19 @@ use std::collections::BTreeMap;
 
 use pretty_assertions::assert_eq;
 
+use super::revocation::DISPATCH_FENCE_SCHEMA_VERSION;
+use super::revocation::DispatchFence;
+use super::revocation::DispatchPhase;
+use super::revocation::ProtectedDispatchStep;
+use super::revocation::RestrictionAuditStatus;
 use super::*;
+
+const INITIAL_GENERATION: u64 = 0;
+const VALID_NOW: i64 = 150;
+const POST_EVENT_NOW: i64 = 151;
+const BEFORE_GRANT: i64 = 99;
+const MANDATE_EXPIRY: i64 = 180;
+const GRANT_EXPIRY: i64 = 200;
 
 fn text(value: &str) -> BoundedText {
     BoundedText::new(value).expect("valid bounded text")
@@ -71,8 +83,68 @@ fn grant() -> BoundedGrant {
     .expect("valid grant")
 }
 
+fn grant_with_nonce(nonce: &str) -> BoundedGrant {
+    BoundedGrant::issue(human(), chain(), scope(1_000), 100, 200, text(nonce)).expect("valid grant")
+}
+
 fn preview() -> ProtectedActionPreview {
     ProtectedActionPreview::new(request(100), 180, text("preview-nonce-1")).expect("valid preview")
+}
+
+fn queued_grant(
+    run_id: BoundedText,
+    expected_generation: u64,
+    grant: &BoundedGrant,
+    revocations: &RevocationState,
+) -> Result<DispatchFence, RevocationError> {
+    DispatchFence::queued_for_grant(run_id, expected_generation, VALID_NOW, grant, revocations)
+}
+
+fn authorize_grant(
+    fence: &mut DispatchFence,
+    run_id: &BoundedText,
+    grant: &BoundedGrant,
+    revocations: &RevocationState,
+    step: ProtectedDispatchStep,
+) -> Result<(), RevocationError> {
+    fence.authorize_grant(run_id, VALID_NOW, grant, revocations, step)
+}
+
+fn refresh_grant(
+    fence: &mut DispatchFence,
+    run_id: &BoundedText,
+    grant: &BoundedGrant,
+    revocations: &RevocationState,
+) -> Result<(), RevocationError> {
+    fence.refresh_grant(run_id, VALID_NOW, grant, revocations)
+}
+
+fn queued_mandate(
+    run_id: BoundedText,
+    expected_generation: u64,
+    mandate: &ProtectedActionMandate,
+    revocations: &RevocationState,
+) -> Result<DispatchFence, RevocationError> {
+    DispatchFence::queued_for_mandate(run_id, expected_generation, VALID_NOW, mandate, revocations)
+}
+
+fn authorize_mandate(
+    fence: &mut DispatchFence,
+    run_id: &BoundedText,
+    mandate: &ProtectedActionMandate,
+    revocations: &RevocationState,
+    step: ProtectedDispatchStep,
+) -> Result<(), RevocationError> {
+    fence.authorize_mandate(run_id, VALID_NOW, mandate, revocations, step)
+}
+
+fn refresh_mandate(
+    fence: &mut DispatchFence,
+    run_id: &BoundedText,
+    mandate: &ProtectedActionMandate,
+    revocations: &RevocationState,
+) -> Result<(), RevocationError> {
+    fence.refresh_mandate(run_id, VALID_NOW, mandate, revocations)
 }
 
 #[test]
@@ -728,6 +800,462 @@ fn revocation_kill_switch_order_converges_and_corrupt_state_fails_closed() {
         corrupt_state.validate(),
         Err(RevocationError::GenerationMismatch { .. })
     ));
+}
+
+#[test]
+fn revocation_dispatch_fence_requires_bound_run_authority_and_generation() {
+    let grant = grant();
+    let run_id = text("run:one");
+    let revocations = RevocationState::new();
+    let mut fence = queued_grant(run_id.clone(), INITIAL_GENERATION, &grant, &revocations).unwrap();
+    assert_eq!(fence.schema_version(), DISPATCH_FENCE_SCHEMA_VERSION);
+    assert_eq!(fence.phase(), DispatchPhase::Queued);
+
+    assert!(matches!(
+        authorize_grant(
+            &mut fence,
+            &run_id,
+            &grant,
+            &revocations,
+            ProtectedDispatchStep::ChannelWrite
+        ),
+        Err(RevocationError::InvalidDispatchTransition)
+    ));
+    authorize_grant(
+        &mut fence,
+        &run_id,
+        &grant,
+        &revocations,
+        ProtectedDispatchStep::Admit,
+    )
+    .unwrap();
+    assert!(matches!(
+        authorize_grant(
+            &mut fence,
+            &run_id,
+            &grant,
+            &revocations,
+            ProtectedDispatchStep::BeginUpload,
+        ),
+        Err(RevocationError::InvalidDispatchTransition)
+    ));
+    authorize_grant(
+        &mut fence,
+        &run_id,
+        &grant,
+        &revocations,
+        ProtectedDispatchStep::EstablishChannel,
+    )
+    .unwrap();
+    assert_eq!(fence.phase(), DispatchPhase::EstablishedChannel);
+
+    assert!(matches!(
+        authorize_grant(
+            &mut fence,
+            &text("run:other"),
+            &grant,
+            &revocations,
+            ProtectedDispatchStep::ChannelWrite
+        ),
+        Err(RevocationError::DispatchBindingMismatch)
+    ));
+    assert!(matches!(
+        queued_grant(run_id, /*expected_generation*/ 1, &grant, &revocations),
+        Err(RevocationError::StaleDispatchGeneration {
+            expected: 1,
+            current: 0
+        })
+    ));
+}
+
+#[test]
+fn revocation_dispatch_fence_rechecks_authority_validity_at_every_boundary() {
+    let grant = grant();
+    let mandate = ProtectedActionMandate::approve(&preview(), human(), 110).unwrap();
+    let run_id = text("run:validity-window");
+    let revocations = RevocationState::new();
+
+    assert!(matches!(
+        DispatchFence::queued_for_grant(
+            run_id.clone(),
+            INITIAL_GENERATION,
+            BEFORE_GRANT,
+            &grant,
+            &revocations,
+        ),
+        Err(RevocationError::AuthorityOutsideValidityWindow)
+    ));
+    assert!(matches!(
+        DispatchFence::queued_for_mandate(
+            run_id.clone(),
+            INITIAL_GENERATION,
+            MANDATE_EXPIRY,
+            &mandate,
+            &revocations,
+        ),
+        Err(RevocationError::AuthorityOutsideValidityWindow)
+    ));
+
+    let mut grant_fence = DispatchFence::queued_for_grant(
+        run_id.clone(),
+        INITIAL_GENERATION,
+        VALID_NOW,
+        &grant,
+        &revocations,
+    )
+    .unwrap();
+    assert!(matches!(
+        grant_fence.refresh_grant(&run_id, GRANT_EXPIRY, &grant, &revocations,),
+        Err(RevocationError::AuthorityOutsideValidityWindow)
+    ));
+    assert_eq!(grant_fence.phase(), DispatchPhase::Fenced);
+
+    let mut mandate_fence = DispatchFence::queued_for_mandate(
+        run_id.clone(),
+        INITIAL_GENERATION,
+        VALID_NOW,
+        &mandate,
+        &revocations,
+    )
+    .unwrap();
+    assert!(matches!(
+        mandate_fence.authorize_mandate(
+            &run_id,
+            MANDATE_EXPIRY,
+            &mandate,
+            &revocations,
+            ProtectedDispatchStep::Admit,
+        ),
+        Err(RevocationError::AuthorityOutsideValidityWindow)
+    ));
+    assert_eq!(mandate_fence.phase(), DispatchPhase::Fenced);
+}
+
+#[test]
+fn revocation_kill_linearizes_before_open_channel_and_upload_writes() {
+    let grant = grant();
+    let run_id = text("run:kill-race");
+    let mut revocations = RevocationState::new();
+    let mut channel =
+        queued_grant(run_id.clone(), INITIAL_GENERATION, &grant, &revocations).unwrap();
+    authorize_grant(
+        &mut channel,
+        &run_id,
+        &grant,
+        &revocations,
+        ProtectedDispatchStep::Admit,
+    )
+    .unwrap();
+    authorize_grant(
+        &mut channel,
+        &run_id,
+        &grant,
+        &revocations,
+        ProtectedDispatchStep::EstablishChannel,
+    )
+    .unwrap();
+    let mut upload = channel.clone();
+    authorize_grant(
+        &mut upload,
+        &run_id,
+        &grant,
+        &revocations,
+        ProtectedDispatchStep::BeginUpload,
+    )
+    .unwrap();
+
+    let kill = RevocationEvent::new(
+        human(),
+        RevocationTarget::KillSwitch { active: true },
+        RevocationReason::KillSwitch,
+        150,
+    )
+    .unwrap();
+    revocations.apply(&kill).unwrap();
+
+    for (fence, step) in [
+        (&mut channel, ProtectedDispatchStep::ChannelWrite),
+        (&mut upload, ProtectedDispatchStep::UploadWrite),
+    ] {
+        assert!(matches!(
+            fence.authorize_grant(&run_id, POST_EVENT_NOW, &grant, &revocations, step),
+            Err(RevocationError::AuthorityRevoked)
+        ));
+        assert_eq!(fence.phase(), DispatchPhase::Fenced);
+    }
+}
+
+#[test]
+fn revocation_targeted_event_fences_victim_without_revoking_sibling() {
+    let victim = grant_with_nonce("grant-nonce-victim");
+    let sibling = grant_with_nonce("grant-nonce-sibling");
+    let victim_run = text("run:victim");
+    let sibling_run = text("run:sibling");
+    let mut revocations = RevocationState::new();
+    let mut victim_fence = queued_grant(
+        victim_run.clone(),
+        INITIAL_GENERATION,
+        &victim,
+        &revocations,
+    )
+    .unwrap();
+    let mut sibling_fence = queued_grant(
+        sibling_run.clone(),
+        INITIAL_GENERATION,
+        &sibling,
+        &revocations,
+    )
+    .unwrap();
+
+    let event = RevocationEvent::new(
+        human(),
+        RevocationTarget::Grant {
+            grant_id: victim.grant_id.clone(),
+        },
+        RevocationReason::HumanRequest,
+        150,
+    )
+    .unwrap();
+    revocations.apply(&event).unwrap();
+
+    assert!(matches!(
+        authorize_grant(
+            &mut victim_fence,
+            &victim_run,
+            &victim,
+            &revocations,
+            ProtectedDispatchStep::Admit
+        ),
+        Err(RevocationError::AuthorityRevoked)
+    ));
+    assert!(matches!(
+        refresh_grant(&mut victim_fence, &victim_run, &victim, &revocations,),
+        Err(RevocationError::InvalidDispatchTransition)
+    ));
+    assert_eq!(victim_fence.phase(), DispatchPhase::Fenced);
+    assert!(matches!(
+        authorize_grant(
+            &mut sibling_fence,
+            &sibling_run,
+            &sibling,
+            &revocations,
+            ProtectedDispatchStep::Admit
+        ),
+        Err(RevocationError::StaleDispatchGeneration {
+            expected: 0,
+            current: 1
+        })
+    ));
+    refresh_grant(&mut sibling_fence, &sibling_run, &sibling, &revocations).unwrap();
+    assert_eq!(sibling_fence.generation(), 1);
+    assert!(matches!(
+        refresh_grant(
+            &mut sibling_fence,
+            &sibling_run,
+            &sibling,
+            &RevocationState::new(),
+        ),
+        Err(RevocationError::StaleDispatchGeneration {
+            expected: 1,
+            current: 0
+        })
+    ));
+    authorize_grant(
+        &mut sibling_fence,
+        &sibling_run,
+        &sibling,
+        &revocations,
+        ProtectedDispatchStep::Admit,
+    )
+    .unwrap();
+    assert_eq!(sibling_fence.phase(), DispatchPhase::Admitted);
+}
+
+#[test]
+fn revocation_audit_unavailable_does_not_delay_emergency_restriction() {
+    let grant = grant();
+    let run_id = text("run:audit-gap");
+    let mut revocations = RevocationState::new();
+    let mut fence = queued_grant(run_id.clone(), INITIAL_GENERATION, &grant, &revocations).unwrap();
+    let kill = RevocationEvent::new(
+        human(),
+        RevocationTarget::KillSwitch { active: true },
+        RevocationReason::KillSwitch,
+        150,
+    )
+    .unwrap();
+
+    let first = revocations
+        .apply_restriction(&kill, || RestrictionAuditStatus::Unavailable)
+        .unwrap();
+    assert_eq!(
+        first,
+        super::revocation::RestrictionApplication {
+            event_was_effective: true,
+            generation: 1,
+            audit_status: RestrictionAuditStatus::Unavailable,
+        }
+    );
+    assert!(matches!(
+        authorize_grant(
+            &mut fence,
+            &run_id,
+            &grant,
+            &revocations,
+            ProtectedDispatchStep::Admit,
+        ),
+        Err(RevocationError::AuthorityRevoked)
+    ));
+    assert!(matches!(
+        fence.record_completed(),
+        Err(RevocationError::InvalidDispatchTransition)
+    ));
+    assert!(matches!(
+        fence.record_unknown_financial_outcome(),
+        Err(RevocationError::InvalidDispatchTransition)
+    ));
+    let repeated = revocations
+        .apply_restriction(&kill, || RestrictionAuditStatus::Recorded)
+        .unwrap();
+    assert!(!repeated.event_was_effective);
+    assert_eq!(repeated.generation, 1);
+
+    let deactivate = RevocationEvent::new(
+        human(),
+        RevocationTarget::KillSwitch { active: false },
+        RevocationReason::HumanRequest,
+        151,
+    )
+    .unwrap();
+    assert!(matches!(
+        revocations.apply_restriction(&deactivate, || panic!("audit must not run")),
+        Err(RevocationError::NotARestriction)
+    ));
+    assert!(revocations.kill_switch_active);
+
+    assert!(revocations.apply(&deactivate).unwrap());
+    assert!(!revocations.kill_switch_active);
+    let skewed_enable = RevocationEvent::new(
+        human(),
+        RevocationTarget::KillSwitch { active: true },
+        RevocationReason::RiskSignal,
+        149,
+    )
+    .unwrap();
+    assert!(matches!(
+        revocations.apply_restriction(&skewed_enable, || panic!("audit must not run")),
+        Err(RevocationError::RestrictionSuperseded)
+    ));
+    assert!(!revocations.kill_switch_active);
+    assert_eq!(revocations.generation, 2);
+}
+
+#[test]
+fn revocation_preserves_completed_and_unknown_financial_outcomes() {
+    let grant = grant();
+    let run_id = text("run:financial");
+    let revocations = RevocationState::new();
+    let mut completed =
+        queued_grant(run_id.clone(), INITIAL_GENERATION, &grant, &revocations).unwrap();
+    authorize_grant(
+        &mut completed,
+        &run_id,
+        &grant,
+        &revocations,
+        ProtectedDispatchStep::Admit,
+    )
+    .unwrap();
+    completed.record_completed().unwrap();
+    completed.record_completed().unwrap();
+    assert_eq!(completed.phase(), DispatchPhase::Completed);
+    assert!(matches!(
+        completed.authorize_grant(
+            &run_id,
+            GRANT_EXPIRY,
+            &grant,
+            &revocations,
+            ProtectedDispatchStep::ChannelWrite,
+        ),
+        Err(RevocationError::InvalidDispatchTransition)
+    ));
+    assert_eq!(completed.phase(), DispatchPhase::Completed);
+
+    let mut unknown =
+        queued_grant(run_id.clone(), INITIAL_GENERATION, &grant, &revocations).unwrap();
+    authorize_grant(
+        &mut unknown,
+        &run_id,
+        &grant,
+        &revocations,
+        ProtectedDispatchStep::Admit,
+    )
+    .unwrap();
+    unknown.record_unknown_financial_outcome().unwrap();
+    unknown.record_unknown_financial_outcome().unwrap();
+    assert_eq!(unknown.phase(), DispatchPhase::UnknownFinancialOutcome);
+    assert!(matches!(
+        unknown.record_completed(),
+        Err(RevocationError::InvalidDispatchTransition)
+    ));
+    assert!(matches!(
+        unknown.refresh_grant(&run_id, GRANT_EXPIRY, &grant, &revocations),
+        Err(RevocationError::InvalidDispatchTransition)
+    ));
+    assert_eq!(unknown.phase(), DispatchPhase::UnknownFinancialOutcome);
+}
+
+#[test]
+fn revocation_mandate_dispatch_uses_the_same_generation_fence() {
+    let preview = preview();
+    let mandate = ProtectedActionMandate::approve(&preview, human(), 110).unwrap();
+    let sibling_mandate = ProtectedActionMandate::approve(&preview, human(), 111).unwrap();
+    let run_id = text("run:mandate");
+    let sibling_run_id = text("run:mandate-sibling");
+    let mut revocations = RevocationState::new();
+    let mut fence =
+        queued_mandate(run_id.clone(), INITIAL_GENERATION, &mandate, &revocations).unwrap();
+    let mut sibling_fence = queued_mandate(
+        sibling_run_id.clone(),
+        INITIAL_GENERATION,
+        &sibling_mandate,
+        &revocations,
+    )
+    .unwrap();
+    let event = RevocationEvent::new(
+        human(),
+        RevocationTarget::Mandate {
+            mandate_id: mandate.mandate_id.clone(),
+        },
+        RevocationReason::HumanRequest,
+        150,
+    )
+    .unwrap();
+    revocations.apply(&event).unwrap();
+    assert!(matches!(
+        authorize_mandate(
+            &mut fence,
+            &run_id,
+            &mandate,
+            &revocations,
+            ProtectedDispatchStep::Admit
+        ),
+        Err(RevocationError::AuthorityRevoked)
+    ));
+    refresh_mandate(
+        &mut sibling_fence,
+        &sibling_run_id,
+        &sibling_mandate,
+        &revocations,
+    )
+    .unwrap();
+    authorize_mandate(
+        &mut sibling_fence,
+        &sibling_run_id,
+        &sibling_mandate,
+        &revocations,
+        ProtectedDispatchStep::Admit,
+    )
+    .unwrap();
 }
 
 #[test]

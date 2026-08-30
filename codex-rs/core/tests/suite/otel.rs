@@ -25,6 +25,7 @@ use core_test_support::responses::ev_reasoning_text_delta;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_response_once;
 use core_test_support::responses::mount_sse_once;
+use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
@@ -739,24 +740,22 @@ async fn handle_responses_span_records_response_kind_and_tool_name() {
 
     let server = start_mock_server().await;
 
-    mount_sse_once(
+    mount_sse_sequence(
         &server,
-        sse(vec![
-            ev_function_call("function-call", "nonexistent", "{\"value\":1}"),
-            ev_completed("done"),
-        ]),
-    )
-    .await;
-    mount_sse_once(
-        &server,
-        sse(vec![
-            ev_assistant_message("msg-1", "tool handled"),
-            ev_completed("done"),
-        ]),
+        vec![
+            sse(vec![
+                ev_function_call("function-call", "nonexistent", "{\"value\":1}"),
+                ev_completed("done"),
+            ]),
+            sse(vec![
+                ev_assistant_message("msg-1", "tool handled"),
+                ev_completed("done"),
+            ]),
+        ],
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let test = test_codex()
         .with_config(|config| {
             config
                 .features
@@ -766,6 +765,7 @@ async fn handle_responses_span_records_response_kind_and_tool_name() {
         .build(&server)
         .await
         .unwrap();
+    let codex = test.codex.clone();
 
     codex
         .submit(Op::UserInput {
@@ -848,7 +848,7 @@ async fn record_responses_sets_span_fields_for_response_events() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let test = test_codex()
         .with_model("gpt-5.4")
         .with_config(|config| {
             config.model_reasoning_effort = Some(ReasoningEffort::High);
@@ -860,6 +860,7 @@ async fn record_responses_sets_span_fields_for_response_events() {
         .build(&server)
         .await
         .unwrap();
+    let codex = test.codex.clone();
 
     codex
         .submit(Op::UserInput {
@@ -876,6 +877,10 @@ async fn record_responses_sets_span_fields_for_response_events() {
         .unwrap();
 
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    tokio::time::timeout(Duration::from_secs(10), codex.shutdown_and_wait())
+        .await
+        .expect("session shutdown timed out")
+        .expect("session shutdown failed");
 
     let logs = String::from_utf8(buffer.lock().unwrap().clone()).unwrap();
 

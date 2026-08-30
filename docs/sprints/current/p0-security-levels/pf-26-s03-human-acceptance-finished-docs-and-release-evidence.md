@@ -4,7 +4,7 @@ title: "Human acceptance, finished docs, and release evidence"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-26"
-execution_order: 30
+execution_order: 76
 owner: "Jim Ricketts"
 lane: "qualification"
 write_scope: "qa/release, docs/features, docs/authentication.md, docs/slash_commands.md"

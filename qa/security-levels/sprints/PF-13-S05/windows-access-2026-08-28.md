@@ -71,7 +71,7 @@ as its ancestor. Uncommitted changes and the separate PF-29 lane were excluded.
 The subsequent commit of this record is documentation-only and does not change
 the candidate to be qualified. This publication is not a product release.
 
-## Current gate / next execution
+## Historical pending gate
 
 Candidate availability is resolved. The remote Windows agent should fetch the
 published PF-13 branch, use a clean isolated checkout at
@@ -80,3 +80,34 @@ test tools, and run the final credential canary including directory-junction
 posture coverage. Record the source commit, executable hash, commands and actual
 results. Windows remains unqualified until that proof exists. The recorded 19
 complete-Core failures and other release gates are not changed by publication.
+
+## Final authenticated execution — 2026-08-29
+
+The stored gitignored SSH profile authenticated from the Corbanu Mac to
+`postfiat1` without exposing or copying private-key material. The host reported
+Windows `10.0.26200.9168`, Python 3.13.15, and more than 800 GiB free on `D:`.
+Rust/Cargo 1.95.0 and MSVC Build Tools were already present under `D:\rustqa`.
+
+Published integrated repair commit
+`be8153f2e29c360d83776441aed50deb204eafa7` was cloned from GitHub into fresh
+checkout `D:\w13-be8153`; both `git rev-parse HEAD` and the empty porcelain
+status were verified. Build, Cargo, Rustup and temporary paths remained on
+`D:`. The initial canary invocation failed before probes because CMD's unquoted
+environment assignment retained a trailing space in `RUSTUP_HOME`. Repeating
+the exact build exposed that path error; no source change was involved. The
+canonical `set "VAR=value"` syntax resolved it, and the candidate built with
+Rust 1.95/MSVC.
+
+The final canary passed all nine probe groups / 47 tests. Its four-test protected
+raw-export group executed
+`vault_auth_helper_symlink_home_cannot_downgrade_persisted_posture`; on Windows
+that test creates an unprivileged directory junction using `mklink /J` and runs
+both home-variable variants. Report
+`repair-credential-canary-windows-integrated.json` is bound to clean source
+`be8153f2e`, candidate version `corbanu 0.1.35`, and executable SHA-256
+`37e0ac06e3f7cab75c684737c7d33e38453578dad5d5d8788ee8221ad8e23737`.
+An independent remote `Get-FileHash` returned the same digest. Report SHA-256 is
+`1fe4f74bf8ae55645012f189dbdcf665175c0b1cb960788f7ce32e456382d4aa`.
+
+Windows component qualification is therefore passed. This does not certify the
+future PF-23 native profile wiring or PF-26 integrated release candidate.

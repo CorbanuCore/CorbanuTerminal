@@ -86,6 +86,7 @@ use codex_model_provider_info::AMBIENT_PROVIDER_ID;
 use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
+use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::LEGACY_OLLAMA_CHAT_PROVIDER_ID;
 use codex_model_provider_info::META_PROVIDER_ID;
@@ -1608,18 +1609,31 @@ fn current_corbanu_auth_helper() -> String {
 }
 
 fn corbanu_auth_helper_from_executable(path: PathBuf) -> Option<String> {
-    let file_name = path.file_name()?.to_str()?;
-    if matches!(file_name, "corbanu" | "corbanu-debug") {
-        return Some(path.to_string_lossy().into_owned());
+    let file_stem = path.file_stem()?.to_str()?;
+    if matches!(file_stem, "corbanu" | "corbanu-debug") {
+        return path.to_str().map(ToString::to_string);
     }
     // Linux marks the procfs target of a running executable as deleted when an update or
     // development rebuild atomically replaces it. `/proc/self/exe` still resolves the live
     // executable and can safely self-invoke hidden helper modes for that process.
     #[cfg(target_os = "linux")]
-    if matches!(file_name, "corbanu (deleted)" | "corbanu-debug (deleted)") {
-        return Some("/proc/self/exe".to_string());
+    {
+        let file_name = path.file_name()?.to_str()?;
+        if matches!(file_name, "corbanu (deleted)" | "corbanu-debug (deleted)") {
+            return Some("/proc/self/exe".to_string());
+        }
     }
-    None
+
+    let sibling = path.with_file_name(if cfg!(windows) {
+        "corbanu.exe"
+    } else {
+        "corbanu"
+    });
+    if sibling.is_file() {
+        sibling.to_str().map(ToString::to_string)
+    } else {
+        None
+    }
 }
 
 pub async fn load_gpu_runtime_model_providers(
@@ -3889,6 +3903,15 @@ impl Config {
             .unwrap_or_else(|| codex_home.to_path_buf());
 
         let mut built_in_model_providers = built_in_model_providers(openai_base_url);
+        if let Some(command) = codex_self_exe
+            .clone()
+            .and_then(corbanu_auth_helper_from_executable)
+            && let Some(auth) = built_in_model_providers
+                .get_mut(CLAUDE_PLAN_PROVIDER_ID)
+                .and_then(|provider| provider.auth.as_mut())
+        {
+            auth.command = command;
+        }
         built_in_model_providers
             .extend(load_gpu_runtime_model_providers(&sqlite_home, &codex_home).await);
         if let Some(openrouter_provider) =

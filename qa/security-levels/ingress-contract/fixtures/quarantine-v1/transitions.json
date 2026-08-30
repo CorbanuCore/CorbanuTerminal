@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "taint": "untrusted",
+  "authority": "none",
+  "initial": "pending_reassembly",
+  "transitions": [
+    {"from": "pending_reassembly", "event": "complete", "to": "pending_screening"},
+    {"from": "pending_reassembly", "event": "malformed_or_cancelled", "to": "unavailable"},
+    {"from": "pending_screening", "event": "allow", "to": "screened_untrusted"},
+    {"from": "pending_screening", "event": "suspicious", "to": "quarantined"},
+    {"from": "pending_screening", "event": "hostile", "to": "rejected"},
+    {"from": "pending_screening", "event": "missing_stale_mismatch_or_timeout", "to": "unavailable"}
+  ],
+  "forbidden": [
+    "release_prefix",
+    "clear_taint",
+    "grant_tool_authority",
+    "authorize_financial_action",
+    "unavailable_to_allow"
+  ]
+}

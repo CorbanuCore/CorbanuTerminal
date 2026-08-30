@@ -28,7 +28,6 @@ they must not restate policy.
 | Change classification and repository-wide release rules    | This file                                                                                                       |
 | Active-plan limit and lifecycle                            | [Plan process](docs/plans/index.md)                                                                             |
 | Plan evidence fields                                       | [Plan template](docs/plans/PLAN_TEMPLATE.md)                                                                    |
-| Upstream integration boundaries and qualification           | [Upstream integration contract](docs/plans/upstream-integration.md)                                             |
 | Sprint lifecycle and execution rules                       | [Sprint process](docs/sprints/index.md)                                                                         |
 | Sprint execution fields                                    | [Sprint template](docs/sprints/SPRINT_TEMPLATE.md)                                                              |
 | Benchmark cadence, methods, performance matrix, and ledger | [Benchmark tracker](benchmarks/README.md)                                                                       |
@@ -79,12 +78,9 @@ from plan prose.
   be `ready` or `in_progress`, before implementation begins.
 - `ready` and `in_progress` sprints record the exact implementation worktree,
   branch, and base commit. Those values must agree with the active plan.
-- A plan defaults to one active sprint; it may explicitly opt into at most
-  three independent active sprints under the concurrency contract in
-  `docs/sprints/index.md`. `blocked` work retains its active slot.
-- A sprint with dependencies cannot become executable until every dependency
-  is completed and archived. Parallel scheduling never waives final-tree,
-  interactive, human-acceptance, or release evidence.
+- Parallel implementation follows the bounded allocation and integration rules
+  in `docs/sprints/index.md`. A sprint with dependencies cannot become executable
+  until every dependency is completed and archived.
 - Agents implement only the selected sprint's remaining checklist. New scope
   goes back to the plan and sprint map before code changes.
 - A sprint becomes `completed` only after every task and required evidence item

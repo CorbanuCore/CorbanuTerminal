@@ -11,6 +11,7 @@ use codex_protocol::user_input::UserInput;
 use core_test_support::responses::assert_parent_turn;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
+use core_test_support::responses::ev_function_call;
 use core_test_support::responses::ev_function_call_with_namespace;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_sse_once_match;
@@ -81,17 +82,6 @@ fn request_has_model(request: &wiremock::Request, model: &str) -> bool {
         .is_some_and(|body| body.get("model").and_then(Value::as_str) == Some(model))
 }
 
-fn request_has_input_type(request: &wiremock::Request, input_type: &str) -> bool {
-    decoded_body(request)
-        .and_then(|body| serde_json::from_slice::<Value>(&body).ok())
-        .and_then(|body| body.get("input").and_then(Value::as_array).cloned())
-        .is_some_and(|items| {
-            items
-                .iter()
-                .any(|item| item.get("type").and_then(Value::as_str) == Some(input_type))
-        })
-}
-
 async fn mount_root_collaboration_call(
     server: &wiremock::MockServer,
     prompt: &'static str,
@@ -100,6 +90,11 @@ async fn mount_root_collaboration_call(
     arguments: &str,
 ) {
     let first_response_id = format!("resp-{call_id}-1");
+    let tool_call = if tool_name.ends_with("_plaintext") {
+        ev_function_call(call_id, tool_name, arguments)
+    } else {
+        ev_function_call_with_namespace(call_id, COLLABORATION_NAMESPACE, tool_name, arguments)
+    };
     mount_sse_once_match(
         server,
         move |request: &wiremock::Request| {
@@ -107,7 +102,7 @@ async fn mount_root_collaboration_call(
         },
         sse(vec![
             ev_response_created(&first_response_id),
-            ev_function_call_with_namespace(call_id, COLLABORATION_NAMESPACE, tool_name, arguments),
+            tool_call,
             ev_completed(&first_response_id),
         ]),
     )
@@ -176,12 +171,7 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
         |request: &wiremock::Request| body_contains(request, INITIAL_PROMPT),
         sse(vec![
             ev_response_created("resp-spawn-1"),
-            ev_function_call_with_namespace(
-                SPAWN_CALL_ID,
-                COLLABORATION_NAMESPACE,
-                "spawn_agent",
-                &spawn_args,
-            ),
+            ev_function_call(SPAWN_CALL_ID, "spawn_agent_plaintext", &spawn_args),
             ev_completed("resp-spawn-1"),
         ]),
     )
@@ -190,7 +180,6 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
         &server,
         |request: &wiremock::Request| {
             request_has_model(request, ROLE_MODEL)
-                && request_has_input_type(request, "agent_message")
                 && body_contains(request, INITIAL_TASK)
         },
         sse(vec![
@@ -220,7 +209,7 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
             &server,
             move |request: &wiremock::Request| {
                 body_contains(request, text)
-                    && request_has_input_type(request, "agent_message") == is_subagent
+                    && request_has_model(request, ROLE_MODEL) == is_subagent
             },
             sse(vec![ev_completed("resp-parent-turn-assistant")]),
         )
@@ -345,16 +334,14 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
         &server,
         SIBLING_PROMPT,
         SIBLING_SPAWN_CALL_ID,
-        "spawn_agent",
+        "spawn_agent_plaintext",
         &sibling_spawn_args,
     )
     .await;
     mount_sse_once_match(
         &server,
         |request: &wiremock::Request| {
-            request_has_model(request, ROLE_MODEL)
-                && request_has_input_type(request, "agent_message")
-                && body_contains(request, SIBLING_TASK)
+            request_has_model(request, ROLE_MODEL) && body_contains(request, SIBLING_TASK)
         },
         sse(vec![
             ev_response_created("resp-survivor-1"),
@@ -406,12 +393,7 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
         |request: &wiremock::Request| body_contains(request, FOLLOWUP_PROMPT),
         sse(vec![
             ev_response_created("resp-followup-1"),
-            ev_function_call_with_namespace(
-                FOLLOWUP_CALL_ID,
-                COLLABORATION_NAMESPACE,
-                "followup_task",
-                &followup_args,
-            ),
+            ev_function_call(FOLLOWUP_CALL_ID, "followup_task_plaintext", &followup_args),
             ev_completed("resp-followup-1"),
         ]),
     )
@@ -420,7 +402,6 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
         &server,
         |request: &wiremock::Request| {
             request_has_model(request, ROLE_MODEL)
-                && request_has_input_type(request, "agent_message")
                 && body_contains(request, FOLLOWUP_TASK)
                 && body_contains(request, QUEUED_MESSAGE)
         },
@@ -472,10 +453,9 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
         |request: &wiremock::Request| body_contains(request, QUEUE_PROMPT),
         sse(vec![
             ev_response_created("resp-queue"),
-            ev_function_call_with_namespace(
+            ev_function_call(
                 QUEUE_CALL_ID,
-                COLLABORATION_NAMESPACE,
-                "send_message",
+                "send_message_plaintext",
                 r#"{"target":"worker","message":"queue-only context from an earlier parent turn"}"#,
             ),
             ev_completed("resp-queue"),
@@ -626,16 +606,14 @@ async fn cold_root_resume_restores_agent_identity_and_role_on_followup() -> Resu
         &server,
         SIBLING_FOLLOWUP_PROMPT,
         SIBLING_FOLLOWUP_CALL_ID,
-        "followup_task",
+        "followup_task_plaintext",
         &sibling_followup_args,
     )
     .await;
     let sibling_followup_request = mount_sse_once_match(
         &server,
         |request: &wiremock::Request| {
-            request_has_model(request, ROLE_MODEL)
-                && request_has_input_type(request, "agent_message")
-                && body_contains(request, SIBLING_FOLLOWUP_TASK)
+            request_has_model(request, ROLE_MODEL) && body_contains(request, SIBLING_FOLLOWUP_TASK)
         },
         sse(vec![
             ev_response_created("resp-survivor-2"),

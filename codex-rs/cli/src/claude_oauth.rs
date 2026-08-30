@@ -14,12 +14,18 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
 use serde::Deserialize;
+#[cfg(target_os = "macos")]
+use sha2::Digest;
+#[cfg(target_os = "macos")]
+use sha2::Sha256;
 use tokio::process::Command;
 
 const CLAUDE_CREDENTIALS_FILE: &str = ".credentials.json";
 const CLAUDE_REFRESH_LOCK_FILE: &str = ".pfterminal-oauth-refresh.lock";
 const MIN_TOKEN_VALIDITY_MS: u64 = 60_000;
 const CLAUDE_REFRESH_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(target_os = "macos")]
+const CLAUDE_KEYCHAIN_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Debug, Deserialize)]
 struct ClaudeCodeCredentials {
@@ -70,7 +76,7 @@ async fn resolve_stored_claude_oauth_access_token(
     force_refresh: bool,
 ) -> Result<String> {
     let credentials_path = config_dir.join(CLAUDE_CREDENTIALS_FILE);
-    let credentials = read_credentials(&credentials_path).await?;
+    let credentials = read_credentials(config_dir, &credentials_path, /*security*/ None).await?;
     if !force_refresh && let Some(access_token) = usable_access_token(&credentials, now_ms) {
         return Ok(access_token);
     }
@@ -82,7 +88,7 @@ async fn resolve_stored_claude_oauth_access_token(
     let _refresh_lock = acquire_refresh_lock(config_dir).await?;
 
     // Another PFTerminal process may have refreshed while this process waited.
-    let credentials = read_credentials(&credentials_path).await?;
+    let credentials = read_credentials(config_dir, &credentials_path, /*security*/ None).await?;
     if let Some(access_token) = usable_access_token(&credentials, current_time_ms().max(now_ms))
         && (!force_refresh || Some(access_token.clone()) != original_access_token)
     {
@@ -92,7 +98,7 @@ async fn resolve_stored_claude_oauth_access_token(
     let refresh_status =
         refresh_with_claude_cli(config_dir, &credentials, claude_executable).await?;
 
-    let refreshed = read_credentials(&credentials_path).await?;
+    let refreshed = read_credentials(config_dir, &credentials_path, /*security*/ None).await?;
     if let Some(access_token) = usable_access_token(&refreshed, current_time_ms().max(now_ms))
         && Some(access_token.clone()) != original_access_token
     {
@@ -108,19 +114,98 @@ async fn resolve_stored_claude_oauth_access_token(
     ))
 }
 
-async fn read_credentials(path: &Path) -> Result<ClaudeCodeCredentials> {
-    let contents = tokio::fs::read_to_string(path).await.map_err(|err| {
+async fn read_credentials(
+    config_dir: &Path,
+    path: &Path,
+    security: Option<&Path>,
+) -> Result<ClaudeCodeCredentials> {
+    #[cfg(not(target_os = "macos"))]
+    let _ = (config_dir, security);
+
+    let contents = match tokio::fs::read(path).await {
+        Ok(contents) => contents,
+        #[cfg(target_os = "macos")]
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            read_macos_keychain_credentials(config_dir, security)
+                .await
+                .with_context(|| {
+                    format!(
+                        "Claude Code credentials were not available at {} or in the macOS Keychain. Run `claude auth login` with your Claude subscription.",
+                        path.display()
+                    )
+                })?
+        }
+        Err(err) => {
+            return Err(anyhow!(
+                "Claude Code credentials not found at {} ({err}). Run `claude auth login` with your Claude subscription.",
+                path.display()
+            ));
+        }
+    };
+    serde_json::from_slice(&contents).map_err(|err| {
         anyhow!(
-            "Claude Code credentials not found at {} ({err}). Run `claude /login` with your Claude subscription.",
-            path.display()
-        )
-    })?;
-    serde_json::from_str(&contents).map_err(|err| {
-        anyhow!(
-            "Claude Code credentials at {} are not valid JSON ({err}). Run `claude /login` again.",
+            "Claude Code credentials for {} are not valid JSON ({err}). Run `claude auth login` again.",
             path.display()
         )
     })
+}
+
+#[cfg(target_os = "macos")]
+async fn read_macos_keychain_credentials(
+    config_dir: &Path,
+    security: Option<&Path>,
+) -> Result<Vec<u8>> {
+    let account = std::env::var("USER")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(whoami::username);
+    let service = claude_keychain_service(config_dir);
+    let executable = security.unwrap_or_else(|| Path::new("/usr/bin/security"));
+    let output = tokio::time::timeout(
+        CLAUDE_KEYCHAIN_TIMEOUT,
+        Command::new(executable)
+            .args([
+                "find-generic-password",
+                "-a",
+                account.as_str(),
+                "-w",
+                "-s",
+                service.as_str(),
+            ])
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .output(),
+    )
+    .await
+    .map_err(|_| anyhow!("macOS Keychain lookup timed out after 5 seconds"))?
+    .with_context(|| format!("failed to start `{}`", executable.display()))?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "macOS Keychain did not contain current Claude Code credentials"
+        ));
+    }
+    Ok(output.stdout)
+}
+
+#[cfg(target_os = "macos")]
+fn claude_keychain_service(config_dir: &Path) -> String {
+    let oauth_suffix = if nonempty_env("CLAUDE_CODE_CUSTOM_OAUTH_URL").is_some() {
+        "-custom-oauth"
+    } else {
+        ""
+    };
+    let config_suffix = std::env::var_os("CLAUDE_CONFIG_DIR")
+        .filter(|value| !value.is_empty())
+        .map_or_else(String::new, |_| {
+            let digest = format!(
+                "{:x}",
+                Sha256::digest(config_dir.to_string_lossy().as_bytes())
+            );
+            format!("-{}", &digest[..8])
+        });
+    format!("Claude Code{oauth_suffix}-credentials{config_suffix}")
 }
 
 fn usable_access_token(credentials: &ClaudeCodeCredentials, now_ms: u64) -> Option<String> {
@@ -167,9 +252,15 @@ async fn refresh_with_claude_cli(
             .context("Claude Code executable was not found on PATH; cannot refresh OAuth token")?,
     };
     let mut command = Command::new(&executable);
+    command.args(["auth", "login"]);
+    if claude_config_dir_is_default(config_dir) {
+        // Claude Code's default macOS Keychain service has no config hash. Setting
+        // CLAUDE_CONFIG_DIR for the refresh would rotate a different credential.
+        command.env_remove("CLAUDE_CONFIG_DIR");
+    } else {
+        command.env("CLAUDE_CONFIG_DIR", config_dir);
+    }
     command
-        .args(["auth", "login"])
-        .env("CLAUDE_CONFIG_DIR", config_dir)
         .env("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", refresh_token)
         .env("CLAUDE_CODE_OAUTH_SCOPES", oauth.scopes.join(" "))
         .env_remove("CLAUDE_CODE_OAUTH_TOKEN")
@@ -189,6 +280,18 @@ async fn refresh_with_claude_cli(
                 executable.display()
             )
         })
+}
+
+fn claude_config_dir_is_default(config_dir: &Path) -> bool {
+    if std::env::var_os("CLAUDE_CONFIG_DIR")
+        .filter(|value| !value.is_empty())
+        .is_some()
+    {
+        return false;
+    }
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .is_some_and(|home| config_dir == home.join(".claude"))
 }
 
 async fn acquire_refresh_lock(config_dir: &Path) -> Result<File> {
@@ -295,9 +398,13 @@ mod tests {
             refresh_log,
             "rotating-refresh|user:profile user:inference\n"
         );
-        let persisted = read_credentials(&temp_dir.path().join(CLAUDE_CREDENTIALS_FILE))
-            .await
-            .expect("persisted credentials");
+        let persisted = read_credentials(
+            temp_dir.path(),
+            &temp_dir.path().join(CLAUDE_CREDENTIALS_FILE),
+            /*security*/ None,
+        )
+        .await
+        .expect("persisted credentials");
         assert_eq!(
             persisted
                 .claude_ai_oauth
@@ -449,6 +556,27 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn current_claude_keychain_credentials_are_supported() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let now_ms = current_time_ms();
+        let security = fake_keychain_security(temp_dir.path(), now_ms + 600_000);
+
+        let credentials = read_credentials(
+            temp_dir.path(),
+            &temp_dir.path().join(CLAUDE_CREDENTIALS_FILE),
+            Some(&security),
+        )
+        .await
+        .expect("keychain credentials");
+
+        assert_eq!(
+            usable_access_token(&credentials, now_ms).as_deref(),
+            Some("keychain-access")
+        );
+    }
+
     fn write_credentials(
         config_dir: &Path,
         access_token: &str,
@@ -506,6 +634,25 @@ exit {exit_code}
             .permissions();
         permissions.set_mode(0o700);
         std::fs::set_permissions(&executable, permissions).expect("make fake Claude executable");
+        executable
+    }
+
+    #[cfg(target_os = "macos")]
+    fn fake_keychain_security(config_dir: &Path, expires_at: u64) -> PathBuf {
+        let executable = config_dir.join("fake-security");
+        let script = format!(
+            r#"#!/bin/sh
+set -eu
+[ "$1" = "find-generic-password" ]
+printf '%s\n' '{{"claudeAiOauth":{{"accessToken":"keychain-access","refreshToken":"keychain-refresh","expiresAt":{expires_at},"scopes":["user:profile","user:inference"]}}}}'
+"#
+        );
+        std::fs::write(&executable, script).expect("write fake security");
+        let mut permissions = std::fs::metadata(&executable)
+            .expect("fake security metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&executable, permissions).expect("make fake security executable");
         executable
     }
 }

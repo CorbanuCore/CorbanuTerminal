@@ -987,6 +987,76 @@ command = "print-token"
 }
 
 #[tokio::test]
+async fn claude_plan_auth_uses_the_runtime_executable_without_path_lookup() {
+    let codex_home = tempdir().expect("tempdir");
+    let codex_self_exe = codex_home.path().join(if cfg!(windows) {
+        "corbanu.exe"
+    } else {
+        "corbanu"
+    });
+    let cfg = toml::from_str::<ConfigToml>(
+        r#"
+model_provider = "claude-plan"
+model = "claude-fable-5-plan"
+"#,
+    )
+    .expect("Claude Plan config should deserialize");
+
+    let config = Config::load_from_base_config_with_overrides(
+        cfg,
+        ConfigOverrides {
+            codex_self_exe: Some(codex_self_exe.clone()),
+            ..Default::default()
+        },
+        codex_home.abs(),
+    )
+    .await
+    .expect("load config");
+
+    assert_eq!(
+        config
+            .model_provider
+            .auth
+            .as_ref()
+            .map(|auth| auth.command.as_str()),
+        codex_self_exe.to_str()
+    );
+}
+
+#[test]
+fn corbanu_auth_helper_rejects_an_unrelated_runtime_without_a_sibling_cli() {
+    let temp_dir = tempdir().expect("tempdir");
+    let runtime = temp_dir.path().join(if cfg!(windows) {
+        "codex-app-server.exe"
+    } else {
+        "codex-app-server"
+    });
+
+    assert_eq!(corbanu_auth_helper_from_executable(runtime), None);
+}
+
+#[test]
+fn corbanu_auth_helper_uses_an_installed_sibling_cli() {
+    let temp_dir = tempdir().expect("tempdir");
+    let runtime = temp_dir.path().join(if cfg!(windows) {
+        "codex-app-server.exe"
+    } else {
+        "codex-app-server"
+    });
+    let corbanu = temp_dir.path().join(if cfg!(windows) {
+        "corbanu.exe"
+    } else {
+        "corbanu"
+    });
+    std::fs::write(&corbanu, b"").expect("write sibling Corbanu CLI");
+
+    assert_eq!(
+        corbanu_auth_helper_from_executable(runtime).as_deref(),
+        corbanu.to_str()
+    );
+}
+
+#[tokio::test]
 async fn load_config_rejects_unsupported_amazon_bedrock_overrides() {
     let cfg = toml::from_str::<ConfigToml>(
         r#"

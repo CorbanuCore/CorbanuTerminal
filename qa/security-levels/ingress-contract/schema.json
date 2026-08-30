@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corbanu.invalid/security/ingress-contract/v1",
+  "title": "Corbanu screening contract fixture manifest",
+  "type": "object",
+  "required": ["schema_version", "contract_version", "taint", "authority", "fixture_verdict_identity", "fixtures", "cases"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "contract_version": {"const": 1},
+    "taint": {"const": "untrusted"},
+    "authority": {"const": "none"},
+    "fixture_verdict_identity": {
+      "type": "object",
+      "required": ["model_id", "model_version", "artifact_sha256", "threshold_id", "threshold_version", "threshold_sha256"],
+      "additionalProperties": false,
+      "properties": {
+        "model_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+        "model_version": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+        "artifact_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "threshold_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+        "threshold_version": {"type": "integer", "minimum": 1},
+        "threshold_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "fixtures": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "path", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+          "kind": {"enum": ["raw", "rendered", "sanitized", "quarantine-transitions"]},
+          "path": {"type": "string", "pattern": "^fixtures/[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*(?:/[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*)*$"},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["id", "source_binding", "transformation", "segmentation", "expected_verdict"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+          "source_binding": {
+            "type": "object",
+            "required": ["schema_version", "opaque_id"],
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {"const": 1},
+              "opaque_id": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+            }
+          },
+          "transformation": {
+            "type": "object",
+            "required": ["pipeline_id", "pipeline_version", "raw_sha256", "rendered_sha256", "sanitized_sha256"],
+            "additionalProperties": false,
+            "properties": {
+              "pipeline_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+              "pipeline_version": {"type": "integer", "minimum": 1},
+              "raw_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "rendered_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "sanitized_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+            }
+          },
+          "segmentation": {
+            "type": "object",
+            "required": ["count", "boundaries", "reassembly_sha256"],
+            "additionalProperties": false,
+            "properties": {
+              "count": {"type": "integer", "minimum": 1},
+              "boundaries": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {"type": "integer", "minimum": 1}
+              },
+              "reassembly_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+            }
+          },
+          "expected_verdict": {"enum": ["allow", "suspicious", "hostile", "unavailable"]}
+        }
+      }
+    }
+  }
+}

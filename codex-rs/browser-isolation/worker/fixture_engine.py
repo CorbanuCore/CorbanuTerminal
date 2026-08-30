@@ -14,6 +14,8 @@ result = None
 code = 0
 if args[:2] == ["image", "inspect"]:
     result = [state["image"]]
+elif args[0] == "build":
+    result = state.get("build_id", state["image"]["Id"])
 elif args[0] == "create":
     state["created"] = True
     label = args[args.index("--label") + 1].split("=", 1)[1]
@@ -39,6 +41,8 @@ else:
 path.write_text(json.dumps(state))
 if args[0] == "exec" and state.get("stall"):
     time.sleep(10)
-if result is not None:
+if args[0] == "build" and result is not None:
+    print(result)
+elif result is not None:
     print(json.dumps(result))
 sys.exit(code)

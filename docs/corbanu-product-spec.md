@@ -2,7 +2,7 @@
 title: Corbanu Terminal Product Specification
 document_type: product_spec
 status: living
-updated: 2026-08-27
+updated: 2026-08-22
 status_labels:
   - live
   - built_not_live
@@ -46,17 +46,6 @@ Marketing language belongs in this positioning section. Delivery requirements be
 7. **Upstream velocity:** Maintain continuous Codex parity without removing Corbanu-specific behavior.
 8. **One product:** Identity, data, inference, skills, execution, NAV, and social must feel native to one Terminal.
 9. **Deterministic authorization:** A model deciding that an action looks safe is never authorization.
-
-## Upstream compatibility — CONTINUOUS
-
-Status: **PRINCIPLE; qualification evidence required, not a current certification**.
-Product decision: Travis Good, 2026-08-27. Corbanu-specific capabilities must
-remain separable from native Codex lifecycle and provider interfaces so upstream
-improvements can be adopted without losing product behavior or weakening security.
-Upgrade acceptance includes regression evidence for affected native delegation,
-transport recovery, context persistence, and authorization boundaries, not merely
-a conflict-free merge. The [upstream integration contract](plans/upstream-integration.md)
-owns the engineering process and evidence fields.
 
 # Shipping MVP — LIVE
 
@@ -240,6 +229,31 @@ cannot change or downgrade it. A confirmed change applies immediately to active
 and future agents, invalidates incompatible pending approvals, persists across
 restart, and produces a secret-free audit event.
 
+## Reconciled security scope — TO BUILD
+
+The 2026-08-28 product decision preserves Permissive compatibility and makes the
+broker mandatory for both Moderate and Aggressive. It authorizes the
+[active security plan](plans/active/p0-security-levels.md) to reconcile the
+working-session overview/transcript, archived security designs and OpenClaw
+implementation into one program; these outcomes are not yet shipped.
+
+Protected modes include isolated credential execution and secretless agent
+launch; reflected-secret/output protection; safe migration and clean-context
+recovery; provenance that survives summaries, memory and child agents; isolated
+retrieval, screened search, network validation and download promotion;
+sanitization, local detection and quarantine; exact-origin brokered login with
+human authentication challenges; bounded financial execution, derived views
+and disclosure controls; Agent Sweep; and an inspector of actual protection,
+degradation and secret-free audit state.
+
+Optional hosted detection and advisory review remain disabled until qualified
+and explicitly consented. Search/security adapters and existing wallet/fake-venue
+qualification are included; new trading venues, commercial agreements, paid
+service activation and live financial actions are not authorized by this
+planning decision. Unknown or unsupported protected paths fail visibly rather
+than falling back to raw secrets or unscreened execution. The plan owns the
+detailed contracts and sprint sequencing.
+
 ## Release rule
 
 Moderate and Aggressive controls must be deterministic policy around the model,
@@ -249,10 +263,9 @@ protected-action decision.
 
 ## Required trust boundaries
 
-The stronger guarantees in this section, **Non-negotiable controls**, and
-**Required adversarial tests** apply to Moderate and Aggressive. Permissive
-preserves the existing product, including its existing vault/helper policies;
-it does not acquire an all-mode confidentiality guarantee from this initiative.
+The added boundaries and controls below apply to Moderate and Aggressive;
+Permissive preserves the existing policies specified above and does not acquire
+an implied secretless guarantee.
 
 1. External content enters as untrusted data.
 2. The model may research and propose but cannot resolve secrets or authorize itself.
@@ -283,8 +296,6 @@ The release suite must cover:
 
 - direct and indirect prompt injection;
 - tool-output and retrieved-content injection;
-- task hijacking through repository instructions, misleading review output, or
-  requests to weaken tests, including attacks containing no secret canary;
 - vault, seed, credential, and financial-data extraction;
 - confused-deputy attacks;
 - malicious plugins, connectors, and MCP servers;
@@ -296,56 +307,6 @@ The release suite must cover:
 - kill-switch, cooldown, revocation, and limit failures.
 
 **Pass condition:** Every critical attack-class regression passes and no critical finding remains open.
-
-## Moderate/Aggressive isolation and content provenance
-
-Status: **TO BUILD**. Product decision: Travis Good, 2026-08-27, approved the
-security-plan refactor while explicitly preserving Permissive as-is.
-
-Browser isolation is a separately scoped feature within the security initiative.
-Eligible public-web acquisition runs in an ephemeral isolated process boundary
-without host browser profiles, inherited credentials, vault access, host IPC, or
-unrestricted workspace access. Network destinations and redirects are enforced;
-downloads remain quarantined until an explicitly approved promotion. Missing
-isolation denies the affected acquisition path rather than falling back to the
-host browser. Authenticated browser login is not part of this initial feature.
-
-Runtime setup decision: Travis Good, 2026-08-27. Support Windows, Linux, and
-macOS with containerized Scrapling. Reuse an installed Podman or Docker runtime
-without replacing it or changing its global configuration; prefer Podman when
-installing a runtime for the first time. Selecting Moderate (also called
-“medium” in discussion) or Aggressive checks isolation readiness. Pull the
-pinned image if absent, start the Corbanu service if stopped, and recover a
-stalled Corbanu-owned service with bounded restart attempts and a fresh health
-test. Never restart unrelated workloads or silently downgrade protection.
-
-If no runtime exists, offer a Corbanu-guided installation, then image setup and
-end-to-end verification. Explain downloads, disk/VM requirements, and host
-changes before consent. Prefer rootless operation; installation or VM/WSL
-prerequisites may still require elevation. Only the operating system's trusted
-authentication surface accepts the user's password. Corbanu, agents, chat,
-transcripts, logs, and configuration must not collect or retain that password.
-Cancellation, failed setup, or failed health checks leave acquisition denied
-and the missing protection visible. Permissive triggers none of this setup.
-Mac/Linux qualification precedes the Windows run; all three remain required.
-
-External content remains untrusted after extraction or sanitization. Source
-provenance and taint survive summaries, compaction, children, memory, and resume;
-deterministic policy rechecks protected actions after untrusted reads. A
-classifier may inform risk but cannot confer authority. Protected values must
-remain absent from model-visible outputs, diagnostics, artifacts, and inherited
-environments, including reflected provider failures.
-
-The security inspector distinguishes the requested level from effective
-enforcement and displays Browser Isolation and External Content Firewall health
-separately. Unavailable controls cannot be represented as active protection.
-These contracts do not change Permissive or weaken any release evidence gate.
-
-The acceptance model distinguishes semantic model mistakes from deterministic
-authority violations. Wrappers, sanitization, and detectors reduce exposure;
-they do not guarantee the model never follows malicious text. A task-hijacking
-test must report both task integrity and policy outcomes, rather than treating
-absence of a secret leak as proof that the task remained intact.
 
 # Trader capabilities
 

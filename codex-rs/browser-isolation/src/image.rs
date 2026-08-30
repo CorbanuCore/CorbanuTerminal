@@ -32,53 +32,61 @@ impl ContainerEngine {
     pub(crate) async fn prepare_image(&self) -> Result<String, BrowserError> {
         let recipe = recipe_digest();
         let tag = format!("localhost/corbanu-browser:recipe-{recipe}");
+        // A local tag and image labels are writable by every principal with
+        // access to the selected engine. Never treat either as a trusted cache
+        // key: rebuild from the checked-in recipe and pinned base, then bind
+        // this runtime to the immutable ID returned by that exact build.
         if self
-            .json(&strings(&["image", "inspect", &tag]))
+            .json(&strings(&["image", "inspect", BASE_IMAGE]))
             .await
             .is_err()
         {
-            if self
-                .json(&strings(&["image", "inspect", BASE_IMAGE]))
-                .await
-                .is_err()
-            {
-                self.command
-                    .run(&strings(&["pull", BASE_IMAGE]), Duration::from_secs(300))
-                    .await
-                    .map_err(|_| BrowserError::ImageUnavailable)?;
-            }
-            let context = tempfile::tempdir().map_err(|_| BrowserError::ImageUnavailable)?;
-            tokio::fs::write(context.path().join("Dockerfile"), RECIPE)
-                .await
-                .map_err(|_| BrowserError::ImageUnavailable)?;
-            tokio::fs::write(context.path().join("worker.py"), WORKER)
-                .await
-                .map_err(|_| BrowserError::ImageUnavailable)?;
             self.command
-                .run(
-                    &strings(&[
-                        "build",
-                        "--network=none",
-                        "--pull=false",
-                        "--quiet",
-                        "--label",
-                        &format!("org.corbanu.browser.recipe={recipe}"),
-                        "--tag",
-                        &tag,
-                        &context.path().to_string_lossy(),
-                    ]),
-                    Duration::from_secs(300),
-                )
+                .run(&strings(&["pull", BASE_IMAGE]), Duration::from_secs(300))
                 .await
                 .map_err(|_| BrowserError::ImageUnavailable)?;
         }
+        let context = tempfile::tempdir().map_err(|_| BrowserError::ImageUnavailable)?;
+        tokio::fs::write(context.path().join("Dockerfile"), RECIPE)
+            .await
+            .map_err(|_| BrowserError::ImageUnavailable)?;
+        tokio::fs::write(context.path().join("worker.py"), WORKER)
+            .await
+            .map_err(|_| BrowserError::ImageUnavailable)?;
+        let build_output = self
+            .command
+            .run(
+                &strings(&[
+                    "build",
+                    "--network=none",
+                    "--pull=false",
+                    "--no-cache",
+                    "--quiet",
+                    "--label",
+                    &format!("org.corbanu.browser.recipe={recipe}"),
+                    "--tag",
+                    &tag,
+                    &context.path().to_string_lossy(),
+                ]),
+                Duration::from_secs(300),
+            )
+            .await
+            .map_err(|_| BrowserError::ImageUnavailable)?;
+        let built_id = std::str::from_utf8(&build_output)
+            .map(str::trim)
+            .ok()
+            .filter(|id| is_image_id(id))
+            .ok_or(BrowserError::ContainerMismatch)?;
         let image = self
-            .json(&strings(&["image", "inspect", &tag]))
+            .json(&strings(&["image", "inspect", built_id]))
             .await
             .map_err(|_| BrowserError::ImageUnavailable)?;
         let image = image.get(0).ok_or(BrowserError::ImageUnavailable)?;
         let id = image["Id"].as_str().ok_or(BrowserError::ImageUnavailable)?;
         if !is_image_id(id)
+            || !id
+                .trim_start_matches("sha256:")
+                .eq_ignore_ascii_case(built_id.trim_start_matches("sha256:"))
             || image
                 .pointer("/Config/Labels/org.corbanu.browser.recipe")
                 .and_then(|v| v.as_str())

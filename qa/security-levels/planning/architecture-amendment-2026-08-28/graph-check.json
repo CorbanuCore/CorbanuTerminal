@@ -1,0 +1,19 @@
+{
+  "security_sprints": 68,
+  "total_current": 75,
+  "archived": 72,
+  "longest_unweighted_chain": 35,
+  "assertions": {
+    "login_has_screening": true,
+    "detector_has_real_policy": true,
+    "live_retrieval_keeps_isolation": true,
+    "classifier_preparation_is_early": true,
+    "shared_audit_precedes_consumers": true,
+    "final_gates_retained": true
+  },
+  "index_matches_front_matter": true,
+  "ready": [
+    "PF-15-S01"
+  ],
+  "in_progress": []
+}

@@ -35,6 +35,7 @@ members = [
     "collaboration-mode-templates",
     "connectors",
     "config",
+    "content-security",
     "context-fragments",
     "shell-command",
     "shell-escalation",
@@ -46,6 +47,7 @@ members = [
     "hooks",
     "http-client",
     "secrets",
+    "secret-broker",
     "exec",
     "file-system",
     "exec-server-protocol",
@@ -245,6 +247,7 @@ codex-rollout = { path = "rollout" }
 codex-rollout-trace = { path = "rollout-trace" }
 codex-sandboxing = { path = "sandboxing" }
 codex-security-policy = { path = "security-policy" }
+codex-secret-broker = { path = "secret-broker" }
 codex-secrets = { path = "secrets" }
 codex-shell-command = { path = "shell-command" }
 codex-shell-escalation = { path = "shell-escalation" }

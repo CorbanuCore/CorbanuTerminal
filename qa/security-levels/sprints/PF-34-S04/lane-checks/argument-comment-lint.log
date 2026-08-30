@@ -1,0 +1,7 @@
+$ DYLINT_DRIVER_PATH=/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/dylint-drivers CARGO_HOME=/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/cargo-home CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/target TMPDIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/tmp just argument-comment-lint --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/Cargo.toml
+candidate=a75efecc0a37d5544e123ad19d57867cac360a68
+exit=0
+if [ "$#" -eq 0 ]; then bazel build --config=argument-comment-lint -- $(/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier/tools/argument-comment-lint/list-bazel-targets.sh); else /Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier/tools/argument-comment-lint/run-prebuilt-linter.py "$@"; fi
+Checking with toolchain `nightly-2025-09-18`
+    Checking pf34-s04-contract-harness v0.0.0 (/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.20s

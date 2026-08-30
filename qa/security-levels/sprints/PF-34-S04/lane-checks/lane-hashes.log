@@ -1,0 +1,18 @@
+$ shasum -a 256 -c qa/security-levels/sprints/PF-34-S04/lane-files.sha256
+candidate=a75efecc0a37d5544e123ad19d57867cac360a68
+exit=0
+codex-rs/content-security/src/contract.rs: OK
+codex-rs/content-security/src/contract_tests.rs: OK
+qa/security-levels/ingress-contract/.gitattributes: OK
+qa/security-levels/ingress-contract/README.md: OK
+qa/security-levels/ingress-contract/fixtures/benign-v1/raw.txt: OK
+qa/security-levels/ingress-contract/fixtures/benign-v1/rendered.txt: OK
+qa/security-levels/ingress-contract/fixtures/benign-v1/sanitized.txt: OK
+qa/security-levels/ingress-contract/fixtures/cross-segment-hostile-v1/raw.txt: OK
+qa/security-levels/ingress-contract/fixtures/cross-segment-hostile-v1/rendered.txt: OK
+qa/security-levels/ingress-contract/fixtures/cross-segment-hostile-v1/sanitized.txt: OK
+qa/security-levels/ingress-contract/fixtures/quarantine-v1/transitions.json: OK
+qa/security-levels/ingress-contract/manifest.json: OK
+qa/security-levels/ingress-contract/schema.json: OK
+qa/security-levels/ingress-contract/test_verify.py: OK
+qa/security-levels/ingress-contract/verify.py: OK

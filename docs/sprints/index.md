@@ -31,54 +31,51 @@ contract. A sprint turns one feature into an exact code-and-evidence checklist.
 - A `draft` sprint may use `UNALLOCATED` worktree coordinates.
 - A `ready` or `in_progress` sprint requires an active plan plus an exact
   worktree, branch, and 40-character base commit matching that plan.
-- Executable dependencies must already be completed and archived.
+- Parallel implementation must satisfy the allocation rules below; executable
+  dependencies must already be completed and archived.
 - A sprint never grants authority beyond its active plan.
-- New or amended implementation records link their plan's upstream-touch rows
-  and resolve the [upstream integration contract](../plans/upstream-integration.md)
-  before readiness; adapter evidence is part of completion.
 
-## Bounded concurrency
+## Bounded parallel implementation
 
-Plans default to `max_active_sprints: 1`. An active plan may opt into two or
-three slots and name an `integration_owner`. Both `in_progress` and `blocked`
-consume slots; `ready` does not authorize code changes or reserve a slot.
-The two-plan portfolio limit is unchanged. Do not split an initiative into
-overlapping plans to evade either limit.
+The default is one active implementation sprint per plan. A plan may opt into
+two or three with `parallel_sprint_limit` and a named `integration_owner` in its
+front matter. Across all plans, at most **three** sprints may be `in_progress`
+or `blocked`; blocked work keeps its reservation until explicitly returned to
+draft with a recorded handoff. The two-active-plan limit is unchanged.
 
-Before opting in, record the dependency graph and lane allocation in the plan.
-Every executable sprint in that plan records `lane` and `write_scope` as well
-as its owner and exact worktree coordinates. `write_scope` is a comma-separated
-list of literal repository-relative files or directory prefixes, not globs;
-`.`/`..`, absolute paths, and backslashes are invalid. Include implementation
-and test paths; the sprint's own record and evidence directory are implicit.
-Shared plan/navigation metadata is updated serially by the integration owner.
+Before a parallel allocation starts:
 
-Concurrently active sprints must have distinct lanes, worktrees, and branches,
-and disjoint write scopes, including across plans. Separate worktrees alone
-do not make edits to the same module independent. Land shared interfaces and
-registration points first, then give each lane its own files. Shared-file
-changes require a serialized integration sprint or dependency, not an overlap
-exception. An integration owner cannot waive a collision or missing evidence.
+- Every dependency is completed and archived. `execution_order` is a
+  topological reading order, not a serial scheduling lock. No dependency on
+  an unfinished interface, draft, fixture-only integration or cancelled record
+  is executable; use a completed single-feature contract sprint as a freeze point.
+- Each worker has a distinct named owner, `parallel_lane`, exact worktree and
+  branch. Worktree coordinates must appear in its active plan. Do not invent
+  allocations or share a checkout merely because two tasks look independent.
+- Each active record declares `write_scope`: comma-separated repository-relative
+  file paths or directory prefixes (trailing `/`), without globs, `..` or root
+  reservations. Concurrent scopes must not overlap, even across plans. Include
+  manifests, lockfiles, shared registries and tests, not just the main module.
+- Each record declares an `integration_gate` naming the receiving owner, merge
+  boundary and tests to rerun on the combined tree. The plan's integration owner
+  serializes shared Core/protocol/schema/lockfile edits. If these overlap, stop
+  concurrency and schedule the changes sequentially; do not omit ownership.
+  Concurrent plans each name their integration owner, even with one worker each.
+- A blocked or completed lane's handoff records its commit, contract versions,
+  test evidence and outstanding integration. Update coordinates/base commits and
+  rerun checks before reallocation. An early artifact or interface pass does not
+  enable protected behavior or replace PF-13/PF-26 qualification.
 
-`depends_on` is the hard prerequisite graph, including completed interface
-contracts; cycles and self-dependencies are invalid even in drafts.
-`execution_order` is a unique display priority within a plan, not a dependency
-or an obligation to wait for every lower number. Split harness construction
-from final qualification instead of treating unfinished prerequisites as soft.
-
-Each worker follows one sprint. Platform tests, independent review, and
-isolated live-repository flows may run concurrently within a qualification
-sprint against the same recorded candidate. No new sprint is activated by a
-plan edit alone. Rebase/integrate through the named owner, then re-run affected
-tests and true-PTY proof on the final integrated candidate. Interactive sprint
-completion requires its own applicable true-PTY proof; final release workflows
-repeat that proof across the integrated product.
+The checker enforces counts, concrete allocation fields, distinct owners/lanes/
+worktrees/branches, disjoint declared paths, dependency order and cycles. It does
+not inspect remote checkouts or prove the declarations truthful: the integration
+owner must compare actual diffs to scope and record final combined-tree evidence.
 
 ## Execution loop
 
-1. Select a dependency-complete sprint linked from the active plan.
-2. Resolve its owner, lane, write scope, and exact worktree coordinates; set it to `ready`.
-3. Check slot availability and collisions; set it to `in_progress` and run the checker before code changes.
+1. Select the next dependency-complete sprint linked from the active plan.
+2. Resolve its exact worktree coordinates and set it to `ready`.
+3. Set it to `in_progress` before code changes.
 4. Execute only `Remaining` items; move verified work to `Done` with `[x]`.
 5. Run formatting before final affected tests and true-TUI QA.
 6. Complete every verification and exit-evidence checkbox.
@@ -90,10 +87,10 @@ repeat that proof across the integrated product.
 
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
-| [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [Current sprints and dependency graph](current/p0-security-levels/index.md) | PF-13-S05 and PF-30-S01 in progress; PF-27-S01/PF-26-S01 completed; PF-29 allocated pending readiness |
+| [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [57 current sprints](current/p0-security-levels/index.md), 19 completed archives | PF-19-S02, PF-20-S02, and PF-21-S02 are allocated ready across three disjoint round-two lanes; PF-13-S07 retains final composed qualification |
 | [Corbanu API balance and keys](../plans/active/corbanu-api-balance.md) | Active | [PF-34-S02](current/corbanu-api-balance/pf-34-s02-wallet-ui.md) | Wallet UI in progress |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
-| [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | The superseded 72-sprint decomposition is retained in the excluded archive |
+| [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | Historical 72-sprint decomposition remains cancelled; every record maps into the active P0 plan's current work |
 
 ## Machine check
 
@@ -103,9 +100,5 @@ python3 docs/sprints/check.py
 
 The checker validates lifecycle placement, one-feature linkage, plan backlinks,
 required checkbox ledgers, line limits, status authorization, exact plan/worktree
-agreement, dependency completion and cycles, bounded active slots, lane/path/
-branch collisions, and archive completion.
-
-The checker does not validate upstream ancestry or semantic adapter compatibility.
-The integration owner reviews that evidence under the upstream contract; a
-passing structural check is not an upstream-qualification pass.
+agreement, dependency completion/order/cycles, bounded parallel allocations and
+archive completion.

@@ -1,0 +1,4 @@
+$ CARGO_HOME=/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/cargo-home CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/target TMPDIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/tmp cargo clippy --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/Cargo.toml --all-targets -- -D warnings
+candidate=a75efecc0a37d5544e123ad19d57867cac360a68
+exit=0
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.21s

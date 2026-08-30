@@ -2510,6 +2510,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "sqlx",
  "supports-color 3.0.2",
  "sys-locale",
@@ -2524,6 +2525,7 @@ dependencies = [
  "url",
  "urlencoding",
  "which 8.0.0",
+ "whoami 1.6.1",
  "windows-sys 0.52.0",
  "wiremock",
  "zstd",
@@ -2780,6 +2782,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-content-security"
+version = "0.1.35"
+dependencies = [
+ "pretty_assertions",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "codex-context-fragments"
 version = "0.1.35"
 dependencies = [
@@ -2844,6 +2854,7 @@ dependencies = [
  "codex-rollout",
  "codex-rollout-trace",
  "codex-sandboxing",
+ "codex-secret-broker",
  "codex-security-policy",
  "codex-shell-command",
  "codex-shell-escalation",
@@ -4156,6 +4167,15 @@ dependencies = [
  "tracing",
  "url",
  "which 8.0.0",
+]
+
+[[package]]
+name = "codex-secret-broker"
+version = "0.1.35"
+dependencies = [
+ "chrono",
+ "pretty_assertions",
+ "serde_json",
 ]
 
 [[package]]

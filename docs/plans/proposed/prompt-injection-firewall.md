@@ -9,7 +9,7 @@ activation_basis: "User-directed proposal capture; implementation is not authori
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-08-23
-updated: 2026-08-24
+updated: 2026-08-28
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
@@ -23,8 +23,18 @@ Policy: repository-root `AGENTS.md`
 
 Plan lifecycle: `docs/plans/index.md`
 
-This is a **proposed plan**. It does not consume an active-plan slot, authorize
-implementation, change the active P0 plan, or describe a finished feature.
+This is **historical proposed design input**, retained as a draft rather than
+reactivated. On 2026-08-28, Travis Good requested selective reuse and reconciliation
+into the [active P0 plan](../active/p0-security-levels.md). That plan now owns all
+accepted implementation scope and its 64 current plus nine completed sprints. This document and its
+72 cancelled sprints do not authorize parallel work or describe finished behavior.
+
+[The complete source and archive crosswalk](../security-source-reconciliation.md)
+records what was reused, replaced or made conditional. Current product decisions
+and the active plan supersede conflicting historical prose below; in particular,
+Permissive retains compatibility and protected agent children do not receive raw
+secrets through environment injection. OpenClaw is the primary implementation
+reference; older Ambient comparisons remain contextual evidence only.
 
 ## Activation record
 
@@ -34,8 +44,8 @@ implementation, change the active P0 plan, or describe a finished feature.
 | Active-plan slot | None |
 | Product authority | Defined once in the product specification |
 | Delivery owner | Jim Ricketts |
-| Authoritative decision | Capture and ground the Ambient-inspired security workflow as a proposal |
-| Activation gate | Explicit product decision, reconciliation with the active `/security` plan, an available active slot, and an isolated implementation worktree |
+| Authoritative decision | Original proposal captured on August 23; accepted contracts reconciled into the active P0 plan on August 28 |
+| Activation gate | Not a separate activation candidate; use the active P0 plan and new sprint map |
 | Target release | TBD |
 | Deadline | TBD |
 
@@ -87,27 +97,11 @@ The user can always tell:
 
 ## Relationship to the active P0 plan
 
-On 2026-08-27 Travis Good approved selective adoption into the active P0 plan:
-shared contracts (PF-27), cross-surface confidentiality (PF-28), provenance and
-derived taint (PF-29), and separately scoped browser isolation (PF-30), with
-early adversarial harnesses under PF-26. These stronger guarantees apply only
-to Moderate/Aggressive; Permissive preserves the existing product.
-Those active contracts supersede the overlapping proposal text for current
-implementation. This proposal and its cancelled sprint catalog remain
-non-executable. New providers, authenticated browser login, classifier training,
-hosted detection, and Agent Sweep are not adopted or implicitly authorized.
-
-The active [`P0 /security levels`](../active/p0-security-levels.md) plan owns the
-current product initiative. This proposal is a researched expansion of its
-untrusted-input, secret-broker, browser-isolation, and adversarial-testing
-boundaries. Promotion must choose one of two clean outcomes:
-
-1. merge the accepted feature contracts into the active P0 plan; or
-2. activate this as a later, separately scoped initiative after the active plan
-   lands or is formally re-scoped.
-
-The two plans must never authorize overlapping implementation in different
-worktrees.
+The [active P0 plan](../active/p0-security-levels.md) is the sole implementation
+authority. The 2026-08-28 decision selected merging the accepted contracts into
+that plan, not activating a second overlapping initiative. All 72 old sprint
+records remain cancelled; their individual dispositions and current owners are
+listed in the [source reconciliation](../security-source-reconciliation.md).
 
 ## Feature register
 
@@ -137,9 +131,9 @@ The [archived sprint register](../../sprints/archive/prompt-injection-firewall/i
 retains the original **72-record** decomposition as historical design input.
 Those records were cancelled unstarted on 2026-08-24 because they encoded a
 broad product program without a sufficiently narrow first vertical slice.
-Nothing in this archived map authorizes implementation. Any later activation
-must create a new dependency-correct sprint sequence from the accepted feature
-contracts below.
+Nothing in this archived map authorizes implementation. The 2026-08-28
+reconciliation created a new dependency-correct sequence in the active P0 plan;
+the contracts below are historical inputs, not additional execution mandates.
 
 | Feature | Archived sprint decomposition | Count |
 | --- | --- | ---: |

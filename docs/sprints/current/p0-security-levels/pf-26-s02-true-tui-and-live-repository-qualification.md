@@ -4,7 +4,7 @@ title: "True-TUI and live-repository qualification"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-26"
-execution_order: 29
+execution_order: 75
 owner: "Jim Ricketts"
 lane: "qualification"
 write_scope: "qa/release"

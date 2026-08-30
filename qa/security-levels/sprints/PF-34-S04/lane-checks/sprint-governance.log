@@ -1,0 +1,4 @@
+$ python3 docs/sprints/check.py
+candidate=a75efecc0a37d5544e123ad19d57867cac360a68
+exit=0
+sprints: current 67; archived 88

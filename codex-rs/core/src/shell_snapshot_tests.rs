@@ -160,6 +160,32 @@ fn bash_snapshot_filters_secret_and_invalid_exports() -> Result<()> {
 
 #[cfg(unix)]
 #[test]
+fn bash_snapshot_filters_secrets_when_bashrc_shadows_filter_helpers() -> Result<()> {
+    let home = tempdir()?;
+    std::fs::write(
+        home.path().join(".bashrc"),
+        "tr() { printf 'BROKEN'; }\nshopt() { return 0; }\n",
+    )?;
+    let output = Command::new("/bin/bash")
+        .arg("-c")
+        .arg(bash_snapshot_script())
+        .env_remove("BASH_ENV")
+        .env("HOME", home.path())
+        .env("PATH", "/usr/bin:/bin")
+        .env("lowercase_api_key", "must-not-be-persisted")
+        .output()?;
+
+    assert!(output.status.success());
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("lowercase_api_key"));
+    assert!(!stdout.contains("must-not-be-persisted"));
+
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
 fn bash_snapshot_preserves_multiline_exports() -> Result<()> {
     let multiline_cert = "-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----";
     let output = Command::new("/bin/bash")

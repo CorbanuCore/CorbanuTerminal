@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corbanu.invalid/security/platform/capability-result-v1.schema.json",
+  "title": "Corbanu platform containment probe result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "fixture_protocol",
+    "probe_sha256",
+    "run_id",
+    "target_id",
+    "target_label",
+    "measured_at",
+    "expires_at",
+    "target",
+    "capabilities",
+    "protected_mode_eligible"
+  ],
+  "properties": {
+    "contract_version": { "const": "corbanu.platform-containment/v1" },
+    "fixture_protocol": { "const": "corbanu.platform-probe/v1" },
+    "probe_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "run_id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "target_id": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "target_label": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$" },
+    "measured_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "os_version", "architecture", "python_version", "cpu"],
+      "properties": {
+        "os": { "enum": ["linux", "macos", "windows", "unknown"] },
+        "os_version": { "type": "string", "maxLength": 160 },
+        "architecture": { "type": "string", "maxLength": 64 },
+        "python_version": { "type": "string", "maxLength": 64 },
+        "cpu": { "type": "string", "maxLength": 160 }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "uniqueItems": true,
+      "allOf": [
+        { "contains": { "properties": { "capability": { "const": "process_identity" } }, "required": ["capability"] } },
+        { "contains": { "properties": { "capability": { "const": "filesystem_boundary" } }, "required": ["capability"] } },
+        { "contains": { "properties": { "capability": { "const": "config_boundary" } }, "required": ["capability"] } },
+        { "contains": { "properties": { "capability": { "const": "inherited_handles" } }, "required": ["capability"] } },
+        { "contains": { "properties": { "capability": { "const": "ipc_peer_identity" } }, "required": ["capability"] } },
+        { "contains": { "properties": { "capability": { "const": "network_boundary" } }, "required": ["capability"] } },
+        { "contains": { "properties": { "capability": { "const": "process_memory_debug" } }, "required": ["capability"] } },
+        { "contains": { "properties": { "capability": { "const": "signing_entitlements" } }, "required": ["capability"] } },
+        { "contains": { "properties": { "capability": { "const": "elevation_boundary" } }, "required": ["capability"] } },
+        { "contains": { "properties": { "capability": { "const": "protected_store" } }, "required": ["capability"] } }
+      ],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["capability", "status", "observation", "mechanism", "detail_code"],
+        "properties": {
+          "capability": {
+            "enum": [
+              "process_identity",
+              "filesystem_boundary",
+              "config_boundary",
+              "inherited_handles",
+              "ipc_peer_identity",
+              "network_boundary",
+              "process_memory_debug",
+              "signing_entitlements",
+              "elevation_boundary",
+              "protected_store"
+            ]
+          },
+          "status": { "enum": ["supported", "unsupported", "untested"] },
+          "observation": {
+            "enum": [
+              "observed_denied",
+              "observed_allowed",
+              "observed_verified",
+              "not_tested",
+              "not_applicable",
+              "probe_error"
+            ]
+          },
+          "mechanism": { "type": "string", "pattern": "^[a-z0-9_.-]{1,64}$" },
+          "detail_code": { "type": "string", "pattern": "^[a-z0-9_.-]{1,96}$" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "status": { "const": "supported" } } },
+            "then": { "properties": { "observation": { "enum": ["observed_denied", "observed_verified"] } } }
+          },
+          {
+            "if": { "properties": { "status": { "const": "unsupported" } } },
+            "then": { "properties": { "observation": { "enum": ["observed_allowed", "not_applicable"] } } }
+          },
+          {
+            "if": { "properties": { "status": { "const": "untested" } } },
+            "then": { "properties": { "observation": { "enum": ["not_tested", "probe_error"] } } }
+          }
+        ]
+      }
+    },
+    "protected_mode_eligible": { "type": "boolean" }
+  }
+}

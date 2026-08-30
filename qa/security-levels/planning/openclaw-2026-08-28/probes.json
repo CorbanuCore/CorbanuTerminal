@@ -1,0 +1,46 @@
+{
+  "kind": "reference-observation-probes",
+  "total": 10,
+  "results": [
+    {
+      "name": "process-local authenticated round trip",
+      "outcome": "pass"
+    },
+    {
+      "name": "tampered reference rejected",
+      "outcome": "pass"
+    },
+    {
+      "name": "raw opt-out exists",
+      "outcome": "pass"
+    },
+    {
+      "name": "short secret omitted by registry",
+      "outcome": "pass"
+    },
+    {
+      "name": "registered raw and percent-encoded forms match",
+      "outcome": "pass"
+    },
+    {
+      "name": "old value evicted after 512 distinct later values",
+      "outcome": "pass"
+    },
+    {
+      "name": "separate redaction calls do not carry split values",
+      "outcome": "pass"
+    },
+    {
+      "name": "request sentinel substituted across one-byte chunks",
+      "outcome": "pass"
+    },
+    {
+      "name": "late refusal does not retract previously emitted request prefix",
+      "outcome": "pass"
+    },
+    {
+      "name": "new turn helper resets unless caller supplies initial taint",
+      "outcome": "pass"
+    }
+  ]
+}

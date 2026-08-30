@@ -3,6 +3,8 @@
 pub(crate) mod credential_capability;
 // Registration only: downstream single-feature sprints own these leaf modules.
 pub(crate) mod aggressive;
+#[allow(dead_code)]
+pub(crate) mod authoritative_state;
 pub(crate) mod browser_isolation;
 pub(crate) mod confidentiality;
 mod effective_policy;
@@ -27,3 +29,7 @@ mod effective_policy_tests;
 #[cfg(test)]
 #[path = "integration_tests.rs"]
 mod integration_tests;
+
+#[cfg(test)]
+#[path = "authoritative_state_tests.rs"]
+mod authoritative_state_tests;

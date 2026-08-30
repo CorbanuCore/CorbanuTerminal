@@ -1,0 +1,29 @@
+$ CARGO_HOME=/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/cargo-home CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/target TMPDIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/tmp cargo test --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/Cargo.toml pf_34_s04 -- --nocapture
+candidate=a75efecc0a37d5544e123ad19d57867cac360a68
+exit=0
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running unittests /Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier/codex-rs/content-security/src/contract.rs (/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/target/debug/deps/pf34_s04_contract_harness-2a123a6caf7bc55d)
+
+running 20 tests
+test tests::pf_34_s04_contract_version_mismatch_is_unavailable ... ok
+test tests::pf_34_s04_source_binding_mismatch_is_unavailable ... ok
+test tests::pf_34_s04_reassembly_digest_mismatch_is_unavailable ... ok
+test tests::pf_34_s04_transformation_version_mismatch_is_unavailable ... ok
+test tests::pf_34_s04_cancellation_erases_segments_and_blocks_allow ... ok
+test tests::pf_34_s04_duplicate_segment_is_sticky_against_forced_allow ... ok
+test tests::pf_34_s04_segment_count_and_index_are_bound ... ok
+test tests::pf_34_s04_releases_only_complete_reassembled_content ... ok
+test tests::pf_34_s04_identifiers_and_versions_reject_malformed_metadata ... ok
+test tests::pf_34_s04_size_and_segment_budgets_fail_closed ... ok
+test tests::pf_34_s04_missing_stale_and_future_verdicts_are_unavailable ... ok
+test tests::pf_34_s04_fixture_schema_and_content_hashes_are_frozen ... ok
+test tests::pf_34_s04_malformed_empty_segment_is_unavailable ... ok
+test tests::pf_34_s04_suspicious_hostile_and_unavailable_all_withhold ... ok
+test tests::pf_34_s04_corrupt_reassembled_bytes_are_unavailable ... ok
+test tests::pf_34_s04_mismatched_verdict_cannot_authorize_release ... ok
+test tests::pf_34_s04_mismatched_model_or_threshold_cannot_authorize_release ... ok
+test tests::pf_34_s04_cross_segment_attack_is_screened_only_after_reassembly ... ok
+test tests::pf_34_s04_timeout_is_sticky_against_late_allow ... ok
+test tests::pf_34_s04_partial_input_never_releases_a_prefix ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

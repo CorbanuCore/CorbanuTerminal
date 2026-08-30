@@ -6,8 +6,9 @@ plan_file: "docs/plans/proposed/example.md"
 plan_feature: "PF-00"
 execution_order: 0
 owner: "accountable owner"
-lane: "UNALLOCATED"
+parallel_lane: "UNALLOCATED"
 write_scope: "UNALLOCATED"
+integration_gate: "UNALLOCATED"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
@@ -40,8 +41,7 @@ updated: YYYY-MM-DD
 - [ ] Plan is active.
 - [ ] Dependencies are completed.
 - [ ] Worktree, branch, and base commit are exact and match the plan.
-- [ ] Lane and literal write scopes are allocated; active-slot and collision checks pass.
-- [ ] Plan upstream-touch rows cover this sprint; verified baseline, adapter ownership, and exact contract tests are resolved.
+- [ ] If parallel, owner/lane/scopes are disjoint and the receiving integration gate is recorded.
 
 ## Done
 
@@ -57,12 +57,11 @@ updated: YYYY-MM-DD
 - [ ] Focused test: `<final-tree command>`
 - [ ] Integration test: `<final-tree command>`
 - [ ] TUI applicability resolved; if applicable, keys and checkpoints recorded.
-- [ ] Integrated interfaces and candidate commit match dependency evidence.
-- [ ] Upstream adapter contracts pass; retained/adapted/removed patches and compatibility evidence are recorded in the plan.
 
 ## Exit evidence
 
 - [ ] Implementation commit recorded.
 - [ ] Final-tree test output linked.
+- [ ] Parallel handoff, if applicable: commit, contract versions, scope audit and combined-tree test evidence recorded.
 - [ ] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/<plan-slug>/`.
