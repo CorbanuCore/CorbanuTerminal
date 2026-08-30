@@ -1,0 +1,33 @@
+{
+  "fixture_version": 1,
+  "snapshot": {
+    "fixture_version": 1,
+    "host": {"os": "linux", "arch": "amd64", "online": true},
+    "preference": "auto",
+    "engines": {
+      "podman": {
+        "installed": true,
+        "daemon_state": "stopped",
+        "workers": [
+          {"name": "corbanu-retriever-podman", "owner_label": "PF-31", "state": "running"}
+        ]
+      },
+      "docker": {
+        "installed": true,
+        "daemon_state": "running",
+        "api_compatible": true,
+        "architecture": "amd64",
+        "workers": [
+          {"name": "corbanu-retriever-docker", "owner_label": "PF-31", "state": "running"}
+        ]
+      }
+    }
+  },
+  "expected": {
+    "status": "blocked",
+    "engine": null,
+    "worker": null,
+    "reason_code": "duplicate_owned_workers_cross_engine",
+    "actions": ["reconcile_owned_workers_manually", "do_not_remove_unrelated_resources"]
+  }
+}

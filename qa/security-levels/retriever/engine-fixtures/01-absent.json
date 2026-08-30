@@ -1,0 +1,10 @@
+{
+  "fixture_version": 1,
+  "snapshot": {
+    "fixture_version": 1,
+    "host": {"os": "linux", "arch": "amd64", "online": true},
+    "preference": "auto",
+    "engines": {"podman": {"installed": false}, "docker": {"installed": false}}
+  },
+  "expected": {"status": "blocked", "engine": null, "worker": null, "reason_code": "engine_absent", "actions": ["install_engine_manually", "rerun_check"]}
+}
