@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-31-S04"
 title: "Retriever artifact and engine preparation"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-31"
 execution_order: 17
@@ -60,10 +60,11 @@ updated: 2026-08-30
 - [x] Integration owner received the candidate, audited the literal scope, reran the combined-tree checks and completed the G2 slot rotation gate.
 - [x] Reopened after a trace-backed tmux/Corbanu Terminal/Claude Opus 5 Max review identified an undisclosed duplicate runtime image pin without a drift assertion.
 - [x] Bound `artifact.reference` to canonical `BASE_IMAGE` and worker Dockerfile `FROM` literals; eleven negative mutations cover manifest drift, missing/duplicate source pins and recipe-only drift.
+- [x] Final corrected-candidate Opus 5 Max follow-up returned `CLEAN`; remediation commit `c2168575695dfb2ad015bf45ef24d9e4b173b571` passed the integration-owner gates.
 
 ## Remaining
 
-- [ ] Record the runtime pin, review disposition and final-tree validation counts, then re-archive the sprint.
+- None.
 
 ## Verification
 
@@ -72,12 +73,12 @@ updated: 2026-08-30
 - [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
 - [x] Scope audit proves no runtime route or profile becomes available from fixture-only preparation.
 - [x] Receiving integration owner reran the manifest, 27 fixtures, five policy mutations, ten path checks, plan/sprint governance and whitespace checks on the combined tree.
-- [ ] Final-tree validator reports 27 fixtures, 27 deterministic replays, eleven policy mutations and ten path checks.
-- [ ] Required Python formatting/lint/compile, JSON, governance and whitespace gates pass after the review repair.
+- [x] Final-tree validator reports 27 fixtures, 27 deterministic replays, eleven policy mutations and ten path checks.
+- [x] Required Python formatting/lint/compile, JSON, governance and whitespace gates pass after the review repair.
 
 ## Exit evidence
 
 - [x] Candidate commits, contract/fixture versions, local and Claude review dispositions, cross-host bundle identity and final-tree outputs are recorded under `qa/security-levels/sprints/PF-31-S04/`.
 - [x] Frozen pins and downstream launch/egress/isolation obligations are handed to PF-31-S01; this preparation sprint makes no protected-retrieval qualification claim.
 - [x] Scope audit, handoff, combined-tree reruns and completed archive transition are recorded.
-- [ ] Trace-backed Opus 5 Max finding and corrected-candidate disposition are preserved under `qa/security-levels/sprints/PF-31-S04/review/`.
+- [x] Trace-backed Opus 5 Max finding and corrected-candidate disposition are preserved under `qa/security-levels/sprints/PF-31-S04/review/`.

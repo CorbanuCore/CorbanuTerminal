@@ -148,8 +148,9 @@ The browser/retrieval worktree was reallocated on 2026-08-30 at
 post-archive tmux/Corbanu Terminal/Claude Opus 5 Max findings. PF-31-S04 and
 PF-33-S03 rotate through that one lane sequentially; no protected route is
 activated by this follow-up.
-[PF-31-S04 remediation](../../sprints/current/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md)
-is the currently allocated browser/retrieval sprint.
+[PF-31-S04 remediation](../../sprints/archive/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md)
+completed at `c2168575695dfb2ad015bf45ef24d9e4b173b571`; PF-33-S03 is the next
+sequential browser/retrieval allocation.
 
 Credentials and machine login details remain only in the local gitignored
 `AgentCredentials.md` chain and must never enter a branch, evidence bundle,

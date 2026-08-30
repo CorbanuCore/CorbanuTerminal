@@ -88,3 +88,5 @@ minutes 5 seconds.
 The integration owner separately ran the complete validator on the writable
 Mac worktree, including all ten temporary-path/symlink checks, plus Ruff,
 byte-compilation, JSON parsing, both governance checkers and `git diff --check`.
+The bounded remediation commit is
+`c2168575695dfb2ad015bf45ef24d9e4b173b571`.
