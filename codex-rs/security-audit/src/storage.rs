@@ -11,7 +11,7 @@ use crate::ReservationId;
 use crate::SecurityEvent;
 use crate::SecurityEventId;
 use crate::SecurityEventKind;
-use crate::event::hash_value;
+use crate::event_identity::hash_value;
 use crate::journal_support::validate_resolution;
 use crate::journal_types::EventChainError;
 use crate::journal_types::IntegrityCheckpoint;

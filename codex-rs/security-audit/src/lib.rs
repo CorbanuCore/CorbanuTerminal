@@ -7,6 +7,7 @@
 //! [`IntegrityRootStore`]; the local hash chain is not a host-compromise boundary.
 
 mod event;
+mod event_identity;
 mod journal;
 #[cfg(test)]
 mod journal_faults;
@@ -17,18 +18,18 @@ mod journal_types;
 mod recovery;
 mod storage;
 
-pub use event::ActionId;
 pub use event::AuthorityIdentity;
-pub use event::DecisionId;
 pub use event::DispatchResolution;
 pub use event::EventContext;
 pub use event::RequestIdentity;
-pub use event::ReservationId;
 pub use event::SecurityEvent;
-pub use event::SecurityEventError;
-pub use event::SecurityEventId;
 pub use event::SecurityEventKind;
 pub use event::UnknownOutcomeReason;
+pub use event_identity::ActionId;
+pub use event_identity::DecisionId;
+pub use event_identity::ReservationId;
+pub use event_identity::SecurityEventError;
+pub use event_identity::SecurityEventId;
 pub use journal::ReferenceJournal;
 pub use journal_types::AppendAcknowledgement;
 pub use journal_types::DispatchPermit;

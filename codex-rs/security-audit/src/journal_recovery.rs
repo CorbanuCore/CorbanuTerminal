@@ -99,6 +99,7 @@ impl ReferenceJournal {
         &mut self,
         expected_event_id: &SecurityEventId,
         expected_policy_generation: u64,
+        expected_run_generation: u64,
         expected_revocations: &RevocationState,
     ) -> Result<IntegrityCheckpoint, JournalError> {
         if !self.blocked {
@@ -140,6 +141,7 @@ impl ReferenceJournal {
             .ok_or(JournalError::AmbiguousCommitMismatch)?;
         if &last.event.event_id != expected_event_id
             || last.event.context.policy_generation > expected_policy_generation
+            || last.event.context.run_generation > expected_run_generation
         {
             return Err(JournalError::AmbiguousCommitMismatch);
         }

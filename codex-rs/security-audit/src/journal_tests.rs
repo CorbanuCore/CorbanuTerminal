@@ -583,7 +583,7 @@ fn operator_can_reconcile_exactly_one_ambiguous_commit_without_replay() {
         .expect("synthetic digest");
     let mismatch = fixture
         .journal
-        .reconcile_ambiguous_commit(&wrong_id, 1, &RevocationState::new())
+        .reconcile_ambiguous_commit(&wrong_id, 1, 1, &RevocationState::new())
         .expect_err("operator must identify the exact failed event");
     assert!(matches!(mismatch, JournalError::AmbiguousCommitMismatch));
 
@@ -593,7 +593,7 @@ fn operator_can_reconcile_exactly_one_ambiguous_commit_without_replay() {
     fixture.roots.force_checkpoint(Some(wrong_anchor));
     let mismatch = fixture
         .journal
-        .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new())
+        .reconcile_ambiguous_commit(&event_id, 1, 1, &RevocationState::new())
         .expect_err("protected prefix mismatch must not be laundered");
     assert!(matches!(mismatch, JournalError::AmbiguousCommitMismatch));
     fixture.roots.force_checkpoint(Some(anchored_root));
@@ -602,27 +602,27 @@ fn operator_can_reconcile_exactly_one_ambiguous_commit_without_replay() {
     assert!(matches!(
         fixture
             .journal
-            .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new()),
+            .reconcile_ambiguous_commit(&event_id, 1, 1, &RevocationState::new()),
         Err(JournalError::AmbiguousCommitMismatch)
     ));
     fixture.roots.fail_store(IntegrityRootError::Unavailable);
     assert!(matches!(
         fixture
             .journal
-            .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new()),
+            .reconcile_ambiguous_commit(&event_id, 1, 1, &RevocationState::new()),
         Err(JournalError::IntegrityRootUnavailable)
     ));
     fixture.roots.fail_store(IntegrityRootError::Timeout);
     assert!(matches!(
         fixture
             .journal
-            .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new()),
+            .reconcile_ambiguous_commit(&event_id, 1, 1, &RevocationState::new()),
         Err(JournalError::CommitUnknown { .. })
     ));
 
     let checkpoint = fixture
         .journal
-        .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new())
+        .reconcile_ambiguous_commit(&event_id, 1, 1, &RevocationState::new())
         .expect("operator-selected record can advance the protected root");
     assert_eq!(checkpoint.sequence, 2);
     let report = fixture.journal.recover(1, 1, &RevocationState::new());
@@ -638,6 +638,44 @@ fn operator_can_reconcile_exactly_one_ambiguous_commit_without_replay() {
         )
         .expect("external effect remains unknown and is never replayed");
     healthy_recovery(&mut fixture);
+}
+
+#[test]
+fn ambiguous_reconciliation_rejects_ahead_run_generation() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    fixture.append_decision();
+    fixture
+        .journal
+        .inject_once(FaultPoint::AfterRecordRename, InjectedFault::Crash);
+    let event_id = match fixture.journal.reserve_dispatch(
+        fixture.context_at(1, 2),
+        None,
+        &request(),
+        AuthorityIdentity::Grant {
+            grant_id: text("grant-1"),
+        },
+        text("dispatch-1"),
+        12,
+    ) {
+        Err(JournalError::CommitUnknown { event_id }) => event_id,
+        other => panic!("expected ambiguous run-two commit, got {other:?}"),
+    };
+
+    assert!(matches!(
+        fixture
+            .journal
+            .reconcile_ambiguous_commit(&event_id, 1, 1, &RevocationState::new()),
+        Err(JournalError::AmbiguousCommitMismatch)
+    ));
+    let checkpoint = fixture
+        .journal
+        .reconcile_ambiguous_commit(&event_id, 1, 2, &RevocationState::new())
+        .expect("live run generation can accept the exact record");
+    assert_eq!(checkpoint.run_generation, 2);
+    assert_eq!(
+        fixture.journal.recover(1, 2, &RevocationState::new()).state,
+        RecoveryState::ReconciliationRequired
+    );
 }
 
 #[test]
@@ -657,7 +695,7 @@ fn ambiguous_reconciliation_rejects_missing_root_and_owner_rotation() {
     };
     let missing = first_install
         .journal
-        .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new())
+        .reconcile_ambiguous_commit(&event_id, 1, 1, &RevocationState::new())
         .expect_err("missing protected root is not an ambiguous prefix");
     assert!(matches!(missing, JournalError::AmbiguousCommitMismatch));
 
@@ -688,7 +726,7 @@ fn ambiguous_reconciliation_rejects_missing_root_and_owner_rotation() {
         JournalConfig::default(),
     );
     let mismatch = rotated
-        .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new())
+        .reconcile_ambiguous_commit(&event_id, 1, 1, &RevocationState::new())
         .expect_err("owner rotation must not rewrite an old protected prefix");
     assert!(matches!(mismatch, JournalError::AmbiguousCommitMismatch));
 }

@@ -23,9 +23,9 @@ broker, quarantine, financial, or Sweep adapter.
   and is never replayed automatically. An operator may advance the protected
   root over exactly one published record only through
   `reconcile_ambiguous_commit`, after matching the returned event ID and live
-  policy/revocation state. The journal stays blocked until another full
-  recovery; a reconciled dispatch intent is then exposed as pending and must be
-  resolved unknown rather than replayed.
+  policy/run generation and revocation state. The journal stays blocked until
+  another full recovery; a reconciled dispatch intent is then exposed as
+  pending and must be resolved unknown rather than replayed.
 
 ## Dispatch contract
 
