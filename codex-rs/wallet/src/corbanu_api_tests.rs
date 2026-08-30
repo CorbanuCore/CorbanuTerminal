@@ -40,3 +40,26 @@ fn top_up_amounts_are_exact_microdollars_without_floating_point() {
         assert!(parse_usd_micros(invalid).is_err(), "{invalid}");
     }
 }
+
+#[test]
+fn created_keys_accept_the_public_api_shape_without_changing_daemon_ipc() {
+    let created = serde_json::from_value::<CreatedApiKey>(serde_json::json!({
+        "id": "2f9350c1-0cf6-4af1-bb90-cc693c923bb3",
+        "key": "cbn_live_secret",
+        "displayPrefix": "cbn_live_4D7K",
+    }))
+    .expect("deserialize the public key response");
+    let key = GatewayKey::from(created);
+
+    assert_eq!(key.key_id, "2f9350c1-0cf6-4af1-bb90-cc693c923bb3");
+    assert_eq!(key.api_key, "cbn_live_secret");
+    assert_eq!(key.display_prefix, "cbn_live_4D7K");
+    assert_eq!(
+        serde_json::to_value(key).expect("serialize the daemon IPC key"),
+        serde_json::json!({
+            "key_id": "2f9350c1-0cf6-4af1-bb90-cc693c923bb3",
+            "api_key": "cbn_live_secret",
+            "display_prefix": "cbn_live_4D7K",
+        })
+    );
+}

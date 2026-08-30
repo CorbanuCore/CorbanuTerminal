@@ -108,6 +108,14 @@ pub const AMBIENT_API_KEY_ENV_VAR: &str = "AMBIENT_API_KEY";
 pub const CORBANU_PLAN_PROVIDER_ID: &str = "corbanu-plan";
 pub const CORBANU_TERMINAL_PLAN_PROVIDER_ID: &str = "corbanu-terminal-plan";
 pub const CORBANU_PLAN_API_KEY_ENV_VAR: &str = "CORBANU_PLAN_API_KEY";
+pub const CORBANU_API_KEY_ENV_VAR: &str = "CORBANU_API_KEY";
+pub const CORBANU_API_BASE_URL_ENV_VAR: &str = "CORBANU_API_BASE_URL";
+pub const CORBANU_API_GLM_5_3_FLASH_MODEL: &str = "corbanu/glm-5.3-flash";
+pub const CORBANU_API_GLM_5_3_MODEL: &str = "corbanu/glm-5.3";
+pub const CORBANU_API_GPT_5_6_LUNA_MODEL: &str = "corbanu/gpt-5.6-luna";
+pub const CORBANU_API_GPT_5_6_SOL_MODEL: &str = "corbanu/gpt-5.6-sol";
+pub const CORBANU_API_CLAUDE_FABLE_5_MODEL: &str = "corbanu/claude-fable-5";
+pub const CORBANU_API_DEEPSEEK_V4_PRO_MODEL: &str = "corbanu/deepseek-v4-pro";
 pub const PFTERMINAL_PLAN_PROVIDER_ID: &str = "pfterminal-plan";
 /// Anthropic-wire sibling of the Corbanu Plan provider. Same gateway, same
 /// customer key; serves only the plan's non-private `claude-fable-5` route.
@@ -276,6 +284,12 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     if model.is_empty() {
         return None;
     }
+    if model == CORBANU_API_CLAUDE_FABLE_5_MODEL {
+        return Some(PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID);
+    }
+    if model.starts_with("corbanu/") {
+        return Some(PFTERMINAL_PLAN_PROVIDER_ID);
+    }
     if model == BASETEN_DEFAULT_MODEL {
         return Some(BASETEN_PROVIDER_ID);
     }
@@ -375,6 +389,14 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     {
         return None;
     }
+    if model.starts_with("corbanu/") {
+        let expected = if model == CORBANU_API_CLAUDE_FABLE_5_MODEL {
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
+        } else {
+            PFTERMINAL_PLAN_PROVIDER_ID
+        };
+        return (provider != expected).then_some(expected);
+    }
     if model.starts_with("zai/") && !VERCEL_FAMILY_PROVIDERS.contains(&provider) {
         return Some(if model == VERCEL_GLM_5_2_FAST_MODEL {
             VERCEL_ANTHROPIC_FAST_PROVIDER_ID
@@ -427,11 +449,21 @@ pub fn resolve_model_for_provider(
     model_provider_id: &str,
 ) -> Option<String> {
     match model_provider_id {
-        PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID => Some(CLAUDE_FABLE_5_MODEL.to_string()),
+        PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID => match model {
+            Some(model) if model.trim() == CORBANU_API_CLAUDE_FABLE_5_MODEL => Some(model),
+            _ => Some(CLAUDE_FABLE_5_MODEL.to_string()),
+        },
         PFTERMINAL_PLAN_PROVIDER_ID
             if model.as_deref().map(str::trim) == Some(DEEPSEEK_PRO_MODEL) =>
         {
             Some(DEEPSEEK_PRO_MODEL.to_string())
+        }
+        PFTERMINAL_PLAN_PROVIDER_ID
+            if model
+                .as_deref()
+                .is_some_and(|model| model.trim().starts_with("corbanu/")) =>
+        {
+            model
         }
         AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID => match model {
             Some(model) if model.trim() == AMBIENT_LEGACY_GLM_5_2_FP8_MODEL => {
@@ -944,6 +976,7 @@ impl ModelProviderInfo {
     pub fn api_key_env_vars(&self) -> Vec<&str> {
         match self.env_key.as_deref() {
             Some(PFTERMINAL_PLAN_API_KEY_ENV_VAR) => vec![
+                CORBANU_API_KEY_ENV_VAR,
                 CORBANU_PLAN_API_KEY_ENV_VAR,
                 PFTERMINAL_PLAN_API_KEY_ENV_VAR,
             ],
@@ -1150,7 +1183,8 @@ impl ModelProviderInfo {
         ModelProviderInfo {
             name: PLAN_NAME.into(),
             base_url: Some(
-                std::env::var("PFTERMINAL_PLAN_BASE_URL")
+                std::env::var(CORBANU_API_BASE_URL_ENV_VAR)
+                    .or_else(|_| std::env::var("PFTERMINAL_PLAN_BASE_URL"))
                     .unwrap_or_else(|_| PFTERMINAL_PLAN_DEFAULT_BASE_URL.to_string()),
             ),
             env_key: Some(PFTERMINAL_PLAN_API_KEY_ENV_VAR.into()),

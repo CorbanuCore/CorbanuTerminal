@@ -292,6 +292,9 @@ pub(crate) enum WalletUnlockContinuation {
     OpenPlans {
         mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode,
     },
+    CorbanuApiOperation {
+        operation: codex_wallet::CorbanuApiOperation,
+    },
 }
 
 #[derive(Debug)]
@@ -1588,6 +1591,24 @@ pub(crate) enum AppEvent {
     WalletStatusReady {
         generation: u64,
         result: Result<crate::chatwidget::wallet_menu::WalletOverview, String>,
+    },
+    OpenCorbanuApi,
+    CorbanuApiLoaded {
+        result: Result<crate::chatwidget::wallet_api::CorbanuApiView, String>,
+    },
+    OpenCorbanuApiTopUp,
+    ConfirmCorbanuApiTopUp {
+        amount_usd: String,
+    },
+    ConfirmCorbanuApiKeyRevocation {
+        key_id: String,
+        display_prefix: String,
+    },
+    CorbanuApiOperationRequested {
+        operation: codex_wallet::CorbanuApiOperation,
+    },
+    CorbanuApiOperationFinished {
+        result: Result<codex_wallet::CorbanuApiOperationResult, String>,
     },
     WalletCreateFinished {
         operation: WalletPersistenceOperation,

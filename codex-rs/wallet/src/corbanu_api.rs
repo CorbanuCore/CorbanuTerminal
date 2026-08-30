@@ -143,12 +143,14 @@ pub(crate) async fn execute(
                 serde_json::from_value(receipt.body).map_err(transport)?;
             Ok(CorbanuApiOperationResult::TopUp {
                 balance: funded.balance,
-                api_key: funded.api_key,
+                api_key: funded.api_key.map(Into::into),
                 transaction,
             })
         }
         CorbanuApiOperation::CreateKey => Ok(CorbanuApiOperationResult::KeyCreated {
-            api_key: serde_json::from_value(response).map_err(transport)?,
+            api_key: serde_json::from_value::<CreatedApiKey>(response)
+                .map(Into::into)
+                .map_err(transport)?,
         }),
         CorbanuApiOperation::RevokeKey { key_id } => {
             let revoked: CorbanuApiRevoked = serde_json::from_value(response).map_err(transport)?;
@@ -241,7 +243,25 @@ struct CorbanuApiPayment {
 #[serde(rename_all = "camelCase")]
 struct CorbanuApiFunded {
     balance: CorbanuApiBalance,
-    api_key: Option<GatewayKey>,
+    api_key: Option<CreatedApiKey>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreatedApiKey {
+    id: String,
+    key: String,
+    display_prefix: String,
+}
+
+impl From<CreatedApiKey> for GatewayKey {
+    fn from(value: CreatedApiKey) -> Self {
+        Self {
+            key_id: value.id,
+            api_key: value.key,
+            display_prefix: value.display_prefix,
+        }
+    }
 }
 
 #[derive(Deserialize)]

@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-34-S01"
 title: "Rust wallet Corbanu API client"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/corbanu-api-balance.md"
 plan_feature: "PF-34"
 execution_order: 6
@@ -46,25 +46,26 @@ updated: 2026-08-30
 ## Done
 
 - [x] Sprint record created and linked to PF-34.
+- [x] Added typed account, model-price, key-summary, top-up, and mutation result contracts.
+- [x] Executed operation-bound challenges and exact x402 top-ups inside the unlocked wallet boundary.
+- [x] Exposed scoped daemon requests with one-action and cancellation behavior.
+- [x] Added protocol, exact-money, and typed-wire regressions.
 
 ## Remaining
 
-- [ ] Add typed account, model-price, key-summary, top-up, and mutation result contracts.
-- [ ] Execute operation-bound challenges and exact x402 top-ups inside the unlocked wallet boundary.
-- [ ] Expose scoped daemon requests with one-action and cancellation behavior.
-- [ ] Add protocol and tamper/failure regressions.
+- [x] None.
 
 ## Verification
 
-- [ ] Focused test: `just test -p codex-wallet -p codex-wallet-daemon`
-- [ ] Integration test: wallet daemon end-to-end operation tests.
+- [x] Focused test: 22 passed, 0 failed across `codex-wallet` and `codex-wallet-daemon`.
+- [x] Integration test: daemon protocol, timeout, cancellation, one-action, and global-lock tests pass.
 - [x] TUI applicability resolved: not yet; rendering and true-TUI proof belong to PF-34-S02.
-- [ ] Integrated interfaces and candidate commit match backend `cd79361d8b4f286291556a641288757d0451f52c`.
+- [x] Integrated interfaces and candidate commit match backend `cd79361d8b4f286291556a641288757d0451f52c`.
 - [x] Upstream adapter contract: product-owned wallet boundary only.
 
 ## Exit evidence
 
-- [ ] Implementation commit recorded.
-- [ ] Final-tree test output linked.
-- [ ] `Done` and `Remaining` ledgers reflect reality.
-- [ ] Completed record moved to `docs/sprints/archive/corbanu-api-balance/`.
+- [x] Implementation commit: `c61de4c0c3cfe909af94f99f69e9a9efac6c2a9a`.
+- [x] Final-tree test output recorded.
+- [x] `Done` and `Remaining` ledgers reflect reality.
+- [x] Completed record moved to `docs/sprints/archive/corbanu-api-balance/`.

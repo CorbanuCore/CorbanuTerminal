@@ -130,8 +130,8 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 13] = [
     },
     ModelPickerProviderGroup {
         id: "pfterminal-plan",
-        label: "Corbanu Plan",
-        subtitle: "USDC-funded Corbanu Plan",
+        label: "Corbanu API",
+        subtitle: "At-cost, wallet-funded API balance",
     },
     ModelPickerProviderGroup {
         id: "kimi-code",

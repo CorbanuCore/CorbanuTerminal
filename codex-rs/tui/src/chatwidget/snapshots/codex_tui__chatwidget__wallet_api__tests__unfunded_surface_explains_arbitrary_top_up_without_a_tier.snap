@@ -1,0 +1,15 @@
+---
+source: tui/src/chatwidget/wallet_api_tests.rs
+expression: rendered
+---
+  Corbanu API
+  $0 available
+  No plan tier is required. Add any positive canonical-USDC amount.
+  Top up with USDC to create the first API key.
+
+› 1. Top up balance   Choose any positive canonical-USDC amount
+  2. Manage API keys  Unlock to load key summaries and balances
+  3. Create API key   Unlock and reveal a new key exactly once
+  4. Refresh          Reload balance and model prices
+
+  Press enter to confirm or esc to go back

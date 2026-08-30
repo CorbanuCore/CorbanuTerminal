@@ -91,7 +91,7 @@ repeat that proof across the integrated product.
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
 | [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [Current sprints and dependency graph](current/p0-security-levels/index.md) | PF-13-S05 and PF-30-S01 in progress; PF-27-S01/PF-26-S01 completed; PF-29 allocated pending readiness |
-| [Corbanu API balance and keys](../plans/active/corbanu-api-balance.md) | Active | [PF-34-S01](current/corbanu-api-balance/pf-34-s01-wallet-client.md) | Rust wallet client in progress |
+| [Corbanu API balance and keys](../plans/active/corbanu-api-balance.md) | Active | [PF-34-S02](current/corbanu-api-balance/pf-34-s02-wallet-ui.md) | Wallet UI in progress |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
 | [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | The superseded 72-sprint decomposition is retained in the excluded archive |
 

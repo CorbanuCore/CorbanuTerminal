@@ -3,8 +3,8 @@ source: tui/src/chatwidget/wallet_menu.rs
 expression: "items.join(\"\\n\")"
 ---
 Receive
-Buy Corbanu Plan
-Recover existing plan
+Corbanu API
+Recover legacy plan access
 Unlock for one signing action
 Unlock for 5 minutes
 Unlock for 15 minutes

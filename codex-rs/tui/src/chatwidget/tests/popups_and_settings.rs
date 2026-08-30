@@ -3797,13 +3797,14 @@ async fn model_picker_hides_show_in_picker_false_models_from_cache() {
 }
 
 fn move_model_picker_selection_to(chat: &mut ChatWidget, model: &str) {
+    let exact_model_field = format!("Model: {model}.");
     for _ in 0..16 {
         for _ in 0..20 {
             let popup =
                 render_bottom_popup_with_height(chat, /*width*/ 140, /*height*/ 40);
             if popup
                 .lines()
-                .any(|line| line.contains('›') && line.contains(model))
+                .any(|line| line.contains('›') && line.contains(&exact_model_field))
             {
                 return;
             }

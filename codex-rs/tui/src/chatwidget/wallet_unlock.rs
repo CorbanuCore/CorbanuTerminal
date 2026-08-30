@@ -130,6 +130,9 @@ impl ChatWidget {
                 match continuation {
                     WalletUnlockContinuation::WalletMenu => self.open_wallet_menu(),
                     WalletUnlockContinuation::OpenPlans { mode } => self.open_wallet_plans(mode),
+                    WalletUnlockContinuation::CorbanuApiOperation { operation } => {
+                        self.request_corbanu_api_operation(operation);
+                    }
                 }
             }
             Err(error) => {

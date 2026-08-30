@@ -2395,6 +2395,31 @@ impl App {
             AppEvent::WalletStatusReady { generation, result } => {
                 self.chat_widget.on_wallet_status_ready(generation, result);
             }
+            AppEvent::OpenCorbanuApi => {
+                self.chat_widget.open_corbanu_api();
+            }
+            AppEvent::CorbanuApiLoaded { result } => {
+                self.chat_widget.on_corbanu_api_loaded(result);
+            }
+            AppEvent::OpenCorbanuApiTopUp => {
+                self.chat_widget.open_corbanu_api_top_up();
+            }
+            AppEvent::ConfirmCorbanuApiTopUp { amount_usd } => {
+                self.chat_widget.confirm_corbanu_api_top_up(amount_usd);
+            }
+            AppEvent::ConfirmCorbanuApiKeyRevocation {
+                key_id,
+                display_prefix,
+            } => {
+                self.chat_widget
+                    .confirm_corbanu_api_key_revocation(key_id, display_prefix);
+            }
+            AppEvent::CorbanuApiOperationRequested { operation } => {
+                self.chat_widget.request_corbanu_api_operation(operation);
+            }
+            AppEvent::CorbanuApiOperationFinished { result } => {
+                self.chat_widget.on_corbanu_api_operation_finished(result);
+            }
             AppEvent::WalletCreateFinished { operation, result } => {
                 self.chat_widget
                     .on_wallet_create_finished(operation, result);

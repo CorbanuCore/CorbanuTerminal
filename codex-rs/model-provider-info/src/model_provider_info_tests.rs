@@ -713,6 +713,7 @@ fn test_built_in_model_providers_keep_legacy_plan_id_with_corbanu_name() {
     assert_eq!(
         provider.api_key_env_vars(),
         vec![
+            CORBANU_API_KEY_ENV_VAR,
             CORBANU_PLAN_API_KEY_ENV_VAR,
             PFTERMINAL_PLAN_API_KEY_ENV_VAR
         ]
