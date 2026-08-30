@@ -52,16 +52,15 @@ updated: 2026-08-30
 - [x] Recorded reviewed-input mechanism candidates for Linux, macOS and Windows without treating installation, signing, same-user separation or proxy configuration as containment.
 - [x] Executed the SHA-bound probe on macOS and Linux with 10/10 capability records and 8/8 contract regressions per target; both correctly remain ineligible because observed same-user bypasses are unsupported.
 - [x] Recorded the Linux/macOS/Windows identity, worker-threat, filesystem/config/IPC/network, handle, debug, signing/entitlement, elevation and store matrix; Windows is explicitly untested rather than inferred.
-- [x] Ran four independent TMUX + Corbanu Terminal + Claude Opus 5.0 Max reviews; repaired all twenty-two findings/coverage gaps across process/handle/elevation/signing/network/IPC probes, schema parity, macOS helper resolution, Windows boot identity, Rust identity/envelope validation, strict versus archival validation, and positive eligibility discrimination, then regenerated exact-SHA macOS/Linux evidence.
+- [x] Ran seven independent TMUX + Corbanu Terminal + Claude Opus 5.0 Max reviews; repaired all twenty-eight findings/coverage gaps across process/handle/elevation/signing/network/IPC probes, schema parity, macOS helper resolution, Windows/unknown-OS boot identity, Rust identity/envelope validation, strict versus archival validation and eligibility enforcement, stable malformed-input handling, standard lint/test discovery, and positive eligibility discrimination, then regenerated exact-SHA macOS/Linux evidence. The seventh complete-tree review reported no findings.
 
 ## Remaining
 
 - [ ] Execute the identical probe on the authorized Windows target and complete the three-platform matrix. The host is absent from the connected Tailscale tailnet and both supplied IP routes currently time out; unavailable access is `untested`, never a platform pass.
-- [ ] Obtain a clean post-repair review of the full final tree through TMUX + Corbanu Terminal + Claude Opus 5.0 Max.
 
 ## Verification
 
-- [x] Run affected format/fix tools before final tests; `ruff format --check` and `ruff check` pass; Python self-test passes 8/8 and standalone Rust activation-gate tests pass 9/9.
+- [x] Run affected format/fix tools before final tests; repository-standard `format.py --check` and focused Ruff discovery pass; Python self-test passes 8/8, discovered Python tests pass 5/5, and standalone Rust activation-gate tests pass 9/9.
 - [ ] Run the planned probe with synthetic canaries on Linux/macOS/Windows; record target versions, expected denial, actual results and unsupported configurations. Run schema/fixture tests and wrong-identity/stale-result cases.
 - [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
 - [x] Verify no runtime route or profile becomes available from fixture-only preparation; the new Rust module remains outside Cargo/Bazel registration and the probe only creates bounded temporary synthetic fixtures.

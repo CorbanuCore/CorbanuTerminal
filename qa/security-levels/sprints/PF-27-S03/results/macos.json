@@ -1,0 +1,24 @@
+{
+  "capabilities": [
+    {"capability":"process_identity","detail_code":"same_user_process_visible","mechanism":"same_user_process","observation":"observed_allowed","status":"unsupported"},
+    {"capability":"filesystem_boundary","detail_code":"same_user_file_readable","mechanism":"same_user_filesystem","observation":"observed_allowed","status":"unsupported"},
+    {"capability":"config_boundary","detail_code":"same_user_config_writable","mechanism":"same_user_config","observation":"observed_allowed","status":"unsupported"},
+    {"capability":"inherited_handles","detail_code":"descriptor_closed","mechanism":"close_fds","observation":"observed_denied","status":"supported"},
+    {"capability":"ipc_peer_identity","detail_code":"peer_api_unavailable","mechanism":"os_peer_credentials","observation":"not_tested","status":"untested"},
+    {"capability":"network_boundary","detail_code":"loopback_unrestricted","mechanism":"worker_network_policy","observation":"observed_allowed","status":"unsupported"},
+    {"capability":"process_memory_debug","detail_code":"task_for_pid_denied","mechanism":"os_process_debug","observation":"observed_denied","status":"supported"},
+    {"capability":"signing_entitlements","detail_code":"signature_present_not_containment","mechanism":"code_signature","observation":"not_applicable","status":"unsupported"},
+    {"capability":"elevation_boundary","detail_code":"noninteractive_sudo_denied","mechanism":"noninteractive_elevation","observation":"observed_denied","status":"supported"},
+    {"capability":"protected_store","detail_code":"store_attacks_allowed_dc8af8fe3810","mechanism":"same_user_store","observation":"observed_allowed","status":"unsupported"}
+  ],
+  "contract_version": "corbanu.platform-containment/v1",
+  "expires_at": "2026-08-31T10:53:47Z",
+  "fixture_protocol": "corbanu.platform-probe/v1",
+  "measured_at": "2026-08-30T10:53:47Z",
+  "probe_sha256": "549c50a5fe8804a3ed6cf22b7de2a947dd8093a6a8bb18a0317e2cfecbcb0440",
+  "protected_mode_eligible": false,
+  "run_id": "81057ca59f19465c8b81afec4b8e4cfe",
+  "target": {"architecture":"arm64","cpu":"Apple M2 Ultra","os":"macos","os_version":"Darwin-25.0.0-arm64-arm-64bit-Mach-O","python_version":"3.14.4"},
+  "target_id": "37df8a9954305c584eba82a9eee0a9c0537fc61e36d860760bcbb99c8e60fbc8",
+  "target_label": "macos-local"
+}
