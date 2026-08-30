@@ -8,6 +8,11 @@
 
 mod event;
 mod journal;
+mod journal_debug;
+#[cfg(test)]
+mod journal_faults;
+mod journal_support;
+mod journal_types;
 mod recovery;
 mod storage;
 
@@ -23,15 +28,15 @@ pub use event::SecurityEventError;
 pub use event::SecurityEventId;
 pub use event::SecurityEventKind;
 pub use event::UnknownOutcomeReason;
-pub use journal::AppendAcknowledgement;
-pub use journal::DispatchPermit;
-pub use journal::IntegrityCheckpoint;
-pub use journal::IntegrityRootError;
-pub use journal::IntegrityRootStore;
-pub use journal::JournalConfig;
-pub use journal::JournalError;
-pub use journal::JournalOwner;
 pub use journal::ReferenceJournal;
+pub use journal_types::AppendAcknowledgement;
+pub use journal_types::DispatchPermit;
+pub use journal_types::IntegrityCheckpoint;
+pub use journal_types::IntegrityRootError;
+pub use journal_types::IntegrityRootStore;
+pub use journal_types::JournalConfig;
+pub use journal_types::JournalError;
+pub use journal_types::JournalOwner;
 pub use recovery::AuditGapReason;
 pub use recovery::EmergencyRestrictionResult;
 pub use recovery::PendingDispatch;

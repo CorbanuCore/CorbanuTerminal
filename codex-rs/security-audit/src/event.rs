@@ -298,11 +298,10 @@ impl SecurityEvent {
         occurred_at_unix_seconds: i64,
     ) -> Result<Self, SecurityEventError> {
         let request = RequestIdentity::from_request(request)?;
-        let action_id = ActionId::from_digest(hash_value(&(
-            "action-v2",
-            &request.action_digest,
-            &authority,
-        ))?);
+        // Authority correlation is deliberately not part of effect identity.
+        // A retry must revalidate current authority, but a re-issued grant or
+        // mandate must not escape the durable replay fence for the same effect.
+        let action_id = ActionId::from_digest(hash_value(&("action-v3", &request.action_digest))?);
         let deduplication_digest =
             BoundedText::new(hash_value(&("deduplication-v1", &deduplication_key))?)?;
         let reservation_id = ReservationId::from_digest(hash_value(&(
@@ -427,8 +426,7 @@ impl SecurityEvent {
                 deduplication_digest,
             } => {
                 request.validate()?;
-                let expected_action =
-                    hash_value(&("action-v2", &request.action_digest, authority))?;
+                let expected_action = hash_value(&("action-v3", &request.action_digest))?;
                 if action_id.as_str() != expected_action {
                     return Err(SecurityEventError::ActionIntegrityMismatch);
                 }

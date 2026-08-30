@@ -44,16 +44,20 @@ adapter-specific reconciliation; it is not a replay instruction.
 Every journal starts blocked and requires successful recovery against the live
 PF-20 policy generation and revocation state before its first append. Retrying
 the same action and deduplication key never returns another permit, even when
-the retry timestamp or policy/run generation changes: unresolved duplicates
-return `AlreadyReserved` and resolved duplicates return `AlreadyResolved`, both
-with the original event/action/reservation acknowledgement identity. Loss of a
+the retry timestamp, session, task, policy/run generation, or freshly reissued
+grant/mandate changes: unresolved duplicates return `AlreadyReserved` and
+resolved duplicates return `AlreadyResolved`, both with the original
+event/action/reservation acknowledgement identity. Authority is recorded and
+must be revalidated live, but is not part of the stable effect identity. Loss of a
 transport acknowledgement outside this in-process journal is handled by that
 same stable retry contract; it is not represented as a fabricated append fault.
-Recovery exposes all durable intents without a terminal receipt as
-`pending_dispatches`, reports `ReconciliationRequired`, and blocks new dispatch
-until each is appended as explicitly unknown through
-`reconcile_dispatch_as_unknown`. Normal resolution accepts the current live
-event context so a policy/run generation advance cannot strand an older intent.
+The live validated chain blocks a distinct new dispatch whenever any intent is
+unresolved, while still returning the original identity for an exact retry.
+Recovery exposes those intents as `pending_dispatches`, reports
+`ReconciliationRequired`, and requires each to be appended as explicitly
+unknown through `reconcile_dispatch_as_unknown`. Normal resolution accepts the
+current live event context so a policy/run generation advance cannot strand an
+older intent.
 
 Full recovery validates every local record and seeds a process-local validated
 chain/tail cache. Normal appends compare the protected checkpoint with that

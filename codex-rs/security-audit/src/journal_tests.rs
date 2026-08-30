@@ -1,5 +1,6 @@
 #![allow(clippy::expect_used)]
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -8,7 +9,10 @@ use codex_security_policy::ActionReceipt;
 use codex_security_policy::ActorChain;
 use codex_security_policy::AuthorizationContext;
 use codex_security_policy::AuthorizationRequest;
+use codex_security_policy::BoundedGrant;
 use codex_security_policy::BoundedText;
+use codex_security_policy::GrantContext;
+use codex_security_policy::GrantScope;
 use codex_security_policy::MandateOutcome;
 use codex_security_policy::PolicyAction;
 use codex_security_policy::PolicyPrincipal;
@@ -192,6 +196,63 @@ fn request_at(now_unix_seconds: i64, session_id: &str, task_id: &str) -> Authori
     .expect("request")
 }
 
+fn reissued_grant_authority(
+    request: &AuthorizationRequest,
+    issued_at_unix_seconds: i64,
+    nonce: &str,
+) -> AuthorityIdentity {
+    let scope = GrantScope::new(
+        request.resource.clone(),
+        [request.action],
+        GrantContext::new(
+            request.context.session_id.clone(),
+            request.context.task_id.clone(),
+            request.context.purpose.clone(),
+            request.context.operation.clone(),
+        ),
+        request.context.destination.clone(),
+        BTreeMap::new(),
+    )
+    .expect("grant scope");
+    let grant = BoundedGrant::issue(
+        request
+            .subject
+            .as_slice()
+            .first()
+            .expect("human issuer")
+            .clone(),
+        request.subject.clone(),
+        scope,
+        issued_at_unix_seconds,
+        issued_at_unix_seconds + 100,
+        text(nonce),
+    )
+    .expect("re-issued grant");
+    AuthorityIdentity::from_grant(&grant).expect("grant identity")
+}
+
+fn reapproved_mandate_authority(
+    request: &AuthorizationRequest,
+    approved_at_unix_seconds: i64,
+    nonce: &str,
+) -> AuthorityIdentity {
+    let preview =
+        ProtectedActionPreview::new(request.clone(), approved_at_unix_seconds + 100, text(nonce))
+            .expect("protected preview");
+    let mandate = ProtectedActionMandate::approve(
+        &preview,
+        request
+            .subject
+            .as_slice()
+            .first()
+            .expect("human approver")
+            .clone(),
+        approved_at_unix_seconds,
+    )
+    .expect("re-approved mandate");
+    AuthorityIdentity::from_mandate(&mandate).expect("mandate identity")
+}
+
 fn mandate(request: &AuthorizationRequest) -> (ProtectedActionMandate, ProtectedActionPreview) {
     let preview =
         ProtectedActionPreview::new(request.clone(), 100, text("nonce-1")).expect("preview");
@@ -351,6 +412,7 @@ fn producer_mismatch_and_generation_rollback_fail_closed() {
 fn disk_full_blocks_dispatch_before_a_permit_exists() {
     let mut fixture = Fixture::new(JournalConfig::default());
     fixture.append_decision();
+    let request = request();
     fixture
         .journal
         .inject_once(FaultPoint::BeforeRecordWrite, InjectedFault::DiskFull);
@@ -359,7 +421,7 @@ fn disk_full_blocks_dispatch_before_a_permit_exists() {
         .reserve_dispatch(
             fixture.context(),
             None,
-            &request(),
+            &request,
             AuthorityIdentity::Grant {
                 grant_id: text("grant-1"),
             },
@@ -372,7 +434,7 @@ fn disk_full_blocks_dispatch_before_a_permit_exists() {
         fixture.journal.reserve_dispatch(
             fixture.context(),
             None,
-            &request(),
+            &request,
             AuthorityIdentity::Grant {
                 grant_id: text("grant-1"),
             },
@@ -474,6 +536,28 @@ fn operator_can_reconcile_exactly_one_ambiguous_commit_without_replay() {
         .expect_err("protected prefix mismatch must not be laundered");
     assert!(matches!(mismatch, JournalError::AmbiguousCommitMismatch));
     fixture.roots.force_checkpoint(Some(anchored_root));
+
+    fixture.roots.fail_store(IntegrityRootError::Conflict);
+    assert!(matches!(
+        fixture
+            .journal
+            .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new()),
+        Err(JournalError::AmbiguousCommitMismatch)
+    ));
+    fixture.roots.fail_store(IntegrityRootError::Unavailable);
+    assert!(matches!(
+        fixture
+            .journal
+            .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new()),
+        Err(JournalError::IntegrityRootUnavailable)
+    ));
+    fixture.roots.fail_store(IntegrityRootError::Timeout);
+    assert!(matches!(
+        fixture
+            .journal
+            .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new()),
+        Err(JournalError::CommitUnknown { .. })
+    ));
 
     let checkpoint = fixture
         .journal
@@ -626,6 +710,124 @@ fn duplicate_dispatch_is_generation_independent() {
         } if event_id == first.event_id
             && action_id == first_action
             && reservation_id == first_reservation
+    ));
+}
+
+#[test]
+fn reissued_grant_and_mandate_cannot_bypass_dispatch_deduplication() {
+    let first_request = request_at(10, "session-1", "task-1");
+    let retry_request = request_at(20, "session-2", "task-2");
+
+    let mut grant_fixture = Fixture::new(JournalConfig::default());
+    let first_grant = reissued_grant_authority(&first_request, 10, "grant-nonce-1");
+    let second_grant = reissued_grant_authority(&retry_request, 20, "grant-nonce-2");
+    assert_ne!(first_grant, second_grant);
+    grant_fixture
+        .journal
+        .reserve_dispatch(
+            grant_fixture.context(),
+            None,
+            &first_request,
+            first_grant,
+            text("stable-effect-1"),
+            12,
+        )
+        .expect("first grant permit");
+    assert!(matches!(
+        grant_fixture.journal.reserve_dispatch(
+            grant_fixture.context_at(2, 2),
+            None,
+            &retry_request,
+            second_grant,
+            text("stable-effect-1"),
+            22,
+        ),
+        Err(JournalError::AlreadyReserved { .. })
+    ));
+
+    let mut mandate_fixture = Fixture::new(JournalConfig::default());
+    let first_mandate = reapproved_mandate_authority(&first_request, 11, "preview-nonce-1");
+    let second_mandate = reapproved_mandate_authority(&retry_request, 21, "preview-nonce-2");
+    assert_ne!(first_mandate, second_mandate);
+    mandate_fixture
+        .journal
+        .reserve_dispatch(
+            mandate_fixture.context(),
+            None,
+            &first_request,
+            first_mandate,
+            text("stable-effect-2"),
+            12,
+        )
+        .expect("first mandate permit");
+    assert!(matches!(
+        mandate_fixture.journal.reserve_dispatch(
+            mandate_fixture.context_at(2, 2),
+            None,
+            &retry_request,
+            second_mandate,
+            text("stable-effect-2"),
+            22,
+        ),
+        Err(JournalError::AlreadyReserved { .. })
+    ));
+}
+
+#[test]
+fn live_unresolved_intent_blocks_distinct_dispatch_but_preserves_retry_identity() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    let request = request();
+    let authority = AuthorityIdentity::Grant {
+        grant_id: text("grant-1"),
+    };
+    let (permit, first) = fixture
+        .journal
+        .reserve_dispatch(
+            fixture.context(),
+            None,
+            &request,
+            authority.clone(),
+            text("dispatch-1"),
+            12,
+        )
+        .expect("first permit");
+    let action_id = permit.action_id().clone();
+    let reservation_id = permit.reservation_id().clone();
+    drop(permit);
+
+    let retry = fixture
+        .journal
+        .reserve_dispatch(
+            fixture.context(),
+            None,
+            &request,
+            authority.clone(),
+            text("dispatch-1"),
+            13,
+        )
+        .expect_err("retry must return original unresolved identity");
+    assert!(matches!(
+        retry,
+        JournalError::AlreadyReserved {
+            event_id,
+            action_id: existing_action,
+            reservation_id: existing_reservation,
+            sequence: 1,
+        } if event_id == first.event_id
+            && existing_action == action_id
+            && existing_reservation == reservation_id
+    ));
+
+    assert!(matches!(
+        fixture.journal.reserve_dispatch(
+            fixture.context(),
+            None,
+            &request,
+            authority,
+            text("dispatch-2"),
+            14,
+        ),
+        Err(JournalError::ReconciliationRequired)
     ));
 }
 
@@ -844,6 +1046,20 @@ fn concurrent_writer_lock_blocks_append() {
         .record_decision(event)
         .expect_err("concurrent writer must block");
     assert!(matches!(error, JournalError::ConcurrentWriter));
+    drop(lock);
+    assert!(matches!(
+        fixture.journal.reserve_dispatch(
+            fixture.context(),
+            None,
+            &request,
+            AuthorityIdentity::Grant {
+                grant_id: text("grant-1"),
+            },
+            text("dispatch-after-lock-conflict"),
+            12,
+        ),
+        Err(JournalError::RecoveryRequired)
+    ));
 }
 
 #[test]
