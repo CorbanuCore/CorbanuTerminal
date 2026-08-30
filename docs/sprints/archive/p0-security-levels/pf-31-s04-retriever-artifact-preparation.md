@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-31-S04"
 title: "Retriever artifact and engine preparation"
-status: ready
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-31"
 execution_order: 17
@@ -56,11 +56,12 @@ updated: 2026-08-29
 - [x] Codex GPT-5.5 autoreview finding fixed and regression-tested; clean rerun reports no accepted/actionable findings.
 - [x] Completed the corrected-candidate disposition in the mandated Claude UI with Opus 5 and Max visibly selected; initial and follow-up findings, screenshots and fixes are preserved.
 - [x] Restored the pinned Windows Tailscale peer, verified its SSH fingerprint and remote bundle SHA-256, then passed the final 27 fixtures, 27 deterministic replays, five manifest mutations and ten evidence-path checks on Windows 11 Pro with Python 3.13.15.
+- [x] Integration owner retained the missing publisher signature/SBOM, pending license approval and locked Corbanu rebuild as hard blockers for PF-31-S01; no protected route was activated.
+- [x] Integration owner received the candidate, audited the literal scope, reran the combined-tree checks and completed the G2 slot rotation gate.
 
 ## Remaining
 
-- [ ] Obtain integration-owner decisions for the Corbanu signing identity/rebuild and for the unresolved SBOM license records; do not activate the unsigned floating-input upstream image.
-- [ ] Hand the final candidate to Jim Ricketts for scope audit, combined-tree reruns, archive transition and explicit G2 slot rotation before PF-33-S03 starts.
+- None.
 
 ## Verification
 
@@ -68,10 +69,10 @@ updated: 2026-08-29
 - [x] Corrected artifact-manifest and engine-fixture tests pass on macOS, Linux and Windows; Windows exact-image qualification is retained separately from the corrected pure contract-suite rerun.
 - [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
 - [x] Scope audit proves no runtime route or profile becomes available from fixture-only preparation.
-- [ ] Receiving integration owner reruns the final candidate on the combined tree after Claude finding disposition and before archive transition.
+- [x] Receiving integration owner reran the manifest, 27 fixtures, five policy mutations, ten path checks, plan/sprint governance and whitespace checks on the combined tree.
 
 ## Exit evidence
 
 - [x] Candidate commits, contract/fixture versions, local and Claude review dispositions, cross-host bundle identity and final-tree outputs are recorded under `qa/security-levels/sprints/PF-31-S04/`.
-- [ ] PF-31-S01 consumes these frozen pins and reruns actual engine/launch/egress/isolation tests; preparation does not qualify protected retrieval.
-- [ ] Scope audit and provisional handoff are recorded; integration owner must resolve blockers, rerun the combined tree and complete/archive the ledger.
+- [x] Frozen pins and downstream launch/egress/isolation obligations are handed to PF-31-S01; this preparation sprint makes no protected-retrieval qualification claim.
+- [x] Scope audit, handoff, combined-tree reruns and completed archive transition are recorded.

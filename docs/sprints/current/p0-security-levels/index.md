@@ -17,7 +17,6 @@ archived evidence proves only its recorded candidate and scope.
 | ---: | --- | --- | --- | --- |
 | 13 | [PF-13-S05](pf-13-s05-credential-boundary-adversarial-qualification.md) | Credential boundary adversarial qualification | in_progress | PF-13-S04 |
 | 16 | [PF-27-S03](pf-27-s03-platform-containment-contract.md) | Platform containment contract and probes | draft | — |
-| 17 | [PF-31-S04](pf-31-s04-retriever-artifact-preparation.md) | Retriever artifact and engine preparation | draft | — |
 | 18 | [PF-33-S03](pf-33-s03-destination-policy-contract.md) | Pure destination-policy contract | draft | — |
 | 19 | [PF-34-S04](pf-34-s04-screening-contract-and-fixtures.md) | Screening segment contract and fixtures | draft | — |
 | 20 | [PF-35-S01](pf-35-s01-classifier-corpus-and-evaluation.md) | Classifier corpus and leakage-free evaluation | draft | PF-34-S04 |
