@@ -123,3 +123,25 @@ Hand back the final candidate commit and this evidence to Jim Ricketts. The
 integration owner audits scope and reruns the manifest, fixture and governance
 checks on the combined tree and completes the documented G2 transition.
 PF-33-S03 must not start before that archive step.
+
+## 2026-08-30 post-archive review remediation
+
+A trace-backed independent review in tmux through Corbanu Terminal, requested as
+`claude-opus-5-plan` at `max` effort and reported by the provider as
+`claude-opus-5`, found that this evidence did not disclose the two identical
+runtime pins in `codex-rs/browser-isolation/src/image.rs` and
+`codex-rs/browser-isolation/worker/Dockerfile`. The first automatically pulls
+the immutable `BASE_IMAGE` reference when it is absent; the second is the
+`FROM` reference used by the `--pull=false` local worker build.
+
+The standalone validator now treats both source literals as required runtime
+copies of the PF-31 pin. Canonical repository-contained reads reject leaf or
+ancestor symlinks; each file must expose exactly one canonical pin, and both
+must equal `artifact.reference` byte for byte. The negative suite changes the
+manifest reference and independently removes or duplicates each source literal.
+The original five-mutation result above remains the historical candidate result;
+the repaired tree reports 27 fixtures, 27 deterministic replays, eleven policy
+mutations and ten evidence-path checks.
+
+The initial review coordinates and disposition are preserved in
+[`review/corbanu-tmux-claude-opus-5-max-20260830.md`](review/corbanu-tmux-claude-opus-5-max-20260830.md).
