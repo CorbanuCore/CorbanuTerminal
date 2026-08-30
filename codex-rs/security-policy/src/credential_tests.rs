@@ -451,4 +451,28 @@ fn credential_usage_policy_is_grant_bound_and_digest_sensitive() {
         forged_extra_limit.validate(),
         Err(CredentialCapabilityError::GrantMismatch)
     ));
+
+    let mut oversized = metered_capability_request("gpt-5.5", &revocations);
+    oversized
+        .aggregate_usage_limits
+        .insert(text("requests"), 1_025);
+    oversized.authorization.context.quantity =
+        Some(QuantitativeLimit::new("credential.aggregate.requests", 1_025).expect("quantity"));
+    let mut oversized_scope = oversized.grant.scope.clone();
+    oversized_scope
+        .quantitative_limits
+        .insert(text("credential.aggregate.requests"), 1_025);
+    oversized.grant = BoundedGrant::issue(
+        oversized.grant.issuer.clone(),
+        oversized.grant.actor_chain.clone(),
+        oversized_scope,
+        oversized.grant.issued_at_unix_seconds,
+        oversized.grant.expires_at_unix_seconds,
+        text("metered-oversized-request-budget"),
+    )
+    .expect("internally valid oversized grant");
+    assert!(matches!(
+        oversized.validate(),
+        Err(CredentialCapabilityError::GrantMismatch)
+    ));
 }

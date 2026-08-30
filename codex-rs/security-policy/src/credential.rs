@@ -25,6 +25,7 @@ use crate::digest::canonical_sha256;
 
 pub const CREDENTIAL_CAPABILITY_SCHEMA_VERSION: u32 = 1;
 pub const CREDENTIAL_USAGE_SCHEMA_VERSION: u32 = 1;
+pub const CREDENTIAL_USAGE_MAX_REQUESTS: u64 = 1_024;
 pub const CAPABILITY_ID_HEX_LENGTH: usize = 64;
 const CREDENTIAL_USAGE_DIMENSIONS: [&str; 4] = ["requests", "tokens", "bytes", "spend_microunits"];
 
@@ -381,6 +382,9 @@ impl CredentialCapabilityRequest {
             return Err(CredentialCapabilityError::GrantMismatch);
         }
         let expected_requests = self.aggregate_usage_limit("requests");
+        if expected_requests.is_some_and(|requests| requests > CREDENTIAL_USAGE_MAX_REQUESTS) {
+            return Err(CredentialCapabilityError::GrantMismatch);
+        }
         if self
             .authorization
             .context

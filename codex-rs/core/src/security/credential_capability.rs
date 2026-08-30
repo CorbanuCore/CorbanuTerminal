@@ -249,12 +249,6 @@ impl IssuedCredentialReservation {
     pub(crate) fn reserved(&self) -> CredentialUsage {
         self.reserved
     }
-
-    /// The later authenticated broker may resolve this reference inside its
-    /// trusted boundary; no credential value is returned here.
-    pub(crate) fn vault_ref(&self) -> Result<VaultCredentialRef, ScopedCredentialError> {
-        VaultCredentialRef::from_authorized(self.capability_id.clone(), self.request.clone())
-    }
 }
 
 /// Trusted runtime handle. Model/tool protocol surfaces receive only the
@@ -313,6 +307,7 @@ struct StoredCapability {
 struct StoredReservation {
     reserved: CredentialUsage,
     settlement: Option<CredentialUsageSettlement>,
+    dispatch_authorized: bool,
 }
 
 /// Hard-bounded concurrent lifecycle store for opaque credential capabilities.
@@ -370,7 +365,7 @@ where
             .entries
             .write()
             .map_err(|_| CredentialCapabilityStoreError::StorePoisoned)?;
-        retain_valid(&mut entries, now, revocations);
+        retain_valid(&mut entries, now, revocations)?;
         if entries.len() >= self.capacity {
             return Err(CredentialCapabilityStoreError::CapacityReached {
                 capacity: self.capacity,
@@ -415,7 +410,7 @@ where
             .entries
             .write()
             .map_err(|_| CredentialCapabilityStoreError::StorePoisoned)?;
-        retain_valid(&mut entries, now, revocations);
+        retain_valid(&mut entries, now, revocations)?;
         let stored = entries
             .get(capability.capability_id())
             .ok_or(CredentialCapabilityStoreError::UnknownCapability)?;
@@ -457,7 +452,7 @@ where
             .entries
             .write()
             .map_err(|_| CredentialCapabilityStoreError::StorePoisoned)?;
-        retain_valid(&mut entries, now, revocations);
+        retain_valid(&mut entries, now, revocations)?;
         let stored = entries
             .get_mut(capability.capability_id())
             .ok_or(CredentialCapabilityStoreError::UnknownCapability)?;
@@ -476,7 +471,13 @@ where
         if !next_usage.fits_within(aggregate) {
             return Err(CredentialCapabilityStoreError::AggregateUsageExceeded);
         }
-        if stored.reservations.len() >= MAX_USAGE_RESERVATIONS_PER_CAPABILITY {
+        if stored
+            .reservations
+            .values()
+            .filter(|reservation| reservation.settlement.is_none())
+            .count()
+            >= MAX_USAGE_RESERVATIONS_PER_CAPABILITY
+        {
             return Err(CredentialCapabilityStoreError::ReservationCapacityReached);
         }
 
@@ -500,6 +501,7 @@ where
                 StoredReservation {
                     reserved: worst_case,
                     settlement: None,
+                    dispatch_authorized: false,
                 },
             );
             return Ok(IssuedCredentialReservation {
@@ -513,6 +515,47 @@ where
         Err(CredentialCapabilityStoreError::TokenCollision)
     }
 
+    /// Authorize exactly one trusted broker dispatch for an active reservation.
+    /// The returned reference remains secret-free; vault resolution still occurs
+    /// only inside the later broker boundary.
+    pub(crate) fn authorize_reservation_dispatch(
+        &self,
+        reservation: &IssuedCredentialReservation,
+        revocations: &RevocationState,
+    ) -> Result<VaultCredentialRef, CredentialCapabilityStoreError> {
+        let now = self.clock.now_unix_seconds()?;
+        reservation.request.validate_at(now, revocations)?;
+        let mut entries = self
+            .entries
+            .write()
+            .map_err(|_| CredentialCapabilityStoreError::StorePoisoned)?;
+        retain_valid(&mut entries, now, revocations)?;
+        let stored = entries
+            .get_mut(&reservation.capability_id)
+            .ok_or(CredentialCapabilityStoreError::UnknownCapability)?;
+        if stored.request != reservation.request {
+            return Err(CredentialCapabilityStoreError::AuthorityMismatch);
+        }
+        let request_digest = stored.request.digest()?;
+        let stored_reservation = stored
+            .reservations
+            .get_mut(&reservation.reservation_id)
+            .ok_or(CredentialCapabilityStoreError::UnknownReservation)?;
+        authenticate_reservation(reservation, stored_reservation, &request_digest)?;
+        if stored_reservation.settlement.is_some() {
+            return Err(CredentialCapabilityStoreError::ReservationSettled);
+        }
+        if stored_reservation.dispatch_authorized {
+            return Err(CredentialCapabilityStoreError::ReservationAlreadyAuthorized);
+        }
+        stored_reservation.dispatch_authorized = true;
+        VaultCredentialRef::from_authorized(
+            reservation.capability_id.clone(),
+            stored.request.clone(),
+        )
+        .map_err(CredentialCapabilityStoreError::VaultReference)
+    }
+
     pub(crate) fn settle(
         &self,
         reservation: &IssuedCredentialReservation,
@@ -520,10 +563,12 @@ where
         revocations: &RevocationState,
     ) -> Result<CredentialUsageSettlement, CredentialCapabilityStoreError> {
         revocations.validate()?;
+        let now = self.clock.now_unix_seconds()?;
         let mut entries = self
             .entries
             .write()
             .map_err(|_| CredentialCapabilityStoreError::StorePoisoned)?;
+        retain_valid(&mut entries, now, revocations)?;
         let stored = entries
             .get_mut(&reservation.capability_id)
             .ok_or(CredentialCapabilityStoreError::UnknownCapability)?;
@@ -532,15 +577,7 @@ where
             .reservations
             .get_mut(&reservation.reservation_id)
             .ok_or(CredentialCapabilityStoreError::UnknownReservation)?;
-        let expected_id = derive_reservation_id(
-            &reservation.token,
-            &reservation.capability_id,
-            &request_digest,
-            stored_reservation.reserved,
-        )?;
-        if expected_id != reservation.reservation_id {
-            return Err(CredentialCapabilityStoreError::ForgedReservation);
-        }
+        authenticate_reservation(reservation, stored_reservation, &request_digest)?;
         if let Some(settlement) = &stored_reservation.settlement {
             return Ok(settlement.clone());
         }
@@ -584,7 +621,7 @@ where
             .write()
             .map_err(|_| CredentialCapabilityStoreError::StorePoisoned)?;
         let previous = entries.len();
-        retain_valid(&mut entries, now, revocations);
+        retain_valid(&mut entries, now, revocations)?;
         Ok(previous - entries.len())
     }
 
@@ -600,7 +637,12 @@ fn retain_valid(
     entries: &mut HashMap<CapabilityId, StoredCapability>,
     now_unix_seconds: i64,
     revocations: &RevocationState,
-) {
+) -> Result<(), CredentialCapabilityStoreError> {
+    for stored in entries.values_mut() {
+        if now_unix_seconds >= stored.request.expires_at_unix_seconds {
+            force_unknown_at_expiry(stored)?;
+        }
+    }
     entries.retain(|_, stored| {
         stored
             .request
@@ -611,6 +653,29 @@ fn retain_valid(
                 .values()
                 .any(|reservation| reservation.settlement.is_none())
     });
+    Ok(())
+}
+
+fn force_unknown_at_expiry(
+    stored: &mut StoredCapability,
+) -> Result<(), CredentialCapabilityStoreError> {
+    if stored.pending_usage == CredentialUsage::default() {
+        return Ok(());
+    }
+    let committed_usage = stored.committed_usage.checked_add(stored.pending_usage)?;
+    for (reservation_id, reservation) in &mut stored.reservations {
+        if reservation.settlement.is_none() {
+            reservation.settlement = Some(CredentialUsageSettlement {
+                reservation_id: reservation_id.clone(),
+                outcome: CredentialUsageOutcome::Unknown,
+                reserved: reservation.reserved,
+                charged: reservation.reserved,
+            });
+        }
+    }
+    stored.committed_usage = committed_usage;
+    stored.pending_usage = CredentialUsage::default();
+    Ok(())
 }
 
 fn authenticate_capability(
@@ -620,6 +685,23 @@ fn authenticate_capability(
     let expected_id = derive_capability_id(&capability.token, &stored.request.digest()?)?;
     if &expected_id != capability.capability_id() {
         return Err(CredentialCapabilityStoreError::ForgedCapability);
+    }
+    Ok(())
+}
+
+fn authenticate_reservation(
+    reservation: &IssuedCredentialReservation,
+    stored: &StoredReservation,
+    request_digest: &str,
+) -> Result<(), CredentialCapabilityStoreError> {
+    let expected_id = derive_reservation_id(
+        &reservation.token,
+        &reservation.capability_id,
+        request_digest,
+        stored.reserved,
+    )?;
+    if expected_id != reservation.reservation_id {
+        return Err(CredentialCapabilityStoreError::ForgedReservation);
     }
     Ok(())
 }
@@ -746,10 +828,16 @@ pub(crate) enum CredentialCapabilityStoreError {
     UnknownReservation,
     #[error("credential usage reservation bearer material is invalid")]
     ForgedReservation,
+    #[error("credential usage reservation has already authorized a dispatch")]
+    ReservationAlreadyAuthorized,
+    #[error("credential usage reservation has already been settled")]
+    ReservationSettled,
     #[error("credential metering exceeds its authenticated reservation")]
     MeteringExceedsReservation,
     #[error("credential metering outcome is internally inconsistent")]
     InvalidMeteringOutcome,
+    #[error("credential vault reference is invalid: {0}")]
+    VaultReference(ScopedCredentialError),
     #[error("credential capability digest encoding failed")]
     DigestEncoding,
     #[error(transparent)]

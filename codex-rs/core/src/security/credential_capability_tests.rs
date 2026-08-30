@@ -845,11 +845,19 @@ fn trusted_settlement_rejects_forgery_and_unknown_usage_charges_the_full_reserva
             &revocations,
         )
         .expect("reserve usage");
+    let vault_reference = store
+        .authorize_reservation_dispatch(&reservation, &revocations)
+        .expect("authorize exactly one broker dispatch");
+    assert_eq!(vault_reference.label(), "provider.openai");
+    assert!(matches!(
+        store.authorize_reservation_dispatch(&reservation, &revocations),
+        Err(CredentialCapabilityStoreError::ReservationAlreadyAuthorized)
+    ));
     let forged = IssuedCredentialReservation {
         capability_id: capability.capability_id().clone(),
         reservation_id: reservation.reservation_id().clone(),
         token: ReservationToken([0x55; CAPABILITY_TOKEN_BYTES]),
-        request: request,
+        request,
         reserved: reservation.reserved(),
     };
     assert!(matches!(
@@ -884,14 +892,57 @@ fn trusted_settlement_rejects_forgery_and_unknown_usage_charges_the_full_reserva
             .expect("duplicate settlement"),
         settlement
     );
+    assert!(matches!(
+        store.authorize_reservation_dispatch(&reservation, &revocations),
+        Err(CredentialCapabilityStoreError::ReservationSettled)
+    ));
     assert!(format!("{reservation:?}").contains("ReservationToken(<redacted>)"));
-    assert_eq!(
-        reservation
-            .vault_ref()
-            .expect("opaque broker handoff")
-            .label(),
-        "provider.openai"
-    );
+}
+
+#[test]
+fn settled_history_does_not_consume_active_reservation_capacity() {
+    let revocations = RevocationState::new();
+    let store = store(4, TestClock::new(100));
+    let request = standard_metered_request(&revocations);
+    let capability = store
+        .issue(request.clone(), &revocations)
+        .expect("issue capability");
+    {
+        let mut entries = store.entries.write().expect("store entries");
+        let stored = entries
+            .get_mut(capability.capability_id())
+            .expect("stored capability");
+        for index in 0..MAX_USAGE_RESERVATIONS_PER_CAPABILITY {
+            let reservation_id =
+                CapabilityId::from_sha256_hex(format!("{index:064x}")).expect("synthetic id");
+            let reserved = usage(
+                /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1, /*spend*/ 1,
+            );
+            stored.reservations.insert(
+                reservation_id.clone(),
+                StoredReservation {
+                    reserved,
+                    settlement: Some(CredentialUsageSettlement {
+                        reservation_id,
+                        outcome: CredentialUsageOutcome::Completed,
+                        reserved,
+                        charged: reserved,
+                    }),
+                    dispatch_authorized: true,
+                },
+            );
+        }
+    }
+    store
+        .reserve(
+            &capability,
+            &request,
+            usage(
+                /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1, /*spend*/ 1,
+            ),
+            &revocations,
+        )
+        .expect("settled history must not consume active capacity");
 }
 
 #[test]
@@ -987,7 +1038,7 @@ fn metered_authority_binds_operation_model_resource_and_settles_after_revocation
             .expect("revocation event"),
         )
         .expect("apply revocation");
-    clock.set(181);
+    clock.set(111);
     assert!(
         store
             .reserve(
@@ -1013,6 +1064,83 @@ fn metered_authority_binds_operation_model_resource_and_settles_after_revocation
         reservation.reserved()
     );
     assert_eq!(store.purge(&revocations).expect("purge settled"), 1);
+}
+
+#[test]
+fn abandoned_reservation_is_force_charged_unknown_and_reclaimed_at_expiry() {
+    let revocations = RevocationState::new();
+    let clock = TestClock::new(100);
+    let store = store(4, clock.clone());
+    let request = standard_metered_request(&revocations);
+    let capability = store
+        .issue(request.clone(), &revocations)
+        .expect("issue capability");
+    let reservation = store
+        .reserve(
+            &capability,
+            &request,
+            usage(
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+            ),
+            &revocations,
+        )
+        .expect("reserve usage");
+    {
+        let mut entries = store.entries.write().expect("store entries");
+        let stored = entries
+            .get_mut(capability.capability_id())
+            .expect("stored capability");
+        force_unknown_at_expiry(stored).expect("force unknown settlement");
+        assert_eq!(stored.pending_usage, CredentialUsage::default());
+        assert_eq!(stored.committed_usage, reservation.reserved());
+        let settlement = stored
+            .reservations
+            .get(reservation.reservation_id())
+            .and_then(|reservation| reservation.settlement.as_ref())
+            .expect("forced settlement");
+        assert_eq!(settlement.outcome, CredentialUsageOutcome::Unknown);
+        assert_eq!(settlement.charged, reservation.reserved());
+    }
+    clock.set(180);
+    assert_eq!(store.purge(&revocations).expect("reclaim expired"), 1);
+    assert_eq!(store.len().expect("empty store"), 0);
+    assert!(matches!(
+        store.settle(
+            &reservation,
+            TrustedCredentialMetering::cancelled(),
+            &revocations,
+        ),
+        Err(CredentialCapabilityStoreError::UnknownCapability)
+    ));
+
+    let late_clock = TestClock::new(100);
+    let late_store =
+        CredentialCapabilityStore::with_sources(4, late_clock.clone(), CounterEntropy::default())
+            .expect("late-settlement store");
+    let late_request = standard_metered_request(&revocations);
+    let late_capability = late_store
+        .issue(late_request.clone(), &revocations)
+        .expect("issue late-settlement capability");
+    let late_reservation = late_store
+        .reserve(
+            &late_capability,
+            &late_request,
+            usage(
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+            ),
+            &revocations,
+        )
+        .expect("reserve late-settlement usage");
+    late_clock.set(180);
+    assert!(matches!(
+        late_store.settle(
+            &late_reservation,
+            TrustedCredentialMetering::completed(late_reservation.reserved()),
+            &revocations,
+        ),
+        Err(CredentialCapabilityStoreError::UnknownCapability)
+    ));
+    assert_eq!(late_store.len().expect("late store reclaimed"), 0);
 }
 
 #[test]
