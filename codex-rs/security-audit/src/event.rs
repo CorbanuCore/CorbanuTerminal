@@ -129,9 +129,11 @@ impl RequestIdentity {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 /// A correlation identity for the authority checked by the caller.
 ///
-/// This serialized value is never authority itself. The constructors validate
-/// the PF-17/PF-18 source shape, but an effectful consumer must revalidate the
-/// live grant or mandate and the PF-19/PF-20 state immediately before dispatch.
+/// This serialized value is never authority itself. [`Self::from_grant`] and
+/// [`Self::from_mandate`] validate the PF-17/PF-18 source shape. The public
+/// variants also support fixture and recovered correlation IDs, but constructing
+/// one does not validate authority. An effectful consumer must revalidate the
+/// live grant or mandate and PF-19/PF-20 state immediately before dispatch.
 pub enum AuthorityIdentity {
     Grant { grant_id: BoundedText },
     Mandate { mandate_id: BoundedText },

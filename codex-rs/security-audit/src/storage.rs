@@ -16,6 +16,7 @@ use crate::journal::IntegrityCheckpoint;
 use crate::journal::JournalError;
 use crate::journal::JournalOwner;
 use crate::journal::validate_resolution;
+use crate::recovery::PendingDispatch;
 use crate::recovery::RecoveryBlocker;
 use crate::recovery::RecoveryState;
 
@@ -26,7 +27,7 @@ pub(crate) const GENESIS_HASH: &str =
 #[derive(Debug)]
 pub(crate) struct ScanResult {
     pub(crate) records: Vec<JournalRecord>,
-    pub(crate) revocations: RevocationState,
+    pub(crate) chain: EventChainState,
     pub(crate) interrupted_temps: usize,
 }
 
@@ -87,27 +88,42 @@ struct IntentState {
     resolved: bool,
 }
 
-pub(crate) fn validate_event_chain(
-    records: &[JournalRecord],
-    owner: &JournalOwner,
-) -> Result<RevocationState, RecoveryBlocker> {
-    let mut event_ids = BTreeSet::new();
-    let mut restrictions = BTreeSet::new();
-    let mut intents = BTreeMap::<ReservationId, IntentState>::new();
-    let mut revocations = RevocationState::new();
-    let mut policy_generation = 0;
-    let mut run_generation = 0;
-    for record in records {
-        let event = &record.event;
+#[derive(Clone, Debug)]
+pub(crate) struct EventChainState {
+    event_ids: BTreeSet<SecurityEventId>,
+    restrictions: BTreeSet<codex_security_policy::BoundedText>,
+    intents: BTreeMap<ReservationId, IntentState>,
+    revocations: RevocationState,
+    policy_generation: u64,
+    run_generation: u64,
+}
+
+impl EventChainState {
+    fn new() -> Self {
+        Self {
+            event_ids: BTreeSet::new(),
+            restrictions: BTreeSet::new(),
+            intents: BTreeMap::new(),
+            revocations: RevocationState::new(),
+            policy_generation: 0,
+            run_generation: 0,
+        }
+    }
+
+    pub(crate) fn apply(
+        &mut self,
+        event: &SecurityEvent,
+        owner: &JournalOwner,
+    ) -> Result<(), RecoveryBlocker> {
         if event.context.producer != owner.producer
-            || !event_ids.insert(event.event_id.clone())
-            || event.context.policy_generation < policy_generation
-            || event.context.run_generation < run_generation
+            || !self.event_ids.insert(event.event_id.clone())
+            || event.context.policy_generation < self.policy_generation
+            || event.context.run_generation < self.run_generation
         {
             return Err(RecoveryBlocker::InvalidRecord);
         }
-        policy_generation = event.context.policy_generation;
-        run_generation = event.context.run_generation;
+        self.policy_generation = event.context.policy_generation;
+        self.run_generation = event.context.run_generation;
         match &event.kind {
             SecurityEventKind::Decision { .. } => {}
             SecurityEventKind::DispatchIntent {
@@ -116,7 +132,8 @@ pub(crate) fn validate_event_chain(
                 authority,
                 ..
             } => {
-                if intents
+                if self
+                    .intents
                     .insert(
                         reservation_id.clone(),
                         IntentState {
@@ -137,7 +154,8 @@ pub(crate) fn validate_event_chain(
                 reservation_id,
                 resolution,
             } => {
-                let intent = intents
+                let intent = self
+                    .intents
                     .get_mut(reservation_id)
                     .ok_or(RecoveryBlocker::InvalidRecord)?;
                 if intent.resolved
@@ -151,16 +169,49 @@ pub(crate) fn validate_event_chain(
                 intent.resolved = true;
             }
             SecurityEventKind::Restriction { event } => {
-                if !restrictions.insert(event.event_id.clone()) {
+                if !self.restrictions.insert(event.event_id.clone()) {
                     return Err(RecoveryBlocker::InvalidRecord);
                 }
-                revocations
+                self.revocations
                     .apply(event)
                     .map_err(|_| RecoveryBlocker::InvalidRecord)?;
             }
         }
+        Ok(())
     }
-    Ok(revocations)
+
+    pub(crate) fn revocations(&self) -> &RevocationState {
+        &self.revocations
+    }
+
+    pub(crate) fn pending_dispatches(&self) -> Vec<PendingDispatch> {
+        self.intents
+            .iter()
+            .filter(|(_, intent)| !intent.resolved)
+            .map(|(reservation_id, intent)| PendingDispatch {
+                intent_event_id: intent.event_id.clone(),
+                action_id: intent.action_id.clone(),
+                reservation_id: reservation_id.clone(),
+            })
+            .collect()
+    }
+
+    pub(crate) fn reservation_is_resolved(&self, reservation_id: &ReservationId) -> bool {
+        self.intents
+            .get(reservation_id)
+            .is_some_and(|intent| intent.resolved)
+    }
+}
+
+pub(crate) fn validate_event_chain(
+    records: &[JournalRecord],
+    owner: &JournalOwner,
+) -> Result<EventChainState, RecoveryBlocker> {
+    let mut state = EventChainState::new();
+    for record in records {
+        state.apply(&record.event, owner)?;
+    }
+    Ok(state)
 }
 
 pub(crate) fn compare_checkpoint(

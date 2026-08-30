@@ -34,6 +34,7 @@ pub use journal::JournalOwner;
 pub use journal::ReferenceJournal;
 pub use recovery::AuditGapReason;
 pub use recovery::EmergencyRestrictionResult;
+pub use recovery::PendingDispatch;
 pub use recovery::RecoveryBlocker;
 pub use recovery::RecoveryReport;
 pub use recovery::RecoveryState;

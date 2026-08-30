@@ -105,7 +105,11 @@ impl Fixture {
         let owner =
             JournalOwner::new(producer.clone(), 1, text("integrity-key-1")).expect("journal owner");
         let roots = Arc::new(MemoryRoot::default());
-        let journal = ReferenceJournal::new(root_path.clone(), owner, roots.clone(), config);
+        let mut journal = ReferenceJournal::new(root_path.clone(), owner, roots.clone(), config);
+        assert_eq!(
+            journal.recover(1, &RevocationState::new()).state,
+            RecoveryState::Empty
+        );
         Self {
             _temp: temp,
             root_path,
@@ -117,6 +121,22 @@ impl Fixture {
 
     fn context(&self) -> EventContext {
         EventContext::new(self.producer.clone(), 1, 1).expect("event context")
+    }
+
+    fn context_at(&self, policy_generation: u64, run_generation: u64) -> EventContext {
+        EventContext::new(self.producer.clone(), policy_generation, run_generation)
+            .expect("event context")
+    }
+
+    fn restarted_journal(&self) -> ReferenceJournal {
+        let owner = JournalOwner::new(self.producer.clone(), 1, text("integrity-key-1"))
+            .expect("journal owner");
+        ReferenceJournal::new(
+            self.root_path.clone(),
+            owner,
+            self.roots.clone(),
+            JournalConfig::default(),
+        )
     }
 
     fn append_decision(&mut self) {
@@ -231,6 +251,7 @@ fn mandate_intent_precedes_completed_receipt() {
         .journal
         .resolve_dispatch(
             permit,
+            fixture.context(),
             DispatchResolution::Completed {
                 outcome: MandateOutcome::Executed,
                 mandate_receipt: Some(receipt),
@@ -262,7 +283,19 @@ fn unknown_receipt_is_terminal_and_never_auto_replayed() {
             12,
         )
         .expect("durable intent");
-    let (duplicate_permit, duplicate_ack) = fixture
+    fixture
+        .journal
+        .resolve_dispatch(
+            permit,
+            fixture.context(),
+            DispatchResolution::Unknown {
+                reason: crate::UnknownOutcomeReason::SettlementUncertain,
+            },
+            13,
+        )
+        .expect("unknown receipt");
+
+    let error = fixture
         .journal
         .reserve_dispatch(
             fixture.context(),
@@ -274,30 +307,8 @@ fn unknown_receipt_is_terminal_and_never_auto_replayed() {
             text("dispatch-1"),
             12,
         )
-        .expect("duplicate durable intent");
-    assert!(duplicate_ack.duplicate);
-    fixture
-        .journal
-        .resolve_dispatch(
-            permit,
-            DispatchResolution::Unknown {
-                reason: crate::UnknownOutcomeReason::SettlementUncertain,
-            },
-            13,
-        )
-        .expect("unknown receipt");
-
-    let error = fixture
-        .journal
-        .resolve_dispatch(
-            duplicate_permit,
-            DispatchResolution::Unknown {
-                reason: crate::UnknownOutcomeReason::SettlementUncertain,
-            },
-            14,
-        )
-        .expect_err("second resolution must fail");
-    assert!(matches!(error, JournalError::InvalidEventSequence));
+        .expect_err("terminal reservation must never issue another permit");
+    assert!(matches!(error, JournalError::AlreadyResolved));
 }
 
 #[test]
@@ -438,7 +449,7 @@ fn ambiguous_commit_after_rename_remains_fail_closed() {
 }
 
 #[test]
-fn lost_ack_is_recovered_by_retrying_the_same_identity() {
+fn lost_ack_retry_never_reissues_a_dispatch_permit() {
     let mut fixture = Fixture::new(JournalConfig::default());
     fixture.append_decision();
     fixture.journal.inject_once(
@@ -460,7 +471,7 @@ fn lost_ack_is_recovered_by_retrying_the_same_identity() {
         Err(JournalError::AcknowledgementLost { .. })
     ));
 
-    let (_, retry) = fixture
+    let retry = fixture
         .journal
         .reserve_dispatch(
             fixture.context(),
@@ -472,9 +483,8 @@ fn lost_ack_is_recovered_by_retrying_the_same_identity() {
             text("dispatch-1"),
             12,
         )
-        .expect("retry must return durable duplicate");
-    assert!(retry.duplicate);
-    assert_eq!(retry.sequence, 2);
+        .expect_err("retry must reconcile instead of replaying");
+    assert!(matches!(retry, JournalError::AlreadyReserved));
 }
 
 #[test]
@@ -591,7 +601,9 @@ fn segment_rotation_preserves_chain_and_recovery() {
             .as_path()
             .is_dir()
     );
-    healthy_recovery(&mut fixture);
+    let report = fixture.journal.recover(1, &RevocationState::new());
+    assert_eq!(report.state, RecoveryState::ReconciliationRequired);
+    assert_eq!(report.pending_dispatches.len(), 1);
 }
 
 #[test]
@@ -742,4 +754,190 @@ fn malformed_segment_names_fail_recovery_closed() {
         report.state,
         RecoveryState::Blocked(RecoveryBlocker::InvalidRecord)
     );
+}
+
+#[test]
+fn fresh_journal_requires_recovery_before_any_append() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    fixture.append_decision();
+    let mut restarted = fixture.restarted_journal();
+    let request = request();
+    let decision = permissive_decision(&request).expect("decision");
+    let event = SecurityEvent::decision(fixture.context(), None, &request, decision, 12)
+        .expect("decision event");
+
+    let error = restarted
+        .record_decision(event)
+        .expect_err("unrecovered journal must fail closed");
+
+    assert!(matches!(error, JournalError::RecoveryRequired));
+}
+
+#[test]
+fn recovery_accepts_first_install_and_forward_policy_generation() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    assert_eq!(
+        fixture.journal.recover(7, &RevocationState::new()).state,
+        RecoveryState::Empty
+    );
+    let first_request = request();
+    let decision = permissive_decision(&first_request).expect("decision");
+    let event =
+        SecurityEvent::decision(fixture.context_at(7, 1), None, &first_request, decision, 12)
+            .expect("generation-seven decision");
+    fixture
+        .journal
+        .record_decision(event)
+        .expect("first-install generation append");
+    assert_eq!(
+        fixture.journal.recover(8, &RevocationState::new()).state,
+        RecoveryState::Ready
+    );
+    let second_request = request();
+    let decision = permissive_decision(&second_request).expect("decision");
+    let event = SecurityEvent::decision(
+        fixture.context_at(8, 1),
+        None,
+        &second_request,
+        decision,
+        13,
+    )
+    .expect("generation-eight decision");
+    fixture
+        .journal
+        .record_decision(event)
+        .expect("forward generation append");
+
+    let rollback = fixture.journal.recover(7, &RevocationState::new());
+    assert_eq!(
+        rollback.state,
+        RecoveryState::Blocked(RecoveryBlocker::PolicyGenerationMismatch)
+    );
+}
+
+#[test]
+fn recovered_pending_intent_is_visible_and_reconciled_unknown() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    let (_, intent) = fixture
+        .journal
+        .reserve_dispatch(
+            fixture.context(),
+            None,
+            &request(),
+            AuthorityIdentity::Grant {
+                grant_id: text("grant-1"),
+            },
+            text("dispatch-1"),
+            12,
+        )
+        .expect("durable intent");
+    assert_eq!(intent.sequence, 1);
+
+    let mut restarted = fixture.restarted_journal();
+    let report = restarted.recover(1, &RevocationState::new());
+    assert_eq!(report.state, RecoveryState::ReconciliationRequired);
+    assert_eq!(report.pending_dispatches.len(), 1);
+    assert!(!report.permits_protected_dispatch());
+    let reserve_error = restarted
+        .reserve_dispatch(
+            fixture.context(),
+            None,
+            &request(),
+            AuthorityIdentity::Grant {
+                grant_id: text("grant-2"),
+            },
+            text("dispatch-2"),
+            13,
+        )
+        .expect_err("pending recovery must block new dispatch");
+    assert!(matches!(
+        reserve_error,
+        JournalError::ReconciliationRequired
+    ));
+
+    restarted
+        .reconcile_dispatch_as_unknown(
+            &report.pending_dispatches[0],
+            fixture.context(),
+            crate::UnknownOutcomeReason::PersistenceUncertain,
+            13,
+        )
+        .expect("unknown reconciliation");
+    let ready = restarted.recover(1, &RevocationState::new());
+    assert!(ready.pending_dispatches.is_empty());
+    assert!(ready.permits_protected_dispatch());
+}
+
+#[test]
+fn resolution_uses_live_generation_after_policy_advances() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    let (permit, _) = fixture
+        .journal
+        .reserve_dispatch(
+            fixture.context(),
+            None,
+            &request(),
+            AuthorityIdentity::Grant {
+                grant_id: text("grant-1"),
+            },
+            text("dispatch-1"),
+            12,
+        )
+        .expect("durable intent");
+    let request = request();
+    let decision = permissive_decision(&request).expect("decision");
+    let generation_two = fixture.context_at(2, 1);
+    let event = SecurityEvent::decision(generation_two.clone(), None, &request, decision, 13)
+        .expect("generation-two decision");
+    fixture
+        .journal
+        .record_decision(event)
+        .expect("advance generation");
+
+    fixture
+        .journal
+        .resolve_dispatch(
+            permit,
+            generation_two,
+            DispatchResolution::Unknown {
+                reason: crate::UnknownOutcomeReason::TransportLost,
+            },
+            14,
+        )
+        .expect("terminal receipt at current generation");
+    assert_eq!(
+        fixture.journal.recover(2, &RevocationState::new()).state,
+        RecoveryState::Ready
+    );
+}
+
+#[test]
+fn directory_sync_failure_after_publish_is_ambiguous_and_blocks() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    fixture
+        .journal
+        .inject_once(FaultPoint::BeforeDirectorySync, InjectedFault::Crash);
+    let decision_request = request();
+    let decision = permissive_decision(&decision_request).expect("decision");
+    let event = SecurityEvent::decision(fixture.context(), None, &decision_request, decision, 11)
+        .expect("decision event");
+
+    let error = fixture
+        .journal
+        .record_decision(event)
+        .expect_err("published record without directory sync is ambiguous");
+    assert!(matches!(error, JournalError::CommitUnknown { .. }));
+    assert!(matches!(
+        fixture.journal.reserve_dispatch(
+            fixture.context(),
+            None,
+            &request(),
+            AuthorityIdentity::Grant {
+                grant_id: text("grant-1"),
+            },
+            text("dispatch-1"),
+            12,
+        ),
+        Err(JournalError::RecoveryRequired)
+    ));
 }

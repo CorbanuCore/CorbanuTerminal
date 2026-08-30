@@ -1,4 +1,5 @@
 use std::fs;
+#[cfg(not(windows))]
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -17,6 +18,7 @@ use crate::ActionId;
 use crate::AuthorityIdentity;
 use crate::DispatchResolution;
 use crate::EventContext;
+use crate::PendingDispatch;
 use crate::ReservationId;
 use crate::SecurityEvent;
 use crate::SecurityEventError;
@@ -24,6 +26,7 @@ use crate::SecurityEventId;
 use crate::SecurityEventKind;
 use crate::recovery::RecoveryBlocker;
 use crate::recovery::RecoveryReport;
+use crate::recovery::RecoveryState;
 use crate::storage::GENESIS_HASH;
 use crate::storage::JournalRecord;
 use crate::storage::ScanResult;
@@ -204,6 +207,8 @@ pub struct ReferenceJournal {
     pub(crate) root_store: Arc<dyn IntegrityRootStore>,
     pub(crate) config: JournalConfig,
     pub(crate) blocked: bool,
+    pub(crate) reconciliation_required: bool,
+    pub(crate) minimum_policy_generation: u64,
     #[cfg(test)]
     fault: Option<(FaultPoint, InjectedFault)>,
 }
@@ -215,6 +220,8 @@ impl std::fmt::Debug for ReferenceJournal {
             .field("owner", &self.owner)
             .field("config", &self.config)
             .field("blocked", &self.blocked)
+            .field("reconciliation_required", &self.reconciliation_required)
+            .field("minimum_policy_generation", &self.minimum_policy_generation)
             .finish_non_exhaustive()
     }
 }
@@ -231,7 +238,9 @@ impl ReferenceJournal {
             owner,
             root_store,
             config,
-            blocked: false,
+            blocked: true,
+            reconciliation_required: false,
+            minimum_policy_generation: 0,
             #[cfg(test)]
             fault: None,
         }
@@ -245,6 +254,7 @@ impl ReferenceJournal {
             return Err(JournalError::WrongEventKind);
         }
         self.append(event)
+            .map(|(acknowledgement, _)| acknowledgement)
     }
 
     pub fn reserve_dispatch(
@@ -256,6 +266,9 @@ impl ReferenceJournal {
         deduplication_key: BoundedText,
         occurred_at_unix_seconds: i64,
     ) -> Result<(DispatchPermit, AppendAcknowledgement), JournalError> {
+        if self.reconciliation_required {
+            return Err(JournalError::ReconciliationRequired);
+        }
         let event = SecurityEvent::dispatch_intent(
             context.clone(),
             causal_parent,
@@ -279,19 +292,33 @@ impl ReferenceJournal {
             reservation_id: reservation_id.clone(),
             authority,
         };
-        let acknowledgement = self.append(event)?;
+        let (acknowledgement, duplicate_terminal) = self.append(event)?;
+        if acknowledgement.duplicate {
+            return Err(if duplicate_terminal {
+                JournalError::AlreadyResolved
+            } else {
+                JournalError::AlreadyReserved
+            });
+        }
         Ok((permit, acknowledgement))
     }
 
     pub fn resolve_dispatch(
         &mut self,
         permit: DispatchPermit,
+        current_context: EventContext,
         resolution: DispatchResolution,
         occurred_at_unix_seconds: i64,
     ) -> Result<AppendAcknowledgement, JournalError> {
+        if current_context.producer != permit.context.producer
+            || current_context.policy_generation < permit.context.policy_generation
+            || current_context.run_generation < permit.context.run_generation
+        {
+            return Err(JournalError::InvalidResolution);
+        }
         validate_resolution(&permit.authority, &resolution)?;
         let event = SecurityEvent::dispatch_resolution(
-            permit.context.clone(),
+            current_context,
             permit.intent_event_id.clone(),
             permit.action_id.clone(),
             permit.reservation_id.clone(),
@@ -299,6 +326,33 @@ impl ReferenceJournal {
             occurred_at_unix_seconds,
         )?;
         self.append(event)
+            .map(|(acknowledgement, _)| acknowledgement)
+    }
+
+    /// Reconciles an intent found during recovery as explicitly unknown.
+    ///
+    /// This never authorizes or replays the external effect. The current
+    /// context must come from the live PF-20 state and advance monotonically.
+    pub fn reconcile_dispatch_as_unknown(
+        &mut self,
+        pending: &PendingDispatch,
+        current_context: EventContext,
+        reason: crate::UnknownOutcomeReason,
+        occurred_at_unix_seconds: i64,
+    ) -> Result<AppendAcknowledgement, JournalError> {
+        if !self.reconciliation_required {
+            return Err(JournalError::InvalidResolution);
+        }
+        let event = SecurityEvent::dispatch_resolution(
+            current_context,
+            pending.intent_event_id.clone(),
+            pending.action_id.clone(),
+            pending.reservation_id.clone(),
+            DispatchResolution::Unknown { reason },
+            occurred_at_unix_seconds,
+        )?;
+        self.append(event)
+            .map(|(acknowledgement, _)| acknowledgement)
     }
 
     pub fn record_restriction(
@@ -308,6 +362,7 @@ impl ReferenceJournal {
         event: codex_security_policy::RevocationEvent,
     ) -> Result<AppendAcknowledgement, JournalError> {
         self.append(SecurityEvent::restriction(context, causal_parent, event)?)
+            .map(|(acknowledgement, _)| acknowledgement)
     }
 
     pub fn recover(
@@ -324,11 +379,18 @@ impl ReferenceJournal {
             return RecoveryReport::blocked(RecoveryBlocker::InterruptedWrite);
         }
         let report = self.inspect(Some((expected_policy_generation, expected_revocations)));
-        self.blocked = !report.permits_protected_dispatch();
+        self.blocked = !report.permits_journal_writes();
+        self.reconciliation_required = !self.blocked && !report.pending_dispatches.is_empty();
+        if !self.blocked {
+            self.minimum_policy_generation = expected_policy_generation;
+        }
         report
     }
 
-    fn append(&mut self, event: SecurityEvent) -> Result<AppendAcknowledgement, JournalError> {
+    fn append(
+        &mut self,
+        event: SecurityEvent,
+    ) -> Result<(AppendAcknowledgement, bool), JournalError> {
         if self.blocked {
             return Err(JournalError::RecoveryRequired);
         }
@@ -336,17 +398,23 @@ impl ReferenceJournal {
         if event.context.producer != self.owner.producer {
             return Err(JournalError::ProducerMismatch);
         }
-        let _lock = self.writer_lock()?;
-        let report = self.inspect(None);
-        if !report.permits_protected_dispatch() {
-            self.blocked = true;
-            return Err(JournalError::RecoveryRequired);
+        if event.context.policy_generation < self.minimum_policy_generation {
+            return Err(JournalError::InvalidEventSequence);
         }
+        let _lock = self.writer_lock()?;
         let scan = self.scan_records().map_err(|blocker| {
             self.blocked = true;
             map_blocker(blocker)
         })?;
+        if scan.interrupted_temps != 0 {
+            self.blocked = true;
+            return Err(JournalError::RecoveryRequired);
+        }
         let checkpoint = self.load_checkpoint().map_err(|blocker| {
+            self.blocked = true;
+            map_blocker(blocker)
+        })?;
+        compare_checkpoint(&scan.records, checkpoint.as_ref(), &self.owner).map_err(|blocker| {
             self.blocked = true;
             map_blocker(blocker)
         })?;
@@ -357,12 +425,21 @@ impl ReferenceJournal {
             .find(|record| record.event.event_id == event.event_id)
         {
             let checkpoint = checkpoint.ok_or(JournalError::RecoveryRequired)?;
-            return Ok(AppendAcknowledgement {
-                event_id: event.event_id,
-                sequence: existing.sequence,
-                checkpoint,
-                duplicate: true,
-            });
+            let duplicate_terminal = match &event.kind {
+                SecurityEventKind::DispatchIntent { reservation_id, .. } => {
+                    scan.chain.reservation_is_resolved(reservation_id)
+                }
+                _ => false,
+            };
+            return Ok((
+                AppendAcknowledgement {
+                    event_id: event.event_id,
+                    sequence: existing.sequence,
+                    checkpoint,
+                    duplicate: true,
+                },
+                duplicate_terminal,
+            ));
         }
         if scan.records.len() >= self.config.max_records {
             self.blocked = true;
@@ -378,9 +455,9 @@ impl ReferenceJournal {
             |record| record.record_sha256.clone(),
         );
         let record = JournalRecord::new(sequence, previous, event)?;
-        let mut candidate_records = scan.records;
-        candidate_records.push(record.clone());
-        validate_event_chain(&candidate_records, &self.owner)
+        let mut candidate_chain = scan.chain;
+        candidate_chain
+            .apply(&record.event, &self.owner)
             .map_err(|_| JournalError::InvalidEventSequence)?;
 
         #[cfg(test)]
@@ -414,12 +491,18 @@ impl ReferenceJournal {
         #[cfg(test)]
         self.maybe_fault(FaultPoint::AfterRootCommit, &record.event.event_id)?;
 
-        Ok(AppendAcknowledgement {
-            event_id: record.event.event_id,
-            sequence,
-            checkpoint: next_checkpoint,
-            duplicate: false,
-        })
+        if self.reconciliation_required && candidate_chain.pending_dispatches().is_empty() {
+            self.reconciliation_required = false;
+        }
+        Ok((
+            AppendAcknowledgement {
+                event_id: record.event.event_id,
+                sequence,
+                checkpoint: next_checkpoint,
+                duplicate: false,
+            },
+            false,
+        ))
     }
 
     fn inspect(&self, expected: Option<(u64, &RevocationState)>) -> RecoveryReport {
@@ -441,19 +524,25 @@ impl ReferenceJournal {
         if let Some((policy_generation, revocations)) = expected {
             if checkpoint
                 .as_ref()
-                .is_some_and(|root| root.policy_generation != policy_generation)
-                || checkpoint.is_none() && policy_generation != 0
+                .is_some_and(|root| root.policy_generation > policy_generation)
             {
                 return RecoveryReport::blocked(RecoveryBlocker::PolicyGenerationMismatch);
             }
-            if &scan.revocations != revocations {
+            if scan.chain.revocations() != revocations {
                 return RecoveryReport::blocked(RecoveryBlocker::RestrictionAuditGap);
             }
         }
+        let pending_dispatches = scan.chain.pending_dispatches();
+        let state = if pending_dispatches.is_empty() {
+            state
+        } else {
+            RecoveryState::ReconciliationRequired
+        };
         RecoveryReport {
             state,
             event_count: scan.records.len(),
             checkpoint,
+            pending_dispatches,
         }
     }
 
@@ -530,10 +619,10 @@ impl ReferenceJournal {
             previous = record.record_sha256.clone();
             records.push(record);
         }
-        let revocations = validate_event_chain(&records, &self.owner)?;
+        let chain = validate_event_chain(&records, &self.owner)?;
         Ok(ScanResult {
             records,
-            revocations,
+            chain,
             interrupted_temps,
         })
     }
@@ -603,12 +692,20 @@ impl ReferenceJournal {
                 event_id: record.event.event_id.clone(),
             }
         })?;
+        #[cfg(test)]
+        self.maybe_fault(FaultPoint::BeforeDirectorySync, &record.event.event_id)?;
         sync_directory(
             final_path
                 .parent()
                 .as_ref()
                 .ok_or(JournalError::StorageUnavailable)?,
         )
+        .map_err(|_| {
+            self.blocked = true;
+            JournalError::CommitUnknown {
+                event_id: record.event.event_id.clone(),
+            }
+        })
     }
 
     fn clean_temps(&self) -> Result<(), JournalError> {
@@ -710,6 +807,7 @@ impl ReferenceJournal {
 pub(crate) enum FaultPoint {
     BeforeRecordWrite,
     AfterRecordSync,
+    BeforeDirectorySync,
     AfterRecordRename,
     AfterRootCommit,
 }
@@ -763,10 +861,19 @@ fn ensure_directory(path: &std::path::Path) -> std::io::Result<()> {
     Ok(())
 }
 
+#[cfg(not(windows))]
 fn sync_directory(path: &AbsolutePathBuf) -> Result<(), JournalError> {
     File::open(path.as_path())
         .and_then(|directory| directory.sync_all())
         .map_err(|_| JournalError::StorageUnavailable)
+}
+
+// Windows does not support opening a directory with std::fs::File. The PF-20
+// protected root remains authoritative: loss of an unsynced local entry is
+// detected as truncation against that root and fails closed on recovery.
+#[cfg(windows)]
+fn sync_directory(_path: &AbsolutePathBuf) -> Result<(), JournalError> {
+    Ok(())
 }
 
 fn segment_number_for_path(
@@ -838,6 +945,12 @@ pub enum JournalError {
     WrongEventKind,
     #[error("dispatch resolution does not match its durable intent")]
     InvalidResolution,
+    #[error("dispatch reservation already has a terminal receipt")]
+    AlreadyResolved,
+    #[error("dispatch reservation is already durable; reconcile instead of replaying")]
+    AlreadyReserved,
+    #[error("unresolved recovered dispatches require explicit reconciliation")]
+    ReconciliationRequired,
     #[error("security event violates journal ordering or causal invariants")]
     InvalidEventSequence,
     #[error("journal must recover before protected dispatch")]

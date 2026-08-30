@@ -51,6 +51,18 @@ class DurableAuditContractTests(unittest.TestCase):
             self.contract["dispatch_contract"]["automatic_replay_after_unknown"],
             False,
         )
+        self.assertIs(
+            self.contract["dispatch_contract"]["duplicate_intent_returns_permit"],
+            False,
+        )
+        self.assertIs(
+            self.contract["dispatch_contract"]["recovery_required_before_append"],
+            True,
+        )
+        self.assertIs(
+            self.contract["dispatch_contract"]["pending_intents_block_new_dispatch"],
+            True,
+        )
 
 
 if __name__ == "__main__":

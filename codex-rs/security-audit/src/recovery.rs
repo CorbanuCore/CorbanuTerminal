@@ -6,10 +6,12 @@ use codex_security_policy::RevocationState;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::ActionId;
 use crate::EventContext;
 use crate::IntegrityCheckpoint;
 use crate::JournalError;
 use crate::ReferenceJournal;
+use crate::ReservationId;
 use crate::SecurityEventId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -33,6 +35,7 @@ pub enum RecoveryBlocker {
 pub enum RecoveryState {
     Empty,
     Ready,
+    ReconciliationRequired,
     Blocked(RecoveryBlocker),
 }
 
@@ -41,6 +44,18 @@ pub struct RecoveryReport {
     pub state: RecoveryState,
     pub event_count: usize,
     pub checkpoint: Option<IntegrityCheckpoint>,
+    /// Durable intents without a terminal completed/unknown receipt.
+    ///
+    /// Consumers must reconcile every entry as explicitly unknown before
+    /// starting another protected dispatch after recovery.
+    pub pending_dispatches: Vec<PendingDispatch>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PendingDispatch {
+    pub intent_event_id: SecurityEventId,
+    pub action_id: ActionId,
+    pub reservation_id: ReservationId,
 }
 
 impl RecoveryReport {
@@ -49,11 +64,20 @@ impl RecoveryReport {
             state: RecoveryState::Blocked(blocker),
             event_count: 0,
             checkpoint: None,
+            pending_dispatches: Vec::new(),
         }
     }
 
     pub fn permits_protected_dispatch(&self) -> bool {
         matches!(self.state, RecoveryState::Empty | RecoveryState::Ready)
+            && self.pending_dispatches.is_empty()
+    }
+
+    pub(crate) fn permits_journal_writes(&self) -> bool {
+        matches!(
+            self.state,
+            RecoveryState::Empty | RecoveryState::Ready | RecoveryState::ReconciliationRequired
+        )
     }
 }
 
@@ -116,6 +140,8 @@ impl From<&JournalError> for AuditGapReason {
         match error {
             JournalError::Event(_)
             | JournalError::InvalidResolution
+            | JournalError::AlreadyReserved
+            | JournalError::AlreadyResolved
             | JournalError::InvalidEventSequence => Self::InvalidEvent,
             JournalError::StorageUnavailable | JournalError::IntegrityRootUnavailable => {
                 Self::StorageUnavailable
@@ -124,7 +150,9 @@ impl From<&JournalError> for AuditGapReason {
             JournalError::CommitUnknown { .. } | JournalError::AcknowledgementLost { .. } => {
                 Self::CommitUnknown
             }
-            JournalError::RecoveryRequired => Self::RecoveryRequired,
+            JournalError::RecoveryRequired | JournalError::ReconciliationRequired => {
+                Self::RecoveryRequired
+            }
             JournalError::ConcurrentWriter => Self::ConcurrentWriter,
             JournalError::CapacityExceeded => Self::CapacityExceeded,
             JournalError::ProducerMismatch

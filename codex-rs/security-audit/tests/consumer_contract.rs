@@ -67,6 +67,10 @@ fn public_consumer_contract_requires_intent_then_terminal_receipt() {
         Arc::new(ControllerRoot::default()),
         JournalConfig::default(),
     );
+    assert_eq!(
+        journal.recover(0, &RevocationState::new()).state,
+        RecoveryState::Empty
+    );
     let request = AuthorizationRequest::new(
         ActorChain::new(vec![
             principal(PrincipalKind::Human, "human-1"),
@@ -90,7 +94,7 @@ fn public_consumer_contract_requires_intent_then_terminal_receipt() {
     let context = EventContext::new(producer, 0, 1).expect("event context");
     let (permit, intent) = journal
         .reserve_dispatch(
-            context,
+            context.clone(),
             None,
             &request,
             AuthorityIdentity::Grant {
@@ -103,6 +107,7 @@ fn public_consumer_contract_requires_intent_then_terminal_receipt() {
     let receipt = journal
         .resolve_dispatch(
             permit,
+            context,
             DispatchResolution::Unknown {
                 reason: UnknownOutcomeReason::TransportLost,
             },

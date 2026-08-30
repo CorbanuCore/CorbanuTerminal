@@ -32,10 +32,25 @@ completed result (with the existing PF-18 mandate receipt where applicable) or
 an explicit unknown result. Unknown is terminal and requires human or
 adapter-specific reconciliation; it is not a replay instruction.
 
+Every journal starts blocked and requires successful recovery against the live
+PF-20 policy generation and revocation state before its first append. Retrying
+an existing reservation never returns another permit: unresolved duplicates
+require reconciliation and resolved duplicates are rejected. Recovery exposes
+all durable intents without a terminal receipt as `pending_dispatches`, reports
+`ReconciliationRequired`, and blocks new dispatch until each is appended as
+explicitly unknown through `reconcile_dispatch_as_unknown`. Normal resolution
+accepts the current live event context so a policy/run generation advance cannot
+strand an older intent.
+
 Emergency restriction uses PF-19 state first and attempts the audit append
 second. Failed audit persistence cannot delay or undo the fence. Recovery
 compares the reconstructed restriction ledger with PF-20 state, exposes any gap,
 and blocks protected dispatch until reconciled.
+
+On Windows, where Rust cannot fsync a directory handle, the local directory
+sync step is a documented no-op matching the existing PF-20 store. The external
+protected root remains authoritative: loss of a local entry is detected as
+truncation and blocks recovery rather than becoming silent success.
 
 [`consumer-contract-v1.json`](consumer-contract-v1.json) is a machine-readable
 handoff fixture. Its `runtime_activation` value is permanently `false`; real

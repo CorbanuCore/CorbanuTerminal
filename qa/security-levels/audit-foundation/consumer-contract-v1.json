@@ -26,6 +26,10 @@
   "dispatch_contract": {
     "intent_before_external_effect": true,
     "permit_serializable": false,
+    "duplicate_intent_returns_permit": false,
+    "recovery_required_before_append": true,
+    "pending_intents_block_new_dispatch": true,
+    "pending_intents_reconcile_as_unknown": true,
     "terminal_receipts": [
       "completed",
       "unknown"
