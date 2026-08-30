@@ -45,10 +45,21 @@ hashes all tracked execution recipe inputs, rejects in-worktree artifacts,
 prunes stale control targets, preserves primary errors through cleanup, removes
 per-run detached sources, and uses a test-anchored lexical Rust extractor.
 
+A second read-only review in the same authenticated TMUX/Corbanu/Opus 5 Plan
+max session found seven residual harness/evidence issues. Commit
+`a6e933b03a91e16e9642f9ce996a52dff5719a3e` fixes all seven: preparation tests
+inject a fixed review time; cleanup retries cannot suppress otherwise complete
+evidence and are recorded as warnings; bounded captures preserve both head and
+tail; stale-target iteration is snapshotted; immutable-probe wording is exact;
+the shared-plan CLI integration action is explicit; and only `Exception` is
+captured by the contract-error path. The findings transcript is outside the
+repository at `tmux-review/remediation-review-findings-transcript.txt`, SHA-256
+`da2c8c88217b4a7d2c731249ee36c3a6dc06de1e3d9008c74e1df7fa0003467b`.
+
 ## Remediated deterministic verification
 
 - Clean implementation commit:
-  `7adff552130ec922e9ae85d927001869090ef634`. The generated report records that
+  `a6e933b03a91e16e9642f9ce996a52dff5719a3e`. The generated report records that
   exact source commit, an empty `source_dirty_paths` array and
   `candidate_runtime_tree: clean`.
 - Exact command (run from the allocated worktree):
@@ -60,19 +71,19 @@ per-run detached sources, and uses a test-anchored lexical Rust extractor.
     --candidate /Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-compatibility-drift/candidate-target/debug/corbanu \
     --cache-root /Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-compatibility-drift/cache \
     --temp-root /Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-compatibility-drift/tmp \
-    --output /Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-compatibility-drift/full-run-5
+    --output /Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-compatibility-drift/full-run-6
   ```
 
 - Result: PASS, 36/36 exact tests: nine inherited cases on each of baseline,
   upstream and candidate (27), four candidate-only protected cases, and five
   immutable S01 probes. Every recorded command executed exactly one test.
 - Report:
-  `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-compatibility-drift/full-run-5/compatibility-report.json`,
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-compatibility-drift/full-run-6/compatibility-report.json`,
   SHA-256
-  `2a94da7019ddff70f9c9aa2810155205f5f964b650f65352ca80bd288ab3e087`.
-- Identities: baseline binary `c8fb4a879a64604c17fe9500864377f86985d180b1627d3af77a3e29e869da88`
+  `2f36a490e88920decc1a0f21edaf84f18a2ab8f8c6d543c6085ed59a74144187`.
+- Identities: baseline binary `814f3aa7e2c03e14b97300fa940ac3f53ae204b5801034662816f74c3e899219`
   (`corbanu 0.1.35`); upstream binary
-  `1b20f5ef0dfa59734bfddd5311690ee1c068515c4c2085e3bfe96bffe3c7fdba`
+  `ecda5252a371b7b3a3faec4494803d1e1afd36be4898d4a5a524349c6edb70c2`
   (`corbanu 0.1.34`); candidate binary
   `9675ddfa7f3e558a46c7bf75611553939d51055a986ab316e1699e0e6b2c90a0`
   (`corbanu 0.1.35`). Baseline/upstream `codex-rs` tree identities are the
@@ -85,9 +96,10 @@ per-run detached sources, and uses a test-anchored lexical Rust extractor.
   `fbf6d9f7eee3b7d067fbdecbe52e9ac465330116eb134482f8ef73386cf364fe`;
   environment digest
   `a1ebaf35d76a84b468a23702ebae7087a8f25e4a7389d71988e62086fd984cf4`.
-- The harness removed its detached per-run source root (`run_root: null`) and
-  retained only the two bounded control targets. The report and all build,
-  cache and temporary artifacts live on `CorbanuDrive` outside the worktree.
+- The harness removed its detached per-run source root (`run_root: null`),
+  recorded an empty `cleanup_warnings` array, and retained only the two bounded
+  control targets. The report and all build, cache and temporary artifacts live
+  on `CorbanuDrive` outside the worktree.
 - `ruff format --check scripts/security_level_compat.py scripts/test_security_level_compat.py`,
   `ruff check scripts/security_level_compat.py scripts/test_security_level_compat.py`,
   and `python3 -m unittest scripts.test_security_level_compat -v` pass; the
