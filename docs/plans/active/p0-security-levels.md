@@ -66,6 +66,13 @@ complete reflected-secret removal, missing-lineage handling, proxy/DNS bypasses
 and migration ownership. Upstream's trusted-host defaults are not Moderate or
 Aggressive guarantees.
 
+Local source-reference input: `/Volumes/CorbanuDrive/Corbanu/.codex-work/references/openclaw-13adff02`.
+It is a clean detached checkout of `https://github.com/openclaw/openclaw.git` at
+the exact review pin above, with Git hooks disabled; all 42 files in the recorded
+source manifest matched their SHA-256 values on 2026-08-30. Agents should use it
+for local source reads without fetching, switching revisions, installing or
+running OpenClaw. A pin change requires an explicit review update first.
+
 For each adaptation, record the pinned upstream function/test, Corbanu owner and
 small Codex integration hook, license notice, deliberate differences and final-tree
 regression evidence. Keep the source checkout/reference outside the Corbanu runtime
