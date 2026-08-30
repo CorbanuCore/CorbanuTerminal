@@ -86,7 +86,6 @@ impl RecoveryReport {
 pub enum AuditGapReason {
     InvalidEvent,
     StorageUnavailable,
-    DeadlineExceeded,
     CommitUnknown,
     RecoveryRequired,
     ConcurrentWriter,
@@ -140,16 +139,13 @@ impl From<&JournalError> for AuditGapReason {
         match error {
             JournalError::Event(_)
             | JournalError::InvalidResolution
-            | JournalError::AlreadyReserved
-            | JournalError::AlreadyResolved
+            | JournalError::AlreadyReserved { .. }
+            | JournalError::AlreadyResolved { .. }
             | JournalError::InvalidEventSequence => Self::InvalidEvent,
             JournalError::StorageUnavailable | JournalError::IntegrityRootUnavailable => {
                 Self::StorageUnavailable
             }
-            JournalError::DeadlineExceeded => Self::DeadlineExceeded,
-            JournalError::CommitUnknown { .. } | JournalError::AcknowledgementLost { .. } => {
-                Self::CommitUnknown
-            }
+            JournalError::CommitUnknown { .. } => Self::CommitUnknown,
             JournalError::RecoveryRequired | JournalError::ReconciliationRequired => {
                 Self::RecoveryRequired
             }

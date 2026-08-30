@@ -41,8 +41,7 @@
   },
   "fail_closed_outcomes": [
     "disk_full",
-    "deadline_exceeded",
-    "acknowledgement_lost",
+    "integrity_root_timeout_commit_unknown",
     "ambiguous_commit",
     "queue_saturation",
     "missing_integrity_key",

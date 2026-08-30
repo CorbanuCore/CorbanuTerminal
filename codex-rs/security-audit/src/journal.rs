@@ -227,6 +227,13 @@ struct ValidatedJournalState {
     chain: EventChainState,
 }
 
+#[derive(Clone, Debug)]
+struct DuplicateDispatch {
+    action_id: ActionId,
+    reservation_id: ReservationId,
+    resolved: bool,
+}
+
 impl std::fmt::Debug for ReferenceJournal {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
@@ -309,12 +316,22 @@ impl ReferenceJournal {
             reservation_id: reservation_id.clone(),
             authority,
         };
-        let (acknowledgement, duplicate_terminal) = self.append(event)?;
-        if acknowledgement.duplicate {
-            return Err(if duplicate_terminal {
-                JournalError::AlreadyResolved
+        let (acknowledgement, duplicate) = self.append(event)?;
+        if let Some(duplicate) = duplicate {
+            return Err(if duplicate.resolved {
+                JournalError::AlreadyResolved {
+                    event_id: acknowledgement.event_id,
+                    action_id: duplicate.action_id,
+                    reservation_id: duplicate.reservation_id,
+                    sequence: acknowledgement.sequence,
+                }
             } else {
-                JournalError::AlreadyReserved
+                JournalError::AlreadyReserved {
+                    event_id: acknowledgement.event_id,
+                    action_id: duplicate.action_id,
+                    reservation_id: duplicate.reservation_id,
+                    sequence: acknowledgement.sequence,
+                }
             });
         }
         Ok((permit, acknowledgement))
@@ -428,11 +445,29 @@ impl ReferenceJournal {
         if scan.interrupted_temps != 0 || scan.chain.revocations() != expected_revocations {
             return Err(JournalError::AmbiguousCommitMismatch);
         }
-        let checkpoint = self.load_checkpoint().map_err(map_blocker)?;
-        let committed_count = checkpoint.as_ref().map_or(0, |root| {
-            usize::try_from(root.sequence).unwrap_or(usize::MAX)
-        });
+        let checkpoint = self
+            .load_checkpoint()
+            .map_err(map_blocker)?
+            .ok_or(JournalError::AmbiguousCommitMismatch)?;
+        if checkpoint.producer != self.owner.producer
+            || checkpoint.owner_generation != self.owner.owner_generation
+            || checkpoint.integrity_key_id != self.owner.integrity_key_id
+        {
+            return Err(JournalError::AmbiguousCommitMismatch);
+        }
+        let committed_count = usize::try_from(checkpoint.sequence)
+            .map_err(|_| JournalError::AmbiguousCommitMismatch)?;
         if scan.records.len() != committed_count.saturating_add(1) {
+            return Err(JournalError::AmbiguousCommitMismatch);
+        }
+        let anchored = scan
+            .records
+            .get(committed_count.saturating_sub(1))
+            .ok_or(JournalError::AmbiguousCommitMismatch)?;
+        if checkpoint.record_sha256 != anchored.record_sha256
+            || checkpoint.policy_generation != anchored.event.context.policy_generation
+            || checkpoint.run_generation != anchored.event.context.run_generation
+        {
             return Err(JournalError::AmbiguousCommitMismatch);
         }
         let last = scan
@@ -455,7 +490,7 @@ impl ReferenceJournal {
             run_generation: last.event.context.run_generation,
         };
         self.root_store
-            .compare_and_store(checkpoint.as_ref(), &next)
+            .compare_and_store(Some(&checkpoint), &next)
             .map_err(|_| JournalError::CommitUnknown {
                 event_id: expected_event_id.clone(),
             })?;
@@ -466,7 +501,7 @@ impl ReferenceJournal {
     fn append(
         &mut self,
         event: SecurityEvent,
-    ) -> Result<(AppendAcknowledgement, bool), JournalError> {
+    ) -> Result<(AppendAcknowledgement, Option<DuplicateDispatch>), JournalError> {
         if self.blocked {
             return Err(JournalError::RecoveryRequired);
         }
@@ -495,11 +530,17 @@ impl ReferenceJournal {
 
         if let Some(sequence) = validated.chain.event_sequence(&event.event_id) {
             let checkpoint = checkpoint.ok_or(JournalError::RecoveryRequired)?;
-            let duplicate_terminal = match &event.kind {
-                SecurityEventKind::DispatchIntent { reservation_id, .. } => {
-                    validated.chain.reservation_is_resolved(reservation_id)
-                }
-                _ => false,
+            let duplicate = match &event.kind {
+                SecurityEventKind::DispatchIntent {
+                    action_id,
+                    reservation_id,
+                    ..
+                } => Some(DuplicateDispatch {
+                    action_id: action_id.clone(),
+                    reservation_id: reservation_id.clone(),
+                    resolved: validated.chain.reservation_is_resolved(reservation_id),
+                }),
+                _ => None,
             };
             return Ok((
                 AppendAcknowledgement {
@@ -508,7 +549,7 @@ impl ReferenceJournal {
                     checkpoint,
                     duplicate: true,
                 },
-                duplicate_terminal,
+                duplicate,
             ));
         }
         if let SecurityEventKind::DispatchIntent {
@@ -516,9 +557,10 @@ impl ReferenceJournal {
             deduplication_digest,
             ..
         } = &event.kind
-            && let Some((existing_event_id, sequence, resolved)) = validated
-                .chain
-                .matching_dispatch(action_id, deduplication_digest)
+            && let Some((existing_event_id, existing_action_id, reservation_id, sequence, resolved)) =
+                validated
+                    .chain
+                    .matching_dispatch(action_id, deduplication_digest)
         {
             let checkpoint = checkpoint.ok_or(JournalError::RecoveryRequired)?;
             return Ok((
@@ -528,7 +570,11 @@ impl ReferenceJournal {
                     checkpoint,
                     duplicate: true,
                 },
-                resolved,
+                Some(DuplicateDispatch {
+                    action_id: existing_action_id,
+                    reservation_id,
+                    resolved,
+                }),
             ));
         }
         if validated.event_count >= self.config.max_records {
@@ -590,8 +636,6 @@ impl ReferenceJournal {
             checkpoint: Some(next_checkpoint.clone()),
             chain: candidate_chain,
         });
-        #[cfg(test)]
-        self.maybe_fault(FaultPoint::AfterRootCommit, &record.event.event_id)?;
         Ok((
             AppendAcknowledgement {
                 event_id: record.event.event_id,
@@ -599,7 +643,7 @@ impl ReferenceJournal {
                 checkpoint: next_checkpoint,
                 duplicate: false,
             },
-            false,
+            None,
         ))
     }
 
@@ -916,19 +960,12 @@ impl ReferenceJournal {
                 self.blocked = true;
                 Err(JournalError::StorageUnavailable)
             }
-            InjectedFault::Timeout => {
-                self.blocked = true;
-                Err(JournalError::DeadlineExceeded)
-            }
             InjectedFault::Crash => {
                 self.blocked = true;
                 Err(JournalError::CommitUnknown {
                     event_id: event_id.clone(),
                 })
             }
-            InjectedFault::AcknowledgementLost => Err(JournalError::AcknowledgementLost {
-                event_id: event_id.clone(),
-            }),
         }
     }
 }
@@ -940,16 +977,13 @@ pub(crate) enum FaultPoint {
     AfterRecordSync,
     BeforeDirectorySync,
     AfterRecordRename,
-    AfterRootCommit,
 }
 
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum InjectedFault {
     DiskFull,
-    Timeout,
     Crash,
-    AcknowledgementLost,
 }
 
 pub(crate) fn validate_resolution(
@@ -1076,10 +1110,24 @@ pub enum JournalError {
     WrongEventKind,
     #[error("dispatch resolution does not match its durable intent")]
     InvalidResolution,
-    #[error("dispatch reservation already has a terminal receipt")]
-    AlreadyResolved,
-    #[error("dispatch reservation is already durable; reconcile instead of replaying")]
-    AlreadyReserved,
+    #[error(
+        "dispatch reservation {reservation_id} for action {action_id} is already terminal at event {event_id} sequence {sequence}"
+    )]
+    AlreadyResolved {
+        event_id: SecurityEventId,
+        action_id: ActionId,
+        reservation_id: ReservationId,
+        sequence: u64,
+    },
+    #[error(
+        "dispatch reservation {reservation_id} for action {action_id} is already durable at event {event_id} sequence {sequence}; reconcile instead of replaying"
+    )]
+    AlreadyReserved {
+        event_id: SecurityEventId,
+        action_id: ActionId,
+        reservation_id: ReservationId,
+        sequence: u64,
+    },
     #[error("unresolved recovered dispatches require explicit reconciliation")]
     ReconciliationRequired,
     #[error("security event violates journal ordering or causal invariants")]
@@ -1094,14 +1142,8 @@ pub enum JournalError {
     StorageUnavailable,
     #[error("controller-owned integrity root is unavailable")]
     IntegrityRootUnavailable,
-    #[error("append deadline expired before durable acknowledgment")]
-    DeadlineExceeded,
     #[error("event commit is ambiguous; do not dispatch or replay {event_id}")]
     CommitUnknown { event_id: SecurityEventId },
-    #[error(
-        "event committed but acknowledgment was lost; retry the same action and deduplication key for {event_id}"
-    )]
-    AcknowledgementLost { event_id: SecurityEventId },
     #[error("published record does not match the operator-selected ambiguous commit")]
     AmbiguousCommitMismatch,
     #[error("journal serialization failed")]

@@ -98,6 +98,10 @@ impl EventContext {
 #[serde(deny_unknown_fields)]
 pub struct RequestIdentity {
     pub request_digest: BoundedText,
+    /// Digest of effect semantics that intentionally excludes wall-clock,
+    /// session, task and grant-correlation fields so idempotent retries remain
+    /// stable without persisting purpose/destination/quantity values.
+    pub action_digest: BoundedText,
     pub actor_chain: ActorChain,
     pub resource: ProtectedResource,
     pub action: PolicyAction,
@@ -116,12 +120,31 @@ impl RequestIdentity {
                     .digest()
                     .map_err(|_| SecurityEventError::InvalidRequest)?,
             )?,
+            action_digest: BoundedText::new(hash_value(&(
+                "action-semantics-v1",
+                &request.subject,
+                &request.resource,
+                request.action,
+                &request.context.purpose,
+                &request.context.operation,
+                &request.context.destination,
+                &request.context.quantity,
+            ))?)?,
             actor_chain: request.subject.clone(),
             resource: request.resource.clone(),
             action: request.action,
             session_id: request.context.session_id.clone(),
             task_id: request.context.task_id.clone(),
         })
+    }
+
+    fn validate(&self) -> Result<(), SecurityEventError> {
+        if !is_lower_hex_sha256(self.request_digest.as_str())
+            || !is_lower_hex_sha256(self.action_digest.as_str())
+        {
+            return Err(SecurityEventError::InvalidRequest);
+        }
+        Ok(())
     }
 }
 
@@ -275,7 +298,11 @@ impl SecurityEvent {
         occurred_at_unix_seconds: i64,
     ) -> Result<Self, SecurityEventError> {
         let request = RequestIdentity::from_request(request)?;
-        let action_id = ActionId::from_digest(hash_value(&("action-v1", &request, &authority))?);
+        let action_id = ActionId::from_digest(hash_value(&(
+            "action-v2",
+            &request.action_digest,
+            &authority,
+        ))?);
         let deduplication_digest =
             BoundedText::new(hash_value(&("deduplication-v1", &deduplication_key))?)?;
         let reservation_id = ReservationId::from_digest(hash_value(&(
@@ -383,6 +410,7 @@ impl SecurityEvent {
                 request,
                 decision,
             } => {
+                request.validate()?;
                 if decision.request_digest != request.request_digest {
                     return Err(SecurityEventError::DecisionRequestMismatch);
                 }
@@ -398,7 +426,9 @@ impl SecurityEvent {
                 authority,
                 deduplication_digest,
             } => {
-                let expected_action = hash_value(&("action-v1", request, authority))?;
+                request.validate()?;
+                let expected_action =
+                    hash_value(&("action-v2", &request.action_digest, authority))?;
                 if action_id.as_str() != expected_action {
                     return Err(SecurityEventError::ActionIntegrityMismatch);
                 }

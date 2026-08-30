@@ -53,6 +53,10 @@ struct MemoryRoot {
 }
 
 impl MemoryRoot {
+    fn checkpoint(&self) -> Option<IntegrityCheckpoint> {
+        self.checkpoint.lock().expect("checkpoint mutex").clone()
+    }
+
     fn force_checkpoint(&self, checkpoint: Option<IntegrityCheckpoint>) {
         *self.checkpoint.lock().expect("checkpoint mutex") = checkpoint;
     }
@@ -162,6 +166,10 @@ fn principal(kind: PrincipalKind, id: &str) -> PolicyPrincipal {
 }
 
 fn request() -> AuthorizationRequest {
+    request_at(10, "session-1", "task-1")
+}
+
+fn request_at(now_unix_seconds: i64, session_id: &str, task_id: &str) -> AuthorizationRequest {
     AuthorizationRequest::new(
         ActorChain::new(vec![
             principal(PrincipalKind::Human, "human-1"),
@@ -171,9 +179,9 @@ fn request() -> AuthorizationRequest {
         ProtectedResource::new(ResourceKind::FinancialAction, "account-1").expect("resource"),
         PolicyAction::Sign,
         AuthorizationContext {
-            now_unix_seconds: 10,
-            session_id: text("session-1"),
-            task_id: text("task-1"),
+            now_unix_seconds,
+            session_id: text(session_id),
+            task_id: text(task_id),
             purpose: text("rebalance"),
             operation: text("sign"),
             destination: None,
@@ -311,7 +319,7 @@ fn unknown_receipt_is_terminal_and_never_auto_replayed() {
             12,
         )
         .expect_err("terminal reservation must never issue another permit");
-    assert!(matches!(error, JournalError::AlreadyResolved));
+    assert!(matches!(error, JournalError::AlreadyResolved { .. }));
 }
 
 #[test]
@@ -374,29 +382,6 @@ fn disk_full_blocks_dispatch_before_a_permit_exists() {
         Err(JournalError::RecoveryRequired)
     ));
     healthy_recovery(&mut fixture);
-}
-
-#[test]
-fn expired_append_deadline_blocks_dispatch() {
-    let mut fixture = Fixture::new(JournalConfig::default());
-    fixture.append_decision();
-    fixture
-        .journal
-        .inject_once(FaultPoint::BeforeRecordWrite, InjectedFault::Timeout);
-    let error = fixture
-        .journal
-        .reserve_dispatch(
-            fixture.context(),
-            None,
-            &request(),
-            AuthorityIdentity::Grant {
-                grant_id: text("grant-1"),
-            },
-            text("dispatch-1"),
-            12,
-        )
-        .expect_err("timeout must not issue permit");
-    assert!(matches!(error, JournalError::DeadlineExceeded));
 }
 
 #[test]
@@ -479,6 +464,17 @@ fn operator_can_reconcile_exactly_one_ambiguous_commit_without_replay() {
         .expect_err("operator must identify the exact failed event");
     assert!(matches!(mismatch, JournalError::AmbiguousCommitMismatch));
 
+    let anchored_root = fixture.roots.checkpoint().expect("anchored checkpoint");
+    let mut wrong_anchor = anchored_root.clone();
+    wrong_anchor.record_sha256 = "0".repeat(64);
+    fixture.roots.force_checkpoint(Some(wrong_anchor));
+    let mismatch = fixture
+        .journal
+        .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new())
+        .expect_err("protected prefix mismatch must not be laundered");
+    assert!(matches!(mismatch, JournalError::AmbiguousCommitMismatch));
+    fixture.roots.force_checkpoint(Some(anchored_root));
+
     let checkpoint = fixture
         .journal
         .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new())
@@ -500,14 +496,32 @@ fn operator_can_reconcile_exactly_one_ambiguous_commit_without_replay() {
 }
 
 #[test]
-fn lost_ack_retry_never_reissues_a_dispatch_permit() {
+fn ambiguous_reconciliation_rejects_missing_root_and_owner_rotation() {
+    let mut first_install = Fixture::new(JournalConfig::default());
+    first_install
+        .journal
+        .inject_once(FaultPoint::AfterRecordRename, InjectedFault::Crash);
+    let first_request = request();
+    let decision = permissive_decision(&first_request).expect("decision");
+    let event =
+        SecurityEvent::decision(first_install.context(), None, &first_request, decision, 11)
+            .expect("decision event");
+    let event_id = match first_install.journal.record_decision(event) {
+        Err(JournalError::CommitUnknown { event_id }) => event_id,
+        other => panic!("expected ambiguous first record, got {other:?}"),
+    };
+    let missing = first_install
+        .journal
+        .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new())
+        .expect_err("missing protected root is not an ambiguous prefix");
+    assert!(matches!(missing, JournalError::AmbiguousCommitMismatch));
+
     let mut fixture = Fixture::new(JournalConfig::default());
     fixture.append_decision();
-    fixture.journal.inject_once(
-        FaultPoint::AfterRootCommit,
-        InjectedFault::AcknowledgementLost,
-    );
-    let first = fixture.journal.reserve_dispatch(
+    fixture
+        .journal
+        .inject_once(FaultPoint::AfterRecordRename, InjectedFault::Crash);
+    let event_id = match fixture.journal.reserve_dispatch(
         fixture.context(),
         None,
         &request(),
@@ -516,36 +530,32 @@ fn lost_ack_retry_never_reissues_a_dispatch_permit() {
         },
         text("dispatch-1"),
         12,
+    ) {
+        Err(JournalError::CommitUnknown { event_id }) => event_id,
+        other => panic!("expected ambiguous dispatch, got {other:?}"),
+    };
+    let rotated_owner = JournalOwner::new(fixture.producer.clone(), 2, text("integrity-key-2"))
+        .expect("rotated owner");
+    let mut rotated = ReferenceJournal::new(
+        fixture.root_path.clone(),
+        rotated_owner,
+        fixture.roots.clone(),
+        JournalConfig::default(),
     );
-    assert!(matches!(
-        first,
-        Err(JournalError::AcknowledgementLost { .. })
-    ));
-
-    let retry = fixture
-        .journal
-        .reserve_dispatch(
-            fixture.context(),
-            None,
-            &request(),
-            AuthorityIdentity::Grant {
-                grant_id: text("grant-1"),
-            },
-            text("dispatch-1"),
-            13,
-        )
-        .expect_err("retry must reconcile instead of replaying");
-    assert!(matches!(retry, JournalError::AlreadyReserved));
+    let mismatch = rotated
+        .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new())
+        .expect_err("owner rotation must not rewrite an old protected prefix");
+    assert!(matches!(mismatch, JournalError::AmbiguousCommitMismatch));
 }
 
 #[test]
 fn duplicate_dispatch_is_generation_independent() {
     let mut fixture = Fixture::new(JournalConfig::default());
-    let request = request();
+    let request = request_at(10, "session-1", "task-1");
     let authority = AuthorityIdentity::Grant {
         grant_id: text("grant-1"),
     };
-    let (permit, _) = fixture
+    let (permit, first) = fixture
         .journal
         .reserve_dispatch(
             fixture.context(),
@@ -556,19 +566,32 @@ fn duplicate_dispatch_is_generation_independent() {
             12,
         )
         .expect("first permit");
+    let first_action = permit.action_id().clone();
+    let first_reservation = permit.reservation_id().clone();
 
+    let rebuilt_request = request_at(11, "session-2", "task-2");
     let forward_policy = fixture
         .journal
         .reserve_dispatch(
             fixture.context_at(2, 1),
             None,
-            &request,
+            &rebuilt_request,
             authority.clone(),
             text("dispatch-1"),
             13,
         )
         .expect_err("policy reload must not issue a second permit");
-    assert!(matches!(forward_policy, JournalError::AlreadyReserved));
+    assert!(matches!(
+        forward_policy,
+        JournalError::AlreadyReserved {
+            event_id,
+            action_id,
+            reservation_id,
+            sequence: 1,
+        } if event_id == first.event_id
+            && action_id == first_action
+            && reservation_id == first_reservation
+    ));
 
     fixture
         .journal
@@ -581,18 +604,29 @@ fn duplicate_dispatch_is_generation_independent() {
             14,
         )
         .expect("terminal receipt");
+    let rebuilt_again = request_at(12, "session-3", "task-3");
     let forward_run = fixture
         .journal
         .reserve_dispatch(
             fixture.context_at(2, 2),
             None,
-            &request,
+            &rebuilt_again,
             authority,
             text("dispatch-1"),
             15,
         )
         .expect_err("run reload must not issue a terminal duplicate");
-    assert!(matches!(forward_run, JournalError::AlreadyResolved));
+    assert!(matches!(
+        forward_run,
+        JournalError::AlreadyResolved {
+            event_id,
+            action_id,
+            reservation_id,
+            sequence: 1,
+        } if event_id == first.event_id
+            && action_id == first_action
+            && reservation_id == first_reservation
+    ));
 }
 
 #[test]
@@ -651,6 +685,27 @@ fn unavailable_integrity_root_creates_an_ambiguous_commit() {
             12,
         )
         .expect_err("root failure must be ambiguous");
+    assert!(matches!(error, JournalError::CommitUnknown { .. }));
+}
+
+#[test]
+fn integrity_root_timeout_creates_an_ambiguous_commit() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    fixture.append_decision();
+    fixture.roots.fail_store(IntegrityRootError::Timeout);
+    let error = fixture
+        .journal
+        .reserve_dispatch(
+            fixture.context(),
+            None,
+            &request(),
+            AuthorityIdentity::Grant {
+                grant_id: text("grant-1"),
+            },
+            text("dispatch-1"),
+            12,
+        )
+        .expect_err("root timeout is ambiguous and cannot issue a permit");
     assert!(matches!(error, JournalError::CommitUnknown { .. }));
 }
 

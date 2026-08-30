@@ -231,14 +231,20 @@ impl EventChainState {
         &self,
         action_id: &ActionId,
         deduplication_digest: &codex_security_policy::BoundedText,
-    ) -> Option<(SecurityEventId, u64, bool)> {
+    ) -> Option<(SecurityEventId, ActionId, ReservationId, u64, bool)> {
         let reservation_id = self
             .dispatch_identities
             .get(&(action_id.clone(), deduplication_digest.clone()))?;
         let intent = self.intents.get(reservation_id)?;
         debug_assert_eq!(&intent.action_id, action_id);
         debug_assert_eq!(&intent.deduplication_digest, deduplication_digest);
-        Some((intent.event_id.clone(), intent.sequence, intent.resolved))
+        Some((
+            intent.event_id.clone(),
+            intent.action_id.clone(),
+            reservation_id.clone(),
+            intent.sequence,
+            intent.resolved,
+        ))
     }
 }
 

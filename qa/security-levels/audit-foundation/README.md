@@ -31,8 +31,12 @@ broker, quarantine, financial, or Sweep adapter.
 
 Consumers call `reserve_dispatch` before external side effects. Only a returned,
 non-serializable `DispatchPermit` proves that intent reached the protected root.
-Disk full, deadline expiry, saturation, missing keys, writer conflict and failed
-persistence return no permit. After dispatch, consumers append either a
+Disk full, integrity-root timeout, saturation, missing keys, writer conflict
+and failed persistence return no permit. An integrity-root timeout after local
+publication is an ambiguous commit (`CommitUnknown`), never a dispatch permit.
+The `IntegrityRootStore` adapter owns any external deadline and reports a real
+`IntegrityRootError::Timeout`; the journal does not advertise an in-process
+timer it cannot enforce. After dispatch, consumers append either a
 completed result (with the existing PF-18 mandate receipt where applicable) or
 an explicit unknown result. Unknown is terminal and requires human or
 adapter-specific reconciliation; it is not a replay instruction.
@@ -41,7 +45,10 @@ Every journal starts blocked and requires successful recovery against the live
 PF-20 policy generation and revocation state before its first append. Retrying
 the same action and deduplication key never returns another permit, even when
 the retry timestamp or policy/run generation changes: unresolved duplicates
-return `AlreadyReserved` and resolved duplicates return `AlreadyResolved`.
+return `AlreadyReserved` and resolved duplicates return `AlreadyResolved`, both
+with the original event/action/reservation acknowledgement identity. Loss of a
+transport acknowledgement outside this in-process journal is handled by that
+same stable retry contract; it is not represented as a fabricated append fault.
 Recovery exposes all durable intents without a terminal receipt as
 `pending_dispatches`, reports `ReconciliationRequired`, and blocks new dispatch
 until each is appended as explicitly unknown through

@@ -40,8 +40,7 @@ class DurableAuditContractTests(unittest.TestCase):
         self.assertTrue(
             {
                 "disk_full",
-                "deadline_exceeded",
-                "acknowledgement_lost",
+                "integrity_root_timeout_commit_unknown",
                 "ambiguous_commit",
                 "missing_integrity_key",
                 "restriction_audit_gap",
