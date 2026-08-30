@@ -54,13 +54,12 @@ updated: 2026-08-30
 - [x] Exercised the deployed read-only flow in the real Terminal at `865ea2edd2`; `/wallet` renders the zero-dollar account, arbitrary top-up, key actions, and all six prices without a catalog error.
 - [x] Audited and transactionally deleted 17 legacy periods, 20 weekly windows, 1,910 legacy inference rows, 34 legacy credentials, one legacy-funded xAPI tenant record, and dependent legacy limit/accounting rows.
 - [x] Post-delete production audit reports zero legacy periods, windows, inference rows, credentials, and legacy xAPI funding; Corbanu API account, top-up, and inference tables were unchanged.
+- [x] Replaced unavailable Claude Fable with Kimi K3 through Vercel at the pinned at-cost schedule in backend commit `08b7cdd` and deployed production image `deployment-01M19Y0YQF47R3YM6SCKBRG8EE`.
+- [x] Production exposes Kimi K3 and no Fable or internal vendor fields; both version-15 Fly machines pass health checks, and an authenticated Terminal Messages call returned `KIMI_OK`.
 
 ## Remaining
 
-- [ ] Remove unavailable Claude Fable from the Corbanu API catalog, add Kimi K3 through Vercel at its pinned at-cost schedule, and deploy the corrected allowlist.
-- [ ] Prove the deployed Kimi K3 Messages route completes and Fable is absent without exposing upstream routing metadata.
 - [ ] Named human tester unlocks the production wallet and completes top-up, create/revoke, one-time reveal, and recovery checks.
-- [ ] Run one low-cost inference call after the human creates a funded Corbanu API key; no balance was fabricated for qualification.
 - [ ] Complete final persistence/compliance/release qualification before public release.
 
 ## Verification
@@ -71,11 +70,14 @@ updated: 2026-08-30
 - [x] TUI applicability is resolved by the production true-PTY run recorded in PF-34-S02.
 - [x] Integrated interfaces match Terminal backend client `cd79361d8b4f286291556a641288757d0451f52c`, read-only catalog fix `865ea2edd2`, and API-only wallet commit `66ff6579d7`.
 - [x] Production database retirement audit and API-only `/wallet` true-PTY evidence show legacy state cannot reappear through supported product flows.
+- [x] Production `/readyz` is 200; `/v1/models` lists six provider-neutral routes with `corbanu/kimi-k3`, no Fable, and no backend/upstream/provider metadata.
+- [x] The existing human-funded Corbanu API key completed a Kimi K3 Messages request from the exact installed Terminal build; the 8,430-input/29-output-token call returned `KIMI_OK`.
 - [ ] Human-funded inference and wallet key-lifecycle acceptance pass against production.
 
 ## Exit evidence
 
 - [x] Deployment image `deployment-01M19ES7MMEKBX1MMDD6QR0AJ7` and source commit `6cc7894` recorded.
 - [x] Production smoke output recorded without secrets or plaintext customer keys.
+- [x] Kimi replacement deployment is image `deployment-01M19Y0YQF47R3YM6SCKBRG8EE` from backend commit `08b7cdd`; both machines run version 15 with passing checks.
 - [x] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/corbanu-api-balance/` after PF-34 handoff.

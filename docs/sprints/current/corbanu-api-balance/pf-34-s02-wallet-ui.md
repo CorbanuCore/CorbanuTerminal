@@ -62,11 +62,10 @@ updated: 2026-08-30
 - [x] Replaced `/wallet` pricing referrals in the model picker with each route's explicit input, cache-read, cache-write, and output rates, including the Luna/Sol 272K+ context schedule.
 - [x] Added a distinct Corbanu API crew quick start while preserving the existing Standard Crew; the 2026-08-30 catalog amendment replaces its unavailable Fable Nazgul with Kimi K3 through the Corbanu API Messages route.
 - [x] Added exact CrewSpec, durable-state/recovery, rendered-picker, and true-TUI evidence for the second preset.
+- [x] Replaced the active Fable row/runtime with Kimi K3, migrated stale selections, preserved Standard Crew, added execution metadata for all six public IDs, corrected Kimi's 128,000-token live ceiling, and true-TUI qualified `KIMI_OK` plus the Kimi/Luna/three-Flash crew against production.
 
 ## Remaining
 
-- [ ] Replace the Corbanu API Fable catalog row and Nazgul runtime with Kimi K3 through Vercel, update at-cost copy/snapshots, and preserve the original Standard Crew.
-- [ ] Build and true-TUI qualify the Kimi K3 Corbanu crew against the deployed backend without starting an inference task.
 - [ ] Named human tester enters the wallet passcode and completes create/revoke plus one-time reveal against the disposable backend.
 - [ ] Named human tester repeats top-up, create/revoke, one-time reveal, inference, and recovery flows against the deployed backend.
 
@@ -80,6 +79,7 @@ updated: 2026-08-30
 - [x] Capability-lifecycle and wallet API/unlock focus suite passes 13/13; the broad 3,842-test TUI run passes 3,811 and retains 31 known unrelated version/copy snapshot failures.
 - [x] Corbanu catalog mapping, rendered seven-row picker snapshot, and existing cross-provider picker regression pass 3/3.
 - [x] Corbanu API crew exact-runtime, Standard Crew preservation, durable round-trip/recovery, and rendered `/spawn` picker suite passes 5/5; true TUI created all five idle threads without starting a task.
+- [x] Kimi replacement verification passes 60 provider, 62 model-manager, four focused TUI, and 110 backend tests plus typecheck/build/governance; production true TUI returned `KIMI_OK` with no fallback-metadata, output-limit, Fable-label, or provider error.
 - [ ] Named human passcode, top-up, one-time reveal, create/revoke, inference, and recovery acceptance pass against production.
 
 ## Exit evidence
@@ -95,5 +95,6 @@ updated: 2026-08-30
 - [x] True-TUI `/model` verification on `fd6f3fde66` opened directly on `Corbanu API` and rendered Ambient GLM 5.2 unchanged alongside the six new routes, with no removed Kimi/direct legacy rows; installed binary SHA-256 is `6501287f8cb5199d02676c576fe0ee0c88559bca2d4068752eacf656b44e6a06`, with trace log at `/tmp/corbanu-ambient-picker-qa.Wq8Vio/codex-tui.log`.
 - [x] True-TUI `/model` verification on `80ce83d9c3` rendered direct input, cache-read, cache-write, output, and applicable 272K+ rates inline with no `/wallet` referral; installed binary SHA-256 is `4fb1b0495f5875dd6421fbb97a8cda89bd37321e5ad95a18d85002238a41cfe1`, with trace log at `/tmp/corbanu-inline-prices-qa.MIZEot/codex-tui.log`.
 - [x] Corbanu API crew implementation is `1235bc529d`; `corbanu-debug` installs that exact build with SHA-256 `e76d41f532e8ea027042a90e55c587e58e0b3b7a3f0111eaefdd2b62ed10b948`. True-TUI `/spawn` kept Standard Crew visible, selected the separate Corbanu API crew, and created Fable, Luna xhigh, and three Flash runtimes with no task or spawn error; trace log is `/tmp/corbanu-crew-qa.2SBKoY/codex-tui.log`.
+- [x] Kimi replacement implementation is `3e6df48bbd`; `corbanu-debug` installs that exact build with SHA-256 `611616a38f715745ee6159fe2e99a7a5681427559a04d10e04a64087ac3d3f08`. Production true-TUI evidence is `/tmp/corbanu-kimi-success.Yg8F6r/codex-tui.log`; it records the successful 8,430-input/29-output-token Kimi request and the updated Corbanu crew runtime.
 - [x] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/corbanu-api-balance/`.
