@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-27-S03"
 title: "Platform containment contract and probes"
-status: ready
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 16

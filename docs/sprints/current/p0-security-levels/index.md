@@ -15,7 +15,7 @@ archived evidence proves only its recorded candidate and scope.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
-| 16 | [PF-27-S03](pf-27-s03-platform-containment-contract.md) | Platform containment contract and probes | ready | — |
+| 16 | [PF-27-S03](pf-27-s03-platform-containment-contract.md) | Platform containment contract and probes | in_progress | — |
 | 19 | [PF-34-S04](pf-34-s04-screening-contract-and-fixtures.md) | Screening segment contract and fixtures | draft | — |
 | 20 | [PF-35-S01](pf-35-s01-classifier-corpus-and-evaluation.md) | Classifier corpus and leakage-free evaluation | draft | PF-34-S04 |
 | 21 | [PF-35-S02](pf-35-s02-local-cpu-detector-artifact.md) | Reproducible local CPU detector artifact | draft | PF-35-S01 |
