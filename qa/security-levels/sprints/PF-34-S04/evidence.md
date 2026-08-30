@@ -24,6 +24,7 @@ Product citations:
 - Pre-Opus-review implementation: `475ed05147fb8801672556048014a3ae28bcba86`
 - First Opus-remediated implementation: `74e97148701ef541ff9ef2d0a9194ba472b2801c`
 - Final Opus-remediated implementation: `a75efecc0a37d5544e123ad19d57867cac360a68`
+- Final lane evidence remediation: `c0ede26f2`
 - Cache root: `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/`
 - Product TUI applicability: none; this is a pure, unregistered preparation
   boundary. The mandated independent review itself ran through TMUX and the
@@ -89,7 +90,8 @@ machine is not claimed as the weakest supported CPU.
 - Manifest SHA-256: `7e8a4850f67052b2b5b2e0d17f5227116f226c65ee25a6945d04ff7a2a1a1fc3`
 - Contract SHA-256: `afde67e16a9117c3bf6052749e450ee805a8266862a87112e84b7918806c12ca`
 - Contract tests SHA-256: `895662f8139c0b5e6e9520cb3c9c52ded6812142b14aa2e1774336043728af1f`
-- Final review packet SHA-256: `3813e9783ddbf09fb9e2bdbb16fa9600adeb62b58fcd09385bf6328089bc3389`
+- Third full review packet SHA-256: `3813e9783ddbf09fb9e2bdbb16fa9600adeb62b58fcd09385bf6328089bc3389`
+- Final evidence-confirmation packet SHA-256: `9753a4b8046359e0c3e6e385fa86770fde692312f3a8c87e9ffd3a979c34ecca`
 
 ## Supplemental structured review
 
@@ -104,11 +106,24 @@ tests or schema validation. The final full-branch rerun reports no findings and
 `patch is correct` at confidence 0.84: [text](autoreview.txt),
 [structured result](autoreview.json).
 
+## Mandated independent review
+
+The review ran in TMUX through the rebased Corbanu Terminal with provider
+`claude-plan`, route `claude-opus-5-plan` (provider-reported Claude Opus 5.0),
+and reasoning effort `max`. Four checksum-verified immutable packets produced:
+
+1. 3 P1 / 7 P2 / 16 P3, all lane findings remediated or correctly accepted at G1.
+2. 0 P1 / 4 P2 / 12 P3, all four P2 findings remediated.
+3. 0 P1 / 1 P2 / 4 P3; the contract, fixtures, verifier, handback, and scope
+   exception were accepted, with stale evidence as the sole P2.
+4. **clean**, with N-5 resolved and 0 new P0/P1/P2.
+
+The complete runtime attestation, packet hashes, dispositions, and transient
+artifact hashes are recorded in
+[`claude-opus-5-max-review.md`](claude-opus-5-max-review.md).
+
 ## Pending G1/G2 evidence
 
-- Narrow Claude Opus 5.0 Max confirmation of the refreshed evidence-only delta;
-  the three full passes found the contract/fixtures/handback clean and the last
-  pass identified only the stale evidence ledger now corrected here.
 - Integration-owner Cargo/Bazel/module/lock registration.
 - Repository `just fix`, `just fmt`, named/full crate tests and Bazel parity on
   the combined registered tree.

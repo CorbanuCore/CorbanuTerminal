@@ -77,8 +77,8 @@ pub use contract::SegmentEnvelope;
 pub use contract::SourceBinding;
 pub use contract::ThresholdIdentity;
 pub use contract::TransformationBinding;
-pub use contract::UntrustedBytes;
 pub use contract::UnavailableReason;
+pub use contract::UntrustedBytes;
 pub use contract::VerdictIdentity;
 pub use contract::VerdictKind;
 pub use contract::WithheldContent;
@@ -141,6 +141,13 @@ must receive a new disjoint allocation and split identity, segment, and session
 implementation into separate modules while preserving these public re-exports.
 The Opus remediation brought the module slightly above the approximate
 800-line target; do not grow the monolith further.
+
+The byte-bearing `Debug` implementations compute SHA-256 to avoid exposing raw
+untrusted content. Do not put `?segment` or `?content` tracing on a hot ingest
+path; use the explicit safe counters and identifiers instead. At G1, rerun
+`qa/security-levels/sprints/PF-34-S04/verify_evidence.py` after combined-tree
+evidence is recorded. Retire that point-in-time guard only when the sprint is
+archived, without removing the preserved lane identities.
 
 The additional root export declaration is exactly:
 

@@ -359,6 +359,14 @@ candidate is `a75efecc0a37d5544e123ad19d57867cac360a68`; no shared Cargo, Bazel,
 module-registration file was edited. Jim Ricketts remains the G1 integration
 owner.
 
+Literal PF-34-S04 write scope: `codex-rs/content-security/src/contract.rs`,
+`codex-rs/content-security/src/contract_tests.rs`,
+`qa/security-levels/ingress-contract/`,
+`qa/security-levels/sprints/PF-34-S04/`, the current PF-34-S04 sprint record,
+and this active-plan allocation. Its `parallel_lane` is `ingress-classifier`.
+Shared crate/workspace Cargo, Bazel, lock, and `lib.rs` registration remain
+outside that scope and exclusively owned by Jim Ricketts at G1.
+
 Implementation does not occur in the documentation checkout. Update this plan
 before changing the implementation worktree, base, owner, or scope.
 

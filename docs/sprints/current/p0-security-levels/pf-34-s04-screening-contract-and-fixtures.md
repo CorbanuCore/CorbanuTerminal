@@ -7,7 +7,7 @@ plan_feature: "PF-34"
 execution_order: 19
 owner: "Codex ingress/classifier lane"
 parallel_lane: "ingress-classifier"
-write_scope: "codex-rs/content-security/src/contract.rs, codex-rs/content-security/src/contract_tests.rs, qa/security-levels/ingress-contract/, qa/security-levels/sprints/PF-34-S04/, docs/sprints/current/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md"
+write_scope: "codex-rs/content-security/src/contract.rs, codex-rs/content-security/src/contract_tests.rs, qa/security-levels/ingress-contract/, qa/security-levels/sprints/PF-34-S04/, docs/sprints/current/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md, docs/plans/active/p0-security-levels.md"
 integration_gate: "Jim Ricketts receives the PF-34-S04 candidate at G1/G2, audits the literal scope, performs serialized content-security crate/workspace/Cargo/Bazel/lock registration, reruns governance and the complete content-security suite on the combined tree, then archives PF-34-S04 before PF-35-S01 allocation."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier"
 branch: "feat/p0-security-ingress-classifier"
@@ -55,21 +55,23 @@ updated: 2026-08-30
 - [x] Pure constructors and fixture verifier add no Core/provider/runtime route; PF-30 source authority and PF-34/PF-35 change ownership remain separate.
 - [x] Lane-local formatting, Clippy, argument-comment lint, 20 named contract tests, 14 verifier regressions, seven-fixture/schema verification, governance and `git diff --check` pass at final Opus-remediated implementation commit `a75efecc0a37d5544e123ad19d57867cac360a68`.
 - [x] Supplemental structured Codex review verified four in-scope findings, drove bounded remediation and finished clean on the complete committed branch.
+- [x] Independent review ran through TMUX and rebased Corbanu Terminal using provider `claude-plan`, route `claude-opus-5-plan` (provider-reported Claude Opus 5.0), and effort `max`; four immutable passes ended `clean` with 0 new P0/P1/P2.
 
 ## Remaining
 
-- [ ] Record the final immutable Claude Opus 5.0 Max follow-up verdict and rerun outputs after every accepted fix.
 - [ ] Hand the candidate, contract/fixture identities, scope audit and exact shared registration patch to Jim Ricketts for serialized G1/G2 integration.
 
 ## Verification
 
-- [ ] Run affected format/fix tools before final tests; record exact commands and actual test counts.
-- [ ] Run planned content-security contract tests including malformed/partial/duplicate segments, digest/version mismatch, timeout and forced-allow safety assertions at the interface.
+- [x] Run affected lane-local format/lint tools before final tests; record exact commands and actual test counts. Repository `just fix` remains G1-only because the crate is deliberately unregistered.
+- [x] Run planned content-security contract tests including malformed/partial/duplicate segments, digest/version mismatch, timeout and forced-allow safety assertions at the interface.
 - [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
 - [x] Verified no runtime route or profile becomes available: the lane does not add `lib.rs`, Cargo/Bazel registration, Core/provider adapters or profile changes.
+- [ ] At G1, run registered-crate `just fix`, `just fmt`, named/full crate tests, lock regeneration, and Bazel parity on Jim Ricketts's combined tree.
 
 ## Exit evidence
 
-- [ ] Commit, contract/fixture versions, owner review and final-tree outputs under `qa/security-levels/sprints/PF-34-S04/`.
+- [x] Commit contract/fixture versions, independent owner review, and lane-candidate outputs under `qa/security-levels/sprints/PF-34-S04/`; combined-tree outputs remain G1-owned.
 - [x] PF-34-S01 and PF-35-S03 remain assigned actual rendering, PF-30 provenance and deterministic policy; fixture completion is not detector or ingestion qualification.
-- [ ] Record integration handoff and scope audit; complete all ledgers before archive and update plan/navigation.
+- [x] Record the exact integration handoff and lane scope audit; archive and navigation changes remain after G1 combined-tree acceptance.
+- [ ] Record Jim Ricketts's integration commit and combined-tree source hashes, then archive PF-34-S04 before PF-35-S01 allocation.
