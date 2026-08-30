@@ -117,14 +117,14 @@ codex_rust_crate(
    both are still present before applying the crate manifest; if either was
    removed, restore it at the workspace-pinned version rather than adding a
    crate-local version.
-3. Add a second root `BUILD.bazel` `exports_files` declaration containing the
-   six fixture paths from `compile_data`, with visibility limited to
-   `//codex-rs/content-security:__pkg__`. Do not change the existing exports or
-   their visibility.
    Integration outcome: `cargo shear 1.11.2` correctly rejected this alias
    because no crate consumes it yet, so commit `279ce48a9e8d3b28ab518ff184aae770d7462d2f`
    removed it. The first consumer must add the workspace alias in the same
    change as its dependency edge.
+3. Add a second root `BUILD.bazel` `exports_files` declaration containing the
+   six fixture paths from `compile_data`, with visibility limited to
+   `//codex-rs/content-security:__pkg__`. Do not change the existing exports or
+   their visibility.
 4. Regenerate `codex-rs/Cargo.lock` and `MODULE.bazel.lock`; do not hand-edit
    either lock.
 

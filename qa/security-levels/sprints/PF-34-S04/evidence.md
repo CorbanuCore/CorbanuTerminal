@@ -143,8 +143,8 @@ artifact hashes are recorded in
   `cargo shear 1.11.2` correctly rejected a dependency with no consumer.
 - The registered combined tree passes `just fix`, `just fmt`, strict Clippy,
   21 focused/full Rust tests (`21 passed, 0 failed`), 14 verifier regressions,
-  seven-fixture/schema
-  verification and targeted Bazel/argument-comment qualification.
+  seven-fixture/schema verification and targeted Bazel/argument-comment
+  qualification.
 - `bazel test //codex-rs/content-security:all` proves the six `include_bytes!`
   resources reach unit-test compilation. Repository-wide argument-comment
   lint remains red only for two pre-existing `security-policy/src/grant.rs`
