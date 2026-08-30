@@ -82,6 +82,14 @@ pub struct DispatchFence {
     authority_id: BoundedText,
     generation: u64,
     phase: DispatchPhase,
+    ever_admitted: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DispatchAuthorityStatus {
+    Active,
+    Revoked,
+    OutsideValidityWindow,
 }
 
 #[derive(
@@ -398,6 +406,7 @@ impl DispatchFence {
     pub fn queued_for_grant(
         run_id: BoundedText,
         expected_generation: u64,
+        now_unix_seconds: i64,
         grant: &BoundedGrant,
         revocations: &RevocationState,
     ) -> Result<Self, RevocationError> {
@@ -410,13 +419,14 @@ impl DispatchFence {
             DispatchAuthorityKind::Grant,
             grant.grant_id.clone(),
             revocations,
-            revocations.grant_is_revoked(grant),
+            Self::grant_status(now_unix_seconds, grant, revocations),
         )
     }
 
     pub fn queued_for_mandate(
         run_id: BoundedText,
         expected_generation: u64,
+        now_unix_seconds: i64,
         mandate: &ProtectedActionMandate,
         revocations: &RevocationState,
     ) -> Result<Self, RevocationError> {
@@ -429,7 +439,7 @@ impl DispatchFence {
             DispatchAuthorityKind::Mandate,
             mandate.mandate_id.clone(),
             revocations,
-            revocations.mandate_is_revoked(mandate),
+            Self::mandate_status(now_unix_seconds, mandate, revocations),
         )
     }
 
@@ -439,7 +449,7 @@ impl DispatchFence {
         authority_kind: DispatchAuthorityKind,
         authority_id: BoundedText,
         revocations: &RevocationState,
-        revoked: bool,
+        authority_status: DispatchAuthorityStatus,
     ) -> Result<Self, RevocationError> {
         revocations.validate()?;
         if expected_generation != revocations.generation {
@@ -448,8 +458,12 @@ impl DispatchFence {
                 current: revocations.generation,
             });
         }
-        if revoked {
-            return Err(RevocationError::AuthorityRevoked);
+        match authority_status {
+            DispatchAuthorityStatus::Active => {}
+            DispatchAuthorityStatus::Revoked => return Err(RevocationError::AuthorityRevoked),
+            DispatchAuthorityStatus::OutsideValidityWindow => {
+                return Err(RevocationError::AuthorityOutsideValidityWindow);
+            }
         }
         Ok(Self {
             schema_version: DISPATCH_FENCE_SCHEMA_VERSION,
@@ -458,12 +472,14 @@ impl DispatchFence {
             authority_id,
             generation: expected_generation,
             phase: DispatchPhase::Queued,
+            ever_admitted: false,
         })
     }
 
     pub fn authorize_grant(
         &mut self,
         run_id: &BoundedText,
+        now_unix_seconds: i64,
         grant: &BoundedGrant,
         revocations: &RevocationState,
         step: ProtectedDispatchStep,
@@ -476,7 +492,7 @@ impl DispatchFence {
             DispatchAuthorityKind::Grant,
             &grant.grant_id,
             revocations,
-            revocations.grant_is_revoked(grant),
+            Self::grant_status(now_unix_seconds, grant, revocations),
             step,
         )
     }
@@ -484,6 +500,7 @@ impl DispatchFence {
     pub fn authorize_mandate(
         &mut self,
         run_id: &BoundedText,
+        now_unix_seconds: i64,
         mandate: &ProtectedActionMandate,
         revocations: &RevocationState,
         step: ProtectedDispatchStep,
@@ -496,7 +513,7 @@ impl DispatchFence {
             DispatchAuthorityKind::Mandate,
             &mandate.mandate_id,
             revocations,
-            revocations.mandate_is_revoked(mandate),
+            Self::mandate_status(now_unix_seconds, mandate, revocations),
             step,
         )
     }
@@ -504,6 +521,7 @@ impl DispatchFence {
     pub fn refresh_grant(
         &mut self,
         run_id: &BoundedText,
+        now_unix_seconds: i64,
         grant: &BoundedGrant,
         revocations: &RevocationState,
     ) -> Result<(), RevocationError> {
@@ -515,13 +533,14 @@ impl DispatchFence {
             DispatchAuthorityKind::Grant,
             &grant.grant_id,
             revocations,
-            revocations.grant_is_revoked(grant),
+            Self::grant_status(now_unix_seconds, grant, revocations),
         )
     }
 
     pub fn refresh_mandate(
         &mut self,
         run_id: &BoundedText,
+        now_unix_seconds: i64,
         mandate: &ProtectedActionMandate,
         revocations: &RevocationState,
     ) -> Result<(), RevocationError> {
@@ -533,7 +552,7 @@ impl DispatchFence {
             DispatchAuthorityKind::Mandate,
             &mandate.mandate_id,
             revocations,
-            revocations.mandate_is_revoked(mandate),
+            Self::mandate_status(now_unix_seconds, mandate, revocations),
         )
     }
 
@@ -543,14 +562,27 @@ impl DispatchFence {
         authority_kind: DispatchAuthorityKind,
         authority_id: &BoundedText,
         revocations: &RevocationState,
-        revoked: bool,
+        authority_status: DispatchAuthorityStatus,
         step: ProtectedDispatchStep,
     ) -> Result<(), RevocationError> {
         self.check_binding(run_id, authority_kind, authority_id)?;
         revocations.validate()?;
-        if revoked {
-            self.phase = DispatchPhase::Fenced;
-            return Err(RevocationError::AuthorityRevoked);
+        if matches!(
+            self.phase,
+            DispatchPhase::Completed | DispatchPhase::UnknownFinancialOutcome
+        ) {
+            return Err(RevocationError::InvalidDispatchTransition);
+        }
+        match authority_status {
+            DispatchAuthorityStatus::Active => {}
+            DispatchAuthorityStatus::Revoked => {
+                self.phase = DispatchPhase::Fenced;
+                return Err(RevocationError::AuthorityRevoked);
+            }
+            DispatchAuthorityStatus::OutsideValidityWindow => {
+                self.phase = DispatchPhase::Fenced;
+                return Err(RevocationError::AuthorityOutsideValidityWindow);
+            }
         }
         if self.generation != revocations.generation {
             return Err(RevocationError::StaleDispatchGeneration {
@@ -558,15 +590,12 @@ impl DispatchFence {
                 current: revocations.generation,
             });
         }
-        self.phase = match (self.phase, step) {
+        let next_phase = match (self.phase, step) {
             (DispatchPhase::Queued, ProtectedDispatchStep::Admit) => DispatchPhase::Admitted,
             (DispatchPhase::Admitted, ProtectedDispatchStep::EstablishChannel) => {
                 DispatchPhase::EstablishedChannel
             }
-            (
-                DispatchPhase::Admitted | DispatchPhase::EstablishedChannel,
-                ProtectedDispatchStep::BeginUpload,
-            )
+            (DispatchPhase::EstablishedChannel, ProtectedDispatchStep::BeginUpload)
             | (DispatchPhase::Uploading, ProtectedDispatchStep::UploadWrite) => {
                 DispatchPhase::Uploading
             }
@@ -576,6 +605,13 @@ impl DispatchFence {
             }
             _ => return Err(RevocationError::InvalidDispatchTransition),
         };
+        if matches!(
+            (self.phase, step),
+            (DispatchPhase::Queued, ProtectedDispatchStep::Admit)
+        ) {
+            self.ever_admitted = true;
+        }
+        self.phase = next_phase;
         Ok(())
     }
 
@@ -585,24 +621,70 @@ impl DispatchFence {
         authority_kind: DispatchAuthorityKind,
         authority_id: &BoundedText,
         revocations: &RevocationState,
-        revoked: bool,
+        authority_status: DispatchAuthorityStatus,
     ) -> Result<(), RevocationError> {
         self.check_binding(run_id, authority_kind, authority_id)?;
         revocations.validate()?;
-        if revoked {
-            self.phase = DispatchPhase::Fenced;
-            return Err(RevocationError::AuthorityRevoked);
-        }
         if matches!(
             self.phase,
-            DispatchPhase::Fenced
-                | DispatchPhase::Completed
-                | DispatchPhase::UnknownFinancialOutcome
+            DispatchPhase::Completed | DispatchPhase::UnknownFinancialOutcome
         ) {
             return Err(RevocationError::InvalidDispatchTransition);
         }
+        match authority_status {
+            DispatchAuthorityStatus::Active => {}
+            DispatchAuthorityStatus::Revoked => {
+                self.phase = DispatchPhase::Fenced;
+                return Err(RevocationError::AuthorityRevoked);
+            }
+            DispatchAuthorityStatus::OutsideValidityWindow => {
+                self.phase = DispatchPhase::Fenced;
+                return Err(RevocationError::AuthorityOutsideValidityWindow);
+            }
+        }
+        if self.phase == DispatchPhase::Fenced {
+            return Err(RevocationError::InvalidDispatchTransition);
+        }
+        if revocations.generation < self.generation {
+            return Err(RevocationError::StaleDispatchGeneration {
+                expected: self.generation,
+                current: revocations.generation,
+            });
+        }
         self.generation = revocations.generation;
         Ok(())
+    }
+
+    fn grant_status(
+        now_unix_seconds: i64,
+        grant: &BoundedGrant,
+        revocations: &RevocationState,
+    ) -> DispatchAuthorityStatus {
+        if revocations.grant_is_revoked(grant) {
+            DispatchAuthorityStatus::Revoked
+        } else if now_unix_seconds < grant.issued_at_unix_seconds
+            || grant.is_expired_at(now_unix_seconds)
+        {
+            DispatchAuthorityStatus::OutsideValidityWindow
+        } else {
+            DispatchAuthorityStatus::Active
+        }
+    }
+
+    fn mandate_status(
+        now_unix_seconds: i64,
+        mandate: &ProtectedActionMandate,
+        revocations: &RevocationState,
+    ) -> DispatchAuthorityStatus {
+        if revocations.mandate_is_revoked(mandate) {
+            DispatchAuthorityStatus::Revoked
+        } else if now_unix_seconds < mandate.approved_at_unix_seconds
+            || now_unix_seconds >= mandate.expires_at_unix_seconds
+        {
+            DispatchAuthorityStatus::OutsideValidityWindow
+        } else {
+            DispatchAuthorityStatus::Active
+        }
     }
 
     fn check_binding(
@@ -638,8 +720,8 @@ impl DispatchFence {
         match self.phase {
             DispatchPhase::Admitted
             | DispatchPhase::EstablishedChannel
-            | DispatchPhase::Uploading
-            | DispatchPhase::Fenced => self.phase = outcome,
+            | DispatchPhase::Uploading => self.phase = outcome,
+            DispatchPhase::Fenced if self.ever_admitted => self.phase = outcome,
             phase if phase == outcome => {}
             _ => return Err(RevocationError::InvalidDispatchTransition),
         }
@@ -678,6 +760,8 @@ pub enum RevocationError {
     InvalidAuthority,
     #[error("dispatch authority has been revoked")]
     AuthorityRevoked,
+    #[error("dispatch authority is outside its validity window")]
+    AuthorityOutsideValidityWindow,
     #[error("dispatch generation {expected} is stale; current generation is {current}")]
     StaleDispatchGeneration { expected: u64, current: u64 },
     #[error("dispatch run or authority binding does not match")]

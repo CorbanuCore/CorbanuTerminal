@@ -15,10 +15,11 @@ active transitions:
 
 ```text
 queued -> admitted
-admitted -> established_channel | uploading
+admitted -> established_channel
 established_channel -> uploading | established_channel (channel write)
 uploading -> uploading (upload write) | established_channel (finish upload)
-active | fenced -> completed | unknown_financial_outcome
+admitted | established_channel | uploading -> completed | unknown_financial_outcome
+fenced after admission -> completed | unknown_financial_outcome
 ```
 
 Every protected admission, channel write, and upload write rechecks the exact
@@ -28,6 +29,10 @@ effect; that is the linearization point. A revoked authority or active kill
 switch moves the work to `fenced`. Any generation change denies the old
 operation. An unaffected sibling can continue only after a trusted explicit
 refresh proves its grant or mandate remains valid at the new generation.
+Refresh cannot lower a fence generation, and every queue, refresh, admission,
+channel, and upload boundary rechecks the grant or mandate validity window.
+Queued work fenced before admission cannot be relabeled as completed or
+financially unknown; terminal observations remain terminal under later checks.
 
 `RevocationState::apply_restriction` applies the restriction before invoking the
 audit callback. The returned `RestrictionApplication` preserves whether audit
@@ -52,16 +57,19 @@ All caches, targets, temporary files, logs, and captures were placed below
 
 | Check | Result | CorbanuDrive artifact SHA-256 |
 | --- | --- | --- |
-| `cd codex-rs && just fix -p codex-security-policy` | PASS; Clippy completed | `f6330cdcebcbca3f6cfaf8492a38d5399e90ffd9c50b7f73bbc7a4ece76131f7` |
+| `cd codex-rs && just fix -p codex-security-policy` | PASS; Clippy completed without warnings | `e27a1892e29e52cf7541a2f7b56105e55dc4f53891dc9515a7edc0cb116d810d` |
 | `cd codex-rs && just fmt` | PASS; no output and no diff | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
-| `cd codex-rs && just test -p codex-security-policy revocation` | PASS; 9 passed, 36 filtered | `49e020853f97ae924462e0843958ab7821f2148f8a69086fb7cc130ddb01aec6` |
-| `cd codex-rs && just test -p codex-security-policy` | PASS; 45 passed, 0 skipped | `24e89764512a13870a5481c9c5f847965010029ccfa0ab973121d2ba626c186a` |
+| `cd codex-rs && just test -p codex-security-policy revocation` | PASS; 10 passed, 36 filtered | `3a8b4389140bae300f203767549dd4caaeea3bffc352948fea320cb17f72d47f` |
+| `cd codex-rs && just test -p codex-security-policy` | PASS; 46 passed, 0 skipped | `ad0eb6a39d588c0cba244649e10ff583138e1e62b3a49818932ab6e92ef9d81e` |
+| `python3 docs/plans/check.py` | PASS; active 1/2, one slot available | `9386e473c028f912d1685f25a88db8d21e57b8a9ad0929b07fcca3262ecbc8fb` |
+| `python3 docs/sprints/check.py` | PASS; 64 current, 91 archived | `a7521385d2c53b4ba1b577fafc1b21953ef1325d024289d2af909facd941b370` |
+| `git diff --check` | PASS; no output | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
 
 The same focused command ran in the real PTY session
-`pf19-revocation-tests` with command text and Enter sent separately: 9/9 passed.
+`pf19-revocation-final` with command text and Enter sent separately: 10/10 passed.
 Capture:
-`/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-revocation-fence/tmux-artifacts/focused-tests-pane.txt`,
-SHA-256 `e1a2ff6b3f6ebdc5f1f8331424bd10896af3e42d68f35565d2ec1866c819048d`.
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-revocation-fence/tmux-artifacts/final-focused-tests-pane.txt`,
+SHA-256 `6b44ccd6fe01d11eae193102ba60f8bf824af10e9bf7cf596582a15087f790f5`.
 
 ## Consumer and integration handoff
 
