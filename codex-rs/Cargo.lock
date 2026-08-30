@@ -2854,6 +2854,7 @@ dependencies = [
  "codex-rollout",
  "codex-rollout-trace",
  "codex-sandboxing",
+ "codex-secret-broker",
  "codex-security-policy",
  "codex-shell-command",
  "codex-shell-escalation",
