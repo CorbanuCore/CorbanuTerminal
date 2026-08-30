@@ -4,7 +4,7 @@
 
 - Dispatch base: `9d08b15fa94676c1383ee1605b77e7cc7218dcc4`.
 - Allocation commit: `e0c23fe95165636d621dae8c16a5366c4f7250ac`.
-- Implementation candidate: `c7072e889e539073104be6c771f704f00adbf373`.
+- Remediated implementation candidate: `7ef637790252036771742e3117d04197fa8e32d4`.
 - Contract versions: security-audit event schema v1, integrity checkpoint v1,
   journal record v1 and consumer fixture v1.
 - Activation posture: fixture-only and fail closed. No producer, consumer,
@@ -55,7 +55,7 @@ crate source through the isolated manifest at
 | Check | Result |
 | --- | --- |
 | `rustfmt +nightly-2025-09-18 --edition 2024 codex-rs/security-audit/src/*.rs codex-rs/security-audit/tests/*.rs` | PASS |
-| `cargo +1.95.0 test --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/harness/Cargo.toml` with CorbanuDrive target/temp | PASS; 25 unit/fault + 1 public integration = 26/26 |
+| `cargo +1.95.0 test --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/harness/Cargo.toml` with CorbanuDrive target/temp | PASS; 30 unit/fault + 1 public integration = 31/31 |
 | `cargo +1.95.0 clippy --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/harness/Cargo.toml --all-targets -- -D warnings` | PASS |
 | `python3 -m unittest discover -s qa/security-levels/audit-foundation -p 'test_*.py' -v` | PASS; 3/3 |
 | `python3 -m unittest docs.plans.tests.test_check docs.sprints.tests.test_check` | PASS; 23/23 |
@@ -69,21 +69,40 @@ mutation, rotation, saturation, missing key, owner rotation and concurrent
 writer recovery. It also verifies immediate emergency fencing when the audit
 write fails and restart blocking while the restriction ledger has a gap.
 
+The post-review regressions additionally cover duplicate-reservation permit
+rejection before and after terminal resolution; mandatory first recovery;
+nonzero first-install and forward policy generations with rollback rejection;
+post-publish directory-sync ambiguity; visible recovered pending intents;
+explicit unknown reconciliation; new-dispatch blocking during reconciliation;
+and terminal receipt recording after a live generation advance.
+
 ## TMUX smoke and independent review
 
-The exact implementation candidate ran in real TMUX session
-`pf41-durable-smoke` from the candidate worktree using Corbanu Terminal
+The remediated implementation candidate ran in real TMUX session
+`pf41-durable-smoke-remediation` from the candidate worktree using Corbanu Terminal
 v0.1.35 with `RUST_LOG=trace` and an explicit CorbanuDrive `log_dir`. `/status`
 confirmed the candidate directory, connected Claude Plan account and Corbanu
 version; `/quit` exited the session cleanly. Command text and Enter were sent
 as separate TMUX operations.
 
 - Status capture:
-  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke/status-pane.txt`,
-  SHA-256 `a89552e805022b3a57728a3c2c069f4bf076f14bd34d382582f04e15a3aa80c1`.
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-remediation/status-pane.txt`,
+  SHA-256 `c2b80d03b910b4bb0e3abdf19b9e277d9e2efbe8f4cfd7b9419ac50b05f36244`.
 - Trace log:
-  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke/logs/codex-tui.log`,
-  SHA-256 `bfe4102eb8fc1deb132184f5e3a5663ca2ad7e1f6d6dca22d938b2cf70222443`.
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-remediation/logs/codex-tui.log`,
+  SHA-256 `356cc3c02ae659f1aa5b20b016f9a46532842893932b61e8d35dd78d91c875b9`.
+
+The first read-only review used real TMUX session `pf27-opus5-g1-review`
+with exact model `claude-opus-5-plan` at `max`. It found nine actionable
+issues: duplicate-permit replay, policy-generation recovery deadlocks, Windows
+directory sync, post-publish ambiguity classification, mandatory startup
+recovery, invisible unresolved intents, generation-advanced resolution,
+redundant full scans and an inaccurate authority-construction claim. Candidate
+`7ef637790252036771742e3117d04197fa8e32d4` fixes all nine, adds the regressions
+above, reduces append to one full scan plus incremental candidate validation,
+and makes unvalidated correlation construction explicit. Transcript:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/review/opus-first-review.txt`,
+SHA-256 `895ab3dccf56f07c7f0cd835d96b7e5c28f7714c44db8910a45d7d83141ef2af`.
 
 The read-only Claude Opus 5 Plan Max review is recorded here after it
 completes. Prompt and Enter are sent as separate TMUX operations; the raw

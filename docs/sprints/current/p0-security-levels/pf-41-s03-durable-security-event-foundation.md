@@ -59,11 +59,11 @@ updated: 2026-08-30
 
 ## Verification
 
-- [x] Final Rust formatting, Clippy, 25 unit/fault tests, one public integration test, three fixture tests, 23 governance checker tests and both live governance checkers pass; exact commands are recorded in evidence.
+- [x] Final Rust formatting, Clippy, 30 unit/fault tests, one public integration test, three fixture tests, 23 governance checker tests and both live governance checkers pass; exact commands are recorded in evidence.
 - [x] Fault tests cover before-write failure, post-sync crash, post-publish ambiguous commit and post-root lost acknowledgment, including immediate emergency fencing with unavailable audit storage.
 - [x] TUI applicability remains indirect for this unregistered foundation; the exact candidate passed the round-three TMUX/Corbanu `/status` and clean-exit smoke with trace logging.
 - [x] Contract fixture asserts `runtime_activation: false` with empty producer and consumer registrations; the lane changes no existing runtime route or profile.
-- [ ] Complete the required read-only Claude Opus 5 Plan Max review in the TMUX/Corbanu harness and remediate verified in-scope findings.
+- [ ] Complete the fresh post-remediation read-only Claude Opus 5 Plan Max review in the TMUX/Corbanu harness; all nine first-review findings are remediated and retested.
 
 ## Exit evidence
 
