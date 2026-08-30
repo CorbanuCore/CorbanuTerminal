@@ -159,6 +159,7 @@ impl ChatWidget {
         self.bottom_pane
             .dismiss_view_by_id(super::wallet_menu::WALLET_REMOVE_VIEW_ID);
         self.wallet_capability = None;
+        self.wallet_capability_policy = None;
         self.wallet_balances = None;
         match result {
             Ok(()) => self.add_info_message(

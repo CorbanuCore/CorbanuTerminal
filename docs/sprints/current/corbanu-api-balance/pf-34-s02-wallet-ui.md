@@ -57,6 +57,7 @@ updated: 2026-08-30
 - [x] Removed the legacy status request and all Plan status, details, receipt, recovery, and mixed-credential copy from `/wallet`; stored credentials now expose only Corbanu API disconnect behavior.
 - [x] Rebuilt `corbanu-debug` and exercised `/wallet` against the production database after legacy deletion; only Receive, Corbanu API, unlock, API disconnect, backup/removal, and refresh actions remain.
 - [x] Generalized the x402 parser to preserve heterogeneous chain alternatives and select only the exact confirmed Solana offer; the production Solana-plus-Base challenge now passes typed parsing while retaining its wire fields.
+- [x] Corrected the shared unlock-capability lifecycle so one-action grants are removed from TUI state when any signing request begins, while timed grants remain reusable; successful top-ups no longer poison the following account refresh with a daemon `capability_invalid` refusal.
 
 ## Remaining
 
@@ -70,6 +71,7 @@ updated: 2026-08-30
 - [x] TUI applicability is resolved and non-secret read-only checkpoints are recorded; human passcode/key lifecycle remains pending.
 - [x] Integrated interfaces in `594d618306d922963cf6676d3600cd381922759c`, `865ea2edd2`, and API-only wallet commit `66ff6579d7` match PF-34-S01 and backend `6cc7894`.
 - [x] Upstream picker/provider compatibility test passes with exact model-field selection.
+- [x] Capability-lifecycle and wallet API/unlock focus suite passes 13/13; the broad 3,842-test TUI run passes 3,811 and retains 31 known unrelated version/copy snapshot failures.
 - [ ] Named human passcode, top-up, one-time reveal, create/revoke, inference, and recovery acceptance pass against production.
 
 ## Exit evidence
@@ -80,5 +82,6 @@ updated: 2026-08-30
 - [x] API-only wallet true-TUI log is `/tmp/corbanu-no-legacy-final.Zn0gYI/codex-tui.log` with no Plan copy, Plan-status request failure, panic, malformed, or unavailable signature.
 - [x] Removed the deleted server credential from the local encrypted store through the API-only confirmation flow; `/tmp/corbanu-credential-clean-final.nzi7jm/codex-tui.log` records the successful disconnect notice and a reopened wallet without the disconnect action or legacy Plan surface.
 - [x] The failed production `$20` top-up remained pending with no transaction and no credited balance; the installed `corbanu-debug` now matches the rebuilt parser-fix binary byte-for-byte. Human payment retry remains explicit and pending.
+- [x] The production `$10` top-up settled as `NcLSGL398QdVTLoPpZQyUZ9vU9SC1fNwRaK3pCbBNtmfwuT1TKYk93Zk25TtKGAJgtMNuc9nbZYuh65B96QeiqE`; the subsequent stale-capability failure is covered by the one-action/timed lifecycle regressions.
 - [x] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/corbanu-api-balance/`.

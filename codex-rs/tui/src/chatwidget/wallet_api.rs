@@ -4,6 +4,7 @@ use super::*;
 use crate::chatwidget::wallet_http::gateway_client;
 use crate::chatwidget::wallet_http::gateway_origin;
 use crate::chatwidget::wallet_menu::item;
+use crate::chatwidget::wallet_unlock::wallet_capability_for_request;
 use codex_model_provider_info::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
@@ -45,10 +46,10 @@ impl ChatWidget {
     pub(crate) fn open_corbanu_api(&mut self) {
         self.show_corbanu_api_loading();
         let home = self.config.codex_home.as_path().to_path_buf();
-        let capability = self
-            .wallet_capability
-            .as_ref()
-            .map(|value| Zeroizing::new(value.to_string()));
+        let capability = wallet_capability_for_request(
+            &mut self.wallet_capability,
+            self.wallet_capability_policy,
+        );
         let credential_store_mode = self.config.cli_auth_credentials_store_mode;
         let keyring_backend = self.config.auth_keyring_backend_kind();
         let tx = self.app_event_tx.clone();
@@ -228,11 +229,10 @@ impl ChatWidget {
     }
 
     pub(crate) fn request_corbanu_api_operation(&mut self, operation: CorbanuApiOperation) {
-        let Some(capability) = self
-            .wallet_capability
-            .as_ref()
-            .map(|value| Zeroizing::new(value.to_string()))
-        else {
+        let Some(capability) = wallet_capability_for_request(
+            &mut self.wallet_capability,
+            self.wallet_capability_policy,
+        ) else {
             self.app_event_tx.send(AppEvent::OpenWalletUnlock {
                 policy: UnlockPolicy::OneAction,
                 continuation: crate::app_event::WalletUnlockContinuation::CorbanuApiOperation {
@@ -306,6 +306,7 @@ impl ChatWidget {
             }
             Err(error) => {
                 self.wallet_capability = None;
+                self.wallet_capability_policy = None;
                 self.add_error_message(format!(
                     "Corbanu API wallet operation failed: {error}. No automatic retry was sent."
                 ));

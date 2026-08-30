@@ -10,6 +10,7 @@ use crate::chatwidget::wallet_http::gateway_origin;
 use crate::chatwidget::wallet_receipt::reconcile_plan_receipt;
 use crate::chatwidget::wallet_render::WalletTextStyle;
 use crate::chatwidget::wallet_render::push_wallet_text;
+use crate::chatwidget::wallet_unlock::wallet_capability_for_request;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
@@ -400,6 +401,7 @@ impl ChatWidget {
 
     pub(crate) fn lock_wallet(&mut self) {
         self.wallet_capability = None;
+        self.wallet_capability_policy = None;
         let home = self.config.codex_home.as_path().to_path_buf();
         let tx = self.app_event_tx.clone();
         tokio::spawn(async move {
@@ -669,8 +671,10 @@ impl ChatWidget {
     }
 
     pub(crate) fn purchase_wallet_plan(&mut self, plan: WalletPlanChoice) {
-        let Some(capability) = wallet_capability_for_request(self.wallet_capability.as_ref())
-        else {
+        let Some(capability) = wallet_capability_for_request(
+            &mut self.wallet_capability,
+            self.wallet_capability_policy,
+        ) else {
             self.add_error_message(
                 "Unlock the wallet from /wallet before confirming a purchase.".to_string(),
             );
@@ -784,8 +788,10 @@ impl ChatWidget {
     }
 
     pub(crate) fn recover_wallet_plan_access(&mut self) {
-        let Some(capability) = wallet_capability_for_request(self.wallet_capability.as_ref())
-        else {
+        let Some(capability) = wallet_capability_for_request(
+            &mut self.wallet_capability,
+            self.wallet_capability_policy,
+        ) else {
             self.open_wallet_plan_recovery_unlock();
             return;
         };
@@ -1132,12 +1138,6 @@ fn push_wallet_line(header: &mut ColumnRenderable, text: &str, dimmed: bool) {
     push_wallet_text(header, text, style);
 }
 
-fn wallet_capability_for_request(
-    capability: Option<&Zeroizing<String>>,
-) -> Option<Zeroizing<String>> {
-    capability.map(|value| Zeroizing::new(value.to_string()))
-}
-
 fn format_token_count(value: u64) -> String {
     let digits = value.to_string();
     let mut output = String::with_capacity(digits.len() + digits.len() / 3);
@@ -1389,9 +1389,24 @@ mod tests {
     }
 
     #[test]
-    fn signing_request_does_not_consume_the_tui_unlock_capability() {
-        let held = Some(Zeroizing::new("test-wallet-capability".to_string()));
-        let request = wallet_capability_for_request(held.as_ref()).expect("request capability");
+    fn one_action_signing_request_consumes_the_tui_unlock_capability() {
+        let mut held = Some(Zeroizing::new("test-wallet-capability".to_string()));
+        let request = wallet_capability_for_request(&mut held, Some(UnlockPolicy::OneAction))
+            .expect("request capability");
+        assert_eq!(request.as_str(), "test-wallet-capability");
+        assert!(held.is_none());
+    }
+
+    #[test]
+    fn timed_signing_request_preserves_the_tui_unlock_capability() {
+        let mut held = Some(Zeroizing::new("test-wallet-capability".to_string()));
+        let request = wallet_capability_for_request(
+            &mut held,
+            Some(UnlockPolicy::Timed {
+                duration_seconds: 1_800,
+            }),
+        )
+        .expect("request capability");
         assert_eq!(request.as_str(), "test-wallet-capability");
         assert_eq!(
             held.as_deref().map(String::as_str),
