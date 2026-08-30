@@ -24,6 +24,7 @@ const CORBANU_API_VIEW_ID: &str = "corbanu-api";
 #[derive(Debug, Clone)]
 pub(crate) struct CorbanuApiView {
     pub(crate) account: Option<CorbanuApiAccount>,
+    pub(crate) models: Vec<CorbanuApiModel>,
     pub(crate) key_summaries_loaded: bool,
     pub(crate) notice: Option<String>,
 }
@@ -65,6 +66,7 @@ impl ChatWidget {
                         .and_then(|result| match result {
                             CorbanuApiOperationResult::Account { account } => Ok(CorbanuApiView {
                                 account: Some(account),
+                                models: Vec::new(),
                                 key_summaries_loaded: true,
                                 notice: None,
                             }),
@@ -262,6 +264,7 @@ impl ChatWidget {
             Ok(CorbanuApiOperationResult::Account { account }) => {
                 self.on_corbanu_api_loaded(Ok(CorbanuApiView {
                     account: Some(account),
+                    models: Vec::new(),
                     key_summaries_loaded: true,
                     notice: None,
                 }));
@@ -359,6 +362,24 @@ async fn load_read_only_account(
     credential_store_mode: codex_config::types::AuthCredentialsStoreMode,
     keyring_backend: codex_config::types::AuthKeyringBackendKind,
 ) -> Result<CorbanuApiView, String> {
+    let gateway = gateway_client()?;
+    let models_response = gateway
+        .client
+        .get(format!("{}/v1/models", gateway.origin))
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    if !models_response.status().is_success() {
+        return Err(format!(
+            "Corbanu API model catalog returned HTTP {}",
+            models_response.status()
+        ));
+    }
+    let models = models_response
+        .json::<ModelListResponse>()
+        .await
+        .map_err(|error| format!("Corbanu API model catalog was malformed: {error}"))?
+        .data;
     let api_key = codex_login::provider_api_key_from_auth_storage(
         &home,
         PFTERMINAL_PLAN_API_KEY_ENV_VAR,
@@ -370,11 +391,11 @@ async fn load_read_only_account(
     let Some(api_key) = api_key else {
         return Ok(CorbanuApiView {
             account: None,
+            models,
             key_summaries_loaded: false,
             notice: Some("Top up with USDC to create the first API key.".to_string()),
         });
     };
-    let gateway = gateway_client()?;
     let account_response = gateway
         .client
         .get(format!("{}/v1/account", gateway.origin))
@@ -385,6 +406,7 @@ async fn load_read_only_account(
     if account_response.status() == reqwest::StatusCode::UNAUTHORIZED {
         return Ok(CorbanuApiView {
             account: None,
+            models,
             key_summaries_loaded: false,
             notice: Some(
                 "The stored Corbanu API key is no longer valid. Unlock this wallet to load its balance or create a replacement key."
@@ -409,6 +431,7 @@ async fn load_read_only_account(
     if daemon.address.as_deref() != Some(account.wallet_address.as_str()) {
         return Ok(CorbanuApiView {
             account: None,
+            models,
             key_summaries_loaded: false,
             notice: Some(
                 "The stored Corbanu API key belongs to a different wallet. Unlock this wallet to load its account."
@@ -416,30 +439,13 @@ async fn load_read_only_account(
             ),
         });
     }
-    let models_response = gateway
-        .client
-        .get(format!("{}/v1/models", gateway.origin))
-        .bearer_auth(api_key.as_str())
-        .send()
-        .await
-        .map_err(|error| error.to_string())?;
-    if !models_response.status().is_success() {
-        return Err(format!(
-            "Corbanu API model catalog returned HTTP {}",
-            models_response.status()
-        ));
-    }
-    let models = models_response
-        .json::<ModelListResponse>()
-        .await
-        .map_err(|error| format!("Corbanu API model catalog was malformed: {error}"))?
-        .data;
     Ok(CorbanuApiView {
         account: Some(CorbanuApiAccount {
             balance: account.corbanu_api,
             keys: Vec::new(),
             models,
         }),
+        models: Vec::new(),
         key_summaries_loaded: false,
         notice: Some("Unlock the wallet to list, create, or revoke API keys.".to_string()),
     })
@@ -454,6 +460,8 @@ fn corbanu_api_params(result: Result<CorbanuApiView, String>) -> SelectionViewPa
             header.push(Line::from(format!("Unavailable: {error}").red()));
         }
         Ok(view) => {
+            let mut models = view.models;
+            let mut keys = Vec::new();
             if let Some(account) = view.account {
                 header.push(Line::from(
                     format!("${} available", account.balance.available_usd)
@@ -469,81 +477,79 @@ fn corbanu_api_params(result: Result<CorbanuApiView, String>) -> SelectionViewPa
                 header.push(Line::from(
                     "Prices are exact upstream cost with zero markup, per million tokens.".dim(),
                 ));
-                for model in account.models {
-                    let recommended = if model.recommended {
-                        " · Recommended"
-                    } else {
-                        ""
-                    };
-                    let faster = if model.balance_rate == "faster" {
-                        " · uses balance faster"
-                    } else {
-                        ""
-                    };
-                    let privacy = if model.privacy == "corbanu-controlled" {
-                        "Corbanu-controlled"
-                    } else {
-                        "Third-party inference"
-                    };
-                    let model_id = model.id.clone();
-                    items.push(SelectionItem {
-                        name: format!("{}{}{}", model.display_name, recommended, faster),
-                        description: Some(format!(
-                            "${} input · ${} cached input · ${} output · {privacy}",
-                            model.pricing.input_usd,
-                            model.pricing.cache_read_usd,
-                            model.pricing.output_usd,
-                        )),
-                        actions: vec![Box::new(move |tx| {
-                            let provider = if model_id == "corbanu/claude-fable-5" {
-                                PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
-                            } else {
-                                PFTERMINAL_PLAN_PROVIDER_ID
-                            };
-                            tx.send(AppEvent::UpdateModelSelection {
-                                model: model_id.clone(),
-                                provider: Some(provider.to_string()),
-                            });
-                            tx.send(AppEvent::PersistModelSelection {
-                                model: model_id.clone(),
-                                provider: Some(provider.to_string()),
-                                effort: None,
-                            });
-                        })],
-                        ..Default::default()
-                    });
-                }
-                if view.key_summaries_loaded {
-                    for key in account
-                        .keys
-                        .into_iter()
-                        .filter(|key| key.revoked_at.is_none())
-                    {
-                        let key_id = key.id.clone();
-                        let prefix = key.display_prefix.clone();
-                        items.push(SelectionItem {
-                            name: format!("API key {}", key.display_prefix),
-                            description: Some(match key.last_used_at {
-                                Some(last_used) => {
-                                    format!("Last used {last_used} · select to revoke")
-                                }
-                                None => "Never used · select to revoke".to_string(),
-                            }),
-                            actions: vec![Box::new(move |tx| {
-                                tx.send(AppEvent::ConfirmCorbanuApiKeyRevocation {
-                                    key_id: key_id.clone(),
-                                    display_prefix: prefix.clone(),
-                                });
-                            })],
-                            ..Default::default()
-                        });
-                    }
-                }
+                models = account.models;
+                keys = account.keys;
             } else {
                 header.push(Line::from("$0 available".cyan().bold()));
                 header.push(Line::from(
                     "No plan tier is required. Add any positive canonical-USDC amount.".dim(),
                 ));
+            }
+            for model in models {
+                let recommended = if model.recommended {
+                    " · Recommended"
+                } else {
+                    ""
+                };
+                let faster = if model.balance_rate == "faster" {
+                    " · uses balance faster"
+                } else {
+                    ""
+                };
+                let privacy = if model.privacy == "corbanu-controlled" {
+                    "Corbanu-controlled"
+                } else {
+                    "Third-party inference"
+                };
+                let model_id = model.id.clone();
+                items.push(SelectionItem {
+                    name: format!("{}{}{}", model.display_name, recommended, faster),
+                    description: Some(format!(
+                        "${} input · ${} cached input · ${} output · {privacy}",
+                        model.pricing.input_usd,
+                        model.pricing.cache_read_usd,
+                        model.pricing.output_usd,
+                    )),
+                    actions: vec![Box::new(move |tx| {
+                        let provider = if model_id == "corbanu/claude-fable-5" {
+                            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
+                        } else {
+                            PFTERMINAL_PLAN_PROVIDER_ID
+                        };
+                        tx.send(AppEvent::UpdateModelSelection {
+                            model: model_id.clone(),
+                            provider: Some(provider.to_string()),
+                        });
+                        tx.send(AppEvent::PersistModelSelection {
+                            model: model_id.clone(),
+                            provider: Some(provider.to_string()),
+                            effort: None,
+                        });
+                    })],
+                    ..Default::default()
+                });
+            }
+            if view.key_summaries_loaded {
+                for key in keys.into_iter().filter(|key| key.revoked_at.is_none()) {
+                    let key_id = key.id.clone();
+                    let prefix = key.display_prefix.clone();
+                    items.push(SelectionItem {
+                        name: format!("API key {}", key.display_prefix),
+                        description: Some(match key.last_used_at {
+                            Some(last_used) => {
+                                format!("Last used {last_used} · select to revoke")
+                            }
+                            None => "Never used · select to revoke".to_string(),
+                        }),
+                        actions: vec![Box::new(move |tx| {
+                            tx.send(AppEvent::ConfirmCorbanuApiKeyRevocation {
+                                key_id: key_id.clone(),
+                                display_prefix: prefix.clone(),
+                            });
+                        })],
+                        ..Default::default()
+                    });
+                }
             }
             if let Some(notice) = view.notice {
                 header.push(Line::from(notice.dim()));

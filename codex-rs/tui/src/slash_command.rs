@@ -158,7 +158,7 @@ impl SlashCommand {
             SlashCommand::Providers => "add provider API keys to the encrypted vault",
             SlashCommand::Telegram => "connect and manage Corbanu Terminal from Telegram",
             SlashCommand::Vault => "manage the encrypted credential vault (keys, tokens)",
-            SlashCommand::Wallet => "manage SOL, USDC, and Corbanu Terminal inference plans",
+            SlashCommand::Wallet => "manage SOL, USDC, and Corbanu API access",
             SlashCommand::Logout => "log out of Corbanu Terminal",
             SlashCommand::Rollout => "print the rollout file path",
             SlashCommand::TestApproval => "test approval request",

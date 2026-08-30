@@ -67,6 +67,7 @@ async fn funded_account_surface_shows_balance_prices_keys_and_no_plan_tiers() {
     chat.show_corbanu_api_loading();
     chat.on_corbanu_api_loaded(Ok(CorbanuApiView {
         account: Some(account()),
+        models: Vec::new(),
         key_summaries_loaded: true,
         notice: None,
     }));
@@ -89,6 +90,7 @@ async fn unfunded_surface_explains_arbitrary_top_up_without_a_tier() {
     chat.show_corbanu_api_loading();
     chat.on_corbanu_api_loaded(Ok(CorbanuApiView {
         account: None,
+        models: account().models,
         key_summaries_loaded: false,
         notice: Some("Top up with USDC to create the first API key.".to_string()),
     }));
@@ -96,6 +98,8 @@ async fn unfunded_surface_explains_arbitrary_top_up_without_a_tier() {
     let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 88);
     assert!(rendered.contains("$0 available"));
     assert!(rendered.contains("Add any positive canonical-USDC amount"));
+    assert!(rendered.contains("GLM 5.3 Flash · Recommended"));
+    assert!(rendered.contains("GLM 5.3 · uses balance faster"));
     assert!(!rendered.contains("Starter"));
     assert!(!rendered.contains("Basic"));
     insta::assert_snapshot!(rendered);
@@ -108,6 +112,7 @@ async fn stale_key_surface_routes_back_through_wallet_ownership() {
     chat.show_corbanu_api_loading();
     chat.on_corbanu_api_loaded(Ok(CorbanuApiView {
         account: None,
+        models: account().models,
         key_summaries_loaded: false,
         notice: Some(
             "The stored Corbanu API key is no longer valid. Unlock this wallet to load its balance or create a replacement key."

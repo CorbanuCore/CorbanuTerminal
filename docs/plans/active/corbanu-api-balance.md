@@ -4,7 +4,7 @@ status: active
 change_class: product-initiative
 priority: P1
 owner: "Alex Good"
-max_active_sprints: 1
+max_active_sprints: 2
 integration_owner: "Jim Ricketts"
 activation_authority: "Alex Good — Head of Product"
 activation_basis: "2026-08-30 directive to replace Corbanu Plan tiers with wallet-funded Corbanu API keys and dollar balance"
@@ -157,7 +157,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | `PF-32` | Dollar balance, top-up intents, key lifecycle, and legacy migration | [PF-32-S01](../../sprints/archive/corbanu-api-balance/pf-32-s01-balance-topups-and-keys.md), [PF-32-S02](../../sprints/archive/corbanu-api-balance/pf-32-s02-terminal-wallet-auth.md) | completed; Terminal bridge at `cd79361d8b4f286291556a641288757d0451f52c` |
 | `PF-33` | Versioned at-cost metering and xAPI/Vercel selection | [PF-33-S01](../../sprints/archive/corbanu-api-balance/pf-33-s01-at-cost-metering.md), [PF-33-S02](../../sprints/archive/corbanu-api-balance/pf-33-s02-customer-response-boundary.md) | completed; response boundary corrected at `778b4b33445aa452dce09ab416e520e6b4aaeab1` |
 | `PF-34` | Terminal provider, balance/key/top-up UI, and one-time secret view | [PF-34-S01](../../sprints/archive/corbanu-api-balance/pf-34-s01-wallet-client.md), [PF-34-S02](../../sprints/current/corbanu-api-balance/pf-34-s02-wallet-ui.md) | wallet client complete; TUI in progress |
-| `PF-35` | Qualification, deployment, migration docs, and human acceptance | pending | pending PF-31 through PF-34 |
+| `PF-35` | Qualification, deployment, migration docs, and human acceptance | [PF-35-S01](../../sprints/current/corbanu-api-balance/pf-35-s01-production-candidate.md) | production candidate in progress; final qualification follows PF-34 |
 
 ### Dependency graph and lane allocation
 
@@ -168,6 +168,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | backend | PF-33-S01 (completed) | Jim Ricketts | Versioned price registry, dollar reservation/settlement, active provider-neutral routes, and tests | PF-32-S01 | 101 package tests and 13 disposable-PostgreSQL tests pass; typecheck and build pass |
 | backend | PF-33-S02 (completed) | Jim Ricketts | Structured customer-response sanitization and live route regression | PF-33-S01 | 104 package tests pass; live GLM 5.3 Flash response is provider-neutral |
 | backend | PF-32-S02 (completed) | Jim Ricketts | Signed-wallet account operations required by the Rust Terminal client | PF-33-S02 | 106 package tests pass; operation-bound auth at `cd79361d8b4f286291556a641288757d0451f52c` |
+| production-candidate | PF-35-S01 | Jim Ricketts | `Dockerfile`, `fly.toml`, `src`, `tests` | PF-32-S02 and PF-33-S02 | Deploy the private backend candidate, verify database migration and provider-neutral production contracts, then hand the endpoint to PF-34 human UI testing |
 
 ### Requirement traceability
 
