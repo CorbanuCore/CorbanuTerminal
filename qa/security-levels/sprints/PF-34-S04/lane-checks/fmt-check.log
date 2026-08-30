@@ -1,0 +1,2 @@
+$ cargo fmt --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/Cargo.toml --all -- --check --config edition=2024
+exit=0

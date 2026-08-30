@@ -1,0 +1,7 @@
+$ python3 qa/security-levels/ingress-contract/test_verify.py
+exit=0
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.015s
+
+OK
