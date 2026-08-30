@@ -2,24 +2,60 @@
 """Verify the frozen Permissive contract against a candidate Corbanu binary."""
 
 import argparse
+import datetime
 import hashlib
 import json
 import os
+import platform
 import re
+import shutil
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 BASELINE_PATH = Path("qa/security-levels/permissive-baseline-v1.json")
+CONTROL_PATH = Path("qa/security-levels/compatibility/upstream-control-v2.json")
+DRIFT_LEDGER_PATH = Path("qa/security-levels/compatibility/drift-ledger-v2.json")
 FROZEN_BASELINE_SHA256 = (
     "45d1f2bd96733381638bb62961ee59fb1c026bc05a6a78d03b560cb794406b8d"
 )
+UPSTREAM_CONVERGENCE_COMMIT = "45a60f03d2f6c041d284b41cc3f33c416d9eeed1"
+UPSTREAM_CODEX_PARENT = "413492cd6c3a4d4f8dff6f406247ccda5a9d88aa"
 REPORT_NAME = "compatibility-report.json"
 MAX_CAPTURE_BYTES = 64 * 1024
+MAX_LEDGER_AGE_DAYS = 30
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9_:-]+$")
+RUNTIME_INPUT_PATHS = (
+    "codex-rs",
+    "justfile",
+    "scripts/just-shell.py",
+    "codex-rs/.cargo/config.toml",
+)
+REQUIRED_EXPANDED_SURFACES = frozenset(
+    {
+        "environment-auth",
+        "web-run-history",
+        "native-search",
+        "browser",
+        "mcp-plugins",
+        "children",
+        "wallet",
+        "clipboard-export",
+        "persisted-sessions",
+    }
+)
+REQUIRED_PROTECTED_PACKAGES = frozenset(
+    {
+        "codex-secret-broker",
+        "codex-network-proxy",
+        "codex-browser-isolation",
+        "codex-content-security",
+    }
+)
 
 
 class CompatibilityError(RuntimeError):
@@ -58,8 +94,11 @@ def bounded_output(value: str) -> str:
     encoded = value.encode("utf-8", errors="replace")
     if len(encoded) <= MAX_CAPTURE_BYTES:
         return value
-    suffix = b"\n... output truncated by security-level-compat ...\n"
-    return (encoded[: MAX_CAPTURE_BYTES - len(suffix)] + suffix).decode(
+    marker = b"\n... output truncated by security-level-compat ...\n"
+    retained = MAX_CAPTURE_BYTES - len(marker)
+    head_size = retained // 2
+    tail_size = retained - head_size
+    return (encoded[:head_size] + marker + encoded[-tail_size:]).decode(
         "utf-8", errors="replace"
     )
 
@@ -71,15 +110,20 @@ def run_command(
     env: dict[str, str] | None = None,
     timeout_seconds: int = 600,
 ) -> CommandResult:
-    completed = subprocess.run(
-        command,
-        cwd=cwd,
-        env=env,
-        text=True,
-        capture_output=True,
-        timeout=timeout_seconds,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=cwd,
+            env=env,
+            text=True,
+            capture_output=True,
+            timeout=timeout_seconds,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise CompatibilityError(
+            f"command timed out after {timeout_seconds}s: {' '.join(command)}"
+        ) from error
     return CommandResult(
         command=command,
         returncode=completed.returncode,
@@ -208,6 +252,375 @@ def validate_manifest(
     return probes
 
 
+def canonical_json_digest(value: Any) -> str:
+    return sha256_bytes(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    )
+
+
+def _rust_code_mask(text: str) -> str:
+    """Return same-length Rust text with comments and literals blanked."""
+    masked = list(text)
+    index = 0
+    block_depth = 0
+    state = "code"
+    raw_hashes = 0
+    while index < len(text):
+        if state == "code":
+            if text.startswith("//", index):
+                masked[index : index + 2] = "  "
+                index += 2
+                state = "line-comment"
+                continue
+            if text.startswith("/*", index):
+                masked[index : index + 2] = "  "
+                index += 2
+                block_depth = 1
+                state = "block-comment"
+                continue
+            raw = re.match(r'r(#{0,255})"', text[index:])
+            if raw is not None:
+                raw_hashes = len(raw.group(1))
+                length = raw.end()
+                masked[index : index + length] = " " * length
+                index += length
+                state = "raw-string"
+                continue
+            if text[index] == '"':
+                masked[index] = " "
+                index += 1
+                state = "string"
+                continue
+            if text[index] == "'" and re.match(r"'(?:\\.|[^\\'\n])'", text[index:]):
+                end = index + re.match(r"'(?:\\.|[^\\'\n])'", text[index:]).end()
+                masked[index:end] = " " * (end - index)
+                index = end
+                continue
+            index += 1
+            continue
+        if state == "line-comment":
+            if text[index] == "\n":
+                state = "code"
+            else:
+                masked[index] = " "
+            index += 1
+            continue
+        if state == "block-comment":
+            if text.startswith("/*", index):
+                masked[index : index + 2] = "  "
+                block_depth += 1
+                index += 2
+            elif text.startswith("*/", index):
+                masked[index : index + 2] = "  "
+                block_depth -= 1
+                index += 2
+                if block_depth == 0:
+                    state = "code"
+            else:
+                if text[index] != "\n":
+                    masked[index] = " "
+                index += 1
+            continue
+        if state == "raw-string":
+            terminator = '"' + ("#" * raw_hashes)
+            if text.startswith(terminator, index):
+                masked[index : index + len(terminator)] = " " * len(terminator)
+                index += len(terminator)
+                state = "code"
+            else:
+                if text[index] != "\n":
+                    masked[index] = " "
+                index += 1
+            continue
+        if state == "string":
+            if text[index] == "\\" and index + 1 < len(text):
+                masked[index : index + 2] = "  "
+                index += 2
+            elif text[index] == '"':
+                masked[index] = " "
+                index += 1
+                state = "code"
+            else:
+                if text[index] != "\n":
+                    masked[index] = " "
+                index += 1
+    return "".join(masked)
+
+
+def extract_expanded_test_source(text: str, function_name: str) -> str:
+    masked = _rust_code_mask(text)
+    marker = re.compile(
+        rf"(?m)^(?P<indent>[ \t]*)"
+        rf"(?P<attributes>(?:#\[(?:[^\[\]]|\n)*\][ \t]*\n(?P=indent))*)"
+        rf"(?:async\s+)?fn\s+{re.escape(function_name)}\s*\("
+    )
+    match = marker.search(masked)
+    if match is None:
+        raise CompatibilityError(f"expanded probe function is missing: {function_name}")
+    attributes = match.group("attributes")
+    if re.search(r"#\[(?:tokio::)?test(?:\s*\([^]]*\))?\]", attributes) is None:
+        raise CompatibilityError(f"expanded probe is not a test: {function_name}")
+    opening_brace = masked.find("{", match.end())
+    if opening_brace < 0:
+        raise CompatibilityError(f"expanded probe has no body: {function_name}")
+    depth = 0
+    for index in range(opening_brace, len(masked)):
+        depth += masked[index] == "{"
+        depth -= masked[index] == "}"
+        if depth == 0:
+            return text[match.start() : index + 1].rstrip() + "\n"
+    raise CompatibilityError(f"expanded probe body is incomplete: {function_name}")
+
+
+def source_at_commit(repo_root: Path, commit: str, path: str) -> str:
+    completed = subprocess.run(
+        ["git", "show", f"{commit}:{path}"],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise CompatibilityError(f"control source is missing: {commit}:{path}")
+    return completed.stdout
+
+
+def expanded_source_digest(
+    repo_root: Path, commit: str, path: str, function_name: str
+) -> str:
+    source = source_at_commit(repo_root, commit, path)
+    return sha256_bytes(
+        extract_expanded_test_source(source, function_name).encode("utf-8")
+    )
+
+
+def parse_utc(value: str) -> datetime.datetime:
+    try:
+        parsed = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError) as error:
+        raise CompatibilityError("control review timestamp is invalid") from error
+    if parsed.tzinfo is None:
+        raise CompatibilityError("control review timestamp requires a timezone")
+    return parsed.astimezone(datetime.timezone.utc)
+
+
+def validate_expanded_control(
+    control: dict[str, Any],
+    ledger: dict[str, Any],
+    repo_root: Path,
+    baseline_commit: str,
+    upstream_commit: str,
+    candidate_commit: str,
+    *,
+    now: datetime.datetime | None = None,
+) -> list[dict[str, Any]]:
+    if control.get("schema_version") != 2 or ledger.get("schema_version") != 2:
+        raise CompatibilityError("unsupported expanded compatibility schema")
+    identity = control.get("identity")
+    if not isinstance(identity, dict):
+        raise CompatibilityError("expanded control identity is missing")
+    expected_identity = {
+        "baseline_commit": baseline_commit,
+        "baseline_manifest_sha256": FROZEN_BASELINE_SHA256,
+        "upstream_commit": upstream_commit,
+    }
+    if any(identity.get(key) != value for key, value in expected_identity.items()):
+        raise CompatibilityError("baseline/upstream control identities do not match")
+    if identity.get("expectations_constructed_from_commit") != upstream_commit:
+        raise CompatibilityError("expanded expectations are not upstream-derived")
+    if identity.get("upstream_convergence_commit") != UPSTREAM_CONVERGENCE_COMMIT:
+        raise CompatibilityError("upstream convergence identity does not match")
+    if identity.get("upstream_codex_parent") != UPSTREAM_CODEX_PARENT:
+        raise CompatibilityError("upstream Codex parent identity does not match")
+    if upstream_commit == candidate_commit:
+        raise CompatibilityError("candidate-derived expectations are forbidden")
+    git_output(
+        repo_root, ["merge-base", "--is-ancestor", upstream_commit, baseline_commit]
+    )
+    upstream_tree = git_output(repo_root, ["rev-parse", f"{upstream_commit}:codex-rs"])
+    baseline_tree = git_output(repo_root, ["rev-parse", f"{baseline_commit}:codex-rs"])
+    if (
+        identity.get("upstream_codex_rs_tree") != upstream_tree
+        or identity.get("baseline_codex_rs_tree") != baseline_tree
+        or upstream_tree == baseline_tree
+    ):
+        raise CompatibilityError(
+            "upstream and baseline controls require pinned, distinct Rust trees"
+        )
+    git_output(
+        repo_root,
+        ["merge-base", "--is-ancestor", UPSTREAM_CONVERGENCE_COMMIT, upstream_commit],
+    )
+    git_output(
+        repo_root,
+        ["merge-base", "--is-ancestor", UPSTREAM_CODEX_PARENT, upstream_commit],
+    )
+    git_output(
+        repo_root, ["merge-base", "--is-ancestor", baseline_commit, candidate_commit]
+    )
+
+    reviewed_at = parse_utc(str(ledger.get("reviewed_at_utc", "")))
+    max_age_days = ledger.get("max_age_days")
+    if (
+        not isinstance(max_age_days, int)
+        or max_age_days < 1
+        or max_age_days > MAX_LEDGER_AGE_DAYS
+    ):
+        raise CompatibilityError(
+            f"drift ledger max_age_days must be between 1 and {MAX_LEDGER_AGE_DAYS}"
+        )
+    current = now or datetime.datetime.now(datetime.timezone.utc)
+    if reviewed_at > current + datetime.timedelta(minutes=5):
+        raise CompatibilityError("drift ledger review timestamp is in the future")
+    if current - reviewed_at > datetime.timedelta(days=max_age_days):
+        raise CompatibilityError("drift ledger is stale and requires owner review")
+    if not isinstance(ledger.get("reviewed_by"), str) or not ledger["reviewed_by"]:
+        raise CompatibilityError("drift ledger requires a named reviewer")
+
+    surfaces = control.get("surfaces")
+    if not isinstance(surfaces, list):
+        raise CompatibilityError("expanded surface inventory is missing")
+    surface_ids = {
+        surface.get("id") for surface in surfaces if isinstance(surface, dict)
+    }
+    if surface_ids != REQUIRED_EXPANDED_SURFACES or len(surfaces) != len(surface_ids):
+        raise CompatibilityError("expanded surface inventory is incomplete")
+    if any(set(surface) != {"id"} for surface in surfaces):
+        raise CompatibilityError(
+            "expanded surfaces are executable inventory ids, not behavior declarations"
+        )
+
+    entries = ledger.get("entries")
+    if not isinstance(entries, list):
+        raise CompatibilityError("drift ledger entries must be a list")
+    drift_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise CompatibilityError("drift ledger entry must be an object")
+        key = (str(entry.get("identity")), str(entry.get("case_id")))
+        if key in drift_by_key:
+            raise CompatibilityError("duplicate drift ledger entry")
+        if entry.get("disposition") != "accepted-intentional":
+            raise CompatibilityError("drift ledger contains unaccepted drift")
+        drift_by_key[key] = entry
+
+    cases = control.get("cases")
+    if not isinstance(cases, list) or not cases:
+        raise CompatibilityError("expanded control requires executable cases")
+    case_ids: set[str] = set()
+    covered: set[str] = set()
+    observed_drift: set[tuple[str, str]] = set()
+    for case in cases:
+        if not isinstance(case, dict):
+            raise CompatibilityError("expanded case must be an object")
+        for key in ("id", "surface", "package", "test_filter", "source", "function"):
+            if not isinstance(case.get(key), str) or not case[key]:
+                raise CompatibilityError(f"expanded case requires non-empty {key}")
+        for key in ("id", "surface", "package", "test_filter", "function"):
+            if IDENTIFIER_PATTERN.fullmatch(case[key]) is None:
+                raise CompatibilityError(
+                    f"expanded case {key} contains unsupported characters"
+                )
+        if case["test_filter"] != case["function"]:
+            raise CompatibilityError(
+                "expanded test filters must name the exact function"
+            )
+        if case["id"] in case_ids or case["surface"] not in surface_ids:
+            raise CompatibilityError("expanded case identity or surface is invalid")
+        case_ids.add(case["id"])
+        covered.add(case["surface"])
+        upstream_digest = expanded_source_digest(
+            repo_root, upstream_commit, case["source"], case["function"]
+        )
+        if upstream_digest != case.get("upstream_source_sha256"):
+            raise CompatibilityError(f"upstream expectation drift for {case['id']}")
+        for label, commit in (
+            ("baseline", baseline_commit),
+            ("candidate", candidate_commit),
+        ):
+            observed = expanded_source_digest(
+                repo_root, commit, case["source"], case["function"]
+            )
+            if observed == upstream_digest:
+                continue
+            key = (label, case["id"])
+            entry = drift_by_key.get(key)
+            if entry is None or entry.get("upstream_source_sha256") != upstream_digest:
+                raise CompatibilityError(f"unknown {label} drift for {case['id']}")
+            if entry.get("observed_source_sha256") != observed or not entry.get(
+                "rationale"
+            ):
+                raise CompatibilityError(f"stale {label} drift entry for {case['id']}")
+            observed_drift.add(key)
+    if covered != surface_ids:
+        raise CompatibilityError("expanded cases do not cover every required surface")
+    if set(drift_by_key) != observed_drift:
+        raise CompatibilityError("drift ledger contains stale or unobserved entries")
+    return cases
+
+
+def validate_protected_cases(
+    control: dict[str, Any], repo_root: Path, candidate_commit: str
+) -> list[dict[str, Any]]:
+    identity = control.get("identity")
+    if not isinstance(identity, dict):
+        raise CompatibilityError("expanded control identity is missing")
+    anchor_commit = identity.get("protected_expectations_commit")
+    if (
+        not isinstance(anchor_commit, str)
+        or COMMIT_PATTERN.fullmatch(anchor_commit) is None
+    ):
+        raise CompatibilityError("protected expectations require a full anchor commit")
+    if anchor_commit == candidate_commit:
+        raise CompatibilityError(
+            "candidate-derived protected expectations are forbidden"
+        )
+    git_output(
+        repo_root, ["merge-base", "--is-ancestor", anchor_commit, candidate_commit]
+    )
+
+    cases = control.get("protected_cases")
+    if not isinstance(cases, list) or not cases:
+        raise CompatibilityError("protected boundary control requires executable cases")
+    packages: set[str] = set()
+    case_ids: set[str] = set()
+    for case in cases:
+        if not isinstance(case, dict):
+            raise CompatibilityError("protected case must be an object")
+        for key in ("id", "package", "test_filter", "source", "function", "guarantee"):
+            if not isinstance(case.get(key), str) or not case[key]:
+                raise CompatibilityError(f"protected case requires non-empty {key}")
+        for key in ("id", "package", "test_filter", "function"):
+            if IDENTIFIER_PATTERN.fullmatch(case[key]) is None:
+                raise CompatibilityError(
+                    f"protected case {key} contains unsupported characters"
+                )
+        if case["test_filter"] != case["function"]:
+            raise CompatibilityError(
+                "protected test filters must name the exact function"
+            )
+        if case["id"] in case_ids or case["package"] in packages:
+            raise CompatibilityError(
+                "protected cases must have unique ids and packages"
+            )
+        case_ids.add(case["id"])
+        packages.add(case["package"])
+        anchor_digest = expanded_source_digest(
+            repo_root, anchor_commit, case["source"], case["function"]
+        )
+        if anchor_digest != case.get("anchor_source_sha256"):
+            raise CompatibilityError(f"protected anchor drift for {case['id']}")
+        candidate_digest = expanded_source_digest(
+            repo_root, candidate_commit, case["source"], case["function"]
+        )
+        if candidate_digest != anchor_digest:
+            raise CompatibilityError(f"protected candidate drift for {case['id']}")
+    if packages != REQUIRED_PROTECTED_PACKAGES:
+        raise CompatibilityError("protected boundary inventory is incomplete")
+    return cases
+
+
 def git_output(repo_root: Path, arguments: list[str]) -> str:
     result = run_command(["git", *arguments], cwd=repo_root, timeout_seconds=30)
     if result.returncode != 0:
@@ -238,13 +651,20 @@ def candidate_identity(
     return identity, version
 
 
-def workspace_candidate_path(repo_root: Path) -> Path:
+def workspace_candidate_path(repo_root: Path, target_dir: Path | None = None) -> Path:
     executable = "corbanu.exe" if os.name == "nt" else "corbanu"
-    return (repo_root / "codex-rs" / "target" / "debug" / executable).resolve()
+    target = target_dir or (repo_root / "codex-rs" / "target")
+    return (target / "debug" / executable).resolve()
 
 
-def build_workspace_candidate(repo_root: Path, candidate: Path) -> CommandResult:
-    expected = workspace_candidate_path(repo_root)
+def build_workspace_candidate(
+    repo_root: Path,
+    candidate: Path,
+    target_dir: Path | None = None,
+    env: dict[str, str] | None = None,
+) -> CommandResult:
+    target = target_dir or (repo_root / "codex-rs" / "target")
+    expected = workspace_candidate_path(repo_root, target)
     if candidate.resolve() != expected:
         raise CompatibilityError(
             f"--candidate must be the workspace binary built by this harness: {expected}"
@@ -254,17 +674,249 @@ def build_workspace_candidate(repo_root: Path, candidate: Path) -> CommandResult
             "cargo",
             "build",
             "--target-dir",
-            str(repo_root / "codex-rs" / "target"),
+            str(target),
             "-p",
             "codex-cli",
             "--bin",
             "corbanu",
         ],
         cwd=repo_root / "codex-rs",
+        env=env,
     )
     if result.returncode != 0:
         raise CompatibilityError("candidate workspace build failed")
     return result
+
+
+def require_clean_runtime_tree(repo_root: Path) -> None:
+    result = run_command(
+        ["git", "status", "--porcelain", "--", *RUNTIME_INPUT_PATHS],
+        cwd=repo_root,
+        timeout_seconds=30,
+    )
+    if result.returncode != 0:
+        raise CompatibilityError("candidate runtime cleanliness check failed")
+    if result.stdout.strip():
+        raise CompatibilityError(
+            "candidate runtime tree is dirty; commit or remove Rust/runtime changes"
+        )
+
+
+def runtime_input_digests(repo_root: Path) -> dict[str, str]:
+    digests: dict[str, str] = {}
+    for relative in RUNTIME_INPUT_PATHS[1:]:
+        path = repo_root / relative
+        if not path.is_file():
+            raise CompatibilityError(f"candidate runtime input is missing: {relative}")
+        digests[relative] = sha256_file(path)
+    return digests
+
+
+def require_external_artifact_roots(repo_root: Path, *roots: Path) -> None:
+    repository = repo_root.resolve()
+    for root in roots:
+        resolved = root.resolve()
+        if resolved == repository or repository in resolved.parents:
+            raise CompatibilityError(
+                f"artifact root must be outside the repository worktree: {resolved}"
+            )
+
+
+def remove_tree_best_effort(path: Path) -> str | None:
+    """Remove an artifact tree without allowing cleanup to mask test evidence."""
+    for _attempt in range(3):
+        try:
+            shutil.rmtree(path, ignore_errors=True)
+        except OSError:
+            pass
+        if not path.exists():
+            return None
+        try:
+            finder_files = list(path.rglob(".DS_Store"))
+        except OSError:
+            finder_files = []
+        for finder_file in finder_files:
+            try:
+                finder_file.unlink(missing_ok=True)
+            except OSError:
+                pass
+    return f"failed to remove artifact tree: {path}"
+
+
+def prune_stale_control_targets(
+    target_root: Path, *, keep_names: frozenset[str]
+) -> list[str]:
+    removed: list[str] = []
+    if not target_root.exists():
+        return removed
+    for child in list(target_root.iterdir()):
+        if child.name not in keep_names and (
+            child.name.startswith("baseline-") or child.name.startswith("upstream-")
+        ):
+            original_name = child.name
+            tombstone = target_root / f".prune-{original_name}-{os.getpid()}"
+            child.replace(tombstone)
+            child = tombstone
+            if child.is_dir() and not child.is_symlink():
+                cleanup_error = remove_tree_best_effort(child)
+                if cleanup_error is not None:
+                    raise CompatibilityError(
+                        f"failed to prune stale control target {original_name}: "
+                        f"{cleanup_error}"
+                    )
+            else:
+                child.unlink()
+            removed.append(original_name)
+    return sorted(removed)
+
+
+def controlled_environment(
+    cache_root: Path, target_dir: Path, temp_dir: Path
+) -> dict[str, str]:
+    allowed = {
+        "COMSPEC",
+        "HOME",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "LANG",
+        "LC_ALL",
+        "PATH",
+        "PATHEXT",
+        "RUSTUP_HOME",
+        "SYSTEMROOT",
+        "USERPROFILE",
+        "WINDIR",
+    }
+    environment = {key: value for key, value in os.environ.items() if key in allowed}
+    environment.update(
+        {
+            "CARGO_HOME": str(cache_root / "cargo-home"),
+            "CARGO_TARGET_DIR": str(target_dir),
+            "CARGO_TERM_COLOR": "never",
+            "TMPDIR": str(temp_dir),
+            "TMP": str(temp_dir),
+            "TEMP": str(temp_dir),
+        }
+    )
+    return environment
+
+
+def environment_identity(repo_root: Path, env: dict[str, str]) -> dict[str, Any]:
+    tools: dict[str, str] = {}
+    for name in ("cargo", "rustc", "just", "git"):
+        result = run_command(
+            [name, "--version"], cwd=repo_root, env=env, timeout_seconds=30
+        )
+        if result.returncode != 0:
+            raise CompatibilityError(f"{name} --version failed")
+        tools[name] = (result.stdout or result.stderr).strip()
+    facts = {
+        "os": platform.system(),
+        "architecture": platform.machine(),
+        "python": platform.python_version(),
+        "tools": tools,
+        "ambient_overrides_present": {
+            key: key in os.environ
+            for key in ("CARGO_BUILD_TARGET", "RUSTFLAGS", "RUSTDOCFLAGS")
+        },
+    }
+    return {"facts": facts, "sha256": canonical_json_digest(facts)}
+
+
+def build_snapshot_binary(
+    workspace: Path,
+    target_dir: Path,
+    binary_name: str,
+    env: dict[str, str],
+) -> tuple[dict[str, Any], CommandResult, CommandResult]:
+    result = run_command(
+        [
+            "cargo",
+            "build",
+            "--target-dir",
+            str(target_dir),
+            "-p",
+            "codex-cli",
+            "--bin",
+            binary_name,
+        ],
+        cwd=workspace / "codex-rs",
+        env=env,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        suffix = f": {detail}" if detail else ""
+        raise CompatibilityError(f"{binary_name} control build failed{suffix}")
+    suffix = ".exe" if os.name == "nt" else ""
+    binary = target_dir / "debug" / f"{binary_name}{suffix}"
+    identity, version = candidate_identity(binary, workspace)
+    return identity, result, version
+
+
+def run_expanded_cases(
+    workspace: Path,
+    cases: list[dict[str, Any]],
+    env: dict[str, str],
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    for case in cases:
+        command = [
+            "just",
+            "test",
+            "-p",
+            case["package"],
+            "--lib",
+            case["test_filter"],
+        ]
+        result = run_command(command, cwd=workspace, env=env)
+        count = executed_test_count(result)
+        recorded = {
+            "id": case["id"],
+            "passed": result.returncode == 0 and count == 1,
+            "executed_tests": count,
+            "result": result.as_json(),
+        }
+        if "surface" in case:
+            recorded["surface"] = case["surface"]
+        if "guarantee" in case:
+            recorded["guarantee"] = case["guarantee"]
+        results.append(recorded)
+    return results
+
+
+def expanded_results_pass(*suites: list[dict[str, Any]]) -> bool:
+    return all(case["passed"] for suite in suites for case in suite)
+
+
+def add_detached_worktree(repo_root: Path, destination: Path, commit: str) -> None:
+    result = run_command(
+        ["git", "worktree", "add", "--detach", str(destination), commit],
+        cwd=repo_root,
+        timeout_seconds=120,
+    )
+    if result.returncode != 0:
+        raise CompatibilityError(f"failed to materialize control {commit}")
+
+
+def remove_detached_worktree(repo_root: Path, destination: Path) -> CommandResult:
+    result = run_command(
+        ["git", "worktree", "remove", "--force", str(destination)],
+        cwd=repo_root,
+        timeout_seconds=120,
+    )
+    if result.returncode != 0:
+        raise CompatibilityError(f"failed to remove control worktree {destination}")
+    return result
+
+
+def cleanup_control_worktrees(repo_root: Path, worktrees: list[Path]) -> list[str]:
+    errors: list[str] = []
+    for workspace in reversed(worktrees):
+        try:
+            remove_detached_worktree(repo_root, workspace)
+        except (CompatibilityError, OSError) as error:
+            errors.append(str(error))
+    return errors
 
 
 def write_report(output_dir: Path, report: dict[str, Any]) -> Path:
@@ -283,46 +935,191 @@ def write_report(output_dir: Path, report: dict[str, Any]) -> Path:
 def run_compatibility(
     repo_root: Path,
     baseline_commit: str,
+    upstream_commit: str,
     candidate: Path,
     output_dir: Path,
+    cache_root: Path,
+    temp_root: Path,
 ) -> tuple[bool, Path]:
-    if COMMIT_PATTERN.fullmatch(baseline_commit) is None:
-        raise CompatibilityError("--baseline must be a full 40-character commit id")
-    git_output(repo_root, ["cat-file", "-e", f"{baseline_commit}^{{commit}}"])
+    for flag, commit in (
+        ("--baseline", baseline_commit),
+        ("--upstream", upstream_commit),
+    ):
+        if COMMIT_PATTERN.fullmatch(commit) is None:
+            raise CompatibilityError(f"{flag} must be a full 40-character commit id")
+        git_output(repo_root, ["cat-file", "-e", f"{commit}^{{commit}}"])
     manifest_path = repo_root / BASELINE_PATH
     manifest_bytes = manifest_path.read_bytes()
     if sha256_bytes(manifest_bytes) != FROZEN_BASELINE_SHA256:
         raise CompatibilityError("accepted PF-21 baseline bytes changed")
     manifest = json.loads(manifest_bytes)
     probes = validate_manifest(manifest, repo_root, baseline_commit)
-    build_result = build_workspace_candidate(repo_root, candidate)
-    identity, version_result = candidate_identity(candidate, repo_root)
-
     source_commit = git_output(repo_root, ["rev-parse", "HEAD"])
+    control = json.loads((repo_root / CONTROL_PATH).read_text(encoding="utf-8"))
+    ledger = json.loads((repo_root / DRIFT_LEDGER_PATH).read_text(encoding="utf-8"))
+    cases = validate_expanded_control(
+        control,
+        ledger,
+        repo_root,
+        baseline_commit,
+        upstream_commit,
+        source_commit,
+    )
+    protected_cases = validate_protected_cases(control, repo_root, source_commit)
+    require_clean_runtime_tree(repo_root)
+
+    candidate_target = candidate.resolve().parent.parent
+    require_external_artifact_roots(
+        repo_root, output_dir, cache_root, temp_root, candidate_target
+    )
+    cache_root.mkdir(parents=True, exist_ok=True)
+    temp_root.mkdir(parents=True, exist_ok=True)
+    target_root = cache_root / "targets"
+    retained_target_names = frozenset(
+        {
+            f"baseline-{baseline_commit}",
+            f"upstream-{upstream_commit}",
+        }
+    )
+    pruned_targets = prune_stale_control_targets(
+        target_root, keep_names=retained_target_names
+    )
+    candidate_temp = temp_root / "candidate-temp"
+    candidate_temp.mkdir(parents=True, exist_ok=True)
+    candidate_env = controlled_environment(cache_root, candidate_target, candidate_temp)
+    build_result = build_workspace_candidate(
+        repo_root, candidate, candidate_target, candidate_env
+    )
+    identity, version_result = candidate_identity(candidate, repo_root)
+    candidate_cases = run_expanded_cases(repo_root, cases, candidate_env)
+    candidate_protected_cases = run_expanded_cases(
+        repo_root, protected_cases, candidate_env
+    )
+
+    baseline_identity: dict[str, Any]
+    upstream_identity: dict[str, Any]
+    baseline_cases: list[dict[str, Any]]
+    upstream_cases: list[dict[str, Any]]
+    control_commands: dict[str, Any] = {}
+    controls_root = Path(tempfile.mkdtemp(prefix="controls-", dir=temp_root))
+    worktrees: list[Path] = []
+    primary_error: BaseException | None = None
+    cleanup_errors: list[str] = []
+    try:
+        for label, commit, binary_name in (
+            ("baseline", baseline_commit, "corbanu"),
+            ("upstream", upstream_commit, "corbanu"),
+        ):
+            workspace = controls_root / f"{label}-source"
+            target = cache_root / "targets" / f"{label}-{commit}"
+            temporary = controls_root / f"{label}-temp"
+            temporary.mkdir(parents=True)
+            add_detached_worktree(repo_root, workspace, commit)
+            worktrees.append(workspace)
+            environment = controlled_environment(cache_root, target, temporary)
+            binary_identity, build, version = build_snapshot_binary(
+                workspace, target, binary_name, environment
+            )
+            results = run_expanded_cases(workspace, cases, environment)
+            control_commands[label] = {
+                "build": build.as_json(),
+                "version": version.as_json(),
+            }
+            if label == "baseline":
+                baseline_identity, baseline_cases = binary_identity, results
+            else:
+                upstream_identity, upstream_cases = binary_identity, results
+    except Exception as error:
+        primary_error = error
+    finally:
+        cleanup_errors.extend(cleanup_control_worktrees(repo_root, worktrees))
+        run_root_cleanup_error = remove_tree_best_effort(controls_root)
+        if run_root_cleanup_error is not None:
+            cleanup_errors.append(run_root_cleanup_error)
+    if primary_error is not None:
+        if cleanup_errors:
+            print(
+                "security-level-compat: cleanup warnings after primary failure: "
+                + "; ".join(cleanup_errors),
+                file=sys.stderr,
+            )
+        raise primary_error
+    if cleanup_errors:
+        print(
+            "security-level-compat: cleanup warnings: " + "; ".join(cleanup_errors),
+            file=sys.stderr,
+        )
+
     dirty_paths = git_output(repo_root, ["status", "--short"]).splitlines()
+    configuration = {
+        "contract_version": 2,
+        "cargo_profile": "dev",
+        "cargo_features": "workspace-default",
+        "color": "never",
+        "control_isolation": "separate-source-and-target-directories",
+        "runtime_input_sha256": runtime_input_digests(repo_root),
+    }
     report: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": "running",
         "baseline_commit": baseline_commit,
+        "upstream_commit": upstream_commit,
         "baseline_manifest": {
             "path": BASELINE_PATH.as_posix(),
             "sha256": sha256_bytes(manifest_bytes),
         },
+        "expanded_control": {
+            "path": CONTROL_PATH.as_posix(),
+            "sha256": sha256_file(repo_root / CONTROL_PATH),
+        },
+        "drift_ledger": {
+            "path": DRIFT_LEDGER_PATH.as_posix(),
+            "sha256": sha256_file(repo_root / DRIFT_LEDGER_PATH),
+            "accepted_entries": len(ledger["entries"]),
+        },
+        "configuration": {
+            "facts": configuration,
+            "sha256": canonical_json_digest(configuration),
+        },
+        "environment": environment_identity(repo_root, candidate_env),
+        "baseline_control": baseline_identity,
+        "upstream_control": upstream_identity,
         "candidate": identity,
         "source_commit": source_commit,
         "source_dirty_paths": dirty_paths,
+        "candidate_runtime_tree": "clean",
+        "control_commands": control_commands,
+        "retained_control_artifacts": {
+            "run_root": str(controls_root) if controls_root.exists() else None,
+            "target_root": str(target_root),
+            "retained_targets": sorted(retained_target_names),
+            "pruned_stale_targets": pruned_targets,
+            "cleanup_warnings": cleanup_errors,
+        },
         "candidate_build_command": build_result.as_json(),
         "candidate_version_command": version_result.as_json(),
         "probes": [],
+        "expanded_cases": {
+            "baseline": baseline_cases,
+            "upstream": upstream_cases,
+            "candidate": candidate_cases,
+        },
+        "protected_cases": candidate_protected_cases,
     }
 
-    temp_parent = Path("/var/tmp") if Path("/var/tmp").is_dir() else None
-    all_passed = True
+    all_passed = expanded_results_pass(
+        baseline_cases,
+        upstream_cases,
+        candidate_cases,
+        candidate_protected_cases,
+    )
     with tempfile.TemporaryDirectory(
-        prefix="corbanu-security-compat-", dir=temp_parent
+        prefix="immutable-probes-", dir=temp_root
     ) as clean_tmp:
-        environment = dict(os.environ)
+        environment = dict(candidate_env)
         environment["TMPDIR"] = clean_tmp
+        environment["TMP"] = clean_tmp
+        environment["TEMP"] = clean_tmp
         for probe in probes:
             command = [
                 "just",
@@ -356,7 +1153,12 @@ def run_compatibility(
 
 
 def prepare_compatibility(
-    repo_root: Path, baseline_commit: str, output_dir: Path
+    repo_root: Path,
+    baseline_commit: str,
+    upstream_commit: str,
+    output_dir: Path,
+    *,
+    now: datetime.datetime | None = None,
 ) -> Path:
     """Validate immutable probes without claiming a build or a runtime pass."""
     manifest_bytes = (repo_root / BASELINE_PATH).read_bytes()
@@ -364,19 +1166,37 @@ def prepare_compatibility(
         raise CompatibilityError("accepted PF-21 baseline bytes changed")
     manifest = json.loads(manifest_bytes)
     probes = validate_manifest(manifest, repo_root, baseline_commit)
+    candidate_commit = git_output(repo_root, ["rev-parse", "HEAD"])
+    control = json.loads((repo_root / CONTROL_PATH).read_text(encoding="utf-8"))
+    ledger = json.loads((repo_root / DRIFT_LEDGER_PATH).read_text(encoding="utf-8"))
+    cases = validate_expanded_control(
+        control,
+        ledger,
+        repo_root,
+        baseline_commit,
+        upstream_commit,
+        candidate_commit,
+        now=now,
+    )
+    protected_cases = validate_protected_cases(control, repo_root, candidate_commit)
+    require_external_artifact_roots(repo_root, output_dir)
     output_dir.mkdir(parents=True, exist_ok=False)
     return write_report(
         output_dir,
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "phase": "fixture-preparation",
             "status": "pending",
             "baseline_commit": baseline_commit,
             "baseline_sha256": FROZEN_BASELINE_SHA256,
             "candidate": None,
-            "source_commit": git_output(repo_root, ["rev-parse", "HEAD"]),
+            "upstream_commit": upstream_commit,
+            "source_commit": candidate_commit,
             "immutable_probes_validated": len(probes),
             "surfaces": len(manifest["surfaces"]),
+            "expanded_cases_validated": len(cases),
+            "protected_cases_validated": len(protected_cases),
+            "expanded_surfaces": len(REQUIRED_EXPANDED_SURFACES),
             "qualification": "pending final candidate build and executed compatibility probes",
         },
     )
@@ -385,9 +1205,12 @@ def prepare_compatibility(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline", required=True)
+    parser.add_argument("--upstream", required=True)
     parser.add_argument("--candidate", type=Path)
     parser.add_argument("--prepare", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--cache-root", type=Path)
+    parser.add_argument("--temp-root", type=Path)
     return parser.parse_args()
 
 
@@ -398,17 +1221,27 @@ def main() -> int:
         if args.prepare:
             if args.candidate is not None:
                 raise CompatibilityError("preparation cannot claim a candidate")
-            report_path = prepare_compatibility(repo_root, args.baseline, args.output)
+            report_path = prepare_compatibility(
+                repo_root, args.baseline, args.upstream, args.output
+            )
             print(
                 f"security-level-compat: fixtures validated; qualification PENDING: {report_path}"
             )
             return 0
         if args.candidate is None:
             raise CompatibilityError("qualification requires --candidate")
+        cache_root = (args.cache_root or (args.output / "cache")).resolve()
+        temp_root = (args.temp_root or (args.output / "tmp")).resolve()
         passed, report_path = run_compatibility(
-            repo_root, args.baseline, args.candidate, args.output
+            repo_root,
+            args.baseline,
+            args.upstream,
+            args.candidate,
+            args.output,
+            cache_root,
+            temp_root,
         )
-    except (CompatibilityError, json.JSONDecodeError, OSError) as error:
+    except Exception as error:
         print(f"security-level-compat: {error}")
         return 2
     print(f"security-level-compat: {'PASS' if passed else 'FAIL'}: {report_path}")

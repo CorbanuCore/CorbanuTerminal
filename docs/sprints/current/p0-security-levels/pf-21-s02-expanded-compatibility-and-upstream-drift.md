@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-21-S02"
 title: "Expanded compatibility and upstream drift"
-status: ready
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-21"
 execution_order: 26
@@ -42,28 +42,32 @@ updated: 2026-08-30
 
 - [x] Plan active; all dependencies completed and archived.
 - [x] Assign a named execution owner and exact plan-matching worktree/branch/base; reserve disjoint scopes and integration gate if parallel.
-- [ ] Read root and nearest implementation AGENTS.md; run the sprint checker before readiness.
+- [x] Read root and nearest implementation AGENTS.md; run the sprint checker before readiness.
 
 ## Done
 
 - [x] Follow-up separated from the accepted upstream foundation; no new implementation or qualification claimed.
-
-## Remaining
-
-- [ ] Preserve the accepted baseline manifest byte-for-byte and its pre-feature commit `3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb`. Add an independently built upstream-aligned control and reviewed drift ledger; same-candidate on/off comparisons are supplemental, never a source of golden expectations.
-- [ ] Expand executable inventory to inherited environment/auth helpers, web.run history/native search, browser, MCP/plugins/children, wallet, clipboard/export and persisted sessions. Added broker, screening, secretless launch and migration must remain opt-in above Permissive.
-- [ ] Record baseline/upstream/candidate commits, config and environment digests, exact probes and owner-reviewed intentional upstream differences. Unknown or unexplained drift fails acceptance rather than regenerating expected results.
-- [ ] Add harness self-tests for missing surfaces, mismatched control identities, candidate-derived expectations, stale evidence and expanded case failures; retain the original executable probes and failure behavior.
+- [x] Read the repository and Rust workspace policies, exact product requirement, active plan, sprint contract and compatibility-lane handoff; validated the allocated branch with both governance checkers before implementation.
+- [x] Preserved the accepted baseline manifest byte-for-byte and its pre-feature commit `3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb`; selected the buildable, genuinely Rust-distinct upstream-aligned 0.1.34 control `af5a4e39b590e7517120fd935ccfac8cbf7cf131` with pinned unequal `codex-rs` tree identities and added a reviewed, fail-closed drift ledger. Candidate output never sources golden expectations.
+- [x] Expanded exact executable inventory to inherited environment/auth helpers, web.run history/native search, browser, MCP/plugins/children, wallet, clipboard/export and persisted sessions. Added dispatch-base-anchored exact protected-boundary cases that directly exercise `codex-secret-broker`, `codex-network-proxy`, `codex-browser-isolation`, and `codex-content-security`; no self-asserted behavior string is treated as evidence and no Rust/runtime path changed.
+- [x] Recorded baseline/upstream/candidate identities, configuration/environment digests, exact probes and the zero-entry reviewed drift result. Unknown, duplicate, unaccepted, stale, future-dated, candidate-derived, mismatched or unobserved drift fails acceptance; protected-boundary source drift is never ledger-allowlisted.
+- [x] Added self-tests for every mandated drift branch plus broad test filters, dirty recipe/runtime masking, fixed-time ledger checks, bounded external artifact roots, cleanup failures, lexical test extraction and ambient secret exclusion; retained the five immutable probes and fail-closed behavior.
 
 ## Verification
 
-- [ ] Format affected Python/Rust before final tests; `python3 -m unittest scripts.test_security_level_compat -v`.
-- [ ] Run the extended compatibility harness against independently built baseline/upstream controls and the final candidate; record exact supported CLI arguments and hashes.
-- [ ] If Rust fixtures change: `cd codex-rs && just fix -p codex-core && just fix -p codex-vault && just fmt`, then affected `just test` suites.
-- [ ] TUI applicability: automated oracle only here; PF-26-S02 still requires both live repositories with actual keys.
+- [x] Formatted and linted affected Python; `python3 -m unittest scripts.test_security_level_compat -v` passed 37/37. No Rust file or fixture changed.
+- [x] The remediated extended harness passed 36/36 against independently built baseline/upstream controls and the clean final implementation candidate; exact CLI arguments, identities and hashes are recorded in the candidate evidence.
+- [x] Rust fix/format is not applicable because no Rust path changed.
+- [x] TUI applicability is automated-oracle-only; a supporting real-candidate TMUX `/status`/clean-exit smoke passed, while PF-26-S02 still owns both live repositories with actual keys.
+- [x] Completed the mandatory read-only Corbanu Terminal + Claude Opus 5 Plan/max independent review in TMUX session `pf27-opus5-g1-review`; the final transcript SHA-256 is `72dd6300b905da2ef3e703e28dc9d038fdb09f36b1678c6d88130e77b6feb86c` and the exact verdict was `NO FINDINGS`.
+- [ ] Integration owner reruns the combined-tree qualification after merging this lane and the prerequisite PF-19/PF-20 lanes; see the Exit evidence handback below.
 
 ## Exit evidence
 
-- [ ] Record implementation commit, changed paths, contract version and exact final-tree commands/results under `qa/security-levels/sprints/PF-21-S02/`.
-- [ ] Preserve S01 archive/evidence unchanged; do not relabel historical passes as proof of these new cases.
-- [ ] Record consumer integration handoff; complete all ledgers before archive and update plan/navigation.
+- [x] Recorded implementation commit, changed paths, contract version and exact clean-tree commands/results under `qa/security-levels/sprints/PF-21-S02/`.
+- [x] Preserved the S01 archive/evidence unchanged and recorded the remediated three-source plus protected-boundary 36-test report separately from historical qualification.
+- [ ] Integration owner merges after PF-19/PF-20; updates all four out-of-scope callers with required `--upstream <commit>` (`docs/plans/active/p0-security-levels.md:752`, `scripts/test_security_level_evidence.py:23-31`, `qa/security-levels/fixtures/README.md:48-49`, `docs/sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md:67`); reruns combined-tree checks; updates shared navigation; and archives PF-21-S02.
+
+## Remaining
+
+- [ ] Close the integration-owner Exit evidence item above.
