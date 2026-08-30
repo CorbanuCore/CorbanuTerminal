@@ -8,9 +8,10 @@
 
 mod event;
 mod journal;
-mod journal_debug;
 #[cfg(test)]
 mod journal_faults;
+mod journal_io;
+mod journal_recovery;
 mod journal_support;
 mod journal_types;
 mod recovery;
@@ -31,6 +32,7 @@ pub use event::UnknownOutcomeReason;
 pub use journal::ReferenceJournal;
 pub use journal_types::AppendAcknowledgement;
 pub use journal_types::DispatchPermit;
+pub use journal_types::EventChainError;
 pub use journal_types::IntegrityCheckpoint;
 pub use journal_types::IntegrityRootError;
 pub use journal_types::IntegrityRootStore;

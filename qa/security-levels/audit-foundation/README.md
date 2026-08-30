@@ -42,7 +42,10 @@ an explicit unknown result. Unknown is terminal and requires human or
 adapter-specific reconciliation; it is not a replay instruction.
 
 Every journal starts blocked and requires successful recovery against the live
-PF-20 policy generation and revocation state before its first append. Retrying
+PF-20 policy generation, run generation, and revocation state before its first
+append. A durable policy or run generation ahead of the live state is a named
+recovery blocker rather than a journal that incorrectly reports ready and then
+rejects every append. Retrying
 the same action and deduplication key never returns another permit, even when
 the retry timestamp, session, task, policy/run generation, or freshly reissued
 grant/mandate changes: unresolved duplicates return `AlreadyReserved` and
@@ -57,7 +60,9 @@ Recovery exposes those intents as `pending_dispatches`, reports
 `ReconciliationRequired`, and requires each to be appended as explicitly
 unknown through `reconcile_dispatch_as_unknown`. Normal resolution accepts the
 current live event context so a policy/run generation advance cannot strand an
-older intent.
+older intent. A pending report includes the durable intent timestamp, and the
+unknown-reconciliation path clamps a backwards wall clock to that timestamp so
+operator reconciliation cannot become unsatisfiable.
 
 Full recovery validates every local record and seeds a process-local validated
 chain/tail cache. Normal appends compare the protected checkpoint with that
@@ -65,6 +70,15 @@ cached checkpoint and validate only the new record, avoiding an O(n) rescan on
 the dispatch path. A protected-root change, restart, failed/ambiguous append or
 explicit recovery invalidates or rebuilds the cache. The external protected
 checkpoint remains authoritative.
+
+Only a protected-root timeout after local publication is classified as
+`CommitUnknown`. Missing/unavailable roots, concurrent root changes, and an
+invalid root return distinct fail-closed errors. Append-time chain rejection
+likewise exposes a structured invariant reason rather than collapsing producer,
+generation, reservation, causal-parent, timestamp, and authority failures into
+one opaque error. Duplicate acknowledgements identify the original event and
+sequence while their checkpoint is the current protected high-water mark that
+still anchors that sequence.
 
 Emergency restriction uses PF-19 state first and attempts the audit append
 second. Failed audit persistence cannot delay or undo the fence. Recovery

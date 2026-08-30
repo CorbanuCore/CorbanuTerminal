@@ -144,10 +144,50 @@ pub enum IntegrityRootError {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AppendAcknowledgement {
+    /// Identity of the original durable event. For a duplicate append this is
+    /// the already-recorded event, not the retry's newly-derived identity.
     pub event_id: SecurityEventId,
+    /// Sequence of `event_id`. This may be lower than `checkpoint.sequence`
+    /// for a duplicate because the checkpoint is the current protected
+    /// high-water mark that proves the original sequence remains anchored.
     pub sequence: u64,
+    /// Current protected high-water mark at acknowledgement time. It includes
+    /// `sequence`; it is not necessarily the checkpoint first returned for a
+    /// duplicate event.
     pub checkpoint: IntegrityCheckpoint,
     pub duplicate: bool,
+}
+
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+pub enum EventChainError {
+    #[error("event producer does not match the journal owner")]
+    ProducerMismatch,
+    #[error("event ID already exists in the journal")]
+    DuplicateEventId,
+    #[error("event policy generation regressed")]
+    PolicyGenerationRegression,
+    #[error("event run generation regressed")]
+    RunGenerationRegression,
+    #[error("dispatch action and deduplication identity already exists")]
+    DuplicateDispatchIdentity,
+    #[error("dispatch reservation already exists")]
+    DuplicateReservation,
+    #[error("dispatch resolution references an unknown reservation")]
+    UnknownReservation,
+    #[error("dispatch reservation is already terminal")]
+    AlreadyResolved,
+    #[error("dispatch resolution action does not match its intent")]
+    ActionMismatch,
+    #[error("dispatch resolution causal parent does not match its intent")]
+    CausalParentMismatch,
+    #[error("dispatch resolution timestamp precedes its intent")]
+    TimestampRegression,
+    #[error("dispatch resolution is not valid for the recorded authority")]
+    InvalidResolutionAuthority,
+    #[error("restriction event already exists")]
+    DuplicateRestriction,
+    #[error("restriction event is invalid")]
+    InvalidRestriction,
 }
 
 /// Non-serializable, single-resolution proof that dispatch intent reached the
@@ -210,8 +250,8 @@ pub enum JournalError {
     },
     #[error("unresolved dispatches require explicit reconciliation")]
     ReconciliationRequired,
-    #[error("security event violates journal ordering or causal invariants")]
-    InvalidEventSequence,
+    #[error(transparent)]
+    EventChain(#[from] EventChainError),
     #[error("journal must recover before protected dispatch")]
     RecoveryRequired,
     #[error("another journal writer owns the append lock")]
@@ -222,6 +262,10 @@ pub enum JournalError {
     StorageUnavailable,
     #[error("controller-owned integrity root is unavailable")]
     IntegrityRootUnavailable,
+    #[error("controller-owned integrity root changed concurrently")]
+    IntegrityRootConflict,
+    #[error("controller-owned integrity root is invalid")]
+    IntegrityRootInvalid,
     #[error("event commit is ambiguous; do not dispatch or replay {event_id}")]
     CommitUnknown { event_id: SecurityEventId },
     #[error("published record does not match the operator-selected ambiguous commit")]

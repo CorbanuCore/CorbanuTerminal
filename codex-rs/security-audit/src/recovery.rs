@@ -28,6 +28,7 @@ pub enum RecoveryBlocker {
     IntegrityRootMismatch,
     OwnerMismatch,
     PolicyGenerationMismatch,
+    RunGenerationMismatch,
     RestrictionAuditGap,
 }
 
@@ -56,6 +57,10 @@ pub struct PendingDispatch {
     pub intent_event_id: SecurityEventId,
     pub action_id: ActionId,
     pub reservation_id: ReservationId,
+    /// Timestamp of the durable intent. Reconciliation timestamps are clamped
+    /// to at least this value so a backwards wall-clock step cannot deadlock
+    /// operator resolution.
+    pub occurred_at_unix_seconds: i64,
 }
 
 impl RecoveryReport {
@@ -141,7 +146,7 @@ impl From<&JournalError> for AuditGapReason {
             | JournalError::InvalidResolution
             | JournalError::AlreadyReserved { .. }
             | JournalError::AlreadyResolved { .. }
-            | JournalError::InvalidEventSequence => Self::InvalidEvent,
+            | JournalError::EventChain(_) => Self::InvalidEvent,
             JournalError::StorageUnavailable | JournalError::IntegrityRootUnavailable => {
                 Self::StorageUnavailable
             }
@@ -156,6 +161,8 @@ impl From<&JournalError> for AuditGapReason {
             | JournalError::InvalidConfig
             | JournalError::WrongEventKind
             | JournalError::AmbiguousCommitMismatch
+            | JournalError::IntegrityRootConflict
+            | JournalError::IntegrityRootInvalid
             | JournalError::Serialization => Self::InvalidEvent,
         }
     }

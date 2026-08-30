@@ -10,6 +10,8 @@ use crate::journal_types::JournalConfig;
 use crate::journal_types::JournalError;
 use crate::recovery::RecoveryBlocker;
 
+pub(crate) const MAX_RECORD_BYTES: usize = 32 * 1024;
+
 pub(crate) fn validate_resolution(
     authority: &AuthorityIdentity,
     resolution: &DispatchResolution,

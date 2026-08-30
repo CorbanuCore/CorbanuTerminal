@@ -60,6 +60,18 @@ class DurableAuditContractTests(unittest.TestCase):
         )
         self.assertIs(
             self.contract["dispatch_contract"][
+                "recovery_validates_policy_and_run_generation"
+            ],
+            True,
+        )
+        self.assertIs(
+            self.contract["dispatch_contract"][
+                "pending_intent_timestamp_is_observable_and_clamped"
+            ],
+            True,
+        )
+        self.assertIs(
+            self.contract["dispatch_contract"][
                 "recovered_pending_intents_block_new_dispatch"
             ],
             True,

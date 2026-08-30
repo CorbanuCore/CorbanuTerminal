@@ -70,7 +70,7 @@ fn public_consumer_contract_requires_intent_then_terminal_receipt() {
         JournalConfig::default(),
     );
     assert_eq!(
-        journal.recover(0, &RevocationState::new()).state,
+        journal.recover(0, 1, &RevocationState::new()).state,
         RecoveryState::Empty
     );
     let request = AuthorizationRequest::new(
@@ -120,7 +120,7 @@ fn public_consumer_contract_requires_intent_then_terminal_receipt() {
     assert_eq!(intent.sequence, 1);
     assert_eq!(receipt.sequence, 2);
     assert_eq!(
-        journal.recover(0, &RevocationState::new()).state,
+        journal.recover(0, 1, &RevocationState::new()).state,
         RecoveryState::Ready
     );
 }

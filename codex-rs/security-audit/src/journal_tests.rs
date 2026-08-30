@@ -33,6 +33,7 @@ use tempfile::TempDir;
 use crate::AuditGapReason;
 use crate::AuthorityIdentity;
 use crate::DispatchResolution;
+use crate::EventChainError;
 use crate::EventContext;
 use crate::IntegrityCheckpoint;
 use crate::IntegrityRootError;
@@ -118,7 +119,7 @@ impl Fixture {
         let roots = Arc::new(MemoryRoot::default());
         let mut journal = ReferenceJournal::new(root_path.clone(), owner, roots.clone(), config);
         assert_eq!(
-            journal.recover(1, &RevocationState::new()).state,
+            journal.recover(1, 1, &RevocationState::new()).state,
             RecoveryState::Empty
         );
         Self {
@@ -273,7 +274,7 @@ fn kill_event() -> RevocationEvent {
 }
 
 fn healthy_recovery(fixture: &mut Fixture) {
-    let report = fixture.journal.recover(1, &RevocationState::new());
+    let report = fixture.journal.recover(1, 1, &RevocationState::new());
     assert_eq!(report.state, RecoveryState::Ready);
 }
 
@@ -404,7 +405,67 @@ fn producer_mismatch_and_generation_rollback_fail_closed() {
         SecurityEvent::decision(rolled_back, None, &request, decision, 12).expect("rollback event");
     assert!(matches!(
         fixture.journal.record_decision(rollback_event),
-        Err(JournalError::InvalidEventSequence)
+        Err(JournalError::EventChain(
+            EventChainError::PolicyGenerationRegression
+        ))
+    ));
+}
+
+#[test]
+fn append_surfaces_precise_chain_invariant_errors() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    let first_request = request();
+    let decision = permissive_decision(&first_request).expect("decision");
+    let event =
+        SecurityEvent::decision(fixture.context_at(1, 2), None, &first_request, decision, 11)
+            .expect("run-two event");
+    fixture
+        .journal
+        .record_decision(event)
+        .expect("run-two append");
+
+    let rollback_request = request();
+    let event = SecurityEvent::decision(
+        fixture.context_at(1, 1),
+        None,
+        &rollback_request,
+        permissive_decision(&rollback_request).expect("decision"),
+        12,
+    )
+    .expect("run rollback event");
+    assert!(matches!(
+        fixture.journal.record_decision(event),
+        Err(JournalError::EventChain(
+            EventChainError::RunGenerationRegression
+        ))
+    ));
+
+    let dispatch_request = request();
+    let (permit, _) = fixture
+        .journal
+        .reserve_dispatch(
+            fixture.context_at(1, 2),
+            None,
+            &dispatch_request,
+            AuthorityIdentity::Grant {
+                grant_id: text("grant-1"),
+            },
+            text("dispatch-1"),
+            20,
+        )
+        .expect("durable intent");
+    assert!(matches!(
+        fixture.journal.resolve_dispatch(
+            permit,
+            fixture.context_at(1, 2),
+            DispatchResolution::Unknown {
+                reason: crate::UnknownOutcomeReason::TransportLost,
+            },
+            19,
+        ),
+        Err(JournalError::EventChain(
+            EventChainError::TimestampRegression
+        ))
     ));
 }
 
@@ -491,7 +552,7 @@ fn ambiguous_commit_after_rename_remains_fail_closed() {
         )
         .expect_err("ambiguous commit must fail");
     assert!(matches!(error, JournalError::CommitUnknown { .. }));
-    let report = fixture.journal.recover(1, &RevocationState::new());
+    let report = fixture.journal.recover(1, 1, &RevocationState::new());
     assert_eq!(
         report.state,
         RecoveryState::Blocked(RecoveryBlocker::RecordsAheadOfIntegrityRoot)
@@ -564,7 +625,7 @@ fn operator_can_reconcile_exactly_one_ambiguous_commit_without_replay() {
         .reconcile_ambiguous_commit(&event_id, 1, &RevocationState::new())
         .expect("operator-selected record can advance the protected root");
     assert_eq!(checkpoint.sequence, 2);
-    let report = fixture.journal.recover(1, &RevocationState::new());
+    let report = fixture.journal.recover(1, 1, &RevocationState::new());
     assert_eq!(report.state, RecoveryState::ReconciliationRequired);
     assert_eq!(report.pending_dispatches.len(), 1);
     fixture
@@ -847,7 +908,7 @@ fn validated_tail_cache_avoids_rescanning_until_recovery() {
     assert_eq!(fixture.journal.scan_count(), 1);
 
     assert_eq!(
-        fixture.journal.recover(1, &RevocationState::new()).state,
+        fixture.journal.recover(1, 1, &RevocationState::new()).state,
         RecoveryState::Ready
     );
     assert_eq!(fixture.journal.scan_count(), 2);
@@ -870,7 +931,7 @@ fn protected_root_change_invalidates_cached_tail() {
 }
 
 #[test]
-fn unavailable_integrity_root_creates_an_ambiguous_commit() {
+fn unavailable_integrity_root_is_precise_and_blocks() {
     let mut fixture = Fixture::new(JournalConfig::default());
     fixture.append_decision();
     fixture.roots.fail_store(IntegrityRootError::Unavailable);
@@ -886,8 +947,65 @@ fn unavailable_integrity_root_creates_an_ambiguous_commit() {
             text("dispatch-1"),
             12,
         )
-        .expect_err("root failure must be ambiguous");
-    assert!(matches!(error, JournalError::CommitUnknown { .. }));
+        .expect_err("unavailable protected root must fail closed");
+    assert!(matches!(error, JournalError::IntegrityRootUnavailable));
+    assert!(matches!(
+        fixture.journal.record_decision(
+            SecurityEvent::decision(
+                fixture.context(),
+                None,
+                &request(),
+                permissive_decision(&request()).expect("decision"),
+                13,
+            )
+            .expect("blocked decision")
+        ),
+        Err(JournalError::RecoveryRequired)
+    ));
+}
+
+#[test]
+fn integrity_root_conflict_and_invalid_are_precise_and_block() {
+    for root_error in [IntegrityRootError::Conflict, IntegrityRootError::Invalid] {
+        let mut fixture = Fixture::new(JournalConfig::default());
+        fixture.append_decision();
+        fixture.roots.fail_store(root_error);
+        let error = fixture
+            .journal
+            .reserve_dispatch(
+                fixture.context(),
+                None,
+                &request(),
+                AuthorityIdentity::Grant {
+                    grant_id: text("grant-1"),
+                },
+                text("dispatch-1"),
+                12,
+            )
+            .expect_err("protected-root CAS rejection must fail closed");
+        match root_error {
+            IntegrityRootError::Conflict => {
+                assert!(matches!(error, JournalError::IntegrityRootConflict));
+            }
+            IntegrityRootError::Invalid => {
+                assert!(matches!(error, JournalError::IntegrityRootInvalid));
+            }
+            _ => unreachable!("test covers conflict and invalid only"),
+        }
+        assert!(matches!(
+            fixture.journal.record_decision(
+                SecurityEvent::decision(
+                    fixture.context(),
+                    None,
+                    &request(),
+                    permissive_decision(&request()).expect("decision"),
+                    13,
+                )
+                .expect("blocked decision")
+            ),
+            Err(JournalError::RecoveryRequired)
+        ));
+    }
 }
 
 #[test]
@@ -916,7 +1034,7 @@ fn missing_integrity_key_blocks_recovery() {
     let mut fixture = Fixture::new(JournalConfig::default());
     fixture.append_decision();
     fixture.roots.fail_load(IntegrityRootError::MissingKey);
-    let report = fixture.journal.recover(1, &RevocationState::new());
+    let report = fixture.journal.recover(1, 1, &RevocationState::new());
     assert_eq!(
         report.state,
         RecoveryState::Blocked(RecoveryBlocker::MissingIntegrityKey)
@@ -950,7 +1068,7 @@ fn truncation_is_detected_against_the_controller_root() {
     )
     .expect("truncate record");
 
-    let report = fixture.journal.recover(1, &RevocationState::new());
+    let report = fixture.journal.recover(1, 1, &RevocationState::new());
     assert_eq!(
         report.state,
         RecoveryState::Blocked(RecoveryBlocker::TruncatedJournal)
@@ -973,7 +1091,7 @@ fn rollback_or_record_mutation_is_detected() {
     bytes[offset] = b'2';
     fs::write(record.as_path(), bytes).expect("mutate record");
 
-    let report = fixture.journal.recover(1, &RevocationState::new());
+    let report = fixture.journal.recover(1, 1, &RevocationState::new());
     assert_eq!(
         report.state,
         RecoveryState::Blocked(RecoveryBlocker::InvalidRecord)
@@ -1004,7 +1122,7 @@ fn segment_rotation_preserves_chain_and_recovery() {
             .as_path()
             .is_dir()
     );
-    let report = fixture.journal.recover(1, &RevocationState::new());
+    let report = fixture.journal.recover(1, 1, &RevocationState::new());
     assert_eq!(report.state, RecoveryState::ReconciliationRequired);
     assert_eq!(report.pending_dispatches.len(), 1);
 }
@@ -1086,7 +1204,7 @@ fn emergency_restriction_fences_immediately_and_exposes_audit_gap() {
         result.application.audit_status,
         codex_security_policy::RestrictionAuditStatus::Unavailable
     );
-    let report = fixture.journal.recover(1, &state);
+    let report = fixture.journal.recover(1, 1, &state);
     assert_eq!(
         report.state,
         RecoveryState::Blocked(RecoveryBlocker::RestrictionAuditGap)
@@ -1110,7 +1228,7 @@ fn recorded_restriction_recovers_with_the_controller_state() {
 
     assert_eq!(result.gap, None);
     assert!(result.audit_event_id.is_some());
-    let report = fixture.journal.recover(1, &state);
+    let report = fixture.journal.recover(1, 1, &state);
     assert_eq!(report.state, RecoveryState::Ready);
 }
 
@@ -1133,7 +1251,7 @@ fn owner_rotation_cannot_reuse_an_old_integrity_root() {
         fixture.roots.clone(),
         JournalConfig::default(),
     );
-    let report = rotated.recover(1, &RevocationState::new());
+    let report = rotated.recover(1, 1, &RevocationState::new());
     assert_eq!(
         report.state,
         RecoveryState::Blocked(RecoveryBlocker::OwnerMismatch)
@@ -1150,7 +1268,7 @@ fn recovery_never_deletes_an_unrecognized_temporary_file() {
         .join("operator-notes.tmp");
     fs::write(unexpected.as_path(), b"not a journal temporary record").expect("write marker");
 
-    let report = fixture.journal.recover(1, &RevocationState::new());
+    let report = fixture.journal.recover(1, 1, &RevocationState::new());
 
     assert_eq!(
         report.state,
@@ -1165,7 +1283,7 @@ fn malformed_segment_names_fail_recovery_closed() {
     fixture.append_decision();
     fs::create_dir(fixture.root_path.join("segment-next").as_path()).expect("malformed segment");
 
-    let report = fixture.journal.recover(1, &RevocationState::new());
+    let report = fixture.journal.recover(1, 1, &RevocationState::new());
 
     assert_eq!(
         report.state,
@@ -1194,7 +1312,7 @@ fn fresh_journal_requires_recovery_before_any_append() {
 fn recovery_accepts_first_install_and_forward_policy_generation() {
     let mut fixture = Fixture::new(JournalConfig::default());
     assert_eq!(
-        fixture.journal.recover(7, &RevocationState::new()).state,
+        fixture.journal.recover(7, 1, &RevocationState::new()).state,
         RecoveryState::Empty
     );
     let first_request = request();
@@ -1207,7 +1325,7 @@ fn recovery_accepts_first_install_and_forward_policy_generation() {
         .record_decision(event)
         .expect("first-install generation append");
     assert_eq!(
-        fixture.journal.recover(8, &RevocationState::new()).state,
+        fixture.journal.recover(8, 1, &RevocationState::new()).state,
         RecoveryState::Ready
     );
     let second_request = request();
@@ -1225,11 +1343,56 @@ fn recovery_accepts_first_install_and_forward_policy_generation() {
         .record_decision(event)
         .expect("forward generation append");
 
-    let rollback = fixture.journal.recover(7, &RevocationState::new());
+    let rollback = fixture.journal.recover(7, 1, &RevocationState::new());
     assert_eq!(
         rollback.state,
         RecoveryState::Blocked(RecoveryBlocker::PolicyGenerationMismatch)
     );
+}
+
+#[test]
+fn recovery_blocks_run_generation_rollback_before_reporting_ready() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    assert_eq!(
+        fixture.journal.recover(1, 7, &RevocationState::new()).state,
+        RecoveryState::Empty
+    );
+    let run_seven_request = request();
+    let event = SecurityEvent::decision(
+        fixture.context_at(1, 7),
+        None,
+        &run_seven_request,
+        permissive_decision(&run_seven_request).expect("decision"),
+        12,
+    )
+    .expect("run-seven decision");
+    fixture
+        .journal
+        .record_decision(event)
+        .expect("run-seven append");
+
+    let rollback = fixture.journal.recover(1, 6, &RevocationState::new());
+    assert_eq!(
+        rollback.state,
+        RecoveryState::Blocked(RecoveryBlocker::RunGenerationMismatch)
+    );
+    assert!(!rollback.permits_protected_dispatch());
+
+    let ready = fixture.journal.recover(1, 8, &RevocationState::new());
+    assert_eq!(ready.state, RecoveryState::Ready);
+    let run_eight_request = request();
+    let event = SecurityEvent::decision(
+        fixture.context_at(1, 8),
+        None,
+        &run_eight_request,
+        permissive_decision(&run_eight_request).expect("decision"),
+        13,
+    )
+    .expect("run-eight decision");
+    fixture
+        .journal
+        .record_decision(event)
+        .expect("forward run generation append");
 }
 
 #[test]
@@ -1251,9 +1414,10 @@ fn recovered_pending_intent_is_visible_and_reconciled_unknown() {
     assert_eq!(intent.sequence, 1);
 
     let mut restarted = fixture.restarted_journal();
-    let report = restarted.recover(1, &RevocationState::new());
+    let report = restarted.recover(1, 1, &RevocationState::new());
     assert_eq!(report.state, RecoveryState::ReconciliationRequired);
     assert_eq!(report.pending_dispatches.len(), 1);
+    assert_eq!(report.pending_dispatches[0].occurred_at_unix_seconds, 12);
     assert!(!report.permits_protected_dispatch());
     let reserve_error = restarted
         .reserve_dispatch(
@@ -1277,10 +1441,10 @@ fn recovered_pending_intent_is_visible_and_reconciled_unknown() {
             &report.pending_dispatches[0],
             fixture.context(),
             crate::UnknownOutcomeReason::PersistenceUncertain,
-            13,
+            1,
         )
-        .expect("unknown reconciliation");
-    let ready = restarted.recover(1, &RevocationState::new());
+        .expect("backwards clock is clamped to the durable intent");
+    let ready = restarted.recover(1, 1, &RevocationState::new());
     assert!(ready.pending_dispatches.is_empty());
     assert!(ready.permits_protected_dispatch());
 }
@@ -1323,7 +1487,7 @@ fn resolution_uses_live_generation_after_policy_advances() {
         )
         .expect("terminal receipt at current generation");
     assert_eq!(
-        fixture.journal.recover(2, &RevocationState::new()).state,
+        fixture.journal.recover(2, 1, &RevocationState::new()).state,
         RecoveryState::Ready
     );
 }

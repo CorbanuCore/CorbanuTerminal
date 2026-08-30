@@ -13,6 +13,7 @@ use crate::SecurityEventId;
 use crate::SecurityEventKind;
 use crate::event::hash_value;
 use crate::journal_support::validate_resolution;
+use crate::journal_types::EventChainError;
 use crate::journal_types::IntegrityCheckpoint;
 use crate::journal_types::JournalError;
 use crate::journal_types::JournalOwner;
@@ -119,17 +120,20 @@ impl EventChainState {
         event: &SecurityEvent,
         sequence: u64,
         owner: &JournalOwner,
-    ) -> Result<(), RecoveryBlocker> {
-        if event.context.producer != owner.producer
-            || self
-                .event_ids
-                .insert(event.event_id.clone(), sequence)
-                .is_some()
-            || event.context.policy_generation < self.policy_generation
-            || event.context.run_generation < self.run_generation
-        {
-            return Err(RecoveryBlocker::InvalidRecord);
+    ) -> Result<(), EventChainError> {
+        if event.context.producer != owner.producer {
+            return Err(EventChainError::ProducerMismatch);
         }
+        if self.event_ids.contains_key(&event.event_id) {
+            return Err(EventChainError::DuplicateEventId);
+        }
+        if event.context.policy_generation < self.policy_generation {
+            return Err(EventChainError::PolicyGenerationRegression);
+        }
+        if event.context.run_generation < self.run_generation {
+            return Err(EventChainError::RunGenerationRegression);
+        }
+        self.event_ids.insert(event.event_id.clone(), sequence);
         self.policy_generation = event.context.policy_generation;
         self.run_generation = event.context.run_generation;
         match &event.kind {
@@ -149,7 +153,7 @@ impl EventChainState {
                     )
                     .is_some()
                 {
-                    return Err(RecoveryBlocker::InvalidRecord);
+                    return Err(EventChainError::DuplicateDispatchIdentity);
                 }
                 if self
                     .intents
@@ -167,7 +171,7 @@ impl EventChainState {
                     )
                     .is_some()
                 {
-                    return Err(RecoveryBlocker::InvalidRecord);
+                    return Err(EventChainError::DuplicateReservation);
                 }
             }
             SecurityEventKind::DispatchResolution {
@@ -178,24 +182,31 @@ impl EventChainState {
                 let intent = self
                     .intents
                     .get_mut(reservation_id)
-                    .ok_or(RecoveryBlocker::InvalidRecord)?;
-                if intent.resolved
-                    || &intent.action_id != action_id
-                    || event.causal_parent.as_ref() != Some(&intent.event_id)
-                    || event.occurred_at_unix_seconds < intent.occurred_at_unix_seconds
-                    || validate_resolution(&intent.authority, resolution).is_err()
-                {
-                    return Err(RecoveryBlocker::InvalidRecord);
+                    .ok_or(EventChainError::UnknownReservation)?;
+                if intent.resolved {
+                    return Err(EventChainError::AlreadyResolved);
+                }
+                if &intent.action_id != action_id {
+                    return Err(EventChainError::ActionMismatch);
+                }
+                if event.causal_parent.as_ref() != Some(&intent.event_id) {
+                    return Err(EventChainError::CausalParentMismatch);
+                }
+                if event.occurred_at_unix_seconds < intent.occurred_at_unix_seconds {
+                    return Err(EventChainError::TimestampRegression);
+                }
+                if validate_resolution(&intent.authority, resolution).is_err() {
+                    return Err(EventChainError::InvalidResolutionAuthority);
                 }
                 intent.resolved = true;
             }
             SecurityEventKind::Restriction { event } => {
                 if !self.restrictions.insert(event.event_id.clone()) {
-                    return Err(RecoveryBlocker::InvalidRecord);
+                    return Err(EventChainError::DuplicateRestriction);
                 }
                 self.revocations
                     .apply(event)
-                    .map_err(|_| RecoveryBlocker::InvalidRecord)?;
+                    .map_err(|_| EventChainError::InvalidRestriction)?;
             }
         }
         Ok(())
@@ -213,6 +224,7 @@ impl EventChainState {
                 intent_event_id: intent.event_id.clone(),
                 action_id: intent.action_id.clone(),
                 reservation_id: reservation_id.clone(),
+                occurred_at_unix_seconds: intent.occurred_at_unix_seconds,
             })
             .collect()
     }
@@ -254,7 +266,9 @@ pub(crate) fn validate_event_chain(
 ) -> Result<EventChainState, RecoveryBlocker> {
     let mut state = EventChainState::new();
     for record in records {
-        state.apply(&record.event, record.sequence, owner)?;
+        state
+            .apply(&record.event, record.sequence, owner)
+            .map_err(|_| RecoveryBlocker::InvalidRecord)?;
     }
     Ok(state)
 }
@@ -315,6 +329,7 @@ pub(crate) fn map_blocker(blocker: RecoveryBlocker) -> JournalError {
         | RecoveryBlocker::IntegrityRootMismatch
         | RecoveryBlocker::OwnerMismatch
         | RecoveryBlocker::PolicyGenerationMismatch
+        | RecoveryBlocker::RunGenerationMismatch
         | RecoveryBlocker::RestrictionAuditGap => JournalError::RecoveryRequired,
     }
 }
