@@ -1083,6 +1083,38 @@ fn test_built_in_model_providers_include_vercel() {
     assert!(!vercel.requires_openai_auth);
     assert_eq!(VERCEL_DEFAULT_MODEL, "zai/glm-5.2");
     assert_eq!(VERCEL_GLM_5_2_FAST_MODEL, "zai/glm-5.2-fast");
+    assert_eq!(VERCEL_GLM_5_3_FLASH_MODEL, "zai/glm-5.3-flash");
+    assert_eq!(VERCEL_GLM_5_3_MODEL, "zai/glm-5.3");
+}
+
+#[test]
+fn vercel_new_catalog_models_preserve_provider_and_wire_identity() {
+    for model in [
+        VERCEL_GLM_5_3_FLASH_MODEL,
+        VERCEL_GLM_5_3_MODEL,
+        VERCEL_KIMI_K3_MODEL,
+        VERCEL_DEEPSEEK_V4_PRO_MODEL,
+        VERCEL_KIMI_K3_UPSTREAM_MODEL,
+        VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL,
+    ] {
+        assert_eq!(
+            resolve_model_for_provider(Some(model.to_string()), VERCEL_PROVIDER_ID).as_deref(),
+            Some(model),
+            "Vercel should preserve supported model {model}"
+        );
+    }
+    assert_eq!(
+        vercel_gateway_upstream_model(VERCEL_KIMI_K3_MODEL),
+        VERCEL_KIMI_K3_UPSTREAM_MODEL
+    );
+    assert_eq!(
+        vercel_gateway_upstream_model(VERCEL_DEEPSEEK_V4_PRO_MODEL),
+        VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL
+    );
+    assert_eq!(
+        vercel_gateway_upstream_model(VERCEL_GLM_5_3_FLASH_MODEL),
+        VERCEL_GLM_5_3_FLASH_MODEL
+    );
 }
 
 #[test]
@@ -1355,6 +1387,18 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider(KIMI_CODE_K3_MODEL, OPENROUTER_PROVIDER_ID),
         Some(KIMI_CODE_PROVIDER_ID)
     );
+    for model in [
+        VERCEL_GLM_5_3_FLASH_MODEL,
+        VERCEL_GLM_5_3_MODEL,
+        VERCEL_KIMI_K3_MODEL,
+        VERCEL_DEEPSEEK_V4_PRO_MODEL,
+    ] {
+        assert_eq!(
+            corrected_catalog_provider(model, AMBIENT_PROVIDER_ID),
+            Some(VERCEL_PROVIDER_ID),
+            "expected {model} to recover to Vercel"
+        );
+    }
 
     // Consistent pairs and legitimate family variants: untouched.
     assert_eq!(
@@ -1451,6 +1495,10 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (META_DEFAULT_MODEL, META_PROVIDER_ID),
         (VERCEL_DEFAULT_MODEL, VERCEL_PROVIDER_ID),
         (VERCEL_GLM_5_2_FAST_MODEL, VERCEL_ANTHROPIC_FAST_PROVIDER_ID),
+        (VERCEL_GLM_5_3_FLASH_MODEL, VERCEL_PROVIDER_ID),
+        (VERCEL_GLM_5_3_MODEL, VERCEL_PROVIDER_ID),
+        (VERCEL_KIMI_K3_MODEL, VERCEL_PROVIDER_ID),
+        (VERCEL_DEEPSEEK_V4_PRO_MODEL, VERCEL_PROVIDER_ID),
         (BASETEN_DEFAULT_MODEL, BASETEN_PROVIDER_ID),
         ("gpt-5.6-sol", OPENAI_PROVIDER_ID),
     ] {

@@ -1,7 +1,6 @@
 # Vercel Integration
 
-Vercel is a built-in metered provider path through Vercel AI Gateway. Corbanu Terminal
-only exposes the Vercel GLM 5.2 models requested for this integration.
+Vercel is a built-in metered provider path through Vercel AI Gateway.
 
 ## Current Provider
 
@@ -32,21 +31,29 @@ The visible Vercel models are bundled in
 | Slug | Display name | Description |
 | --- | --- | --- |
 | `zai/glm-5.2` | `Vercel GLM 5.2` | `Vercel: GLM 5.2 - $1.40/M input, $0.26/M cached input, $4.40/M output.` |
-| `zai/glm-5.2-fast` | `Vercel GLM 5.2 Fast` | `Vercel: GLM 5.2 Fast - $3.00/M input, $0.50/M cached input, $10.25/M output.` |
+| `zai/glm-5.2-fast` | `Vercel GLM 5.2 Fast` | `Vercel: GLM 5.2 Fast - $2.10/M input, $0.21/M cached input, $6.60/M output.` |
+| `zai/glm-5.3-flash` | `Vercel GLM 5.3 Flash` | Vercel GLM 5.3 Flash route with vision and reasoning. |
+| `zai/glm-5.3` | `Vercel GLM 5.3` | Vercel GLM 5.3 reasoning route. |
+| `vercel/moonshotai/kimi-k3` | `Vercel Kimi K3` | Provider-qualified local identity; sends `moonshotai/kimi-k3` to Vercel. |
+| `vercel/deepseek/deepseek-v4-pro` | `Vercel DeepSeek V4 Pro` | Provider-qualified local identity; sends `deepseek/deepseek-v4-pro` to Vercel. |
 
-Both entries use a `1048576` token context window, are listed in `/model`, and
-do not expose Corbanu Terminal reasoning-effort controls.
+All entries are listed in `/model`. Provider-qualified identities keep Kimi K3
+and DeepSeek V4 Pro distinct from their OpenRouter catalog entries while the
+wire request uses Vercel's official model slug.
 
 ## Model And Provider Selection
 
-Corbanu Terminal maps the exact models `zai/glm-5.2` and `zai/glm-5.2-fast` to
-provider `vercel` in `codex-rs/tui/src/chatwidget/model_popups.rs`.
+Corbanu Terminal maps every model above to provider `vercel`.
 
 Examples:
 
 ```bash
 corbanu -m zai/glm-5.2
 corbanu -m zai/glm-5.2-fast
+corbanu -m zai/glm-5.3-flash
+corbanu -m zai/glm-5.3
+corbanu -m vercel/moonshotai/kimi-k3
+corbanu -m vercel/deepseek/deepseek-v4-pro
 ```
 
 ## Vault Behavior

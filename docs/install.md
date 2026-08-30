@@ -178,7 +178,7 @@ to use.
 | OpenRouter   | `openrouter`  | `OPENROUTER_API_KEY` | `deepseek/deepseek-v4-flash-0731`, `moonshotai/kimi-k3`, and other catalogued routes |
 | Meta         | `meta`        | `MODEL_API_KEY`      | `muse-spark-1.1`                                                                     |
 | Baseten      | `baseten`     | `BASETEN_API_KEY`    | `zai-org/GLM-5.2`                                                                    |
-| Vercel       | `vercel`      | `AI_GATEWAY_API_KEY` | `zai/glm-5.2`, `zai/glm-5.2-fast`                                                    |
+| Vercel       | `vercel`      | `AI_GATEWAY_API_KEY` | `zai/glm-5.3-flash`, `zai/glm-5.3`, Vercel Kimi K3 and DeepSeek V4 Pro routes        |
 
 The first-run provider picker and `/providers` expose account/plan routes and
 all of the API-key rows above. Provider keys entered through the Corbanu Terminal UI
@@ -262,6 +262,10 @@ corbanu -m deepseek-v4-flash                    # direct DeepSeek Responses API
 corbanu -m deepseek/deepseek-v4-flash-0731     # pinned OpenRouter route
 corbanu -m muse-spark-1.1                       # Meta
 corbanu -m zai/glm-5.2-fast                     # Vercel GLM 5.2 Fast
+corbanu -m zai/glm-5.3-flash                    # Vercel GLM 5.3 Flash
+corbanu -m zai/glm-5.3                          # Vercel GLM 5.3
+corbanu -m vercel/moonshotai/kimi-k3            # Vercel Kimi K3
+corbanu -m vercel/deepseek/deepseek-v4-pro      # Vercel DeepSeek V4 Pro
 ```
 
 The `/model` picker groups models by account/provider route. Current categories
@@ -283,6 +287,10 @@ Current visible model metadata:
 | `deepseek/deepseek-v4-flash-0731`     | OpenRouter              | Exact pinned OpenRouter DeepSeek Flash route              |
 | `deepseek/deepseek-v4-pro`            | OpenRouter              | OpenRouter DeepSeek V4 Pro route                          |
 | `moonshotai/kimi-k3`                  | OpenRouter              | Metered Kimi K3 route                                     |
+| `zai/glm-5.3-flash`                   | Vercel                  | Vercel AI Gateway GLM 5.3 Flash route                     |
+| `zai/glm-5.3`                         | Vercel                  | Vercel AI Gateway GLM 5.3 route                           |
+| `vercel/moonshotai/kimi-k3`           | Vercel                  | Vercel route; sends official `moonshotai/kimi-k3` slug    |
+| `vercel/deepseek/deepseek-v4-pro`     | Vercel                  | Vercel route; sends official DeepSeek V4 Pro slug         |
 | `muse-spark-1.1`                      | Meta                    | Meta API route                                            |
 | `glm-5.2` and provider-specific slugs | Multiple                | Ambient, Z.AI, Baseten, Vercel, and OpenRouter GLM routes |
 

@@ -27,8 +27,13 @@ use codex_model_provider_info::KIMI_CODE_K3_MODEL;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
+use codex_model_provider_info::VERCEL_DEEPSEEK_V4_PRO_MODEL;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
+use codex_model_provider_info::VERCEL_GLM_5_3_FLASH_MODEL;
+use codex_model_provider_info::VERCEL_GLM_5_3_MODEL;
+use codex_model_provider_info::VERCEL_KIMI_K3_MODEL;
+use codex_model_provider_info::VERCEL_PROVIDER_ID;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 use codex_protocol::openai_models::ReasoningEffort;
 use pretty_assertions::assert_eq;
@@ -3975,6 +3980,22 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
             .contains("Vercel: GLM 5.2 - $1.40/M input, $0.26/M cached input, $4.40/M output."),
         "expected Vercel GLM price description in /model picker:\n{vercel_popup}"
     );
+    for (model, display_name) in [
+        (VERCEL_GLM_5_3_FLASH_MODEL, "Vercel GLM 5.3 Flash"),
+        (VERCEL_GLM_5_3_MODEL, "Vercel GLM 5.3"),
+        (VERCEL_KIMI_K3_MODEL, "Vercel Kimi K3"),
+        (VERCEL_DEEPSEEK_V4_PRO_MODEL, "Vercel DeepSeek V4 Pro"),
+    ] {
+        assert!(
+            vercel_popup.contains(model) && vercel_popup.contains(display_name),
+            "expected {display_name} ({model}) in the Vercel tab:\n{vercel_popup}"
+        );
+        assert_eq!(
+            ChatWidget::model_provider_for_selection(model).as_deref(),
+            Some(VERCEL_PROVIDER_ID),
+            "expected {model} to select the Vercel provider"
+        );
+    }
 
     let (mut vercel_fast_chat, _vercel_fast_rx, _vercel_fast_op_rx) =
         make_chatwidget_manual(Some(VERCEL_GLM_5_2_FAST_MODEL)).await;

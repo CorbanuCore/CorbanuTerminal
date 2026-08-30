@@ -27,7 +27,7 @@ providers as first-class choices.
 | OpenRouter provider | Built-in metered provider including pinned `deepseek/deepseek-v4-flash-0731`, DeepSeek Pro, Kimi K3, Grok, MiniMax, Gemini, Owl, and Tencent routes. | `codex-rs/model-provider-info/src/lib.rs`, `codex-rs/models-manager/models.json` |
 | Meta provider | Built-in `meta` route using `MODEL_API_KEY` and Muse Spark 1.1. | `codex-rs/model-provider-info/src/lib.rs` |
 | Baseten provider | Built-in provider named `baseten`, using `BASETEN_API_KEY` and Baseten GLM 5.2. | `codex-rs/model-provider-info/src/lib.rs` |
-| Vercel provider | Built-in provider named `vercel`, using `AI_GATEWAY_API_KEY` and Vercel AI Gateway GLM 5.2 models. | `codex-rs/model-provider-info/src/lib.rs` |
+| Vercel provider | Built-in provider named `vercel`, using `AI_GATEWAY_API_KEY` for GLM 5.3 Flash, GLM 5.3, Kimi K3, DeepSeek V4 Pro, and legacy GLM 5.2 routes. | `codex-rs/model-provider-info/src/lib.rs` |
 | Amazon Bedrock | Cloud-authenticated Bedrock models through the inherited provider route. | `codex-rs/model-provider-info/src/lib.rs`, `docs/config.md` |
 | Ollama and LM Studio | Local model-server routes configured against the operator's endpoint. | `codex-rs/model-provider-info/src/lib.rs`, `docs/config.md` |
 | Corbanu Plan | Wallet-linked prepaid inference credential, usage, and model routes. | `codex-rs/tui/src/chatwidget/wallet_menu.rs`, `codex-rs/tui/src/chatwidget/model_popups.rs` |
@@ -56,6 +56,6 @@ Avoid spreading provider assumptions through prompts or docs-only instructions. 
 2. [Z.AI GLM 5.2](zai-glm-52.md) for the direct Z.AI coding-plan path.
 3. [OpenRouter](openrouter.md) for metered OpenRouter models.
 4. [Baseten](baseten.md) for metered Baseten GLM 5.2.
-5. [Vercel](vercel.md) for metered Vercel AI Gateway GLM 5.2 models.
+5. [Vercel](vercel.md) for metered Vercel AI Gateway models.
 6. [Codex Fork](codex-fork.md) for product changes around command names,
    packaging, status surfaces, and model picker behavior.

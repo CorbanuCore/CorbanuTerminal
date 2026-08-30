@@ -1,0 +1,258 @@
+---
+title: "Corbanu API balance and keys"
+status: active
+change_class: product-initiative
+priority: P1
+owner: "Alex Good"
+max_active_sprints: 1
+integration_owner: "Jim Ricketts"
+activation_authority: "Alex Good — Head of Product"
+activation_basis: "2026-08-30 directive to replace Corbanu Plan tiers with wallet-funded Corbanu API keys and dollar balance"
+target_release: "TBD"
+deadline: "TBD"
+created: 2026-08-30
+updated: 2026-08-30
+product_spec:
+  file: docs/corbanu-product-spec.md
+  heading: "Corbanu API — TO BUILD"
+  requirement_excerpt: "Replace new Corbanu Plan sales with a wallet-funded, dollar-denominated Corbanu API balance."
+implementation_worktrees:
+  - path: "/home/pfrpc/repos/CorbanuAPI"
+    branch: "feat/corbanu-api-balance"
+    base_commit: "66097f417815bb094f070bd9733007d27be98725"
+---
+
+# Corbanu API balance and keys
+
+Policy: repository-root `AGENTS.md`
+
+Plan lifecycle: `docs/plans/index.md`
+
+## Activation record
+
+| Field | Value |
+| --- | --- |
+| Status | **Active** |
+| Active-plan slot | **2 of 2** |
+| Product authority | Alex Good, Head of Product, for product financialization and commercial integration |
+| Authoritative decision | 2026-08-30 user directive recorded in the product specification |
+| Final launch authority | Travis Good; compliance and provider-terms review remain required |
+| Target release | TBD |
+| Deadline | TBD |
+
+## User pain
+
+The current product sells expiring token bundles through four tiers even though
+models have materially different costs. Users cannot see a simple dollar
+balance, compare per-model prices, or manage multiple API keys in one place.
+The word “Plan” also conflates payment, entitlement, and inference.
+
+## Product intent and ideal flow
+
+The user opens `/wallet`, enters **Corbanu API**, and sees a dollar balance,
+priced models, and API-key summaries. They choose any positive canonical-USDC
+top-up amount, review the exact transfer, unlock the wallet, and confirm it.
+Settlement credits the same number of dollars to the wallet account. If the
+account has no active key, Corbanu creates one and shows it exactly once in a
+secure secret view while storing it in the encrypted client credential store.
+Returning users can create and revoke additional keys with an unlocked wallet;
+list views expose only prefixes and metadata.
+
+Inference reserves estimated dollars atomically, routes through an internal
+provider adapter, and settles actual input/cache/output cost. Rejected calls
+release the reservation; ambiguous calls retain a conservative debit with an
+auditable disposition. Insufficient balance fails before upstream inference.
+Restart and resume preserve balances, keys, idempotency, and unsettled work.
+
+## Product linkage
+
+| Field | Value |
+| --- | --- |
+| Exact product-spec heading | **Corbanu API — TO BUILD** |
+| Requirement excerpt | “Replace new Corbanu Plan sales with a wallet-funded, dollar-denominated Corbanu API balance.” |
+| Product outcome advanced | Wallet-funded inference with transparent API pricing |
+| North-star criterion advanced | Fund Corbanu with stablecoins while keeping provider credentials and protected financial data out of model context |
+
+## Scope
+
+### In
+
+- Replace new tier purchases with arbitrary positive canonical-USDC top-ups at one USDC to one dollar of credit.
+- Store wallet-account balances in integer microdollars with atomic reservations and settlement.
+- Share one wallet balance across independently revocable API keys and attribute spend per key.
+- Show a newly created plaintext key exactly once in a secure non-transcript view; persist only its hash server-side.
+- Add provider-neutral public model IDs, recommendation/speed guidance, privacy class, and versioned input/cache/output sell prices.
+- Route GLM 5.3 Flash, GLM 5.3, GPT-5.6 Luna, and GPT-5.6 Sol through the protected server-side Vercel credential.
+- Route Claude Fable and DeepSeek V4 Pro through xAPI when enabled, cheaper, and healthy.
+- Keep internal vendor, account, and credential metadata out of public responses.
+- Grandfather existing paid periods and credentials through expiration without conversion or deletion.
+- Replace user-facing “Plan” language with “Corbanu API”; retain old identifiers only as migration aliases.
+- Add backend, payment, concurrency, metering, migration, TUI snapshot, true-PTY, and production-readiness evidence.
+
+### Out
+
+- Converting unused legacy token allowances into dollars.
+- Silently changing a published customer price during an in-flight request.
+- Exposing upstream vendor names or credentials to customers or models.
+- Shipping a customer-visible model before its sell price is explicitly approved.
+- Removing historical settlement, ledger, or compatibility records.
+- Launching before required stablecoin-payment, provider-terms, and compliance review.
+
+## Invariants
+
+- Money is integer microdollars; token counts and floating point never represent account value.
+- Settlement identity is idempotent and cannot credit two accounts.
+- Reservation plus available balance cannot go negative under concurrency.
+- Plaintext customer keys are never persisted server-side or written to transcript, logs, or evidence.
+- Every key is wallet-owned, revocable, and separately attributable; keys share only the wallet balance.
+- Provider credentials resolve only inside the backend trust boundary.
+- Public model identity and price are independent from internal route selection.
+- Privacy remains explicit as Corbanu-controlled or third-party without naming the vendor.
+- Existing paid users lose no recorded entitlement during migration.
+- An unavailable backend fails visibly and never falls through to an unapproved route.
+
+## Ownership and implementation worktrees
+
+| Owner | Worktree | Branch | Base commit | Scope |
+| --- | --- | --- | --- | --- |
+| Jim Ricketts | `/home/pfrpc/repos/CorbanuAPI` | `feat/corbanu-api-balance` | `66097f417815bb094f070bd9733007d27be98725` | Private gateway domain, provider adapters, persistence, API, and tests |
+| Unallocated | TBD | TBD | TBD | Public Terminal provider/catalog and `/wallet` UI after backend contract lands |
+
+## Useful code references
+
+| Path or symbol | Why it matters |
+| --- | --- |
+| `CorbanuPlan/src/models.ts` | Existing internal route registry and privacy classification |
+| `CorbanuPlan/src/store.ts::GatewayStore` | Existing key, entitlement, reservation, and settlement contract |
+| `CorbanuPlan/src/postgres-store.ts` | Existing atomic PostgreSQL implementation and compatibility tables |
+| `CorbanuPlan/src/x402.ts` | Current static tier checkout; replaced by amount-bound top-up intents |
+| `CorbanuPlan/src/app.ts::createGatewayApp` | Customer API, authentication, catalog, and inference boundary |
+| `codex-rs/wallet-daemon` | Existing local signing and payment capability boundary |
+| `codex-rs/tui/src/chatwidget/wallet_menu.rs` | Existing purchase/recovery UI and encrypted credential storage |
+| `codex-rs/tui/src/chatwidget/model_popups.rs` | Existing provider/model picker mapping and privacy label |
+
+## Upstream-touch record
+
+| Baseline field | Value / evidence |
+| --- | --- |
+| Canonical upstream URL and verified full SHA | `https://github.com/openai/codex.git` at `ba6cf9c69277caec51a4c12c5b7401a9920930e0`; fork merge-base `413492cd6c3a4d4f8dff6f406247ccda5a9d88aa` |
+| Fork base and candidate SHA | Public client base `0c3129f266d4859bfb21c291c7d3a05fc3c284e9`; private backend base `66097f417815bb094f070bd9733007d27be98725` |
+| Proposed upstream update SHA | Not applicable; this initiative does not update upstream Codex |
+
+| Feature / sprint | Upstream files and native interface | Product-owned boundary / reason | Integration owner | Contract tests / artifact | Upgrade disposition |
+| --- | --- | --- | --- | --- | --- |
+| PF-31 / S01 | None; standalone private backend | Product-owned provider adapter and catalog contract | Jim Ricketts | Backend adapter tests at `ef31361e5becfabc971db7a3670ed340433f18ea`; passed | No upstream patch |
+| PF-32 / future | Native model provider/catalog interfaces | Thin Corbanu API provider aliases and model metadata | Jim Ricketts | Provider resolution and request-wire tests; pending | Keep adapter separable |
+| PF-33 / future | Native wallet/TUI selection interfaces | Product-owned payment, key, and balance views | Jim Ricketts | Wallet daemon, snapshots, true-PTY; pending | Keep wallet UI modular |
+
+## Sprint execution map
+
+| Feature ID | Plan feature | Current sprint records | State |
+| --- | --- | --- | --- |
+| `PF-31` | Provider-neutral backend registry and Vercel adapter | [PF-31-S01](../../sprints/archive/corbanu-api-balance/pf-31-s01-vercel-adapter.md) | completed at `ef31361e5becfabc971db7a3670ed340433f18ea` |
+| `PF-32` | Dollar balance, top-up intents, key lifecycle, and legacy migration | [PF-32-S01](../../sprints/archive/corbanu-api-balance/pf-32-s01-balance-topups-and-keys.md) | completed at `00a410be45d6f463e04d6342255df864af56a92b` |
+| `PF-33` | Versioned sell-price metering and xAPI/Vercel selection | pending | blocked on sell-price decision |
+| `PF-34` | Terminal provider, balance/key/top-up UI, and one-time secret view | pending | pending PF-32/PF-33 |
+| `PF-35` | Qualification, deployment, migration docs, and human acceptance | pending | pending PF-31 through PF-34 |
+
+### Dependency graph and lane allocation
+
+| Lane | Sprint(s) | Owner | Write scope | Shared-interface prerequisite | Integration checkpoint |
+| --- | --- | --- | --- | --- | --- |
+| backend | PF-31-S01 (completed) | Jim Ricketts | `src/config.ts`, `src/models.ts`, `src/vercel.ts`, `tests/config.test.ts`, `tests/vercel-routing.test.ts` | Existing `ModelRoute` and configuration contracts | 86 package tests pass; staged routes remain outside legacy catalog |
+| backend | PF-32-S01 (completed) | Jim Ricketts | Store, payment, API, exact-money, and tests recorded in sprint | PF-31-S01 | 92 package tests pass; PostgreSQL fixture added but runtime unavailable |
+
+### Requirement traceability
+
+| Product requirement / adopted design | Feature and sprint | State | Acceptance evidence |
+| --- | --- | --- | --- |
+| Protected Vercel routing for four routes | PF-31 / PF-31-S01 | completed | `ef31361e5becfabc971db7a3670ed340433f18ea`; 86 package tests pass |
+| Dollar balance and no new tiers | PF-32 | completed | `00a410be45d6f463e04d6342255df864af56a92b`; exact top-up and compatibility tests |
+| Versioned per-model pricing | PF-33 | blocked | Approved sell-price table and cost tests |
+| One-time key reveal and multiple keys | PF-32, PF-34 | backend complete | API response-only key tests pass; secure-view TUI proof remains PF-34 |
+| Provider-neutral customer surface with privacy class | PF-33, PF-34 | pending | Catalog contract, snapshots, and absence scan |
+| Legacy paid periods preserved | PF-32, PF-35 | backend complete | Legacy suite passes; production audit remains PF-35 |
+
+## Acceptance flows
+
+| Flow | Starting state | User action | Expected visible result | Pass criterion |
+| --- | --- | --- | --- | --- |
+| Primary success | Funded wallet, no API balance | Enter amount, unlock, confirm | Exact USDC settles, equal dollar balance appears, default key appears once securely | Balance and stored client credential survive restart |
+| Additional key | Positive balance, unlocked wallet | Choose Create API key | New plaintext shown once; list later shows prefix only | Both keys work with separate attribution |
+| Failure/cancel | Locked wallet or cancelled confirmation | Cancel or fail signing/payment | No debit, credit, or key creation | Idempotent retry is safe |
+| Insufficient balance | Valid key, low balance | Submit priced inference | Rejected before upstream with required/available dollars | No negative balance or provider spend |
+| Recovery/resume | Existing wallet on fresh install | Restore and authenticate | Balance/key summaries recover; old plaintext does not reappear | New key can be created without top-up |
+| Legacy compatibility | Unexpired Plan period | Continue using existing key | Recorded allowance remains usable through expiration | No entitlement loss or dollar conversion |
+
+## Implementation sequence
+
+1. Land the private provider-neutral Vercel adapter without customer-visible activation.
+2. Add dollar accounts, amount-bound x402 top-ups, atomic reservations, and legacy compatibility.
+3. Add approved price schedules and activate the provider-neutral model catalog.
+4. Add the Terminal Corbanu API UI and secure one-time key display.
+5. Qualify, migrate, deploy, and obtain human acceptance.
+
+## Automated evidence
+
+| Check | Final-tree command | Result | Artifact |
+| --- | --- | --- | --- |
+| Backend focused | Package focused test command | pending | pending |
+| Backend build/typecheck | `pnpm run check && pnpm run build` | pending | pending |
+| Public Rust crates | `just test -p <affected-crate>` after `just fmt` | pending | pending |
+| Snapshot | `just test -p codex-tui` and reviewed `insta` changes | pending | pending |
+| Payment/adversarial | Duplicate settlement, concurrent reserve, key leakage, fail-closed route matrix | pending | pending |
+
+## True-TUI evidence
+
+| Flow | Candidate binary | Test repo/worktree | Keys/actions | Visible checkpoints | Result | Artifact |
+| --- | --- | --- | --- | --- | --- | --- |
+| Primary | pending | TensorCash | `/wallet`, Corbanu API, amount, unlock, confirm | Balance and one-time secure key | pending | pending |
+| Failure/cancel | pending | Isometric Game | Cancel and failed top-up | No state change | pending | pending |
+| Recovery/resume | pending | both | Restart, restore, create/revoke key | Balance persists; old plaintext absent | pending | pending |
+
+## Live-repository applicability
+
+| Repository | Applicable? | Resolved checkout/test worktree | Base commit | Reason or result |
+| --- | --- | --- | --- | --- |
+| TensorCash | yes | pending | pending | Trading-oriented wallet-funded inference workflow |
+| Isometric Game | yes | pending | pending | TUI layout, secure view, and model picker workflow |
+
+## Human acceptance
+
+| Tester | Date | Candidate version/commit | Flow | Result | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| Travis Good | pending | pending | Payment, key, pricing, legacy migration | pending | pending |
+
+## Documentation
+
+| Finished-feature doc | Product-spec citation present | Verified candidate |
+| --- | --- | --- |
+| `docs/features/corbanu-api.md` | pending | pending |
+
+## Dependencies, decisions, and blockers
+
+| Item | Type | Owner | Needed by | State / decision |
+| --- | --- | --- | --- | --- |
+| Customer sell prices and markup for six models | Commercial decision | Alex Good | PF-33 | **blocked; upstream cost is not silently copied** |
+| Shared wallet balance across keys | Product interpretation | Alex Good | PF-32 | adopted; correct before PF-32 if per-key balances were intended |
+| Vercel model IDs | Provider contract | Jim Ricketts | PF-31 | verified from live catalog on 2026-08-30 |
+| Legacy period treatment | Migration decision | Alex Good | PF-32 | grandfather through expiration; no conversion |
+| Stablecoin/provider terms and compliance | Launch gate | Head of Product | PF-35 | pending |
+| Existing dirty deep-research work | Integration dependency | Jim Ricketts | PF-35 | isolated in another worktree; merge explicitly later |
+
+## Release linkage
+
+- Release record: pending
+- Benchmark tracker row: pending
+- Remaining blocker: prices, implementation, qualification, compliance, deployment, and human acceptance
+
+## Completion
+
+- [ ] Product linkage, scope, invariants, and worktrees are current.
+- [ ] Every implementation unit is represented by a valid single-feature sprint.
+- [ ] Required final-tree automated evidence passes.
+- [ ] Required true-TUI and live-repository evidence passes.
+- [ ] Human acceptance passes.
+- [ ] Finished documentation matches the candidate.
+- [ ] Release and benchmark records are linked.
+- [ ] No hard release gate remains pending.

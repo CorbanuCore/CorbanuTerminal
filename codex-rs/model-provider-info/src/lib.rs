@@ -197,7 +197,43 @@ const VERCEL_ANTHROPIC_FAST_PROVIDER_NAME: &str = "Vercel Anthropic Fast";
 pub const VERCEL_ANTHROPIC_FAST_PROVIDER_ID: &str = "vercel-anthropic-fast";
 pub const VERCEL_DEFAULT_MODEL: &str = "zai/glm-5.2";
 pub const VERCEL_GLM_5_2_FAST_MODEL: &str = "zai/glm-5.2-fast";
+pub const VERCEL_GLM_5_3_FLASH_MODEL: &str = "zai/glm-5.3-flash";
+pub const VERCEL_GLM_5_3_MODEL: &str = "zai/glm-5.3";
+/// Provider-qualified catalog identity for Vercel's Kimi K3 route.
+///
+/// The upstream slug is also catalogued for OpenRouter, so a distinct local
+/// identity is required to preserve the provider/model pair through picker,
+/// persistence, resume, and orchestration paths.
+pub const VERCEL_KIMI_K3_MODEL: &str = "vercel/moonshotai/kimi-k3";
+pub const VERCEL_KIMI_K3_UPSTREAM_MODEL: &str = "moonshotai/kimi-k3";
+/// Provider-qualified catalog identity for Vercel's DeepSeek V4 Pro route.
+pub const VERCEL_DEEPSEEK_V4_PRO_MODEL: &str = "vercel/deepseek/deepseek-v4-pro";
+pub const VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL: &str = "deepseek/deepseek-v4-pro";
 pub const VERCEL_API_KEY_ENV_VAR: &str = "AI_GATEWAY_API_KEY";
+
+pub fn vercel_gateway_upstream_model(model: &str) -> &str {
+    match model.trim() {
+        VERCEL_KIMI_K3_MODEL => VERCEL_KIMI_K3_UPSTREAM_MODEL,
+        VERCEL_DEEPSEEK_V4_PRO_MODEL => VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL,
+        _ => model,
+    }
+}
+
+fn is_vercel_catalog_model(model: &str) -> bool {
+    matches!(
+        model.trim(),
+        VERCEL_DEFAULT_MODEL
+            | VERCEL_GLM_5_2_FAST_MODEL
+            | VERCEL_GLM_5_3_FLASH_MODEL
+            | VERCEL_GLM_5_3_MODEL
+            | VERCEL_KIMI_K3_MODEL
+            | VERCEL_DEEPSEEK_V4_PRO_MODEL
+            // Accept official gateway slugs when users provide an explicit
+            // Vercel provider/model pair on the command line.
+            | VERCEL_KIMI_K3_UPSTREAM_MODEL
+            | VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL
+    )
+}
 
 /// Built-in catalog providers eligible for impossible-pair correction. User-defined providers
 /// (e.g. a private Azure deployment) are never second-guessed.
@@ -290,7 +326,14 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     if model == VERCEL_GLM_5_2_FAST_MODEL {
         return Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID);
     }
-    if model == VERCEL_DEFAULT_MODEL {
+    if matches!(
+        model,
+        VERCEL_DEFAULT_MODEL
+            | VERCEL_GLM_5_3_FLASH_MODEL
+            | VERCEL_GLM_5_3_MODEL
+            | VERCEL_KIMI_K3_MODEL
+            | VERCEL_DEEPSEEK_V4_PRO_MODEL
+    ) {
         return Some(VERCEL_PROVIDER_ID);
     }
     if matches!(
@@ -333,7 +376,16 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
         return None;
     }
     if model.starts_with("zai/") && !VERCEL_FAMILY_PROVIDERS.contains(&provider) {
-        return Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID);
+        return Some(if model == VERCEL_GLM_5_2_FAST_MODEL {
+            VERCEL_ANTHROPIC_FAST_PROVIDER_ID
+        } else {
+            VERCEL_PROVIDER_ID
+        });
+    }
+    if matches!(model, VERCEL_KIMI_K3_MODEL | VERCEL_DEEPSEEK_V4_PRO_MODEL)
+        && !VERCEL_FAMILY_PROVIDERS.contains(&provider)
+    {
+        return Some(VERCEL_PROVIDER_ID);
     }
     if matches!(
         model,
@@ -456,14 +508,7 @@ pub fn resolve_model_for_provider(
             _ => Some(BASETEN_DEFAULT_MODEL.to_string()),
         },
         VERCEL_PROVIDER_ID | VERCEL_ANTHROPIC_PROVIDER_ID => match model {
-            Some(model)
-                if matches!(
-                    model.trim(),
-                    VERCEL_DEFAULT_MODEL | VERCEL_GLM_5_2_FAST_MODEL
-                ) =>
-            {
-                Some(model)
-            }
+            Some(model) if is_vercel_catalog_model(&model) => Some(model),
             _ => Some(VERCEL_DEFAULT_MODEL.to_string()),
         },
         VERCEL_ANTHROPIC_FAST_PROVIDER_ID => match model {

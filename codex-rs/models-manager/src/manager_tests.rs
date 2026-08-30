@@ -1885,6 +1885,10 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
         "moonshotai/kimi-k2.7-code",
         "zai/glm-5.2",
         "zai/glm-5.2-fast",
+        "zai/glm-5.3-flash",
+        "zai/glm-5.3",
+        "vercel/moonshotai/kimi-k3",
+        "vercel/deepseek/deepseek-v4-pro",
         "zai-org/GLM-5.2",
         "ambient/large",
         "glm-5.2",
@@ -2370,6 +2374,45 @@ fn bundled_models_json_contains_openrouter_models() {
             .unwrap_or_default()
             .contains("$2.10/M input, $0.21/M cached input, $6.60/M output")
     );
+
+    for (slug, display_name, context_window, max_output_tokens) in [
+        (
+            "zai/glm-5.3-flash",
+            "Vercel GLM 5.3 Flash",
+            1_000_000,
+            131_000,
+        ),
+        ("zai/glm-5.3", "Vercel GLM 5.3", 1_000_000, 1_000_000),
+        (
+            "vercel/moonshotai/kimi-k3",
+            "Vercel Kimi K3",
+            1_000_000,
+            131_072,
+        ),
+        (
+            "vercel/deepseek/deepseek-v4-pro",
+            "Vercel DeepSeek V4 Pro",
+            1_000_000,
+            384_000,
+        ),
+    ] {
+        let model = response
+            .models
+            .iter()
+            .find(|model| model.slug == slug)
+            .unwrap_or_else(|| panic!("bundled models.json should include {slug}"));
+        assert_eq!(model.display_name, display_name);
+        assert_eq!(model.context_window, Some(context_window));
+        assert_eq!(model.max_output_tokens, Some(max_output_tokens));
+        assert_eq!(
+            model
+                .orchestration
+                .as_ref()
+                .map(codex_protocol::openai_models::ModelOrchestrationMetadata::provider_id),
+            Some("vercel")
+        );
+        assert_eq!(model.visibility, ModelVisibility::List);
+    }
 
     let openrouter_gemini = response
         .models

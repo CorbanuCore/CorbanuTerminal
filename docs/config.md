@@ -118,6 +118,22 @@ model_provider = "vercel"
 model = "zai/glm-5.2-fast"
 ```
 
+Current Vercel AI Gateway models can use the same provider:
+
+```toml
+model_provider = "vercel"
+model = "zai/glm-5.3-flash" # or zai/glm-5.3
+```
+
+The Vercel Kimi K3 and DeepSeek V4 Pro picker entries use provider-qualified
+catalog identities so they remain distinct from the same slugs on OpenRouter:
+
+```toml
+model_provider = "vercel"
+model = "vercel/moonshotai/kimi-k3"
+# model = "vercel/deepseek/deepseek-v4-pro"
+```
+
 You can also select a model per run:
 
 ```bash
