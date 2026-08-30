@@ -14,7 +14,7 @@ branch: "feat/p0-security-browser-retrieval-pf33"
 base_commit: "b415ca43d148c1b40c61e9d1fb7ce12929b33a3e"
 depends_on: "none"
 created: 2026-08-28
-updated: 2026-08-29
+updated: 2026-08-30
 ---
 
 # PF-33-S03 — Pure destination-policy contract
@@ -46,24 +46,24 @@ updated: 2026-08-29
 ## Done
 
 - [x] Bounded preparation/foundation mandate created from the accepted review; no implementation or platform acceptance claimed.
+- [x] Frozen `pf33-destination-policy/v1` pure normalization, policy-polarity, DNS-answer, private-service and redirect/replay decisions without runtime registration or socket access.
+- [x] Added standalone deterministic table/property coverage for URL ambiguity, IDNA, suffix/trailing-dot/path boundaries, unusual IPv4, mapped/translation/tunnel IPv6, reserved names, answer-set polarity and malformed policy.
+- [x] Recorded a hashed versioned representative fixture and the isolated 239/239 network-proxy result under `qa/security-levels/sprints/PF-33-S03/`; the suite executes every frozen fixture case.
 
 ## Remaining
 
-- [ ] Define normalized scheme/host/port/method/path, DNS-answer and redirect-decision types with versioned fixtures; no live socket or broker hooks in this sprint.
-- [ ] Distinguish absent restrictions, explicit empty deny-all, wildcard public scope and explicit private-service authorization. Moderate public retrieval need not acquire a blanket per-host grant; Aggressive still requires its narrow grants.
-- [ ] Keep private provider exceptions separate from public retrieval. Specify approved address/identity sets and change/revalidation rules; TLS identity alone does not authorize a private destination.
-- [ ] Add table/property tests for IDNA, userinfo, suffix/trailing-dot confusion, unusual IPv4, mapped IPv6, mixed/private answers, downgrade redirects, credential/body replay and malformed policy.
-- [ ] Freeze pure decision fixtures and ownership; PF-33-S01/S02 must wire actual DNS, retries, redirects and peer checks without replacing the decision contract with a permissive adapter.
+- [x] Completed Claude Opus 5 Max Computer Use review (`PASS`) and Codex GPT-5.5 Autoreview (clean, 0.86 confidence); resolved accepted findings in scope and retained immutable evidence.
+- [ ] Integration owner audits the literal scope, reruns the ordered Rust and governance gates on the combined tree, archives the sprint, updates plan/navigation and returns the active lane slot.
 
 ## Verification
 
-- [ ] Run affected format/fix tools before final tests; record exact commands and actual test counts.
-- [ ] Run planned destination-contract unit/property tests with synthetic addresses; prove empty/absent/wildcard/private-policy polarity and bounded normalization.
-- [ ] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
-- [ ] Verify no runtime route or profile becomes available from fixture-only preparation.
+- [x] Ran `just fix -p codex-network-proxy`, `just fmt`, then `just test -p codex-network-proxy`: pre-final-review 239 passed, zero skipped across three binaries; sixteen destination-contract tests.
+- [x] Ran standalone deterministic table/property tests with synthetic address sets; proved empty/absent/wildcard/private polarity and bounded normalization.
+- [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
+- [x] Verified the source has no socket/client call and remains absent from runtime/module/manifests; fixture-only preparation exposes no route or profile.
 
 ## Exit evidence
 
-- [ ] Commit, contract/fixture versions, owner review and final-tree outputs under `qa/security-levels/sprints/PF-33-S03/`.
-- [ ] No claim of SSRF prevention until PF-33-S01/S02 real resolver, connected-peer and alternate-egress qualification completes.
+- [x] Reviewed source commit, source/test/fixture hashes, owner review and final isolated outputs recorded under `qa/security-levels/sprints/PF-33-S03/`.
+- [x] No SSRF-prevention claim; PF-33-S01/S02 retain real resolver, connected-peer, pool/proxy and alternate-egress qualification.
 - [ ] Record integration handoff and scope audit; complete all ledgers before archive and update plan/navigation.
