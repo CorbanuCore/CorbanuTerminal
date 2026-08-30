@@ -141,6 +141,21 @@ Cycle-7 trace SHA-256:
 An exact committed-HEAD confirmation review is performed again before handback
 and sealed below without changing implementation bytes.
 
+Cycle 8 reviewed exact clean implementation HEAD
+`7fa31d8a0043e88a9d725dff9b9f8bf7e85ebe06` against allocation baseline
+`e0c23fe95165636d621dae8c16a5366c4f7250ac` and returned
+`clean: 0 actionable P0/P1/P2 findings`. The reviewer independently reproduced
+the review-7 remediations, statistical bounds, fail-closed qualification,
+strict schema/provenance chain, explicit resource caps, literal write scope and
+honest external-gate ledger. Eight P3 observations were explicitly
+non-blocking/no-change-requested; the shared active-plan and recurring-CI items
+remain integration handoffs above, and the remaining notes do not weaken the
+preparation contract. This evidence-only sealing edit does not change any
+reviewed implementation byte. Cycle-8 transcript SHA-256:
+`7f965811cb88273ca4a15236dc8bae45b543bc0c9a17b5a240014ac6d94866da`.
+Cycle-8 trace SHA-256:
+`1c081e658fc41667449f5a623b4f40658abc804a5dd3d3048e06ea31e2adc052`.
+
 ## External blockers kept open
 
 - Qwen3.5-27B/vLLM generation and corpus hashes on the owner-supplied RTX host.
