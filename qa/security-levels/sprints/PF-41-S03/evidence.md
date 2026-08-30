@@ -4,7 +4,7 @@
 
 - Dispatch base: `9d08b15fa94676c1383ee1605b77e7cc7218dcc4`.
 - Allocation commit: `e0c23fe95165636d621dae8c16a5366c4f7250ac`.
-- Final implementation candidate: `1c190e4fee649167ecc241e8113722d174b74a4c`.
+- Final implementation candidate: `4a2f1deb7e54410a08277c98fe4cec01e3c16cf5`.
 - Contract versions: security-audit event schema v1, integrity checkpoint v1,
   journal record v1 and consumer fixture v1.
 - Activation posture: fixture-only and fail closed. No producer, consumer,
@@ -36,13 +36,17 @@ install; missing/deleted roots or keys fail closed. A local hash chain alone is
 explicitly not a host-compromise boundary.
 
 Recovery validates storage names, bounds, event identities, sequence, causal
-links, generation monotonicity, hash chain, owner/key generation and the
+links, live policy and run generations, generation monotonicity, hash chain,
+owner/key generation and the
 protected high-water mark. Records ahead of the protected root are ambiguous
 commits and never replay automatically. An operator can accept exactly one
 published record only by matching its returned event ID and live
 policy/revocation state through `reconcile_ambiguous_commit`; the journal stays
 blocked until a new full recovery, and a dispatch intent remains pending for an
 explicit unknown receipt. Unknown outcomes are terminal.
+Pending reports expose the durable intent timestamp, and unknown reconciliation
+clamps a backwards wall clock to that value so an operator cannot be stranded
+by a clock step-back.
 Temporary cleanup recognizes only exact journal temporary names and cannot
 delete unrelated files. Emergency restriction applies the PF-19 fence before
 the audit write; a failed write exposes an audit gap and PF-20/reconstructed
@@ -66,6 +70,9 @@ protected checkpoint, and validates the protected prefix hash, policy/run
 generation, producer, owner generation and integrity-key identity before its
 CAS. Missing roots, changed owners and anchor mismatches fail closed. A real
 `IntegrityRootError::Timeout` after local publication maps to `CommitUnknown`.
+The normal write path returns distinct unavailable, concurrent-change and
+invalid-root errors for definite CAS failures, and append-time chain rejection
+returns a structured invariant reason.
 During operator reconciliation, definite conflict/invalid errors map to a
 mismatch and missing/unavailable roots remain unavailable; only a timeout is
 ambiguous. All blocking write-path errors invalidate the validated tail cache.
@@ -84,23 +91,23 @@ crate source through the isolated manifest at
 | Check | Result |
 | --- | --- |
 | `rustfmt +nightly-2025-09-18 --edition 2024 codex-rs/security-audit/src/*.rs codex-rs/security-audit/tests/*.rs` | PASS |
-| `cargo +1.95.0 test --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/harness/Cargo.toml` with CorbanuDrive target/temp | PASS; 36 unit/fault + 1 public integration = 37/37 |
+| `cargo +1.95.0 test --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/harness/Cargo.toml` with CorbanuDrive target/temp | PASS; 39 unit/fault + 1 public integration = 40/40 |
 | `cargo +1.95.0 clippy --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/harness/Cargo.toml --all-targets -- -D warnings` | PASS; isolated workspace mirrors every root workspace Clippy deny |
 | `python3 -m unittest discover -s qa/security-levels/audit-foundation -p 'test_*.py' -v` | PASS; 3/3 |
 | `python3 -m unittest docs.plans.tests.test_check docs.sprints.tests.test_check` | PASS; 23/23 |
 | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | PASS; active 1/2, current 61, archived 94 |
 | `git diff --check` | PASS |
 
-Exact-commit final artifacts for `1c190e4fee649167ecc241e8113722d174b74a4c`:
+Exact-commit final artifacts for `4a2f1deb7e54410a08277c98fe4cec01e3c16cf5`:
 
-- Rust test log: `test-rust-final-2.log`, SHA-256
-  `aca572ec22e714c7b745e0e863905aabd3a965573f32844a936b4bb9604069c8`.
-- full-workspace-lint Clippy log: `clippy-final-2.log`, SHA-256
-  `99f71393b9903dca098310bb446022a4bdee195ea9996f351a787195555210a6`.
-- fixture log: `test-fixture-final-2.log`, SHA-256
-  `c80a081792c1328f46d1f385824d459d636bcb7a3b834976c060563bf2cef3fb`.
-- governance test log: `test-governance-final-2.log`, SHA-256
-  `d1c4da7e9f1b05e00c562492bbcd657d44d4c79cc16d9cf09d86f329f8ee4f89`.
+- Rust test log: `test-rust-final-3.log`, SHA-256
+  `8e0e7ef041724ba752d12929294a9fd885534de519c5acfdc7149f0f0b5ae9cd`.
+- full-workspace-lint Clippy log: `clippy-final-3.log`, SHA-256
+  `5561d70ffe4ed061fbe181b17091e0c7ae01d2625dea6ef6463a5450ffbb8000`.
+- fixture log: `test-fixture-final-3.log`, SHA-256
+  `33060fd73862c5e1af97335504d5b45211fce6d229657f556d8deceeadc52ce4`.
+- governance test log: `test-governance-final-3.log`, SHA-256
+  `b8447aec702f8196aac886b2dc76d2b8bf93792c166701f5e67d77f1830eee14`.
 - isolated manifest with the exact root Clippy deny set: `harness/Cargo.toml`,
   SHA-256
   `b1de95677cf4f772334b66a7be5d07b0de7146643034ef31f901bccc941066e9`.
@@ -126,17 +133,19 @@ terminal receipt recording after a live generation advance; clock-, session-,
 task-, generation- and reissued-authority-independent retry classification with
 original identity reporting; live dropped-permit fencing; exact one-record
 operator reconciliation with protected-prefix, owner and precise CAS-error
-validation; validated-tail cache reuse; and cache invalidation on protected-root,
+validation; run-generation rollback at recovery; observable/clamped pending
+timestamps; structured chain failures; precise write-path CAS errors;
+validated-tail cache reuse; and cache invalidation on protected-root,
 writer-lock and persistence failures.
 
 The foundation was landed in reviewable commits: initial event/storage/journal
 contracts and fixture, identity redaction, recovery/cache hardening, and focused
-review remediations. The final safety module was further split into journal
-types, support, debug and test-fault modules; the production state-machine file
-is 799 lines and no new production module exceeds the roughly-800-line policy.
-The remaining size is the smallest coherent record-first/root-last state
-machine: splitting individual commit transitions would obscure the ordering
-invariant that the tests and review inspect together.
+review remediations. Journal lifecycle/append (`journal.rs`, 373 lines),
+filesystem publication (`journal_io.rs`, 131 lines), and recovery/reconciliation
+(`journal_recovery.rs`, 370 lines) are cohesive production boundaries below the
+500-line target; the former debug-only micro-module was folded into the core
+type. Record-first/root-last ordering stays directly visible in the append and
+recovery state machines rather than being split at individual transitions.
 
 ## TMUX smoke and independent review
 
@@ -201,6 +210,21 @@ implementation/handoff items and this evidence records its exact logs and smoke.
 Transcript:
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/review/opus-fourth-review.txt`,
 SHA-256 `46e15a585b4018c45e15a2aa7c4ffd90defe115f969ed47fc97a5936f3c4c56b`.
+
+A fifth fresh read-only review in the same real TMUX/Corbanu harness used exact
+model `claude-opus-5-plan` at `max` and reviewed immutable evidence candidate
+`8b96f054de57d703608e3df885d2461f79c2b8c6`. It found six remaining issues: a
+run-generation rollback could report recovery ready; a pending intent's
+timestamp was not observable for reconciliation after a backwards clock step;
+append collapsed chain invariant failures; the normal write path classified
+definite integrity-root errors as ambiguous; the journal split did not meet the
+500-line target and retained a debug-only micro-module; and duplicate
+acknowledgement fields did not explain an original sequence paired with the
+current anchoring checkpoint. Implementation candidate
+`4a2f1deb7e54410a08277c98fe4cec01e3c16cf5` fixes all six and adds focused
+regressions. Transcript:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/review/opus-fifth-review.txt`,
+SHA-256 `f45170f3737f2121a4def69c8aadb6012e198ae97bc0a8d068b1bca5a85b047e`.
 
 The final post-remediation read-only Claude Opus 5 Plan Max review is recorded
 here after it completes. Prompt and Enter are sent as separate TMUX operations;
