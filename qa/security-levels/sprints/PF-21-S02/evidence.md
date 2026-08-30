@@ -122,14 +122,20 @@ above and is not final evidence.
 The integration owner still must merge after PF-19/PF-20, rerun the combined
 tree, update every pre-S02 caller to supply the now-required
 `--upstream <commit>` argument, update shared navigation, and archive PF-21-S02.
-The three exact out-of-scope call sites are:
+The four exact out-of-scope call sites are:
 
 - `docs/plans/active/p0-security-levels.md:752` (release-gate command);
 - `scripts/test_security_level_evidence.py:23-31` (sibling discovered test); and
-- `qa/security-levels/fixtures/README.md:48-49` (`--prepare` operator runbook).
+- `qa/security-levels/fixtures/README.md:48-49` (`--prepare` operator runbook); and
+- `docs/sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md:67`
+  (final qualification checklist).
 
 The third read-only review identified this incomplete handback as its sole
 finding; its transcript is outside the repository at
 `tmux-review/final-review-one-finding-transcript.txt`, SHA-256
 `74bb69180b854c83ece3ac12145127a3dac57a9ca0c0f2c459a34240850cc5a2`.
+The fourth read-only review identified the omitted final-qualification caller
+as its sole finding; its transcript is outside the repository at
+`tmux-review/fourth-review-one-finding-transcript.txt`, SHA-256
+`7982da1cc02fe8e22156154f700cfaad978168a36c2fd6484565fb6266b968d0`.
 This lane does not edit those shared/out-of-scope surfaces.
