@@ -114,7 +114,17 @@ repository at `tmux-review/remediation-review-findings-transcript.txt`, SHA-256
   `17a09ef7fb46d24dd1f296dae32a10d5985f94868e688148cb2cc4fb656ae9ef`)
   and `tmux-smoke/logs/codex-tui.log` (SHA-256
   `3194fb4857b6083f09896a3ef97e7a67b2c0b4389d1ea28b79fbbfc1eb0a6162`).
-- Final read-only Corbanu Terminal + Claude Opus 5 Plan/max review: pending.
+- Final read-only review ran in authenticated real TMUX session
+  `pf27-opus5-g1-review` using Corbanu Terminal v0.1.35 with exact model
+  `claude-opus-5-plan` at `max` effort. It reviewed evidence commit
+  `ea3c63846`, implementation commit
+  `a6e933b03a91e16e9642f9ce996a52dff5719a3e`, and the full diff from dispatch
+  base `77f56da1ecddf6093184280b541339e1869ca7b3`; it independently searched for
+  additional live callers and returned the exact verdict `NO FINDINGS`.
+  Transcript:
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-compatibility-drift/tmux-review/clean-final-transcript.txt`,
+  SHA-256
+  `72dd6300b905da2ef3e703e28dc9d038fdb09f36b1678c6d88130e77b6feb86c`.
 
 The earlier 32-test report is superseded by the clean-source 36/36 report
 above and is not final evidence.

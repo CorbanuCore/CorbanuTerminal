@@ -59,7 +59,8 @@ updated: 2026-08-30
 - [x] The remediated extended harness passed 36/36 against independently built baseline/upstream controls and the clean final implementation candidate; exact CLI arguments, identities and hashes are recorded in the candidate evidence.
 - [x] Rust fix/format is not applicable because no Rust path changed.
 - [x] TUI applicability is automated-oracle-only; a supporting real-candidate TMUX `/status`/clean-exit smoke passed, while PF-26-S02 still owns both live repositories with actual keys.
-- [ ] Complete the mandatory read-only Corbanu Terminal + Claude Opus 5 Plan/max independent review and record its transcript hash.
+- [x] Completed the mandatory read-only Corbanu Terminal + Claude Opus 5 Plan/max independent review in TMUX session `pf27-opus5-g1-review`; the final transcript SHA-256 is `72dd6300b905da2ef3e703e28dc9d038fdb09f36b1678c6d88130e77b6feb86c` and the exact verdict was `NO FINDINGS`.
+- [ ] Integration owner reruns the combined-tree qualification after merging this lane and the prerequisite PF-19/PF-20 lanes; see the Exit evidence handback below.
 
 ## Exit evidence
 
@@ -69,5 +70,4 @@ updated: 2026-08-30
 
 ## Remaining
 
-- [ ] Close the independent-review Verification item above.
 - [ ] Close the integration-owner Exit evidence item above.
