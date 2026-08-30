@@ -8,5 +8,7 @@ Plan: [Corbanu API balance and keys](../../../plans/active/corbanu-api-balance.m
 | 2 | [PF-32-S01 balance, top-ups, and keys](../../archive/corbanu-api-balance/pf-32-s01-balance-topups-and-keys.md) | PF-32 | completed | PF-31-S01 |
 | 3 | [PF-33-S01 at-cost metering](../../archive/corbanu-api-balance/pf-33-s01-at-cost-metering.md) | PF-33 | completed | PF-32-S01 |
 | 4 | [PF-33-S02 customer response boundary](../../archive/corbanu-api-balance/pf-33-s02-customer-response-boundary.md) | PF-33 | completed | PF-33-S01 |
+| 5 | [PF-32-S02 Terminal wallet authentication](../../archive/corbanu-api-balance/pf-32-s02-terminal-wallet-auth.md) | PF-32 | completed | PF-33-S02 |
+| 6 | [PF-34-S01 Rust wallet client](pf-34-s01-wallet-client.md) | PF-34 | in progress | PF-32-S02 |
 
-PF-34 and PF-35 remain unallocated; PF-34 is dependency-ready.
+PF-34 is in progress. PF-35 remains unallocated.

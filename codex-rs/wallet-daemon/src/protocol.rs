@@ -1,3 +1,5 @@
+use codex_wallet::CorbanuApiOperation;
+use codex_wallet::CorbanuApiOperationResult;
 use codex_wallet::GatewayKey;
 use codex_wallet::PlanPurchaseIntent;
 use codex_wallet::ProvisionedPlan;
@@ -39,6 +41,11 @@ pub(crate) enum Request {
         capability: String,
         gateway_origin: String,
     },
+    CorbanuApiOperation {
+        capability: String,
+        gateway_origin: String,
+        operation: CorbanuApiOperation,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -57,6 +64,7 @@ pub(crate) enum Response {
     },
     PlanProvisioned(ProvisionedPlan),
     GatewayKeyIssued(GatewayKey),
+    CorbanuApiOperationCompleted(CorbanuApiOperationResult),
     Error {
         code: String,
         message: String,

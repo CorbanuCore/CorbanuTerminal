@@ -186,7 +186,7 @@ pub(crate) async fn provision_plan(
     })
 }
 
-fn payment_transaction(receipt: &PaymentReceipt) -> Option<String> {
+pub(crate) fn payment_transaction(receipt: &PaymentReceipt) -> Option<String> {
     receipt
         .payment_response
         .as_deref()
@@ -456,7 +456,7 @@ pub fn validate_gateway_origin(value: &str) -> Result<(), X402PaymentError> {
     Ok(())
 }
 
-fn secure_client(origin: &str) -> Result<Client, X402PaymentError> {
+pub(crate) fn secure_client(origin: &str) -> Result<Client, X402PaymentError> {
     Client::builder()
         .https_only(!is_loopback_origin(origin))
         .connect_timeout(NETWORK_CONNECT_TIMEOUT)
@@ -474,7 +474,10 @@ fn pubkey(value: &str, label: &str) -> Result<Pubkey, X402PaymentError> {
     Pubkey::from_str(value).map_err(|_| invalid(&format!("{label} is not a Solana address")))
 }
 
-fn required_string(body: &serde_json::Value, field: &str) -> Result<String, X402PaymentError> {
+pub(crate) fn required_string(
+    body: &serde_json::Value,
+    field: &str,
+) -> Result<String, X402PaymentError> {
     body.get(field)
         .and_then(serde_json::Value::as_str)
         .map(ToOwned::to_owned)
@@ -498,13 +501,13 @@ fn decode_header_json(value: &str) -> Option<serde_json::Value> {
     serde_json::from_slice(&bytes).ok()
 }
 
-fn invalid(message: &str) -> X402PaymentError {
+pub(crate) fn invalid(message: &str) -> X402PaymentError {
     X402PaymentError::Intent(message.to_string())
 }
-fn transport(error: impl std::fmt::Display) -> X402PaymentError {
+pub(crate) fn transport(error: impl std::fmt::Display) -> X402PaymentError {
     X402PaymentError::Transport(error.to_string())
 }
-fn rejected(status: u16, body: serde_json::Value) -> X402PaymentError {
+pub(crate) fn rejected(status: u16, body: serde_json::Value) -> X402PaymentError {
     X402PaymentError::Rejected {
         status,
         message: body.to_string(),

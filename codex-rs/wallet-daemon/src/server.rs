@@ -147,6 +147,11 @@ async fn handle(state: Arc<Mutex<State>>, request: Request) -> Response {
             mut capability,
             gateway_origin,
         } => handle_issue_gateway_key(state, &mut capability, gateway_origin).await,
+        Request::CorbanuApiOperation {
+            mut capability,
+            gateway_origin,
+            operation,
+        } => handle_corbanu_api_operation(state, &mut capability, gateway_origin, operation).await,
         request => handle_immediate(state, request).await,
     }
 }
@@ -214,7 +219,9 @@ async fn handle_immediate(state: Arc<Mutex<State>>, mut request: Request) -> Res
             }
             response
         }
-        Request::ProvisionPlan { .. } | Request::IssueGatewayKey { .. } => {
+        Request::ProvisionPlan { .. }
+        | Request::IssueGatewayKey { .. }
+        | Request::CorbanuApiOperation { .. } => {
             unreachable!("network operations are handled without an await-held lock")
         }
     }
@@ -406,6 +413,38 @@ async fn handle_issue_gateway_key(
         Ok(result) => Response::GatewayKeyIssued(result),
         Err(message) => Response::Error {
             code: "key_recovery_failed".into(),
+            message,
+        },
+    }
+}
+
+async fn handle_corbanu_api_operation(
+    state: Arc<Mutex<State>>,
+    capability: &mut String,
+    gateway_origin: String,
+    operation: codex_wallet::CorbanuApiOperation,
+) -> Response {
+    let lease = match checkout_wallet(
+        &state,
+        capability,
+        "Corbanu API capability is invalid or expired",
+    )
+    .await
+    {
+        Ok(lease) => lease,
+        Err(response) => return response,
+    };
+    let result = tokio::select! {
+        _ = lease.cancel.cancelled() => Err("wallet was locked while the Corbanu API operation was in progress".to_string()),
+        result = lease.wallet.execute_corbanu_api_operation(gateway_origin, operation) => {
+            result.map_err(|error| error.to_string())
+        },
+    };
+    finish_operation(&state, lease).await;
+    match result {
+        Ok(result) => Response::CorbanuApiOperationCompleted(result),
+        Err(message) => Response::Error {
+            code: "corbanu_api_operation_failed".into(),
             message,
         },
     }

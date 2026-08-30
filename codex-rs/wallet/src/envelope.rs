@@ -121,6 +121,14 @@ impl UnlockedWallet {
         crate::payment::issue_gateway_key(self, gateway_origin).await
     }
 
+    pub async fn execute_corbanu_api_operation(
+        &self,
+        gateway_origin: String,
+        operation: crate::CorbanuApiOperation,
+    ) -> Result<crate::CorbanuApiOperationResult, crate::X402PaymentError> {
+        crate::corbanu_api::execute(self, gateway_origin, operation).await
+    }
+
     pub(crate) fn seed_for_payment(&self) -> &[u8; 32] {
         &self.seed
     }
