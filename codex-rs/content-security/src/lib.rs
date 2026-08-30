@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 //! Fail-closed external-content screening contracts for Corbanu Terminal.
 
 mod contract;

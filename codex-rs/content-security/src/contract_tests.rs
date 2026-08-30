@@ -144,6 +144,27 @@ fn unavailable_reason(decision: ScreeningDecision) -> Option<UnavailableReason> 
 }
 
 #[test]
+fn pf_34_s04_content_digest_hex_encoding_is_stable() {
+    assert_eq!(
+        ContentDigest::from_bytes([0x00; 32]).to_hex(),
+        "00".repeat(32)
+    );
+    assert_eq!(
+        ContentDigest::from_bytes([0xff; 32]).to_hex(),
+        "ff".repeat(32)
+    );
+
+    let mut ascending = [0_u8; 32];
+    for (value, byte) in ascending.iter_mut().enumerate() {
+        *byte = value as u8;
+    }
+    assert_eq!(
+        ContentDigest::from_bytes(ascending).to_hex(),
+        "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+    );
+}
+
+#[test]
 fn pf_34_s04_releases_only_complete_reassembled_content() {
     let target = target_for(BENIGN_SANITIZED, /*count*/ 2);
     let parts = split(BENIGN_SANITIZED, BENIGN_SANITIZED.len() / 2);
