@@ -12,7 +12,12 @@ for reviewed ranges, callers, adoption decisions and unexecuted cases.
 - Package version: `2026.8.1`; this is a source snapshot, not a release install.
 - Download: shallow clone with hooks disabled; the historical commit was fetched
   with `--depth=1 --no-tags`. No upstream install/startup scripts were run.
-- Exact checkout: `/Users/travisgood/Documents/ChatGPT/openclaw-review-2026-08-28.xLJPKK/source`.
+- Original review checkout: `/Users/travisgood/Documents/ChatGPT/openclaw-review-2026-08-28.xLJPKK/source`
+  (historical temporary path; no longer present).
+- Durable local reference: `/Volumes/CorbanuDrive/Corbanu/.codex-work/references/openclaw-13adff02`,
+  recreated on 2026-08-30 as a clean detached checkout at the same pin with
+  hooks disabled. All 42 `source-manifest.json` file digests match. No install,
+  startup script or upstream test was run while creating this reference.
 - Corbanu planning checkout: `/Users/travisgood/Documents/ChatGPT/corbanu`, `main`,
   base `f173a0bc97c7495d134a67079aadfbe3657d11a7`, with pre-existing reconciliation
   edits preserved. PF-13/PF-29 implementation worktrees were not changed.
