@@ -20,8 +20,8 @@ updated: 2026-08-30
 
 ## Execution mandate
 
-- Deliver: deploy the private Corbanu API backend candidate behind the existing compatibility hostname and prove its production health, wallet-auth, catalog, price, persistence, and provider-neutral inference boundaries.
-- Excludes: public release publication, deleting legacy entitlements, final Terminal human acceptance, and declaring the plan complete.
+- Deliver: deploy the private Corbanu API backend candidate, retire all legacy-plan authorization and state, and prove production health, wallet-auth, catalog, price, persistence, and provider-neutral inference boundaries.
+- Excludes: public release publication, final Terminal human acceptance, and declaring the plan complete.
 
 ## Plan linkage
 
@@ -52,6 +52,8 @@ updated: 2026-08-30
 - [x] Deployed image `deployment-01M19ES7MMEKBX1MMDD6QR0AJ7`; Fly machines `2870663bd33de8` and `784503db5e0398` are version 13 with passing readiness checks.
 - [x] Production smoke confirms `/readyz` 200, six provider-neutral at-cost catalog entries, GLM 5.3 Flash recommended at `$0.15` input, no vendor metadata, legacy `/v1/plans` retirement, and a no-store signed-wallet challenge.
 - [x] Exercised the deployed read-only flow in the real Terminal at `865ea2edd2`; `/wallet` renders the zero-dollar account, arbitrary top-up, key actions, and all six prices without a catalog error.
+- [x] Audited and transactionally deleted 17 legacy periods, 20 weekly windows, 1,910 legacy inference rows, 34 legacy credentials, one legacy-funded xAPI tenant record, and dependent legacy limit/accounting rows.
+- [x] Post-delete production audit reports zero legacy periods, windows, inference rows, credentials, and legacy xAPI funding; Corbanu API account, top-up, and inference tables were unchanged.
 
 ## Remaining
 
@@ -66,6 +68,7 @@ updated: 2026-08-30
 - [x] Customer catalog responses expose Corbanu model and price identities without vendor metadata.
 - [x] TUI applicability is resolved by the production true-PTY run recorded in PF-34-S02.
 - [x] Integrated interfaces match Terminal backend client `cd79361d8b4f286291556a641288757d0451f52c` and read-only catalog fix `865ea2edd2`.
+- [x] Production database retirement audit and API-only `/wallet` true-PTY evidence show legacy state cannot reappear through supported product flows.
 - [ ] Human-funded inference and wallet key-lifecycle acceptance pass against production.
 
 ## Exit evidence

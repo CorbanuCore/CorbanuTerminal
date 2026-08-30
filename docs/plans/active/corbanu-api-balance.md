@@ -7,7 +7,7 @@ owner: "Alex Good"
 max_active_sprints: 2
 integration_owner: "Jim Ricketts"
 activation_authority: "Alex Good — Head of Product"
-activation_basis: "2026-08-30 directive to replace Corbanu Plan tiers with wallet-funded Corbanu API keys and dollar balance"
+activation_basis: "2026-08-30 directives to replace Corbanu Plan tiers with wallet-funded Corbanu API keys and dollar balance, then delete all legacy plan state for the sole production user"
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-08-30
@@ -89,17 +89,16 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 - Route GLM 5.3 Flash, GLM 5.3, GPT-5.6 Luna, and GPT-5.6 Sol through the protected server-side Vercel credential.
 - Route Claude Fable and DeepSeek V4 Pro through xAPI when enabled, cheaper, and healthy.
 - Keep internal vendor, account, and credential metadata out of public responses.
-- Grandfather existing paid periods and credentials through expiration without conversion or deletion.
-- Replace user-facing “Plan” language with “Corbanu API”; retain old identifiers only as migration aliases.
+- Delete legacy paid periods, plan credentials, token allowances, receipts, and dependent entitlement records while preserving wallet assets and Corbanu API state.
+- Remove legacy Plan status, details, receipt, recovery, and inference authorization surfaces; call the product “Corbanu API”.
 - Add backend, payment, concurrency, metering, migration, TUI snapshot, true-PTY, and production-readiness evidence.
 
 ### Out
 
-- Converting unused legacy token allowances into dollars.
+- Converting legacy token allowances into dollars.
 - Silently changing a published customer price during an in-flight request.
 - Exposing upstream vendor names or credentials to customers or models.
 - Shipping a customer-visible model before its sell price is explicitly approved.
-- Removing historical settlement, ledger, or compatibility records.
 - Launching before required stablecoin-payment, provider-terms, and compliance review.
 
 ## Invariants
@@ -112,7 +111,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 - Provider credentials resolve only inside the backend trust boundary.
 - Public model identity and price are independent from internal route selection.
 - Privacy remains explicit as Corbanu-controlled or third-party without naming the vendor.
-- Existing paid users lose no recorded entitlement during migration.
+- Legacy plan state cannot authorize inference or appear in the wallet UI.
 - An unavailable backend fails visibly and never falls through to an unapproved route.
 
 ## Ownership and implementation worktrees
@@ -179,7 +178,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | Versioned per-model pricing | PF-33 / PF-33-S01 | completed | `6aa81161ece53b26915f05c3346a9ebe11b094fd`; zero-markup schedules, exact reservation/settlement, and provider-neutral catalog tests pass |
 | One-time key reveal and multiple keys | PF-32, PF-34 | backend complete | API response-only key tests pass; secure-view TUI proof remains PF-34 |
 | Provider-neutral customer surface with privacy class | PF-33, PF-34 | backend complete | `778b4b33445aa452dce09ab416e520e6b4aaeab1`; JSON/SSE/error sanitization and live provider-neutral response pass; Terminal snapshots remain PF-34 |
-| Legacy paid periods preserved | PF-32, PF-35 | backend complete | Legacy suite passes; production audit remains PF-35 |
+| Legacy plans deleted and deauthorized | PF-34, PF-35 | in progress | Terminal removal, production deletion audit, and balance/key preservation checks |
 
 ## Acceptance flows
 
@@ -190,12 +189,12 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | Failure/cancel | Locked wallet or cancelled confirmation | Cancel or fail signing/payment | No debit, credit, or key creation | Idempotent retry is safe |
 | Insufficient balance | Valid key, low balance | Submit priced inference | Rejected before upstream with required/available dollars | No negative balance or provider spend |
 | Recovery/resume | Existing wallet on fresh install | Restore and authenticate | Balance/key summaries recover; old plaintext does not reappear | New key can be created without top-up |
-| Legacy compatibility | Unexpired Plan period | Continue using existing key | Recorded allowance remains usable through expiration | No entitlement loss or dollar conversion |
+| Legacy retirement | Any legacy Plan period or credential | Open `/wallet` or attempt legacy inference | No Plan surface or authorization; Corbanu API remains available | Legacy rows are absent and wallet/API state is preserved |
 
 ## Implementation sequence
 
 1. Land the private provider-neutral Vercel adapter without customer-visible activation.
-2. Add dollar accounts, amount-bound x402 top-ups, atomic reservations, and legacy compatibility.
+2. Add dollar accounts, amount-bound x402 top-ups, atomic reservations, and remove legacy plan state.
 3. Add approved price schedules and activate the provider-neutral model catalog.
 4. Add the Terminal Corbanu API UI and secure one-time key display.
 5. Qualify, migrate, deploy, and obtain human acceptance.
@@ -232,7 +231,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 
 | Tester | Date | Candidate version/commit | Flow | Result | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| Travis Good | pending | pending | Payment, key, pricing, legacy migration | pending | pending |
+| Travis Good | pending | pending | Payment, key, pricing, and legacy retirement | pending | pending |
 
 ## Documentation
 
@@ -247,7 +246,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | Customer sell prices and markup for six models | Commercial decision | Alex Good | PF-33 | **resolved 2026-08-30: exact pinned upstream cost, zero markup** |
 | Shared wallet balance across keys | Product interpretation | Alex Good | PF-32 | adopted; correct before PF-32 if per-key balances were intended |
 | Vercel model IDs | Provider contract | Jim Ricketts | PF-31 | verified from live catalog on 2026-08-30 |
-| Legacy period treatment | Migration decision | Alex Good | PF-32 | grandfather through expiration; no conversion |
+| Legacy period treatment | Migration decision | Alex Good | PF-34, PF-35 | **amended 2026-08-30: delete all legacy plan state; preserve wallet assets and Corbanu API state** |
 | Stablecoin/provider terms and compliance | Launch gate | Head of Product | PF-35 | pending |
 | Existing dirty deep-research work | Integration dependency | Jim Ricketts | PF-35 | isolated in another worktree; merge explicitly later |
 

@@ -7,7 +7,7 @@ plan_feature: "PF-34"
 execution_order: 7
 owner: "Jim Ricketts"
 lane: "terminal-tui"
-write_scope: "codex-rs/model-provider-info/src/lib.rs, codex-rs/model-provider-info/src/model_provider_info_tests.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/bottom_pane/mod.rs, codex-rs/tui/src/bottom_pane/snapshots, codex-rs/tui/src/chatwidget.rs, codex-rs/tui/src/chatwidget/model_popups.rs, codex-rs/tui/src/chatwidget/wallet_api.rs, codex-rs/tui/src/chatwidget/wallet_api_tests.rs, codex-rs/tui/src/chatwidget/wallet_menu.rs, codex-rs/tui/src/chatwidget/wallet_unlock.rs, codex-rs/tui/src/chatwidget/wallet_unlock_tests.rs, codex-rs/tui/src/slash_command.rs"
+write_scope: "codex-rs/model-provider-info/src/lib.rs, codex-rs/model-provider-info/src/model_provider_info_tests.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/bottom_pane/mod.rs, codex-rs/tui/src/bottom_pane/snapshots, codex-rs/tui/src/chatwidget.rs, codex-rs/tui/src/chatwidget/model_popups.rs, codex-rs/tui/src/chatwidget/wallet_account_actions.rs, codex-rs/tui/src/chatwidget/wallet_api.rs, codex-rs/tui/src/chatwidget/wallet_api_tests.rs, codex-rs/tui/src/chatwidget/wallet_menu.rs, codex-rs/tui/src/chatwidget/wallet_unlock.rs, codex-rs/tui/src/chatwidget/wallet_unlock_tests.rs, codex-rs/tui/src/slash_command.rs"
 worktree: "/home/pfrpc/repos/CorbanuTerminal"
 branch: "feat/corbanu-api-wallet"
 base_commit: "4ff38e974b4e63cebffc5d608c5584e2d453cf1b"
@@ -20,8 +20,8 @@ updated: 2026-08-30
 
 ## Execution mandate
 
-- Deliver: replace new tier-sale UX with a `/wallet` Corbanu API surface for balance, at-cost prices, arbitrary top-up, key summaries, one-time secret reveal, create/revoke, and provider selection.
-- Excludes: deleting grandfathered legacy periods, production deployment, compliance sign-off, and release publication.
+- Deliver: replace all tier and legacy-plan UX with a `/wallet` Corbanu API surface for balance, at-cost prices, arbitrary top-up, key summaries, one-time secret reveal, create/revoke, and provider selection.
+- Excludes: production database deletion, deployment, compliance sign-off, and release publication.
 
 ## Plan linkage
 
@@ -54,6 +54,8 @@ updated: 2026-08-30
 - [x] Built the real Terminal and exercised `/wallet` -> `Corbanu API`, wallet-daemon startup, unlock prompt, top-up entry, exact confirmation, insufficient-funds disablement, and cancel against the wallet-bound disposable backend.
 - [x] Corrected the production price-discovery boundary so locked, unfunded, stale-key, and legacy-key wallets load the public provider-neutral catalog before authenticated account details.
 - [x] Exercised `/wallet` -> `Corbanu API` against the deployed backend and confirmed the zero-dollar balance, arbitrary top-up, key actions, and all six priced models render without exposing upstream vendors.
+- [x] Removed the legacy status request and all Plan status, details, receipt, recovery, and mixed-credential copy from `/wallet`; stored credentials now expose only Corbanu API disconnect behavior.
+- [x] Rebuilt `corbanu-debug` and exercised `/wallet` against the production database after legacy deletion; only Receive, Corbanu API, unlock, API disconnect, backup/removal, and refresh actions remain.
 
 ## Remaining
 
@@ -62,7 +64,7 @@ updated: 2026-08-30
 
 ## Verification
 
-- [x] Focused tests: 14 wallet, 9 wallet-daemon, 58 provider, 3 wallet-API snapshots, and 23 wallet-menu tests pass.
+- [x] Focused tests: 14 wallet, 9 wallet-daemon, 58 provider, 4 wallet-API snapshots, and 16 API-only wallet-menu tests pass.
 - [x] Integration tests cover provider mapping, operation-preserving daemon IPC, backend public-key conversion, and exact microdollars.
 - [x] TUI applicability is resolved and non-secret read-only checkpoints are recorded; human passcode/key lifecycle remains pending.
 - [x] Integrated interfaces in `594d618306d922963cf6676d3600cd381922759c` and `865ea2edd2` match PF-34-S01 and backend `6cc7894`.
@@ -72,7 +74,8 @@ updated: 2026-08-30
 ## Exit evidence
 
 - [x] Implementation commits: `594d618306d922963cf6676d3600cd381922759c` and production catalog fix `865ea2edd2`.
-- [x] Final focused tests pass: 4 wallet-API and 23 wallet-menu; the broad 3,847-test run passed 3,817 and exposed 30 unrelated pre-existing version-drift snapshots.
+- [x] Final focused tests pass: 4 wallet-API and 16 API-only wallet-menu tests; the prior broad 3,847-test run passed 3,817 and exposed 30 unrelated pre-existing version-drift snapshots.
 - [x] Production true-TUI log is `/tmp/corbanu-api-prod-qa-final.nuVmDv/codex-tui.log` with no panic, malformed-catalog, or unavailable-screen signature.
+- [x] API-only wallet true-TUI log is `/tmp/corbanu-no-legacy-final.Zn0gYI/codex-tui.log` with no Plan copy, Plan-status request failure, panic, malformed, or unavailable signature.
 - [x] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/corbanu-api-balance/`.

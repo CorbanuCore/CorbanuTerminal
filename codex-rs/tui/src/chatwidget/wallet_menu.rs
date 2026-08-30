@@ -7,7 +7,6 @@ use crate::app_event::WalletPlanPurchaseSummary;
 use crate::app_event::WalletSecret;
 use crate::chatwidget::wallet_http::gateway_client;
 use crate::chatwidget::wallet_http::gateway_origin;
-use crate::chatwidget::wallet_receipt::latest_plan_receipt;
 use crate::chatwidget::wallet_receipt::reconcile_plan_receipt;
 use crate::chatwidget::wallet_render::WalletTextStyle;
 use crate::chatwidget::wallet_render::push_wallet_text;
@@ -71,11 +70,7 @@ pub(crate) struct WalletOverview {
     pub(crate) daemon: DaemonStatus,
     pub(crate) balances: Option<WalletBalances>,
     pub(crate) balance_error: Option<String>,
-    pub(crate) plan: Option<WalletPlanStatus>,
-    pub(crate) linked_plan_for_other_wallet: Option<WalletPlanStatus>,
-    pub(crate) plan_error: Option<String>,
     pub(crate) plan_credential_present: bool,
-    pub(crate) plan_prices_usdc: std::collections::BTreeMap<String, String>,
 }
 
 fn wallet_balance_endpoint(
@@ -179,62 +174,10 @@ impl ChatWidget {
                     .status()
                     .await
                     .map_err(|error| error.to_string())?;
-                let plan_request = async {
-                    if let Some(key) = plan_key {
-                        let gateway = match gateway_client() {
-                            Ok(gateway) => gateway,
-                            Err(error) => {
-                                return (None, Some(format!("plan status unavailable: {error}")));
-                            }
-                        };
-                        match gateway
-                            .client
-                            .get(format!("{}/v1/account", gateway.origin))
-                            .bearer_auth(key.as_str())
-                            .send()
-                            .await
-                        {
-                            Ok(response) if response.status().is_success() => {
-                                match response.json::<WalletPlanStatus>().await {
-                                    Ok(status) => (Some(status), None),
-                                    Err(error) => {
-                                        (None, Some(format!("plan status was malformed: {error}")))
-                                    }
-                                }
-                            }
-                            Ok(response) => (
-                                None,
-                                Some(format!("plan status returned HTTP {}", response.status())),
-                            ),
-                            Err(error) => (None, Some(format!("plan status unavailable: {error}"))),
-                        }
-                    } else {
-                        (None, None)
-                    }
-                };
-                let catalog_request = async {
-                    let Ok(gateway) = gateway_client() else {
-                        return None;
-                    };
-                    match gateway
-                        .client
-                        .get(format!("{}/v1/plans", gateway.origin))
-                        .send()
-                        .await
-                    {
-                        Ok(response) if response.status().is_success() => {
-                            response.json::<WalletPlanCatalog>().await.ok()
-                        }
-                        _ => None,
-                    }
-                };
-                let ((plan, plan_error), catalog) = tokio::join!(plan_request, catalog_request);
-                let (plan, linked_plan_for_other_wallet) =
-                    separate_plan_for_local_wallet(plan, daemon.address.as_deref());
                 let (balances, balance_error) = if let (Some(address), Some(network)) =
                     (daemon.address.as_deref(), daemon.network.as_deref())
                 {
-                    let (rpc, network) = wallet_balance_endpoint(network, catalog.as_ref());
+                    let (rpc, network) = wallet_balance_endpoint(network, /*catalog*/ None);
                     match BalanceClient::new(rpc, network) {
                         Ok(client) => match client.balances(address).await {
                             Ok(value) => (Some(value), None),
@@ -245,24 +188,11 @@ impl ChatWidget {
                 } else {
                     (None, None)
                 };
-                let plan_prices_usdc = catalog
-                    .map(|catalog| {
-                        catalog
-                            .plans
-                            .into_iter()
-                            .map(|plan| (plan.id, plan.price_usdc))
-                            .collect()
-                    })
-                    .unwrap_or_default();
                 Ok(WalletOverview {
                     daemon,
                     balances,
                     balance_error,
-                    plan,
-                    linked_plan_for_other_wallet,
-                    plan_error,
                     plan_credential_present,
-                    plan_prices_usdc,
                 })
             }
             .await;
@@ -932,21 +862,6 @@ impl ChatWidget {
     }
 }
 
-fn separate_plan_for_local_wallet(
-    plan: Option<WalletPlanStatus>,
-    local_wallet_address: Option<&str>,
-) -> (Option<WalletPlanStatus>, Option<WalletPlanStatus>) {
-    match plan {
-        Some(plan)
-            if local_wallet_address.is_some_and(|address| address == plan.wallet_address) =>
-        {
-            (Some(plan), None)
-        }
-        Some(plan) => (None, Some(plan)),
-        None => (None, None),
-    }
-}
-
 fn wallet_plan_provisioning_error(
     operation: WalletPlanProvisioningOperation,
     error: &str,
@@ -1042,10 +957,6 @@ fn wallet_items(
         .address
         .clone()
         .unwrap_or_else(|| "unavailable".to_string());
-    let latest_receipt = overview
-        .plan
-        .as_ref()
-        .map(|status| latest_plan_receipt(status, overview.balances, &overview.plan_prices_usdc));
     let can_sign = client_can_sign && !overview.daemon.locked && !overview.daemon.busy;
     let lock = if overview.daemon.busy {
         "signing operation in progress"
@@ -1074,29 +985,8 @@ fn wallet_items(
     if let Some(error) = overview.balance_error {
         header.push(Line::from(format!("Balance unavailable: {error}").red()));
     }
-    if let Some(linked_plan) = &overview.linked_plan_for_other_wallet {
-        push_wallet_line(
-            header,
-            &format!(
-                "Legacy Corbanu Plan · {} linked to another wallet",
-                title_case_plan(&linked_plan.period.plan_id),
-            ),
-            /*dimmed*/ false,
-        );
-        push_wallet_line(
-            header,
-            &linked_plan_owner_description(linked_plan),
-            /*dimmed*/ false,
-        );
-    }
     if !overview.plan_credential_present {
         push_wallet_line(header, "Corbanu API · no stored key", /*dimmed*/ false);
-    }
-    if let Some(plan) = &overview.plan {
-        push_wallet_line(header, &wallet_plan_summary(plan), /*dimmed*/ false);
-    }
-    if let Some(error) = overview.plan_error {
-        header.push(Line::from(format!("Plan status: {error}").red()));
     }
     let receive_address = address.clone();
     let mut items = vec![SelectionItem {
@@ -1117,33 +1007,6 @@ fn wallet_items(
         "View dollar balance, at-cost model prices, top up, and manage API keys",
         || AppEvent::OpenCorbanuApi,
     ));
-    if overview.plan_credential_present {
-        items.push(item(
-            "Plan details",
-            "View prepaid spend, token usage, limits, reset dates, and queued periods",
-            || AppEvent::OpenWalletPlanUsage,
-        ));
-    }
-    if let Some(receipt) = latest_receipt {
-        let receipt_for_action = receipt.clone();
-        items.push(item(
-            "View latest plan receipt",
-            &format!(
-                "{} plan · Solana payment confirmation",
-                title_case_plan(&receipt.plan_id)
-            ),
-            move || AppEvent::OpenWalletPlanReceipt {
-                receipt: receipt_for_action.clone(),
-            },
-        ));
-    }
-    if !overview.plan_credential_present && !overview.daemon.busy {
-        items.push(item(
-            "Recover legacy plan access",
-            "Only for a wallet with an unexpired historical plan; sends no USDC",
-            || AppEvent::WalletRecoverPlanRequested,
-        ));
-    }
     if !can_sign && !overview.daemon.busy {
         for (name, policy) in [
             ("Unlock for one signing action", UnlockPolicy::OneAction),
@@ -1194,17 +1057,10 @@ fn wallet_items(
             || AppEvent::WalletLockRequested,
         ));
     }
-    if can_sign && overview.plan_credential_present {
-        items.push(item(
-            "Recover legacy plan access",
-            "Issue a replacement key for an already-paid wallet without another payment",
-            || AppEvent::WalletRecoverPlanRequested,
-        ));
-    }
     if overview.plan_credential_present {
         items.push(item(
-            "Disconnect Corbanu API / legacy credential",
-            "Remove the stored API credential; keep the wallet, balance, and legacy period",
+            "Disconnect Corbanu API",
+            "Remove the stored API credential; keep the wallet and dollar balance",
             || AppEvent::ConfirmWalletPlanDisconnect,
         ));
     }
@@ -1225,24 +1081,6 @@ fn wallet_items(
         AppEvent::OpenWallet
     }));
     items
-}
-
-fn linked_plan_owner_description(plan: &WalletPlanStatus) -> String {
-    format!(
-        "Purchased by {} · not this local wallet",
-        short_address(&plan.wallet_address)
-    )
-}
-
-fn wallet_plan_summary(plan: &WalletPlanStatus) -> String {
-    let mut summary = format!(
-        "Legacy Corbanu Plan · {} active",
-        title_case_plan(&plan.period.plan_id)
-    );
-    if let Some(next) = plan.queued_periods.first() {
-        summary.push_str(&format!(" · {} next", title_case_plan(&next.plan_id)));
-    }
-    summary
 }
 
 pub(super) fn item<F>(name: &str, description: &str, event: F) -> SelectionItem
@@ -1393,11 +1231,7 @@ mod tests {
                 usdc_atomic: 5_000_000,
             }),
             balance_error: None,
-            plan: None,
-            linked_plan_for_other_wallet: None,
-            plan_error: None,
             plan_credential_present: false,
-            plan_prices_usdc: std::collections::BTreeMap::new(),
         }
     }
 
@@ -1409,124 +1243,10 @@ mod tests {
             .collect()
     }
 
-    fn starter_plan() -> WalletPlanStatus {
-        WalletPlanStatus {
-            wallet_address: "EpUYgzi88BYbsGoyiNghPppd3J9ASbARq7UjBCCUnk2i".to_string(),
-            period: WalletPlanPeriod {
-                transaction: "starter-transaction".to_string(),
-                plan_id: "starter".to_string(),
-                starts_at: "2026-07-19T00:35:20Z".to_string(),
-                ends_at: "2026-08-19T00:35:20Z".to_string(),
-                monthly_limit_tokens: 1_000_000,
-                monthly_used_tokens: 20_996,
-                monthly_reserved_tokens: 0,
-            },
-            weekly: WalletUsageWindow {
-                ends_at: "2026-07-26T00:35:20Z".to_string(),
-                limit_tokens: 250_000,
-                used_tokens: 20_996,
-                reserved_tokens: 0,
-            },
-            monthly_remaining_tokens: 979_004,
-            weekly_remaining_tokens: 229_004,
-            queued_periods: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn wallet_summary_keeps_usage_and_dates_out_of_the_header() {
-        let mut plan = starter_plan();
-        plan.queued_periods.push(WalletQueuedPlanPeriod {
-            transaction: "basic-transaction".to_string(),
-            plan_id: "basic".to_string(),
-            starts_at: "2026-08-19T00:35:20Z".to_string(),
-            ends_at: "2026-09-19T00:35:20Z".to_string(),
-        });
-
-        let summary = wallet_plan_summary(&plan);
-        assert_eq!(summary, "Legacy Corbanu Plan · Starter active · Basic next");
-        assert!(!summary.contains("token"));
-        assert!(!summary.contains("2026-"));
-        assert!(!summary.contains("USDC"));
-    }
-
-    #[test]
-    fn connected_plan_exposes_dedicated_details_view() {
-        let mut active = overview(/*locked*/ true);
-        active.plan = Some(starter_plan());
-        active.plan_credential_present = true;
-        let mut header = ColumnRenderable::new();
-        let items = wallet_items(&mut header, active, /*client_can_sign*/ false);
-        let details = items
-            .iter()
-            .position(|item| item.name == "Plan details")
-            .expect("plan details action");
-
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let sender = crate::app_event_sender::AppEventSender::new(tx);
-        (items[details].actions[0])(&sender);
-        assert!(matches!(rx.try_recv(), Ok(AppEvent::OpenWalletPlanUsage)));
-    }
-
-    #[test]
-    fn linked_plan_for_another_wallet_is_not_presented_as_local_plan() {
-        let local_address = "EpUYgzi88BYbsGoyiNghPppd3J9ASbARq7UjBCCUnk2i";
-        let mut linked = starter_plan();
-        linked.wallet_address = "2YYwro8tH3LzkwqCyHqZvBZt9KBsQwgtu9E6b1dBhbB5".to_string();
-
-        let (local, other) =
-            separate_plan_for_local_wallet(Some(linked.clone()), Some(local_address));
-        assert!(local.is_none());
-        assert_eq!(
-            other.as_ref().map(|plan| &plan.wallet_address),
-            Some(&linked.wallet_address)
-        );
-
-        let mut overview = overview(/*locked*/ false);
-        overview.linked_plan_for_other_wallet = other;
-        overview.plan_credential_present = true;
-        let mut header = ColumnRenderable::new();
-        let names = wallet_items(&mut header, overview, /*client_can_sign*/ true)
-            .into_iter()
-            .map(|item| item.name)
-            .collect::<Vec<_>>();
-        assert!(names.iter().any(|name| name == "Corbanu API"));
-        assert!(
-            names
-                .iter()
-                .any(|name| name == "Disconnect Corbanu API / legacy credential")
-        );
-        assert!(!names.iter().any(|name| name == "Upgrade Corbanu Plan"));
-        assert!(!names.iter().any(|name| name == "View latest plan receipt"));
-        assert_eq!(
-            linked_plan_owner_description(&linked),
-            "Purchased by 2YYwro8…dBhbB5 · not this local wallet"
-        );
-    }
-
-    #[test]
-    fn matching_plan_wallet_remains_the_local_upgrade_account() {
-        let linked = starter_plan();
-        let address = linked.wallet_address.clone();
-
-        let (local, other) = separate_plan_for_local_wallet(Some(linked), Some(&address));
-
-        assert_eq!(
-            local.as_ref().map(|plan| plan.period.plan_id.as_str()),
-            Some("starter")
-        );
-        assert!(other.is_none());
-    }
-
     #[test]
     fn unlocked_daemon_without_this_tui_capability_requires_unlock_again() {
         let items = names(/*locked*/ false, /*client_can_sign*/ false);
         assert!(items.iter().any(|name| name == "Corbanu API"));
-        assert!(
-            items
-                .iter()
-                .any(|name| name == "Recover legacy plan access")
-        );
         assert!(
             items
                 .iter()
@@ -1546,16 +1266,11 @@ mod tests {
     fn scoped_capability_enables_spending_actions_only_in_owning_tui() {
         let items = names(/*locked*/ false, /*client_can_sign*/ true);
         assert!(items.iter().any(|name| name == "Corbanu API"));
-        assert!(
-            items
-                .iter()
-                .any(|name| name == "Recover legacy plan access")
-        );
         assert!(!items.iter().any(|name| name.starts_with("Unlock for")));
     }
 
     #[test]
-    fn fresh_locked_wallet_leads_with_api_and_keeps_legacy_recovery_secondary() {
+    fn fresh_locked_wallet_leads_with_corbanu_api() {
         let mut header = ColumnRenderable::new();
         let items = wallet_items(
             &mut header,
@@ -1566,22 +1281,12 @@ mod tests {
             .iter()
             .position(|item| item.name == "Corbanu API")
             .expect("Corbanu API action");
-        let recovery = items
-            .iter()
-            .position(|item| item.name == "Recover legacy plan access")
-            .expect("legacy-plan recovery action");
         assert_eq!(api, 1, "Corbanu API should follow Receive");
-        assert_eq!(recovery, 2, "legacy recovery should follow Corbanu API");
 
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = crate::app_event_sender::AppEventSender::new(tx);
         (items[api].actions[0])(&sender);
         assert!(matches!(rx.try_recv(), Ok(AppEvent::OpenCorbanuApi)));
-        (items[recovery].actions[0])(&sender);
-        assert!(matches!(
-            rx.try_recv(),
-            Ok(AppEvent::WalletRecoverPlanRequested)
-        ));
     }
 
     #[test]
@@ -1603,110 +1308,7 @@ mod tests {
     }
 
     #[test]
-    fn active_legacy_plan_does_not_expose_new_tier_sales() {
-        let mut locked_overview = overview(/*locked*/ true);
-        locked_overview.plan = Some(starter_plan());
-        let mut header = ColumnRenderable::new();
-        let locked_items =
-            wallet_items(&mut header, locked_overview, /*client_can_sign*/ false);
-        assert!(locked_items.iter().any(|item| item.name == "Corbanu API"));
-        assert!(
-            !locked_items
-                .iter()
-                .any(|item| item.name == "Upgrade Corbanu Plan")
-        );
-
-        let mut unlocked_overview = overview(/*locked*/ false);
-        unlocked_overview.plan = Some(starter_plan());
-        let mut header = ColumnRenderable::new();
-        let unlocked_items = wallet_items(
-            &mut header,
-            unlocked_overview,
-            /*client_can_sign*/ true,
-        );
-        assert!(unlocked_items.iter().any(|item| item.name == "Corbanu API"));
-        assert!(
-            !unlocked_items
-                .iter()
-                .any(|item| item.name == "Upgrade Corbanu Plan")
-        );
-    }
-
-    #[test]
-    fn queued_legacy_plan_does_not_restore_tier_sales() {
-        let mut status = starter_plan();
-        status.queued_periods.push(WalletQueuedPlanPeriod {
-            transaction: "basic-transaction".to_string(),
-            plan_id: "basic".to_string(),
-            starts_at: "2026-08-19T00:35:20Z".to_string(),
-            ends_at: "2026-09-19T00:35:20Z".to_string(),
-        });
-        let mut active = overview(/*locked*/ false);
-        active.plan = Some(status);
-        let mut header = ColumnRenderable::new();
-        let items = wallet_items(&mut header, active, /*client_can_sign*/ true);
-        assert!(items.iter().any(|item| item.name == "Corbanu API"));
-        assert!(!items.iter().any(|item| item.name == "Upgrade Corbanu Plan"));
-        let plans = ["entry", "daily", "studio"]
-            .into_iter()
-            .map(|id| WalletPlanChoice {
-                id: id.to_string(),
-                price_usdc: "1".to_string(),
-                amount_atomic: "1000000".to_string(),
-                weekly_token_limit: 1,
-                monthly_token_limit: 1,
-                scheduled_start: None,
-            })
-            .collect();
-        assert_eq!(
-            higher_tiers_from_catalog(plans, "daily")
-                .into_iter()
-                .map(|plan| plan.id)
-                .collect::<Vec<_>>(),
-            vec!["studio"]
-        );
-    }
-
-    #[test]
-    fn queued_payment_exposes_a_durable_authoritative_receipt() {
-        let mut status = starter_plan();
-        status.queued_periods.push(WalletQueuedPlanPeriod {
-            transaction: "basic-settlement-signature".to_string(),
-            plan_id: "basic".to_string(),
-            starts_at: "2026-08-19T00:35:20Z".to_string(),
-            ends_at: "2026-09-19T00:35:20Z".to_string(),
-        });
-        let mut active = overview(/*locked*/ true);
-        active.plan = Some(status);
-        active
-            .plan_prices_usdc
-            .insert("basic".to_string(), "20".to_string());
-        let mut header = ColumnRenderable::new();
-        let items = wallet_items(&mut header, active, /*client_can_sign*/ false);
-        let receipt = items
-            .iter()
-            .position(|item| item.name == "View latest plan receipt")
-            .expect("receipt action");
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let sender = crate::app_event_sender::AppEventSender::new(tx);
-
-        (items[receipt].actions[0])(&sender);
-
-        let AppEvent::OpenWalletPlanReceipt { receipt } = rx.try_recv().expect("receipt event")
-        else {
-            panic!("unexpected event");
-        };
-        assert_eq!(receipt.plan_id, "basic");
-        assert_eq!(receipt.price_usdc.as_deref(), Some("20"));
-        assert_eq!(
-            receipt.transaction.as_deref(),
-            Some("basic-settlement-signature")
-        );
-        assert_eq!(receipt.active_plan_id.as_deref(), Some("starter"));
-    }
-
-    #[test]
-    fn plan_disconnect_and_wallet_removal_are_separate_actions() {
+    fn stored_api_credential_never_restores_legacy_plan_copy() {
         let mut overview = overview(/*locked*/ true);
         overview.plan_credential_present = true;
         let mut header = ColumnRenderable::new();
@@ -1715,14 +1317,24 @@ mod tests {
             .iter()
             .map(|item| item.name.as_str())
             .collect::<Vec<_>>();
-        assert!(names.contains(&"Disconnect Corbanu API / legacy credential"));
+        assert!(names.contains(&"Disconnect Corbanu API"));
         assert!(names.contains(&"Remove wallet from this device"));
+        for item in &items {
+            let visible_copy = format!(
+                "{} {}",
+                item.name,
+                item.description.as_deref().unwrap_or_default()
+            );
+            assert!(!visible_copy.contains("Corbanu Plan"));
+            assert!(!visible_copy.to_ascii_lowercase().contains("legacy"));
+            assert!(!visible_copy.to_ascii_lowercase().contains("paid period"));
+        }
 
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = crate::app_event_sender::AppEventSender::new(tx);
         let disconnect = items
             .iter()
-            .position(|item| item.name == "Disconnect Corbanu API / legacy credential")
+            .position(|item| item.name == "Disconnect Corbanu API")
             .expect("disconnect action");
         (items[disconnect].actions[0])(&sender);
         assert!(matches!(
@@ -1799,7 +1411,7 @@ mod tests {
             "Remove wallet from this device",
             "Wallet: 3speRmS…JRwV5r",
             "Funds stay on Solana. Corbanu Terminal cannot recover them without your recovery material.",
-            "This also disconnects the local Corbanu Plan credential. It does not cancel or refund the paid period.",
+            "This also removes the stored Corbanu API credential. Your on-chain funds and dollar balance remain unchanged.",
             "Cancel — Keep the wallet on this device",
             "Remove wallet — I have saved the recovery material",
         ]

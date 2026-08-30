@@ -110,9 +110,12 @@ Model-specific cost normalization, Plan margin targets, and other commercial per
 # Corbanu API — TO BUILD
 
 Product decision: Alex Good, Head of Product, 2026-08-30. Replace new Corbanu
-Plan sales with a wallet-funded, dollar-denominated Corbanu API balance. Existing
-paid periods and credentials remain honored through their recorded expiration;
-they are not silently repriced, deleted, or converted.
+Plan sales with a wallet-funded, dollar-denominated Corbanu API balance. Alex
+Good amended the migration decision on 2026-08-30: Corbanu has one production
+user, so all legacy paid periods, plan credentials, token allowances, receipts,
+and dependent entitlement records are retired and deleted instead of being
+grandfathered. Wallet assets and Corbanu API balances, keys, and ledgers are not
+legacy plan data and remain intact.
 
 The user tops up with canonical USDC and receives the same number of dollars of
 Corbanu API credit. There are no Starter, Basic, Power, or Pro purchase tiers,
@@ -145,9 +148,9 @@ Customer pricing is exact upstream cost with zero markup, adopted by Alex Good
 on 2026-08-30. Each request pins a versioned upstream route and price schedule;
 catalog and ledger records expose the customer rate without exposing the vendor.
 
-The existing Corbanu Plan names, endpoints, headers, database records, and
-credential aliases remain compatibility surfaces only for already-paid users
-during migration. New UI and payment flows call the product **Corbanu API**.
+Legacy Corbanu Plan names, purchase/recovery/details surfaces, entitlements, and
+inference authorization are not part of the product. New and existing UI,
+payment, account, and inference flows call the product **Corbanu API**.
 
 # Target product
 
@@ -208,7 +211,7 @@ scope for the `/security` implementation plan.
 |    **9** | USDAI preferred stablecoin partnership               | TO ACQUIRE     | P2         | Head of Product | Commercial and compliance review                                                   | TBD                                     | If acquired, approved USDAI flows are native where appropriate. Corbanu does not center a new native token.                                                                                                                                                                                                                                                                         |
 |   **10** | Per-wallet xAPI isolation                            | BUILT NOT LIVE | P2         | Lead developer  | Merge, deployment, tenant-isolation review, and accounting verification            | TBD                                     | The existing branch is merged and deployed; wallet isolation, encrypted tenant keys, capped refills, and cost attribution pass production verification.                                                                                                                                                                                                                             |
 |   **11** | Upstream Codex parity                                | PRINCIPLE      | CONTINUOUS | Lead developer  | Continuous upstream review and benchmark evidence                                  | Continuous                              | Relevant upstream harness improvements are assessed and adopted without regressions to Corbanu-specific behavior. At least every three releases, the full checked-in coding benchmark catalog is run across the relevant production model set; correctness, end-to-end runtime, and spend are recorded, and a threshold regression blocks release.                                  |
-|   **12** | Corbanu API balance and keys                         | TO BUILD       | P1         | Head of Product | Explicit sell prices, payment/compliance review, backend and Terminal qualification | TBD                                     | A wallet can top up a dollar balance with canonical USDC, receive a one-time API key, create/revoke additional keys, inspect balance and per-model prices, and use the approved provider-neutral model catalog without plan tiers or expiring token allowances. Existing paid periods remain usable through expiration. |
+|   **12** | Corbanu API balance and keys                         | TO BUILD       | P1         | Head of Product | Explicit sell prices, payment/compliance review, backend and Terminal qualification | TBD                                     | A wallet can top up a dollar balance with canonical USDC, receive a one-time API key, create/revoke additional keys, inspect balance and per-model prices, and use the approved provider-neutral model catalog without plan tiers, legacy plan surfaces, or expiring token allowances. |
 
 # P0 `/security` levels
 
