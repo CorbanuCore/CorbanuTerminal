@@ -14,7 +14,8 @@ under `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-compatibility-drift
 
 This is a live allocation: set PF-21-S02 to `in_progress`, run both governance
 checkers, then implement. No additional worktree, branch, owner, or G0 decision
-is missing.
+is missing. Change only the branch-local sprint record; the shared index remains
+`ready` until the integration owner updates it at handback.
 
 Literal scope:
 
@@ -64,4 +65,3 @@ Hand back the candidate/base, immutable-oracle hash, control identities, drift
 ledger, scope audit, exact tests, limitations, and transcript hash. The
 integration owner merges this after the two contract lanes and archives it before
 PF-22-S02 allocation.
-

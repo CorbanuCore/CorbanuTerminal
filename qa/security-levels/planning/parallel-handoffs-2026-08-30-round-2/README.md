@@ -22,8 +22,10 @@ PF-19-S02, PF-20-S02, PF-21-S02, and PF-35-S01. The optimal disjoint frontier is
 | Authoritative state | [authoritative-state.md](authoritative-state.md) | PF-20-S02 | Other half of PF-41-S03; state input to PF-22-S02 |
 | Compatibility/drift | [compatibility-drift.md](compatibility-drift.md) | PF-21-S02 | Independent compatibility input to PF-22-S02 |
 
-PF-13-S06 waits because it overlaps security-policy/Core paths in the first two
-tracks. PF-35-S01 waits despite a completed dependency because corpus licenses,
+PF-13-S06 waits because all three slots are consumed, it unlocks only the later
+PF-13-S07, and its likely shared export points would serialize with PF-20-S02;
+its currently named implementation files do not literally overlap this round.
+PF-35-S01 waits despite a completed dependency because corpus licenses,
 blind-evaluator custody, weakest-supported CPU, and artifact ownership are not
 yet fixed. The prior browser/retrieval lane also waits: its first runtime sprint
 requires PF-27-S02, then PF-33-S01/S02. Assigning idle thematic lanes would add
@@ -88,3 +90,8 @@ identity, exact commands/counts, limitations, and immutable clean-review
 evidence. It must not merge itself, touch another lane, change shared manifests,
 or archive its sprint.
 
+The shared current-index Status cells represent mainline allocation state and
+remain `ready` while work proceeds on lane branches. A receiving agent changes
+only its branch-local sprint record to `in_progress`; the integration owner
+updates the shared index during handback/integration. This deliberate ownership
+rule prevents three lanes from reserving the same index file.

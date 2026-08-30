@@ -53,7 +53,7 @@ updated: 2026-08-30
 - [ ] Implement controller-owned level, grant, revocation/kill generation and recovery state separate from agent-editable preferences. Authenticate mutation callers using the PF-27-S03 contract; do not trust a model-supplied role or ordinary config file as authority.
 - [ ] Reject overwrite, deletion, rename, symlink/replacement, permission changes, old snapshots and rollback by the untrusted context, including restart/resume. Distinguish a genuinely new legacy installation from missing state after protected activation; the latter cannot become Permissive.
 - [ ] Implement compare-and-activate revision checks and ownership-scoped rollback so stale recovery cannot overwrite a later credential/provenance owner. Test crash boundaries and durable recovery, not just in-memory snapshots.
-- [ ] Preserve PF-20-S01 legacy/config/schema behavior and the frozen Permissive oracle; document platform-specific unsupported cases as activation blockers. Keep Cargo/Bazel/schema outputs synchronized when affected.
+- [ ] Preserve PF-20-S01 legacy/config/schema behavior and the frozen Permissive oracle; document platform-specific unsupported cases as activation blockers. Hand any required Cargo/Bazel/schema synchronization to the integration owner; those shared surfaces are outside this lane.
 
 ## Verification
 

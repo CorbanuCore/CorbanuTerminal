@@ -14,7 +14,8 @@ under `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-authoritative-state
 
 This is a live allocation: set PF-20-S02 to `in_progress`, run both governance
 checkers, then implement. No additional worktree, branch, owner, or G0 decision
-is missing.
+is missing. Change only the branch-local sprint record; the shared index remains
+`ready` until the integration owner updates it at handback.
 
 Literal scope:
 
@@ -62,4 +63,3 @@ Hand back the candidate/base, scope audit, state/revision contract, exact tests
 and platform outcomes, limitations, and transcript hash. Integration follows
 PF-19-S02; the integration owner serializes schema/shared edits and archives only
 after combined-tree probes pass.
-

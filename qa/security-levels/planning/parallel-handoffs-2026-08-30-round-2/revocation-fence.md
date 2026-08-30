@@ -14,7 +14,8 @@ under `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-revocation-fence/`.
 
 This is a live allocation: set PF-19-S02 to `in_progress`, run both governance
 checkers, then implement. No additional worktree, branch, owner, or G0 decision
-is missing.
+is missing. Change only the branch-local sprint record; the shared index remains
+`ready` until the integration owner updates it at handback.
 
 Literal scope:
 
@@ -59,4 +60,3 @@ idempotency, and fail-open behavior. Repeat until clean.
 Hand back the candidate/base, exact diff and test counts, contract transitions,
 scope audit, limitations, and transcript hash. The integration owner merges this
 candidate first and archives PF-19-S02 only after combined-tree checks.
-

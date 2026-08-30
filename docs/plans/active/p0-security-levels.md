@@ -143,9 +143,12 @@ review still requires immutable packet/model/effort/result evidence, verified
 finding disposition and reruns. Reviewer availability does not replace the named
 human final-acceptance gate.
 
-The coordination packet at
-`qa/security-levels/planning/parallel-handoffs-2026-08-29/README.md` divides the
-program into foundation/platform, browser/retrieval and ingress/classifier legs.
+The initial coordination packet at
+`qa/security-levels/planning/parallel-handoffs-2026-08-29/README.md` historically
+divided the first round into foundation/platform, browser/retrieval and
+ingress/classifier legs. It is evidence, not current dispatch authority. The
+[round-two packet](../../qa/security-levels/planning/parallel-handoffs-2026-08-30-round-2/README.md)
+owns new dispatches after PF-27-S03 integration.
 PF-13-S05, PF-31-S04, PF-33-S03, and PF-27-S03 are completed and archived.
 PF-27-S03 occupied the foundation/platform slot at dispatch base
 `1907d99aed9714f05a5f54fca1703658017d616c`; one sprint may run at a time in
@@ -426,8 +429,10 @@ PF-19-S02, PF-20-S02, PF-21-S02, PF-13-S06, and PF-35-S01. The three ready
 round-two lanes deliberately select PF-19-S02, PF-20-S02, and PF-21-S02 because
 their literal scopes are disjoint and together unlock PF-41-S03 and then
 PF-22-S02, the shared prerequisite for the broker, retrieval, and ingress
-runtime chains. PF-13-S06 overlaps the active security-policy/Core surfaces and
-waits. PF-35-S01 is dependency-ready but not readiness-safe until corpus
+runtime chains. PF-13-S06 waits because all three execution slots are consumed,
+it unlocks only the later PF-13-S07, and its likely shared export points would
+serialize against PF-20-S02; its currently named implementation files do not
+literally overlap the round-two scopes. PF-35-S01 is dependency-ready but not readiness-safe until corpus
 licenses, blind-evaluator custody, weakest-supported CPU, and artifact ownership
 are recorded.
 

@@ -35,7 +35,9 @@ updated: 2026-08-30
 
 - OpenClaw adoption: OC-2 in the [pinned source review](../../../plans/openclaw-source-review-2026-08-28.md), commit `13adff02ca3897768d80d2bca18f5acf08c55d91`; named source tests are references, not candidate passes.
 
-- Existing: `codex-rs/security-policy/src/{revocation,grant,mandate}.rs` and `security_policy_tests.rs`.
+- Writable: `codex-rs/security-policy/src/revocation.rs` and
+  `security_policy_tests.rs`. Existing `grant.rs` and `mandate.rs` are read-only
+  contract context in this lane.
 - Consumers: PF-13-S04/PF-27 transport, PF-38-S03 financial recovery and PF-25 stop UI.
 
 ## Preconditions

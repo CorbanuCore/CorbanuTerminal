@@ -35,7 +35,8 @@ updated: 2026-08-30
 
 - Existing: `scripts/security_level_compat.py`, `scripts/security-level-compat`, `scripts/test_security_level_compat.py`.
 - Immutable oracle: `qa/security-levels/permissive-baseline-v1.json`; new independent controls, inventory and drift ledger under `qa/security-levels/compatibility/`.
-- Core/vault compatibility tests only where a new inventory case requires them.
+- Any discovered Core/Vault regression becomes evidence for a later separately
+  scoped repair; this lane does not edit Rust runtime paths.
 
 ## Preconditions
 
