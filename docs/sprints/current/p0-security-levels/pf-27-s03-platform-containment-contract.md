@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-27-S03"
 title: "Platform containment contract and probes"
-status: draft
+status: ready
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 16
-owner: "Jim Ricketts"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Codex foundation/platform lane"
+parallel_lane: "foundation-platform"
+write_scope: "codex-rs/secret-broker/src/platform_contract.rs, scripts/security-platform-probe, qa/security-levels/platform/, qa/security-levels/sprints/PF-27-S03/, docs/sprints/current/p0-security-levels/pf-27-s03-platform-containment-contract.md"
+integration_gate: "Jim Ricketts receives the PF-27-S03 candidate at G1, audits the literal scope, exclusively registers codex-content-security Cargo/Bazel workspace surfaces, reruns schema/probe/governance checks on the combined tree, then archives the sprint before a consumer can use the contract."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform"
+branch: "feat/p0-security-foundation-platform"
+base_commit: "1907d99aed9714f05a5f54fca1703658017d616c"
 depends_on: "none"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-30
 ---
 
 # PF-27-S03 — Platform containment contract and probes
@@ -36,9 +39,9 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Plan active; dependencies in front matter completed and archived.
-- [ ] Assign a named execution owner and exact plan-matching worktree/branch/base; run the sprint checker before readiness.
-- [ ] Read root and nearest implementation AGENTS.md; reserve disjoint write scope and receiving integration gate if parallel.
+- [x] Plan active; dependencies in front matter are `none`.
+- [x] Named execution owner and exact plan-matching worktree/branch/base are allocated at post-handoff `main`; both governance checkers pass.
+- [x] Read root and nearest implementation AGENTS.md; reserved disjoint write scope and the integration-owner-only G1 registration gate.
 
 ## Done
 

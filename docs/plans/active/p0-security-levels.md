@@ -23,6 +23,9 @@ implementation_worktrees:
   - path: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
     branch: "feat/p0-security-levels"
     base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform"
+    branch: "feat/p0-security-foundation-platform"
+    base_commit: "1907d99aed9714f05a5f54fca1703658017d616c"
 ---
 
 # P0 `/security` levels
@@ -121,10 +124,10 @@ human final-acceptance gate.
 The coordination packet at
 `qa/security-levels/planning/parallel-handoffs-2026-08-29/README.md` divides the
 program into foundation/platform, browser/retrieval and ingress/classifier legs.
-PF-13-S05 already occupies one of the three global active-sprint slots. The two
-available initial preparation slots are PF-31-S04 and PF-34-S04; one sprint may
-run at a time in each lane. After PF-13-S05 closes, the primary slot rotates to
-PF-27-S03. A handoff document is coordination, not execution authority: before a
+PF-13-S05, PF-31-S04 and PF-33-S03 are completed and archived. PF-27-S03 now
+occupies the foundation/platform slot at dispatch base
+`1907d99aed9714f05a5f54fca1703658017d616c`; one sprint may run at a time in
+each lane. A handoff document is coordination, not execution authority: before a
 draft becomes `ready`, this plan and its sprint record must name the exact owner,
 CorbanuDrive worktree and branch, 40-character post-handoff `main` base, parallel
 lane, literal disjoint `write_scope` and `integration_gate`, and both governance
@@ -391,8 +394,8 @@ The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
 is dependency-correct; feature IDs are not execution order. Archive orders 1–9
 stay unchanged and current orders start at 10. Existing allocation coordinates
 follow upstream; the five preparation/foundation drafts and five new follow-ups
-remain `UNALLOCATED` until assigned. All current records are `draft`, with
-completed prerequisites and checked allocation
+remain `UNALLOCATED` until assigned. PF-27-S03 is the checked foundation/platform
+allocation; other current records are `draft`, with completed prerequisites and checked allocation
 required before execution. Archived links document original scope, not new passes.
 
 | Feature ID | Plan feature | Sprint records (completed links are archived) | State |
