@@ -15,7 +15,6 @@ use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
 use core_test_support::responses::ev_response_created;
-use core_test_support::responses::ev_shell_command_call_with_args;
 use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
@@ -308,24 +307,36 @@ async fn shell_tools_start_before_response_completed_when_stream_delayed() -> an
     let first_response_id = "resp-1";
     let second_response_id = "resp-2";
 
-    let command = format!(
-        "perl -MTime::HiRes -e 'print int(Time::HiRes::time()*1000), \"\\n\"' >> \"{}\"",
-        output_path.display()
-    );
+    let command = |marker: u8| {
+        format!(
+            "perl -MTime::HiRes -e 'print int(Time::HiRes::time()*1000), \"\\n\"' >> \"{}\" # call-{marker}",
+            output_path.display()
+        )
+    };
     // Use a non-login shell to avoid slow, user-specific shell init (e.g. zsh profiles)
     // from making this timing-based test flaky.
-    let args = json!({
-        "command": command,
-        "login": false,
-        "timeout_ms": 5_000,
-    });
-
     let first_chunk = sse(vec![
         ev_response_created(first_response_id),
-        ev_shell_command_call_with_args("call-1", &args),
-        ev_shell_command_call_with_args("call-2", &args),
-        ev_shell_command_call_with_args("call-3", &args),
-        ev_shell_command_call_with_args("call-4", &args),
+        ev_function_call(
+            "call-1",
+            "exec_command",
+            &serde_json::to_string(&json!({"cmd": command(1), "login": false}))?,
+        ),
+        ev_function_call(
+            "call-2",
+            "exec_command",
+            &serde_json::to_string(&json!({"cmd": command(2), "login": false}))?,
+        ),
+        ev_function_call(
+            "call-3",
+            "exec_command",
+            &serde_json::to_string(&json!({"cmd": command(3), "login": false}))?,
+        ),
+        ev_function_call(
+            "call-4",
+            "exec_command",
+            &serde_json::to_string(&json!({"cmd": command(4), "login": false}))?,
+        ),
     ]);
     let second_chunk = sse(vec![ev_completed(first_response_id)]);
     let follow_up = sse(vec![

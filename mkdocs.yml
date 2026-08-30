@@ -106,7 +106,6 @@ nav:
                   - "PF-21-S02 — Expanded compatibility and upstream drift": sprints/current/p0-security-levels/pf-21-s02-expanded-compatibility-and-upstream-drift.md
                   - "PF-22-S02 — Protected runtime integration and upstream seams": sprints/current/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md
               - "PF-13 — Credential boundary":
-                  - "PF-13-S05 — Adversarial qualification": sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md
                   - "PF-13-S06 — Credential usage reservations": sprints/current/p0-security-levels/pf-13-s06-credential-usage-reservations.md
                   - "PF-13-S07 — Integrated credential qualification": sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md
               - "Protected-surface enforcement":

@@ -6,6 +6,7 @@ use anyhow::Result;
 use codex_core::config::Config;
 use codex_features::Feature;
 use codex_protocol::models::PermissionProfile;
+use codex_protocol::openai_models::ApplyPatchToolType;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::Op;
@@ -43,20 +44,23 @@ struct CodeModeElicitationHarness {
 impl CodeModeElicitationHarness {
     async fn start(
         code: &str,
+        approval_policy: AskForApproval,
         permission_profile: PermissionProfile,
         configure: impl FnOnce(&mut Config) + Send + 'static,
     ) -> Result<Self> {
         let server = responses::start_mock_server().await;
-        let mut builder =
-            test_codex()
-                .with_model("test-gpt-5.1-codex")
-                .with_config(move |config| {
-                    let _ = config.features.enable(Feature::CodeMode);
-                    configure(config);
-                });
+        let mut builder = test_codex()
+            .with_model_info_override("gpt-5.5", |model_info| {
+                model_info.apply_patch_tool_type = Some(ApplyPatchToolType::Freeform);
+            })
+            .with_config(move |config| {
+                let _ = config.features.enable(Feature::CodeMode);
+                let _ = config.features.enable(Feature::CodeModeHost);
+                configure(config);
+            });
         let test = builder.build_with_auto_env(&server).await?;
         let follow_up = mount_code_mode_responses(&server, code).await;
-        let turn_id = submit_turn(&test, permission_profile).await?;
+        let turn_id = submit_turn(&test, approval_policy, permission_profile).await?;
         Ok(Self {
             _server: server,
             test,
@@ -107,7 +111,11 @@ async fn mount_code_mode_responses(server: &MockServer, code: &str) -> ResponseM
     .await
 }
 
-async fn submit_turn(test: &TestCodex, permission_profile: PermissionProfile) -> Result<String> {
+async fn submit_turn(
+    test: &TestCodex,
+    approval_policy: AskForApproval,
+    permission_profile: PermissionProfile,
+) -> Result<String> {
     let (sandbox_policy, permission_profile) =
         turn_permission_fields(permission_profile, test.config.cwd.as_path());
     test.codex
@@ -120,7 +128,7 @@ async fn submit_turn(test: &TestCodex, permission_profile: PermissionProfile) ->
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
             thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
-                approval_policy: Some(AskForApproval::OnRequest),
+                approval_policy: Some(approval_policy),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
                 collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
@@ -159,6 +167,7 @@ await tools.exec_command({
   sandbox_permissions: "require_escalated",
   justification: "test command approval",
 });"#,
+        AskForApproval::OnRequest,
         PermissionProfile::read_only(),
         |_| {},
     )
@@ -190,15 +199,21 @@ async fn code_mode_holds_yielded_result_during_patch_approval() -> Result<()> {
     let harness = CodeModeElicitationHarness::start(
         r#"// @exec: {"yield_time_ms": 1000}
 await tools.apply_patch("*** Begin Patch\n*** Add File: code_mode_patch_approval.txt\n+held\n*** End Patch\n");"#,
-        PermissionProfile::read_only(),
+        AskForApproval::UnlessTrusted,
+        PermissionProfile::Disabled,
         |_| {},
     )
     .await?;
-    let approval = wait_for_event_match(&harness.test.codex, |event| match event {
-        EventMsg::ApplyPatchApprovalRequest(approval) => Some(approval.clone()),
-        _ => None,
+    let approval = wait_for_event(&harness.test.codex, |event| {
+        matches!(
+            event,
+            EventMsg::ApplyPatchApprovalRequest(_) | EventMsg::Error(_) | EventMsg::TurnComplete(_)
+        )
     })
     .await;
+    let EventMsg::ApplyPatchApprovalRequest(approval) = approval else {
+        panic!("expected patch approval before terminal event, got {approval:?}");
+    };
 
     harness.assert_result_held().await;
     harness
@@ -227,6 +242,7 @@ await tools.request_permissions({
   reason: "test permission request",
   permissions: { network: { enabled: true } },
 });"#,
+        AskForApproval::OnRequest,
         PermissionProfile::read_only(),
         |config| {
             let _ = config.features.enable(Feature::RequestPermissionsTool);

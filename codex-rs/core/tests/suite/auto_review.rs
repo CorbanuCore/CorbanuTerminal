@@ -133,6 +133,7 @@ async fn remote_model_override_uses_catalog_model_for_strict_auto_review() -> Re
         codex,
         cwd,
         config,
+        home: _home,
         thread_manager,
         ..
     } = builder.build(&server).await?;
@@ -174,7 +175,7 @@ async fn remote_model_override_uses_catalog_model_for_strict_auto_review() -> Re
 
     let cwd_path = cwd.abs();
     let (sandbox_policy, permission_profile) =
-        turn_permission_fields(PermissionProfile::read_only(), cwd_path.as_path());
+        turn_permission_fields(PermissionProfile::workspace_write(), cwd_path.as_path());
     codex
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
@@ -216,6 +217,17 @@ async fn remote_model_override_uses_catalog_model_for_strict_auto_review() -> Re
         })
         .await?;
 
+    wait_for_event_with_timeout(
+        &codex,
+        |event| {
+            matches!(
+                event,
+                EventMsg::AgentMessage(message) if message.message == "done"
+            )
+        },
+        Duration::from_secs(15),
+    )
+    .await;
     wait_for_event_with_timeout(
         &codex,
         |event| matches!(event, EventMsg::TurnComplete(_)),

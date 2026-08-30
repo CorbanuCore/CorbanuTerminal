@@ -266,7 +266,7 @@ mod tests {
         assert_eq!(
             err,
             FunctionCallError::RespondToModel(
-                "target provider `openrouter` cannot consume this OpenAI-encrypted collaboration payload. Retry the same target and message once with `followup_task_plaintext`. No message was admitted and no target turn was started.".to_string()
+                "target provider `openrouter` cannot consume this OpenAI-encrypted collaboration payload. Call the function named `followup_task_plaintext` directly with exactly the same `target` and the plaintext `message`; do not call `followup_task` again and do not add an `adapter` field. No message was admitted and no target turn was started.".to_string()
             )
         );
     }

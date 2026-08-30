@@ -1,6 +1,82 @@
 # PF-13 accepted-review repair evidence
 
-Status: accepted credential/harness repairs implemented and reviewed; Mac/Linux component qualification passed. Complete-Core and final Windows qualification remain blocked. PF-13-S05 is still in progress, not a release approval.
+Status: accepted credential/harness repairs implemented and reviewed; Mac/Linux
+component qualification, the transferred-tree complete-Core gate, and the final
+Windows component qualification pass. PF-13-S05 is completed and archived; this
+component result is not the later integrated PF-13-S07 release approval.
+
+The closeout review and post-review stabilization evidence is recorded in
+`claude-integrated-repair-review.md`. The final isolated, retry-free Core run at
+`d021d017b` passed 3,414/3,414 tests with 19 platform skips.
+
+## Transferred-tree integrated repair
+
+The foundation lane was transferred to
+`/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform` from
+base `6a35712cd5731b191d875e8c6468f1abe23eb66e`. Prior Mac/Linux artifacts remain
+bound to their recorded `f6ec1c75f` source and are not relabeled.
+
+The 18 failures from the first transferred-tree Core run were scope-reviewed
+against `repair-core-triage.md`. The sprint's literal `write_scope` now names
+every repaired runtime/test path. The changes repair root-resume authority
+binding, streamed tool dispatch, durable shutdown identity, macOS Bash 3.2
+snapshot compatibility, and stale or nondeterministic fixtures. They do not
+change Vault, broker, provider, security-profile, or Permissive behavior.
+
+- Final complete Core: `just test -p codex-core --test-threads 4`; run
+  `fd5920a2-8b87-4e14-a2b8-a7201aed6304`; **3,411/3,411 passed**, 19
+  platform-filtered skips, no retry or flaky classification, 175.194 seconds.
+  Artifact `repair-core-final-macos-junit.xml.gz`, SHA-256
+  `9eb1c35509c4cd4480f8491ed218b2b59a8e765d39c8fd71fdb8f7381f1f1a7e`.
+- Final affected security crates:
+  `just test -p codex-security-policy -p codex-vault -p codex-network-proxy --test-threads 4`;
+  run `c7938288-cff5-496f-b802-03d95adf7f19`; **295/295 passed**, zero
+  skipped, 129.406 seconds. Artifact
+  `repair-focused-final-macos-junit.xml.gz`, SHA-256
+  `1c2d35ab9d5fc6a82884cac060446050a319f68e1f388c9e71a89b1d1c9c296a`.
+- Canary harness unit suite:
+  `python3 -B -m unittest scripts.test_security_credential_canary`; **11/11
+  passed**.
+- `just fix -p codex-core`, `just fmt`, `git diff --check`, the plan checker,
+  and the sprint checker passed before the final runs. The formatter's unrelated
+  `output_text_stream.rs` interpolation rewrite was excluded from this sprint.
+
+## Published integrated candidate and final platform canaries
+
+Integrated repair commit `be8153f2e29c360d83776441aed50deb204eafa7` is
+published at `origin/feat/p0-security-foundation-platform`. `git ls-remote`
+matched that exact commit before remote qualification.
+
+- macOS 26.0 arm64, Python 3.14.4: all nine probe groups / **47 tests passed**
+  from a clean checkout state. Candidate `corbanu 0.1.35`, SHA-256
+  `6d4a01137de0e10a8f3dcf205709f1e28518a7c5e6d5efaa53a1ce60d764d135`;
+  report `repair-credential-canary-macos-integrated.json`, SHA-256
+  `af03fd29a03b6540b0cf22a1d4150ab4643152874ed4e27e7a2e5671d17160be`.
+- Windows 11 AMD64 (`10.0.26200.9168`), Python 3.13.15, Rust/Cargo 1.95.0,
+  MSVC Build Tools: all nine probe groups / **47 tests passed** from a fresh,
+  clean `D:\w13-be8153` checkout. The protected raw-export group executed all
+  four required tests, including the Windows `mklink /J` unprivileged
+  directory-junction posture test. Candidate `corbanu 0.1.35`, SHA-256
+  `37e0ac06e3f7cab75c684737c7d33e38453578dad5d5d8788ee8221ad8e23737`;
+  an independent remote `Get-FileHash` matched the report. Report
+  `repair-credential-canary-windows-integrated.json`, SHA-256
+  `1fe4f74bf8ae55645012f189dbdcf665175c0b1cb960788f7ce32e456382d4aa`.
+- Linux remains bound to the clean `f6ec1c75f` report recorded below. A
+  path-by-path comparison of every source hash embedded by all nine probes is
+  identical to the integrated macOS report. The transferred Core repairs do
+  not change any Linux-qualified probe source, so the Linux result is retained
+  with its original commit identity rather than relabeled as `be8153f2e`.
+
+The first Windows invocation failed before probes because an unquoted CMD
+`set VAR=value &&` stored a trailing space in `RUSTUP_HOME`. Reproducing the
+exact build exposed `D:\rustqa\rustup \settings.toml`; using CMD's canonical
+`set "VAR=value"` syntax fixed the environment. The subsequent candidate build
+and complete canary passed. No repository file was changed on Windows.
+
+The complete-Core, affected-crate, canary-unit and three-host component evidence
+now pass. Archive remains gated on review of the newly scope-classified Core
+repair and its recorded disposition; this is still not PF-23/PF-26 integrated
+release qualification.
 
 ## Authority and identity
 

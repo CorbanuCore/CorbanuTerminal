@@ -15,6 +15,7 @@ use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_models_manager::model_info;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
+use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ApplyPatchToolType;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::InputModality;
@@ -845,6 +846,7 @@ async fn environment_count_controls_environment_backed_tools() {
 
     let multiple_environments = probe(|turn| {
         duplicate_primary_environment(turn);
+        turn.permission_profile = PermissionProfile::workspace_write();
         set_feature(turn, Feature::ShellTool, /*enabled*/ true);
         set_feature(turn, Feature::UnifiedExec, /*enabled*/ true);
         set_feature(turn, Feature::RequestPermissionsTool, /*enabled*/ true);
@@ -875,6 +877,7 @@ async fn environment_tools_follow_the_step_context() {
     let (_session, mut turn) = make_session_and_context().await;
     set_feature(&mut turn, Feature::UnifiedExec, /*enabled*/ true);
     turn.model_info.apply_patch_tool_type = Some(ApplyPatchToolType::Freeform);
+    turn.permission_profile = PermissionProfile::workspace_write();
 
     let environments = turn.environments.clone();
     turn.environments.environments.clear();
@@ -1698,6 +1701,7 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
         set_feature(turn, Feature::MultiAgentV2, /*enabled*/ true);
         update_config(turn, |config| {
             config.multi_agent_v2.max_concurrent_threads_per_session = 17;
+            config.multi_agent_v2.expose_spawn_agent_model_overrides = true;
         });
     })
     .await;
@@ -1748,14 +1752,20 @@ async fn multi_agent_feature_selects_one_agent_tool_family() {
         .as_ref()
         .expect("spawn_agent should use object params");
     for property in [
+        "agent_type",
         "model_provider",
         "model",
         "reasoning_effort",
         "service_tier",
     ] {
+        assert!(
+            !spawn_agent_properties.contains_key(property),
+            "OpenAI's reserved collaboration schema must hide `{property}`"
+        );
+    }
+    for property in ["message", "task_name", "fork_turns"] {
         assert!(spawn_agent_properties.contains_key(property));
     }
-    assert!(spawn_agent_properties.contains_key("agent_type"));
     let spawn_agent_description = spawn_agent.description.as_str();
     assert!(!spawn_agent_description.contains("max_concurrent_threads_per_session"));
     assert!(spawn_agent_description.contains(
@@ -2383,7 +2393,7 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
         turn.model_info.use_responses_lite = true;
     })
     .await;
-    zai_native_web_search_for_responses_lite.assert_visible_contains(&["web_search"]);
+    zai_native_web_search_for_responses_lite.assert_visible_lacks(&["web_search"]);
 
     let openrouter_server_web_search_for_chat = probe(|turn| {
         use_openrouter_provider(turn);
@@ -2392,7 +2402,7 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
         turn.model_info.use_responses_lite = true;
     })
     .await;
-    openrouter_server_web_search_for_chat.assert_visible_contains(&["web_search"]);
+    openrouter_server_web_search_for_chat.assert_visible_lacks(&["web_search"]);
 
     let code_mode_only = probe(|turn| {
         use_chatgpt_auth(turn);
@@ -2410,6 +2420,9 @@ async fn hosted_web_search_and_standalone_image_generation_follow_runtime_gates(
             "request_user_input",
             // Multi-agent v2 tools.
             MULTI_AGENT_V2_NAMESPACE,
+            "spawn_agent_plaintext",
+            "send_message_plaintext",
+            "followup_task_plaintext",
             // Hosted Responses tools.
             "web_search",
         ]

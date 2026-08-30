@@ -3185,8 +3185,9 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
                     if communication.author == troll_path
                         && communication.recipient == first_orc_path
                         && communication.other_recipients.is_empty()
-                        && communication.content == first_delegated_message
-                        && communication.encrypted_content.is_none()
+                        && communication.content.is_empty()
+                        && communication.encrypted_content.as_deref()
+                            == Some(first_delegated_message)
                         && communication
                             .metadata
                             .as_ref()
@@ -3203,8 +3204,9 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
                     if communication.author == troll_path
                         && communication.recipient == second_orc_path
                         && communication.other_recipients.is_empty()
-                        && communication.content == second_delegated_message
-                        && communication.encrypted_content.is_none()
+                        && communication.content.is_empty()
+                        && communication.encrypted_content.as_deref()
+                            == Some(second_delegated_message)
                         && communication
                             .metadata
                             .as_ref()
@@ -3278,15 +3280,14 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
         agent.agent_name == first_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Snaga")
             && agent.agent_role.as_deref() == Some("orc")
-            && agent.last_task_message.as_deref()
-                == Some("Start another task while every execution slot is occupied.")
+            && agent.last_task_message.is_none()
             && agent.last_result_message.as_deref() == Some("animation shell complete")
     }));
     assert!(result.agents.iter().any(|agent| {
         agent.agent_name == second_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Ghash")
             && agent.agent_role.as_deref() == Some("orc")
-            && agent.last_task_message.as_deref() == Some(second_delegated_message)
+            && agent.last_task_message.is_none()
             && agent.last_result_message.as_deref() == Some("formula checks complete")
     }));
     let context = session
@@ -3298,7 +3299,7 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
         context.contains("orc_snaga: Snaga"),
         "Troll context should name the first Orc, got {context:?}"
     );
-    assert!(context.contains("Start another task while every execution slot is occupied."));
+    assert!(!context.contains("Start another task while every execution slot is occupied."));
     assert!(
         context.contains("animation shell complete"),
         "Troll context should expose the first Orc result, got {context:?}"
@@ -3307,7 +3308,7 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
         context.contains("orc_ghash: Ghash"),
         "Troll context should name the second Orc, got {context:?}"
     );
-    assert!(context.contains(second_delegated_message));
+    assert!(!context.contains(second_delegated_message));
     assert!(
         context.contains("formula checks complete"),
         "Troll context should expose the second Orc result, got {context:?}"
@@ -3349,8 +3350,9 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
                 Op::InterAgentCommunication { communication }
                     if communication.author == troll_path
                         && communication.recipient == first_orc_path
-                        && communication.content == first_improvement_message
-                        && communication.encrypted_content.is_none()
+                        && communication.content.is_empty()
+                        && communication.encrypted_content.as_deref()
+                            == Some(first_improvement_message)
                         && communication.trigger_turn
             )
     }));
@@ -3361,8 +3363,9 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
                 Op::InterAgentCommunication { communication }
                     if communication.author == troll_path
                         && communication.recipient == second_orc_path
-                        && communication.content == second_improvement_message
-                        && communication.encrypted_content.is_none()
+                        && communication.content.is_empty()
+                        && communication.encrypted_content.as_deref()
+                            == Some(second_improvement_message)
                         && communication.trigger_turn
             )
     }));
@@ -3383,13 +3386,13 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
     assert!(result.agents.iter().any(|agent| {
         agent.agent_name == first_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Snaga")
-            && agent.last_task_message.as_deref() == Some(first_improvement_message)
+            && agent.last_task_message.is_none()
             && agent.last_result_message.as_deref() == Some("animation shell complete")
     }));
     assert!(result.agents.iter().any(|agent| {
         agent.agent_name == second_orc_path.as_str()
             && agent.agent_nickname.as_deref() == Some("Ghash")
-            && agent.last_task_message.as_deref() == Some(second_improvement_message)
+            && agent.last_task_message.is_none()
             && agent.last_result_message.as_deref() == Some("formula checks complete")
     }));
     let context = session
@@ -3397,11 +3400,11 @@ async fn direct_spawn_troll_can_followup_task_two_named_orc_children() {
         .agent_control
         .format_environment_context_subagents(troll.thread_id)
         .await;
-    assert!(context.contains(first_improvement_message));
-    assert!(context.contains(second_improvement_message));
+    assert!(!context.contains(first_improvement_message));
+    assert!(!context.contains(second_improvement_message));
     assert!(
         context.contains("animation shell complete") && context.contains("formula checks complete"),
-        "provider-neutral rework and result previews should remain readable, got {context:?}"
+        "results should remain readable without exposing encrypted task text, got {context:?}"
     );
 }
 
@@ -3789,6 +3792,18 @@ async fn spawn_agent_allows_depth_up_to_configured_max_depth() {
         })
         .await
         .expect("live parent at the configured depth should start");
+    root.thread
+        .session
+        .services
+        .agent_control
+        .effective_security_policy()
+        .inherit_child(
+            root.thread_id,
+            parent.thread_id,
+            "task:test-configured-depth-parent",
+            turn.config.security_level,
+        )
+        .expect("direct fixture parent should receive the same policy binding as a live spawn");
     session.services.agent_control = manager.agent_control();
     session.thread_id = parent.thread_id;
     turn.session_source = parent_source;
@@ -5534,6 +5549,100 @@ async fn multi_agent_v2_interrupt_agent_accepts_task_name_target() {
     assert!(
         !ops.iter()
             .any(|(thread_id, op)| *thread_id == child_id && matches!(op, Op::Interrupt))
+    );
+}
+
+#[tokio::test]
+async fn multi_agent_v2_interrupt_shutdown_agent_is_idempotent_and_preserves_identity() {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let manager = thread_manager();
+    let root = manager
+        .start_thread(StartThreadOptions::new((*turn.config).clone()))
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = root.thread_id;
+    let mut config = (*turn.config).clone();
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    set_turn_config(&mut turn, config);
+
+    let session = Arc::new(session);
+    let turn = Arc::new(turn);
+    SpawnAgentHandlerV2::default()
+        .handle(invocation(
+            session.clone(),
+            turn.clone(),
+            "spawn_agent",
+            function_payload(json!({
+                "message": "inspect this repo",
+                "task_name": "worker"
+            })),
+        ))
+        .await
+        .expect("spawn_agent should succeed");
+    let agent_id = session
+        .services
+        .agent_control
+        .resolve_agent_reference(session.thread_id, &turn.session_source, "worker")
+        .await
+        .expect("worker path should resolve");
+    let worker = manager
+        .get_thread(agent_id)
+        .await
+        .expect("worker should be resident");
+    worker
+        .submit(Op::Shutdown {})
+        .await
+        .expect("worker shutdown should submit");
+    worker.wait_until_terminated().await;
+    assert_eq!(
+        session.services.agent_control.get_status(agent_id).await,
+        AgentStatus::Shutdown
+    );
+    let audit_count = manager
+        .captured_ops()
+        .iter()
+        .filter(|(thread_id, op)| {
+            *thread_id == agent_id && matches!(op, Op::InterAgentCommunication { .. })
+        })
+        .count();
+
+    for _ in 0..2 {
+        let output = InterruptAgentHandler
+            .handle(invocation(
+                session.clone(),
+                turn.clone(),
+                "interrupt_agent",
+                function_payload(json!({"target": "worker", "reason": "review correction"})),
+            ))
+            .await
+            .expect("interrupting a shutdown agent should be idempotent");
+        let (content, success) = expect_text_output(output);
+        let result: InterruptAgentResult =
+            serde_json::from_str(&content).expect("interrupt_agent result should be json");
+        assert_eq!(result.previous_status, AgentStatus::Shutdown);
+        assert_eq!(success, Some(true));
+    }
+
+    assert_eq!(
+        manager
+            .captured_ops()
+            .iter()
+            .filter(|(thread_id, op)| {
+                *thread_id == agent_id && matches!(op, Op::InterAgentCommunication { .. })
+            })
+            .count(),
+        audit_count
+    );
+    assert!(
+        session
+            .services
+            .agent_control
+            .get_agent_metadata(agent_id)
+            .is_some()
     );
 }
 

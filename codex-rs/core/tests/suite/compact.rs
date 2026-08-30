@@ -1226,7 +1226,15 @@ async fn multiple_auto_compact_per_task_runs_after_token_limit_hit() {
         values
             .iter()
             .filter_map(|value| {
-                let value = strip_response_item_ids_from_json(value.clone());
+                let mut value = strip_response_item_ids_from_json(value.clone());
+                // Providers may normalize absent optional reasoning content to JSON null.
+                // Compaction semantics do not depend on that wire-level representation.
+                if value.get("type").and_then(|ty| ty.as_str()) == Some("reasoning")
+                    && value.get("content").is_some_and(serde_json::Value::is_null)
+                    && let Some(object) = value.as_object_mut()
+                {
+                    object.remove("content");
+                }
                 if value
                     .get("type")
                     .and_then(|ty| ty.as_str())
