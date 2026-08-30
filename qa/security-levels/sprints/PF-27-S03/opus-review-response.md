@@ -100,3 +100,47 @@ It recomputed all ten published hashes, independently checked both result files
 against every schema constraint, verified all review-six repairs and earlier
 fail-closed classes, and confirmed the exact declared scope creates no runtime
 Cargo/Bazel route.
+
+## Windows completion qualification
+
+After the authorized Windows endpoint returned to the connected Tailscale
+tailnet, the exact reviewed implementation and shim ran directly on Windows 11
+with Python 3.13.15. The target passed 8/8 contract regressions, generated and
+strictly validated 10/10 capability records, remained correctly ineligible, and
+returned exit 2 under `--require-eligible`. The retrieved result then passed
+local archival validation and was byte-compared with the compact repository
+artifact. The remote synthetic fixture directory was removed. A final
+three-platform review is required because this evidence postdates review seven.
+
+The eighth independent review transcript is stored at
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-foundation-platform/tmux-artifacts/pf27-opus-max-review-8/pane.txt`
+with SHA-256
+`ab3845a65da3094d98a62111d81e023a1ae2ebff8c9975f3e9d1f2744e67e376`.
+All four findings were accepted. The frozen mechanism document now records the
+measured Windows blockers; the probe detects an elevated Windows token and
+classifies it as unsupported; every result is reproduced with a documented
+`jq -c` compaction step and exact `cmp`; and the matrix contains only metadata
+bound into each result artifact. The source repair changed the probe identity,
+so macOS, Linux, and Windows evidence was regenerated and revalidated from the
+same implementation. A final post-repair review remains pending.
+
+The ninth independent review transcript is stored at
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-foundation-platform/tmux-artifacts/pf27-opus-max-review-9/pane.txt`
+with SHA-256
+`65b8bc77f1db521045bad4b75d640cd7f2b5563e541c921716910182bff0fbbb`.
+Both low findings were accepted. The mechanism record now names the measured
+`PROCESS_VM_READ` bypass without conflating it with the query-only identity
+probe, and every expected ctypes failure class maps to the stable
+`windows_token_probe_error` code with regression coverage. The probe identity
+changed, so exact compact macOS/Linux/Windows evidence was regenerated again.
+A clean follow-up review remains pending.
+
+The tenth independent review inspected the complete regenerated final tree and
+reported **NO FINDINGS**. Its read-only transcript is stored at
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-foundation-platform/tmux-artifacts/pf27-opus-max-review-10/pane.txt`
+with SHA-256
+`8ef76718e93b3b62003eb1285abd1990c56c24160de00035a073a2956844ab60`.
+It verified all eleven hashes, exact `jq -c` reproduction for all three results,
+six cross-target denials, every envelope/count/eligibility claim, both
+review-nine repairs, stable Windows token semantics, and the absence of a
+runtime Cargo/Bazel route.

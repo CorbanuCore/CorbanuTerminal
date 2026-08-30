@@ -82,6 +82,59 @@ def target_os() -> str:
     )
 
 
+def windows_token_is_elevated() -> bool:
+    """Return whether the current Windows process token is elevated."""
+
+    try:
+        advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    except (AttributeError, OSError) as error:
+        raise OSError("windows_token_api_unavailable") from error
+
+    token = ctypes.c_void_p()
+    kernel32.GetCurrentProcess.argtypes = []
+    kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+    advapi32.OpenProcessToken.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    advapi32.OpenProcessToken.restype = ctypes.c_int
+    advapi32.GetTokenInformation.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+        ctypes.POINTER(ctypes.c_uint32),
+    ]
+    advapi32.GetTokenInformation.restype = ctypes.c_int
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel32.CloseHandle.restype = ctypes.c_int
+
+    token_query = 0x0008
+    token_elevation = 20
+    if not advapi32.OpenProcessToken(
+        kernel32.GetCurrentProcess(), token_query, ctypes.byref(token)
+    ):
+        raise OSError(ctypes.get_last_error(), "OpenProcessToken")
+    try:
+        elevated = ctypes.c_uint32()
+        returned = ctypes.c_uint32()
+        if not advapi32.GetTokenInformation(
+            token,
+            token_elevation,
+            ctypes.byref(elevated),
+            ctypes.sizeof(elevated),
+            ctypes.byref(returned),
+        ):
+            raise OSError(ctypes.get_last_error(), "GetTokenInformation")
+        if returned.value < ctypes.sizeof(elevated):
+            raise OSError(errno.EIO, "short TokenElevation response")
+        return elevated.value != 0
+    finally:
+        kernel32.CloseHandle(token)
+
+
 def bounded(value: str, limit: int) -> str:
     value = " ".join(value.split())
     return value[:limit] if value else "unknown"
@@ -426,9 +479,17 @@ def internal_worker(action: str, payload: dict[str, Any]) -> dict[str, Any]:
                 return {"outcome": "allowed", "code": "passwordless_sudo_allowed"}
             return {"outcome": "denied", "code": "noninteractive_sudo_denied"}
         if os_name == "windows":
+            try:
+                if windows_token_is_elevated():
+                    return {
+                        "outcome": "allowed",
+                        "code": "worker_already_elevated",
+                    }
+            except (OSError, AttributeError, TypeError, ValueError):
+                return {"outcome": "error", "code": "windows_token_probe_error"}
             return {
                 "outcome": "unavailable",
-                "code": "no_noninteractive_elevation_attempt",
+                "code": "worker_unelevated_no_noninteractive_attempt",
             }
         return {"outcome": "unavailable", "code": "unknown_platform"}
     if action == "process-memory":

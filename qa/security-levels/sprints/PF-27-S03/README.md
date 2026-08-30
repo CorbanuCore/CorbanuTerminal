@@ -16,41 +16,51 @@ an IPC/network listener running.
 | Artifact | SHA-256 |
 | --- | --- |
 | `scripts/security-platform-probe` | `0045b29fc50c69c0282083d2c5da12d25a184e4d7742445ac5fa5515c4996a70` |
-| `scripts/security_platform_probe.py` | `549c50a5fe8804a3ed6cf22b7de2a947dd8093a6a8bb18a0317e2cfecbcb0440` |
-| `scripts/test_security_platform_probe.py` | `a26cb7874cb6753a3b403711c9c3bc6543e1d8ac2a6ac66ba10db5e6cf09244a` |
+| `scripts/security_platform_probe.py` | `30032a9359aca1672e14bd9571fb573aba2039bceb5576e526787786fd593de9` |
+| `scripts/test_security_platform_probe.py` | `6a96c85eab3469fc68fea65bf2b6bc0aee84fc2be291cc36e28e621259f0acf8` |
 | `codex-rs/secret-broker/src/platform_contract.rs` | `9a0d07e9f7e2ce462f9956a33f0915607089aa529ddfdff969abd1a541d0bdcf` |
 | `capability-result-v1.schema.json` | `da6cb78e37b2473713e652ecb15a871fa8dbc77683c246b3eb4da2ad15d82671` |
 | `fixture-protocol-v1.md` | `27650019fe7bde431091c4309f4125ee0151bbf415664e3b6d03b68ccff4134a` |
 | `containment-contract-v1.md` | `1e929b22e7429ae8f85f16265a2545676f961446237abe35f906efbe96bce2ae` |
-| `platform-mechanisms-v1.md` | `a6fedef0c39661f9e9e74e6b8630a1ef1ba2ebfb30a7e64ba1201885b101dc74` |
-| `results/macos.json` | `fa579d5586e35ce00a659562060a65fe508231acc366055b5f30a34a3655c62d` |
-| `results/linux.json` | `999b1907db6c750a502efa5001dfc117ca2047a94799e823f19f19fc3a388088` |
+| `platform-mechanisms-v1.md` | `0e3e6bc3a0d2d6c91da0e83cc4d959d1dd041f523c2fbbf310b53726bb20529b` |
+| `results/macos.json` | `3964a310c9bbe31fe8c8a120e56f304d17ec4e436115e289ee325b30a44556a5` |
+| `results/linux.json` | `a7089dd3e6117152e5cff617465707f56bda175685a89c2ddab3986b5ed02e6f` |
+| `results/windows.json` | `fcdb7d7536c4e3d0ce9bdbaa15d1af46469ccd38d948a017695dcbd6cf356404` |
 
 The result files embed the exact linted implementation-module SHA-256. The
 stable extensionless shim is separately bound above. The Markdown/schema hashes
 bind the surrounding frozen contract; the G1 integration owner must recompute
 them after any review repair.
 
+Each repository result is reproduced from the probe's raw `--output` file with
+`jq -c . raw.json > results/<target>.json`; `cmp` then verifies exact byte
+identity with that generated compact form before its hash is published.
+
 ## Platform matrix
 
 | Target | Runtime | Supported | Unsupported | Untested | Eligibility |
 | --- | --- | ---: | ---: | ---: | --- |
-| macOS Apple M2 Ultra arm64 | Darwin 25.0.0; Python 3.14.4 | 3 | 6 | 1 | false |
-| Ubuntu Linux AMD EPYC-Milan x86_64 | Linux 6.8.0-49; Ubuntu 24.04.3; Python 3.12.3 | 4 | 6 | 0 | false |
-| Windows | Authorized endpoint absent from the connected Tailscale tailnet; both supplied IP routes timed out on port 22 | 0 | 0 | 10 | untested, never a pass |
+| macOS arm64 | Darwin 25.0.0; Python 3.14.4; Apple M2 Ultra | 3 | 6 | 1 | false |
+| Linux x86_64 | Linux 6.8.0-49; glibc 2.39; Python 3.12.3; AMD EPYC-Milan | 4 | 6 | 0 | false |
+| Windows 11 AMD64 | Windows 11 10.0.26200; Python 3.13.15; Intel64 Family 6 Model 106 | 0 | 8 | 2 | false |
 
-Both executed targets prove that an ordinary same-user subprocess is not a
+All three executed targets prove that the measured worker context is not a
 protected broker boundary: controller process/file/config and loopback access
-remain available, and all protected-store attacks were possible. Descriptor
+remain available, and all protected-store attacks were possible. The macOS and
+Linux workers were ordinary same-user subprocesses; the Windows token probe
+detected that its SSH-launched worker was already elevated and classified that
+as an explicit unsupported privilege bypass. Descriptor
 closure, non-interactive elevation denial, and process-memory denial are useful
 inputs but do not compensate for another missing capability. Linux additionally
 verified `SO_PEERCRED`; the selected macOS Python API exposed no peer-credential
 mechanism, so that row is honestly untested.
 
-Windows remains a hard completion gate. The local Tailscale client is connected,
-but its peer list does not contain the authorized Windows host; direct SSH to the
-two previously supplied Tailscale addresses timed out. No Windows result is
-inferred from prior PF-13 evidence or from another OS.
+Windows was measured directly through the authorized Tailscale/SSH route. It
+confirmed process, file, config, loopback, process-debug, elevated-token,
+signature, and protected-store bypasses. Inherited-handle negative control and
+AF_UNIX peer credentials remain explicitly untested; neither is inferred as a
+pass. The probe and its synthetic temporary files were removed from the remote
+host after evidence retrieval.
 
 ## Commands and counts
 
@@ -59,15 +69,19 @@ inferred from prior PF-13 evidence or from another OS.
   false-eligibility, duplicate/missing capability, and inconsistent
   status/observation rejection, plus an all-supported eligible report; each
   self-test also executes all 10 probes.
-- `python3 -m unittest scripts/test_security_platform_probe.py`: 5/5 discovered
+- `python3 -m unittest scripts/test_security_platform_probe.py`: 6/6 discovered
   tests pass, including the complete 8-case contract self-test, malformed-input
   stable-error handling, unknown-OS boot-identity denial, validation-mode
-  eligibility enforcement, and JSON Schema target-metadata parity.
+  eligibility enforcement, JSON Schema target-metadata parity, and fail-closed
+  Windows token-elevation classification.
 - `scripts/security-platform-probe --probe ...` and strict current-target
   `--validate ...`: 10/10 capability records generated and validated on macOS.
 - The identical SHA-bound implementation and stable shim: 8/8 regressions and
   10/10 capability records generated/validated on Linux, then checked locally with
   `--validate-evidence` (which cannot authorize the local target).
+- The same implementation and shim passed 8/8 regressions, generated and
+  strictly validated 10/10 Windows capability records, returned exit 2 for
+  `--require-eligible`, and passed local archival validation after retrieval.
 - Standalone `rustc --test` activation-gate regressions pass 9/9 and library
   compilation passes
   without registering a Cargo/Bazel runtime route.

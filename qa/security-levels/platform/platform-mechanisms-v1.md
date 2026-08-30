@@ -55,8 +55,12 @@ passes every v1 probe on the weakest supported target.
   transports. Environment proxy settings do not qualify.
 - Elevation: explicit UAC/human setup only, with no stored password and a
   post-restart audit.
-- Blocker: the authorized target is not currently reachable from this Mac's
-  Tailscale tailnet, so all Windows mechanism observations remain untested.
+- Blockers observed: same-user process/file/config/network/store access
+  succeeds; a `PROCESS_VM_READ` controller handle is granted
+  (`open_process_allowed`); Authenticode alone is not containment; and the
+  SSH-launched worker token is already elevated. The inherited-handle negative
+  control and selected AF_UNIX peer-credential API remain untested. Current host
+  is ineligible.
 
 ## Selection rule
 

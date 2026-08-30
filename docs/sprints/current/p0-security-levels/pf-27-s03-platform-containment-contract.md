@@ -50,18 +50,21 @@ updated: 2026-08-30
 - [x] Implemented a versioned result schema and bounded cross-platform synthetic probe for process, filesystem/config, inherited handle, IPC, network, process-memory/debug, signing/entitlement, elevation and protected-store boundaries; unknown/stale/wrong-target/false-eligibility input fails closed.
 - [x] Specified authenticated human-controller IPC and protected policy-store ownership, including replay, delete, rename, symlink/reparse, rollback and restart attacks; fixture preparation creates no runtime route.
 - [x] Recorded reviewed-input mechanism candidates for Linux, macOS and Windows without treating installation, signing, same-user separation or proxy configuration as containment.
-- [x] Executed the SHA-bound probe on macOS and Linux with 10/10 capability records and 8/8 contract regressions per target; both correctly remain ineligible because observed same-user bypasses are unsupported.
-- [x] Recorded the Linux/macOS/Windows identity, worker-threat, filesystem/config/IPC/network, handle, debug, signing/entitlement, elevation and store matrix; Windows is explicitly untested rather than inferred.
-- [x] Ran seven independent TMUX + Corbanu Terminal + Claude Opus 5.0 Max reviews; repaired all twenty-eight findings/coverage gaps across process/handle/elevation/signing/network/IPC probes, schema parity, macOS helper resolution, Windows/unknown-OS boot identity, Rust identity/envelope validation, strict versus archival validation and eligibility enforcement, stable malformed-input handling, standard lint/test discovery, and positive eligibility discrimination, then regenerated exact-SHA macOS/Linux evidence. The seventh complete-tree review reported no findings.
+- [x] Executed the SHA-bound probe on macOS, Linux, and Windows with 10/10 capability records and 8/8 contract regressions per target; all three correctly remain ineligible because observed same-user bypasses are unsupported.
+- [x] Recorded the Linux/macOS/Windows identity, worker-threat, filesystem/config/IPC/network, handle, debug, signing/entitlement, elevation and store matrix from direct measurements; unsupported and untested Windows mechanisms remain explicit rather than inferred.
+- [x] Ran ten independent TMUX + Corbanu Terminal + Claude Opus 5.0 Max reviews; repaired all thirty-four findings/coverage gaps across process/handle/elevation/signing/network/IPC probes, schema parity, macOS helper resolution, Windows/unknown-OS boot and token identity, Rust identity/envelope validation, strict versus archival validation and eligibility enforcement, stable malformed-input handling, standard lint/test discovery, reproducible artifact compaction, and positive eligibility discrimination, then regenerated exact-SHA macOS/Linux/Windows evidence. The tenth complete three-platform review reported no findings.
+- [x] Obtained a clean independent review of the final three-platform evidence tree and reran governance before integration.
 
 ## Remaining
 
-- [ ] Execute the identical probe on the authorized Windows target and complete the three-platform matrix. The host is absent from the connected Tailscale tailnet and both supplied IP routes currently time out; unavailable access is `untested`, never a platform pass.
+- [ ] Commit the reviewed three-platform candidate, complete the integration-owner scope audit, and archive the sprint.
 
 ## Verification
 
-- [x] Run affected format/fix tools before final tests; repository-standard `format.py --check` and focused Ruff discovery pass; Python self-test passes 8/8, discovered Python tests pass 5/5, and standalone Rust activation-gate tests pass 9/9.
-- [ ] Run the planned probe with synthetic canaries on Linux/macOS/Windows; record target versions, expected denial, actual results and unsupported configurations. Run schema/fixture tests and wrong-identity/stale-result cases.
+- [x] Run affected format/fix tools before final tests; repository-standard `format.py --check` and focused Ruff discovery pass; Python self-test passes 8/8, discovered Python tests pass 6/6, and standalone Rust activation-gate tests pass 9/9.
+- [x] Run the planned probe with synthetic canaries on Linux/macOS/Windows; record target versions, expected denial, actual results and unsupported configurations. Run schema/fixture tests and wrong-identity/stale-result cases.
+- [x] Record a clean independent review of the final three-platform evidence tree and rerun governance before archive.
+- [ ] Rerun the final focused and governance checks on the integration target before archive.
 - [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
 - [x] Verify no runtime route or profile becomes available from fixture-only preparation; the new Rust module remains outside Cargo/Bazel registration and the probe only creates bounded temporary synthetic fixtures.
 

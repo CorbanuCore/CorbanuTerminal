@@ -65,6 +65,40 @@ class SecurityPlatformProbeTests(unittest.TestCase):
                 ):
                     probe.validate_report(malformed)
 
+    def test_windows_elevation_context_is_fail_closed(self) -> None:
+        with mock.patch.object(probe, "target_os", return_value="windows"):
+            cases = (
+                (True, "allowed", "worker_already_elevated"),
+                (
+                    False,
+                    "unavailable",
+                    "worker_unelevated_no_noninteractive_attempt",
+                ),
+            )
+            for elevated, outcome, code in cases:
+                with self.subTest(elevated=elevated):
+                    with mock.patch.object(
+                        probe, "windows_token_is_elevated", return_value=elevated
+                    ):
+                        self.assertEqual(
+                            probe.internal_worker("elevation", {}),
+                            {"outcome": outcome, "code": code},
+                        )
+            for error_type in (OSError, AttributeError, TypeError, ValueError):
+                with self.subTest(error_type=error_type.__name__):
+                    with mock.patch.object(
+                        probe,
+                        "windows_token_is_elevated",
+                        side_effect=error_type("synthetic"),
+                    ):
+                        self.assertEqual(
+                            probe.internal_worker("elevation", {}),
+                            {
+                                "outcome": "error",
+                                "code": "windows_token_probe_error",
+                            },
+                        )
+
 
 if __name__ == "__main__":
     unittest.main()
