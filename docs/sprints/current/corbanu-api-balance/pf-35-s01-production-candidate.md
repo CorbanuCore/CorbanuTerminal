@@ -47,26 +47,30 @@ updated: 2026-08-30
 
 - [x] Sprint record created and linked to PF-35.
 - [x] Fly authentication restored and the production app, compatibility hostname, current health, and private repository visibility verified.
+- [x] Final backend tree at `6cc7894` passes 107 tests, typecheck, and production build.
+- [x] Staged the protected Vercel gateway credential from the encrypted local vault without printing its value.
+- [x] Deployed image `deployment-01M19ES7MMEKBX1MMDD6QR0AJ7`; Fly machines `2870663bd33de8` and `784503db5e0398` are version 13 with passing readiness checks.
+- [x] Production smoke confirms `/readyz` 200, six provider-neutral at-cost catalog entries, GLM 5.3 Flash recommended at `$0.15` input, no vendor metadata, legacy `/v1/plans` retirement, and a no-store signed-wallet challenge.
+- [x] Exercised the deployed read-only flow in the real Terminal at `865ea2edd2`; `/wallet` renders the zero-dollar account, arbitrary top-up, key actions, and all six prices without a catalog error.
 
 ## Remaining
 
-- [ ] Run final-tree backend tests, typecheck, and production build.
-- [ ] Stage the protected Vercel credential without exposing its value.
-- [ ] Deploy with rolling health checks and verify both production machines.
-- [ ] Smoke-test readiness, provider-neutral catalog and prices, signed-wallet challenge, persistence, legacy compatibility, and one low-cost inference call.
-- [ ] Record the candidate deployment and hand the endpoint to PF-34 human UI testing.
+- [ ] Named human tester unlocks the production wallet and completes top-up, create/revoke, one-time reveal, and recovery checks.
+- [ ] Run one low-cost inference call after the human creates a funded Corbanu API key; no balance was fabricated for qualification.
+- [ ] Complete final persistence/compliance/release qualification before public release.
 
 ## Verification
 
-- [ ] Focused and full backend suites pass on the deployed commit.
-- [ ] Production health and database migration are stable across both machines.
-- [ ] Customer responses expose Corbanu model and price identities without vendor metadata.
-- [ ] TUI applicability is deferred to PF-34-S02 against this deployed candidate.
-- [ ] Integrated interfaces match Terminal backend client commit `cd79361d8b4f286291556a641288757d0451f52c`.
+- [x] Focused and full backend suites pass on the deployed commit.
+- [x] Production health and database-backed startup are stable across both machines.
+- [x] Customer catalog responses expose Corbanu model and price identities without vendor metadata.
+- [x] TUI applicability is resolved by the production true-PTY run recorded in PF-34-S02.
+- [x] Integrated interfaces match Terminal backend client `cd79361d8b4f286291556a641288757d0451f52c` and read-only catalog fix `865ea2edd2`.
+- [ ] Human-funded inference and wallet key-lifecycle acceptance pass against production.
 
 ## Exit evidence
 
-- [ ] Deployment image and source commit recorded.
-- [ ] Production smoke output recorded without secrets or plaintext customer keys.
-- [ ] `Done` and `Remaining` ledgers reflect reality.
+- [x] Deployment image `deployment-01M19ES7MMEKBX1MMDD6QR0AJ7` and source commit `6cc7894` recorded.
+- [x] Production smoke output recorded without secrets or plaintext customer keys.
+- [x] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/corbanu-api-balance/` after PF-34 handoff.

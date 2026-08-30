@@ -52,23 +52,27 @@ updated: 2026-08-30
 - [x] Added create/revoke actions and provider-neutral Corbanu API model selection.
 - [x] Added funded, unfunded, amount-boundary, key-wire, legacy-sale, and provider-selection regressions.
 - [x] Built the real Terminal and exercised `/wallet` -> `Corbanu API`, wallet-daemon startup, unlock prompt, top-up entry, exact confirmation, insufficient-funds disablement, and cancel against the wallet-bound disposable backend.
+- [x] Corrected the production price-discovery boundary so locked, unfunded, stale-key, and legacy-key wallets load the public provider-neutral catalog before authenticated account details.
+- [x] Exercised `/wallet` -> `Corbanu API` against the deployed backend and confirmed the zero-dollar balance, arbitrary top-up, key actions, and all six priced models render without exposing upstream vendors.
 
 ## Remaining
 
 - [ ] Named human tester enters the wallet passcode and completes create/revoke plus one-time reveal against the disposable backend.
-- [ ] Repeat the primary and recovery flows against the deployed backend in PF-35 after Fly authentication is restored.
+- [ ] Named human tester repeats top-up, create/revoke, one-time reveal, inference, and recovery flows against the deployed backend.
 
 ## Verification
 
 - [x] Focused tests: 14 wallet, 9 wallet-daemon, 58 provider, 3 wallet-API snapshots, and 23 wallet-menu tests pass.
 - [x] Integration tests cover provider mapping, operation-preserving daemon IPC, backend public-key conversion, and exact microdollars.
-- [ ] TUI applicability is resolved and non-secret checkpoints are recorded; human passcode/key lifecycle remains pending.
-- [x] Integrated interfaces in `594d618306d922963cf6676d3600cd381922759c` match PF-34-S01 and backend `cd79361d8b4f286291556a641288757d0451f52c`.
+- [x] TUI applicability is resolved and non-secret read-only checkpoints are recorded; human passcode/key lifecycle remains pending.
+- [x] Integrated interfaces in `594d618306d922963cf6676d3600cd381922759c` and `865ea2edd2` match PF-34-S01 and backend `6cc7894`.
 - [x] Upstream picker/provider compatibility test passes with exact model-field selection.
+- [ ] Named human passcode, top-up, one-time reveal, create/revoke, inference, and recovery acceptance pass against production.
 
 ## Exit evidence
 
-- [x] Implementation commit: `594d618306d922963cf6676d3600cd381922759c`.
-- [x] Final-tree focused tests and `just fix` pass; true-TUI log is `/tmp/corbanu-api-ui-qa-20260830/codex-tui.log` with no panic signature.
+- [x] Implementation commits: `594d618306d922963cf6676d3600cd381922759c` and production catalog fix `865ea2edd2`.
+- [x] Final focused tests pass: 4 wallet-API and 23 wallet-menu; the broad 3,847-test run passed 3,817 and exposed 30 unrelated pre-existing version-drift snapshots.
+- [x] Production true-TUI log is `/tmp/corbanu-api-prod-qa-final.nuVmDv/codex-tui.log` with no panic, malformed-catalog, or unavailable-screen signature.
 - [x] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/corbanu-api-balance/`.
