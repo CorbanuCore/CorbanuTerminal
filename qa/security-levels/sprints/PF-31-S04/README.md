@@ -49,11 +49,12 @@ reuses exactly one eligible PF-31 worker. The contract never installs or elevate
 an engine, touches unrelated resources, changes a user default, uses a mutable
 tag as identity, or falls back after a verification failure.
 
-Thirteen fixtures cover absent engine, stopped engine, stalled engine,
+Fourteen fixtures cover absent engine, stopped engine, stalled engine,
 mismatched digest, tampering, offline verification, wrong architecture,
 duplicate owned workers, concurrent clients, explicit selection, automatic
-Podman preference, unrelated resources, and a stalled owned worker. Each fixture
-is evaluated twice to prove deterministic idempotency.
+Podman preference, fallback to an eligible Docker engine, unrelated resources,
+and a stalled owned worker. Each fixture is evaluated twice to prove
+deterministic idempotency.
 
 ## Commands and actual counts
 
@@ -70,10 +71,10 @@ python3 docs/sprints/check.py
 git diff --check
 ```
 
-Results: Ruff clean; one manifest validated; 13/13 fixtures and 13/13 repeated
+Results: Ruff clean; one manifest validated; 14/14 fixtures and 14/14 repeated
 idempotency checks passed; JSON parsing, byte compilation, plan governance,
 sprint governance and whitespace checks passed on macOS. The same portable
-bundle passed one manifest, 13/13 fixtures and 13/13 idempotency checks with
+bundle passed one manifest, 14/14 fixtures and 14/14 idempotency checks with
 Python 3.12.3 on Ubuntu 24.04 Linux.
 
 Resource probes launched the exact image by digest with network disabled, one

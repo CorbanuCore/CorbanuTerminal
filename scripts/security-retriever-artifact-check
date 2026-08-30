@@ -348,6 +348,23 @@ def evaluate_snapshot(
             ["install_engine_manually", "rerun_check"],
         )
 
+    if preference == "auto":
+        first_action: dict[str, Any] | None = None
+        first_blocked: dict[str, Any] | None = None
+        for name in installed:
+            result = evaluate_snapshot({**snapshot, "preference": name}, manifest)
+            if result["status"] == "ready":
+                return result
+            if result["status"] == "action_required" and first_action is None:
+                first_action = result
+            if result["status"] == "blocked" and first_blocked is None:
+                first_blocked = result
+        require(
+            first_action is not None or first_blocked is not None,
+            "auto selection produced no result",
+        )
+        return first_action if first_action is not None else first_blocked
+
     name = installed[0]
     state = engines[name]
     daemon_state = state.get("daemon_state")
