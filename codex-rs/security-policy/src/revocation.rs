@@ -318,6 +318,24 @@ impl RevocationState {
         if matches!(event.target, RevocationTarget::KillSwitch { active: false }) {
             return Err(RevocationError::NotARestriction);
         }
+        self.validate()?;
+        event.validate()?;
+        if matches!(event.target, RevocationTarget::KillSwitch { active: true })
+            && !self.kill_switch_active
+        {
+            let candidate = RevocationOrder {
+                created_at_unix_seconds: event.created_at_unix_seconds,
+                event_id: event.event_id.clone(),
+            };
+            if self.applied_event_ids.contains(&event.event_id)
+                || self
+                    .last_kill_switch_event
+                    .as_ref()
+                    .is_some_and(|previous| &candidate <= previous)
+            {
+                return Err(RevocationError::RestrictionSuperseded);
+            }
+        }
         let event_was_effective = self.apply(event)?;
         let audit_status = write_audit();
         Ok(RestrictionApplication {
@@ -757,6 +775,8 @@ pub enum RevocationError {
     CorruptKillSwitchState,
     #[error("kill-switch deactivation is not an emergency restriction")]
     NotARestriction,
+    #[error("emergency restriction was superseded by a newer kill-switch order")]
+    RestrictionSuperseded,
     #[error("dispatch authority is malformed")]
     InvalidAuthority,
     #[error("dispatch authority has been revoked")]

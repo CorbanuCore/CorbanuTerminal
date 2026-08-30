@@ -1132,6 +1132,22 @@ fn revocation_audit_unavailable_does_not_delay_emergency_restriction() {
         Err(RevocationError::NotARestriction)
     ));
     assert!(revocations.kill_switch_active);
+
+    assert!(revocations.apply(&deactivate).unwrap());
+    assert!(!revocations.kill_switch_active);
+    let skewed_enable = RevocationEvent::new(
+        human(),
+        RevocationTarget::KillSwitch { active: true },
+        RevocationReason::RiskSignal,
+        149,
+    )
+    .unwrap();
+    assert!(matches!(
+        revocations.apply_restriction(&skewed_enable, || panic!("audit must not run")),
+        Err(RevocationError::RestrictionSuperseded)
+    ));
+    assert!(!revocations.kill_switch_active);
+    assert_eq!(revocations.generation, 2);
 }
 
 #[test]
