@@ -1,7 +1,7 @@
 //! Versioned platform-containment contract frozen by PF-27-S03.
 //!
-//! This module is intentionally not registered in the Cargo/Bazel workspaces by
-//! the preparation sprint. G1 integration owns that shared-surface change.
+//! G1 integration registers this contract without adding a runtime consumer or
+//! enabling a protected-mode route.
 
 use std::fmt;
 
@@ -253,6 +253,7 @@ fn is_lower_hex_64(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     const TARGET_ID: &str = concat!(
         "1111111111111111",

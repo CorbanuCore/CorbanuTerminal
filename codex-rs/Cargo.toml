@@ -47,6 +47,7 @@ members = [
     "hooks",
     "http-client",
     "secrets",
+    "secret-broker",
     "exec",
     "file-system",
     "exec-server-protocol",

@@ -7,9 +7,9 @@ Contract: `corbanu.platform-containment/v1`
 Fixture protocol: `corbanu.platform-probe/v1`
 
 The probe uses random synthetic canaries only. It writes no credential, username,
-hostname, source path, or exception text to result artifacts. Probe preparation
-does not register a crate, enable a broker/profile, alter a host policy, or leave
-an IPC/network listener running.
+hostname, source path, or exception text to result artifacts. G1 registers the
+contract-only crate, but does not add a runtime consumer, enable a broker/profile,
+alter a host policy, or leave an IPC/network listener running.
 
 ## Artifact identity
 
@@ -18,7 +18,10 @@ an IPC/network listener running.
 | `scripts/security-platform-probe` | `0045b29fc50c69c0282083d2c5da12d25a184e4d7742445ac5fa5515c4996a70` |
 | `scripts/security_platform_probe.py` | `30032a9359aca1672e14bd9571fb573aba2039bceb5576e526787786fd593de9` |
 | `scripts/test_security_platform_probe.py` | `6a96c85eab3469fc68fea65bf2b6bc0aee84fc2be291cc36e28e621259f0acf8` |
-| `codex-rs/secret-broker/src/platform_contract.rs` | `9a0d07e9f7e2ce462f9956a33f0915607089aa529ddfdff969abd1a541d0bdcf` |
+| `codex-rs/secret-broker/src/platform_contract.rs` | `5ab71ddd09222fff9c6c7866eac71d4b50a964dd3f330a71c596ce41bd46bc31` |
+| `codex-rs/secret-broker/Cargo.toml` | `9382ff053132b956cacbe806393101eeebb693b4ca5b2c4e225fb3dff5c0b78f` |
+| `codex-rs/secret-broker/BUILD.bazel` | `b3644a641748ae9a6366ed69ec0c5512fecc5047f74aa870a9f664f77cef7a1d` |
+| `codex-rs/secret-broker/src/lib.rs` | `256a9b1a0e9c771e3c7db8b014c00b517402314481b316c3c734f49d769d75c7` |
 | `capability-result-v1.schema.json` | `da6cb78e37b2473713e652ecb15a871fa8dbc77683c246b3eb4da2ad15d82671` |
 | `fixture-protocol-v1.md` | `27650019fe7bde431091c4309f4125ee0151bbf415664e3b6d03b68ccff4134a` |
 | `containment-contract-v1.md` | `1e929b22e7429ae8f85f16265a2545676f961446237abe35f906efbe96bce2ae` |
@@ -82,16 +85,18 @@ host after evidence retrieval.
 - The same implementation and shim passed 8/8 regressions, generated and
   strictly validated 10/10 Windows capability records, returned exit 2 for
   `--require-eligible`, and passed local archival validation after retrieval.
-- Standalone `rustc --test` activation-gate regressions pass 9/9 and library
-  compilation passes
-  without registering a Cargo/Bazel runtime route.
+- Standalone `rustc --test` activation-gate regressions pass 9/9. After the G1
+  registration, `just test -p codex-secret-broker` passes 9/9 and Bazel's
+  `//codex-rs/secret-broker:secret-broker-unit-tests` target passes 1/1.
 - `python3 -m py_compile`, `ruff check`, JSON parse, both governance checkers,
   and `git diff --check`: required before review handoff.
 
-## Integration handoff
+## G1 integration
 
-G1 is serialized to Jim Ricketts. The receiver audits the literal scope and
-exclusively registers the future `codex-content-security` Cargo/Bazel surfaces.
-PF-27-S04/S02 must select reviewed per-OS mechanisms and rerun these probes
-against the real controller/broker/worker launch path. This fixture-only sprint
-cannot activate protected mode.
+Jim Ricketts merged the completed PF-34-S04 tree first, audited the literal
+PF-27 scope, and then exclusively registered `codex-secret-broker` on the Cargo
+and Bazel workspace surfaces. `just bazel-lock-update` completed without
+changing `MODULE.bazel.lock`. No workspace crate depends on the new crate, so
+the registration exposes only the frozen contract and cannot activate protected
+mode. PF-27-S04/S02 must select reviewed per-OS mechanisms and rerun these probes
+against the real controller/broker/worker launch path.

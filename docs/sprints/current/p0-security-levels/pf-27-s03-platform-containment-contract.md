@@ -7,8 +7,8 @@ plan_feature: "PF-27"
 execution_order: 16
 owner: "Codex foundation/platform lane"
 parallel_lane: "foundation-platform"
-write_scope: "codex-rs/secret-broker/src/platform_contract.rs, scripts/security-platform-probe, scripts/security_platform_probe.py, scripts/test_security_platform_probe.py, qa/security-levels/platform/, qa/security-levels/sprints/PF-27-S03/, docs/sprints/current/p0-security-levels/pf-27-s03-platform-containment-contract.md"
-integration_gate: "Jim Ricketts receives the PF-27-S03 candidate at G1, audits the literal scope, exclusively registers codex-content-security Cargo/Bazel workspace surfaces, reruns schema/probe/governance checks on the combined tree, then archives the sprint before a consumer can use the contract."
+write_scope: "codex-rs/secret-broker/, codex-rs/Cargo.toml, codex-rs/Cargo.lock, MODULE.bazel.lock, scripts/security-platform-probe, scripts/security_platform_probe.py, scripts/test_security_platform_probe.py, qa/security-levels/platform/, qa/security-levels/sprints/PF-27-S03/, docs/sprints/current/p0-security-levels/pf-27-s03-platform-containment-contract.md"
+integration_gate: "Jim Ricketts receives the PF-27-S03 candidate at G1, audits the literal scope, exclusively registers codex-secret-broker Cargo/Bazel workspace surfaces after codex-content-security, reruns schema/probe/governance checks on the combined tree, then archives the sprint before a consumer can use the contract."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform"
 branch: "feat/p0-security-foundation-platform"
 base_commit: "1907d99aed9714f05a5f54fca1703658017d616c"
@@ -35,8 +35,9 @@ updated: 2026-08-30
 ## Code boundaries
 
 - Planned: codex-rs/secret-broker/src/platform_contract.rs; scripts/security-platform-probe; scripts/security_platform_probe.py; scripts/test_security_platform_probe.py; qa/security-levels/platform/
-- Existing integration paths are read-only until the named consumer sprint; shared manifests/lockfiles require serialized ownership.
+- G1 registration: codex-rs/secret-broker/{Cargo.toml,BUILD.bazel,src/lib.rs}; codex-rs/{Cargo.toml,Cargo.lock}; MODULE.bazel.lock. The integration owner alone changes these shared surfaces, after the completed codex-content-security registration.
 - Scope amendment (2026-08-30): the fifth independent review showed that the extensionless probe was omitted by standard Ruff and test discovery. The integration owner added only the conventional linted Python implementation and companion discovery test; the extensionless command remains a stable shim. No shared manifest, runtime route, or consumer surface is added.
+- G1 scope amendment (2026-08-30): after merging the completed PF-34-S04 registration, the integration owner reserved and registers the standalone `codex-secret-broker` crate on Cargo/Bazel surfaces. The crate exports only the frozen platform contract; no runtime consumer or protected-mode route is added.
 
 ## Preconditions
 
@@ -61,12 +62,12 @@ updated: 2026-08-30
 
 ## Verification
 
-- [x] Run affected format/fix tools before final tests; repository-standard `format.py --check` and focused Ruff discovery pass; Python self-test passes 8/8, discovered Python tests pass 6/6, and standalone Rust activation-gate tests pass 9/9.
+- [x] Run affected format/fix tools before final tests; repository-standard `format.py --check` and focused Ruff discovery pass; Python self-test passes 8/8, discovered Python tests pass 6/6, and the registered Rust activation-gate tests pass 9/9 through both nextest and Bazel.
 - [x] Run the planned probe with synthetic canaries on Linux/macOS/Windows; record target versions, expected denial, actual results and unsupported configurations. Run schema/fixture tests and wrong-identity/stale-result cases.
 - [x] Record a clean independent review of the final three-platform evidence tree and rerun governance before archive.
 - [ ] Rerun the final focused and governance checks on the integration target before archive.
 - [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
-- [x] Verify no runtime route or profile becomes available from fixture-only preparation; the new Rust module remains outside Cargo/Bazel registration and the probe only creates bounded temporary synthetic fixtures.
+- [x] Verify no runtime route or profile becomes available from fixture-only preparation; Cargo/Bazel register only the standalone contract crate, no workspace crate consumes it, and the probe creates only bounded temporary synthetic fixtures.
 
 ## Exit evidence
 

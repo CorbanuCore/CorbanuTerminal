@@ -96,10 +96,10 @@ read-only transcript is stored at
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-foundation-platform/tmux-artifacts/pf27-opus-max-review-7/pane.txt`
 with SHA-256
 `e4ed8ba00cec04510f021b227e8398536ebf68cfe947b31876df1bee91bdd5ae`.
-It recomputed all ten published hashes, independently checked both result files
+It recomputed all ten then-published hashes, independently checked both result files
 against every schema constraint, verified all review-six repairs and earlier
-fail-closed classes, and confirmed the exact declared scope creates no runtime
-Cargo/Bazel route.
+fail-closed classes, and confirmed the exact declared scope had no runtime
+consumer before the serialized G1 registration.
 
 ## Windows completion qualification
 
@@ -140,7 +140,7 @@ reported **NO FINDINGS**. Its read-only transcript is stored at
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-foundation-platform/tmux-artifacts/pf27-opus-max-review-10/pane.txt`
 with SHA-256
 `8ef76718e93b3b62003eb1285abd1990c56c24160de00035a073a2956844ab60`.
-It verified all eleven hashes, exact `jq -c` reproduction for all three results,
+It verified all eleven pre-G1 hashes, exact `jq -c` reproduction for all three results,
 six cross-target denials, every envelope/count/eligibility claim, both
 review-nine repairs, stable Windows token semantics, and the absence of a
-runtime Cargo/Bazel route.
+runtime consumer before the serialized G1 registration.

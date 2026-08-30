@@ -4169,6 +4169,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-secret-broker"
+version = "0.1.35"
+dependencies = [
+ "pretty_assertions",
+]
+
+[[package]]
 name = "codex-secrets"
 version = "0.1.35"
 dependencies = [
