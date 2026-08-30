@@ -67,13 +67,13 @@ updated: 2026-08-30
 - [x] Focused tests: 14 wallet, 9 wallet-daemon, 58 provider, 4 wallet-API snapshots, and 16 API-only wallet-menu tests pass.
 - [x] Integration tests cover provider mapping, operation-preserving daemon IPC, backend public-key conversion, and exact microdollars.
 - [x] TUI applicability is resolved and non-secret read-only checkpoints are recorded; human passcode/key lifecycle remains pending.
-- [x] Integrated interfaces in `594d618306d922963cf6676d3600cd381922759c` and `865ea2edd2` match PF-34-S01 and backend `6cc7894`.
+- [x] Integrated interfaces in `594d618306d922963cf6676d3600cd381922759c`, `865ea2edd2`, and API-only wallet commit `66ff6579d7` match PF-34-S01 and backend `6cc7894`.
 - [x] Upstream picker/provider compatibility test passes with exact model-field selection.
 - [ ] Named human passcode, top-up, one-time reveal, create/revoke, inference, and recovery acceptance pass against production.
 
 ## Exit evidence
 
-- [x] Implementation commits: `594d618306d922963cf6676d3600cd381922759c` and production catalog fix `865ea2edd2`.
+- [x] Implementation commits: `594d618306d922963cf6676d3600cd381922759c`, production catalog fix `865ea2edd2`, and legacy retirement `66ff6579d7`.
 - [x] Final focused tests pass: 4 wallet-API and 16 API-only wallet-menu tests; the prior broad 3,847-test run passed 3,817 and exposed 30 unrelated pre-existing version-drift snapshots.
 - [x] Production true-TUI log is `/tmp/corbanu-api-prod-qa-final.nuVmDv/codex-tui.log` with no panic, malformed-catalog, or unavailable-screen signature.
 - [x] API-only wallet true-TUI log is `/tmp/corbanu-no-legacy-final.Zn0gYI/codex-tui.log` with no Plan copy, Plan-status request failure, panic, malformed, or unavailable signature.

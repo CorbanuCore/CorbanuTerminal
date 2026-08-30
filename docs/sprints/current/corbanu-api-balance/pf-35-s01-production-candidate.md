@@ -67,7 +67,7 @@ updated: 2026-08-30
 - [x] Production health and database-backed startup are stable across both machines.
 - [x] Customer catalog responses expose Corbanu model and price identities without vendor metadata.
 - [x] TUI applicability is resolved by the production true-PTY run recorded in PF-34-S02.
-- [x] Integrated interfaces match Terminal backend client `cd79361d8b4f286291556a641288757d0451f52c` and read-only catalog fix `865ea2edd2`.
+- [x] Integrated interfaces match Terminal backend client `cd79361d8b4f286291556a641288757d0451f52c`, read-only catalog fix `865ea2edd2`, and API-only wallet commit `66ff6579d7`.
 - [x] Production database retirement audit and API-only `/wallet` true-PTY evidence show legacy state cannot reappear through supported product flows.
 - [ ] Human-funded inference and wallet key-lifecycle acceptance pass against production.
 
