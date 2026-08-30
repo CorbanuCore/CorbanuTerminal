@@ -1,4 +1,6 @@
 use std::fs;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use codex_config::AuthoritativeSecurityState;
 use codex_config::AuthoritativeStateOwner;
@@ -13,6 +15,9 @@ use codex_security_policy::SecurityLevel;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
+use super::authoritative_state::AuthoritativeStateAnchor;
+use super::authoritative_state::AuthoritativeStateAnchorError;
+use super::authoritative_state::AuthoritativeStateAnchorStore;
 use super::authoritative_state::AuthoritativeStateLoad;
 use super::authoritative_state::AuthoritativeStateStore;
 use super::authoritative_state::AuthoritativeStateStoreError;
@@ -108,8 +113,34 @@ const fn generations(grant: u64, revocation: u64, kill_switch: u64) -> Authority
 fn store() -> (TempDir, AuthoritativeStateStore) {
     let root = tempfile::tempdir().expect("protected state root");
     set_private_directory(root.path());
-    let store = AuthoritativeStateStore::new(root.path());
+    let store = AuthoritativeStateStore::new(root.path(), Arc::new(MemoryAnchor::default()));
     (root, store)
+}
+
+#[derive(Debug, Default)]
+struct MemoryAnchor {
+    value: Mutex<Option<AuthoritativeStateAnchor>>,
+}
+
+impl AuthoritativeStateAnchorStore for MemoryAnchor {
+    fn load_anchor(
+        &self,
+    ) -> Result<Option<AuthoritativeStateAnchor>, AuthoritativeStateAnchorError> {
+        Ok(self.value.lock().unwrap().clone())
+    }
+
+    fn compare_and_store_anchor(
+        &self,
+        expected: Option<&AuthoritativeStateAnchor>,
+        next: &AuthoritativeStateAnchor,
+    ) -> Result<(), AuthoritativeStateAnchorError> {
+        let mut value = self.value.lock().unwrap();
+        if value.as_ref() != expected {
+            return Err(AuthoritativeStateAnchorError::Conflict);
+        }
+        *value = Some(next.clone());
+        Ok(())
+    }
 }
 
 #[cfg(unix)]
@@ -200,7 +231,7 @@ fn compare_and_activate_rejects_stale_revision_and_wrong_owner() {
 }
 
 #[test]
-fn state_only_crash_resumes_only_the_identical_successor() {
+fn unanchored_pending_state_is_discarded_only_by_the_authorized_owner() {
     let (root, store) = store();
     let initial = state(
         1,
@@ -210,9 +241,9 @@ fn state_only_crash_resumes_only_the_identical_successor() {
         generations(0, 0, 0),
         false,
     );
-    let authorization = authorization("credential-owner-a", 1);
+    let owner_authorization = authorization("credential-owner-a", 1);
     store
-        .compare_and_activate(0, &initial, &authorization)
+        .compare_and_activate(0, &initial, &owner_authorization)
         .unwrap();
     let next = state(
         2,
@@ -229,17 +260,24 @@ fn state_only_crash_resumes_only_the_identical_successor() {
 
     assert!(matches!(
         store.load(),
-        Err(AuthoritativeStateStoreError::InterruptedWrite { revision: 2 })
+        Err(AuthoritativeStateStoreError::UnanchoredRecords { revision: 2 })
     ));
     let mut different = next.clone();
     different.grant_generation = 2;
     assert!(matches!(
-        store.compare_and_activate(1, &different, &authorization),
-        Err(AuthoritativeStateStoreError::InterruptedStateMismatch { revision: 2 })
+        store.compare_and_activate(1, &different, &owner_authorization),
+        Err(AuthoritativeStateStoreError::UnanchoredRecords { revision: 2 })
     ));
+    assert!(matches!(
+        store.discard_unanchored_suffix(2, &authorization("other-owner", 1)),
+        Err(AuthoritativeStateStoreError::UnauthorizedOwner)
+    ));
+    store
+        .discard_unanchored_suffix(2, &owner_authorization)
+        .unwrap();
     assert_eq!(
         store
-            .compare_and_activate(1, &next, &authorization)
+            .compare_and_activate(1, &next, &owner_authorization)
             .unwrap(),
         next
     );
@@ -311,6 +349,99 @@ fn overwrite_delete_and_rename_do_not_fall_back_to_permissive() {
     assert!(!matches!(
         store.load(),
         Ok(AuthoritativeStateLoad::LegacyFirstInstall)
+    ));
+}
+
+#[test]
+fn deleting_all_records_does_not_recreate_a_legacy_first_install() {
+    let (root, store) = store();
+    let initial = state(
+        1,
+        "credential-owner-a",
+        1,
+        SecurityLevel::Aggressive,
+        generations(1, 1, 1),
+        true,
+    );
+    store
+        .compare_and_activate(0, &initial, &authorization("credential-owner-a", 1))
+        .unwrap();
+    for entry in fs::read_dir(root.path()).unwrap() {
+        fs::remove_file(entry.unwrap().path()).unwrap();
+    }
+    assert!(matches!(
+        store.load(),
+        Err(AuthoritativeStateStoreError::InterruptedWrite { revision: 1 })
+    ));
+    assert!(!matches!(
+        store.load(),
+        Ok(AuthoritativeStateLoad::LegacyFirstInstall)
+    ));
+}
+
+#[test]
+fn suffix_truncation_is_rejected_against_the_external_high_water_mark() {
+    let (root, store) = store();
+    let authorization = authorization("credential-owner-a", 1);
+    for revision in 1..=4 {
+        let next = state(
+            revision,
+            "credential-owner-a",
+            1,
+            if revision >= 3 {
+                SecurityLevel::Aggressive
+            } else {
+                SecurityLevel::Moderate
+            },
+            generations(revision, revision, revision),
+            revision >= 3,
+        );
+        store
+            .compare_and_activate(revision - 1, &next, &authorization)
+            .unwrap();
+    }
+    for revision in 3..=4 {
+        for prefix in ["state", "intent", "commit"] {
+            fs::remove_file(root.path().join(format!("{prefix}-{revision:020}.json"))).unwrap();
+        }
+    }
+    assert!(matches!(
+        store.load(),
+        Err(AuthoritativeStateStoreError::AnchorAheadOfRecords {
+            anchor_revision: 4,
+            record_revision: 2
+        })
+    ));
+}
+
+#[test]
+fn clearing_kill_switch_requires_a_new_generation() {
+    let (_root, store) = store();
+    let authorization = authorization("credential-owner-a", 1);
+    let active = state(
+        1,
+        "credential-owner-a",
+        1,
+        SecurityLevel::Aggressive,
+        generations(1, 1, 1),
+        true,
+    );
+    store
+        .compare_and_activate(0, &active, &authorization)
+        .unwrap();
+    let invalid = state(
+        2,
+        "credential-owner-a",
+        1,
+        SecurityLevel::Aggressive,
+        generations(1, 1, 1),
+        false,
+    );
+    assert!(matches!(
+        store.compare_and_activate(1, &invalid, &authorization),
+        Err(AuthoritativeStateStoreError::Validation(
+            codex_config::AuthoritativeStateValidationError::KillSwitchClearedWithoutGeneration
+        ))
     ));
 }
 

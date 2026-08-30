@@ -1,3 +1,12 @@
+//! Controller-owned authoritative-state contract.
+//!
+//! Unix uid/mode checks are defense-in-depth, not a same-uid containment
+//! boundary. Activation additionally requires PF-27's independently validated
+//! process, filesystem, config, and protected-store capabilities plus an
+//! external durable anchor. Non-Unix persistence is an explicit activation
+//! blocker until equivalent ACL, no-follow, and directory-durability checks are
+//! implemented and qualified.
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::fs::File;
@@ -6,6 +15,7 @@ use std::io;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
@@ -28,13 +38,48 @@ const RECORD_SUFFIX: &str = ".json";
 
 /// Opaque permission to mutate one authoritative ownership epoch.
 ///
-/// Construction consumes the PF-27 platform witness returned for the exact
-/// expected target and probe identities. Callers cannot replace that witness
-/// with a model-supplied role or a value from ordinary configuration.
+/// Construction consumes the PF-27 platform witness returned for target and
+/// probe identities that the platform-identity provider must derive
+/// independently of the report and ordinary/model-editable configuration.
 #[derive(Debug)]
 pub(crate) struct TrustedControllerAuthorization {
     _platform_authorization: ProtectedModeAuthorization,
     owner: AuthoritativeStateOwner,
+}
+
+/// High-water mark held by a PF-27 protected-store provider outside the
+/// append-only record directory.
+///
+/// The external anchor makes an empty or truncated record directory distinct
+/// from a genuine first install. PF-20 deliberately defines this contract
+/// without selecting an OS mechanism; protected activation remains unavailable
+/// until PF-27 can supply an implementation with its protected-store capability.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AuthoritativeStateAnchor {
+    revision: u64,
+    owner: AuthoritativeStateOwner,
+    state_sha256: String,
+    commit_sha256: String,
+}
+
+pub(crate) trait AuthoritativeStateAnchorStore: std::fmt::Debug + Send + Sync {
+    fn load_anchor(
+        &self,
+    ) -> Result<Option<AuthoritativeStateAnchor>, AuthoritativeStateAnchorError>;
+
+    fn compare_and_store_anchor(
+        &self,
+        expected: Option<&AuthoritativeStateAnchor>,
+        next: &AuthoritativeStateAnchor,
+    ) -> Result<(), AuthoritativeStateAnchorError>;
+}
+
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub(crate) enum AuthoritativeStateAnchorError {
+    #[error("protected authoritative-state anchor is unavailable")]
+    Unavailable,
+    #[error("protected authoritative-state anchor changed concurrently")]
+    Conflict,
 }
 
 impl TrustedControllerAuthorization {
@@ -79,11 +124,18 @@ pub(crate) enum AuthoritativeStateLoad {
 #[derive(Clone, Debug)]
 pub(crate) struct AuthoritativeStateStore {
     root: PathBuf,
+    anchor_store: Arc<dyn AuthoritativeStateAnchorStore>,
 }
 
 impl AuthoritativeStateStore {
-    pub(crate) fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+    pub(crate) fn new(
+        root: impl Into<PathBuf>,
+        anchor_store: Arc<dyn AuthoritativeStateAnchorStore>,
+    ) -> Self {
+        Self {
+            root: root.into(),
+            anchor_store,
+        }
     }
 
     pub(crate) fn load(&self) -> Result<AuthoritativeStateLoad, AuthoritativeStateStoreError> {
@@ -92,6 +144,9 @@ impl AuthoritativeStateStore {
             StoreInspection::Active { head, .. } => Ok(AuthoritativeStateLoad::Active(head)),
             StoreInspection::Interrupted { revision, .. } => {
                 Err(AuthoritativeStateStoreError::InterruptedWrite { revision })
+            }
+            StoreInspection::Unanchored { revision, .. } => {
+                Err(AuthoritativeStateStoreError::UnanchoredRecords { revision })
             }
         }
     }
@@ -109,7 +164,7 @@ impl AuthoritativeStateStore {
         }
 
         let inspection = self.inspect()?;
-        let previous_commit_sha256 = match &inspection {
+        let (previous_commit_sha256, expected_anchor, advanced_anchor) = match &inspection {
             StoreInspection::LegacyFirstInstall => {
                 if expected_revision != 0 || next.revision != 1 {
                     return Err(AuthoritativeStateStoreError::RevisionConflict {
@@ -117,11 +172,12 @@ impl AuthoritativeStateStore {
                         actual: 0,
                     });
                 }
-                None
+                (None, None, None)
             }
             StoreInspection::Active {
                 head,
                 head_commit_sha256,
+                anchor,
             } => {
                 if expected_revision != head.revision {
                     return Err(AuthoritativeStateStoreError::RevisionConflict {
@@ -130,13 +186,14 @@ impl AuthoritativeStateStore {
                     });
                 }
                 next.validate_successor(head)?;
-                Some(head_commit_sha256.clone())
+                (Some(head_commit_sha256.clone()), Some(anchor.clone()), None)
             }
             StoreInspection::Interrupted {
                 head,
                 head_commit_sha256,
                 pending,
                 revision,
+                anchor,
             } => {
                 let actual = head.as_ref().map_or(0, |state| state.revision);
                 if expected_revision != actual || next.revision != *revision {
@@ -157,15 +214,39 @@ impl AuthoritativeStateStore {
                         revision: *revision,
                     });
                 }
-                head_commit_sha256.clone()
+                (head_commit_sha256.clone(), None, Some(anchor.clone()))
+            }
+            StoreInspection::Unanchored { revision, .. } => {
+                return Err(AuthoritativeStateStoreError::UnanchoredRecords {
+                    revision: *revision,
+                });
             }
         };
 
         let state_bytes = serialize(next)?;
         let state_sha256 = sha256(&state_bytes);
-        let commit =
-            AuthoritativeStateCommit::new(next.revision, state_sha256, previous_commit_sha256)?;
+        let commit = AuthoritativeStateCommit::new(
+            next.revision,
+            state_sha256.clone(),
+            previous_commit_sha256,
+        )?;
         let commit_bytes = serialize(&commit)?;
+        let next_anchor = AuthoritativeStateAnchor {
+            revision: next.revision,
+            owner: next.owner.clone(),
+            state_sha256,
+            commit_sha256: sha256(&commit_bytes),
+        };
+        if let Some(anchor) = advanced_anchor {
+            if anchor != next_anchor {
+                return Err(AuthoritativeStateStoreError::InterruptedStateMismatch {
+                    revision: next.revision,
+                });
+            }
+        } else {
+            self.anchor_store
+                .compare_and_store_anchor(expected_anchor.as_ref(), &next_anchor)?;
+        }
 
         write_once_or_verify(&self.root, &state_name(next.revision), &state_bytes)?;
         write_once_or_verify(&self.root, &intent_name(next.revision), &commit_bytes)?;
@@ -181,6 +262,63 @@ impl AuthoritativeStateStore {
                 Err(AuthoritativeStateStoreError::CommitDidNotActivate)
             }
         }
+    }
+
+    /// Removes a single unanchored next revision after re-validating the
+    /// controller epoch. Anchored history is never removed by this operation.
+    pub(crate) fn discard_unanchored_suffix(
+        &self,
+        revision: u64,
+        authorization: &TrustedControllerAuthorization,
+    ) -> Result<(), AuthoritativeStateStoreError> {
+        let StoreInspection::Unanchored {
+            head,
+            revision: found,
+            ..
+        } = self.inspect()?
+        else {
+            return Err(AuthoritativeStateStoreError::NoUnanchoredPending);
+        };
+        if found != revision || revision != head.revision.saturating_add(1) {
+            return Err(AuthoritativeStateStoreError::UnanchoredRecords { revision: found });
+        }
+        if !authorization.authorizes(&head) {
+            return Err(AuthoritativeStateStoreError::UnauthorizedOwner);
+        }
+        let records = scan_records(&self.root)?;
+        let highest = records
+            .states
+            .keys()
+            .chain(records.intents.keys())
+            .chain(records.commits.keys())
+            .copied()
+            .max()
+            .unwrap_or(revision);
+        for discard_revision in revision..=highest {
+            for name in [
+                state_name(discard_revision),
+                intent_name(discard_revision),
+                commit_name(discard_revision),
+            ] {
+                let path = self.root.join(name);
+                match fs::symlink_metadata(&path) {
+                    Ok(metadata) => {
+                        if metadata.file_type().is_symlink() {
+                            return Err(AuthoritativeStateStoreError::SymlinkRejected { path });
+                        }
+                        validate_private_metadata(&path, &metadata, false)?;
+                        fs::remove_file(&path).map_err(|source| {
+                            io_error("discard unanchored record", &path, source)
+                        })?;
+                    }
+                    Err(source) if source.kind() == io::ErrorKind::NotFound => {}
+                    Err(source) => {
+                        return Err(io_error("inspect unanchored record", &path, source));
+                    }
+                }
+            }
+        }
+        sync_directory(&self.root)
     }
 
     pub(crate) fn recover_from_revision(
@@ -229,10 +367,172 @@ impl AuthoritativeStateStore {
     }
 
     fn inspect(&self) -> Result<StoreInspection, AuthoritativeStateStoreError> {
+        let anchor = self.anchor_store.load_anchor()?;
+        let records = self.inspect_records()?;
+        match (anchor, records) {
+            (None, RecordInspection::Empty) => Ok(StoreInspection::LegacyFirstInstall),
+            (Some(anchor), RecordInspection::Empty) if anchor.revision == 1 => {
+                Ok(StoreInspection::Interrupted {
+                    head: None,
+                    head_commit_sha256: None,
+                    pending: None,
+                    revision: 1,
+                    anchor,
+                })
+            }
+            (Some(anchor), RecordInspection::Empty) => {
+                Err(AuthoritativeStateStoreError::AnchorAheadOfRecords {
+                    anchor_revision: anchor.revision,
+                    record_revision: 0,
+                })
+            }
+            (
+                Some(anchor),
+                RecordInspection::Active {
+                    head,
+                    head_state_sha256,
+                    head_commit_sha256,
+                },
+            ) if anchor.revision == head.revision => {
+                if anchor.owner != head.owner
+                    || anchor.state_sha256 != head_state_sha256
+                    || anchor.commit_sha256 != head_commit_sha256
+                {
+                    return Err(AuthoritativeStateStoreError::AnchorMismatch {
+                        revision: anchor.revision,
+                    });
+                }
+                Ok(StoreInspection::Active {
+                    head,
+                    head_commit_sha256,
+                    anchor,
+                })
+            }
+            (
+                Some(anchor),
+                RecordInspection::Active {
+                    head,
+                    head_commit_sha256,
+                    ..
+                },
+            ) if anchor.revision == head.revision.saturating_add(1) => {
+                let revision = anchor.revision;
+                Ok(StoreInspection::Interrupted {
+                    head: Some(head),
+                    head_commit_sha256: Some(head_commit_sha256),
+                    pending: None,
+                    revision,
+                    anchor,
+                })
+            }
+            (Some(anchor), RecordInspection::Active { head, .. })
+                if anchor.revision < head.revision =>
+            {
+                let anchored_head = self.read_committed_state(anchor.revision)?;
+                let anchored_commit_bytes =
+                    read_private_file(&self.root.join(commit_name(anchor.revision)))?;
+                let anchored_commit: AuthoritativeStateCommit =
+                    deserialize(&anchored_commit_bytes)?;
+                let anchored_commit_sha256 = sha256(&anchored_commit_bytes);
+                if anchor.owner != anchored_head.owner
+                    || anchor.state_sha256 != anchored_commit.state_sha256
+                    || anchor.commit_sha256 != anchored_commit_sha256
+                {
+                    return Err(AuthoritativeStateStoreError::AnchorMismatch {
+                        revision: anchor.revision,
+                    });
+                }
+                let revision = anchor.revision.saturating_add(1);
+                Ok(StoreInspection::Unanchored {
+                    head: anchored_head,
+                    head_commit_sha256: anchored_commit_sha256,
+                    revision,
+                })
+            }
+            (Some(anchor), RecordInspection::Active { head, .. }) => {
+                Err(AuthoritativeStateStoreError::AnchorAheadOfRecords {
+                    anchor_revision: anchor.revision,
+                    record_revision: head.revision,
+                })
+            }
+            (
+                None,
+                RecordInspection::Active {
+                    head,
+                    head_commit_sha256,
+                    ..
+                },
+            ) => {
+                let revision = head.revision;
+                Ok(StoreInspection::Unanchored {
+                    head,
+                    head_commit_sha256,
+                    revision,
+                })
+            }
+            (
+                anchor,
+                RecordInspection::Interrupted {
+                    head,
+                    head_commit_sha256,
+                    pending,
+                    pending_state_sha256,
+                    pending_commit_sha256,
+                    revision,
+                },
+            ) => {
+                let head_revision = head.as_ref().map_or(0, |state| state.revision);
+                let Some(anchor) = anchor else {
+                    let Some(head) = head else {
+                        return Err(AuthoritativeStateStoreError::UnanchoredRecords { revision });
+                    };
+                    return Ok(StoreInspection::Unanchored {
+                        head,
+                        head_commit_sha256: head_commit_sha256
+                            .ok_or(AuthoritativeStateStoreError::MissingProtectedState)?,
+                        revision,
+                    });
+                };
+                if anchor.revision == head_revision {
+                    let Some(head) = head else {
+                        return Err(AuthoritativeStateStoreError::UnanchoredRecords { revision });
+                    };
+                    return Ok(StoreInspection::Unanchored {
+                        head,
+                        head_commit_sha256: head_commit_sha256
+                            .ok_or(AuthoritativeStateStoreError::MissingProtectedState)?,
+                        revision,
+                    });
+                }
+                if anchor.revision != revision || revision != head_revision.saturating_add(1) {
+                    return Err(AuthoritativeStateStoreError::AnchorAheadOfRecords {
+                        anchor_revision: anchor.revision,
+                        record_revision: head_revision,
+                    });
+                }
+                if let Some(pending) = &pending
+                    && (anchor.owner != pending.owner
+                        || pending_state_sha256.as_deref() != Some(anchor.state_sha256.as_str())
+                        || pending_commit_sha256.as_deref() != Some(anchor.commit_sha256.as_str()))
+                {
+                    return Err(AuthoritativeStateStoreError::AnchorMismatch { revision });
+                }
+                Ok(StoreInspection::Interrupted {
+                    head,
+                    head_commit_sha256,
+                    pending,
+                    revision,
+                    anchor,
+                })
+            }
+        }
+    }
+
+    fn inspect_records(&self) -> Result<RecordInspection, AuthoritativeStateStoreError> {
         validate_store_root(&self.root)?;
         let records = scan_records(&self.root)?;
         if records.states.is_empty() && records.intents.is_empty() && records.commits.is_empty() {
-            return Ok(StoreInspection::LegacyFirstInstall);
+            return Ok(RecordInspection::Empty);
         }
 
         let highest = records
@@ -250,6 +550,7 @@ impl AuthoritativeStateStore {
 
         let mut head = None;
         let mut previous_commit_sha256 = None;
+        let mut head_state_sha256 = None;
         for revision in 1..=committed_highest {
             if !records.states.contains_key(&revision)
                 || !records.intents.contains_key(&revision)
@@ -274,6 +575,7 @@ impl AuthoritativeStateStore {
                 state.validate_successor(previous)?;
             }
             previous_commit_sha256 = Some(sha256(&commit_bytes));
+            head_state_sha256 = Some(commit.state_sha256);
             head = Some(state);
         }
 
@@ -281,8 +583,10 @@ impl AuthoritativeStateStore {
             let Some(head) = head else {
                 return Err(AuthoritativeStateStoreError::MissingProtectedState);
             };
-            return Ok(StoreInspection::Active {
+            return Ok(RecordInspection::Active {
                 head,
+                head_state_sha256: head_state_sha256
+                    .ok_or(AuthoritativeStateStoreError::MissingProtectedState)?,
                 head_commit_sha256: previous_commit_sha256
                     .ok_or(AuthoritativeStateStoreError::MissingProtectedState)?,
             });
@@ -317,10 +621,19 @@ impl AuthoritativeStateStore {
                 return Err(AuthoritativeStateStoreError::InvalidIntent { revision });
             }
         }
-        Ok(StoreInspection::Interrupted {
+        let pending_state_sha256 = sha256(&pending_bytes);
+        let pending_commit = AuthoritativeStateCommit::new(
+            revision,
+            pending_state_sha256.clone(),
+            previous_commit_sha256.clone(),
+        )?;
+        let pending_commit_sha256 = sha256(&serialize(&pending_commit)?);
+        Ok(RecordInspection::Interrupted {
             head,
             head_commit_sha256: previous_commit_sha256,
             pending: Some(pending),
+            pending_state_sha256: Some(pending_state_sha256),
+            pending_commit_sha256: Some(pending_commit_sha256),
             revision,
         })
     }
@@ -332,11 +645,36 @@ enum StoreInspection {
     Active {
         head: AuthoritativeSecurityState,
         head_commit_sha256: String,
+        anchor: AuthoritativeStateAnchor,
     },
     Interrupted {
         head: Option<AuthoritativeSecurityState>,
         head_commit_sha256: Option<String>,
         pending: Option<AuthoritativeSecurityState>,
+        revision: u64,
+        anchor: AuthoritativeStateAnchor,
+    },
+    Unanchored {
+        head: AuthoritativeSecurityState,
+        head_commit_sha256: String,
+        revision: u64,
+    },
+}
+
+#[derive(Debug)]
+enum RecordInspection {
+    Empty,
+    Active {
+        head: AuthoritativeSecurityState,
+        head_state_sha256: String,
+        head_commit_sha256: String,
+    },
+    Interrupted {
+        head: Option<AuthoritativeSecurityState>,
+        head_commit_sha256: Option<String>,
+        pending: Option<AuthoritativeSecurityState>,
+        pending_state_sha256: Option<String>,
+        pending_commit_sha256: Option<String>,
         revision: u64,
     },
 }
@@ -415,6 +753,7 @@ fn sha256(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
+#[cfg(unix)]
 fn validate_store_root(root: &Path) -> Result<(), AuthoritativeStateStoreError> {
     let metadata = fs::symlink_metadata(root)
         .map_err(|source| io_error("inspect protected-state root", root, source))?;
@@ -424,6 +763,11 @@ fn validate_store_root(root: &Path) -> Result<(), AuthoritativeStateStoreError> 
         });
     }
     validate_private_metadata(root, &metadata, /*directory*/ true)
+}
+
+#[cfg(not(unix))]
+fn validate_store_root(_root: &Path) -> Result<(), AuthoritativeStateStoreError> {
+    Err(AuthoritativeStateStoreError::UnsupportedPlatform)
 }
 
 fn read_private_file(path: &Path) -> Result<Vec<u8>, AuthoritativeStateStoreError> {
@@ -444,12 +788,16 @@ fn write_once_or_verify(
     contents: &[u8],
 ) -> Result<(), AuthoritativeStateStoreError> {
     let destination = root.join(name);
-    if destination.exists() {
-        let existing = read_private_file(&destination)?;
-        if existing == contents {
-            return Ok(());
+    match fs::symlink_metadata(&destination) {
+        Ok(_) => return verify_existing_record(&destination, contents),
+        Err(source) if source.kind() == io::ErrorKind::NotFound => {}
+        Err(source) => {
+            return Err(io_error(
+                "inspect immutable protected-state destination",
+                &destination,
+                source,
+            ));
         }
-        return Err(AuthoritativeStateStoreError::ExistingRecordMismatch { path: destination });
     }
 
     let nanos = SystemTime::now()
@@ -472,7 +820,7 @@ fn write_once_or_verify(
         Ok(()) => {}
         Err(source) if source.kind() == io::ErrorKind::AlreadyExists => {
             let _ = fs::remove_file(&temporary);
-            return write_once_or_verify(root, name, contents);
+            return verify_existing_record(&destination, contents);
         }
         Err(source) => {
             let _ = fs::remove_file(&temporary);
@@ -489,6 +837,20 @@ fn write_once_or_verify(
     }
     sync_directory(root)?;
     Ok(())
+}
+
+fn verify_existing_record(
+    destination: &Path,
+    contents: &[u8],
+) -> Result<(), AuthoritativeStateStoreError> {
+    let existing = read_private_file(destination)?;
+    if existing == contents {
+        Ok(())
+    } else {
+        Err(AuthoritativeStateStoreError::ExistingRecordMismatch {
+            path: destination.to_path_buf(),
+        })
+    }
 }
 
 #[cfg(unix)]
@@ -583,6 +945,10 @@ pub(crate) enum AuthoritativeStateStoreError {
     PlatformAuthorization(ResultRejection),
     #[error(transparent)]
     Validation(#[from] AuthoritativeStateValidationError),
+    #[error(transparent)]
+    Anchor(#[from] AuthoritativeStateAnchorError),
+    #[error("protected authoritative-state persistence is unsupported on this platform")]
+    UnsupportedPlatform,
     #[error("authoritative state is not owned by the authorized controller epoch")]
     UnauthorizedOwner,
     #[error("expected authoritative revision {expected}, but current revision is {actual}")]
@@ -593,6 +959,19 @@ pub(crate) enum AuthoritativeStateStoreError {
     InterruptedWrite { revision: u64 },
     #[error("interrupted revision {revision} does not match the proposed state")]
     InterruptedStateMismatch { revision: u64 },
+    #[error("unanchored protected-state records begin at revision {revision}")]
+    UnanchoredRecords { revision: u64 },
+    #[error("there is no unanchored pending revision to discard")]
+    NoUnanchoredPending,
+    #[error(
+        "protected anchor revision {anchor_revision} is ahead of record revision {record_revision}"
+    )]
+    AnchorAheadOfRecords {
+        anchor_revision: u64,
+        record_revision: u64,
+    },
+    #[error("protected anchor does not match authoritative record {revision}")]
+    AnchorMismatch { revision: u64 },
     #[error("protected-state records are not sequential")]
     NonSequentialRecords,
     #[error("protected-state record {revision} is missing")]

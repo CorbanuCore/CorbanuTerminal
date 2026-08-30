@@ -163,6 +163,12 @@ impl AuthoritativeSecurityState {
         {
             return Err(AuthoritativeStateValidationError::AuthorityGenerationRollback);
         }
+        if previous.kill_switch_active
+            && !self.kill_switch_active
+            && self.kill_switch_generation == previous.kill_switch_generation
+        {
+            return Err(AuthoritativeStateValidationError::KillSwitchClearedWithoutGeneration);
+        }
         Ok(())
     }
 
@@ -303,6 +309,8 @@ pub enum AuthoritativeStateValidationError {
     OwnerGenerationSkipped,
     #[error("grant, revocation, and kill-switch generations cannot roll back")]
     AuthorityGenerationRollback,
+    #[error("clearing an active kill switch requires a new kill-switch generation")]
+    KillSwitchClearedWithoutGeneration,
     #[error("recovery snapshot belongs to another owner generation")]
     RecoveryOwnerMismatch,
     #[error("state or commit digest must be a lower-hex SHA-256 value")]
