@@ -208,8 +208,8 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | PostgreSQL integration | Isolated PostgreSQL 16 plus `tests/postgres-store.test.ts` | 13 passed, 0 failed | disposable container removed after run |
 | Backend build/typecheck | `corepack pnpm typecheck && corepack pnpm build` | passed | `6aa81161ece53b26915f05c3346a9ebe11b094fd` |
 | Customer response boundary | `corepack pnpm test && corepack pnpm typecheck && corepack pnpm build` plus live GLM 5.3 Flash probe | 104 passed; live 200 with Corbanu model identity and no vendor/cost metadata | `778b4b33445aa452dce09ab416e520e6b4aaeab1` |
-| Public Rust crates | `just test -p <affected-crate>` after `just fmt` | pending | pending |
-| Snapshot | `just test -p codex-tui` and reviewed `insta` changes | pending | pending |
+| Public Rust crates | `just test -p codex-wallet`; `just test -p codex-wallet-daemon`; `just test -p codex-model-provider-info` after `just fmt` | 14, 9, and 58 passed | `594d618306d922963cf6676d3600cd381922759c` |
+| Snapshot | focused `codex-tui` wallet API and wallet-menu suites with reviewed `insta` changes | 3 wallet-API and 23 wallet-menu tests passed | `594d618306d922963cf6676d3600cd381922759c` |
 | Payment/adversarial | Duplicate settlement, concurrent reserve, key leakage, fail-closed route matrix | pending | pending |
 
 ## True-TUI evidence
@@ -217,7 +217,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | Flow | Candidate binary | Test repo/worktree | Keys/actions | Visible checkpoints | Result | Artifact |
 | --- | --- | --- | --- | --- | --- | --- |
 | Primary | pending | TensorCash | `/wallet`, Corbanu API, amount, unlock, confirm | Balance and one-time secure key | pending | pending |
-| Failure/cancel | pending | Isometric Game | Cancel and failed top-up | No state change | pending | pending |
+| Failure/cancel | `target/debug/codex` at `594d618306d922963cf6676d3600cd381922759c` | Corbanu Terminal checkout; live-repository repetition pending | `/wallet`, Corbanu API, `1.25`, cancel; disposable wallet-bound backend | Exact $1.25 confirmation, one-time/no-tier copy, 1 USDC available, pay disabled, cancel returned without signing | passed for local candidate | `/tmp/corbanu-api-ui-qa-20260830/codex-tui.log`; no panic signature |
 | Recovery/resume | pending | both | Restart, restore, create/revoke key | Balance persists; old plaintext absent | pending | pending |
 
 ## Live-repository applicability

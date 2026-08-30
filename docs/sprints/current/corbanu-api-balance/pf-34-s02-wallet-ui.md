@@ -46,27 +46,29 @@ updated: 2026-08-30
 ## Done
 
 - [x] Sprint record created and linked to PF-34.
+- [x] Replaced visible new tier-sale actions with the Corbanu API entry and account surface.
+- [x] Added arbitrary amount entry, exact confirmation, operation-bound unlock continuation, and result handling.
+- [x] Added balance, versioned at-cost prices, key summaries, and secure one-time secret reveal.
+- [x] Added create/revoke actions and provider-neutral Corbanu API model selection.
+- [x] Added funded, unfunded, amount-boundary, key-wire, legacy-sale, and provider-selection regressions.
+- [x] Built the real Terminal and exercised `/wallet` -> `Corbanu API`, wallet-daemon startup, unlock prompt, top-up entry, exact confirmation, insufficient-funds disablement, and cancel against the wallet-bound disposable backend.
 
 ## Remaining
 
-- [ ] Replace visible new tier-sale actions with the Corbanu API entry and account surface.
-- [ ] Add amount entry, exact confirmation, unlock continuation, and result handling.
-- [ ] Show balance, versioned at-cost prices, key summaries, and secure one-time secrets.
-- [ ] Add create/revoke actions and Corbanu API provider/model selection.
-- [ ] Add snapshot and adjacent state regressions.
-- [ ] Pass the primary, cancel/failure, and recovery true-TUI flows with actual keys.
+- [ ] Named human tester enters the wallet passcode and completes create/revoke plus one-time reveal against the disposable backend.
+- [ ] Repeat the primary and recovery flows against the deployed backend in PF-35 after Fly authentication is restored.
 
 ## Verification
 
-- [ ] Focused test: `just test -p codex-model-provider-info -p codex-tui`
-- [ ] Integration test: provider request-wire and wallet-daemon interaction tests.
-- [ ] TUI applicability resolved; actual keys, checkpoints, and artifact recorded.
-- [ ] Integrated interfaces and candidate commit match PF-34-S01 and backend evidence.
-- [ ] Upstream picker/provider compatibility tests pass.
+- [x] Focused tests: 14 wallet, 9 wallet-daemon, 58 provider, 3 wallet-API snapshots, and 23 wallet-menu tests pass.
+- [x] Integration tests cover provider mapping, operation-preserving daemon IPC, backend public-key conversion, and exact microdollars.
+- [ ] TUI applicability is resolved and non-secret checkpoints are recorded; human passcode/key lifecycle remains pending.
+- [x] Integrated interfaces in `594d618306d922963cf6676d3600cd381922759c` match PF-34-S01 and backend `cd79361d8b4f286291556a641288757d0451f52c`.
+- [x] Upstream picker/provider compatibility test passes with exact model-field selection.
 
 ## Exit evidence
 
-- [ ] Implementation commit recorded.
-- [ ] Final-tree test output linked.
-- [ ] `Done` and `Remaining` ledgers reflect reality.
+- [x] Implementation commit: `594d618306d922963cf6676d3600cd381922759c`.
+- [x] Final-tree focused tests and `just fix` pass; true-TUI log is `/tmp/corbanu-api-ui-qa-20260830/codex-tui.log` with no panic signature.
+- [x] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/corbanu-api-balance/`.
