@@ -83,12 +83,12 @@ passing candidate evidence; no source citation alone closes an acceptance item.
   launch and deterministic ingress/disclosure policy. Unsupported adapters or
   isolation fail visibly; they never fall back to raw credentials.
 - **All source requirements have owners.** Earlier 68/73-record snapshots are
-  historical. Sprint 13 integration preserves 14 completed archives and leaves
-  **62 current units**. All 72
+  historical. Sprint 13 integration preserves 15 completed archives and leaves
+  **61 current units**. All 72
   cancelled firewall records and seven unrelated Autoreview drafts are unchanged.
 - **No evidence is retroactively accepted.** Upstream's PF-15–22 and PF-13-S01
   completions remain accepted for their original scope. The stronger review
-  requirements have separate follow-ups; PF-13-S05 remains in progress and
+  requirements have separate follow-ups; PF-13-S05 is completed and archived and
   PF-13-S07 owns final composed credential qualification.
 - The existing October 8 deadline is unchanged, but this larger program has not
   been effort-estimated or scheduled. The owner must assess capacity and surface
@@ -192,9 +192,9 @@ Neither updating allocation nor merging upstream rewrites that oracle.
 
 The published `feat/pf-13-s02-scoped-vault-resolver` branch through
 `c25e2825a2fe3fe63c8e1d58cc1e3aa82b0d1d04` is integrated into this plan.
-PF-13-S02–S04 and the early PF-26-S01 harness are completed and archived;
-PF-13-S05 remains in progress with its recorded 19 Core failures and Windows
-qualification still open. PF-13-S07 now owns final composed qualification after
+PF-13-S02–S05 and the early PF-26-S01 harness are completed and archived;
+PF-13-S05 closed after clean integrated Core, Windows component, and independent
+review evidence. PF-13-S07 now owns final composed qualification after
 PF-13-S06 and downstream isolation/output/migration/connection controls.
 
 The branch's earlier PF-27 shared-contract work remains completed as PF-27-S01.
@@ -205,7 +205,7 @@ artifacts remain integrated inputs, not duplicate completed dependencies.
 Canonical record links: [PF-13-S02](../../sprints/archive/p0-security-levels/pf-13-s02-scoped-vault-resolver.md),
 [PF-13-S03](../../sprints/archive/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md),
 [PF-13-S04](../../sprints/archive/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md),
-[PF-13-S05](../../sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md),
+[PF-13-S05](../../sprints/archive/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md),
 [PF-13-S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md),
 [PF-26-S01](../../sprints/archive/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md),
 [PF-26-S04](../../sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md),
@@ -393,13 +393,13 @@ coordinates are not permission for concurrent workers in the same checkout.
 
 ## Sprint execution map
 
-This map covers **62 current and 14 completed archived sprints**.
+This map covers **61 current and 15 completed archived sprints**.
 The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
 is dependency-correct; feature IDs are not execution order. Archive orders 1–9
 stay unchanged and current orders start at 10. Existing allocation coordinates
 follow upstream; the five preparation/foundation drafts and five new follow-ups
-remain `UNALLOCATED` until assigned. Only PF-13-S05 is `in_progress`; all other
-current records are `draft`, with completed prerequisites and checked allocation
+remain `UNALLOCATED` until assigned. All current records are `draft`, with
+completed prerequisites and checked allocation
 required before execution. Archived links document original scope, not new passes.
 
 | Feature ID | Plan feature | Sprint records (completed links are archived) | State |
@@ -412,7 +412,7 @@ required before execution. Archived links document original scope, not new passe
 | `PF-20` | Versioned security persistence | [PF-20-S01](../../sprints/archive/p0-security-levels/pf-20-s01-versioned-security-persistence.md), [PF-20-S02](../../sprints/current/p0-security-levels/pf-20-s02-protected-authoritative-state.md) | S01 completed; S02 follow-up draft |
 | `PF-21` | Frozen Permissive compatibility | [PF-21-S01](../../sprints/archive/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md), [PF-21-S02](../../sprints/current/p0-security-levels/pf-21-s02-expanded-compatibility-and-upstream-drift.md) | S01 completed; S02 follow-up draft |
 | `PF-22` | Effective runtime policy and agent inheritance | [PF-22-S01](../../sprints/archive/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md), [PF-22-S02](../../sprints/current/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md) | S01 completed; S02 follow-up draft |
-| `PF-13` | Vault-backed exact-host credential boundary | [S01](../../sprints/archive/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md), [S02](../../sprints/archive/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/archive/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/archive/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/current/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md), [S06](../../sprints/current/p0-security-levels/pf-13-s06-credential-usage-reservations.md), [S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md) | S01–S04 completed; S05 in progress; S06–S07 draft |
+| `PF-13` | Vault-backed exact-host credential boundary | [S01](../../sprints/archive/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md), [S02](../../sprints/archive/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/archive/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/archive/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/archive/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md), [S06](../../sprints/current/p0-security-levels/pf-13-s06-credential-usage-reservations.md), [S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md) | S01–S05 completed; S06–S07 draft |
 | `PF-23` | Moderate/Aggressive protected-surface enforcement | [S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), [S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md), [S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | draft |
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
@@ -602,9 +602,9 @@ incomplete; do not substitute a wrapper heuristic or optional hosted service.
 
 ## Implementation sequence
 
-Use the [62-record current index](../../sprints/current/p0-security-levels/index.md)
+Use the [61-record current index](../../sprints/current/p0-security-levels/index.md)
 for exact dependencies. Bounded parallel allocations follow the sprint process;
-reading order is not a serial lock. Including 14 completed archives, the graph
+reading order is not a serial lock. Including 15 completed archives, the graph
 has 76 nodes; exact merged-tree ordering is maintained by the checked current
 index rather than inherited historical snapshot arithmetic.
 
@@ -740,7 +740,7 @@ before qualification.
 - [ ] Accepted architecture refinements and upstream-seam register have final-tree evidence.
 - [ ] Parallel allocations, scope audits and combined-tree integration evidence are complete.
 
-- [x] Complete source scope maps to 62 current and 14 completed single-feature sprints; all 72 cancelled records have explicit dispositions.
+- [x] Complete source scope maps to 61 current and 15 completed single-feature sprints; all 72 cancelled records have explicit dispositions.
 - [ ] Every PF-27–41 contract and protected-mode readiness condition passes final-candidate evidence.
 - [ ] Optional hosted/reviewer lanes are explicitly qualified-enabled or disabled with an auditable reason.
 - [ ] Permissive compatibility is proven against the frozen pre-feature baseline.

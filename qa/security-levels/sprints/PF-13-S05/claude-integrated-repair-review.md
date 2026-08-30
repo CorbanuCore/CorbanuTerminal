@@ -83,7 +83,32 @@ It found two actionable issues, both accepted:
    before the script runs. The regression shadows both helpers.
 
 Focused nextest run `627c3d10-e746-4885-a25b-829cfa58abc9` passed all five
-accepted-finding tests without retry after the second repair. The repair still
-requires a clean independent re-review through the same mandated harness. The
-sprint must not be archived until that re-review and the affected final
-qualification are clean.
+accepted-finding tests without retry after the second repair.
+
+The final repair-chain review covered immutable range
+`c12711462..3db1c6875` through TMUX + Corbanu Terminal + Claude Opus 5.0 Max and
+returned `NO FINDINGS`. Its raw pane capture is
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-foundation-platform/tmux-artifacts/pf13-opus-max-final-review/pane.txt`,
+SHA-256
+`29189b00ca95b1a3b209da0057d0a811600ddbdec78f566e337db753a7af9b94`.
+
+The final isolated Core qualification found and repaired two test-fixture
+lifetime races rather than product failures. The tests had destructured
+`TestCodex` and dropped its temporary home while their sessions were active;
+the telemetry test also read its tracing buffer before shutdown completed.
+Commit `d021d017b` retains the fixtures, waits for the intended parent message,
+and waits for bounded session shutdown before reading telemetry. The telemetry
+test passed 50/50 retry-free stress iterations, and the final isolated command
+`just test -p codex-core --test-threads 4 --retries 0` passed 3,414/3,414 tests
+with 19 platform skips. The run used
+`CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-foundation-platform/target`
+with `CORBANU_HOME` and `PFTERMINAL_HOME` unset so another worktree or the live
+Corbanu home could not contaminate the result.
+
+The post-qualification stabilization diff received a separate read-only review
+through TMUX + Corbanu Terminal + Claude Opus 5.0 Max. It returned
+`NO FINDINGS` after checking fixture ownership, event ordering, shutdown safety,
+hang risk, and assertion strength. Raw capture:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-foundation-platform/tmux-artifacts/pf13-opus-max-test-stabilization-review/pane.txt`;
+SHA-256
+`a834201ebb9d5df2b625162a33c7cd04c1ec0e001ca2486e859db3aa0ce09e63`.

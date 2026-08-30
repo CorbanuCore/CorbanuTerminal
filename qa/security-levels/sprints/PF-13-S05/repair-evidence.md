@@ -1,6 +1,13 @@
 # PF-13 accepted-review repair evidence
 
-Status: accepted credential/harness repairs implemented and reviewed; Mac/Linux component qualification and the transferred-tree complete-Core gate pass. Final Windows qualification remains pending. PF-13-S05 is still in progress, not a release approval.
+Status: accepted credential/harness repairs implemented and reviewed; Mac/Linux
+component qualification, the transferred-tree complete-Core gate, and the final
+Windows component qualification pass. PF-13-S05 is completed and archived; this
+component result is not the later integrated PF-13-S07 release approval.
+
+The closeout review and post-review stabilization evidence is recorded in
+`claude-integrated-repair-review.md`. The final isolated, retry-free Core run at
+`d021d017b` passed 3,414/3,414 tests with 19 platform skips.
 
 ## Transferred-tree integrated repair
 

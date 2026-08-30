@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-13-S05"
 title: "Credential boundary adversarial qualification"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 13
@@ -14,7 +14,7 @@ branch: "feat/p0-security-foundation-platform"
 base_commit: "6a35712cd5731b191d875e8c6468f1abe23eb66e"
 depends_on: "PF-13-S04"
 created: 2026-08-24
-updated: 2026-08-29
+updated: 2026-08-30
 ---
 
 # PF-13-S05 — Credential boundary adversarial qualification
@@ -74,10 +74,13 @@ updated: 2026-08-29
 - [x] Published integrated repair commit `be8153f2e29c360d83776441aed50deb204eafa7`; a clean macOS canary passed 47/47 tests and recorded exact executable/report hashes.
 - [x] On Windows 11 AMD64, fetched the same published commit into a clean `D:` checkout, pinned Rust/Cargo 1.95.0 and MSVC, and passed all nine canary groups / 47 tests. The four-test raw-export group executed the unprivileged `mklink /J` directory-junction posture case; independent `Get-FileHash` matched the report's executable SHA-256.
 - [x] Compared every path/source hash embedded by the retained Linux report with the integrated macOS report; all probe sources are identical. The Linux result remains honestly bound to `f6ec1c75f` rather than being relabeled after the non-probe Core repairs.
+- [x] Completed the immutable repair-chain review through TMUX + Corbanu Terminal + Claude Opus 5.0 Max; the final pass returned no findings after two accepted-finding repair rounds.
+- [x] Stabilized two qualification-only fixture-lifetime races at `d021d017b`; telemetry passed 50/50 retry-free stress iterations and isolated Core passed 3,414/3,414 with 19 platform skips and no retries.
+- [x] Completed a separate Claude Opus 5.0 Max review of the final stabilization diff with no findings; the raw TMUX captures and hashes are recorded in `qa/security-levels/sprints/PF-13-S05/claude-integrated-repair-review.md`.
 
 ## Remaining
 
-- [ ] Review the newly scope-classified integrated Core repair through Computer Use with Claude Opus 5.0 Max, record findings/dispositions, and rerun any affected proof if the review causes changes. The current Mac lock prevents this UI-only gate; credential/platform tests are complete.
+None.
 
 The amended mandate authorizes only the repairs above; additional runtime fixes return to scope review and require affected reruns.
 
@@ -88,7 +91,7 @@ The amended mandate authorizes only the repairs above; additional runtime fixes 
 - [x] Final affected tests: `cd codex-rs && just test -p codex-security-policy -p codex-vault -p codex-network-proxy --test-threads 4` passed 295/295; `just test -p codex-core --test-threads 4` passed 3,411/3,411 with 19 platform-filtered skips.
 - [x] Canary: `python3 scripts/security-credential-canary --candidate <binary> --output qa/security-levels/sprints/PF-13-S05/`.
 - [x] Final Windows canary on published commit `be8153f2e29c360d83776441aed50deb204eafa7`: 47/47 passed, including the directory-junction posture case; clean source and independent executable identity matched.
-- [ ] Claude Opus 5.0 Max Computer Use review of the integrated Core repair, with immutable result and dispositions.
+- [x] Claude Opus 5.0 Max review of the integrated Core repair through the mandated TMUX + Corbanu Terminal harness, with immutable results and dispositions.
 - [x] Reviewer, reviewed commit, commands and historical platform/canary identities are recorded without claiming a final integrated pass.
 - [x] TUI: production panic-hook subprocess proof plus final candidate startup/cancel/resume in a PTY; no new UI. PF-26-S02 retains integrated feature/live-repository qualification.
 
@@ -97,4 +100,4 @@ The amended mandate authorizes only the repairs above; additional runtime fixes 
 - [x] Published integrated repair candidate `be8153f2e` and artifact/source manifests are recorded; historical `f6ec1c75f` evidence retains its original identity.
 - [x] Final all-platform component canary proof: macOS and Windows passed the published integrated candidate; Linux's clean report remains bound to its recorded candidate and has an identical complete probe-source hash set. Native PF-23 wiring is not claimed.
 - [x] Independent accepted-repair security review passes with no findings; native integration review remains downstream in PF-23/PF-26.
-- [ ] After the integrated repair review is clean, ensure ledgers reflect reality and archive the completed record.
+- [x] Ledgers reflect the clean integrated repair and stabilization reviews; the completed record is archived.
