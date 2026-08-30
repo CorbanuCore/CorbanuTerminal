@@ -570,6 +570,15 @@ def evaluate_snapshot(
             result = evaluate_snapshot({**snapshot, "preference": name}, manifest)
             if result["reason_code"] not in AUTO_SKIPPABLE_REASONS:
                 return result
+            if owned_by_engine.get(name):
+                return engine_failure(
+                    "owned_worker_on_unavailable_engine",
+                    name,
+                    [
+                        "recover_selected_engine_manually",
+                        "do_not_create_duplicate",
+                    ],
+                )
             if first_unselectable is None:
                 first_unselectable = result
         require(
@@ -730,7 +739,8 @@ def run_fixtures(directory: Path, manifest: dict[str, Any]) -> tuple[int, int]:
     require(paths, f"no fixtures found in {directory}")
     passed = 0
     deterministic = 0
-    for path in paths:
+    for unresolved_path in paths:
+        path = resolve_repository_input(unresolved_path, "fixture")
         fixture = load_json(path)
         snapshot = fixture.get("snapshot")
         expected = fixture.get("expected")
