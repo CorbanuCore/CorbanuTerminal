@@ -584,7 +584,7 @@ def classify_access(
     return result(capability, "untested", "probe_error", mechanism, code)
 
 
-def probe_ipc(root: Path) -> dict[str, str]:
+def probe_ipc(_root: Path) -> dict[str, str]:
     if not hasattr(socket, "AF_UNIX"):
         return result(
             "ipc_peer_identity",
@@ -593,66 +593,51 @@ def probe_ipc(root: Path) -> dict[str, str]:
             "os_peer_credentials",
             "af_unix_unavailable",
         )
-    socket_path = root / "peer.sock"
+    if not hasattr(os, "getuid"):
+        return result(
+            "ipc_peer_identity",
+            "untested",
+            "not_tested",
+            "os_peer_credentials",
+            "peer_uid_api_unavailable",
+        )
+    if not hasattr(socket, "SO_PEERCRED"):
+        return result(
+            "ipc_peer_identity",
+            "untested",
+            "not_tested",
+            "os_peer_credentials",
+            "peer_api_unavailable",
+        )
+
+    # Linux abstract sockets avoid the platform's short sockaddr_un path limit,
+    # so a long caller-controlled TMPDIR cannot degrade the containment result.
+    socket_address = f"\0corbanu-pf27-{uuid.uuid4().hex}"
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     listener.settimeout(5)
     process: subprocess.Popen[str] | None = None
     try:
-        listener.bind(str(socket_path))
+        listener.bind(socket_address)
         listener.listen(1)
-        if not hasattr(os, "getuid"):
-            return result(
-                "ipc_peer_identity",
-                "untested",
-                "not_tested",
-                "os_peer_credentials",
-                "peer_uid_api_unavailable",
-            )
         canary = uuid.uuid4().hex
         process = start_worker(
-            "unix-connect", {"path": str(socket_path), "canary": canary}
+            "unix-connect", {"path": socket_address, "canary": canary}
         )
         connection, _ = listener.accept()
         with connection:
             message = json.loads(connection.recv(256).decode("ascii"))
             claimed_pid = int(message["pid"])
             echoed_canary = str(message["canary"])
-            if hasattr(socket, "SO_PEERCRED"):
-                raw = connection.getsockopt(
-                    socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")
-                )
-                peer_pid, peer_uid, _ = struct.unpack("3i", raw)
-                verified = (
-                    peer_pid == process.pid
-                    and claimed_pid == process.pid
-                    and peer_uid == os.getuid()
-                    and echoed_canary == canary
-                )
-                worker_result = finish_worker(process)
-                process = None
-                if worker_result.get("outcome") != "allowed":
-                    return result(
-                        "ipc_peer_identity",
-                        "untested",
-                        "probe_error",
-                        "so_peercred",
-                        "peer_worker_incomplete",
-                    )
-                if verified and worker_result.get("outcome") == "allowed":
-                    return result(
-                        "ipc_peer_identity",
-                        "supported",
-                        "observed_verified",
-                        "so_peercred",
-                        "peer_pid_uid_verified",
-                    )
-                return result(
-                    "ipc_peer_identity",
-                    "unsupported",
-                    "observed_allowed",
-                    "so_peercred",
-                    "peer_identity_mismatch",
-                )
+            raw = connection.getsockopt(
+                socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i")
+            )
+            peer_pid, peer_uid, _ = struct.unpack("3i", raw)
+            verified = (
+                peer_pid == process.pid
+                and claimed_pid == process.pid
+                and peer_uid == os.getuid()
+                and echoed_canary == canary
+            )
             worker_result = finish_worker(process)
             process = None
             if worker_result.get("outcome") != "allowed":
@@ -660,15 +645,23 @@ def probe_ipc(root: Path) -> dict[str, str]:
                     "ipc_peer_identity",
                     "untested",
                     "probe_error",
-                    "os_peer_credentials",
+                    "so_peercred",
                     "peer_worker_incomplete",
+                )
+            if verified:
+                return result(
+                    "ipc_peer_identity",
+                    "supported",
+                    "observed_verified",
+                    "so_peercred",
+                    "peer_pid_uid_verified",
                 )
             return result(
                 "ipc_peer_identity",
-                "untested",
-                "not_tested",
-                "os_peer_credentials",
-                "peer_api_unavailable",
+                "unsupported",
+                "observed_allowed",
+                "so_peercred",
+                "peer_identity_mismatch",
             )
     except (
         OSError,

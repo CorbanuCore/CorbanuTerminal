@@ -147,20 +147,28 @@ pub enum ResultRejection {
     StatusObservationMismatch(Capability),
 }
 
+/// Proof that a complete, current platform report passed every activation gate.
+///
+/// Callers cannot construct this witness. Protected-mode consumers must require
+/// it rather than trusting the report's self-asserted eligibility bit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProtectedModeAuthorization(());
+
 impl fmt::Display for ResultRejection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{self:?}")
     }
 }
 
-/// Validates the complete activation envelope. `Ok(())` is the only outcome
-/// that permits protected mode; every malformed or incomplete input fails closed.
+/// Validates the complete activation envelope. A returned authorization witness
+/// is the only outcome that permits protected mode; every malformed or incomplete
+/// input fails closed.
 pub fn validate_protected_mode_report(
     report: &PlatformReport<'_>,
     expected_target_id: &str,
     expected_probe_sha256: &str,
     now_unix_seconds: u64,
-) -> Result<(), ResultRejection> {
+) -> Result<ProtectedModeAuthorization, ResultRejection> {
     if report.contract_version != CONTRACT_VERSION {
         return Err(ResultRejection::UnknownContract);
     }
@@ -240,7 +248,7 @@ pub fn validate_protected_mode_report(
     if !report.protected_mode_eligible {
         return Err(ResultRejection::EligibilityClaimMismatch);
     }
-    Ok(())
+    Ok(ProtectedModeAuthorization(()))
 }
 
 fn is_lower_hex_64(value: &str) -> bool {
@@ -313,8 +321,76 @@ mod tests {
         let results = supported_results();
         assert_eq!(
             validate_protected_mode_report(&report(&results), TARGET_ID, PROBE_SHA256, 1_500),
-            Ok(())
+            Ok(ProtectedModeAuthorization(()))
         );
+    }
+
+    #[test]
+    fn rejects_unknown_contract_and_fixture_protocol() {
+        let results = supported_results();
+        let mut candidate = report(&results);
+        candidate.contract_version = "corbanu.platform-containment/unknown";
+        assert_eq!(
+            validate_protected_mode_report(&candidate, TARGET_ID, PROBE_SHA256, 1_500),
+            Err(ResultRejection::UnknownContract)
+        );
+
+        candidate.contract_version = CONTRACT_VERSION;
+        candidate.fixture_protocol = "corbanu.platform-probe/unknown";
+        assert_eq!(
+            validate_protected_mode_report(&candidate, TARGET_ID, PROBE_SHA256, 1_500),
+            Err(ResultRejection::UnknownFixtureProtocol)
+        );
+    }
+
+    #[test]
+    fn rejects_future_dated_report() {
+        let results = supported_results();
+        let mut candidate = report(&results);
+        candidate.measured_at_unix_seconds = 2_000;
+        candidate.expires_at_unix_seconds = 2_500;
+        assert_eq!(
+            validate_protected_mode_report(&candidate, TARGET_ID, PROBE_SHA256, 1_500),
+            Err(ResultRejection::FutureDated)
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_expiry() {
+        let results = supported_results();
+        let mut candidate = report(&results);
+        candidate.expires_at_unix_seconds = candidate.measured_at_unix_seconds;
+        assert_eq!(
+            validate_protected_mode_report(&candidate, TARGET_ID, PROBE_SHA256, 900),
+            Err(ResultRejection::InvalidExpiry)
+        );
+    }
+
+    #[test]
+    fn rejects_untested_capability() {
+        let mut results = supported_results();
+        results[0].status = CapabilityStatus::Untested;
+        results[0].observation = Observation::Unavailable;
+        assert_eq!(
+            validate_protected_mode_report(&report(&results), TARGET_ID, PROBE_SHA256, 1_500),
+            Err(ResultRejection::UntestedCapability(
+                Capability::ProcessIdentity
+            ))
+        );
+    }
+
+    #[test]
+    fn rejects_malformed_digest_identity() {
+        let results = supported_results();
+        for malformed in [
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ] {
+            assert_eq!(
+                validate_protected_mode_report(&report(&results), TARGET_ID, malformed, 1_500),
+                Err(ResultRejection::WrongProbeIdentity)
+            );
+        }
     }
 
     #[test]

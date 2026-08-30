@@ -65,6 +65,11 @@ class SecurityPlatformProbeTests(unittest.TestCase):
                 ):
                     probe.validate_report(malformed)
 
+    def test_ipc_probe_is_independent_of_long_temp_paths(self) -> None:
+        long_root = Path("x" * 240)
+        ipc_result = probe.probe_ipc(long_root)
+        self.assertNotEqual(ipc_result["detail_code"], "peer_probe_error")
+
     def test_windows_elevation_context_is_fail_closed(self) -> None:
         with mock.patch.object(probe, "target_os", return_value="windows"):
             cases = (

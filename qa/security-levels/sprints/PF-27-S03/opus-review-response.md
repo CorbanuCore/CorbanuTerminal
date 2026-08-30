@@ -144,3 +144,40 @@ It verified all eleven pre-G1 hashes, exact `jq -c` reproduction for all three r
 six cross-target denials, every envelope/count/eligibility claim, both
 review-nine repairs, stable Windows token semantics, and the absence of a
 runtime consumer before the serialized G1 registration.
+
+## G1 integration review
+
+The eleventh independent review inspected the merged and registered G1 tree
+through TMUX + Corbanu Terminal + Claude Opus 5.0 Max. Its read-only transcript
+is stored outside the repository at
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-foundation-platform/tmux-artifacts/pf27-opus-max-g1-review/pane.txt`
+with SHA-256
+`4be9db8c33e5e563ee38e7e734623b926cefd513cf64ff5271fa16e90f0ab20c`.
+It accepted the registration parity, all published fixture hashes, platform
+counts, absence of a runtime consumer, and merge integrity, then reported ten
+integration findings. All ten were accepted and repaired:
+
+1. PF-27-S03 state and the 58-current/18-archive ledgers are consistent.
+2. The mainline Codex ingress/classifier integration owner is preserved and the
+   post-PF-34 transfer is recorded explicitly.
+3. The foundation/platform lane and literal G1 scope are present in the owner
+   table and plan narrative.
+4. Rust tests consume the exact frozen schema and all three result fixtures
+   through Cargo and Bazel compile-data declarations.
+5. Every remaining Rust rejection variant and malformed digest class has direct
+   regression coverage.
+6. A three-operating-system CI workflow runs Python contract tests, archival
+   fixture validation, and the registered Rust suite.
+7. Successful activation returns an opaque, unforgeable authorization witness
+   rather than trusting a self-asserted boolean.
+8. The pre-existing sprint-count narrative is reconciled.
+9. Release-evidence text distinguishes the registered broker/ingress crates from
+   the still-planned retriever/search-extension crates.
+10. Linux IPC uses a short abstract socket address, with a regression proving a
+    caller's long temporary path cannot degrade the result to a generic error.
+
+Because the last repair changed the probe identity, the exact implementation
+again passed 7/7 discovered tests and 8/8 self-tests on all three targets,
+generated and strictly validated 10/10 capability records on each target, and
+remained correctly ineligible. The compact results pass local archival
+validation and are bound into the 16/16 Rust gate suite.

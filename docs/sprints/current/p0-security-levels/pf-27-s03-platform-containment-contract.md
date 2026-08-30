@@ -8,7 +8,7 @@ execution_order: 16
 owner: "Codex foundation/platform lane"
 parallel_lane: "foundation-platform"
 write_scope: "codex-rs/secret-broker/, codex-rs/Cargo.toml, codex-rs/Cargo.lock, BUILD.bazel, MODULE.bazel.lock, .github/workflows/security-platform-contract.yml, scripts/security-platform-probe, scripts/security_platform_probe.py, scripts/test_security_platform_probe.py, qa/security-levels/platform/, qa/security-levels/sprints/PF-27-S03/, docs/plans/active/p0-security-levels.md, docs/sprints/current/p0-security-levels/, docs/sprints/archive/p0-security-levels/pf-27-s03-platform-containment-contract.md, docs/sprints/index.md, mkdocs.yml"
-integration_gate: "Jim Ricketts receives the PF-27-S03 candidate at G1, audits the literal scope, exclusively registers codex-secret-broker Cargo/Bazel workspace surfaces after codex-content-security, reruns schema/probe/governance checks on the combined tree, then archives the sprint before a consumer can use the contract."
+integration_gate: "The Codex ingress/classifier integration lane receives the PF-27-S03 candidate at G1, audits the literal scope, exclusively registers codex-secret-broker Cargo/Bazel workspace surfaces after codex-content-security, reruns schema/probe/governance checks on the combined tree, then archives the sprint before a consumer can use the contract."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform"
 branch: "feat/p0-security-foundation-platform"
 base_commit: "1907d99aed9714f05a5f54fca1703658017d616c"
@@ -63,7 +63,7 @@ updated: 2026-08-30
 
 ## Verification
 
-- [x] Run affected format/fix tools before final tests; repository-standard `format.py --check` and focused Ruff discovery pass; Python self-test passes 8/8, discovered Python tests pass 6/6, and the registered Rust activation-gate tests pass 9/9 through both nextest and Bazel.
+- [x] Run affected format/fix tools before final tests; repository-standard `format.py --check` and focused Ruff discovery pass; Python self-test passes 8/8, discovered Python tests pass 7/7, and the registered Rust activation-gate tests pass 16/16 through nextest with the Bazel unit target green.
 - [x] Run the planned probe with synthetic canaries on Linux/macOS/Windows; record target versions, expected denial, actual results and unsupported configurations. Run schema/fixture tests and wrong-identity/stale-result cases.
 - [x] Record a clean independent review of the final three-platform evidence tree and rerun governance before archive.
 - [ ] Rerun the final focused and governance checks on the integration target before archive.

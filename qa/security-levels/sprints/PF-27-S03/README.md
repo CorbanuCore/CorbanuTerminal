@@ -16,19 +16,24 @@ alter a host policy, or leave an IPC/network listener running.
 | Artifact | SHA-256 |
 | --- | --- |
 | `scripts/security-platform-probe` | `0045b29fc50c69c0282083d2c5da12d25a184e4d7742445ac5fa5515c4996a70` |
-| `scripts/security_platform_probe.py` | `30032a9359aca1672e14bd9571fb573aba2039bceb5576e526787786fd593de9` |
-| `scripts/test_security_platform_probe.py` | `6a96c85eab3469fc68fea65bf2b6bc0aee84fc2be291cc36e28e621259f0acf8` |
-| `codex-rs/secret-broker/src/platform_contract.rs` | `5ab71ddd09222fff9c6c7866eac71d4b50a964dd3f330a71c596ce41bd46bc31` |
-| `codex-rs/secret-broker/Cargo.toml` | `9382ff053132b956cacbe806393101eeebb693b4ca5b2c4e225fb3dff5c0b78f` |
-| `codex-rs/secret-broker/BUILD.bazel` | `b3644a641748ae9a6366ed69ec0c5512fecc5047f74aa870a9f664f77cef7a1d` |
-| `codex-rs/secret-broker/src/lib.rs` | `256a9b1a0e9c771e3c7db8b014c00b517402314481b316c3c734f49d769d75c7` |
+| `scripts/security_platform_probe.py` | `715a4a737c3def69cb4da4c67581914cfdd5eb871e1223f8cadb70a068be98bf` |
+| `scripts/test_security_platform_probe.py` | `361ff71ef1e1c5c2c989db6041b6a01d83d65b586bf145156ecf886e0229207f` |
+| `codex-rs/secret-broker/src/platform_contract.rs` | `7f6b597788010cc32b6156205e4a506cb293b528012883b6f69324dc62b825d5` |
+| `codex-rs/secret-broker/src/platform_contract_fixture_tests.rs` | `18eebbeca85531e89b5c8859814f4a04e4c928b13a5e0bb3cb011c63fe488cd2` |
+| `codex-rs/secret-broker/Cargo.toml` | `8dd9ba505ed575fd78f81c9b81a8069e908db0e864ab8aa5899ad1bb5466d67a` |
+| `codex-rs/secret-broker/BUILD.bazel` | `665f804676a5acfccd12fb1b6095630ead6d13e05c8bf19aca1c665151faa0a7` |
+| `codex-rs/secret-broker/src/lib.rs` | `03a2b98a134bb23cc9b993f537432770fe78d524b647d77f3dcf71f9789b4f79` |
+| `codex-rs/Cargo.toml` | `82b971ddfafd10fdadbae414bab4c1a5119b0173fd9ac522c90efb0eabd8c2b3` |
+| `codex-rs/Cargo.lock` | `e643a17d738119b18ae9af44a340bad283de306c2227060cbd922046cce43153` |
+| `BUILD.bazel` | `226aeb958f0032a4efac71b9e9b1c6731bc2d26ee6d019c2af86b3b9787a8e79` |
+| `.github/workflows/security-platform-contract.yml` | `3abb356e3efa06ba221d2509731afbc3dc3c060b839f0a74a2643e6e9567177e` |
 | `capability-result-v1.schema.json` | `da6cb78e37b2473713e652ecb15a871fa8dbc77683c246b3eb4da2ad15d82671` |
 | `fixture-protocol-v1.md` | `27650019fe7bde431091c4309f4125ee0151bbf415664e3b6d03b68ccff4134a` |
 | `containment-contract-v1.md` | `1e929b22e7429ae8f85f16265a2545676f961446237abe35f906efbe96bce2ae` |
 | `platform-mechanisms-v1.md` | `0e3e6bc3a0d2d6c91da0e83cc4d959d1dd041f523c2fbbf310b53726bb20529b` |
-| `results/macos.json` | `3964a310c9bbe31fe8c8a120e56f304d17ec4e436115e289ee325b30a44556a5` |
-| `results/linux.json` | `a7089dd3e6117152e5cff617465707f56bda175685a89c2ddab3986b5ed02e6f` |
-| `results/windows.json` | `fcdb7d7536c4e3d0ce9bdbaa15d1af46469ccd38d948a017695dcbd6cf356404` |
+| `results/macos.json` | `103190c9475add8b6c07a3c1d5dcea2798fc4ba9ba0a3edadfcb9f1bc78339da` |
+| `results/linux.json` | `504ea78f9d623f0b77c751a20cf04ab1047a05b557b3b83c38ed25377bc7f42d` |
+| `results/windows.json` | `39ec59ea056a77071ce660e4932b62135cdaac015d9d1623e5e677480a580610` |
 
 The result files embed the exact linted implementation-module SHA-256. The
 stable extensionless shim is separately bound above. The Markdown/schema hashes
@@ -72,11 +77,11 @@ host after evidence retrieval.
   false-eligibility, duplicate/missing capability, and inconsistent
   status/observation rejection, plus an all-supported eligible report; each
   self-test also executes all 10 probes.
-- `python3 -m unittest scripts/test_security_platform_probe.py`: 6/6 discovered
+- `python3 -m unittest scripts/test_security_platform_probe.py`: 7/7 discovered
   tests pass, including the complete 8-case contract self-test, malformed-input
   stable-error handling, unknown-OS boot-identity denial, validation-mode
   eligibility enforcement, JSON Schema target-metadata parity, and fail-closed
-  Windows token-elevation classification.
+  Windows token-elevation classification, and long temporary-path independence.
 - `scripts/security-platform-probe --probe ...` and strict current-target
   `--validate ...`: 10/10 capability records generated and validated on macOS.
 - The identical SHA-bound implementation and stable shim: 8/8 regressions and
@@ -85,17 +90,19 @@ host after evidence retrieval.
 - The same implementation and shim passed 8/8 regressions, generated and
   strictly validated 10/10 Windows capability records, returned exit 2 for
   `--require-eligible`, and passed local archival validation after retrieval.
-- Standalone `rustc --test` activation-gate regressions pass 9/9. After the G1
-  registration, `just test -p codex-secret-broker` passes 9/9 and Bazel's
+- Standalone `rustc --test` activation-gate regressions passed 9/9 before G1.
+  After the G1 registration and fixture binding, `just test -p
+  codex-secret-broker` passes 16/16 and Bazel's
   `//codex-rs/secret-broker:secret-broker-unit-tests` target passes 1/1.
 - `python3 -m py_compile`, `ruff check`, JSON parse, both governance checkers,
   and `git diff --check`: required before review handoff.
 
 ## G1 integration
 
-Jim Ricketts merged the completed PF-34-S04 tree first, audited the literal
-PF-27 scope, and then exclusively registered `codex-secret-broker` on the Cargo
-and Bazel workspace surfaces. `just bazel-lock-update` completed without
+The Codex ingress/classifier integration lane merged the completed PF-34-S04
+tree first, audited the literal PF-27 scope, and then exclusively registered
+`codex-secret-broker` on the Cargo and Bazel workspace surfaces.
+`just bazel-lock-update` completed without
 changing `MODULE.bazel.lock`. No workspace crate depends on the new crate, so
 the registration exposes only the frozen contract and cannot activate protected
 mode. PF-27-S04/S02 must select reviewed per-OS mechanisms and rerun these probes
