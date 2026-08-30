@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "checks": [
+    {
+      "name": "fmt-check",
+      "command": [
+        "cargo",
+        "fmt",
+        "--manifest-path",
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/Cargo.toml",
+        "--all",
+        "--",
+        "--check",
+        "--config",
+        "edition=2024"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--manifest-path",
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/Cargo.toml",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "focused-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/Cargo.toml",
+        "pf_34_s04",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "full-harness-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/harness/Cargo.toml",
+        "--",
+        "--nocapture"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "fixture-verifier",
+      "command": [
+        "python3",
+        "qa/security-levels/ingress-contract/verify.py"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "fixture-verifier-tests",
+      "command": [
+        "python3",
+        "qa/security-levels/ingress-contract/test_verify.py"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "jsonschema",
+      "command": [
+        "uv",
+        "run",
+        "--isolated",
+        "--with",
+        "jsonschema==4.25.1",
+        "python",
+        "-c",
+        "import json; from pathlib import Path; from jsonschema import Draft202012Validator; root=Path('qa/security-levels/ingress-contract'); schema=json.loads((root/'schema.json').read_text()); manifest=json.loads((root/'manifest.json').read_text()); Draft202012Validator.check_schema(schema); Draft202012Validator(schema).validate(manifest); print('jsonschema: schema valid; bundled manifest valid')"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "plan-governance",
+      "command": [
+        "python3",
+        "docs/plans/check.py"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "sprint-governance",
+      "command": [
+        "python3",
+        "docs/sprints/check.py"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "diff-check",
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "exit": 0
+    }
+  ]
+}

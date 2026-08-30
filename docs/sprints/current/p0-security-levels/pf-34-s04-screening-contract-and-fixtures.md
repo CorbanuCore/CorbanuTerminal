@@ -47,24 +47,28 @@ updated: 2026-08-28
 
 - [x] Bounded preparation/foundation mandate created from the accepted review; no implementation or platform acceptance claimed.
 - [x] Ingress/classifier lane allocated from dispatch base `6a35712cd5731b191d875e8c6468f1abe23eb66e`; all caches are rooted under `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/`.
+- [x] Immutable opaque-source, raw/rendered/sanitized transformation, complete-reassembly, segment index/count and contract-version bindings implemented.
+- [x] Typed allow/suspicious/hostile/unavailable decisions bind exact model/threshold identities, safe diagnostics, size/time/freshness budgets and sticky fail-closed state.
+- [x] Versioned benign, cross-segment hostile and quarantine-transition fixtures freeze hashes, schema, taint/no-authority and forbidden transitions.
+- [x] Full-content one-shot release and cancellation semantics prevent partial/prefix release and forced allow after any terminal fault.
+- [x] Pure constructors and fixture verifier add no Core/provider/runtime route; PF-30 source authority and PF-34/PF-35 change ownership remain separate.
+- [x] Lane-local formatting, Clippy, 20 named contract tests, three verifier regressions, seven-fixture/schema verification, governance and `git diff --check` pass at post-review implementation commit `002c6382152910d984db22a41a24f80281f6d19b`.
+- [x] Supplemental structured Codex review verified four in-scope findings, drove bounded remediation and finished clean on the complete committed branch.
 
 ## Remaining
 
-- [ ] Define immutable content digest, opaque source binding, transformation/version, segment index/count and reassembly identity; source authority remains owned by PF-30, never duplicated or inferred from caller strings.
-- [ ] Define allow/suspicious/hostile/unavailable outcomes, model/threshold identities, size/time budgets and safe diagnostics; missing, malformed or mismatched verdicts are unavailable, not allow.
-- [ ] Create versioned raw/rendered/sanitized fixtures, quarantine transition fixtures and cross-segment attacks; the fixture seam cannot authorize tools, clear taint or ship as protected ingestion.
-- [ ] Define full-content decision and cancellation semantics; no unexamined prefix release. Any future incremental protocol needs separate proof and cannot waive reassembled-content screening.
-- [ ] Freeze schema compatibility and change ownership for sanitizer, classifier and quarantine consumers; code uses pure constructors and fixtures, not live Core/provider adapters.
+- [ ] Complete the immutable Claude Opus 5.0 Max review, verify every finding locally and rerun lane checks after any accepted fix.
+- [ ] Hand the candidate, contract/fixture identities, scope audit and exact shared registration patch to Jim Ricketts for serialized G1/G2 integration.
 
 ## Verification
 
 - [ ] Run affected format/fix tools before final tests; record exact commands and actual test counts.
 - [ ] Run planned content-security contract tests including malformed/partial/duplicate segments, digest/version mismatch, timeout and forced-allow safety assertions at the interface.
-- [ ] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
-- [ ] Verify no runtime route or profile becomes available from fixture-only preparation.
+- [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
+- [x] Verified no runtime route or profile becomes available: the lane does not add `lib.rs`, Cargo/Bazel registration, Core/provider adapters or profile changes.
 
 ## Exit evidence
 
 - [ ] Commit, contract/fixture versions, owner review and final-tree outputs under `qa/security-levels/sprints/PF-34-S04/`.
-- [ ] PF-34-S01 and PF-35-S03 must test actual rendering, PF-30 provenance and deterministic policy; fixture completion is not detector or ingestion qualification.
+- [x] PF-34-S01 and PF-35-S03 remain assigned actual rendering, PF-30 provenance and deterministic policy; fixture completion is not detector or ingestion qualification.
 - [ ] Record integration handoff and scope audit; complete all ledgers before archive and update plan/navigation.
