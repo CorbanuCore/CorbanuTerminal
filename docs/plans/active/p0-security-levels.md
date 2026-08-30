@@ -102,7 +102,7 @@ passing candidate evidence; no source citation alone closes an acceptance item.
   launch and deterministic ingress/disclosure policy. Unsupported adapters or
   isolation fail visibly; they never fall back to raw credentials.
 - **All source requirements have owners.** Earlier 68/73-record snapshots are
-  historical. Sprint 13, PF-34-S04, and PF-27-S03 integration preserve 19
+  historical. Sprint 13, PF-34-S04, PF-27-S03, and round-two integration preserve 22
   completed archives and leave **54 current units**. All 72
   cancelled firewall records and seven unrelated Autoreview drafts are unchanged.
 - **No evidence is retroactively accepted.** Upstream's PF-15–22 and PF-13-S01
