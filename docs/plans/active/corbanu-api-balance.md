@@ -82,6 +82,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 - Share one wallet balance across independently revocable API keys and attribute spend per key.
 - Show a newly created plaintext key exactly once in a secure non-transcript view; persist only its hash server-side.
 - Add provider-neutral public model IDs, recommendation/speed guidance, privacy class, and versioned input/cache/output sell prices.
+- Price every Corbanu API route at the pinned upstream cost with zero markup and microdollar settlement granularity.
 - Route GLM 5.3 Flash, GLM 5.3, GPT-5.6 Luna, and GPT-5.6 Sol through the protected server-side Vercel credential.
 - Route Claude Fable and DeepSeek V4 Pro through xAPI when enabled, cheaper, and healthy.
 - Keep internal vendor, account, and credential metadata out of public responses.
@@ -151,7 +152,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | --- | --- | --- | --- |
 | `PF-31` | Provider-neutral backend registry and Vercel adapter | [PF-31-S01](../../sprints/archive/corbanu-api-balance/pf-31-s01-vercel-adapter.md) | completed at `ef31361e5becfabc971db7a3670ed340433f18ea` |
 | `PF-32` | Dollar balance, top-up intents, key lifecycle, and legacy migration | [PF-32-S01](../../sprints/archive/corbanu-api-balance/pf-32-s01-balance-topups-and-keys.md) | completed at `00a410be45d6f463e04d6342255df864af56a92b` |
-| `PF-33` | Versioned sell-price metering and xAPI/Vercel selection | pending | blocked on sell-price decision |
+| `PF-33` | Versioned at-cost metering and xAPI/Vercel selection | [PF-33-S01](../../sprints/archive/corbanu-api-balance/pf-33-s01-at-cost-metering.md) | completed at `6aa81161ece53b26915f05c3346a9ebe11b094fd` |
 | `PF-34` | Terminal provider, balance/key/top-up UI, and one-time secret view | pending | pending PF-32/PF-33 |
 | `PF-35` | Qualification, deployment, migration docs, and human acceptance | pending | pending PF-31 through PF-34 |
 
@@ -161,6 +162,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | --- | --- | --- | --- | --- | --- |
 | backend | PF-31-S01 (completed) | Jim Ricketts | `src/config.ts`, `src/models.ts`, `src/vercel.ts`, `tests/config.test.ts`, `tests/vercel-routing.test.ts` | Existing `ModelRoute` and configuration contracts | 86 package tests pass; staged routes remain outside legacy catalog |
 | backend | PF-32-S01 (completed) | Jim Ricketts | Store, payment, API, exact-money, and tests recorded in sprint | PF-31-S01 | 92 package tests pass; PostgreSQL fixture added but runtime unavailable |
+| backend | PF-33-S01 (completed) | Jim Ricketts | Versioned price registry, dollar reservation/settlement, active provider-neutral routes, and tests | PF-32-S01 | 101 package tests and 13 disposable-PostgreSQL tests pass; typecheck and build pass |
 
 ### Requirement traceability
 
@@ -168,9 +170,9 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | --- | --- | --- | --- |
 | Protected Vercel routing for four routes | PF-31 / PF-31-S01 | completed | `ef31361e5becfabc971db7a3670ed340433f18ea`; 86 package tests pass |
 | Dollar balance and no new tiers | PF-32 | completed | `00a410be45d6f463e04d6342255df864af56a92b`; exact top-up and compatibility tests |
-| Versioned per-model pricing | PF-33 | blocked | Approved sell-price table and cost tests |
+| Versioned per-model pricing | PF-33 / PF-33-S01 | completed | `6aa81161ece53b26915f05c3346a9ebe11b094fd`; zero-markup schedules, exact reservation/settlement, and provider-neutral catalog tests pass |
 | One-time key reveal and multiple keys | PF-32, PF-34 | backend complete | API response-only key tests pass; secure-view TUI proof remains PF-34 |
-| Provider-neutral customer surface with privacy class | PF-33, PF-34 | pending | Catalog contract, snapshots, and absence scan |
+| Provider-neutral customer surface with privacy class | PF-33, PF-34 | backend complete | Catalog and vendor-absence tests pass; Terminal snapshots remain PF-34 |
 | Legacy paid periods preserved | PF-32, PF-35 | backend complete | Legacy suite passes; production audit remains PF-35 |
 
 ## Acceptance flows
@@ -196,8 +198,10 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 
 | Check | Final-tree command | Result | Artifact |
 | --- | --- | --- | --- |
-| Backend focused | Package focused test command | pending | pending |
-| Backend build/typecheck | `pnpm run check && pnpm run build` | pending | pending |
+| Backend focused | `corepack pnpm exec tsx --test --test-concurrency=1 tests/pricing.test.ts tests/api-balance.test.ts tests/vercel-routing.test.ts tests/xapi-routing.test.ts` | 35 passed, 0 failed | `6aa81161ece53b26915f05c3346a9ebe11b094fd` |
+| Backend full suite | `corepack pnpm test` | 101 passed, 0 failed | `6aa81161ece53b26915f05c3346a9ebe11b094fd` |
+| PostgreSQL integration | Isolated PostgreSQL 16 plus `tests/postgres-store.test.ts` | 13 passed, 0 failed | disposable container removed after run |
+| Backend build/typecheck | `corepack pnpm typecheck && corepack pnpm build` | passed | `6aa81161ece53b26915f05c3346a9ebe11b094fd` |
 | Public Rust crates | `just test -p <affected-crate>` after `just fmt` | pending | pending |
 | Snapshot | `just test -p codex-tui` and reviewed `insta` changes | pending | pending |
 | Payment/adversarial | Duplicate settlement, concurrent reserve, key leakage, fail-closed route matrix | pending | pending |
@@ -233,7 +237,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 
 | Item | Type | Owner | Needed by | State / decision |
 | --- | --- | --- | --- | --- |
-| Customer sell prices and markup for six models | Commercial decision | Alex Good | PF-33 | **blocked; upstream cost is not silently copied** |
+| Customer sell prices and markup for six models | Commercial decision | Alex Good | PF-33 | **resolved 2026-08-30: exact pinned upstream cost, zero markup** |
 | Shared wallet balance across keys | Product interpretation | Alex Good | PF-32 | adopted; correct before PF-32 if per-key balances were intended |
 | Vercel model IDs | Provider contract | Jim Ricketts | PF-31 | verified from live catalog on 2026-08-30 |
 | Legacy period treatment | Migration decision | Alex Good | PF-32 | grandfather through expiration; no conversion |
@@ -244,7 +248,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 
 - Release record: pending
 - Benchmark tracker row: pending
-- Remaining blocker: prices, implementation, qualification, compliance, deployment, and human acceptance
+- Remaining blocker: PF-34 Terminal implementation, PF-35 qualification, compliance, deployment, and human acceptance
 
 ## Completion
 

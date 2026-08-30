@@ -141,8 +141,9 @@ DeepSeek V4 Pro. Vercel is the internal route for both GLM models and the two
 OpenAI models; xAPI remains the preferred internal route for Fable and DeepSeek
 where it is cheaper and passes reliability checks. Internal routing may change
 without changing the public model identity or price during an in-flight request.
-Exact customer prices and any markup require an explicit commercial decision
-before a route becomes customer-visible.
+Customer pricing is exact upstream cost with zero markup, adopted by Alex Good
+on 2026-08-30. Each request pins a versioned upstream route and price schedule;
+catalog and ledger records expose the customer rate without exposing the vendor.
 
 The existing Corbanu Plan names, endpoints, headers, database records, and
 credential aliases remain compatibility surfaces only for already-paid users
