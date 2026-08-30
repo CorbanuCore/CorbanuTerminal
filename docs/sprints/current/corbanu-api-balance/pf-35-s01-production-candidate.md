@@ -57,6 +57,8 @@ updated: 2026-08-30
 
 ## Remaining
 
+- [ ] Remove unavailable Claude Fable from the Corbanu API catalog, add Kimi K3 through Vercel at its pinned at-cost schedule, and deploy the corrected allowlist.
+- [ ] Prove the deployed Kimi K3 Messages route completes and Fable is absent without exposing upstream routing metadata.
 - [ ] Named human tester unlocks the production wallet and completes top-up, create/revoke, one-time reveal, and recovery checks.
 - [ ] Run one low-cost inference call after the human creates a funded Corbanu API key; no balance was fabricated for qualification.
 - [ ] Complete final persistence/compliance/release qualification before public release.

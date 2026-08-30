@@ -7497,7 +7497,8 @@ async fn standard_crew_quick_start_uses_the_expected_role_picker_label() {
     assert_app_snapshot!("spawn_role_picker_with_corbanu_api_crew", popup);
     assert!(
         popup.contains("Create standard crew: Nazgul + Troll + 3 Orcs")
-            && popup.contains("Create Corbanu API crew: Fable Nazgul + Luna Troll + 3 Flash Orcs"),
+            && popup
+                .contains("Create Corbanu API crew: Kimi K3 Nazgul + Luna Troll + 3 Flash Orcs"),
         "both built-in crew choices must remain visible:\n{popup}"
     );
     // The picker is rendered into the chat widget; assert the role-picker path doesn't error and

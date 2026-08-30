@@ -187,10 +187,10 @@ impl App {
                 ..Default::default()
             },
             SelectionItem {
-                name: "Create Corbanu API crew: Fable Nazgul + Luna Troll + 3 Flash Orcs"
+                name: "Create Corbanu API crew: Kimi K3 Nazgul + Luna Troll + 3 Flash Orcs"
                     .to_string(),
                 description: Some(
-                    "Create persistent named panes using wallet-funded Corbanu API routes (Nazgul Claude Fable 5, Troll GPT-5.6 Luna xhigh, and 3 Orcs on GLM 5.3 Flash). No task is started."
+                    "Create persistent named panes using wallet-funded Corbanu API routes (Nazgul Kimi K3, Troll GPT-5.6 Luna xhigh, and 3 Orcs on GLM 5.3 Flash). No task is started."
                         .to_string(),
                 ),
                 actions: vec![Box::new(|tx| {

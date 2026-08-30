@@ -2,9 +2,9 @@ use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
-use codex_model_provider_info::CORBANU_API_CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CORBANU_API_GLM_5_3_FLASH_MODEL;
 use codex_model_provider_info::CORBANU_API_GPT_5_6_LUNA_MODEL;
+use codex_model_provider_info::CORBANU_API_KIMI_K3_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::KIMI_CODE_K3_MODEL;
 #[cfg(test)]
@@ -27,7 +27,7 @@ pub(crate) const STANDARD_TROLL_MODEL: &str = "gpt-5.6-sol";
 pub(crate) const STANDARD_ORC_MODEL: &str = "gpt-5.6-luna";
 pub(crate) const STANDARD_ORC_2_MODEL: &str = "gpt-5.6-terra";
 pub(crate) const STANDARD_ORC_3_MODEL: &str = OPENROUTER_GROK_4_6_MODEL;
-pub(crate) const CORBANU_API_NAZGUL_MODEL: &str = CORBANU_API_CLAUDE_FABLE_5_MODEL;
+pub(crate) const CORBANU_API_NAZGUL_MODEL: &str = CORBANU_API_KIMI_K3_MODEL;
 pub(crate) const CORBANU_API_TROLL_MODEL: &str = CORBANU_API_GPT_5_6_LUNA_MODEL;
 pub(crate) const CORBANU_API_ORC_MODEL: &str = CORBANU_API_GLM_5_3_FLASH_MODEL;
 

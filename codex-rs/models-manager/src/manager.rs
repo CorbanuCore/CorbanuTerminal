@@ -624,6 +624,24 @@ fn find_model_by_namespaced_suffix(model: &str, candidates: &[ModelInfo]) -> Opt
     find_model_by_longest_prefix(suffix, candidates)
 }
 
+/// Resolve Corbanu API's provider-neutral public identities to the bundled
+/// catalog entries that own their execution metadata.
+///
+/// The returned slug is used only for local metadata lookup. The resulting
+/// [`ModelInfo`] retains the public Corbanu slug on the request, so internal
+/// provider identities never cross the customer-facing wire boundary.
+fn corbanu_catalog_source_model(model: &str) -> Option<&'static str> {
+    match model {
+        "corbanu/glm-5.3-flash" => Some("zai/glm-5.3-flash"),
+        "corbanu/glm-5.3" => Some("zai/glm-5.3"),
+        "corbanu/gpt-5.6-luna" => Some("gpt-5.6-luna"),
+        "corbanu/gpt-5.6-sol" => Some("gpt-5.6-sol"),
+        "corbanu/kimi-k3" => Some("vercel/moonshotai/kimi-k3"),
+        "corbanu/deepseek-v4-pro" => Some("deepseek-v4-pro"),
+        _ => None,
+    }
+}
+
 pub(crate) fn construct_model_info_from_candidates(
     model: &str,
     candidates: &[ModelInfo],
@@ -631,8 +649,9 @@ pub(crate) fn construct_model_info_from_candidates(
 ) -> ModelInfo {
     // First use the normal longest-prefix match. If that misses, allow a narrowly scoped
     // retry for namespaced slugs like `custom/gpt-5.3-codex`.
-    let remote = find_model_by_longest_prefix(model, candidates)
-        .or_else(|| find_model_by_namespaced_suffix(model, candidates));
+    let catalog_model = corbanu_catalog_source_model(model).unwrap_or(model);
+    let remote = find_model_by_longest_prefix(catalog_model, candidates)
+        .or_else(|| find_model_by_namespaced_suffix(catalog_model, candidates));
     let model_info = if let Some(remote) = remote {
         ModelInfo {
             slug: model.to_string(),

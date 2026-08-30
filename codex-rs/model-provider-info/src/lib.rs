@@ -10,8 +10,8 @@ use codex_api::RetryConfig as ApiRetryConfig;
 use codex_api::is_azure_responses_provider;
 use codex_product_brand::PLAN_NAME;
 
-/// Display name for the plan's Anthropic-wire non-private Fable route.
-const PLAN_ANTHROPIC_NAME: &str = "Corbanu Plan (Fable, non-private)";
+/// Provider-neutral display name for Corbanu API's Messages-wire routes.
+const PLAN_ANTHROPIC_NAME: &str = "Corbanu API";
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::ModelProviderAuthInfo;
 use codex_protocol::error::CodexErr;
@@ -114,11 +114,14 @@ pub const CORBANU_API_GLM_5_3_FLASH_MODEL: &str = "corbanu/glm-5.3-flash";
 pub const CORBANU_API_GLM_5_3_MODEL: &str = "corbanu/glm-5.3";
 pub const CORBANU_API_GPT_5_6_LUNA_MODEL: &str = "corbanu/gpt-5.6-luna";
 pub const CORBANU_API_GPT_5_6_SOL_MODEL: &str = "corbanu/gpt-5.6-sol";
+/// Retired public route retained only so persisted pre-cutover sessions can be
+/// decoded and reported accurately. It is not part of the active catalog.
 pub const CORBANU_API_CLAUDE_FABLE_5_MODEL: &str = "corbanu/claude-fable-5";
+pub const CORBANU_API_KIMI_K3_MODEL: &str = "corbanu/kimi-k3";
 pub const CORBANU_API_DEEPSEEK_V4_PRO_MODEL: &str = "corbanu/deepseek-v4-pro";
 pub const PFTERMINAL_PLAN_PROVIDER_ID: &str = "pfterminal-plan";
 /// Anthropic-wire sibling of the Corbanu Plan provider. Same gateway, same
-/// customer key; serves only the plan's non-private `claude-fable-5` route.
+/// customer key; serves Corbanu API models exposed through the Messages API.
 pub const PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID: &str = "pfterminal-plan-anthropic";
 pub const CORBANU_PLAN_ANTHROPIC_PROVIDER_ID: &str = "corbanu-plan-anthropic";
 /// Context reliably served by the SkyAPI Fable route used by Corbanu Plan.
@@ -284,7 +287,10 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     if model.is_empty() {
         return None;
     }
-    if model == CORBANU_API_CLAUDE_FABLE_5_MODEL {
+    if matches!(
+        model,
+        CORBANU_API_CLAUDE_FABLE_5_MODEL | CORBANU_API_KIMI_K3_MODEL
+    ) {
         return Some(PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID);
     }
     if model.starts_with("corbanu/") {
@@ -390,7 +396,10 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
         return None;
     }
     if model.starts_with("corbanu/") {
-        let expected = if model == CORBANU_API_CLAUDE_FABLE_5_MODEL {
+        let expected = if matches!(
+            model,
+            CORBANU_API_CLAUDE_FABLE_5_MODEL | CORBANU_API_KIMI_K3_MODEL
+        ) {
             PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
         } else {
             PFTERMINAL_PLAN_PROVIDER_ID
@@ -450,8 +459,8 @@ pub fn resolve_model_for_provider(
 ) -> Option<String> {
     match model_provider_id {
         PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID => match model {
-            Some(model) if model.trim() == CORBANU_API_CLAUDE_FABLE_5_MODEL => Some(model),
-            _ => Some(CLAUDE_FABLE_5_MODEL.to_string()),
+            Some(model) if model.trim() == CORBANU_API_KIMI_K3_MODEL => Some(model),
+            _ => Some(CORBANU_API_KIMI_K3_MODEL.to_string()),
         },
         PFTERMINAL_PLAN_PROVIDER_ID
             if model.as_deref().map(str::trim) == Some(DEEPSEEK_PRO_MODEL) =>

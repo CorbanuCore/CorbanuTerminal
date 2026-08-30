@@ -5,9 +5,9 @@ use crate::chatwidget::wallet_http::gateway_client;
 use crate::chatwidget::wallet_http::gateway_origin;
 use crate::chatwidget::wallet_menu::item;
 use crate::chatwidget::wallet_unlock::wallet_capability_for_request;
-use codex_model_provider_info::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
+use codex_model_provider_info::canonical_catalog_provider;
 use codex_wallet::CorbanuApiAccount;
 use codex_wallet::CorbanuApiBalance;
 use codex_wallet::CorbanuApiModel;
@@ -341,11 +341,7 @@ impl ChatWidget {
     }
 
     fn select_corbanu_api_model(&self, model: &str) {
-        let provider = if model == "corbanu/claude-fable-5" {
-            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
-        } else {
-            PFTERMINAL_PLAN_PROVIDER_ID
-        };
+        let provider = canonical_catalog_provider(model).unwrap_or(PFTERMINAL_PLAN_PROVIDER_ID);
         self.app_event_tx.send(AppEvent::UpdateModelSelection {
             model: model.to_string(),
             provider: Some(provider.to_string()),
@@ -512,11 +508,8 @@ fn corbanu_api_params(result: Result<CorbanuApiView, String>) -> SelectionViewPa
                         model.pricing.output_usd,
                     )),
                     actions: vec![Box::new(move |tx| {
-                        let provider = if model_id == "corbanu/claude-fable-5" {
-                            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
-                        } else {
-                            PFTERMINAL_PLAN_PROVIDER_ID
-                        };
+                        let provider = canonical_catalog_provider(&model_id)
+                            .unwrap_or(PFTERMINAL_PLAN_PROVIDER_ID);
                         tx.send(AppEvent::UpdateModelSelection {
                             model: model_id.clone(),
                             provider: Some(provider.to_string()),

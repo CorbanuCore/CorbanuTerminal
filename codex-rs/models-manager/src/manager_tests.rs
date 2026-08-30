@@ -512,6 +512,41 @@ async fn get_model_info_rejects_multi_segment_namespace_suffix_matching() {
 }
 
 #[tokio::test]
+async fn corbanu_api_public_models_inherit_exact_catalog_metadata() {
+    let codex_home = tempdir().expect("temp dir");
+    let config = ModelsManagerConfig::default();
+    let manager = openai_manager_for_tests(
+        codex_home.path().to_path_buf(),
+        TestModelsEndpoint::new(Vec::new()),
+    );
+
+    for (public_model, catalog_model) in [
+        ("corbanu/glm-5.3-flash", "zai/glm-5.3-flash"),
+        ("corbanu/glm-5.3", "zai/glm-5.3"),
+        ("corbanu/gpt-5.6-luna", "gpt-5.6-luna"),
+        ("corbanu/gpt-5.6-sol", "gpt-5.6-sol"),
+        ("corbanu/kimi-k3", "vercel/moonshotai/kimi-k3"),
+        ("corbanu/deepseek-v4-pro", "deepseek-v4-pro"),
+    ] {
+        let public_info = manager.get_model_info(public_model, &config).await;
+        let catalog_info = manager.get_model_info(catalog_model, &config).await;
+
+        assert_eq!(public_info.slug, public_model);
+        assert!(!public_info.used_fallback_model_metadata);
+        assert_eq!(public_info.context_window, catalog_info.context_window);
+        assert_eq!(
+            public_info.max_output_tokens,
+            catalog_info.max_output_tokens
+        );
+        assert_eq!(public_info.input_modalities, catalog_info.input_modalities);
+        assert_eq!(
+            public_info.supported_reasoning_levels,
+            catalog_info.supported_reasoning_levels
+        );
+    }
+}
+
+#[tokio::test]
 async fn refresh_available_models_sorts_by_priority() {
     let remote_models = vec![
         remote_model("priority-low", "Low", /*priority*/ 1),
@@ -2387,7 +2422,7 @@ fn bundled_models_json_contains_openrouter_models() {
             "vercel/moonshotai/kimi-k3",
             "Vercel Kimi K3",
             1_000_000,
-            131_072,
+            128_000,
         ),
         (
             "vercel/deepseek/deepseek-v4-pro",

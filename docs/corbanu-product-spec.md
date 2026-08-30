@@ -139,10 +139,12 @@ remains explicit: every route is labeled either **Corbanu-controlled** or
 never enter model context or customer responses.
 
 Initial intended routes are GLM 5.3 Flash (**Recommended**), GLM 5.3 (labeled as
-using balance faster), GPT-5.6 Luna at xhigh, GPT-5.6 Sol, Claude Fable, and
-DeepSeek V4 Pro. Vercel is the internal route for both GLM models and the two
-OpenAI models; xAPI remains the preferred internal route for Fable and DeepSeek
-where it is cheaper and passes reliability checks. Internal routing may change
+using balance faster), GPT-5.6 Luna at xhigh, GPT-5.6 Sol, Kimi K3, and
+DeepSeek V4 Pro. Alex Good replaced Claude Fable with Kimi K3 on 2026-08-30
+after direct SkyAPI qualification found no available Fable channel. Vercel is
+the internal route for both GLM models, the two OpenAI models, and Kimi K3;
+xAPI remains the preferred internal route for DeepSeek where it is cheaper and
+passes reliability checks. Internal routing may change
 without changing the public model identity or price during an in-flight request.
 Customer pricing is exact upstream cost with zero markup, adopted by Alex Good
 on 2026-08-30. Each request pins a versioned upstream route and price schedule;

@@ -21,12 +21,12 @@ use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
-use codex_model_provider_info::CORBANU_API_CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CORBANU_API_DEEPSEEK_V4_PRO_MODEL;
 use codex_model_provider_info::CORBANU_API_GLM_5_3_FLASH_MODEL;
 use codex_model_provider_info::CORBANU_API_GLM_5_3_MODEL;
 use codex_model_provider_info::CORBANU_API_GPT_5_6_LUNA_MODEL;
 use codex_model_provider_info::CORBANU_API_GPT_5_6_SOL_MODEL;
+use codex_model_provider_info::CORBANU_API_KIMI_K3_MODEL;
 use codex_model_provider_info::DEEPSEEK_DEFAULT_MODEL;
 use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_K3_MODEL;
@@ -4130,7 +4130,7 @@ async fn corbanu_api_model_picker_preserves_ambient_and_shows_the_six_public_rou
         CORBANU_API_GLM_5_3_MODEL,
         CORBANU_API_GPT_5_6_LUNA_MODEL,
         CORBANU_API_GPT_5_6_SOL_MODEL,
-        CORBANU_API_CLAUDE_FABLE_5_MODEL,
+        CORBANU_API_KIMI_K3_MODEL,
         CORBANU_API_DEEPSEEK_V4_PRO_MODEL,
     ] {
         assert!(
@@ -4141,6 +4141,8 @@ async fn corbanu_api_model_picker_preserves_ambient_and_shows_the_six_public_rou
     assert!(popup.contains("Recommended"), "{popup}");
     assert!(popup.contains("Uses balance faster"), "{popup}");
     assert!(popup.contains("Ambient GLM 5.2"), "{popup}");
+    assert!(!popup.contains("Claude Fable"), "{popup}");
+    assert!(!popup.contains("corbanu/claude-fable-5"), "{popup}");
     for legacy_row in ["Ambient Kimi K2.7 Code", "DeepSeek V4 Pro (Direct)"] {
         assert!(
             !popup.contains(legacy_row),

@@ -20,7 +20,6 @@ use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 #[cfg(test)]
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
-use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 #[cfg(test)]
@@ -28,12 +27,12 @@ use codex_model_provider_info::CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
-use codex_model_provider_info::CORBANU_API_CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CORBANU_API_DEEPSEEK_V4_PRO_MODEL;
 use codex_model_provider_info::CORBANU_API_GLM_5_3_FLASH_MODEL;
 use codex_model_provider_info::CORBANU_API_GLM_5_3_MODEL;
 use codex_model_provider_info::CORBANU_API_GPT_5_6_LUNA_MODEL;
 use codex_model_provider_info::CORBANU_API_GPT_5_6_SOL_MODEL;
+use codex_model_provider_info::CORBANU_API_KIMI_K3_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::DEEPSEEK_DEFAULT_MODEL;
 use codex_model_provider_info::DEEPSEEK_PRO_MODEL;
@@ -57,6 +56,7 @@ use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_3_FLASH_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_3_MODEL;
+use codex_model_provider_info::VERCEL_KIMI_K3_MODEL;
 use codex_model_provider_info::VERCEL_PROVIDER_ID;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
@@ -142,11 +142,11 @@ const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 7] = [
         is_default: false,
     },
     CorbanuApiModelTemplate {
-        source_model: CLAUDE_FABLE_5_MODEL,
-        public_model: CORBANU_API_CLAUDE_FABLE_5_MODEL,
-        display_name: Some("Claude Fable 5"),
+        source_model: VERCEL_KIMI_K3_MODEL,
+        public_model: CORBANU_API_KIMI_K3_MODEL,
+        display_name: Some("Kimi K3"),
         description: Some(
-            "At cost: $2.00/M input · $1.00/M cache read · $2.50/M cache write · $10.00/M output. Third-party inference.",
+            "At cost: $3.00/M input · $0.30/M cache read · $3.00/M cache write · $15.00/M output. Third-party inference.",
         ),
         provider_id: PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
         is_default: false,
@@ -1554,7 +1554,7 @@ mod tests {
             VERCEL_GLM_5_3_MODEL,
             OPENAI_GPT_5_6_LUNA_MODEL,
             OPENAI_GPT_5_6_SOL_MODEL,
-            CLAUDE_FABLE_5_MODEL,
+            VERCEL_KIMI_K3_MODEL,
             DEEPSEEK_PRO_MODEL,
         ]
         .into_iter()
@@ -1608,9 +1608,9 @@ mod tests {
                     false,
                 ),
                 (
-                    CORBANU_API_CLAUDE_FABLE_5_MODEL,
+                    CORBANU_API_KIMI_K3_MODEL,
                     Some(PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID),
-                    "Claude Fable 5",
+                    "Kimi K3",
                     false,
                 ),
                 (
@@ -1627,6 +1627,9 @@ mod tests {
             })
         }));
         assert!(presets[0].description.contains("$0.15/M input"));
+        assert!(presets.iter().all(|preset| {
+            preset.model != "corbanu/claude-fable-5" && !preset.display_name.contains("Fable")
+        }));
         assert_eq!(
             presets[1].description,
             format!("{AMBIENT_DEFAULT_MODEL} description")

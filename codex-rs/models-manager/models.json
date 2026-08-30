@@ -199,7 +199,7 @@
       "supports_parallel_tool_calls": false,
       "context_window": 1000000,
       "max_context_window": 1000000,
-      "max_output_tokens": 131072,
+      "max_output_tokens": 128000,
       "auto_compact_token_limit": null,
       "default_reasoning_summary": "none",
       "slug": "vercel/moonshotai/kimi-k3",

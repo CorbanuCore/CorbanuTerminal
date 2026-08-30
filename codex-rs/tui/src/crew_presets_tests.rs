@@ -86,7 +86,7 @@ fn corbanu_api_crew_is_valid_and_uses_the_requested_runtime_for_every_role() {
                 "nazgul",
                 Some((
                     PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
-                    CORBANU_API_CLAUDE_FABLE_5_MODEL,
+                    CORBANU_API_KIMI_K3_MODEL,
                     None,
                 )),
             ),

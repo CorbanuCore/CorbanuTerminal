@@ -3860,7 +3860,7 @@ impl App {
                     Ok((nazgul_thread_id, troll_thread_id)) => {
                         self.open_spawn_status();
                         self.chat_widget.add_info_message(
-                            "Created Corbanu API crew: Fable Nazgul + Luna Troll + 3 Flash Orcs."
+                            "Created Corbanu API crew: Kimi K3 Nazgul + Luna Troll + 3 Flash Orcs."
                                 .to_string(),
                             Some(format!(
                                 "Nazgul: {nazgul_thread_id}. Troll: {troll_thread_id}. No task was started. Send work explicitly from /spawn status or by dispatch block."

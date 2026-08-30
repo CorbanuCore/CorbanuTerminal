@@ -7,7 +7,7 @@ plan_feature: "PF-34"
 execution_order: 7
 owner: "Jim Ricketts"
 lane: "terminal-tui"
-write_scope: "codex-rs/model-provider-info/src/lib.rs, codex-rs/model-provider-info/src/model_provider_info_tests.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app/tests.rs, codex-rs/tui/src/app/snapshots, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/bottom_pane/mod.rs, codex-rs/tui/src/bottom_pane/snapshots, codex-rs/tui/src/chatwidget.rs, codex-rs/tui/src/chatwidget/model_popups.rs, codex-rs/tui/src/chatwidget/tests/popups_and_settings.rs, codex-rs/tui/src/chatwidget/snapshots, codex-rs/tui/src/chatwidget/wallet_account_actions.rs, codex-rs/tui/src/chatwidget/wallet_api.rs, codex-rs/tui/src/chatwidget/wallet_api_tests.rs, codex-rs/tui/src/chatwidget/wallet_menu.rs, codex-rs/tui/src/chatwidget/wallet_unlock.rs, codex-rs/tui/src/chatwidget/wallet_unlock_tests.rs, codex-rs/tui/src/crew_presets.rs, codex-rs/tui/src/crew_presets_tests.rs, codex-rs/tui/src/crew_state_tests.rs, codex-rs/tui/src/slash_command.rs, codex-rs/tui/src/snapshots, codex-rs/tui/src/spawn_crew.rs, codex-rs/tui/src/spawn_orchestration.rs, codex-rs/wallet/src/corbanu_api.rs, codex-rs/wallet/src/corbanu_api_tests.rs, codex-rs/wallet/src/payment.rs"
+write_scope: "codex-rs/model-provider-info/src/lib.rs, codex-rs/model-provider-info/src/model_provider_info_tests.rs, codex-rs/models-manager/models.json, codex-rs/models-manager/src/manager.rs, codex-rs/models-manager/src/manager_tests.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app/tests.rs, codex-rs/tui/src/app/snapshots, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/bottom_pane/mod.rs, codex-rs/tui/src/bottom_pane/snapshots, codex-rs/tui/src/chatwidget.rs, codex-rs/tui/src/chatwidget/model_popups.rs, codex-rs/tui/src/chatwidget/tests/popups_and_settings.rs, codex-rs/tui/src/chatwidget/snapshots, codex-rs/tui/src/chatwidget/wallet_account_actions.rs, codex-rs/tui/src/chatwidget/wallet_api.rs, codex-rs/tui/src/chatwidget/wallet_api_tests.rs, codex-rs/tui/src/chatwidget/wallet_menu.rs, codex-rs/tui/src/chatwidget/wallet_unlock.rs, codex-rs/tui/src/chatwidget/wallet_unlock_tests.rs, codex-rs/tui/src/crew_presets.rs, codex-rs/tui/src/crew_presets_tests.rs, codex-rs/tui/src/crew_state_tests.rs, codex-rs/tui/src/slash_command.rs, codex-rs/tui/src/snapshots, codex-rs/tui/src/spawn_crew.rs, codex-rs/tui/src/spawn_orchestration.rs, codex-rs/wallet/src/corbanu_api.rs, codex-rs/wallet/src/corbanu_api_tests.rs, codex-rs/wallet/src/payment.rs"
 worktree: "/home/pfrpc/repos/CorbanuTerminal"
 branch: "feat/corbanu-api-wallet"
 base_commit: "4ff38e974b4e63cebffc5d608c5584e2d453cf1b"
@@ -32,7 +32,7 @@ updated: 2026-08-30
 ## Code boundaries
 
 - Existing: `codex-rs/tui/src/chatwidget/wallet_menu.rs`, `wallet_unlock.rs`, `model_popups.rs`, `crew_presets.rs`, `spawn_orchestration.rs`
-- Planned: `codex-rs/tui/src/chatwidget/wallet_api.rs` and focused tests
+- Planned: `codex-rs/tui/src/chatwidget/wallet_api.rs`, Corbanu public-alias metadata resolution in `codex-rs/models-manager`, and focused tests
 - Tests: TUI unit/snapshot tests, provider-resolution tests, and true-PTY flow
 
 ## Preconditions
@@ -60,11 +60,13 @@ updated: 2026-08-30
 - [x] Corrected the shared unlock-capability lifecycle so one-action grants are removed from TUI state when any signing request begins, while timed grants remain reusable; successful top-ups no longer poison the following account refresh with a daemon `capability_invalid` refusal.
 - [x] Replaced the legacy four-row Plan relabeling with the six provider-neutral Corbanu API routes while preserving the supported Ambient GLM 5.2 option; Flash is marked recommended and GLM 5.3 is labeled as using balance faster.
 - [x] Replaced `/wallet` pricing referrals in the model picker with each route's explicit input, cache-read, cache-write, and output rates, including the Luna/Sol 272K+ context schedule.
-- [x] Added a distinct Corbanu API crew quick start with Fable Nazgul, Luna Troll at xhigh, and three Flash Orcs while preserving the existing Standard Crew.
+- [x] Added a distinct Corbanu API crew quick start while preserving the existing Standard Crew; the 2026-08-30 catalog amendment replaces its unavailable Fable Nazgul with Kimi K3 through the Corbanu API Messages route.
 - [x] Added exact CrewSpec, durable-state/recovery, rendered-picker, and true-TUI evidence for the second preset.
 
 ## Remaining
 
+- [ ] Replace the Corbanu API Fable catalog row and Nazgul runtime with Kimi K3 through Vercel, update at-cost copy/snapshots, and preserve the original Standard Crew.
+- [ ] Build and true-TUI qualify the Kimi K3 Corbanu crew against the deployed backend without starting an inference task.
 - [ ] Named human tester enters the wallet passcode and completes create/revoke plus one-time reveal against the disposable backend.
 - [ ] Named human tester repeats top-up, create/revoke, one-time reveal, inference, and recovery flows against the deployed backend.
 

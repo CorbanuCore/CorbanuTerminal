@@ -733,6 +733,18 @@ fn test_built_in_model_providers_keep_legacy_plan_id_with_corbanu_name() {
 }
 
 #[test]
+fn corbanu_messages_provider_does_not_expose_the_retired_fable_route() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let provider = providers
+        .get(PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID)
+        .expect("Corbanu API Messages provider");
+
+    assert_eq!(provider.name, "Corbanu API");
+    assert!(!provider.name.contains("Fable"));
+    assert_eq!(provider.wire_api, WireApi::Anthropic);
+}
+
+#[test]
 fn test_built_in_model_providers_include_anthropic() {
     let providers = built_in_model_providers(/*openai_base_url*/ None);
 
@@ -1500,6 +1512,10 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (VERCEL_GLM_5_3_MODEL, VERCEL_PROVIDER_ID),
         (VERCEL_KIMI_K3_MODEL, VERCEL_PROVIDER_ID),
         (VERCEL_DEEPSEEK_V4_PRO_MODEL, VERCEL_PROVIDER_ID),
+        (
+            CORBANU_API_KIMI_K3_MODEL,
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+        ),
         (BASETEN_DEFAULT_MODEL, BASETEN_PROVIDER_ID),
         ("gpt-5.6-sol", OPENAI_PROVIDER_ID),
     ] {
@@ -1511,6 +1527,42 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
     }
     assert_eq!(canonical_catalog_provider(""), None);
     assert_eq!(canonical_catalog_provider("private/custom-model"), None);
+}
+
+#[test]
+fn corbanu_api_kimi_uses_the_gateway_messages_provider() {
+    assert_eq!(
+        corrected_catalog_provider(CORBANU_API_KIMI_K3_MODEL, PFTERMINAL_PLAN_PROVIDER_ID),
+        Some(PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID)
+    );
+    assert_eq!(
+        corrected_catalog_provider(
+            CORBANU_API_KIMI_K3_MODEL,
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+        ),
+        None
+    );
+    assert_eq!(
+        resolve_model_for_provider(
+            Some(CORBANU_API_KIMI_K3_MODEL.to_string()),
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+        )
+        .as_deref(),
+        Some(CORBANU_API_KIMI_K3_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(None, PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID).as_deref(),
+        Some(CORBANU_API_KIMI_K3_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(
+            Some(CORBANU_API_CLAUDE_FABLE_5_MODEL.to_string()),
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+        )
+        .as_deref(),
+        Some(CORBANU_API_KIMI_K3_MODEL),
+        "retired Fable sessions must migrate to the active Kimi route",
+    );
 }
 
 #[test]

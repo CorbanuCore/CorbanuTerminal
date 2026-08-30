@@ -7,7 +7,7 @@ owner: "Alex Good"
 max_active_sprints: 2
 integration_owner: "Jim Ricketts"
 activation_authority: "Alex Good — Head of Product"
-activation_basis: "2026-08-30 directives to replace Corbanu Plan tiers with wallet-funded Corbanu API keys and dollar balance, then delete all legacy plan state for the sole production user"
+activation_basis: "2026-08-30 directives to replace Corbanu Plan tiers with wallet-funded Corbanu API keys and dollar balance, delete all legacy plan state for the sole production user, and replace unavailable Fable with Kimi K3 through Vercel"
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-08-30
@@ -85,10 +85,10 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 - Share one wallet balance across independently revocable API keys and attribute spend per key.
 - Show a newly created plaintext key exactly once in a secure non-transcript view; persist only its hash server-side.
 - Add provider-neutral public model IDs, recommendation/speed guidance, privacy class, and versioned input/cache/output sell prices.
-- Add a separate `/spawn` quick-start crew that uses the wallet-funded Corbanu API routes: Fable Nazgul, GPT-5.6 Luna Troll, and three GLM 5.3 Flash Orcs, without replacing the existing Standard Crew.
+- Add a separate `/spawn` quick-start crew that uses the wallet-funded Corbanu API routes: Kimi K3 Nazgul, GPT-5.6 Luna Troll, and three GLM 5.3 Flash Orcs, without replacing the existing Standard Crew.
 - Price every Corbanu API route at the pinned upstream cost with zero markup and microdollar settlement granularity.
-- Route GLM 5.3 Flash, GLM 5.3, GPT-5.6 Luna, and GPT-5.6 Sol through the protected server-side Vercel credential.
-- Route Claude Fable and DeepSeek V4 Pro through xAPI when enabled, cheaper, and healthy.
+- Route GLM 5.3 Flash, GLM 5.3, GPT-5.6 Luna, GPT-5.6 Sol, and Kimi K3 through the protected server-side Vercel credential.
+- Route DeepSeek V4 Pro through xAPI when enabled, cheaper, and healthy.
 - Keep internal vendor, account, and credential metadata out of public responses.
 - Delete legacy paid periods, plan credentials, token allowances, receipts, and dependent entitlement records while preserving wallet assets and Corbanu API state.
 - Remove legacy Plan status, details, receipt, recovery, and inference authorization surfaces; call the product “Corbanu API”.
@@ -179,7 +179,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | Versioned per-model pricing | PF-33 / PF-33-S01 | completed | `6aa81161ece53b26915f05c3346a9ebe11b094fd`; zero-markup schedules, exact reservation/settlement, and provider-neutral catalog tests pass |
 | One-time key reveal and multiple keys | PF-32, PF-34 | backend complete | API response-only key tests pass; secure-view TUI proof remains PF-34 |
 | Provider-neutral customer surface with privacy class | PF-33, PF-34 | backend complete | `778b4b33445aa452dce09ab416e520e6b4aaeab1`; JSON/SSE/error sanitization and live provider-neutral response pass; Terminal snapshots remain PF-34 |
-| Corbanu API crew quick start | PF-34 / PF-34-S02 | in progress | Separate Fable → Luna → 3× Flash preset, spawn-picker snapshot, runtime mapping tests, and true-TUI proof |
+| Corbanu API crew quick start | PF-34 / PF-34-S02 | in progress | Separate Kimi K3 → Luna → 3× Flash preset, spawn-picker snapshot, runtime mapping tests, and true-TUI proof |
 | Legacy plans deleted and deauthorized | PF-34, PF-35 | in progress | Terminal removal, production deletion audit, and balance/key preservation checks |
 
 ## Acceptance flows
