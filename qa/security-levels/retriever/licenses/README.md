@@ -7,16 +7,22 @@ Artifact: Scrapling 0.4.15, source commit
 The upstream project declares BSD-3-Clause and includes its license in the
 image. The per-architecture CycloneDX files beside this inventory are the exact
 component/license inventories generated from the pinned image manifests with
-Syft 1.51.1. They contain 5,332 components for `linux/amd64` and 5,323 for
-`linux/arm64`.
+Syft 1.51.1. The amd64 catalog has 5,332 records: 4,009 file records and roughly
+790 unique packages (199 Debian, 66 Python, 523 Rust crates and 2 npm packages).
+The arm64 catalog has 5,323 records. Cargo crates are represented once for each
+of the bundled `uv` and `uvx` binaries, so record counts are not unique-package
+counts or a completeness measure.
 
 The Python layer reports BSD, MIT, Apache-2.0, MPL, ISC, PSF and related
-permissive/copyleft expressions. Two Python records require manual resolution:
-`prompt-toolkit` 3.0.53 has no license value in the generated metadata and
-`ptyprocess` 0.7.0 reports `UNKNOWN`. Some Debian records expose a license-file
-digest instead of an SPDX expression. Those unresolved records, plus Chromium's
-third-party notices, require legal review before a Corbanu rebuild can be signed
-or enabled. The presence of this inventory is not license approval.
+expressions. Two Python records require manual resolution: `prompt-toolkit`
+3.0.53 has no license value in the generated metadata and `ptyprocess` 0.7.0
+reports `UNKNOWN`. The amd64 catalog has 5,066 records without a `licenses`
+array, including 1,046 duplicate cargo records representing 523 unique Rust
+crates bundled in `uv` and `uvx`. Debian records include GPL-2, GPL-3 and LGPL
+families as well as records that expose a license-file digest instead of an SPDX
+expression. Those unresolved records, all reciprocal-license obligations, and
+Chromium's third-party notices require legal review before a Corbanu rebuild can
+be signed or enabled. The presence of this inventory is not license approval.
 
 Upstream release facts observed 2026-08-29:
 

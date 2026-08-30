@@ -1,0 +1,32 @@
+{
+  "fixture_version": 1,
+  "snapshot": {
+    "fixture_version": 1,
+    "host": {"os": "linux", "arch": "amd64", "online": true},
+    "preference": "docker",
+    "engines": {
+      "docker": {
+        "installed": true,
+        "daemon_state": "running",
+        "api_compatible": true,
+        "architecture": "amd64",
+        "image": {
+          "present": true,
+          "digest": "sha256:1bacbc8ec90b3090d462e12f6555e241daf0dfeb684ab326ffa09d52d8226e69",
+          "resolved_platform": "linux/arm64",
+          "manifest_digest": "sha256:1a5e7c7a08b6a892b793cd5c596a3bde5184f9a7c1bd74efb846cf5550377f13",
+          "config_digest": "sha256:1ca734b07ddef61f6bc75175baaf112f822857e2ebd5c3715677b0b7dc3dbdb1",
+          "verified": true,
+          "tampered": false
+        }
+      }
+    }
+  },
+  "expected": {
+    "status": "blocked",
+    "engine": "docker",
+    "worker": null,
+    "reason_code": "image_platform_mismatch",
+    "actions": ["pull_matching_platform_manually", "do_not_run_mismatched_image"]
+  }
+}

@@ -5,8 +5,9 @@ Date: 2026-08-29 (America/Phoenix)
 The supplied Windows host was reached over its pinned SSH host identity. The
 official `RedHat.Podman` winget package was installed only after the user
 explicitly authorized an engine install. Winget selected version 5.8.3 from the
-official source, downloaded the upstream GitHub release installer, and verified
-installer SHA-256
+official source, downloaded the upstream GitHub release installer, and winget
+verified the downloaded installer against the package manifest's declared
+SHA-256
 `b87fe41c112062b3f598574ed4aa3fb82aaa4bc150b29eb4915400e59b0b6b55`
 before installation.
 

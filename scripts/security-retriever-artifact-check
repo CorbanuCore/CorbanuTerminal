@@ -8,22 +8,35 @@ image, starts a worker, opens a socket, or changes a user's engine selection.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = ROOT / "qa/security-levels/retriever/artifact-manifest.json"
 DEFAULT_FIXTURES = ROOT / "qa/security-levels/retriever/engine-fixtures"
+EVIDENCE_ROOT = ROOT / "qa/security-levels/retriever"
+EVIDENCE_PREFIX = PurePosixPath("qa/security-levels/retriever")
 SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
+DATE = re.compile(r"^20[0-9]{2}-[0-9]{2}-[0-9]{2}$")
+PACKAGE_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?$")
+OS_VERSION = re.compile(r"^[0-9]+\.[0-9]+$")
+REVISION = re.compile(r"^[0-9]+$")
 SUPPORTED_HOSTS = {"linux", "macos", "windows"}
 SUPPORTED_ARCHES = {"amd64", "arm64"}
 ENGINE_ORDER = ("podman", "docker")
+AUTO_SKIPPABLE_REASONS = {
+    "engine_stopped",
+    "engine_stalled",
+    "engine_state_unknown",
+    "engine_api_incompatible",
+}
 
 
 class ContractError(ValueError):
@@ -50,6 +63,142 @@ def sha256_file(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def validate_evidence_relative_path(relative: object) -> PurePosixPath:
+    require(isinstance(relative, str), "evidence path must be a string")
+    path = PurePosixPath(relative)
+    require(
+        relative == path.as_posix(),
+        f"evidence path must be canonical POSIX syntax: {relative!r}",
+    )
+    require(
+        path.is_relative_to(EVIDENCE_PREFIX) and path != EVIDENCE_PREFIX,
+        f"evidence path escapes retriever scope: {relative!r}",
+    )
+    require(
+        ".." not in path.parts,
+        f"evidence path contains traversal: {relative!r}",
+    )
+    return path
+
+
+def resolve_evidence_path(relative: object) -> tuple[str, Path]:
+    path = validate_evidence_relative_path(relative)
+    relative_string = path.as_posix()
+    unresolved = ROOT.joinpath(*path.parts)
+    require(
+        not unresolved.is_symlink(), f"evidence file is a symlink: {relative_string}"
+    )
+    try:
+        target = unresolved.resolve(strict=True)
+        evidence_root = EVIDENCE_ROOT.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ContractError(f"missing evidence file {relative_string}: {exc}") from exc
+    require(
+        target.is_relative_to(evidence_root),
+        f"evidence path resolves outside retriever scope: {relative_string}",
+    )
+    require(target.is_file(), f"missing evidence file {relative_string}")
+    return relative_string, target
+
+
+def resolve_repository_input(path: Path, kind: str) -> Path:
+    unresolved = path if path.is_absolute() else Path.cwd() / path
+    require(not unresolved.is_symlink(), f"{kind} input must not be a symlink")
+    try:
+        resolved = unresolved.resolve(strict=True)
+        root = ROOT.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ContractError(f"invalid {kind} input: {exc}") from exc
+    require(
+        resolved.is_relative_to(root),
+        f"{kind} input must remain within the repository",
+    )
+    return resolved
+
+
+def validate_preparation_invariants(manifest: dict[str, Any]) -> None:
+    """Enforce the preparation blockers and provenance that prevent activation."""
+    require(
+        isinstance(manifest.get("security_review_date"), str)
+        and DATE.fullmatch(manifest["security_review_date"]) is not None,
+        "security_review_date must be an ISO date",
+    )
+    blockers = manifest.get("hard_blockers")
+    require(
+        isinstance(blockers, list)
+        and blockers
+        and all(isinstance(item, str) and item.strip() for item in blockers),
+        "preparation_only requires explicit hard blockers",
+    )
+
+    supply_chain = manifest.get("supply_chain")
+    require(isinstance(supply_chain, dict), "supply_chain must be an object")
+    require(
+        supply_chain.get("license_review") == "pending",
+        "license review must remain pending during preparation",
+    )
+    require(
+        supply_chain.get("publisher_provenance") == "present_slsa_v1_per_platform",
+        "per-platform publisher provenance must remain explicit",
+    )
+    require(
+        supply_chain.get("corbanu_generated_sbom") == "present_per_platform",
+        "per-platform independently generated SBOMs must remain explicit",
+    )
+    for field in ("signature_policy", "verification_policy"):
+        require(
+            isinstance(supply_chain.get(field), str) and supply_chain[field].strip(),
+            f"supply_chain.{field} must be non-empty",
+        )
+
+    artifact = manifest.get("artifact")
+    require(isinstance(artifact, dict), "artifact must be an object")
+    build = artifact.get("build_provenance")
+    require(isinstance(build, dict), "artifact.build_provenance must be an object")
+    require(
+        build.get("predicate_type") == "https://slsa.dev/provenance/v1",
+        "SLSA v1 build provenance is required",
+    )
+    require(
+        build.get("source_revision") == artifact.get("source", {}).get("commit"),
+        "build provenance source revision mismatch",
+    )
+    for field in ("python_base_index_digest", "uv_base_index_digest"):
+        value = build.get(field)
+        require(
+            isinstance(value, str) and SHA256.fullmatch(value) is not None,
+            f"invalid build provenance digest {field}",
+        )
+    for platform in artifact.get("platforms", []):
+        require(isinstance(platform, dict), "platform entry must be an object")
+        for field in ("provenance_manifest_digest", "provenance_blob_digest"):
+            value = platform.get(field)
+            require(
+                isinstance(value, str) and SHA256.fullmatch(value) is not None,
+                f"invalid {field} for {platform.get('platform')}",
+            )
+
+    engine = manifest.get("engine_contract")
+    require(isinstance(engine, dict), "engine_contract must be an object")
+    require(
+        engine.get("supported_names") == list(ENGINE_ORDER),
+        "supported engine names must match the evaluator",
+    )
+    require(
+        engine.get("automatic_engine_start") is False,
+        "automatic engine start is forbidden",
+    )
+    require(
+        engine.get("ownership_label") == "io.corbanu.owner=PF-31",
+        "PF-31 ownership label mismatch",
+    )
+    for field in ("lock_rule", "lock_scope", "shared_resource_rule"):
+        require(
+            isinstance(engine.get(field), str) and engine[field].strip(),
+            f"engine_contract.{field} must be non-empty",
+        )
 
 
 def validate_manifest(path: Path) -> dict[str, Any]:
@@ -125,6 +274,12 @@ def validate_manifest(path: Path) -> dict[str, Any]:
             and SHA256.fullmatch(item["config_digest"]) is not None,
             f"invalid config digest for {name}",
         )
+        for field in ("provenance_manifest_digest", "provenance_blob_digest"):
+            require(
+                isinstance(item.get(field), str)
+                and SHA256.fullmatch(item[field]) is not None,
+                f"invalid {field} for {name}",
+            )
         require(
             isinstance(item.get("compressed_bytes"), int)
             and item["compressed_bytes"] > 0,
@@ -151,14 +306,19 @@ def validate_manifest(path: Path) -> dict[str, Any]:
         require(key not in seen_hosts, f"duplicate host identity {key}")
         seen_hosts.add(key)
         image_platform = host.get("image_platform")
+        expected_image_platform = f"linux/{arch}"
         require(
-            image_platform in by_platform,
-            f"host {key} references an unknown image platform",
+            image_platform == expected_image_platform,
+            f"host {key} must use {expected_image_platform}",
         )
         require(
             host.get("manifest_digest")
             == by_platform[image_platform]["manifest_digest"],
             f"host {key} digest mismatch",
+        )
+        require(
+            host.get("config_digest") == by_platform[image_platform]["config_digest"],
+            f"host {key} config digest mismatch",
         )
         if host_os == "windows":
             require(
@@ -188,11 +348,19 @@ def validate_manifest(path: Path) -> dict[str, Any]:
             "dependency name missing",
         )
         version = dependency.get("version")
+        name = dependency["name"]
+        version_pattern = (
+            REVISION
+            if name.endswith("-revision")
+            else OS_VERSION
+            if name == "debian"
+            else PACKAGE_VERSION
+        )
         require(
             isinstance(version, str)
             and version
-            and not any(marker in version for marker in (">", "<", "*", "latest")),
-            f"dependency {dependency['name']} is not exact",
+            and version_pattern.fullmatch(version) is not None,
+            f"dependency {name} is not exact",
         )
 
     supply_chain = manifest.get("supply_chain")
@@ -219,21 +387,14 @@ def validate_manifest(path: Path) -> dict[str, Any]:
     evidence_paths: set[str] = set()
     for item in evidence:
         require(isinstance(item, dict), "evidence file entry must be an object")
-        relative = item.get("path")
+        relative, target = resolve_evidence_path(item.get("path"))
         expected_hash = item.get("sha256")
-        require(
-            isinstance(relative, str)
-            and relative.startswith("qa/security-levels/retriever/"),
-            "evidence path escapes retriever scope",
-        )
         require(relative not in evidence_paths, f"duplicate evidence path {relative}")
         require(
             isinstance(expected_hash, str)
             and re.fullmatch(r"[0-9a-f]{64}", expected_hash) is not None,
             f"invalid evidence hash for {relative}",
         )
-        target = ROOT / relative
-        require(target.is_file(), f"missing evidence file {relative}")
         require(
             sha256_file(target) == expected_hash,
             f"evidence hash mismatch for {relative}",
@@ -294,6 +455,7 @@ def validate_manifest(path: Path) -> dict[str, Any]:
         engine.get("explicit_selection_preserved") is True,
         "explicit engine selection must be preserved",
     )
+    validate_preparation_invariants(manifest)
     return manifest
 
 
@@ -305,6 +467,44 @@ def engine_failure(code: str, engine: str | None, actions: list[str]) -> dict[st
         "reason_code": code,
         "actions": actions,
     }
+
+
+def owned_workers(state: dict[str, Any]) -> list[dict[str, Any]]:
+    workers = state.get("workers")
+    if not isinstance(workers, list):
+        return []
+    return [
+        worker
+        for worker in workers
+        if isinstance(worker, dict) and worker.get("owner_label") == "PF-31"
+    ]
+
+
+def owned_worker_snapshot(workers: list[dict[str, Any]]) -> str:
+    records = sorted((worker.get("name"), worker.get("state")) for worker in workers)
+    return json.dumps(records, separators=(",", ":"))
+
+
+def validate_worker_lock(
+    state: dict[str, Any],
+    engine: str,
+    worker: str | None,
+    workers: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    lock = state.get("lock")
+    if (
+        not isinstance(lock, dict)
+        or lock.get("corbanu_owned") is not True
+        or lock.get("worker") != worker
+        or lock.get("reinspected") is not True
+        or lock.get("owned_worker_snapshot") != owned_worker_snapshot(workers)
+    ):
+        return engine_failure(
+            "worker_lock_mismatch",
+            engine,
+            ["repair_corbanu_lock_manually", "do_not_create_duplicate"],
+        )
+    return None
 
 
 def evaluate_snapshot(
@@ -333,6 +533,22 @@ def evaluate_snapshot(
     )
     engines = snapshot.get("engines")
     require(isinstance(engines, dict), "engines must be an object")
+    owned_by_engine = {
+        name: owned_workers(state)
+        for name, state in engines.items()
+        if name in ENGINE_ORDER
+        and isinstance(state, dict)
+        and state.get("installed") is True
+    }
+    engines_with_owned_workers = [
+        name for name, workers in owned_by_engine.items() if workers
+    ]
+    if len(engines_with_owned_workers) > 1:
+        return engine_failure(
+            "duplicate_owned_workers_cross_engine",
+            None,
+            ["reconcile_owned_workers_manually", "do_not_remove_unrelated_resources"],
+        )
     candidates = list(ENGINE_ORDER if preference == "auto" else (preference,))
     installed = [
         name
@@ -349,21 +565,18 @@ def evaluate_snapshot(
         )
 
     if preference == "auto":
-        first_action: dict[str, Any] | None = None
-        first_blocked: dict[str, Any] | None = None
+        first_unselectable: dict[str, Any] | None = None
         for name in installed:
             result = evaluate_snapshot({**snapshot, "preference": name}, manifest)
-            if result["status"] == "ready":
+            if result["reason_code"] not in AUTO_SKIPPABLE_REASONS:
                 return result
-            if result["status"] == "action_required" and first_action is None:
-                first_action = result
-            if result["status"] == "blocked" and first_blocked is None:
-                first_blocked = result
+            if first_unselectable is None:
+                first_unselectable = result
         require(
-            first_action is not None or first_blocked is not None,
+            first_unselectable is not None,
             "auto selection produced no result",
         )
-        return first_action if first_action is not None else first_blocked
+        return first_unselectable
 
     name = installed[0]
     state = engines[name]
@@ -409,6 +622,30 @@ def evaluate_snapshot(
             name,
             ["pull_pinned_image_manually", "do_not_run_mismatched_image"],
         )
+    expected_platform = f"linux/{host_arch}"
+    expected_image = next(
+        item
+        for item in manifest["artifact"]["platforms"]
+        if item["platform"] == expected_platform
+    )
+    if image.get("resolved_platform") != expected_platform:
+        return engine_failure(
+            "image_platform_mismatch",
+            name,
+            ["pull_matching_platform_manually", "do_not_run_mismatched_image"],
+        )
+    if image.get("manifest_digest") != expected_image["manifest_digest"]:
+        return engine_failure(
+            "image_manifest_mismatch",
+            name,
+            ["pull_pinned_image_manually", "do_not_run_mismatched_image"],
+        )
+    if image.get("config_digest") != expected_image["config_digest"]:
+        return engine_failure(
+            "image_config_mismatch",
+            name,
+            ["pull_pinned_image_manually", "do_not_run_mismatched_image"],
+        )
     if image.get("verified") is not True or image.get("tampered") is True:
         return engine_failure(
             "image_tampered",
@@ -424,11 +661,7 @@ def evaluate_snapshot(
 
     workers = state.get("workers")
     require(isinstance(workers, list), f"{name}.workers must be a list")
-    owned = [
-        worker
-        for worker in workers
-        if isinstance(worker, dict) and worker.get("owner_label") == "PF-31"
-    ]
+    owned = owned_workers(state)
     if len(owned) > 1:
         return engine_failure(
             "duplicate_owned_workers",
@@ -436,6 +669,9 @@ def evaluate_snapshot(
             ["reconcile_owned_workers_manually", "do_not_remove_unrelated_resources"],
         )
     if not owned:
+        lock_failure = validate_worker_lock(state, name, None, owned)
+        if lock_failure is not None:
+            return lock_failure
         return {
             "status": "action_required",
             "engine": name,
@@ -447,6 +683,9 @@ def evaluate_snapshot(
     worker = owned[0]
     worker_name = worker.get("name")
     require(isinstance(worker_name, str) and worker_name, "owned worker name missing")
+    lock_failure = validate_worker_lock(state, name, worker_name, owned)
+    if lock_failure is not None:
+        return lock_failure
     if worker.get("state") == "stopped":
         return {
             "status": "action_required",
@@ -468,14 +707,6 @@ def evaluate_snapshot(
             "owned_worker_state_unknown", name, ["inspect_owned_worker_manually"]
         )
 
-    lock = state.get("lock")
-    require(isinstance(lock, dict), f"{name}.lock must be an object")
-    if lock.get("corbanu_owned") is not True or lock.get("worker") != worker_name:
-        return engine_failure(
-            "worker_lock_mismatch",
-            name,
-            ["repair_corbanu_lock_manually", "do_not_create_duplicate"],
-        )
     clients = state.get("active_clients", 0)
     require(
         isinstance(clients, int) and clients >= 0,
@@ -498,7 +729,7 @@ def run_fixtures(directory: Path, manifest: dict[str, Any]) -> tuple[int, int]:
     )
     require(paths, f"no fixtures found in {directory}")
     passed = 0
-    idempotent = 0
+    deterministic = 0
     for path in paths:
         fixture = load_json(path)
         snapshot = fixture.get("snapshot")
@@ -507,11 +738,74 @@ def run_fixtures(directory: Path, manifest: dict[str, Any]) -> tuple[int, int]:
         require(isinstance(expected, dict), f"{path}: expected must be an object")
         first = evaluate_snapshot(snapshot, manifest)
         second = evaluate_snapshot(snapshot, manifest)
-        require(first == second, f"{path}: evaluation is not idempotent")
-        idempotent += 1
+        require(first == second, f"{path}: evaluation is not deterministic")
+        deterministic += 1
         require(first == expected, f"{path}: expected {expected!r}, got {first!r}")
         passed += 1
-    return passed, idempotent
+    return passed, deterministic
+
+
+def run_manifest_policy_checks(manifest: dict[str, Any]) -> int:
+    mutations = (
+        ("empty hard blockers", lambda item: item.__setitem__("hard_blockers", [])),
+        (
+            "approved license review",
+            lambda item: item["supply_chain"].__setitem__("license_review", "approved"),
+        ),
+        (
+            "automatic engine start",
+            lambda item: item["engine_contract"].__setitem__(
+                "automatic_engine_start", True
+            ),
+        ),
+        (
+            "engine list drift",
+            lambda item: item["engine_contract"].__setitem__(
+                "supported_names", ["docker", "podman"]
+            ),
+        ),
+        (
+            "invalid provenance digest",
+            lambda item: item["artifact"]["platforms"][0].__setitem__(
+                "provenance_manifest_digest", "sha256:invalid"
+            ),
+        ),
+    )
+    passed = 0
+    for label, mutate in mutations:
+        candidate = copy.deepcopy(manifest)
+        mutate(candidate)
+        try:
+            validate_preparation_invariants(candidate)
+        except ContractError:
+            passed += 1
+        else:
+            raise ContractError(f"manifest policy mutation was accepted: {label}")
+    return passed
+
+
+def run_evidence_path_checks() -> int:
+    valid = "qa/security-levels/retriever/licenses/README.md"
+    require(
+        validate_evidence_relative_path(valid) == PurePosixPath(valid),
+        "canonical evidence path was rejected",
+    )
+    rejected = (
+        "qa/security-levels/retriever/../artifact-manifest.json",
+        "qa/security-levels/retriever/licenses/../../outside.txt",
+        "qa/security-levels/retriever/./licenses/README.md",
+        "qa//security-levels/retriever/licenses/README.md",
+        r"qa\security-levels\retriever\licenses\README.md",
+    )
+    passed = 1
+    for relative in rejected:
+        try:
+            validate_evidence_relative_path(relative)
+        except ContractError:
+            passed += 1
+        else:
+            raise ContractError(f"unsafe evidence path was accepted: {relative!r}")
+    return passed
 
 
 def main() -> int:
@@ -522,20 +816,31 @@ def main() -> int:
     parser.add_argument("--snapshot", type=Path)
     args = parser.parse_args()
     try:
-        manifest = validate_manifest(args.manifest)
+        manifest_path = resolve_repository_input(args.manifest, "manifest")
+        manifest = validate_manifest(manifest_path)
         if args.command in {"validate", "all"}:
-            print(f"manifest: valid ({args.manifest.relative_to(ROOT)})")
+            print(f"manifest: valid ({manifest_path.relative_to(ROOT.resolve())})")
         if args.command == "evaluate":
             require(args.snapshot is not None, "evaluate requires --snapshot")
+            snapshot_path = resolve_repository_input(args.snapshot, "snapshot")
             print(
                 json.dumps(
-                    evaluate_snapshot(load_json(args.snapshot), manifest),
+                    evaluate_snapshot(load_json(snapshot_path), manifest),
                     sort_keys=True,
                 )
             )
         if args.command in {"self-test", "all"}:
-            passed, idempotent = run_fixtures(args.fixtures, manifest)
-            print(f"fixtures: {passed} passed; {idempotent} idempotency checks passed")
+            fixtures_path = resolve_repository_input(args.fixtures, "fixtures")
+            passed, deterministic = run_fixtures(fixtures_path, manifest)
+            print(
+                f"fixtures: {passed} passed; "
+                f"{deterministic} deterministic replay checks passed"
+            )
+            print(
+                f"manifest policies: {run_manifest_policy_checks(manifest)} "
+                "mutation checks passed"
+            )
+            print(f"evidence paths: {run_evidence_path_checks()} checks passed")
     except ContractError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
