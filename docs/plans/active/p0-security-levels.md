@@ -23,6 +23,9 @@ implementation_worktrees:
   - path: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
     branch: "feat/p0-security-levels"
     base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier"
+    branch: "feat/p0-security-ingress-classifier"
+    base_commit: "6a35712cd5731b191d875e8c6468f1abe23eb66e"
 ---
 
 # P0 `/security` levels
@@ -346,6 +349,7 @@ update; it cannot silently change Permissive or an accepted security level.
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
 | Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-security-levels` | `feat/p0-security-levels` | `7cc15ae0762664d6d01765de407329887da9f876` | Complete reconciled security program, policy/broker/ingress/financial adapters, TUI and evidence |
+| Codex ingress/classifier lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier` | `feat/p0-security-ingress-classifier` | `6a35712cd5731b191d875e8c6468f1abe23eb66e` | PF-34-S04 screening contract and immutable fixtures; Jim Ricketts receives the lane candidate and owns serialized crate/workspace/Bazel registration at G1 |
 
 Implementation does not occur in the documentation checkout. Update this plan
 before changing the implementation worktree, base, owner, or scope.

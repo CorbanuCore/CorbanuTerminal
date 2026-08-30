@@ -1,14 +1,17 @@
 ---
 sprint_id: "PF-34-S04"
 title: "Screening segment contract and fixtures"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-34"
 execution_order: 19
-owner: "Jim Ricketts"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Codex ingress/classifier lane"
+parallel_lane: "ingress-classifier"
+write_scope: "codex-rs/content-security/src/contract.rs, codex-rs/content-security/src/contract_tests.rs, qa/security-levels/ingress-contract/, qa/security-levels/sprints/PF-34-S04/, docs/sprints/current/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md"
+integration_gate: "Jim Ricketts receives the PF-34-S04 candidate at G1/G2, audits the literal scope, performs serialized content-security crate/workspace/Cargo/Bazel/lock registration, reruns governance and the complete content-security suite on the combined tree, then archives PF-34-S04 before PF-35-S01 allocation."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier"
+branch: "feat/p0-security-ingress-classifier"
+base_commit: "6a35712cd5731b191d875e8c6468f1abe23eb66e"
 depends_on: "none"
 created: 2026-08-28
 updated: 2026-08-28
@@ -36,13 +39,14 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Plan active; dependencies in front matter completed and archived.
-- [ ] Assign a named execution owner and exact plan-matching worktree/branch/base; run the sprint checker before readiness.
-- [ ] Read root and nearest implementation AGENTS.md; reserve disjoint write scope and receiving integration gate if parallel.
+- [x] Plan active; dependencies in front matter are `none`.
+- [x] Named execution owner and exact plan-matching worktree/branch/base assigned; governance checkers pass before readiness.
+- [x] Root and nearest implementation AGENTS.md read; literal disjoint write scope and Jim Ricketts receiving integration gate reserved.
 
 ## Done
 
 - [x] Bounded preparation/foundation mandate created from the accepted review; no implementation or platform acceptance claimed.
+- [x] Ingress/classifier lane allocated from dispatch base `6a35712cd5731b191d875e8c6468f1abe23eb66e`; all caches are rooted under `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/`.
 
 ## Remaining
 
