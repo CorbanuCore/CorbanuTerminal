@@ -120,7 +120,6 @@ nav:
               - "Broker process and launch":
                   - "PF-27-S04 — Isolated credential broker process": sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md
                   - "PF-27-S02 — Secretless agent launch and bypass containment": sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md
-                  - "PF-27-S03: Platform containment contract and probes": sprints/current/p0-security-levels/pf-27-s03-platform-containment-contract.md
               - "Output and reflected secrets":
                   - "PF-28-S01 — Central secret and protected-output gate": sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md
                   - "PF-28-S02 — Reflected-secret response scrubbing": sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md
@@ -135,7 +134,7 @@ nav:
                   - "PF-31-S01 — Pinned retriever artifact and sandbox": sprints/current/p0-security-levels/pf-31-s01-pinned-retriever-isolation.md
                   - "PF-31-S02 — Bounded fetch adapter with no host fallback": sprints/current/p0-security-levels/pf-31-s02-bounded-fetch-no-fallback.md
                   - "PF-31-S03 — Download quarantine and human file promotion": sprints/current/p0-security-levels/pf-31-s03-download-quarantine-promotion.md
-                  - "PF-31-S04: Retriever artifact and engine preparation": sprints/current/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md
+                  - "PF-31-S04: Retriever artifact and engine preparation": sprints/archive/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md
               - "Screened search providers":
                   - "PF-32-S01 — Stable web facade and provider registry": sprints/current/p0-security-levels/pf-32-s01-web-facade-and-registry.md
                   - "PF-32-S02 — Existing search adapter and native bypass closure": sprints/current/p0-security-levels/pf-32-s02-existing-search-and-native-bypass.md
@@ -146,7 +145,7 @@ nav:
               - "Network enforcement":
                   - "PF-33-S01 — URL DNS and redirect policy": sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md
                   - "PF-33-S02 — Connection pinning and alternate-egress denial": sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md
-                  - "PF-33-S03: Pure destination-policy contract": sprints/current/p0-security-levels/pf-33-s03-destination-policy-contract.md
+                  - "PF-33-S03: Pure destination-policy contract": sprints/archive/p0-security-levels/pf-33-s03-destination-policy-contract.md
               - "Sanitization and quarantine":
                   - "PF-34-S01 — Render-aware content sanitization": sprints/current/p0-security-levels/pf-34-s01-render-aware-sanitization.md
                   - "PF-34-S02 — Quarantine state and encrypted retention": sprints/current/p0-security-levels/pf-34-s02-quarantine-state-and-store.md

@@ -1,0 +1,12 @@
+load("//:defs.bzl", "codex_rust_crate")
+
+codex_rust_crate(
+    name = "secret-broker",
+    compile_data = [
+        "//:qa/security-levels/platform/capability-result-v1.schema.json",
+        "//:qa/security-levels/sprints/PF-27-S03/results/linux.json",
+        "//:qa/security-levels/sprints/PF-27-S03/results/macos.json",
+        "//:qa/security-levels/sprints/PF-27-S03/results/windows.json",
+    ],
+    crate_name = "codex_secret_broker",
+)

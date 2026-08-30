@@ -89,3 +89,13 @@ exports_files(
     ],
     visibility = ["//codex-rs/content-security:__pkg__"],
 )
+
+exports_files(
+    [
+        "qa/security-levels/platform/capability-result-v1.schema.json",
+        "qa/security-levels/sprints/PF-27-S03/results/linux.json",
+        "qa/security-levels/sprints/PF-27-S03/results/macos.json",
+        "qa/security-levels/sprints/PF-27-S03/results/windows.json",
+    ],
+    visibility = ["//codex-rs/secret-broker:__pkg__"],
+)

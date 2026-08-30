@@ -26,6 +26,9 @@ implementation_worktrees:
   - path: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
     branch: "feat/p0-security-levels"
     base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform"
+    branch: "feat/p0-security-foundation-platform"
+    base_commit: "1907d99aed9714f05a5f54fca1703658017d616c"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier"
     branch: "feat/p0-security-ingress-classifier"
     base_commit: "6a35712cd5731b191d875e8c6468f1abe23eb66e"
@@ -90,8 +93,8 @@ passing candidate evidence; no source citation alone closes an acceptance item.
   launch and deterministic ingress/disclosure policy. Unsupported adapters or
   isolation fail visibly; they never fall back to raw credentials.
 - **All source requirements have owners.** Earlier 68/73-record snapshots are
-  historical. Sprint 13 and PF-34-S04 integration preserve 17 completed archives
-  and leave **59 current units**. All 72
+  historical. Sprint 13, PF-34-S04, and PF-27-S03 integration preserve 19
+  completed archives and leave **57 current units**. All 72
   cancelled firewall records and seven unrelated Autoreview drafts are unchanged.
 - **No evidence is retroactively accepted.** Upstream's PF-15–22 and PF-13-S01
   completions remain accepted for their original scope. The stronger review
@@ -134,10 +137,10 @@ human final-acceptance gate.
 The coordination packet at
 `qa/security-levels/planning/parallel-handoffs-2026-08-29/README.md` divides the
 program into foundation/platform, browser/retrieval and ingress/classifier legs.
-PF-13-S05 already occupies one of the three global active-sprint slots. The two
-available initial preparation slots are PF-31-S04 and PF-34-S04; one sprint may
-run at a time in each lane. After PF-13-S05 closes, the primary slot rotates to
-PF-27-S03. A handoff document is coordination, not execution authority: before a
+PF-13-S05, PF-31-S04, PF-33-S03, and PF-27-S03 are completed and archived.
+PF-27-S03 occupied the foundation/platform slot at dispatch base
+`1907d99aed9714f05a5f54fca1703658017d616c`; one sprint may run at a time in
+each lane. A handoff document is coordination, not execution authority: before a
 draft becomes `ready`, this plan and its sprint record must name the exact owner,
 CorbanuDrive worktree and branch, 40-character post-handoff `main` base, parallel
 lane, literal disjoint `write_scope` and `integration_gate`, and both governance
@@ -378,6 +381,7 @@ update; it cannot silently change Permissive or an accepted security level.
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
 | Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-security-levels` | `feat/p0-security-levels` | `7cc15ae0762664d6d01765de407329887da9f876` | Complete reconciled security program, policy/broker/ingress/financial adapters, TUI and evidence |
+| Codex foundation/platform lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform` | `feat/p0-security-foundation-platform` | `1907d99aed9714f05a5f54fca1703658017d616c` | PF-27-S03 platform contract, probes, three-platform evidence, and user-authorized serialized G1 crate/workspace/Bazel/lock/CI integration |
 | Codex ingress/classifier lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier` | `feat/p0-security-ingress-classifier` | `6a35712cd5731b191d875e8c6468f1abe23eb66e` | PF-34-S04 screening contract, immutable fixtures and user-authorized serialized G1/G2 crate/workspace/Bazel/lock/CI integration |
 
 The PF-34-S04 creation coordinate remains the immutable base recorded above.
@@ -402,6 +406,23 @@ the current and archive PF-34-S04 sprint-record paths, the current security spri
 index, the global sprint index, `mkdocs.yml`, and this active-plan allocation.
 Its `parallel_lane` is `ingress-classifier`. Shared registration is now serialized
 inside this one lane; no concurrent sprint owns any listed path.
+
+After PF-34-S04 was archived, the user's 2026-08-30 integration instruction kept
+the Codex ingress/classifier lane as integration owner and assigned PF-27-S03's
+serialized G1 registration. That lane merged current `main`, audited the literal
+scope, and registered the standalone contract crate; the foundation/platform
+lane remained the candidate owner. Integration authority was not returned to
+Jim Ricketts by the merge.
+
+Literal PF-27-S03 write scope: `codex-rs/secret-broker/`,
+`codex-rs/Cargo.toml`, `codex-rs/Cargo.lock`, root `BUILD.bazel`, root
+`MODULE.bazel.lock`, `.github/workflows/security-platform-contract.yml`, the
+three `scripts/security_platform_probe` command/implementation/test paths,
+`qa/security-levels/platform/`, `qa/security-levels/sprints/PF-27-S03/`, the
+current and archive PF-27-S03 sprint-record paths, both sprint indexes,
+`mkdocs.yml`, and this active plan. Its `parallel_lane` is
+`foundation-platform`. Shared registration is serialized at G1; no concurrent
+sprint owns any listed path.
 
 Implementation does not occur in the documentation checkout. Update this plan
 before changing the implementation worktree, base, owner, or scope.
@@ -434,13 +455,14 @@ coordinates are not permission for concurrent workers in the same checkout.
 
 ## Sprint execution map
 
-This map covers **59 current and 17 completed archived sprints**.
+This map covers **57 current and 19 completed archived sprints**.
 The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
 is dependency-correct; feature IDs are not execution order. Archive orders 1–9
 stay unchanged and current orders start at 10. Existing allocation coordinates
 follow upstream; the five preparation/foundation drafts and five new follow-ups
-remain `UNALLOCATED` until assigned. PF-34-S04 is completed and archived; all
-current records are `draft`, with completed prerequisites and checked allocation
+remain `UNALLOCATED` until assigned. PF-27-S03 and PF-34-S04 are completed and
+archived, and other current records are
+`draft`, with completed prerequisites and checked allocation
 required before execution. Archived links document original scope, not new passes.
 
 | Feature ID | Plan feature | Sprint records (completed links are archived) | State |
@@ -458,7 +480,7 @@ required before execution. Archived links document original scope, not new passe
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
 | `PF-26` | Harnesses, true-TUI/live-repository qualification, human acceptance, and finished docs | [S01](../../sprints/archive/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md), [S04](../../sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md), [S02](../../sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md), [S03](../../sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | S01 completed; S04/S02/S03 draft |
-| `PF-27` | Shared contracts, isolated credential broker and secretless launch | [S01](../../sprints/archive/p0-security-levels/pf-27-s01-shared-security-contracts.md), [S02](../../sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md), [S03](../../sprints/current/p0-security-levels/pf-27-s03-platform-containment-contract.md), [S04](../../sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md) | S01 completed; S02–S04 draft |
+| `PF-27` | Shared contracts, isolated credential broker and secretless launch | [S01](../../sprints/archive/p0-security-levels/pf-27-s01-shared-security-contracts.md), [S02](../../sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md), [S03](../../sprints/archive/p0-security-levels/pf-27-s03-platform-containment-contract.md), [S04](../../sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md) | S01/S03 completed; S02/S04 draft |
 | `PF-28` | Central output and reflected-secret protection | [S01](../../sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md), [S02](../../sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) | draft |
 | `PF-29` | Protected-mode inventory and human migration | [S01](../../sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md), [S02](../../sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md) | draft |
 | `PF-30` | Durable provenance and post-taint authority | [S01](../../sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md), [S02](../../sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md), [S03](../../sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) | draft |
@@ -643,9 +665,9 @@ incomplete; do not substitute a wrapper heuristic or optional hosted service.
 
 ## Implementation sequence
 
-Use the [59-record current index](../../sprints/current/p0-security-levels/index.md)
+Use the [57-record current index](../../sprints/current/p0-security-levels/index.md)
 for exact dependencies. Bounded parallel allocations follow the sprint process;
-reading order is not a serial lock. Including 17 completed archives, the graph
+reading order is not a serial lock. Including 19 completed archives, the graph
 has 76 nodes; exact merged-tree ordering is maintained by the checked current
 index rather than inherited historical snapshot arithmetic.
 
@@ -691,7 +713,7 @@ Run fix and formatting tools before the final affected tests.
 | Security policy | `cd codex-rs && just test -p codex-security-policy` | pending | `qa/release/<version>/security/policy-tests.txt` |
 | Config and core integration | `cd codex-rs && just test -p codex-config && just test -p codex-core` | pending | `qa/release/<version>/security/integration-tests.txt` |
 | Vault and network boundaries | `cd codex-rs && just test -p codex-vault && just test -p codex-network-proxy` | pending | `qa/release/<version>/security/boundary-tests.txt` |
-| Expanded broker/ingress/retriever suites | `cd codex-rs && just test -p codex-secret-broker && just test -p codex-content-security && just test -p codex-web-retriever && just test -p codex-web-search-extension` | pending; new crates are planned | `qa/release/<version>/security/expanded-boundaries/` |
+| Expanded broker/ingress/retriever suites | `cd codex-rs && just test -p codex-secret-broker && just test -p codex-content-security && just test -p codex-web-retriever && just test -p codex-web-search-extension` | broker and ingress contracts registered; retriever and search-extension crates remain planned | `qa/release/<version>/security/expanded-boundaries/` |
 | Classifier corpus/artifact/quality | `python3 scripts/security-classifier-eval --manifest <frozen-manifest> --artifact <pinned-artifact> --output <dir>` | pending; evaluator is PF-35 work | `qa/release/<version>/security/classifier/` |
 | TUI and snapshots | `cd codex-rs && just test -p codex-tui` | pending | `qa/release/<version>/security/tui-tests.txt` |
 | Adversarial matrix | `python3 scripts/security-level-adversarial --candidate <binary> --output <dir>` | pending; harness is part of stage 5 | `qa/release/<version>/security/adversarial/` |
@@ -781,7 +803,7 @@ before qualification.
 - [ ] Accepted architecture refinements and upstream-seam register have final-tree evidence.
 - [ ] Parallel allocations, scope audits and combined-tree integration evidence are complete.
 
-- [x] Complete source scope maps to 59 current and 17 completed single-feature sprints; all 72 cancelled records have explicit dispositions.
+- [x] Complete source scope maps to 57 current and 19 completed single-feature sprints; all 72 cancelled records have explicit dispositions.
 - [ ] Every PF-27–41 contract and protected-mode readiness condition passes final-candidate evidence.
 - [ ] Optional hosted/reviewer lanes are explicitly qualified-enabled or disabled with an auditable reason.
 - [ ] Permissive compatibility is proven against the frozen pre-feature baseline.
