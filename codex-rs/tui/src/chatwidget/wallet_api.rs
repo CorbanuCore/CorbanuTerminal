@@ -382,6 +382,16 @@ async fn load_read_only_account(
         .send()
         .await
         .map_err(|error| error.to_string())?;
+    if account_response.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Ok(CorbanuApiView {
+            account: None,
+            key_summaries_loaded: false,
+            notice: Some(
+                "The stored Corbanu API key is no longer valid. Unlock this wallet to load its balance or create a replacement key."
+                    .to_string(),
+            ),
+        });
+    }
     if !account_response.status().is_success() {
         return Err(format!(
             "Corbanu API account returned HTTP {}",

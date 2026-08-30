@@ -100,3 +100,25 @@ async fn unfunded_surface_explains_arbitrary_top_up_without_a_tier() {
     assert!(!rendered.contains("Basic"));
     insta::assert_snapshot!(rendered);
 }
+
+#[tokio::test]
+async fn stale_key_surface_routes_back_through_wallet_ownership() {
+    let (mut chat, _tx, _event_rx, _op_rx) =
+        crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+    chat.show_corbanu_api_loading();
+    chat.on_corbanu_api_loaded(Ok(CorbanuApiView {
+        account: None,
+        key_summaries_loaded: false,
+        notice: Some(
+            "The stored Corbanu API key is no longer valid. Unlock this wallet to load its balance or create a replacement key."
+                .to_string(),
+        ),
+    }));
+
+    let rendered =
+        crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 100);
+    assert!(rendered.contains("stored Corbanu API key is no longer valid"));
+    assert!(rendered.contains("Manage API keys"));
+    assert!(rendered.contains("Create API key"));
+    assert!(!rendered.contains("Unavailable:"));
+}
