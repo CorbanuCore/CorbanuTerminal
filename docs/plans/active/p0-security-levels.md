@@ -147,7 +147,8 @@ The initial coordination packet at
 `qa/security-levels/planning/parallel-handoffs-2026-08-29/README.md` historically
 divided the first round into foundation/platform, browser/retrieval and
 ingress/classifier legs. It is evidence, not current dispatch authority. The
-[round-two packet](../../qa/security-levels/planning/parallel-handoffs-2026-08-30-round-2/README.md)
+round-two packet at
+`qa/security-levels/planning/parallel-handoffs-2026-08-30-round-2/README.md`
 owns new dispatches after PF-27-S03 integration.
 PF-13-S05, PF-31-S04, PF-33-S03, and PF-27-S03 are completed and archived.
 PF-27-S03 occupied the foundation/platform slot at dispatch base
