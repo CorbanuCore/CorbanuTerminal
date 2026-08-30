@@ -60,11 +60,11 @@ updated: 2026-08-30
 - [x] Corrected the shared unlock-capability lifecycle so one-action grants are removed from TUI state when any signing request begins, while timed grants remain reusable; successful top-ups no longer poison the following account refresh with a daemon `capability_invalid` refusal.
 - [x] Replaced the legacy four-row Plan relabeling with the six provider-neutral Corbanu API routes while preserving the supported Ambient GLM 5.2 option; Flash is marked recommended and GLM 5.3 is labeled as using balance faster.
 - [x] Replaced `/wallet` pricing referrals in the model picker with each route's explicit input, cache-read, cache-write, and output rates, including the Luna/Sol 272K+ context schedule.
+- [x] Added a distinct Corbanu API crew quick start with Fable Nazgul, Luna Troll at xhigh, and three Flash Orcs while preserving the existing Standard Crew.
+- [x] Added exact CrewSpec, durable-state/recovery, rendered-picker, and true-TUI evidence for the second preset.
 
 ## Remaining
 
-- [ ] Add a distinct Corbanu API crew quick start with Fable Nazgul, Luna Troll, and three Flash Orcs while preserving the existing Standard Crew.
-- [ ] Add exact CrewSpec, event-routing, rendered-picker, and true-TUI evidence for the second preset.
 - [ ] Named human tester enters the wallet passcode and completes create/revoke plus one-time reveal against the disposable backend.
 - [ ] Named human tester repeats top-up, create/revoke, one-time reveal, inference, and recovery flows against the deployed backend.
 
@@ -77,6 +77,7 @@ updated: 2026-08-30
 - [x] Upstream picker/provider compatibility test passes with exact model-field selection.
 - [x] Capability-lifecycle and wallet API/unlock focus suite passes 13/13; the broad 3,842-test TUI run passes 3,811 and retains 31 known unrelated version/copy snapshot failures.
 - [x] Corbanu catalog mapping, rendered seven-row picker snapshot, and existing cross-provider picker regression pass 3/3.
+- [x] Corbanu API crew exact-runtime, Standard Crew preservation, durable round-trip/recovery, and rendered `/spawn` picker suite passes 5/5; true TUI created all five idle threads without starting a task.
 - [ ] Named human passcode, top-up, one-time reveal, create/revoke, inference, and recovery acceptance pass against production.
 
 ## Exit evidence
@@ -91,5 +92,6 @@ updated: 2026-08-30
 - [x] True-TUI read-only recovery on `06e54c4431` in TensorCash opened `/wallet` -> `Corbanu API` and rendered `$10 available` plus the priced catalog without `capability_invalid`, `Unavailable`, or a second signing/payment request; exact installed binary SHA-256 is `cb4bfa6ae28a1ffbcfc7f19a4118655f00cd95dc526bb43cdf347a0054b6e604`, with trace log at `/tmp/corbanu-capability-qa.t06JLR/codex-tui.log`.
 - [x] True-TUI `/model` verification on `fd6f3fde66` opened directly on `Corbanu API` and rendered Ambient GLM 5.2 unchanged alongside the six new routes, with no removed Kimi/direct legacy rows; installed binary SHA-256 is `6501287f8cb5199d02676c576fe0ee0c88559bca2d4068752eacf656b44e6a06`, with trace log at `/tmp/corbanu-ambient-picker-qa.Wq8Vio/codex-tui.log`.
 - [x] True-TUI `/model` verification on `80ce83d9c3` rendered direct input, cache-read, cache-write, output, and applicable 272K+ rates inline with no `/wallet` referral; installed binary SHA-256 is `4fb1b0495f5875dd6421fbb97a8cda89bd37321e5ad95a18d85002238a41cfe1`, with trace log at `/tmp/corbanu-inline-prices-qa.MIZEot/codex-tui.log`.
+- [x] Corbanu API crew implementation is `1235bc529d`; `corbanu-debug` installs that exact build with SHA-256 `e76d41f532e8ea027042a90e55c587e58e0b3b7a3f0111eaefdd2b62ed10b948`. True-TUI `/spawn` kept Standard Crew visible, selected the separate Corbanu API crew, and created Fable, Luna xhigh, and three Flash runtimes with no task or spawn error; trace log is `/tmp/corbanu-crew-qa.2SBKoY/codex-tui.log`.
 - [x] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/corbanu-api-balance/`.
