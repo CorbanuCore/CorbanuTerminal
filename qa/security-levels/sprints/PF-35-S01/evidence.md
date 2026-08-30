@@ -29,6 +29,10 @@ weights, signing, or Intel N100 performance.
 - Plan-state handoff: the integration owner must reconcile the stale PF-35
   execution-map `draft` row and superseded readiness-blocked prose with this
   allocated `in_progress` sprint; the shared active plan is outside write scope.
+- Sprint-process handoff: ratify the allocation-coordinate convention in the
+  shared sprint policy. This record preserves the original dispatch
+  `base_commit` and separately records the allocation commit from which this
+  branch was forked; the shared policy is outside write scope.
 
 ## Verification
 
@@ -120,8 +124,22 @@ above. Cycle-6 transcript SHA-256:
 `074270f8b74174304d4e68de89d07a276f670ff4006b3a027de0a890dd6ae362`.
 Cycle-6 trace SHA-256:
 `1c8aa51cfcdfd72578ed8f65c9629b956290596b1fefa297de8f7b135e8aa781`.
-An exact committed-HEAD confirmation review is performed before handback and
-sealed below without changing implementation bytes.
+Cycle 7 reviewed exact clean committed HEAD
+`745df3594b34021947ffc27131c35828eaa4c524` and found 0 P0/P1, one P2 and seven
+P3 observations. The P2 showed that escaped JSON keys could still place a raw
+terminal control byte in a record-material error. The evaluator now terminal-
+escapes every dynamic error fragment and final stderr message. It also closes
+the feasible P3s by measuring the 64 KiB JSONL limit in bytes, splitting only
+on the JSONL LF delimiter, normalizing oversized-integer `ValueError`s, forcing
+LF report output, and reconciling prior-report group plus duplicate counts with
+`record_count`. Test-only file helpers continue to delegate to the same
+single-open regular-file snapshot path; recurring CI and sprint-coordinate
+policy remain shared-owner handoffs. Cycle-7 transcript SHA-256:
+`5a308886aaa75d1e1666fc619646c602368cbe354bd2d392d5adbbafcfd9a7c2`.
+Cycle-7 trace SHA-256:
+`c80f91b2ca856a9cdc18f4440ca8195d0150fbdc6a7c4ff389c5e14233a19f7c`.
+An exact committed-HEAD confirmation review is performed again before handback
+and sealed below without changing implementation bytes.
 
 ## External blockers kept open
 

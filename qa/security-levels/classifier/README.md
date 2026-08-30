@@ -56,7 +56,8 @@ tool cannot claim full qualification from self-reported numbers.
 
 The integration owner must wire `scripts/test_security_classifier_eval.py` into
 recurring CI because `.github/` is outside this sprint's literal write scope.
-JSON objects reject duplicate keys, prediction volume and line length are
-explicitly bounded, and operator-facing path errors escape control characters.
+JSON objects reject duplicate keys, prediction volume and byte line length are
+explicitly bounded, JSONL splits only on LF, and all dynamic operator-facing
+errors escape control characters.
 Input files are snapshotted from one opened regular file; parsing, byte count
 and SHA-256 all use those identical bytes. Reports are written atomically.

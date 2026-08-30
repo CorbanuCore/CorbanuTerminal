@@ -114,11 +114,16 @@ DEFAULT_TARGETS = {
 }
 MAX_INPUT_BYTES = 128 * 1024 * 1024
 MAX_PREDICTION_RECORDS = 100_000
-MAX_PREDICTION_LINE_CHARS = 64 * 1024
+MAX_PREDICTION_LINE_BYTES = 64 * 1024
 
 
 class EvaluationError(RuntimeError):
     """A fail-closed corpus or evaluation contract violation."""
+
+
+def _terminal_safe(value: Any) -> str:
+    """Render dynamic operator-facing text without terminal control bytes."""
+    return str(value).encode("unicode_escape").decode("ascii")
 
 
 def sha256_bytes(value: bytes) -> str:
@@ -220,7 +225,9 @@ def _read_regular_file(path: Path, field: str) -> bytes:
             )
             value = handle.read(MAX_INPUT_BYTES + 1)
     except OSError as error:
-        raise EvaluationError(f"cannot read {field} {path}: {error}") from error
+        raise EvaluationError(
+            f"cannot read {field} {_terminal_safe(path)}: {_terminal_safe(error)}"
+        ) from error
     _require(len(value) <= MAX_INPUT_BYTES, f"{field} exceeds maximum size")
     return value
 
@@ -229,9 +236,14 @@ def _load_json_bytes(value: bytes, location: str) -> dict[str, Any]:
     try:
         decoded = value.decode("utf-8")
         parsed = json.loads(decoded, object_pairs_hook=_unique_json_object)
-    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
-        raise EvaluationError(f"cannot read JSON {location}: {error}") from error
-    _require(isinstance(parsed, dict), f"JSON root must be an object: {location}")
+    except (UnicodeDecodeError, ValueError, RecursionError) as error:
+        raise EvaluationError(
+            f"cannot read JSON {_terminal_safe(location)}: {_terminal_safe(error)}"
+        ) from error
+    _require(
+        isinstance(parsed, dict),
+        f"JSON root must be an object: {_terminal_safe(location)}",
+    )
     return parsed
 
 
@@ -249,9 +261,10 @@ def load_json(path: Path) -> dict[str, Any]:
 
 
 def _reject_record_material(value: Any, *, location: str, depth: int = 0) -> None:
-    _require(depth <= 32, f"{location} exceeds maximum nesting depth")
+    shown_location = _terminal_safe(location)
+    _require(depth <= 32, f"{shown_location} exceeds maximum nesting depth")
     if isinstance(value, dict):
-        _require(len(value) <= 256, f"{location} has too many object fields")
+        _require(len(value) <= 256, f"{shown_location} has too many object fields")
         prohibited = {
             "content",
             "contents",
@@ -267,14 +280,14 @@ def _reject_record_material(value: Any, *, location: str, depth: int = 0) -> Non
         forbidden = prohibited.intersection(value)
         _require(
             not forbidden,
-            f"{location} exposes prohibited record fields: {sorted(forbidden)}",
+            f"{shown_location} exposes prohibited record fields: {sorted(forbidden)}",
         )
         for key, child in value.items():
             _reject_record_material(
-                child, location=f"{location}.{key}", depth=depth + 1
+                child, location=f"{location}.{key!r}", depth=depth + 1
             )
     elif isinstance(value, list):
-        _require(len(value) <= 256, f"{location} has too many array elements")
+        _require(len(value) <= 256, f"{shown_location} has too many array elements")
         for index, child in enumerate(value):
             _reject_record_material(
                 child, location=f"{location}[{index}]", depth=depth + 1
@@ -859,15 +872,11 @@ def validate_split_manifest(
 
 def _load_predictions_bytes(value: bytes, location: str) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
-    try:
-        decoded = value.decode("utf-8")
-    except UnicodeDecodeError as error:
-        raise EvaluationError(f"cannot decode prediction input {location}") from error
-    for line_number, line in enumerate(decoded.splitlines(), start=1):
-        if not line.strip():
+    for line_number, raw_line in enumerate(value.split(b"\n"), start=1):
+        if not raw_line.strip():
             continue
         _require(
-            len(line) <= MAX_PREDICTION_LINE_CHARS,
+            len(raw_line) <= MAX_PREDICTION_LINE_BYTES,
             f"prediction line {line_number} exceeds maximum length",
         )
         _require(
@@ -875,10 +884,11 @@ def _load_predictions_bytes(value: bytes, location: str) -> list[dict[str, Any]]
             "prediction input exceeds maximum record count",
         )
         try:
+            line = raw_line.decode("utf-8")
             record = json.loads(line, object_pairs_hook=_unique_json_object)
-        except (json.JSONDecodeError, RecursionError) as error:
+        except (UnicodeDecodeError, ValueError, RecursionError) as error:
             raise EvaluationError(
-                f"invalid prediction JSON at line {line_number}"
+                f"invalid prediction JSON at line {line_number}: {_terminal_safe(error)}"
             ) from error
         _require(
             isinstance(record, dict),
@@ -1602,6 +1612,20 @@ def _development_fingerprint_from_report(
         sum(cohort_group_counts.values()) == development_fingerprint["group_count"],
         "development cohort group counts do not sum to group_count",
     )
+    metrics = evaluation.get("metrics")
+    _require(isinstance(metrics, dict), "development metrics must be an object")
+    record_count = _integer(
+        metrics.get("record_count"),
+        "development record count",
+        minimum=1,
+        maximum=MAX_PREDICTION_RECORDS,
+    )
+    _require(
+        development_fingerprint["group_count"]
+        + development_fingerprint["duplicate_record_count"]
+        == record_count,
+        "development group and duplicate counts do not reconcile with record_count",
+    )
     fingerprint = development_fingerprint.get("fingerprint_sha256")
     _require(
         isinstance(fingerprint, str) and HEX64.fullmatch(fingerprint) is not None,
@@ -1774,6 +1798,7 @@ def main() -> int:
             with tempfile.NamedTemporaryFile(
                 mode="w",
                 encoding="utf-8",
+                newline="\n",
                 dir=output_directory,
                 prefix=".evaluation-report.",
                 suffix=".tmp",
@@ -1794,8 +1819,14 @@ def main() -> int:
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
-    except (EvaluationError, OSError, UnicodeDecodeError, RecursionError) as error:
-        print(f"security-classifier-eval: {error}", file=sys.stderr)
+    except (
+        EvaluationError,
+        OSError,
+        UnicodeDecodeError,
+        ValueError,
+        RecursionError,
+    ) as error:
+        print(f"security-classifier-eval: {_terminal_safe(error)}", file=sys.stderr)
         return 1
     print(output)
     return 0

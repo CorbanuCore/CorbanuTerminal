@@ -161,14 +161,31 @@ class SecurityClassifierEvalTests(unittest.TestCase):
         self.assertNotIn("\x1b", message)
         self.assertIn("\\x1b", message)
 
+        hostile_key = b'{"g\\u001b[2Jx":{"payload":1}}\n'
+        with self.assertRaises(evaluator.EvaluationError) as raised:
+            evaluator._load_predictions_bytes(hostile_key, "fixture")
+        self.assertNotIn("\x1b", str(raised.exception))
+        self.assertIn("\\x1b", str(raised.exception))
+
+        oversized_integer = b'{"value":' + b"9" * 5_000 + b"}"
+        with self.assertRaisesRegex(evaluator.EvaluationError, "cannot read JSON"):
+            evaluator._load_json_bytes(oversized_integer, "fixture")
+
     def test_pf_35_s01_prediction_volume_is_explicitly_bounded(self) -> None:
         payload = b'{"record_id":"one"}\n{"record_id":"two"}\n'
         with mock.patch.object(evaluator, "MAX_PREDICTION_RECORDS", 1):
             with self.assertRaisesRegex(evaluator.EvaluationError, "record count"):
                 evaluator._load_predictions_bytes(payload, "fixture")
-        oversized_line = b"{" + b" " * evaluator.MAX_PREDICTION_LINE_CHARS + b"}"
+        oversized_line = b"{" + b" " * evaluator.MAX_PREDICTION_LINE_BYTES + b"}"
         with self.assertRaisesRegex(evaluator.EvaluationError, "maximum length"):
             evaluator._load_predictions_bytes(oversized_line, "fixture")
+        unicode_separator = json.dumps(
+            {"note": "before\u2028after"}, ensure_ascii=False
+        ).encode("utf-8")
+        self.assertEqual(
+            evaluator._load_predictions_bytes(unicode_separator, "fixture")[0]["note"],
+            "before\u2028after",
+        )
 
     def prediction(
         self, record_id: str, split: str, scope: str, expected: str, predicted: str
@@ -503,6 +520,15 @@ class SecurityClassifierEvalTests(unittest.TestCase):
             with self.assertRaisesRegex(evaluator.EvaluationError, "prohibited"):
                 evaluator._development_fingerprint_from_report(
                     material,
+                    corpus_sha256=evaluator.sha256_file(self.corpus_path),
+                    split_sha256=evaluator.sha256_file(self.split_path),
+                )
+
+            mismatched_count = copy.deepcopy(development_report)
+            mismatched_count["evaluation"]["metrics"]["record_count"] = 2
+            with self.assertRaisesRegex(evaluator.EvaluationError, "do not reconcile"):
+                evaluator._development_fingerprint_from_report(
+                    mismatched_count,
                     corpus_sha256=evaluator.sha256_file(self.corpus_path),
                     split_sha256=evaluator.sha256_file(self.split_path),
                 )
