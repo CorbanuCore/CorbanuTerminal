@@ -610,18 +610,23 @@ def probe_ipc(_root: Path) -> dict[str, str]:
             "peer_api_unavailable",
         )
 
-    # Linux abstract sockets avoid the platform's short sockaddr_un path limit,
-    # so a long caller-controlled TMPDIR cannot degrade the containment result.
-    socket_address = f"\0corbanu-pf27-{uuid.uuid4().hex}"
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     listener.settimeout(5)
     process: subprocess.Popen[str] | None = None
+    socket_directory: Path | None = None
+    socket_path: Path | None = None
     try:
-        listener.bind(socket_address)
+        # Linux sockaddr_un paths are short. Create an atomic, mode-0700
+        # directory under the fixed short system prefix instead of trusting a
+        # caller-controlled TMPDIR or exposing an enumerable abstract socket.
+        socket_directory = Path(tempfile.mkdtemp(prefix="cb27-", dir="/tmp"))
+        os.chmod(socket_directory, 0o700)
+        socket_path = socket_directory / "peer.sock"
+        listener.bind(str(socket_path))
         listener.listen(1)
         canary = uuid.uuid4().hex
         process = start_worker(
-            "unix-connect", {"path": socket_address, "canary": canary}
+            "unix-connect", {"path": str(socket_path), "canary": canary}
         )
         connection, _ = listener.accept()
         with connection:
@@ -683,6 +688,16 @@ def probe_ipc(_root: Path) -> dict[str, str]:
             process.kill()
             process.communicate()
         listener.close()
+        if socket_path is not None:
+            try:
+                socket_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        if socket_directory is not None:
+            try:
+                socket_directory.rmdir()
+            except OSError:
+                pass
 
 
 def probe_network() -> dict[str, str]:

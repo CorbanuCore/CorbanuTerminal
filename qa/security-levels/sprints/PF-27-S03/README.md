@@ -16,8 +16,8 @@ alter a host policy, or leave an IPC/network listener running.
 | Artifact | SHA-256 |
 | --- | --- |
 | `scripts/security-platform-probe` | `0045b29fc50c69c0282083d2c5da12d25a184e4d7742445ac5fa5515c4996a70` |
-| `scripts/security_platform_probe.py` | `715a4a737c3def69cb4da4c67581914cfdd5eb871e1223f8cadb70a068be98bf` |
-| `scripts/test_security_platform_probe.py` | `361ff71ef1e1c5c2c989db6041b6a01d83d65b586bf145156ecf886e0229207f` |
+| `scripts/security_platform_probe.py` | `c1be49372faffe0d0ea1791290a1817ee0c2d9eaee510d2c6d830e876adb7acb` |
+| `scripts/test_security_platform_probe.py` | `141eb77d7096ad56df7183743192ef5ae8918e97d30b608fce0fe7a4f38962c0` |
 | `codex-rs/secret-broker/src/platform_contract.rs` | `7f6b597788010cc32b6156205e4a506cb293b528012883b6f69324dc62b825d5` |
 | `codex-rs/secret-broker/src/platform_contract_fixture_tests.rs` | `18eebbeca85531e89b5c8859814f4a04e4c928b13a5e0bb3cb011c63fe488cd2` |
 | `codex-rs/secret-broker/Cargo.toml` | `8dd9ba505ed575fd78f81c9b81a8069e908db0e864ab8aa5899ad1bb5466d67a` |
@@ -26,14 +26,14 @@ alter a host policy, or leave an IPC/network listener running.
 | `codex-rs/Cargo.toml` | `82b971ddfafd10fdadbae414bab4c1a5119b0173fd9ac522c90efb0eabd8c2b3` |
 | `codex-rs/Cargo.lock` | `e643a17d738119b18ae9af44a340bad283de306c2227060cbd922046cce43153` |
 | `BUILD.bazel` | `226aeb958f0032a4efac71b9e9b1c6731bc2d26ee6d019c2af86b3b9787a8e79` |
-| `.github/workflows/security-platform-contract.yml` | `3abb356e3efa06ba221d2509731afbc3dc3c060b839f0a74a2643e6e9567177e` |
+| `.github/workflows/security-platform-contract.yml` | `e8228456a740dcb638fdffc2b00ea26ca8174886f3ef561dd01d74e9b3e7680e` |
 | `capability-result-v1.schema.json` | `da6cb78e37b2473713e652ecb15a871fa8dbc77683c246b3eb4da2ad15d82671` |
 | `fixture-protocol-v1.md` | `27650019fe7bde431091c4309f4125ee0151bbf415664e3b6d03b68ccff4134a` |
 | `containment-contract-v1.md` | `1e929b22e7429ae8f85f16265a2545676f961446237abe35f906efbe96bce2ae` |
 | `platform-mechanisms-v1.md` | `0e3e6bc3a0d2d6c91da0e83cc4d959d1dd041f523c2fbbf310b53726bb20529b` |
-| `results/macos.json` | `103190c9475add8b6c07a3c1d5dcea2798fc4ba9ba0a3edadfcb9f1bc78339da` |
-| `results/linux.json` | `504ea78f9d623f0b77c751a20cf04ab1047a05b557b3b83c38ed25377bc7f42d` |
-| `results/windows.json` | `39ec59ea056a77071ce660e4932b62135cdaac015d9d1623e5e677480a580610` |
+| `results/macos.json` | `456db8c727867b722d372b60ec339784b0ac8b4359f76334a09c7dd62ca7e4cf` |
+| `results/linux.json` | `6306c9a6ad47e55b2311c59a9f3eb3384fe1aa0f79ba745d01fc7eea7ec3cda7` |
+| `results/windows.json` | `c1d5c1ef8c75422ef18efdea3456c03d7e59f08c7dac7133655d9e5d49d67470` |
 
 The result files embed the exact linted implementation-module SHA-256. The
 stable extensionless shim is separately bound above. The Markdown/schema hashes

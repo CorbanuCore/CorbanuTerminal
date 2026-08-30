@@ -57,9 +57,9 @@ jobs:
           set -euo pipefail
           python -m unittest scripts.test_security_platform_probe
           python scripts/security_platform_probe.py --self-test
-          python scripts/security_platform_probe.py --validate-evidence qa/security-levels/platform/results/linux.json
-          python scripts/security_platform_probe.py --validate-evidence qa/security-levels/platform/results/macos.json
-          python scripts/security_platform_probe.py --validate-evidence qa/security-levels/platform/results/windows.json
+          python scripts/security_platform_probe.py --validate-evidence qa/security-levels/sprints/PF-27-S03/results/linux.json
+          python scripts/security_platform_probe.py --validate-evidence qa/security-levels/sprints/PF-27-S03/results/macos.json
+          python scripts/security_platform_probe.py --validate-evidence qa/security-levels/sprints/PF-27-S03/results/windows.json
           cargo test --manifest-path codex-rs/Cargo.toml -p codex-secret-broker
       - name: Require a clean worktree
         if: always() && !cancelled()

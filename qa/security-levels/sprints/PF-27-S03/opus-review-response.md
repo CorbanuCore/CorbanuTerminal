@@ -181,3 +181,17 @@ again passed 7/7 discovered tests and 8/8 self-tests on all three targets,
 generated and strictly validated 10/10 capability records on each target, and
 remained correctly ineligible. The compact results pass local archival
 validation and are bound into the 16/16 Rust gate suite.
+
+The twelfth independent follow-up reviewed exact commit `9f12e5f7e` through the
+same TMUX + Corbanu Terminal + Claude Opus 5.0 Max session. Its transcript is
+stored outside the repository at
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-foundation-platform/tmux-artifacts/pf27-opus-max-g1-review-12/pane.txt`
+with SHA-256
+`d172187468c26789d046b2e1d3a90d617c6fcaf09fac4decb0192f188834bb96`.
+It verified the ten prior repairs and all nineteen published hashes, then found
+four follow-up defects. All four were accepted: CI now uses the actual sprint
+result paths, the final 59-record reference is 58, the cross-platform IPC test
+asserts exact OS-specific outcomes, and Linux uses an atomic mode-0700 directory
+under a fixed short prefix rather than an enumerable abstract socket. The source
+identity changed, so macOS, Linux, and Windows evidence was regenerated and
+strictly revalidated once more.
