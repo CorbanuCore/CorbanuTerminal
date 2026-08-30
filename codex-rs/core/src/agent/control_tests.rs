@@ -146,6 +146,53 @@ fn cold_resumed_subagent_initializes_a_fail_closed_security_policy() {
     );
 }
 
+#[test]
+fn resumed_root_preserves_its_policy_and_unbound_auxiliary_still_inherits() {
+    let root_thread_id = ThreadId::new();
+    let auxiliary_thread_id = ThreadId::new();
+    let control = AgentControl::default()
+        .with_session_id(SessionId::new(), 2)
+        .with_effective_security_policy(
+            SecurityLevel::Moderate,
+            root_thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
+        .expect("initialize root policy");
+    let original_root = control
+        .effective_security_policy()
+        .snapshot_for_agent(root_thread_id)
+        .expect("root policy snapshot");
+
+    let control = control
+        .with_effective_security_policy(
+            SecurityLevel::Aggressive,
+            root_thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
+        .expect("resume the already-bound root");
+    assert_eq!(
+        control
+            .effective_security_policy()
+            .snapshot_for_agent(root_thread_id)
+            .expect("resumed root policy snapshot"),
+        original_root
+    );
+
+    let control = control
+        .with_effective_security_policy(
+            SecurityLevel::Aggressive,
+            auxiliary_thread_id,
+            /*inherits_from_spawn_parent*/ false,
+        )
+        .expect("bind an unbound auxiliary agent");
+    let auxiliary = control
+        .effective_security_policy()
+        .snapshot_for_agent(auxiliary_thread_id)
+        .expect("auxiliary policy snapshot");
+    assert_eq!(auxiliary.level, SecurityLevel::Aggressive);
+    assert!(auxiliary.actor_chain.extends(&original_root.actor_chain));
+}
+
 fn spawn_agent_call(call_id: &str) -> ResponseItem {
     ResponseItem::FunctionCall {
         id: None,
@@ -392,9 +439,11 @@ async fn crew_child_terminal_result_uses_one_triggering_native_mailbox_message()
             .session
             .services
             .agent_control
-            .begin_native_agent_turn(parent.thread_id, /*terminal_result_only*/ false),
+            .begin_native_agent_turn(child.thread_id, /*terminal_result_only*/ false),
     );
     let turn = child.thread.codex.session.new_default_turn().await;
+    turn.parent_completion_expected
+        .store(true, std::sync::atomic::Ordering::Release);
     let completed = EventMsg::TurnComplete(TurnCompleteEvent {
         turn_id: turn.sub_id.clone(),
         started_at: None,

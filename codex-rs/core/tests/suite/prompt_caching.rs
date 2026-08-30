@@ -23,6 +23,7 @@ use core_test_support::TempDirExt;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_sse_once;
+use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::responses::strip_metadata_from_json;
@@ -33,6 +34,7 @@ use core_test_support::test_codex::local_selections;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
+use core_test_support::wait_for_event_match;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
@@ -437,18 +439,16 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
     use pretty_assertions::assert_eq;
 
     let server = start_mock_server().await;
-    let req1 = mount_sse_once(
+    let responses = mount_sse_sequence(
         &server,
-        sse(vec![ev_response_created("resp-1"), ev_completed("resp-1")]),
-    )
-    .await;
-    let req2 = mount_sse_once(
-        &server,
-        sse(vec![ev_response_created("resp-2"), ev_completed("resp-2")]),
+        vec![
+            sse(vec![ev_response_created("resp-1"), ev_completed("resp-1")]),
+            sse(vec![ev_response_created("resp-2"), ev_completed("resp-2")]),
+        ],
     )
     .await;
 
-    let TestCodex { codex, config, .. } = test_codex()
+    let test = test_codex()
         .with_pre_build_hook(write_global_instructions)
         .with_config(|config| {
             config
@@ -458,6 +458,8 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
         })
         .build(&server)
         .await?;
+    let codex = test.codex.clone();
+    let config = &test.config;
 
     // First turn
     codex
@@ -472,7 +474,16 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
             thread_settings: Default::default(),
         })
         .await?;
-    wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    let first_turn_id = wait_for_event_match(&codex, |event| match event {
+        EventMsg::TurnStarted(event) => Some(event.turn_id.clone()),
+        _ => None,
+    })
+    .await;
+    wait_for_event(&codex, |event| match event {
+        EventMsg::TurnComplete(event) => event.turn_id == first_turn_id,
+        _ => false,
+    })
+    .await;
 
     let writable = TempDir::new().unwrap();
     let permission_profile = PermissionProfile::workspace_write_with(
@@ -510,10 +521,29 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
             thread_settings: Default::default(),
         })
         .await?;
-    wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    let second_turn_id = wait_for_event_match(&codex, |event| match event {
+        EventMsg::TurnStarted(event) => Some(event.turn_id.clone()),
+        _ => None,
+    })
+    .await;
+    let second_turn_complete = wait_for_event_match(&codex, |event| match event {
+        EventMsg::TurnComplete(event) if event.turn_id == second_turn_id => Some(event.clone()),
+        _ => None,
+    })
+    .await;
+    assert!(
+        second_turn_complete.error.is_none(),
+        "second turn failed before sending its model request: {:?}",
+        second_turn_complete.error
+    );
 
-    let request1 = req1.single_request();
-    let request2 = req2.single_request();
+    let recorded_requests = responses.requests();
+    let [request1, request2] = recorded_requests.as_slice() else {
+        panic!(
+            "expected exactly two ordered requests, got {}",
+            recorded_requests.len()
+        );
+    };
     let body1 = request1.body_json();
     let body2 = request2.body_json();
     // prompt_cache_key should remain constant across overrides

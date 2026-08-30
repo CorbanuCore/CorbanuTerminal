@@ -117,12 +117,19 @@ async fn handle_interrupt_agent(
         "Actor: {actor}\nTarget: {target}\nReason: {reason}\nSuperseding task/dispatch: {}\nProcess effect: {process_effect}",
         superseding_task.as_deref().unwrap_or("none")
     );
-    let result = match session
-        .services
-        .agent_control
-        .interrupt_agent(agent_id)
-        .await
-    {
+    // A shutdown V2 worker remains a durable graph identity that can be reloaded later. Sending
+    // an interrupt to its dead runtime reports `InternalAgentDied`, whose generic cleanup path
+    // removes that identity. Treat the already-terminal interrupt as idempotent instead.
+    let interrupt_result = if matches!(status, AgentStatus::Shutdown) {
+        Ok(String::new())
+    } else {
+        session
+            .services
+            .agent_control
+            .interrupt_agent(agent_id)
+            .await
+    };
+    let result = match interrupt_result {
         Ok(_) => Ok(()),
         Err(err)
             if matches!(
@@ -135,7 +142,10 @@ async fn handle_interrupt_agent(
         Err(err) => Err(collab_agent_error(agent_id, err)),
     };
     result?;
-    if !matches!(status, AgentStatus::NotFound | AgentStatus::Unloaded) {
+    if !matches!(
+        status,
+        AgentStatus::NotFound | AgentStatus::Unloaded | AgentStatus::Shutdown
+    ) {
         // The runtime owns this plaintext audit record. Keep it typed as a control request so the
         // target pane and durable mailbox retain the full actor/reason/process tuple.
         let mut communication = InterAgentCommunication::new(

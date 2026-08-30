@@ -201,6 +201,17 @@ impl AgentControl {
         inherits_from_spawn_parent: bool,
     ) -> Result<Self, SecurityPolicyError> {
         if self.security_policy.is_initialized()? {
+            // Resuming an already-bound root on the same control plane must preserve its
+            // binding. Treating it as a new auxiliary agent appends the same principal to its
+            // own actor chain, which correctly fails cycle validation but makes root resume
+            // impossible.
+            if self
+                .security_policy
+                .snapshot_for_agent(root_thread_id)
+                .is_ok()
+            {
+                return Ok(self);
+            }
             if !inherits_from_spawn_parent {
                 self.security_policy.inherit_auxiliary_agent(
                     root_thread_id,

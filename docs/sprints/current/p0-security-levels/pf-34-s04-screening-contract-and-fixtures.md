@@ -7,8 +7,8 @@ plan_feature: "PF-34"
 execution_order: 19
 owner: "Codex ingress/classifier lane"
 parallel_lane: "ingress-classifier"
-write_scope: "codex-rs/content-security/src/contract.rs, codex-rs/content-security/src/contract_tests.rs, qa/security-levels/ingress-contract/, qa/security-levels/sprints/PF-34-S04/, docs/sprints/current/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md, docs/plans/active/p0-security-levels.md"
-integration_gate: "Jim Ricketts receives the PF-34-S04 candidate at G1/G2, audits the literal scope, performs serialized content-security crate/workspace/Cargo/Bazel/lock registration, reruns governance and the complete content-security suite on the combined tree, then archives PF-34-S04 before PF-35-S01 allocation."
+write_scope: "codex-rs/content-security/, codex-rs/Cargo.toml, codex-rs/Cargo.lock, BUILD.bazel, MODULE.bazel.lock, .github/workflows/security-ingress-contract.yml, qa/security-levels/ingress-contract/, qa/security-levels/sprints/PF-34-S04/, docs/sprints/current/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md, docs/sprints/archive/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md, docs/sprints/current/p0-security-levels/index.md, docs/sprints/index.md, docs/plans/active/p0-security-levels.md, mkdocs.yml"
+integration_gate: "Codex ingress/classifier lane owns the user-authorized G1/G2 transfer: combine current main at 1907d99aed9714f05a5f54fca1703658017d616c, audit the literal scope, serialize content-security crate/workspace/Cargo/Bazel/lock/CI registration, rerun governance and the complete content-security suite, obtain an independent TMUX plus Corbanu Terminal plus Claude Opus 5.0 Max review, then archive PF-34-S04 before PF-35-S01 allocation."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier"
 branch: "feat/p0-security-ingress-classifier"
 base_commit: "6a35712cd5731b191d875e8c6468f1abe23eb66e"
@@ -41,7 +41,7 @@ updated: 2026-08-30
 
 - [x] Plan active; dependencies in front matter are `none`.
 - [x] Named execution owner and exact plan-matching worktree/branch/base assigned; governance checkers pass before readiness.
-- [x] Root and nearest implementation AGENTS.md read; literal disjoint write scope and Jim Ricketts receiving integration gate reserved.
+- [x] Root and nearest implementation AGENTS.md read; literal disjoint write scope is reserved and the user transferred G1/G2 integration ownership from unavailable Jim Ricketts to this lane.
 
 ## Done
 
@@ -56,10 +56,11 @@ updated: 2026-08-30
 - [x] Lane-local formatting, Clippy, argument-comment lint, 20 named contract tests, 14 verifier regressions, seven-fixture/schema verification, governance and `git diff --check` pass at final Opus-remediated implementation commit `a75efecc0a37d5544e123ad19d57867cac360a68`.
 - [x] Supplemental structured Codex review verified four in-scope findings, drove bounded remediation and finished clean on the complete committed branch.
 - [x] Independent review ran through TMUX and rebased Corbanu Terminal using provider `claude-plan`, route `claude-opus-5-plan` (provider-reported Claude Opus 5.0), and effort `max`; four immutable passes ended `clean` with 0 new P0/P1/P2.
+- [x] Current `main` at `1907d99aed9714f05a5f54fca1703658017d616c` was combined without rewriting the immutable reviewed commits; PF-13-S05 archive and plan updates are preserved.
 
 ## Remaining
 
-- [ ] Hand the candidate, contract/fixture identities, scope audit and exact shared registration patch to Jim Ricketts for serialized G1/G2 integration.
+- [ ] Apply the exact shared registration handback, recurring cross-platform CI and combined-tree qualification under the transferred G1/G2 ownership.
 
 ## Verification
 
@@ -67,11 +68,11 @@ updated: 2026-08-30
 - [x] Run planned content-security contract tests including malformed/partial/duplicate segments, digest/version mismatch, timeout and forced-allow safety assertions at the interface.
 - [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
 - [x] Verified no runtime route or profile becomes available: the lane does not add `lib.rs`, Cargo/Bazel registration, Core/provider adapters or profile changes.
-- [ ] At G1, run registered-crate `just fix`, `just fmt`, named/full crate tests, lock regeneration, and Bazel parity on Jim Ricketts's combined tree.
+- [ ] At G1, run registered-crate `just fix`, `just fmt`, named/full crate tests, lock regeneration, Bazel parity and recurring-CI contract checks on the combined tree.
 
 ## Exit evidence
 
-- [x] Commit contract/fixture versions, independent owner review, and lane-candidate outputs under `qa/security-levels/sprints/PF-34-S04/`; combined-tree outputs remain G1-owned.
+- [x] Commit contract/fixture versions, independent owner review, and lane-candidate outputs under `qa/security-levels/sprints/PF-34-S04/`; combined-tree outputs are now owned by this lane under the user-authorized transfer.
 - [x] PF-34-S01 and PF-35-S03 remain assigned actual rendering, PF-30 provenance and deterministic policy; fixture completion is not detector or ingestion qualification.
 - [x] Record the exact integration handoff and lane scope audit; archive and navigation changes remain after G1 combined-tree acceptance.
-- [ ] Record Jim Ricketts's integration commit and combined-tree source hashes, then archive PF-34-S04 before PF-35-S01 allocation.
+- [ ] Record the transferred integration commit and combined-tree source hashes, then archive PF-34-S04 before PF-35-S01 allocation.
