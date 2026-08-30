@@ -8,13 +8,13 @@ execution_order: 13
 owner: "Jim Ricketts"
 parallel_lane: "foundation-platform"
 integration_gate: "PF-13-S07 consumes the frozen component evidence after remaining repairs; Jim Ricketts owns integration."
-write_scope: "scripts/security-credential-canary, scripts/security_credential_canary.py, scripts/test_security_credential_canary.py, codex-rs/vault/src, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/providers.rs, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/cli/tests/vault.rs, codex-rs/tui/src/lib.rs, codex-rs/tui/src/tui.rs, codex-rs/tui/src/credential_panic_tests.rs, codex-rs/core/src/security/credential_capability_tests.rs, codex-rs/core/src/agent/control.rs, codex-rs/core/src/agent/control/spawn.rs, codex-rs/core/src/agent/control_tests.rs, codex-rs/core/src/security/effective_policy.rs, codex-rs/core/src/security/effective_policy_tests.rs, codex-rs/core/src/session/handlers.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/session/tests.rs, codex-rs/core/src/shell_snapshot.rs, codex-rs/core/src/shell_snapshot_tests.rs, codex-rs/core/src/tools/handlers/multi_agents.rs, codex-rs/core/src/tools/handlers/multi_agents_tests.rs, codex-rs/core/src/tools/handlers/multi_agents_v2.rs, codex-rs/core/src/tools/spec_plan.rs, codex-rs/core/src/tools/spec_plan_tests.rs, codex-rs/core/src/client.rs, codex-rs/core/tests/suite/auto_review.rs, codex-rs/core/tests/suite/client.rs, codex-rs/core/tests/suite/code_mode_elicitation.rs, codex-rs/core/tests/suite/compact.rs, codex-rs/core/tests/suite/multi_agent_resume.rs, codex-rs/core/tests/suite/tool_parallelism.rs, codex-rs/protocol/src/models.rs, qa/security-levels/sprints/PF-13-S05"
+write_scope: "scripts/security-credential-canary, scripts/security_credential_canary.py, scripts/test_security_credential_canary.py, codex-rs/vault/src, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/providers.rs, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/cli/tests/vault.rs, codex-rs/tui/src/lib.rs, codex-rs/tui/src/tui.rs, codex-rs/tui/src/credential_panic_tests.rs, codex-rs/core/src/security/credential_capability_tests.rs, codex-rs/core/src/agent/control.rs, codex-rs/core/src/agent/control/spawn.rs, codex-rs/core/src/agent/control_tests.rs, codex-rs/core/src/security/effective_policy.rs, codex-rs/core/src/security/effective_policy_tests.rs, codex-rs/core/src/session/handlers.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/session/tests.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/shell_snapshot.rs, codex-rs/core/src/shell_snapshot_tests.rs, codex-rs/core/src/tools/handlers/multi_agents.rs, codex-rs/core/src/tools/handlers/multi_agents_tests.rs, codex-rs/core/src/tools/handlers/multi_agents_v2.rs, codex-rs/core/src/tools/handlers/multi_agents_v2/interrupt_agent.rs, codex-rs/core/src/tools/spec_plan.rs, codex-rs/core/src/tools/spec_plan_tests.rs, codex-rs/core/src/client.rs, codex-rs/core/tests/suite/auto_review.rs, codex-rs/core/tests/suite/client.rs, codex-rs/core/tests/suite/code_mode_elicitation.rs, codex-rs/core/tests/suite/compact.rs, codex-rs/core/tests/suite/multi_agent_resume.rs, codex-rs/core/tests/suite/otel.rs, codex-rs/core/tests/suite/prompt_caching.rs, codex-rs/core/tests/suite/tool_parallelism.rs, codex-rs/protocol/src/models.rs, qa/security-levels/sprints/PF-13-S05"
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform"
 branch: "feat/p0-security-foundation-platform"
 base_commit: "6a35712cd5731b191d875e8c6468f1abe23eb66e"
 depends_on: "PF-13-S04"
 created: 2026-08-24
-updated: 2026-08-28
+updated: 2026-08-29
 ---
 
 # PF-13-S05 — Credential boundary adversarial qualification
@@ -36,6 +36,7 @@ updated: 2026-08-28
 - Existing: PF-13 S01-S04 implementation and tests
 - Planned: full-output scanner, Vault-owned scoped panic guard, thin TUI panic-hook adapter, scoped header hardening, alternate-home tests; exact paths are in `write_scope`.
 - Kimi repair-review hardening: apply the same scoped guard to the terminal-restoration hook and report the non-secret byte count on capture overflow; neither changes the authorized feature contract.
+- Integrated-tree repair classification: the transferred lane owns only the 18 named Core failures recorded in `repair-core-triage.md`. The amended `write_scope` enumerates each affected runtime/test path; no Vault, broker, provider, profile, or Permissive contract is widened.
 - Test surfaces: Core context/tool events, child env, proxy capture, tracing, audit, errors, receipts, and artifacts
 
 ## Preconditions
@@ -69,10 +70,11 @@ updated: 2026-08-28
 - [x] Recorded the later agent-reported SSH/fingerprint success at `100.111.98.12` and independently verified publication through `a9ebfcc2f`, including required candidate `f6ec1c75f`. No Windows test result is inferred.
 - [x] Transferred the sprint explicitly to the CorbanuDrive foundation worktree at `6a35712cd5731b191d875e8c6468f1abe23eb66e`; prior evidence remains historical and is not relabeled.
 - [x] Re-ran complete Core on the transferred integrated tree with Rust 1.95 and all four companion executables: 3,393/3,411 passed, 18 failed and 19 skipped. All credential tests passed and the earlier prompt-cache failure passed; the new JUnit is preserved as repair input, not a clean qualification result.
+- [x] Scope-reviewed and repaired all 18 transferred-tree failures without weakening the credential boundary or test assertions; a final complete Core rerun passed 3,411/3,411 with 19 platform-filtered skips and no retry/flaky classification. JUnit run `fd5920a2-8b87-4e14-a2b8-a7201aed6304` is preserved as `repair-core-final-macos-junit.xml.gz` (SHA-256 `9eb1c35509c4cd4480f8491ed218b2b59a8e765d39c8fd71fdb8f7381f1f1a7e`).
+- [x] Re-ran the affected security crates after the Core repairs: 295/295 passed, zero skipped, run `c7938288-cff5-496f-b802-03d95adf7f19`; `repair-focused-final-macos-junit.xml.gz` SHA-256 `1c2d35ab9d5fc6a82884cac060446050a319f68e1f388c9e71a89b1d1c9c296a`. The canary harness unit suite also passed 11/11.
 
 ## Remaining
 
-- [ ] Repair and retest the 18 explicitly scoped Core lifecycle, effective-policy inheritance, MCP invalidation, portable shell snapshot, collaboration message, tool-spec, auto-review, skill-budget, compaction-serialization, code-mode elicitation and timing failures; then obtain a clean complete rerun.
 - [ ] On the remote agent's working Windows route, fetch the published candidate, prepare Rust 1.95/Python and required test tools, then run the final canary including the directory-junction posture test. Final source/artifact identity must be recorded; historical results are not relabeled as qualification of the repaired candidate.
 
 Mac failure triage and qualification repairs may run concurrently within this
@@ -83,8 +85,9 @@ additional runtime fixes return to scope review and require affected reruns.
 
 - [x] Record applicable upstream adapter evidence: permanent Vault guard, thin native TUI hook checks, unchanged legacy provider path, focused tests and final PTY; verified upstream ancestor is recorded in repair evidence.
 - [x] Fix and format all affected crates before the final run; inspect the final diff.
-- [ ] Final affected tests: `cd codex-rs && just test -p codex-security-policy && just test -p codex-vault && just test -p codex-network-proxy && just test -p codex-core`.
+- [x] Final affected tests: `cd codex-rs && just test -p codex-security-policy -p codex-vault -p codex-network-proxy --test-threads 4` passed 295/295; `just test -p codex-core --test-threads 4` passed 3,411/3,411 with 19 platform-filtered skips.
 - [x] Canary: `python3 scripts/security-credential-canary --candidate <binary> --output qa/security-levels/sprints/PF-13-S05/`.
+- [ ] Final Windows canary on the published integrated repair commit, including the directory-junction posture case and exact source/executable identity.
 - [x] Reviewer, reviewed commit, commands and historical platform/canary identities are recorded without claiming a final integrated pass.
 - [x] TUI: production panic-hook subprocess proof plus final candidate startup/cancel/resume in a PTY; no new UI. PF-26-S02 retains integrated feature/live-repository qualification.
 

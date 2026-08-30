@@ -1,4 +1,14 @@
-# Complete Core rerun — gate remains failed
+# Historical complete-Core failure triage and final disposition
+
+This document preserves the failed repair-input run below. Its gate was closed
+on 2026-08-29 after the sprint's scope was amended to enumerate every affected
+runtime/test path. Final run `fd5920a2-8b87-4e14-a2b8-a7201aed6304` passed
+3,411/3,411 tests with 19 platform-filtered skips and no retries or flaky
+classification. The exact JUnit is
+`repair-core-final-macos-junit.xml.gz` (SHA-256
+`9eb1c35509c4cd4480f8491ed218b2b59a8e765d39c8fd71fdb8f7381f1f1a7e`).
+The original failure evidence and reasoning remain below rather than being
+rewritten as a pass.
 
 Candidate Rust tree: `a7ae94e4c9c01924c896d9f10b1f588f1727fc67`, macOS arm64,
 Rust 1.95.0, nextest 0.9.143, default features, no test exclusions added.

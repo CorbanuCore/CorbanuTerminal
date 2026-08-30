@@ -406,7 +406,8 @@ alias -p
 echo ''
 export_lines=$(
   while IFS= read -r name; do
-    upper_name=${name^^}
+    # macOS still ships Bash 3.2, which does not support `${name^^}`.
+    upper_name=$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')
     if [[ "$upper_name" =~ ^(EXCLUDED_EXPORTS)$ ]]; then
       continue
     fi

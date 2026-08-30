@@ -7400,8 +7400,8 @@ async fn user_turn_updates_approvals_reviewer() {
         codex_config::types::ApprovalsReviewer::AutoReview
     );
     assert!(
-        session.mcp_refresh.is_pending(),
-        "server elicitation authority changes must refresh MCP state"
+        !session.mcp_refresh.is_pending(),
+        "the user-turn path must publish the refreshed MCP state before execution"
     );
 }
 

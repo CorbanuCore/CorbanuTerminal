@@ -392,9 +392,11 @@ async fn crew_child_terminal_result_uses_one_triggering_native_mailbox_message()
             .session
             .services
             .agent_control
-            .begin_native_agent_turn(parent.thread_id, /*terminal_result_only*/ false),
+            .begin_native_agent_turn(child.thread_id, /*terminal_result_only*/ false),
     );
     let turn = child.thread.codex.session.new_default_turn().await;
+    turn.parent_completion_expected
+        .store(true, std::sync::atomic::Ordering::Release);
     let completed = EventMsg::TurnComplete(TurnCompleteEvent {
         turn_id: turn.sub_id.clone(),
         started_at: None,

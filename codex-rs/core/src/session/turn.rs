@@ -143,13 +143,13 @@ use codex_utils_stream_parser::AssistantTextStreamParser;
 use codex_utils_stream_parser::ProposedPlanSegment;
 use codex_utils_stream_parser::extract_proposed_plan_text;
 use codex_utils_stream_parser::strip_citations;
-use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesOrdered;
 use regex_lite::Regex;
 use sha2::Digest;
 use sha2::Sha256;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::AbortOnDropHandle;
 use tracing::Instrument;
 use tracing::debug;
 use tracing::error;
@@ -2466,13 +2466,13 @@ async fn handle_assistant_item_done_in_plan_mode(
 
 #[instrument(level = "trace", skip_all)]
 async fn drain_in_flight(
-    in_flight: &mut FuturesOrdered<BoxFuture<'static, CodexResult<ResponseInputItem>>>,
+    in_flight: &mut FuturesOrdered<AbortOnDropHandle<CodexResult<ResponseInputItem>>>,
     sess: Arc<Session>,
     turn_context: Arc<TurnContext>,
 ) -> CodexResult<()> {
     while let Some(res) = in_flight.next().await {
         match res {
-            Ok(response_input) => {
+            Ok(Ok(response_input)) => {
                 let response_item = response_input.into();
                 sess.record_conversation_items(&turn_context, std::slice::from_ref(&response_item))
                     .await;
@@ -2483,9 +2483,10 @@ async fn drain_in_flight(
                 )
                 .await;
             }
-            Err(err) => {
+            Ok(Err(err)) => {
                 error_or_panic(format!("in-flight tool future failed during drain: {err}"));
             }
+            Err(err) => error_or_panic(format!("in-flight tool task failed during drain: {err}")),
         }
     }
     Ok(())
@@ -3156,7 +3157,7 @@ async fn try_run_sampling_request(
             return Err(err);
         }
     };
-    let mut in_flight: FuturesOrdered<BoxFuture<'static, CodexResult<ResponseInputItem>>> =
+    let mut in_flight: FuturesOrdered<AbortOnDropHandle<CodexResult<ResponseInputItem>>> =
         FuturesOrdered::new();
     let mut needs_follow_up = false;
     let mut last_agent_message: Option<String> = None;
@@ -3331,7 +3332,10 @@ async fn try_run_sampling_request(
                     };
                 if let Some(tool_future) = output_result.tool_future {
                     saw_client_tool_call = true;
-                    in_flight.push_back(tool_future);
+                    // Start tool execution as soon as its completed call item arrives. Keeping
+                    // only an unpolled future in `FuturesOrdered` defers all work until the
+                    // provider emits `response.completed`, defeating streamed tool dispatch.
+                    in_flight.push_back(AbortOnDropHandle::new(tokio::spawn(tool_future)));
                 }
                 if let Some(agent_message) = output_result.last_agent_message {
                     last_agent_message = Some(agent_message);

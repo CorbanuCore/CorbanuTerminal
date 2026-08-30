@@ -1,6 +1,42 @@
 # PF-13 accepted-review repair evidence
 
-Status: accepted credential/harness repairs implemented and reviewed; Mac/Linux component qualification passed. Complete-Core and final Windows qualification remain blocked. PF-13-S05 is still in progress, not a release approval.
+Status: accepted credential/harness repairs implemented and reviewed; Mac/Linux component qualification and the transferred-tree complete-Core gate pass. Final Windows qualification remains pending. PF-13-S05 is still in progress, not a release approval.
+
+## Transferred-tree integrated repair
+
+The foundation lane was transferred to
+`/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform` from
+base `6a35712cd5731b191d875e8c6468f1abe23eb66e`. Prior Mac/Linux artifacts remain
+bound to their recorded `f6ec1c75f` source and are not relabeled.
+
+The 18 failures from the first transferred-tree Core run were scope-reviewed
+against `repair-core-triage.md`. The sprint's literal `write_scope` now names
+every repaired runtime/test path. The changes repair root-resume authority
+binding, streamed tool dispatch, durable shutdown identity, macOS Bash 3.2
+snapshot compatibility, and stale or nondeterministic fixtures. They do not
+change Vault, broker, provider, security-profile, or Permissive behavior.
+
+- Final complete Core: `just test -p codex-core --test-threads 4`; run
+  `fd5920a2-8b87-4e14-a2b8-a7201aed6304`; **3,411/3,411 passed**, 19
+  platform-filtered skips, no retry or flaky classification, 175.194 seconds.
+  Artifact `repair-core-final-macos-junit.xml.gz`, SHA-256
+  `9eb1c35509c4cd4480f8491ed218b2b59a8e765d39c8fd71fdb8f7381f1f1a7e`.
+- Final affected security crates:
+  `just test -p codex-security-policy -p codex-vault -p codex-network-proxy --test-threads 4`;
+  run `c7938288-cff5-496f-b802-03d95adf7f19`; **295/295 passed**, zero
+  skipped, 129.406 seconds. Artifact
+  `repair-focused-final-macos-junit.xml.gz`, SHA-256
+  `1c2d35ab9d5fc6a82884cac060446050a319f68e1f388c9e71a89b1d1c9c296a`.
+- Canary harness unit suite:
+  `python3 -B -m unittest scripts.test_security_credential_canary`; **11/11
+  passed**.
+- `just fix -p codex-core`, `just fmt`, `git diff --check`, the plan checker,
+  and the sprint checker passed before the final runs. The formatter's unrelated
+  `output_text_stream.rs` interpolation rewrite was excluded from this sprint.
+
+The final Windows report must bind the published integrated repair commit and
+the exact Windows executable. Until that succeeds, this record does not claim
+all-platform completion.
 
 ## Authority and identity
 
