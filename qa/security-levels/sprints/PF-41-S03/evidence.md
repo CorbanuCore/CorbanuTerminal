@@ -4,7 +4,7 @@
 
 - Dispatch base: `9d08b15fa94676c1383ee1605b77e7cc7218dcc4`.
 - Allocation commit: `e0c23fe95165636d621dae8c16a5366c4f7250ac`.
-- Final implementation candidate: `8fc225e3e534c596bc5b26f91d614926df2b5362`.
+- Final implementation candidate: `5c8564de07b182c48b31ba0477806837c87fa7c4`.
 - Contract versions: security-audit event schema v1, integrity checkpoint v1,
   journal record v1 and consumer fixture v1.
 - Activation posture: fixture-only and fail closed. No producer, consumer,
@@ -54,7 +54,19 @@ only the candidate record. A root change or failure invalidates the cache and
 restart/recovery rebuilds it, removing the prior O(n) scan from every dispatch
 without treating the local tail as the protected authority. Dispatch identity
 deduplication is indexed by action plus hashed deduplication key and therefore
-survives timestamp and policy/run generation changes.
+survives clock, session, task and policy/run generation changes. The action
+digest contains only stable authorization semantics required for replay
+fencing. Duplicate errors preserve the original event, action, reservation and
+sequence identity.
+
+`reconcile_ambiguous_commit` accepts only one local record beyond an existing
+protected checkpoint, and validates the protected prefix hash, policy/run
+generation, producer, owner generation and integrity-key identity before its
+CAS. Missing roots, changed owners and anchor mismatches fail closed. A real
+`IntegrityRootError::Timeout` after local publication maps to `CommitUnknown`.
+Transport acknowledgement loss is outside the in-process journal contract;
+callers retry the same stable semantics and deduplication key and receive the
+original detailed duplicate outcome.
 
 ## Automated evidence
 
@@ -74,16 +86,16 @@ crate source through the isolated manifest at
 | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | PASS; active 1/2, current 61, archived 94 |
 | `git diff --check` | PASS |
 
-Exact-commit final artifacts for `8fc225e3e534c596bc5b26f91d614926df2b5362`:
+Exact-commit final artifacts for `5c8564de07b182c48b31ba0477806837c87fa7c4`:
 
-- Rust test log: `test-rust-remediation.log`, SHA-256
-  `aa0692c55b6e1cc42592565e6fe247ab1e18318d3445eda52d8b750b56daefd0`.
-- full-workspace-lint Clippy log: `clippy-remediation.log`, SHA-256
-  `4073809757782ba97b75c54de485c378016c5759b132d3aae576d6f3c8c1d920`.
-- fixture log: `test-fixture-remediation.log`, SHA-256
-  `c80a081792c1328f46d1f385824d459d636bcb7a3b834976c060563bf2cef3fb`.
-- governance test log: `test-governance-remediation.log`, SHA-256
-  `0b95fd98e4e2151675c48f59f686dd31c8a977408f4ba112449907ab76a9b1f4`.
+- Rust test log: `test-rust-final.log`, SHA-256
+  `5ed61fc2dec92fda21d61beb741f05429e7592c306dfa1b2c1660038328de7ba`.
+- full-workspace-lint Clippy log: `clippy-final.log`, SHA-256
+  `99f71393b9903dca098310bb446022a4bdee195ea9996f351a787195555210a6`.
+- fixture log: `test-fixture-final.log`, SHA-256
+  `61a588e9d182e4d8b3e62927057ea1a676ea9c8fa322820b330836c1e4782810`.
+- governance test log: `test-governance-final.log`, SHA-256
+  `fcab8f626d2fb7c2b9a13c73516f036d81537f671598efd26d16377702433da8`.
 - isolated manifest with the exact root Clippy deny set: `harness/Cargo.toml`,
   SHA-256
   `b1de95677cf4f772334b66a7be5d07b0de7146643034ef31f901bccc941066e9`.
@@ -93,9 +105,9 @@ All paths above are beneath
 attempts were overwritten by these exact-candidate logs; PASS claims refer only
 to the hashes above.
 
-The fault suite covers disk full before write; timeout before write; crash after
-record sync; crash after no-clobber publish; protected-root unavailability;
-lost acknowledgment after root commit; retry/deduplication; truncation,
+The fault suite covers disk full before write; crash after record sync; crash
+after no-clobber publish; protected-root unavailability and a real
+protected-root timeout; retry/deduplication; truncation,
 mutation, rotation, saturation, missing key, owner rotation and concurrent
 writer recovery. It also verifies immediate emergency fencing when the audit
 write fails and restart blocking while the restriction ledger has a gap.
@@ -105,15 +117,16 @@ rejection before and after terminal resolution; mandatory first recovery;
 nonzero first-install and forward policy generations with rollback rejection;
 post-publish directory-sync ambiguity; visible recovered pending intents;
 explicit unknown reconciliation; new-dispatch blocking during reconciliation;
-terminal receipt recording after a live generation advance; timestamp- and
-generation-independent retry classification; exact one-record operator
-reconciliation; validated-tail cache reuse; and cache invalidation when the
+terminal receipt recording after a live generation advance; clock-, session-,
+task- and generation-independent retry classification with original identity
+reporting; exact one-record operator reconciliation with protected-prefix and
+owner validation; validated-tail cache reuse; and cache invalidation when the
 protected root changes.
 
 ## TMUX smoke and independent review
 
-The final implementation candidate `8fc225e3e534c596bc5b26f91d614926df2b5362`
-ran in real TMUX session `pf41-durable-smoke-final` from the candidate worktree
+The final implementation candidate `5c8564de07b182c48b31ba0477806837c87fa7c4`
+ran in real TMUX session `pf41-durable-smoke-final-2` from the candidate worktree
 using Corbanu Terminal v0.1.35 with `RUST_LOG=trace`, read-only/never
 permissions, exact model `claude-opus-5-plan` at `max`, and an explicit
 CorbanuDrive `log_dir`. `/status` confirmed the candidate directory, connected
@@ -121,11 +134,11 @@ Claude Plan account, exact model and Corbanu version; `/quit` exited the session
 cleanly. Command text and Enter were sent as separate TMUX operations.
 
 - Status capture:
-  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final/status-pane.txt`,
-  SHA-256 `ee6206e6562cb90ca19a2e91bd87ef3cf468ea5fd1744f67e3222da5c60a4d4a`.
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final-2/status-pane.txt`,
+  SHA-256 `19e2eaeeba6844a528b115e8a6c4b1546c828436a1aa118b8e190a6e285369de`.
 - Trace log:
-  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final/logs/codex-tui.log`,
-  SHA-256 `1c8cab1957b808595498edfa25c9feafe683f5b30d07ffdeff01cc4c4c68dbb5`.
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final-2/logs/codex-tui.log`,
+  SHA-256 `2a6dcf8115392d8c8704435c063e3b8c6be57aa7abfc5d1379d1b97710cb7e79`.
 
 The first read-only review used real TMUX session `pf27-opus5-g1-review`
 with exact model `claude-opus-5-plan` at `max`. It found nine actionable
@@ -149,6 +162,17 @@ fixes the five lane-owned runtime/evidence issues and makes the Bazel integratio
 gate explicit. Transcript:
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/review/opus-second-review.txt`,
 SHA-256 `8c6e22e6088d441b1e2a3b533d0027d8dedfebdc12b14dfc96e27c83a710fae6`.
+
+A third fresh read-only review in the same real TMUX/Corbanu harness used exact
+model `claude-opus-5-plan` at `max` and reviewed evidence candidate `09d476c3a`
+plus implementation `8fc225e3e`. It found four issues: action identity still
+included retry-variant clock/session/task fields; ambiguous reconciliation did
+not authenticate its protected prefix and owner; two documented runtime errors
+existed only as test injectors; and duplicate errors discarded the original
+acknowledgement identity. Candidate `5c8564de07b182c48b31ba0477806837c87fa7c4`
+fixes all four and adds focused regressions. Transcript:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/review/opus-third-review.txt`,
+SHA-256 `9b28a866538e79cbe7fd0d042fbcf3dc46f6d3eecb62a5d7e491a4e9cc286d2b`.
 
 The final post-remediation read-only Claude Opus 5 Plan Max review is recorded
 here after it completes. Prompt and Enter are sent as separate TMUX operations;
