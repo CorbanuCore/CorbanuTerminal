@@ -1071,12 +1071,28 @@ fn terminal_path_entries() -> Vec<String> {
                 .lines()
                 .map(str::trim)
                 .filter(|line| !line.is_empty())
+                .filter(|line| !is_process_arg0_alias(line))
                 .map(str::to_string),
         );
     }
     entries.sort();
     entries.dedup();
     entries
+}
+
+fn is_process_arg0_alias(path: &str) -> bool {
+    let Some(alias_dir) = Path::new(path).parent() else {
+        return false;
+    };
+    let Some(alias_dir_name) = alias_dir.file_name().and_then(OsStr::to_str) else {
+        return false;
+    };
+    alias_dir_name.starts_with("codex-arg0")
+        && alias_dir
+            .parent()
+            .and_then(Path::file_name)
+            .and_then(OsStr::to_str)
+            == Some("arg0")
 }
 
 fn run_command<I, S>(program: &str, args: I) -> Result<String, String>
@@ -3289,6 +3305,15 @@ mod tests {
                 npm_package_root: npm_root.join("@agticorp").join("pfterminal"),
             }
         );
+    }
+
+    #[test]
+    fn process_arg0_alias_is_not_reported_as_a_duplicate_install() {
+        let alias = PathBuf::from("/tmp/corbanu-home/tmp/arg0/codex-arg0-session/corbanu");
+        let installed = PathBuf::from("/opt/corbanu/bin/corbanu");
+
+        assert!(is_process_arg0_alias(&alias.to_string_lossy()));
+        assert!(!is_process_arg0_alias(&installed.to_string_lossy()));
     }
 
     #[test]
