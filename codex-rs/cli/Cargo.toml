@@ -109,9 +109,11 @@ owo-colors = { workspace = true }
 regex-lite = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 supports-color = { workspace = true }
 sys-locale = { workspace = true }
+whoami = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = [
     "io-std",
