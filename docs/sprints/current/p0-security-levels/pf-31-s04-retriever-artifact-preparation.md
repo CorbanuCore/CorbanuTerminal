@@ -1,14 +1,17 @@
 ---
 sprint_id: "PF-31-S04"
 title: "Retriever artifact and engine preparation"
-status: draft
+status: ready
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-31"
 execution_order: 17
-owner: "Jim Ricketts"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Codex browser/retrieval lane"
+parallel_lane: "browser-retrieval"
+write_scope: "scripts/security-retriever-artifact-check, qa/security-levels/retriever/, qa/security-levels/sprints/PF-31-S04/, docs/sprints/current/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md"
+integration_gate: "Jim Ricketts receives the PF-31-S04 candidate at G2, audits the literal scope, reruns manifest/fake-engine/governance checks on the combined tree, then archives the sprint before PF-33-S03 allocation."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval"
+branch: "feat/p0-security-browser-retrieval"
+base_commit: "ea23dfa38bc4f2cbfe0aceadd6777c3e436a53d4"
 depends_on: "none"
 created: 2026-08-28
 updated: 2026-08-28
@@ -36,13 +39,14 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Plan active; dependencies in front matter completed and archived.
-- [ ] Assign a named execution owner and exact plan-matching worktree/branch/base; run the sprint checker before readiness.
-- [ ] Read root and nearest implementation AGENTS.md; reserve disjoint write scope and receiving integration gate if parallel.
+- [x] Plan active; dependencies in front matter are `none`.
+- [x] Named execution owner and exact plan-matching worktree/branch/base assigned; governance checkers pass before readiness.
+- [x] Root and nearest implementation AGENTS.md read; disjoint write scope and receiving integration gate reserved.
 
 ## Done
 
 - [x] Bounded preparation/foundation mandate created from the accepted review; no implementation or platform acceptance claimed.
+- [x] Browser/retrieval lane allocated from dispatch base `ea23dfa38bc4f2cbfe0aceadd6777c3e436a53d4` with Jim Ricketts as receiving integration owner.
 
 ## Remaining
 
