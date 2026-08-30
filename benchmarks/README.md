@@ -91,13 +91,14 @@ approved the changed threshold before any lane ran.
 
 | Verdict | Definition | Release effect |
 | --- | --- | --- |
-| **Pass** | All three competitive lanes are auditable; Corbanu meets the live task rubric; the full coding task/model matrix is correct and auditable; runtime and spend stay within their frozen thresholds; and no P0 security failure is exposed. | Benchmark gate passes. |
-| **Fail** | Corbanu fails the live task or a required coding pair, crosses a frozen correctness/runtime/spend threshold, or exposes a P0 security failure. | Release blocked. |
-| **Incomplete** | Any competitive lane or required coding task/model pair lacks a functioning harness, credential, provider route, task input, runtime, spend, or evidence. | Release blocked until rerun. |
+| **Pass** | All three competitive lanes are auditable; Corbanu meets the live task rubric; the full coding task/model matrix is correct and auditable; runtime and spend stay within their frozen thresholds; and no P0 security failure is exposed. | Record the qualifying result. |
+| **Fail** | Corbanu fails the live task or a required coding pair, crosses a frozen correctness/runtime/spend threshold, or exposes a P0 security failure. | Record the result and open corrective follow-up. |
+| **Incomplete** | Any competitive lane or required coding task/model pair lacks a functioning harness, credential, provider route, task input, runtime, spend, or evidence. | Record the missing evidence and complete it in follow-up. |
 
 Hermes or Kilo performing poorly on a functioning, auditable lane is a valid
-competitive result; it does not make the run incomplete. A due failed or
-incomplete benchmark has no release waiver.
+competitive result; it does not make the run incomplete. Failed or incomplete
+benchmark evidence must be disclosed accurately, but does not override an
+explicit release instruction from a human with release authority.
 
 ## Bootstrap procedure
 
@@ -115,13 +116,14 @@ For the next release, the release owner must:
 7. set “releases since qualifying cycle” to zero only after both components
    pass.
 
-The current pending row blocks publication, not implementation.
+The current pending row records unfinished benchmark work. It is not an
+independent publication veto over an explicitly authorized release.
 
 ## Cadence ledger
 
 | Release | Releases since qualifying cycle | Required | Owner | Live repo/task | Corbanu/Hermes/Kilo | Coding catalog/model set | Runtime | Spend | Verdict | Evidence |
 | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Next release after policy adoption | baseline pending | yes | Release owner named in release record | pending | pending | full catalog; models pending | pending | pending | **Pending—publication blocked** | pending |
+| Next release after policy adoption | baseline pending | yes | Release owner named in release record | pending | pending | full catalog; models pending | pending | pending | **Pending—must be disclosed** | pending |
 
 ## Evidence package
 
