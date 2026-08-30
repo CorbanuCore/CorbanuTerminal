@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-33-S03"
 title: "Pure destination-policy contract"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-33"
 execution_order: 18
@@ -55,10 +55,11 @@ updated: 2026-08-30
 - [x] Replaced the ambiguous optional public rules with explicit `PublicScope`, made normalized destinations and decisions non-forgeable, and retained read-only accessors.
 - [x] Declared the source as Bazel test compile data, added a package-local executable fixture, froze its hash and retained a byte-identical QA evidence copy.
 - [x] Final same-session Opus 5 Max follow-up returned `CLEAN`; all three original PF-33 findings and the follow-up ledger contradiction are closed.
+- [x] Remediation commit `80a2469e401066ebaf04d95ba603ab68cb341854` passed the final integration-owner gates and the sprint was re-archived.
 
 ## Remaining
 
-- [ ] Record the exact remediation commit and re-archive the sprint.
+- None.
 
 ## Verification
 
@@ -67,13 +68,13 @@ updated: 2026-08-30
 - [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
 - [x] Verified the source has no socket/client call and remains absent from `src/lib.rs`, the module tree and the runtime graph; the Bazel integration target declares it only as test compile data, and fixture-only preparation exposes no route or profile.
 - [x] Receiving integration owner reran plan/sprint governance and whitespace checks on the completed combined archive tree.
-- [ ] Record the final-tree ordered `just fix`, `just fmt`, `just test -p codex-network-proxy` pass with all 239 network-proxy tests, including sixteen destination-contract regressions.
-- [ ] Record the passing focused Bazel target `//codex-rs/network-proxy:network-proxy-destination_contract-test` and its declared source/fixture compile data.
-- [ ] Record the final tmux/Corbanu Terminal/Claude Opus 5 Max corrected-candidate `CLEAN` verdict with no actionable P0-P3 finding.
+- [x] Final-tree ordered `just fix`, `just fmt`, `just test -p codex-network-proxy` sequence passed with all 239 network-proxy tests, including sixteen destination-contract regressions.
+- [x] Focused Bazel target `//codex-rs/network-proxy:network-proxy-destination_contract-test` passed with declared source and fixture compile data.
+- [x] Final tmux/Corbanu Terminal/Claude Opus 5 Max corrected-candidate verdict was `CLEAN` with no actionable P0-P3 finding.
 
 ## Exit evidence
 
 - [x] Reviewed source commit, source/test/fixture hashes, owner reviews and final-tree outputs recorded under `qa/security-levels/sprints/PF-33-S03/`.
 - [x] No SSRF-prevention claim; PF-33-S01/S02 retain real resolver, connected-peer, pool/proxy and alternate-egress qualification.
 - [x] Scope audit, integration handoff, combined-tree reruns and completed archive transition recorded; all ledgers updated.
-- [ ] Exact remediation commit, post-archive transition and final-tree hashes are recorded under `qa/security-levels/sprints/PF-33-S03/`.
+- [x] Exact remediation commit, post-archive transition and final-tree hashes are recorded under `qa/security-levels/sprints/PF-33-S03/`.

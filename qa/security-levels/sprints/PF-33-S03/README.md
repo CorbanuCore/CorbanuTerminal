@@ -62,6 +62,8 @@ cmp qa/security-levels/sprints/PF-33-S03/contract-v1.json \
 
 The Bazel target now deliberately compiles the pure source as test input; the source remains absent from `src/lib.rs` and the runtime graph. This still makes no live SSRF-prevention claim.
 
+The bounded remediation commit is `80a2469e401066ebaf04d95ba603ab68cb341854`; the sprint was re-archived only after the ordered Rust gate, focused Bazel target, governance checks and same-session `CLEAN` verdict.
+
 ## Review
 
 - [Codex GPT-5.5 Autoreview](review/codex-gpt-5.5.md): review iterations drove closure of private-service DNS-rebinding/pin-bypass and malformed-host alias defects; final full-candidate verdict is clean at confidence 0.86.

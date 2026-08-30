@@ -39,3 +39,5 @@ Disposition: corrected the checked sprint item to state that the pure source rem
 Final follow-up prompt SHA-256: `2b18ff503a613ade2adb882b358c01303adf3e244470fedc2026b3700eea7687`.
 
 The same tmux/Corbanu Terminal/Claude Opus 5 Max conversation recomputed the source/test/fixture hashes, confirmed that the repair touched only the ledger and evidence, and verified the full working-tree consistency. It marked the ledger contradiction and all three original PF-33 findings closed, reported no actionable P0-P3 finding, and ended with the standalone verdict `CLEAN` after 1 minute 13 seconds.
+
+The integration owner separately completed the writable final-tree gates. The bounded remediation commit is `80a2469e401066ebaf04d95ba603ab68cb341854`.
