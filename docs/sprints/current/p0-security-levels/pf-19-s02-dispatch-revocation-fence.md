@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-19-S02"
 title: "Dispatch revocation fence contract"
-status: ready
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-19"
 execution_order: 23
@@ -44,27 +44,30 @@ updated: 2026-08-30
 
 - [x] Plan active; all dependencies completed and archived.
 - [x] Assign a named execution owner and exact plan-matching worktree/branch/base; reserve disjoint scopes and integration gate if parallel.
-- [ ] Read root and nearest implementation AGENTS.md; run the sprint checker before readiness.
+- [x] Read root and nearest implementation AGENTS.md; run the sprint checker before readiness.
 
 ## Done
 
 - [x] Follow-up separated from the accepted upstream foundation; no new implementation or qualification claimed.
+- [x] Define queued, admitted, uploading and established-channel transitions and the linearization point after which no new protected dispatch or channel write is permitted.
+- [x] Require current run/revocation generation at every protected dispatch; reject stale authority and specify how adapters fence open channels, in-flight uploads and queued work without revoking unaffected siblings.
+- [x] Emergency kill and restriction take effect even when audit storage is unavailable or an earlier financial effect is submitted/unknown. Preserve uncertainty for later reconciliation; never claim completed effects can be undone.
+- [x] Add deterministic interleaving, repeated kill, stale-generation, open-channel, audit-unavailable and unknown-financial-outcome contract tests. Retain the accepted generation/order/idempotency tests; actual transport/restart proof remains with consumers.
 
 ## Remaining
 
-- [ ] Define queued, admitted, uploading and established-channel transitions and the linearization point after which no new protected dispatch or channel write is permitted.
-- [ ] Require current run/revocation generation at every protected dispatch; reject stale authority and specify how adapters fence open channels, in-flight uploads and queued work without revoking unaffected siblings.
-- [ ] Emergency kill and restriction take effect even when audit storage is unavailable or an earlier financial effect is submitted/unknown. Preserve uncertainty for later reconciliation; never claim completed effects can be undone.
-- [ ] Add deterministic interleaving, repeated kill, stale-generation, open-channel, audit-unavailable and unknown-financial-outcome contract tests. Retain the accepted generation/order/idempotency tests; actual transport/restart proof remains with consumers.
+- [ ] Integration owner adds the reserved public re-exports, validates the combined tree, and archives the accepted sprint without activating a transport consumer.
 
 ## Verification
 
-- [ ] `cd codex-rs && just fix -p codex-security-policy && just fmt` before final affected tests.
-- [ ] `cd codex-rs && just test -p codex-security-policy revocation && just test -p codex-security-policy`.
-- [ ] TUI applicability: none; PF-25 and PF-26 retain interactive kill/recovery proof.
+- [x] `cd codex-rs && just fix -p codex-security-policy && just fmt` before final affected tests.
+- [x] `cd codex-rs && just test -p codex-security-policy revocation && just test -p codex-security-policy`.
+- [x] TUI applicability: none; PF-25 and PF-26 retain interactive kill/recovery proof. The focused suite also passed in a real TMUX PTY.
+- [ ] Integration-owner final-tree rerun after the shared export-only edit and serialized merge.
 
 ## Exit evidence
 
-- [ ] Record implementation commit, changed paths, contract version and exact final-tree commands/results under `qa/security-levels/sprints/PF-19-S02/`.
-- [ ] Preserve S01 archive/evidence unchanged; do not relabel historical passes as proof of these new cases.
-- [ ] Record consumer integration handoff; complete all ledgers before archive and update plan/navigation.
+- [x] Record implementation commit, changed paths, contract version and exact final-tree commands/results under `qa/security-levels/sprints/PF-19-S02/`.
+- [x] Preserve S01 archive/evidence unchanged; do not relabel historical passes as proof of these new cases.
+- [x] Record consumer integration handoff; all lane-owned ledgers are complete. Plan/navigation/archive remain integration-owner-only.
+- [ ] Integration owner records the merged candidate and moves this record to the archive with plan/navigation updates.

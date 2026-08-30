@@ -13,6 +13,84 @@ use crate::ProtectedActionMandate;
 use crate::digest::canonical_sha256;
 
 pub const REVOCATION_SCHEMA_VERSION: u32 = 1;
+pub const DISPATCH_FENCE_SCHEMA_VERSION: u32 = 1;
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum DispatchAuthorityKind {
+    Grant,
+    Mandate,
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum DispatchPhase {
+    Queued,
+    Admitted,
+    EstablishedChannel,
+    Uploading,
+    Fenced,
+    Completed,
+    UnknownFinancialOutcome,
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ProtectedDispatchStep {
+    Admit,
+    EstablishChannel,
+    BeginUpload,
+    UploadWrite,
+    FinishUpload,
+    ChannelWrite,
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum RestrictionAuditStatus {
+    Recorded,
+    Unavailable,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RestrictionApplication {
+    pub event_was_effective: bool,
+    pub generation: u64,
+    pub audit_status: RestrictionAuditStatus,
+}
+
+/// Adapter-neutral fence for one run and one grant or mandate.
+///
+/// Consumers must call `authorize_*` while holding the same revocation-state
+/// read guard through the protected dispatch or write. That check is the
+/// linearization point. A stale generation never authorizes work; unaffected
+/// authority may continue only after a trusted `refresh_*` revalidation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DispatchFence {
+    schema_version: u32,
+    run_id: BoundedText,
+    authority_kind: DispatchAuthorityKind,
+    authority_id: BoundedText,
+    generation: u64,
+    phase: DispatchPhase,
+    ever_admitted: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DispatchAuthorityStatus {
+    Active,
+    Revoked,
+    OutsideValidityWindow,
+}
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
@@ -229,6 +307,44 @@ impl RevocationState {
         Ok(true)
     }
 
+    /// Apply an emergency restriction before recording whether its audit write
+    /// succeeded. Audit failure is preserved in the result and cannot delay or
+    /// roll back the restriction.
+    pub fn apply_restriction(
+        &mut self,
+        event: &RevocationEvent,
+        write_audit: impl FnOnce() -> RestrictionAuditStatus,
+    ) -> Result<RestrictionApplication, RevocationError> {
+        if matches!(event.target, RevocationTarget::KillSwitch { active: false }) {
+            return Err(RevocationError::NotARestriction);
+        }
+        self.validate()?;
+        event.validate()?;
+        if matches!(event.target, RevocationTarget::KillSwitch { active: true })
+            && !self.kill_switch_active
+        {
+            let candidate = RevocationOrder {
+                created_at_unix_seconds: event.created_at_unix_seconds,
+                event_id: event.event_id.clone(),
+            };
+            if self.applied_event_ids.contains(&event.event_id)
+                || self
+                    .last_kill_switch_event
+                    .as_ref()
+                    .is_some_and(|previous| &candidate <= previous)
+            {
+                return Err(RevocationError::RestrictionSuperseded);
+            }
+        }
+        let event_was_effective = self.apply(event)?;
+        let audit_status = write_audit();
+        Ok(RestrictionApplication {
+            event_was_effective,
+            generation: self.generation,
+            audit_status,
+        })
+    }
+
     pub fn grant_is_revoked(&self, grant: &BoundedGrant) -> bool {
         self.kill_switch_active
             || self.revoked_grant_ids.contains(&grant.grant_id)
@@ -292,6 +408,346 @@ impl RevocationState {
     }
 }
 
+impl DispatchFence {
+    pub fn schema_version(&self) -> u32 {
+        self.schema_version
+    }
+
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
+    pub fn phase(&self) -> DispatchPhase {
+        self.phase
+    }
+
+    pub fn queued_for_grant(
+        run_id: BoundedText,
+        expected_generation: u64,
+        now_unix_seconds: i64,
+        grant: &BoundedGrant,
+        revocations: &RevocationState,
+    ) -> Result<Self, RevocationError> {
+        grant
+            .validate()
+            .map_err(|_| RevocationError::InvalidAuthority)?;
+        Self::queued(
+            run_id,
+            expected_generation,
+            DispatchAuthorityKind::Grant,
+            grant.grant_id.clone(),
+            revocations,
+            Self::grant_status(now_unix_seconds, grant, revocations),
+        )
+    }
+
+    pub fn queued_for_mandate(
+        run_id: BoundedText,
+        expected_generation: u64,
+        now_unix_seconds: i64,
+        mandate: &ProtectedActionMandate,
+        revocations: &RevocationState,
+    ) -> Result<Self, RevocationError> {
+        mandate
+            .validate()
+            .map_err(|_| RevocationError::InvalidAuthority)?;
+        Self::queued(
+            run_id,
+            expected_generation,
+            DispatchAuthorityKind::Mandate,
+            mandate.mandate_id.clone(),
+            revocations,
+            Self::mandate_status(now_unix_seconds, mandate, revocations),
+        )
+    }
+
+    fn queued(
+        run_id: BoundedText,
+        expected_generation: u64,
+        authority_kind: DispatchAuthorityKind,
+        authority_id: BoundedText,
+        revocations: &RevocationState,
+        authority_status: DispatchAuthorityStatus,
+    ) -> Result<Self, RevocationError> {
+        revocations.validate()?;
+        if expected_generation != revocations.generation {
+            return Err(RevocationError::StaleDispatchGeneration {
+                expected: expected_generation,
+                current: revocations.generation,
+            });
+        }
+        match authority_status {
+            DispatchAuthorityStatus::Active => {}
+            DispatchAuthorityStatus::Revoked => return Err(RevocationError::AuthorityRevoked),
+            DispatchAuthorityStatus::OutsideValidityWindow => {
+                return Err(RevocationError::AuthorityOutsideValidityWindow);
+            }
+        }
+        Ok(Self {
+            schema_version: DISPATCH_FENCE_SCHEMA_VERSION,
+            run_id,
+            authority_kind,
+            authority_id,
+            generation: expected_generation,
+            phase: DispatchPhase::Queued,
+            ever_admitted: false,
+        })
+    }
+
+    pub fn authorize_grant(
+        &mut self,
+        run_id: &BoundedText,
+        now_unix_seconds: i64,
+        grant: &BoundedGrant,
+        revocations: &RevocationState,
+        step: ProtectedDispatchStep,
+    ) -> Result<(), RevocationError> {
+        grant
+            .validate()
+            .map_err(|_| RevocationError::InvalidAuthority)?;
+        self.authorize(
+            run_id,
+            DispatchAuthorityKind::Grant,
+            &grant.grant_id,
+            revocations,
+            Self::grant_status(now_unix_seconds, grant, revocations),
+            step,
+        )
+    }
+
+    pub fn authorize_mandate(
+        &mut self,
+        run_id: &BoundedText,
+        now_unix_seconds: i64,
+        mandate: &ProtectedActionMandate,
+        revocations: &RevocationState,
+        step: ProtectedDispatchStep,
+    ) -> Result<(), RevocationError> {
+        mandate
+            .validate()
+            .map_err(|_| RevocationError::InvalidAuthority)?;
+        self.authorize(
+            run_id,
+            DispatchAuthorityKind::Mandate,
+            &mandate.mandate_id,
+            revocations,
+            Self::mandate_status(now_unix_seconds, mandate, revocations),
+            step,
+        )
+    }
+
+    pub fn refresh_grant(
+        &mut self,
+        run_id: &BoundedText,
+        now_unix_seconds: i64,
+        grant: &BoundedGrant,
+        revocations: &RevocationState,
+    ) -> Result<(), RevocationError> {
+        grant
+            .validate()
+            .map_err(|_| RevocationError::InvalidAuthority)?;
+        self.refresh(
+            run_id,
+            DispatchAuthorityKind::Grant,
+            &grant.grant_id,
+            revocations,
+            Self::grant_status(now_unix_seconds, grant, revocations),
+        )
+    }
+
+    pub fn refresh_mandate(
+        &mut self,
+        run_id: &BoundedText,
+        now_unix_seconds: i64,
+        mandate: &ProtectedActionMandate,
+        revocations: &RevocationState,
+    ) -> Result<(), RevocationError> {
+        mandate
+            .validate()
+            .map_err(|_| RevocationError::InvalidAuthority)?;
+        self.refresh(
+            run_id,
+            DispatchAuthorityKind::Mandate,
+            &mandate.mandate_id,
+            revocations,
+            Self::mandate_status(now_unix_seconds, mandate, revocations),
+        )
+    }
+
+    fn authorize(
+        &mut self,
+        run_id: &BoundedText,
+        authority_kind: DispatchAuthorityKind,
+        authority_id: &BoundedText,
+        revocations: &RevocationState,
+        authority_status: DispatchAuthorityStatus,
+        step: ProtectedDispatchStep,
+    ) -> Result<(), RevocationError> {
+        self.check_binding(run_id, authority_kind, authority_id)?;
+        revocations.validate()?;
+        if matches!(
+            self.phase,
+            DispatchPhase::Fenced
+                | DispatchPhase::Completed
+                | DispatchPhase::UnknownFinancialOutcome
+        ) {
+            return Err(RevocationError::InvalidDispatchTransition);
+        }
+        match authority_status {
+            DispatchAuthorityStatus::Active => {}
+            DispatchAuthorityStatus::Revoked => {
+                self.phase = DispatchPhase::Fenced;
+                return Err(RevocationError::AuthorityRevoked);
+            }
+            DispatchAuthorityStatus::OutsideValidityWindow => {
+                self.phase = DispatchPhase::Fenced;
+                return Err(RevocationError::AuthorityOutsideValidityWindow);
+            }
+        }
+        if self.generation != revocations.generation {
+            return Err(RevocationError::StaleDispatchGeneration {
+                expected: self.generation,
+                current: revocations.generation,
+            });
+        }
+        let next_phase = match (self.phase, step) {
+            (DispatchPhase::Queued, ProtectedDispatchStep::Admit) => DispatchPhase::Admitted,
+            (DispatchPhase::Admitted, ProtectedDispatchStep::EstablishChannel) => {
+                DispatchPhase::EstablishedChannel
+            }
+            (DispatchPhase::EstablishedChannel, ProtectedDispatchStep::BeginUpload)
+            | (DispatchPhase::Uploading, ProtectedDispatchStep::UploadWrite) => {
+                DispatchPhase::Uploading
+            }
+            (DispatchPhase::Uploading, ProtectedDispatchStep::FinishUpload)
+            | (DispatchPhase::EstablishedChannel, ProtectedDispatchStep::ChannelWrite) => {
+                DispatchPhase::EstablishedChannel
+            }
+            _ => return Err(RevocationError::InvalidDispatchTransition),
+        };
+        if matches!(
+            (self.phase, step),
+            (DispatchPhase::Queued, ProtectedDispatchStep::Admit)
+        ) {
+            self.ever_admitted = true;
+        }
+        self.phase = next_phase;
+        Ok(())
+    }
+
+    fn refresh(
+        &mut self,
+        run_id: &BoundedText,
+        authority_kind: DispatchAuthorityKind,
+        authority_id: &BoundedText,
+        revocations: &RevocationState,
+        authority_status: DispatchAuthorityStatus,
+    ) -> Result<(), RevocationError> {
+        self.check_binding(run_id, authority_kind, authority_id)?;
+        revocations.validate()?;
+        if matches!(
+            self.phase,
+            DispatchPhase::Fenced
+                | DispatchPhase::Completed
+                | DispatchPhase::UnknownFinancialOutcome
+        ) {
+            return Err(RevocationError::InvalidDispatchTransition);
+        }
+        match authority_status {
+            DispatchAuthorityStatus::Active => {}
+            DispatchAuthorityStatus::Revoked => {
+                self.phase = DispatchPhase::Fenced;
+                return Err(RevocationError::AuthorityRevoked);
+            }
+            DispatchAuthorityStatus::OutsideValidityWindow => {
+                self.phase = DispatchPhase::Fenced;
+                return Err(RevocationError::AuthorityOutsideValidityWindow);
+            }
+        }
+        if revocations.generation < self.generation {
+            return Err(RevocationError::StaleDispatchGeneration {
+                expected: self.generation,
+                current: revocations.generation,
+            });
+        }
+        self.generation = revocations.generation;
+        Ok(())
+    }
+
+    fn grant_status(
+        now_unix_seconds: i64,
+        grant: &BoundedGrant,
+        revocations: &RevocationState,
+    ) -> DispatchAuthorityStatus {
+        if revocations.grant_is_revoked(grant) {
+            DispatchAuthorityStatus::Revoked
+        } else if now_unix_seconds < grant.issued_at_unix_seconds
+            || grant.is_expired_at(now_unix_seconds)
+        {
+            DispatchAuthorityStatus::OutsideValidityWindow
+        } else {
+            DispatchAuthorityStatus::Active
+        }
+    }
+
+    fn mandate_status(
+        now_unix_seconds: i64,
+        mandate: &ProtectedActionMandate,
+        revocations: &RevocationState,
+    ) -> DispatchAuthorityStatus {
+        if revocations.mandate_is_revoked(mandate) {
+            DispatchAuthorityStatus::Revoked
+        } else if now_unix_seconds < mandate.approved_at_unix_seconds
+            || now_unix_seconds >= mandate.expires_at_unix_seconds
+        {
+            DispatchAuthorityStatus::OutsideValidityWindow
+        } else {
+            DispatchAuthorityStatus::Active
+        }
+    }
+
+    fn check_binding(
+        &self,
+        run_id: &BoundedText,
+        authority_kind: DispatchAuthorityKind,
+        authority_id: &BoundedText,
+    ) -> Result<(), RevocationError> {
+        if self.schema_version != DISPATCH_FENCE_SCHEMA_VERSION {
+            return Err(RevocationError::UnsupportedDispatchFenceVersion {
+                found: self.schema_version,
+                supported: DISPATCH_FENCE_SCHEMA_VERSION,
+            });
+        }
+        if &self.run_id != run_id
+            || self.authority_kind != authority_kind
+            || &self.authority_id != authority_id
+        {
+            return Err(RevocationError::DispatchBindingMismatch);
+        }
+        Ok(())
+    }
+
+    pub fn record_completed(&mut self) -> Result<(), RevocationError> {
+        self.record_terminal(DispatchPhase::Completed)
+    }
+
+    pub fn record_unknown_financial_outcome(&mut self) -> Result<(), RevocationError> {
+        self.record_terminal(DispatchPhase::UnknownFinancialOutcome)
+    }
+
+    fn record_terminal(&mut self, outcome: DispatchPhase) -> Result<(), RevocationError> {
+        match self.phase {
+            DispatchPhase::Admitted
+            | DispatchPhase::EstablishedChannel
+            | DispatchPhase::Uploading => self.phase = outcome,
+            DispatchPhase::Fenced if self.ever_admitted => self.phase = outcome,
+            phase if phase == outcome => {}
+            _ => return Err(RevocationError::InvalidDispatchTransition),
+        }
+        Ok(())
+    }
+}
+
 impl Default for RevocationState {
     fn default() -> Self {
         Self::new()
@@ -317,6 +773,24 @@ pub enum RevocationError {
     CorruptStateTimestamp,
     #[error("revocation state contains an invalid kill-switch history")]
     CorruptKillSwitchState,
+    #[error("kill-switch deactivation is not an emergency restriction")]
+    NotARestriction,
+    #[error("emergency restriction was superseded by a newer kill-switch order")]
+    RestrictionSuperseded,
+    #[error("dispatch authority is malformed")]
+    InvalidAuthority,
+    #[error("dispatch authority has been revoked")]
+    AuthorityRevoked,
+    #[error("dispatch authority is outside its validity window")]
+    AuthorityOutsideValidityWindow,
+    #[error("dispatch generation {expected} is stale; current generation is {current}")]
+    StaleDispatchGeneration { expected: u64, current: u64 },
+    #[error("dispatch run or authority binding does not match")]
+    DispatchBindingMismatch,
+    #[error("dispatch phase transition is invalid")]
+    InvalidDispatchTransition,
+    #[error("unsupported dispatch-fence schema version {found}; supported version is {supported}")]
+    UnsupportedDispatchFenceVersion { found: u32, supported: u32 },
     #[error("unsupported revocation schema version {found}; supported version is {supported}")]
     UnsupportedSchemaVersion { found: u32, supported: u32 },
     #[error(transparent)]
