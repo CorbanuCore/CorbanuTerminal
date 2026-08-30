@@ -1,0 +1,33 @@
+{
+  "schema_version": 2,
+  "identity": {
+    "baseline_commit": "3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb",
+    "baseline_manifest_sha256": "45d1f2bd96733381638bb62961ee59fb1c026bc05a6a78d03b560cb794406b8d",
+    "upstream_commit": "b0dc0624326c706fec5329fd48ed44f243937469",
+    "upstream_convergence_commit": "45a60f03d2f6c041d284b41cc3f33c416d9eeed1",
+    "upstream_codex_parent": "413492cd6c3a4d4f8dff6f406247ccda5a9d88aa",
+    "expectations_constructed_from_commit": "b0dc0624326c706fec5329fd48ed44f243937469"
+  },
+  "surfaces": [
+    {"id": "environment-auth", "permissive_behavior": "upstream-aligned", "protected_behavior": "opt-in-above-permissive"},
+    {"id": "web-run-history", "permissive_behavior": "upstream-aligned", "protected_behavior": "opt-in-above-permissive"},
+    {"id": "native-search", "permissive_behavior": "upstream-aligned", "protected_behavior": "opt-in-above-permissive"},
+    {"id": "browser", "permissive_behavior": "upstream-aligned", "protected_behavior": "opt-in-above-permissive"},
+    {"id": "mcp-plugins", "permissive_behavior": "upstream-aligned", "protected_behavior": "opt-in-above-permissive"},
+    {"id": "children", "permissive_behavior": "upstream-aligned", "protected_behavior": "opt-in-above-permissive"},
+    {"id": "wallet", "permissive_behavior": "upstream-aligned", "protected_behavior": "opt-in-above-permissive"},
+    {"id": "clipboard-export", "permissive_behavior": "upstream-aligned", "protected_behavior": "opt-in-above-permissive"},
+    {"id": "persisted-sessions", "permissive_behavior": "upstream-aligned", "protected_behavior": "opt-in-above-permissive"}
+  ],
+  "cases": [
+    {"id": "environment-auth-header", "surface": "environment-auth", "package": "codex-agent-identity", "test_filter": "authorization_header_for_agent_task_serializes_signed_agent_assertion", "source": "codex-rs/agent-identity/src/lib.rs", "function": "authorization_header_for_agent_task_serializes_signed_agent_assertion", "upstream_source_sha256": "c6c0fec307656ba11d6b8ef3defb91a3e119d594022137b17a597e3a8af62f18"},
+    {"id": "web-run-history-wire-shape", "surface": "web-run-history", "package": "codex-extension-items", "test_filter": "web_search_item_preserves_stable_wire_shape", "source": "codex-rs/ext/items/src/tests.rs", "function": "web_search_item_preserves_stable_wire_shape", "upstream_source_sha256": "cbea49f5c623d8810633bcaa3023c2ca85a2872ba2fcfb68ed1de23618748200"},
+    {"id": "native-search-runtime-gate", "surface": "native-search", "package": "codex-core", "test_filter": "hosted_web_search_fallback_follows_winning_browser_runtime", "source": "codex-rs/core/src/tools/spec_plan_tests.rs", "function": "hosted_web_search_fallback_follows_winning_browser_runtime", "upstream_source_sha256": "a303e5aecba402ed243551cd0011e957e52e8ddb8a4fa6cbed329a6d24385c41"},
+    {"id": "browser-requirements", "surface": "browser", "package": "codex-core", "test_filter": "browser_feature_requirements_are_valid", "source": "codex-rs/core/src/config/config_tests.rs", "function": "browser_feature_requirements_are_valid", "upstream_source_sha256": "73ba96f2294c840594137f50eac5f86c04df61a5a8ccd9cdc27036896638733c"},
+    {"id": "mcp-plugin-auth-gate", "surface": "mcp-plugins", "package": "codex-features", "test_filter": "apps_require_feature_flag_and_chatgpt_auth", "source": "codex-rs/features/src/tests.rs", "function": "apps_require_feature_flag_and_chatgpt_auth", "upstream_source_sha256": "4e71e3705a03b66abb8118f3e9735e83f052221dd8de3371f923844ea93c17dd"},
+    {"id": "child-depth-limit", "surface": "children", "package": "codex-core", "test_filter": "thread_spawn_depth_increments_and_enforces_limit", "source": "codex-rs/core/src/agent/registry_tests.rs", "function": "thread_spawn_depth_increments_and_enforces_limit", "upstream_source_sha256": "503f8732025ec6f3b7762b6463a930665f9e10c8d0b6a75e7c57f38e235870ed"},
+    {"id": "wallet-fee-owner", "surface": "wallet", "package": "codex-wallet", "test_filter": "rejects_a_challenge_that_makes_the_wallet_owner_pay_network_fees", "source": "codex-rs/wallet/src/payment.rs", "function": "rejects_a_challenge_that_makes_the_wallet_owner_pay_network_fees", "upstream_source_sha256": "3496c6d0b99ab04e974068b0ba11c99e8caa3f7e5ec8a7dfd01ee860235656bc"},
+    {"id": "clipboard-tmux-export", "surface": "clipboard-export", "package": "codex-tui", "test_filter": "ssh_inside_tmux_prefers_tmux_clipboard", "source": "codex-rs/tui/src/clipboard_copy.rs", "function": "ssh_inside_tmux_prefers_tmux_clipboard", "upstream_source_sha256": "1b232b4fc1e675edacbd214c3248f93e27cca54a70b82a572acef1321e770dda"},
+    {"id": "persisted-mcp-session-history", "surface": "persisted-sessions", "package": "codex-app-server-protocol", "test_filter": "reconstructs_mcp_tool_result_meta_from_persisted_completion_events", "source": "codex-rs/app-server-protocol/src/protocol/thread_history.rs", "function": "reconstructs_mcp_tool_result_meta_from_persisted_completion_events", "upstream_source_sha256": "03defba803879ff503e491d08e7a266364c9285fc31a1191d65ea6629e8836fc"}
+  ]
+}

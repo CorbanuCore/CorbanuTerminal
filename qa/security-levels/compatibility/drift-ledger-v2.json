@@ -1,0 +1,8 @@
+{
+  "schema_version": 2,
+  "reviewed_at_utc": "2026-08-30T12:00:00Z",
+  "max_age_days": 30,
+  "reviewed_by": "Codex compatibility/drift lane",
+  "rule": "Only exact, owner-reviewed source differences from the upstream control are accepted; absent, unknown, stale, or candidate-derived drift fails.",
+  "entries": []
+}
