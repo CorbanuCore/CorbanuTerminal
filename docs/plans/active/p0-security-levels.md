@@ -19,7 +19,7 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval"
     branch: "feat/p0-security-browser-retrieval-pf33"
-    base_commit: "1a5562738cb3d53bd4d0b6668761cfe76bd4b93e"
+    base_commit: "67cdfaf0fce7cdb4e19036306fb5ca3129192968"
   - path: "/Users/travisgood/Documents/ChatGPT/corbanu-pf13-s02"
     branch: "feat/pf-13-s02-scoped-vault-resolver"
     base_commit: "1bdc515bff48a4d9048dae7d06c6214e884265bc"
@@ -150,7 +150,8 @@ PF-33-S03 rotate through that one lane sequentially; no protected route is
 activated by this follow-up.
 [PF-31-S04 remediation](../../sprints/archive/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md)
 completed at `c2168575695dfb2ad015bf45ef24d9e4b173b571`; PF-33-S03 is the next
-sequential browser/retrieval allocation.
+sequential browser/retrieval allocation through
+[PF-33-S03 remediation](../../sprints/current/p0-security-levels/pf-33-s03-destination-policy-contract.md).
 
 Credentials and machine login details remain only in the local gitignored
 `AgentCredentials.md` chain and must never enter a branch, evidence bundle,
