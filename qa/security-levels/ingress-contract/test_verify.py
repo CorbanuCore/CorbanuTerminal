@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.append(str(Path(__file__).resolve().parent))
 import verify
 
 
@@ -77,6 +77,14 @@ class IngressContractVerifierTest(unittest.TestCase):
         self.save("manifest.json", manifest)
         self.assert_verification_fails("invalid fixture entry")
 
+    def test_duplicate_fixture_path_fails(self) -> None:
+        manifest = self.load("manifest.json")
+        duplicate = dict(manifest["fixtures"][0])
+        duplicate["id"] = "unique-id-with-duplicate-path"
+        manifest["fixtures"].append(duplicate)
+        self.save("manifest.json", manifest)
+        self.assert_verification_fails("invalid fixture entry")
+
     def test_missing_fixture_fails_cleanly(self) -> None:
         (self.root / "fixtures/benign-v1/raw.txt").unlink()
         self.assert_verification_fails("missing fixture")
@@ -96,7 +104,6 @@ class IngressContractVerifierTest(unittest.TestCase):
         self.save("manifest.json", manifest)
         self.assert_verification_fails("model or threshold identity changed")
 
-    @unittest.skipUnless(hasattr(Path, "symlink_to"), "symlinks unavailable")
     def test_fixture_symlink_fails(self) -> None:
         fixture = self.root / "fixtures/benign-v1/raw.txt"
         outside = Path(self.temporary.name) / "outside.txt"

@@ -14,6 +14,13 @@ schema version, source binding, transformation identity, segment count/order,
 complete reassembly digest, model artifact identity, and threshold identity.
 Missing, malformed, stale, or mismatched inputs produce `unavailable`.
 
+`verify.py` is the normative executable check. `schema.json` documents the
+portable manifest shape, while the dependency-free verifier applies the
+stronger frozen semantic constraints and pins the schema bytes. Because the
+schema digest constant lives in the verifier itself, a coordinated edit to both
+files still depends on code review and recurring CI; the pin detects accidental
+or one-sided drift, not a malicious maintainer controlling both artifacts.
+
 The fixture seam preserves `taint: untrusted` and `authority: none`. No fixture
 may authorize a tool, financial action, credential resolution, taint clearing,
 or prefix release. PF-30 owns source authority; this package accepts only its

@@ -14,7 +14,7 @@ branch: "feat/p0-security-ingress-classifier"
 base_commit: "6a35712cd5731b191d875e8c6468f1abe23eb66e"
 depends_on: "none"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-30
 ---
 
 # PF-34-S04 — Screening segment contract and fixtures
@@ -47,17 +47,18 @@ updated: 2026-08-28
 
 - [x] Bounded preparation/foundation mandate created from the accepted review; no implementation or platform acceptance claimed.
 - [x] Ingress/classifier lane allocated from dispatch base `6a35712cd5731b191d875e8c6468f1abe23eb66e`; all caches are rooted under `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/`.
+- [x] Rebased onto current `main` at `1a5562738cb3d53bd4d0b6668761cfe76bd4b93e` so the mandated review used the corrected TMUX/provider behavior while preserving the immutable creation coordinate.
 - [x] Immutable opaque-source, raw/rendered/sanitized transformation, complete-reassembly, segment index/count and contract-version bindings implemented.
 - [x] Typed allow/suspicious/hostile/unavailable decisions bind exact model/threshold identities, safe diagnostics, size/time/freshness budgets and sticky fail-closed state.
 - [x] Versioned benign, cross-segment hostile and quarantine-transition fixtures freeze hashes, schema, taint/no-authority and forbidden transitions.
 - [x] Full-content one-shot release and cancellation semantics prevent partial/prefix release and forced allow after any terminal fault.
 - [x] Pure constructors and fixture verifier add no Core/provider/runtime route; PF-30 source authority and PF-34/PF-35 change ownership remain separate.
-- [x] Lane-local formatting, Clippy, 20 named contract tests, three verifier regressions, seven-fixture/schema verification, governance and `git diff --check` pass at post-review implementation commit `002c6382152910d984db22a41a24f80281f6d19b`.
+- [x] Lane-local formatting, Clippy, argument-comment lint, 20 named contract tests, 13 verifier regressions, seven-fixture/schema verification, governance and `git diff --check` pass at Opus-remediated implementation commit `74e97148701ef541ff9ef2d0a9194ba472b2801c`.
 - [x] Supplemental structured Codex review verified four in-scope findings, drove bounded remediation and finished clean on the complete committed branch.
 
 ## Remaining
 
-- [ ] Complete the immutable Claude Opus 5.0 Max review, verify every finding locally and rerun lane checks after any accepted fix.
+- [ ] Record the final immutable Claude Opus 5.0 Max follow-up verdict and rerun outputs after every accepted fix.
 - [ ] Hand the candidate, contract/fixture identities, scope audit and exact shared registration patch to Jim Ricketts for serialized G1/G2 integration.
 
 ## Verification

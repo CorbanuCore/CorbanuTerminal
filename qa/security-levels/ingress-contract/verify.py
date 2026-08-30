@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
+from typing import NoReturn
 
 
 ROOT = Path(__file__).resolve().parent
@@ -12,7 +13,7 @@ ALLOWED_KINDS = {"raw", "rendered", "sanitized", "quarantine-transitions"}
 EXPECTED_SCHEMA_SHA256 = "eb5637086be6cc07d4d7b8bffedc0a16d141d81772ce11e4b903e4053e997873"
 
 
-def fail(message: str) -> None:
+def fail(message: str) -> NoReturn:
     raise SystemExit(f"ingress-contract: {message}")
 
 
@@ -177,7 +178,7 @@ def main() -> None:
         }:
             fail(f"transformation binding mismatch: {case_id}")
         sanitized_fixture = required_fixture(fixture_by_id, f"{case_id}-sanitized")
-        sanitized_path = ROOT / sanitized_fixture["path"]
+        sanitized_path = fixture_path(PurePosixPath(sanitized_fixture["path"]))
         sanitized = sanitized_path.read_bytes()
         segmentation = case["segmentation"]
         boundaries = segmentation.get("boundaries", [])

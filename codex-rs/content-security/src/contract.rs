@@ -371,7 +371,7 @@ impl ScreeningTarget {
 }
 
 /// Untrusted wire representation. Validation occurs inside [`ScreeningSession`].
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct SegmentEnvelope {
     pub contract_version: u32,
     pub binding: ContentBinding,
@@ -379,6 +379,12 @@ pub struct SegmentEnvelope {
     pub index: u32,
     pub count: u32,
     pub payload: Vec<u8>,
+}
+
+impl fmt::Debug for SegmentEnvelope {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        redacted_bytes("SegmentEnvelope", &self.payload, formatter)
+    }
 }
 
 impl SegmentEnvelope {
@@ -531,7 +537,7 @@ pub enum ContentAuthority {
 /// Raw bytes require the explicit, greppable [`Self::into_raw_untrusted`]
 /// escape hatch. This type intentionally implements neither `Deref` nor
 /// `AsRef<[u8]>`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct UntrustedBytes<'a>(&'a [u8]);
 
 impl<'a> UntrustedBytes<'a> {
@@ -540,12 +546,32 @@ impl<'a> UntrustedBytes<'a> {
     }
 }
 
+impl fmt::Debug for UntrustedBytes<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        redacted_bytes("UntrustedBytes", self.0, formatter)
+    }
+}
+
 /// Complete content released only by a matching `Allow` verdict.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct ScreenedContent {
     bytes: Vec<u8>,
     target: ScreeningTarget,
     identity: VerdictIdentity,
+}
+
+impl fmt::Debug for ScreenedContent {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        redacted_bytes("ScreenedContent", &self.bytes, formatter)
+    }
+}
+
+fn redacted_bytes(name: &str, bytes: &[u8], formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    formatter
+        .debug_struct(name)
+        .field("len", &bytes.len())
+        .field("sha256", &ContentDigest::of(bytes).to_hex())
+        .finish()
 }
 
 impl ScreenedContent {
@@ -642,6 +668,8 @@ impl ScreeningSession {
         if segment.contract_version != SCREENING_CONTRACT_VERSION {
             return self.fail(UnavailableReason::ContractVersionMismatch);
         }
+        // Constructors make this unreachable in v1. Keep the guard for future
+        // validated wire decoders, which may accept multiple contract versions.
         if segment.binding.contract_version != self.target.binding.contract_version {
             return self.fail(UnavailableReason::ContentBindingMismatch);
         }

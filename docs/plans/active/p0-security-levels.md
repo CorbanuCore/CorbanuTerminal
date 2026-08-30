@@ -351,6 +351,14 @@ update; it cannot silently change Permissive or an accepted security level.
 | Jim Ricketts | `/Users/travisgood/Documents/ChatGPT/corbanu-security-levels` | `feat/p0-security-levels` | `7cc15ae0762664d6d01765de407329887da9f876` | Complete reconciled security program, policy/broker/ingress/financial adapters, TUI and evidence |
 | Codex ingress/classifier lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier` | `feat/p0-security-ingress-classifier` | `6a35712cd5731b191d875e8c6468f1abe23eb66e` | PF-34-S04 screening contract and immutable fixtures; Jim Ricketts receives the lane candidate and owns serialized crate/workspace/Bazel registration at G1 |
 
+The PF-34-S04 creation coordinate remains the immutable base recorded above.
+After allocation, the lane rebased onto current `main` at
+`1a5562738cb3d53bd4d0b6668761cfe76bd4b93e` to include the corrected TMUX and
+provider behavior before independent review. The lane-owned implementation is
+at `74e97148701ef541ff9ef2d0a9194ba472b2801c`; no shared Cargo, Bazel, lock, or
+module-registration file was edited. Jim Ricketts remains the G1 integration
+owner.
+
 Implementation does not occur in the documentation checkout. Update this plan
 before changing the implementation worktree, base, owner, or scope.
 

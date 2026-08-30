@@ -147,6 +147,11 @@ fn unavailable_reason(decision: ScreeningDecision) -> Option<UnavailableReason> 
 fn pf_34_s04_releases_only_complete_reassembled_content() {
     let target = target_for(BENIGN_SANITIZED, /*count*/ 2);
     let parts = split(BENIGN_SANITIZED, BENIGN_SANITIZED.len() / 2);
+    let debug_segment = SegmentEnvelope::new(&target, /*index*/ 0, BENIGN_SANITIZED.to_vec());
+    assert_eq!(
+        format!("{debug_segment:?}"),
+        "SegmentEnvelope { len: 99, sha256: \"c26af282d0752aa49a5fbba56c6151a7091ccb9f2018f78e3115af2bb685ce5f\" }"
+    );
     let mut session = session(target.clone(), budget()).unwrap();
 
     let second = session
@@ -182,6 +187,14 @@ fn pf_34_s04_releases_only_complete_reassembled_content() {
     ) else {
         panic!("matching allow verdict should release complete content");
     };
+    assert_eq!(
+        format!("{:?}", content.bytes()),
+        "UntrustedBytes { len: 99, sha256: \"c26af282d0752aa49a5fbba56c6151a7091ccb9f2018f78e3115af2bb685ce5f\" }"
+    );
+    assert_eq!(
+        format!("{content:?}"),
+        "ScreenedContent { len: 99, sha256: \"c26af282d0752aa49a5fbba56c6151a7091ccb9f2018f78e3115af2bb685ce5f\" }"
+    );
     assert_eq!(content.bytes().into_raw_untrusted(), BENIGN_SANITIZED);
     assert_eq!(content.taint(), ContentTaint::Untrusted);
     assert_eq!(content.authority(), ContentAuthority::None);
@@ -739,6 +752,10 @@ fn pf_34_s04_identifiers_and_versions_reject_malformed_metadata() {
 
 #[test]
 fn pf_34_s04_fixture_schema_and_content_hashes_are_frozen() {
+    assert_eq!(MAX_SCREENED_CONTENT_BYTES, 67_108_864);
+    assert_eq!(MAX_SCREENING_SEGMENTS, 4_096);
+    assert_eq!(MAX_SCREENING_ELAPSED_MS, 3_600_000);
+    assert_eq!(MAX_VERDICT_AGE_MS, 300_000);
     assert_eq!(SCREENING_FIXTURE_SCHEMA_VERSION, 1);
     assert_eq!(
         ContentDigest::of(BENIGN_RAW).to_hex(),
