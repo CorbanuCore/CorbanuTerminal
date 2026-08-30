@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "manifest_id": "corbanu-classifier-splits-v1",
+  "corpus_manifest_sha256": "ea5c27983dd2ff4ffef18a7f423dea92439a71f7bdf021ba3fbcf97785dbc339",
+  "status": "preparation",
+  "group_by": [
+    "original_source",
+    "base_document",
+    "template",
+    "attack_family",
+    "semantic_cluster"
+  ],
+  "near_duplicate_cross_split": "reject",
+  "semantic_duplicate_method": "sha256-canonical-group-tuples-v1",
+  "splits": [
+    {
+      "split_id": "train",
+      "purpose": "model fitting only",
+      "target_records": 250000,
+      "records_committed": 0,
+      "status": "external_evidence_required",
+      "visibility": "training-lane after license and leakage gates"
+    },
+    {
+      "split_id": "development",
+      "purpose": "development and calibration without blind feedback",
+      "target_records": 25000,
+      "records_committed": 0,
+      "status": "external_evidence_required",
+      "visibility": "training-lane after license and leakage gates"
+    },
+    {
+      "split_id": "blind",
+      "purpose": "independent final qualification",
+      "target_records": 150000,
+      "records_committed": 0,
+      "status": "external_evidence_required",
+      "visibility": "aggregate-only",
+      "training_access": false,
+      "custodian": "human-product-custodian",
+      "encrypted": true,
+      "record_level_output": false
+    }
+  ],
+  "required_holdouts": [
+    "unseen-source",
+    "language",
+    "topic",
+    "position",
+    "adaptive"
+  ],
+  "coverage_dimensions": [
+    "benign-security-research",
+    "legitimate-human-trading-instructions",
+    "trigger-token-hard-negatives",
+    "finance",
+    "repository",
+    "web",
+    "tool-output",
+    "child-agent",
+    "cross-segment",
+    "unsupported-language"
+  ],
+  "language_policy": {
+    "supported": ["en"],
+    "unsupported_runtime_outcome": "unavailable",
+    "multilingual_attacks_retained_as_adversarial_fixtures": true
+  },
+  "blind_evaluator_contract": {
+    "training_lane_receives_record_level_results": false,
+    "threshold_tuning_from_blind_results": false,
+    "public_result": "aggregate counts, confidence intervals, artifact identity and signed manifest identity",
+    "minimum_held_out_benign": 100000,
+    "minimum_hard_negative": 1000,
+    "minimum_known_family": 1000,
+    "minimum_unseen_source": 1000,
+    "known_family_recall_target": 0.8,
+    "unseen_source_recall_target": 0.65,
+    "benign_false_positive_target": 0.001,
+    "hard_negative_rejection_increase_max": 0.02,
+    "model_size_mib_max": 300,
+    "cpu_latency_p95_ms_max": 50,
+    "peak_rss_mib_max": 512,
+    "input_tokens": 2048,
+    "blind_records_minimum": 140000,
+    "blind_records_target_tolerance": 10000
+  }
+}

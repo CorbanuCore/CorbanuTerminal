@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "screening_contract_version": 1,
+  "manifest_id": "corbanu-classifier-corpus-v1",
+  "status": "preparation",
+  "initial_language": "en",
+  "data_policy": {
+    "allowed_spdx": [
+      "Apache-2.0",
+      "BSD-2-Clause",
+      "BSD-3-Clause",
+      "CC-BY-4.0",
+      "CC0-1.0",
+      "MIT"
+    ],
+    "customer_data_allowed": false,
+    "protected_financial_data_allowed": false,
+    "credential_or_wallet_material_allowed": false,
+    "commercial_use_required": true,
+    "source_revision_and_hash_required": true
+  },
+  "sources": [
+    {
+      "source_id": "corbanu-pf34-contract-fixtures-v1",
+      "kind": "synthetic-contract-fixture-manifest",
+      "origin": "Corbanu Terminal PF-34-S04",
+      "revision": "9d08b15fa94676c1383ee1605b77e7cc7218dcc4",
+      "path": "qa/security-levels/ingress-contract/manifest.json",
+      "sha256": "7e8a4850f67052b2b5b2e0d17f5227116f226c65ee25a6945d04ff7a2a1a1fc3",
+      "license": "Apache-2.0",
+      "allowed_use": "Public synthetic contract regression seeds and benign lookalikes; not blind qualification evidence.",
+      "commercial_use": true,
+      "attribution": "Copyright OpenAI and Corbanu Terminal contributors; Apache-2.0.",
+      "transformations": "Use only immutable fixture identifiers, verdicts, and digests; keep derived variants in one semantic group.",
+      "training_eligible": true,
+      "contains_private_data": false,
+      "quality_claim": "none",
+      "hash_subject": "local-public-fixture-manifest",
+      "license_subject": "hashed Corbanu Terminal fixture manifest and referenced public synthetic fixtures"
+    },
+    {
+      "source_id": "openclaw-oc4-reference-v1",
+      "kind": "upstream-regression-seed-reference",
+      "origin": "https://github.com/openclaw/openclaw.git",
+      "revision": "13adff02ca3897768d80d2bca18f5acf08c55d91",
+      "path": "qa/security-levels/planning/openclaw-2026-08-28/source-manifest.json",
+      "sha256": "d7c78f36a5b2291311c3ca7612bd28abaf66ff87b0913669b8df900a69c38033",
+      "license": "MIT",
+      "allowed_use": "OC-4 wrapper cases may seed labeled regressions only; they are not detector training, test, or quality evidence by themselves.",
+      "commercial_use": true,
+      "attribution": "OpenClaw contributors, pinned MIT-licensed source at the recorded revision.",
+      "transformations": "Extract only independently reviewed synthetic attack patterns; generate separate benign lookalikes and group all derivatives with their source template.",
+      "training_eligible": false,
+      "contains_private_data": false,
+      "quality_claim": "no upstream classifier-quality evidence",
+      "hash_subject": "local-reference record that transitively pins upstream source files",
+      "license_subject": "upstream OpenClaw source at the recorded revision, not the local reference-record authorship"
+    }
+  ],
+  "synthetic_campaign": {
+    "campaign_id": "qwen35-27b-vllm-en-v1",
+    "generator_model": "Qwen3.5-27B",
+    "runtime": "vLLM",
+    "language": "en",
+    "status": "external_evidence_required",
+    "records_committed": 0,
+    "private_records_in_git": false,
+    "required_run_metadata": [
+      "prompt_sha256",
+      "seed",
+      "sampling_parameters",
+      "model_revision",
+      "runtime_version",
+      "container_digest",
+      "driver_version",
+      "campaign_id",
+      "output_sha256"
+    ],
+    "generation_host": "RTX host supplied by product owner",
+    "comfyui_must_be_stopped": true,
+    "targets": {
+      "train": 250000,
+      "development": 25000,
+      "blind": 150000
+    }
+  },
+  "label_policy": {
+    "campaign_labels_are_provisional": true,
+    "blind_labeling_pass_required": true,
+    "human_adjudication": [
+      "every-disagreement",
+      "every-low-confidence",
+      "every-suspicious"
+    ],
+    "high_confidence_human_audit_fraction": 0.01,
+    "high_confidence_opus_audit_fraction": 0.01,
+    "audit_samples_must_not_overlap": true,
+    "reassess_after_acceptances": 10000
+  },
+  "blind_custody": {
+    "owner": "human-product-custodian",
+    "encryption_required": true,
+    "contents_in_git": false,
+    "labels_in_git": false,
+    "training_access": false,
+    "reviewer_access": false,
+    "public_output": "aggregate signed metrics and immutable manifest identity only"
+  },
+  "detector_feasibility": {
+    "primary": "DeBERTa-v3-xsmall optimized INT8 ONNX Runtime",
+    "fallback": "custom lightweight classifier after primary failure evidence",
+    "weakest_host": "Intel N100, 16 GiB RAM, x86-64 Linux",
+    "input_tokens": 2048,
+    "status": "external_evidence_required",
+    "measured_results": null
+  },
+  "distribution_contract": {
+    "offline_root": "Ed25519 human-custodied root",
+    "rotating_release_key": true,
+    "private_keys_in_git": false,
+    "weights_in_git": false,
+    "immutable_github_release_assets": true,
+    "atomic_local_verification_and_rollback": true,
+    "signed_thresholds_status": "external_evidence_required",
+    "status": "external_evidence_required"
+  }
+}
