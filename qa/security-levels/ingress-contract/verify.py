@@ -129,6 +129,12 @@ def main() -> None:
             != hashlib.sha256(sanitized).hexdigest()
         ):
             fail(f"segmentation binding mismatch: {case_id}")
+        expected_verdict = {
+            "benign-v1": "allow",
+            "cross-segment-hostile-v1": "hostile",
+        }.get(case_id)
+        if case["expected_verdict"] != expected_verdict:
+            fail(f"expected verdict mismatch: {case_id}")
         seen_cases.add(case_id)
 
     if seen_cases != {"benign-v1", "cross-segment-hostile-v1"}:
@@ -137,17 +143,29 @@ def main() -> None:
     transitions = json.loads(
         (ROOT / "fixtures/quarantine-v1/transitions.json").read_text(encoding="utf-8")
     )
-    if transitions.get("taint") != "untrusted" or transitions.get("authority") != "none":
-        fail("quarantine fixture changed trust or authority")
-    required_forbidden = {
-        "release_prefix",
-        "clear_taint",
-        "grant_tool_authority",
-        "authorize_financial_action",
-        "unavailable_to_allow",
+    expected_transitions = {
+        "schema_version": 1,
+        "taint": "untrusted",
+        "authority": "none",
+        "initial": "pending_reassembly",
+        "transitions": [
+            {"from": "pending_reassembly", "event": "complete", "to": "pending_screening"},
+            {"from": "pending_reassembly", "event": "malformed_or_cancelled", "to": "unavailable"},
+            {"from": "pending_screening", "event": "allow", "to": "screened_untrusted"},
+            {"from": "pending_screening", "event": "suspicious", "to": "quarantined"},
+            {"from": "pending_screening", "event": "hostile", "to": "rejected"},
+            {"from": "pending_screening", "event": "missing_stale_mismatch_or_timeout", "to": "unavailable"},
+        ],
+        "forbidden": [
+            "release_prefix",
+            "clear_taint",
+            "grant_tool_authority",
+            "authorize_financial_action",
+            "unavailable_to_allow",
+        ],
     }
-    if set(transitions.get("forbidden", [])) != required_forbidden:
-        fail("quarantine forbidden-transition set changed")
+    if transitions != expected_transitions:
+        fail("quarantine v1 semantics changed")
 
     print(f"ingress-contract: verified {len(fixtures)} fixtures; schema=1 contract=1")
 
