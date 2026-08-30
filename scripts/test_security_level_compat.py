@@ -30,6 +30,7 @@ class SecurityLevelCompatTests(unittest.TestCase):
                 baseline,
                 upstream,
                 Path(directory) / "prepared",
+                now=CONTROL_NOW,
             )
             report = json.loads(path.read_text())
             self.assertEqual(report["status"], "pending")
@@ -98,6 +99,23 @@ class SecurityLevelCompatTests(unittest.TestCase):
                 )
             ),
             0,
+        )
+
+        output = "compile output\n" * 10_000
+        output += "Summary [0.027s] 1 test run: 1 passed, 10 skipped\n"
+        bounded = compat.bounded_output(output)
+        self.assertIn("output truncated by security-level-compat", bounded)
+        self.assertTrue(bounded.endswith("1 passed, 10 skipped\n"))
+        self.assertEqual(
+            compat.executed_test_count(
+                compat.CommandResult(
+                    command=["just", "test"],
+                    returncode=0,
+                    stdout="",
+                    stderr=bounded,
+                )
+            ),
+            1,
         )
 
     def test_expanded_extractor_requires_a_real_test_and_ignores_literal_braces(self):
@@ -290,6 +308,22 @@ class SecurityLevelCompatTests(unittest.TestCase):
             self.assertEqual(removed, ["baseline-old"])
             self.assertTrue((root / "upstream-current").is_dir())
             self.assertTrue((root / "unrelated").is_dir())
+
+            retry = root / "controls-retry"
+            retry.mkdir()
+            (retry / ".DS_Store").write_text("finder", encoding="utf-8")
+            real_rmtree = compat.shutil.rmtree
+            attempts = 0
+
+            def flaky_rmtree(path, *, ignore_errors):
+                nonlocal attempts
+                attempts += 1
+                if attempts > 1:
+                    real_rmtree(path, ignore_errors=ignore_errors)
+
+            with mock.patch.object(compat.shutil, "rmtree", side_effect=flaky_rmtree):
+                self.assertIsNone(compat.remove_tree_best_effort(retry))
+            self.assertEqual(attempts, 2)
 
     def test_cleanup_attempts_every_control_worktree(self) -> None:
         with mock.patch.object(

@@ -94,8 +94,11 @@ def bounded_output(value: str) -> str:
     encoded = value.encode("utf-8", errors="replace")
     if len(encoded) <= MAX_CAPTURE_BYTES:
         return value
-    suffix = b"\n... output truncated by security-level-compat ...\n"
-    return (encoded[: MAX_CAPTURE_BYTES - len(suffix)] + suffix).decode(
+    marker = b"\n... output truncated by security-level-compat ...\n"
+    retained = MAX_CAPTURE_BYTES - len(marker)
+    head_size = retained // 2
+    tail_size = retained - head_size
+    return (encoded[:head_size] + marker + encoded[-tail_size:]).decode(
         "utf-8", errors="replace"
     )
 
@@ -719,13 +722,34 @@ def require_external_artifact_roots(repo_root: Path, *roots: Path) -> None:
             )
 
 
+def remove_tree_best_effort(path: Path) -> str | None:
+    """Remove an artifact tree without allowing cleanup to mask test evidence."""
+    for _attempt in range(3):
+        try:
+            shutil.rmtree(path, ignore_errors=True)
+        except OSError:
+            pass
+        if not path.exists():
+            return None
+        try:
+            finder_files = list(path.rglob(".DS_Store"))
+        except OSError:
+            finder_files = []
+        for finder_file in finder_files:
+            try:
+                finder_file.unlink(missing_ok=True)
+            except OSError:
+                pass
+    return f"failed to remove artifact tree: {path}"
+
+
 def prune_stale_control_targets(
     target_root: Path, *, keep_names: frozenset[str]
 ) -> list[str]:
     removed: list[str] = []
     if not target_root.exists():
         return removed
-    for child in target_root.iterdir():
+    for child in list(target_root.iterdir()):
         if child.name not in keep_names and (
             child.name.startswith("baseline-") or child.name.startswith("upstream-")
         ):
@@ -734,15 +758,11 @@ def prune_stale_control_targets(
             child.replace(tombstone)
             child = tombstone
             if child.is_dir() and not child.is_symlink():
-                for _attempt in range(3):
-                    shutil.rmtree(child, ignore_errors=True)
-                    if not child.exists():
-                        break
-                    for finder_file in child.rglob(".DS_Store"):
-                        finder_file.unlink(missing_ok=True)
-                if child.exists():
+                cleanup_error = remove_tree_best_effort(child)
+                if cleanup_error is not None:
                     raise CompatibilityError(
-                        f"failed to prune stale control target: {original_name}"
+                        f"failed to prune stale control target {original_name}: "
+                        f"{cleanup_error}"
                     )
             else:
                 child.unlink()
@@ -1009,14 +1029,13 @@ def run_compatibility(
                 baseline_identity, baseline_cases = binary_identity, results
             else:
                 upstream_identity, upstream_cases = binary_identity, results
-    except BaseException as error:
+    except Exception as error:
         primary_error = error
     finally:
         cleanup_errors.extend(cleanup_control_worktrees(repo_root, worktrees))
-        try:
-            shutil.rmtree(controls_root)
-        except OSError as error:
-            cleanup_errors.append(f"failed to remove control run root: {error}")
+        run_root_cleanup_error = remove_tree_best_effort(controls_root)
+        if run_root_cleanup_error is not None:
+            cleanup_errors.append(run_root_cleanup_error)
     if primary_error is not None:
         if cleanup_errors:
             print(
@@ -1026,7 +1045,10 @@ def run_compatibility(
             )
         raise primary_error
     if cleanup_errors:
-        raise CompatibilityError("; ".join(cleanup_errors))
+        print(
+            "security-level-compat: cleanup warnings: " + "; ".join(cleanup_errors),
+            file=sys.stderr,
+        )
 
     dirty_paths = git_output(repo_root, ["status", "--short"]).splitlines()
     configuration = {
@@ -1068,10 +1090,11 @@ def run_compatibility(
         "candidate_runtime_tree": "clean",
         "control_commands": control_commands,
         "retained_control_artifacts": {
-            "run_root": None,
+            "run_root": str(controls_root) if controls_root.exists() else None,
             "target_root": str(target_root),
             "retained_targets": sorted(retained_target_names),
             "pruned_stale_targets": pruned_targets,
+            "cleanup_warnings": cleanup_errors,
         },
         "candidate_build_command": build_result.as_json(),
         "candidate_version_command": version_result.as_json(),
@@ -1130,7 +1153,12 @@ def run_compatibility(
 
 
 def prepare_compatibility(
-    repo_root: Path, baseline_commit: str, upstream_commit: str, output_dir: Path
+    repo_root: Path,
+    baseline_commit: str,
+    upstream_commit: str,
+    output_dir: Path,
+    *,
+    now: datetime.datetime | None = None,
 ) -> Path:
     """Validate immutable probes without claiming a build or a runtime pass."""
     manifest_bytes = (repo_root / BASELINE_PATH).read_bytes()
@@ -1148,6 +1176,7 @@ def prepare_compatibility(
         baseline_commit,
         upstream_commit,
         candidate_commit,
+        now=now,
     )
     protected_cases = validate_protected_cases(control, repo_root, candidate_commit)
     require_external_artifact_roots(repo_root, output_dir)

@@ -24,8 +24,10 @@ consumers have already received PF-26 end-to-end qualification.
 Candidate output never creates or refreshes a golden value. The candidate
 runtime inputs (`codex-rs`, root `justfile`, `scripts/just-shell.py`, and
 `codex-rs/.cargo/config.toml`) must be clean; the three tracked recipe inputs
-are hashed into the report. Every executable filter names an exact, lexically
-verified Rust test and must execute exactly one test.
+are hashed into the report. Every expanded and protected executable filter
+names an exact, lexically verified Rust test and must execute exactly one test.
+The five immutable S01 probes retain their accepted historical
+`executed_tests > 0` contract.
 
 `drift-ledger-v2.json` is intentionally empty: the reviewed source blocks for
 all nine inherited cases are byte-identical across upstream, baseline, and the
@@ -37,7 +39,10 @@ the review lifetime at 30 days; the ledger cannot extend it.
 Output, cache, temp, and candidate target roots inside the repository worktree
 are rejected. Per-run detached control sources are removed even after failure.
 At most the two currently pinned baseline/upstream target caches are retained;
-stale baseline/upstream target directories are pruned on the next run.
+stale baseline/upstream target directories are pruned on the next run. A
+cleanup-only failure cannot discard otherwise complete test evidence: the
+report preserves the verdict, leaked run-root path, and explicit
+`cleanup_warnings` for operator remediation.
 
 The report records only allowlisted platform/tool facts and whether three
 behavior-affecting ambient variables were present. It never records environment
