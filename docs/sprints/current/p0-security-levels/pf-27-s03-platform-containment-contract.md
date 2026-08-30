@@ -7,7 +7,7 @@ plan_feature: "PF-27"
 execution_order: 16
 owner: "Codex foundation/platform lane"
 parallel_lane: "foundation-platform"
-write_scope: "codex-rs/secret-broker/src/platform_contract.rs, scripts/security-platform-probe, qa/security-levels/platform/, qa/security-levels/sprints/PF-27-S03/, docs/sprints/current/p0-security-levels/pf-27-s03-platform-containment-contract.md"
+write_scope: "codex-rs/secret-broker/src/platform_contract.rs, scripts/security-platform-probe, scripts/security_platform_probe.py, scripts/test_security_platform_probe.py, qa/security-levels/platform/, qa/security-levels/sprints/PF-27-S03/, docs/sprints/current/p0-security-levels/pf-27-s03-platform-containment-contract.md"
 integration_gate: "Jim Ricketts receives the PF-27-S03 candidate at G1, audits the literal scope, exclusively registers codex-content-security Cargo/Bazel workspace surfaces, reruns schema/probe/governance checks on the combined tree, then archives the sprint before a consumer can use the contract."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform"
 branch: "feat/p0-security-foundation-platform"
@@ -34,8 +34,9 @@ updated: 2026-08-30
 
 ## Code boundaries
 
-- Planned: codex-rs/secret-broker/src/platform_contract.rs; scripts/security-platform-probe; qa/security-levels/platform/
+- Planned: codex-rs/secret-broker/src/platform_contract.rs; scripts/security-platform-probe; scripts/security_platform_probe.py; scripts/test_security_platform_probe.py; qa/security-levels/platform/
 - Existing integration paths are read-only until the named consumer sprint; shared manifests/lockfiles require serialized ownership.
+- Scope amendment (2026-08-30): the fifth independent review showed that the extensionless probe was omitted by standard Ruff and test discovery. The integration owner added only the conventional linted Python implementation and companion discovery test; the extensionless command remains a stable shim. No shared manifest, runtime route, or consumer surface is added.
 
 ## Preconditions
 
@@ -46,21 +47,24 @@ updated: 2026-08-30
 ## Done
 
 - [x] Bounded preparation/foundation mandate created from the accepted review; no implementation or platform acceptance claimed.
+- [x] Implemented a versioned result schema and bounded cross-platform synthetic probe for process, filesystem/config, inherited handle, IPC, network, process-memory/debug, signing/entitlement, elevation and protected-store boundaries; unknown/stale/wrong-target/false-eligibility input fails closed.
+- [x] Specified authenticated human-controller IPC and protected policy-store ownership, including replay, delete, rename, symlink/reparse, rollback and restart attacks; fixture preparation creates no runtime route.
+- [x] Recorded reviewed-input mechanism candidates for Linux, macOS and Windows without treating installation, signing, same-user separation or proxy configuration as containment.
+- [x] Executed the SHA-bound probe on macOS and Linux with 10/10 capability records and 8/8 contract regressions per target; both correctly remain ineligible because observed same-user bypasses are unsupported.
+- [x] Recorded the Linux/macOS/Windows identity, worker-threat, filesystem/config/IPC/network, handle, debug, signing/entitlement, elevation and store matrix; Windows is explicitly untested rather than inferred.
+- [x] Ran four independent TMUX + Corbanu Terminal + Claude Opus 5.0 Max reviews; repaired all twenty-two findings/coverage gaps across process/handle/elevation/signing/network/IPC probes, schema parity, macOS helper resolution, Windows boot identity, Rust identity/envelope validation, strict versus archival validation, and positive eligibility discrimination, then regenerated exact-SHA macOS/Linux evidence.
 
 ## Remaining
 
-- [ ] Record a Linux/macOS/Windows matrix: trusted identities/processes, agent shell/plugin/MCP/child threat, filesystem/config/IPC/network access, inherited handles, process-memory/debug permissions, signing/entitlements and elevation actually required. Same-user process separation alone is not proof.
-- [ ] Implement bounded capability probes from the untrusted execution context with synthetic process, file, handle and IPC canaries; distinguish supported, unsupported and untested mechanisms. Record OS/engine versions and rerun triggers; do not equate installation, notarization or a configuration flag with containment.
-- [ ] Specify authenticated human controller IPC and protected policy-store ownership, including delete/rename/symlink/rollback/restart attacks; PF-20 implements the store and PF-27-S04/S02 implement and qualify the production boundary.
-- [ ] Version the capability-result schema and fixture protocol; no runtime secret resolution, host-wide trust changes or automatic administrator setup. Any needed elevation uses human approval without password persistence.
-- [ ] Require reviewed per-OS mechanism choices and successful design probes before this contract completes; unavailable target access is not a platform pass. Update estimates with measured feasibility, not universal OS assumptions.
+- [ ] Execute the identical probe on the authorized Windows target and complete the three-platform matrix. The host is absent from the connected Tailscale tailnet and both supplied IP routes currently time out; unavailable access is `untested`, never a platform pass.
+- [ ] Obtain a clean post-repair review of the full final tree through TMUX + Corbanu Terminal + Claude Opus 5.0 Max.
 
 ## Verification
 
-- [ ] Run affected format/fix tools before final tests; record exact commands and actual test counts.
+- [x] Run affected format/fix tools before final tests; `ruff format --check` and `ruff check` pass; Python self-test passes 8/8 and standalone Rust activation-gate tests pass 9/9.
 - [ ] Run the planned probe with synthetic canaries on Linux/macOS/Windows; record target versions, expected denial, actual results and unsupported configurations. Run schema/fixture tests and wrong-identity/stale-result cases.
-- [ ] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
-- [ ] Verify no runtime route or profile becomes available from fixture-only preparation.
+- [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
+- [x] Verify no runtime route or profile becomes available from fixture-only preparation; the new Rust module remains outside Cargo/Bazel registration and the probe only creates bounded temporary synthetic fixtures.
 
 ## Exit evidence
 
