@@ -17,6 +17,9 @@ product_spec:
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval"
+    branch: "feat/p0-security-browser-retrieval-pf33"
+    base_commit: "80a2469e401066ebaf04d95ba603ab68cb341854"
   - path: "/Users/travisgood/Documents/ChatGPT/corbanu-pf13-s02"
     branch: "feat/pf-13-s02-scoped-vault-resolver"
     base_commit: "1bdc515bff48a4d9048dae7d06c6214e884265bc"
@@ -150,6 +153,17 @@ per cross-lane convergence gate and two days for final PF-26 convergence;
 reforecast after every gate. Reviewer availability itself is not charged, but
 finding remediation is. No calendar feasibility claim is made until raw sprint
 estimates, retriever pins, corpus/licensing and the weakest-supported CPU exist.
+
+The browser/retrieval worktree was reallocated on 2026-08-30 at
+`1a5562738cb3d53bd4d0b6668761cfe76bd4b93e` for bounded remediation of the
+post-archive tmux/Corbanu Terminal/Claude Opus 5 Max findings. PF-31-S04 and
+PF-33-S03 rotate through that one lane sequentially; no protected route is
+activated by this follow-up.
+[PF-31-S04 remediation](../../sprints/archive/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md)
+completed at `c2168575695dfb2ad015bf45ef24d9e4b173b571`.
+[PF-33-S03 remediation](../../sprints/archive/p0-security-levels/pf-33-s03-destination-policy-contract.md)
+then completed sequentially at `80a2469e401066ebaf04d95ba603ab68cb341854`;
+the browser/retrieval lane is returned after re-archive.
 
 Credentials and machine login details remain only in the local gitignored
 `AgentCredentials.md` chain and must never enter a branch, evidence bundle,

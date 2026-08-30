@@ -7,11 +7,11 @@ plan_feature: "PF-33"
 execution_order: 18
 owner: "Codex browser/retrieval lane"
 parallel_lane: "browser-retrieval"
-write_scope: "codex-rs/network-proxy/src/destination_contract.rs, codex-rs/network-proxy/tests/destination_contract.rs, qa/security-levels/sprints/PF-33-S03/, docs/sprints/current/p0-security-levels/pf-33-s03-destination-policy-contract.md"
+write_scope: "codex-rs/network-proxy/src/destination_contract.rs, codex-rs/network-proxy/tests/, codex-rs/network-proxy/BUILD.bazel, qa/security-levels/sprints/PF-33-S03/, docs/sprints/current/p0-security-levels/pf-33-s03-destination-policy-contract.md"
 integration_gate: "Jim Ricketts receives the PF-33-S03 candidate, audits the literal scope, runs fix/format/tests and governance on the combined tree, then archives the sprint and returns the slot."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval"
 branch: "feat/p0-security-browser-retrieval-pf33"
-base_commit: "b415ca43d148c1b40c61e9d1fb7ce12929b33a3e"
+base_commit: "67cdfaf0fce7cdb4e19036306fb5ca3129192968"
 depends_on: "none"
 created: 2026-08-28
 updated: 2026-08-30
@@ -51,6 +51,11 @@ updated: 2026-08-30
 - [x] Recorded a hashed versioned representative fixture and the isolated 239/239 network-proxy result under `qa/security-levels/sprints/PF-33-S03/`; the suite executes every frozen fixture case.
 - [x] Completed Claude Opus 5 Max Computer Use review (`PASS`) and Codex GPT-5.5 Autoreview (clean, 0.86 confidence); resolved accepted findings in scope and retained immutable evidence.
 - [x] Integration owner received the candidate, audited the literal scope, reran the ordered Rust and governance gates on the combined tree, archived the sprint, updated plan/navigation and returned the active lane slot.
+- [x] Reopened after a trace-backed tmux/Corbanu Terminal/Claude Opus 5 Max review found a Bazel compile-data break and two permissive type-construction gaps.
+- [x] Replaced the ambiguous optional public rules with explicit `PublicScope`, made normalized destinations and decisions non-forgeable, and retained read-only accessors.
+- [x] Declared the source as Bazel test compile data, added a package-local executable fixture, froze its hash and retained a byte-identical QA evidence copy.
+- [x] Final same-session Opus 5 Max follow-up returned `CLEAN`; all three original PF-33 findings and the follow-up ledger contradiction are closed.
+- [x] Remediation commit `80a2469e401066ebaf04d95ba603ab68cb341854` passed the final integration-owner gates and the sprint was re-archived.
 
 ## Remaining
 
@@ -61,11 +66,15 @@ updated: 2026-08-30
 - [x] Ran `just fix -p codex-network-proxy`, `just fmt`, then `just test -p codex-network-proxy` on the isolated and canonical trees: 239 passed, zero skipped across three binaries; sixteen destination-contract tests.
 - [x] Ran standalone deterministic table/property tests with synthetic address sets; proved empty/absent/wildcard/private polarity and bounded normalization.
 - [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
-- [x] Verified the source has no socket/client call and remains absent from runtime/module/manifests; fixture-only preparation exposes no route or profile.
+- [x] Verified the source has no socket/client call and remains absent from `src/lib.rs`, the module tree and the runtime graph; the Bazel integration target declares it only as test compile data, and fixture-only preparation exposes no route or profile.
 - [x] Receiving integration owner reran plan/sprint governance and whitespace checks on the completed combined archive tree.
+- [x] Final-tree ordered `just fix`, `just fmt`, `just test -p codex-network-proxy` sequence passed with all 239 network-proxy tests, including sixteen destination-contract regressions.
+- [x] Focused Bazel target `//codex-rs/network-proxy:network-proxy-destination_contract-test` passed with declared source and fixture compile data.
+- [x] Final tmux/Corbanu Terminal/Claude Opus 5 Max corrected-candidate verdict was `CLEAN` with no actionable P0-P3 finding.
 
 ## Exit evidence
 
 - [x] Reviewed source commit, source/test/fixture hashes, owner reviews and final-tree outputs recorded under `qa/security-levels/sprints/PF-33-S03/`.
 - [x] No SSRF-prevention claim; PF-33-S01/S02 retain real resolver, connected-peer, pool/proxy and alternate-egress qualification.
 - [x] Scope audit, integration handoff, combined-tree reruns and completed archive transition recorded; all ledgers updated.
+- [x] Exact remediation commit, post-archive transition and final-tree hashes are recorded under `qa/security-levels/sprints/PF-33-S03/`.

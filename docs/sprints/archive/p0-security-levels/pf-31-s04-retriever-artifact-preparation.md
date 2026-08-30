@@ -10,11 +10,11 @@ parallel_lane: "browser-retrieval"
 write_scope: "scripts/security-retriever-artifact-check, qa/security-levels/retriever/, qa/security-levels/sprints/PF-31-S04/, docs/sprints/current/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md"
 integration_gate: "Jim Ricketts receives the PF-31-S04 candidate at G2, audits the literal scope, reruns manifest/fake-engine/governance checks on the combined tree, then archives the sprint before PF-33-S03 allocation."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval"
-branch: "feat/p0-security-browser-retrieval"
-base_commit: "ea23dfa38bc4f2cbfe0aceadd6777c3e436a53d4"
+branch: "feat/p0-security-browser-retrieval-pf33"
+base_commit: "1a5562738cb3d53bd4d0b6668761cfe76bd4b93e"
 depends_on: "none"
 created: 2026-08-28
-updated: 2026-08-29
+updated: 2026-08-30
 ---
 
 # PF-31-S04 — Retriever artifact and engine preparation
@@ -58,6 +58,9 @@ updated: 2026-08-29
 - [x] Restored the pinned Windows Tailscale peer, verified its SSH fingerprint and remote bundle SHA-256, then passed the final 27 fixtures, 27 deterministic replays, five manifest mutations and ten evidence-path checks on Windows 11 Pro with Python 3.13.15.
 - [x] Integration owner retained the missing publisher signature/SBOM, pending license approval and locked Corbanu rebuild as hard blockers for PF-31-S01; no protected route was activated.
 - [x] Integration owner received the candidate, audited the literal scope, reran the combined-tree checks and completed the G2 slot rotation gate.
+- [x] Reopened after a trace-backed tmux/Corbanu Terminal/Claude Opus 5 Max review identified an undisclosed duplicate runtime image pin without a drift assertion.
+- [x] Bound `artifact.reference` to canonical `BASE_IMAGE` and worker Dockerfile `FROM` literals; eleven negative mutations cover manifest drift, missing/duplicate source pins and recipe-only drift.
+- [x] Final corrected-candidate Opus 5 Max follow-up returned `CLEAN`; remediation commit `c2168575695dfb2ad015bf45ef24d9e4b173b571` passed the integration-owner gates.
 
 ## Remaining
 
@@ -70,9 +73,12 @@ updated: 2026-08-29
 - [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
 - [x] Scope audit proves no runtime route or profile becomes available from fixture-only preparation.
 - [x] Receiving integration owner reran the manifest, 27 fixtures, five policy mutations, ten path checks, plan/sprint governance and whitespace checks on the combined tree.
+- [x] Final-tree validator reports 27 fixtures, 27 deterministic replays, eleven policy mutations and ten path checks.
+- [x] Required Python formatting/lint/compile, JSON, governance and whitespace gates pass after the review repair.
 
 ## Exit evidence
 
 - [x] Candidate commits, contract/fixture versions, local and Claude review dispositions, cross-host bundle identity and final-tree outputs are recorded under `qa/security-levels/sprints/PF-31-S04/`.
 - [x] Frozen pins and downstream launch/egress/isolation obligations are handed to PF-31-S01; this preparation sprint makes no protected-retrieval qualification claim.
 - [x] Scope audit, handoff, combined-tree reruns and completed archive transition are recorded.
+- [x] Trace-backed Opus 5 Max finding and corrected-candidate disposition are preserved under `qa/security-levels/sprints/PF-31-S04/review/`.

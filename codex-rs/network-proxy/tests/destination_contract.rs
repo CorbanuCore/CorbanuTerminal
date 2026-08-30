@@ -10,11 +10,17 @@ use destination_contract::DestinationPolicy;
 use destination_contract::DnsAnswerSet;
 use destination_contract::PolicySpec;
 use destination_contract::PrivateServiceSpec;
+use destination_contract::PublicScope;
 use destination_contract::RequestInput;
 use destination_contract::RuleSpec;
 use destination_contract::evaluate_destination;
 use destination_contract::evaluate_redirect;
 use destination_contract::normalize_destination;
+use sha2::Digest;
+use sha2::Sha256;
+
+const FROZEN_FIXTURE_SHA256: &str =
+    "1b05284a2c173bb4436f9eae913e0d47cd2a11a6df4ee7e5d5b9e7fa93d2eb1a";
 
 fn request(url: &str, method: &str) -> destination_contract::NormalizedDestination {
     match normalize_destination(RequestInput { url, method }) {
@@ -24,12 +30,12 @@ fn request(url: &str, method: &str) -> destination_contract::NormalizedDestinati
 }
 
 fn compile(
-    public_rules: Option<Vec<RuleSpec>>,
+    public_scope: PublicScope,
     private_services: Vec<PrivateServiceSpec>,
 ) -> DestinationPolicy {
     match DestinationPolicy::compile(PolicySpec {
         version: DESTINATION_CONTRACT_VERSION.to_owned(),
-        public_rules,
+        public_scope,
         private_services,
     }) {
         Ok(policy) => policy,
@@ -89,13 +95,16 @@ fn fixture_u16_value(value: &serde_json::Value, label: &str) -> u16 {
 }
 
 fn fixture_policy(case: &serde_json::Value) -> DestinationPolicy {
-    let public_rules = match case.get("public_rules") {
-        None | Some(serde_json::Value::Null) => None,
-        Some(value) => {
-            let Some(rules) = value.as_array() else {
-                panic!("public_rules must be an array or null");
+    let scope = case
+        .get("public_scope")
+        .unwrap_or_else(|| panic!("fixture must name public_scope explicitly"));
+    let public_scope = match fixture_string(scope, "kind") {
+        "unrestricted" => PublicScope::Unrestricted,
+        "rules" => {
+            let Some(rules) = scope["rules"].as_array() else {
+                panic!("rules public_scope must contain a rules array");
             };
-            Some(
+            PublicScope::Rules(
                 rules
                     .iter()
                     .map(|rule| RuleSpec {
@@ -116,6 +125,7 @@ fn fixture_policy(case: &serde_json::Value) -> DestinationPolicy {
                     .collect(),
             )
         }
+        kind => panic!("unknown public_scope kind: {kind}"),
     };
     let private_services = case
         .get("private_service")
@@ -129,7 +139,7 @@ fn fixture_policy(case: &serde_json::Value) -> DestinationPolicy {
             }]
         })
         .unwrap_or_default();
-    compile(public_rules, private_services)
+    compile(public_scope, private_services)
 }
 
 fn fixture_answers(case: &serde_json::Value) -> DnsAnswerSet {
@@ -144,11 +154,11 @@ fn fixture_answers(case: &serde_json::Value) -> DnsAnswerSet {
 #[test]
 fn normalizes_idna_case_trailing_dot_default_port_and_path() {
     let normalized = request("HTTPS://BÜCHER.Example.:443/a/../v1/items?x=1", "GET");
-    assert_eq!(normalized.scheme, "https");
-    assert_eq!(normalized.host, "xn--bcher-kva.example");
-    assert_eq!(normalized.port, 443);
-    assert_eq!(normalized.method, "GET");
-    assert_eq!(normalized.path, "/v1/items");
+    assert_eq!(normalized.scheme(), "https");
+    assert_eq!(normalized.host(), "xn--bcher-kva.example");
+    assert_eq!(normalized.port(), 443);
+    assert_eq!(normalized.method(), "GET");
+    assert_eq!(normalized.path(), "/v1/items");
 }
 
 #[test]
@@ -217,55 +227,65 @@ fn rejects_userinfo_fragments_backslashes_and_non_http_schemes() {
 
 #[test]
 fn canonicalizes_unusual_ipv4_and_mapped_ipv6() {
-    assert_eq!(request("http://0177.0.0.1/", "GET").host, "127.0.0.1");
-    assert_eq!(request("http://2130706433/", "GET").host, "127.0.0.1");
+    assert_eq!(request("http://0177.0.0.1/", "GET").host(), "127.0.0.1");
+    assert_eq!(request("http://2130706433/", "GET").host(), "127.0.0.1");
     let mapped = DnsAnswerSet::parse(&["::ffff:127.0.0.1"]).unwrap();
     assert!(mapped.addresses().contains(&"127.0.0.1".parse().unwrap()));
 }
 
 #[test]
-fn absent_empty_and_wildcard_public_polarities_are_distinct() {
+fn unrestricted_empty_and_wildcard_public_polarities_are_distinct() {
     let destination = request("https://public.example/v1", "GET");
     let public_answers = DnsAnswerSet::parse(&["93.184.216.34"]).unwrap();
 
-    let absent = evaluate_destination(&compile(None, vec![]), &destination, &public_answers);
-    assert_eq!(absent.reason, DecisionReason::PublicPolicyAbsent);
-    assert!(absent.allowed);
+    let unrestricted = evaluate_destination(
+        &compile(PublicScope::Unrestricted, vec![]),
+        &destination,
+        &public_answers,
+    );
+    assert_eq!(unrestricted.reason(), DecisionReason::PublicPolicyAbsent);
+    assert!(unrestricted.allowed());
 
     let empty = evaluate_destination(
-        &compile(Some(vec![]), vec![]),
+        &compile(PublicScope::Rules(vec![]), vec![]),
         &destination,
         &public_answers,
     );
-    assert_eq!(empty.reason, DecisionReason::ExplicitDenyAll);
-    assert!(!empty.allowed);
+    assert_eq!(empty.reason(), DecisionReason::ExplicitDenyAll);
+    assert!(!empty.allowed());
 
     let wildcard = evaluate_destination(
-        &compile(Some(vec![rule("*", &["GET"], &["/"])]), vec![]),
+        &compile(
+            PublicScope::Rules(vec![rule("*", &["GET"], &["/"])]),
+            vec![],
+        ),
         &destination,
         &public_answers,
     );
-    assert_eq!(wildcard.reason, DecisionReason::WildcardPublicRule);
-    assert!(wildcard.allowed);
+    assert_eq!(wildcard.reason(), DecisionReason::WildcardPublicRule);
+    assert!(wildcard.allowed());
 
     let private_answers = DnsAnswerSet::parse(&["10.0.0.8"]).unwrap();
     let denied_private = evaluate_destination(
-        &compile(Some(vec![rule("*", &["GET"], &["/"])]), vec![]),
+        &compile(
+            PublicScope::Rules(vec![rule("*", &["GET"], &["/"])]),
+            vec![],
+        ),
         &destination,
         &private_answers,
     );
     assert_eq!(
-        denied_private.reason,
+        denied_private.reason(),
         DecisionReason::PrivateDestinationNotAuthorized
     );
-    assert!(!denied_private.allowed);
+    assert!(!denied_private.allowed());
 }
 
 #[test]
 fn exact_and_suffix_rules_resist_host_and_path_confusion() {
     let answers = DnsAnswerSet::parse(&["93.184.216.34"]).unwrap();
     let exact = compile(
-        Some(vec![rule("api.example.com.", &["GET"], &["/v1"])]),
+        PublicScope::Rules(vec![rule("api.example.com.", &["GET"], &["/v1"])]),
         vec![],
     );
     assert!(
@@ -274,52 +294,58 @@ fn exact_and_suffix_rules_resist_host_and_path_confusion() {
             &request("https://api.example.com./v1/items", "GET"),
             &answers,
         )
-        .allowed
+        .allowed()
     );
     for url in [
         "https://api.example.com.evil.test/v1/items",
         "https://api.example.com/v10/items",
     ] {
-        assert!(!evaluate_destination(&exact, &request(url, "GET"), &answers).allowed);
+        assert!(!evaluate_destination(&exact, &request(url, "GET"), &answers).allowed());
     }
 
-    let suffix = compile(Some(vec![rule("*.example.com", &["GET"], &["/"])]), vec![]);
+    let suffix = compile(
+        PublicScope::Rules(vec![rule("*.example.com", &["GET"], &["/"])]),
+        vec![],
+    );
     assert!(
         evaluate_destination(
             &suffix,
             &request("https://child.example.com/", "GET"),
             &answers,
         )
-        .allowed
+        .allowed()
     );
     for url in [
         "https://example.com/",
         "https://badexample.com/",
         "https://example.com.evil.test/",
     ] {
-        assert!(!evaluate_destination(&suffix, &request(url, "GET"), &answers).allowed);
+        assert!(!evaluate_destination(&suffix, &request(url, "GET"), &answers).allowed());
     }
 }
 
 #[test]
 fn idna_policy_and_request_compare_in_one_ascii_form() {
-    let policy = compile(Some(vec![rule("bücher.example", &["GET"], &["/"])]), vec![]);
+    let policy = compile(
+        PublicScope::Rules(vec![rule("bücher.example", &["GET"], &["/"])]),
+        vec![],
+    );
     let answers = DnsAnswerSet::parse(&["93.184.216.34"]).unwrap();
     let decision = evaluate_destination(
         &policy,
         &request("https://xn--bcher-kva.example/", "GET"),
         &answers,
     );
-    assert_eq!(decision.reason, DecisionReason::ExplicitPublicRule);
-    assert!(decision.allowed);
+    assert_eq!(decision.reason(), DecisionReason::ExplicitPublicRule);
+    assert!(decision.allowed());
 }
 
 #[test]
 fn dns_answer_sets_fail_closed_for_empty_mixed_private_and_literal_mismatch() {
-    let policy = compile(None, vec![]);
+    let policy = compile(PublicScope::Unrestricted, vec![]);
     let destination = request("https://public.example/", "GET");
     assert_eq!(
-        evaluate_destination(&policy, &destination, &DnsAnswerSet::parse(&[]).unwrap()).reason,
+        evaluate_destination(&policy, &destination, &DnsAnswerSet::parse(&[]).unwrap()).reason(),
         DecisionReason::EmptyDnsAnswerSet
     );
     assert_eq!(
@@ -328,7 +354,7 @@ fn dns_answer_sets_fail_closed_for_empty_mixed_private_and_literal_mismatch() {
             &destination,
             &DnsAnswerSet::parse(&["93.184.216.34", "127.0.0.1"]).unwrap(),
         )
-        .reason,
+        .reason(),
         DecisionReason::MixedPublicAndPrivateAnswers
     );
     assert_eq!(
@@ -337,14 +363,14 @@ fn dns_answer_sets_fail_closed_for_empty_mixed_private_and_literal_mismatch() {
             &request("https://93.184.216.34/", "GET"),
             &DnsAnswerSet::parse(&["93.184.216.35"]).unwrap(),
         )
-        .reason,
+        .reason(),
         DecisionReason::AddressLiteralMismatch
     );
 }
 
 #[test]
 fn reserved_and_local_address_table_is_never_public() {
-    let policy = compile(None, vec![]);
+    let policy = compile(PublicScope::Unrestricted, vec![]);
     let destination = request("https://public.example/", "GET");
     for address in [
         "0.0.0.0",
@@ -378,7 +404,7 @@ fn reserved_and_local_address_table_is_never_public() {
             &destination,
             &DnsAnswerSet::parse(&[address]).unwrap(),
         );
-        assert!(!decision.allowed, "{address} was treated as public");
+        assert!(!decision.allowed(), "{address} was treated as public");
     }
     for address in ["1.1.1.1", "8.8.8.8", "2606:4700:4700::1111"] {
         assert!(
@@ -387,7 +413,7 @@ fn reserved_and_local_address_table_is_never_public() {
                 &destination,
                 &DnsAnswerSet::parse(&[address]).unwrap(),
             )
-            .allowed,
+            .allowed(),
             "{address} was not treated as public"
         );
     }
@@ -395,23 +421,26 @@ fn reserved_and_local_address_table_is_never_public() {
 
 #[test]
 fn private_service_requires_exact_https_identity_and_approved_addresses() {
-    let policy = compile(None, vec![private_service(&["10.0.0.8", "10.0.0.9"])]);
+    let policy = compile(
+        PublicScope::Unrestricted,
+        vec![private_service(&["10.0.0.8", "10.0.0.9"])],
+    );
     let target = request("https://internal.example.test/api/items", "GET");
     let allowed = evaluate_destination(
         &policy,
         &target,
         &DnsAnswerSet::parse(&["10.0.0.8", "10.0.0.9"]).unwrap(),
     );
-    assert_eq!(allowed.reason, DecisionReason::ExplicitPrivateService);
-    assert!(allowed.allowed);
+    assert_eq!(allowed.reason(), DecisionReason::ExplicitPrivateService);
+    assert!(allowed.allowed());
 
     let changed = evaluate_destination(
         &policy,
         &target,
         &DnsAnswerSet::parse(&["10.0.0.8", "10.0.0.10"]).unwrap(),
     );
-    assert_eq!(changed.reason, DecisionReason::PrivateAddressSetMismatch);
-    assert!(!changed.allowed);
+    assert_eq!(changed.reason(), DecisionReason::PrivateAddressSetMismatch);
+    assert!(!changed.allowed());
 
     let rebound_public = evaluate_destination(
         &policy,
@@ -419,18 +448,18 @@ fn private_service_requires_exact_https_identity_and_approved_addresses() {
         &DnsAnswerSet::parse(&["93.184.216.34"]).unwrap(),
     );
     assert_eq!(
-        rebound_public.reason,
+        rebound_public.reason(),
         DecisionReason::PrivateAddressSetMismatch
     );
-    assert!(!rebound_public.allowed);
+    assert!(!rebound_public.allowed());
 
     let mixed = evaluate_destination(
         &policy,
         &target,
         &DnsAnswerSet::parse(&["10.0.0.8", "93.184.216.34"]).unwrap(),
     );
-    assert_eq!(mixed.reason, DecisionReason::MixedPublicAndPrivateAnswers);
-    assert!(!mixed.allowed);
+    assert_eq!(mixed.reason(), DecisionReason::MixedPublicAndPrivateAnswers);
+    assert!(!mixed.allowed());
 
     for url in [
         "http://internal.example.test/api/items",
@@ -443,7 +472,7 @@ fn private_service_requires_exact_https_identity_and_approved_addresses() {
                 &request(url, "GET"),
                 &DnsAnswerSet::parse(&["10.0.0.8"]).unwrap(),
             )
-            .allowed,
+            .allowed(),
             "{url} bypassed the private identity"
         );
     }
@@ -452,7 +481,7 @@ fn private_service_requires_exact_https_identity_and_approved_addresses() {
 #[test]
 fn private_service_ip_literal_requires_the_same_literal_and_pinned_answer() {
     let policy = compile(
-        None,
+        PublicScope::Unrestricted,
         vec![PrivateServiceSpec {
             host: "10.0.0.8".to_owned(),
             port: 443,
@@ -468,7 +497,7 @@ fn private_service_ip_literal_requires_the_same_literal_and_pinned_answer() {
             &target,
             &DnsAnswerSet::parse(&["10.0.0.8"]).unwrap(),
         )
-        .allowed
+        .allowed()
     );
     assert_eq!(
         evaluate_destination(
@@ -476,7 +505,7 @@ fn private_service_ip_literal_requires_the_same_literal_and_pinned_answer() {
             &target,
             &DnsAnswerSet::parse(&["10.0.0.9"]).unwrap(),
         )
-        .reason,
+        .reason(),
         DecisionReason::AddressLiteralMismatch
     );
 }
@@ -484,7 +513,7 @@ fn private_service_ip_literal_requires_the_same_literal_and_pinned_answer() {
 #[test]
 fn reserved_names_require_explicit_private_service_identity() {
     let public_answers = DnsAnswerSet::parse(&["93.184.216.34"]).unwrap();
-    let absent = compile(None, vec![]);
+    let unrestricted = compile(PublicScope::Unrestricted, vec![]);
     for url in [
         "https://localhost/",
         "https://sub.localhost/",
@@ -504,29 +533,35 @@ fn reserved_names_require_explicit_private_service_identity() {
         "https://service.intra/",
         "https://service.private/",
     ] {
-        let decision = evaluate_destination(&absent, &request(url, "GET"), &public_answers);
+        let decision = evaluate_destination(&unrestricted, &request(url, "GET"), &public_answers);
         assert_eq!(
-            decision.reason,
+            decision.reason(),
             DecisionReason::PrivateDestinationNotAuthorized,
             "{url}"
         );
-        assert!(!decision.allowed, "{url}");
+        assert!(!decision.allowed(), "{url}");
     }
 
-    let private = compile(None, vec![private_service(&["10.0.0.8"])]);
+    let private = compile(
+        PublicScope::Unrestricted,
+        vec![private_service(&["10.0.0.8"])],
+    );
     assert!(
         evaluate_destination(
             &private,
             &request("https://internal.example.test/api/items", "GET"),
             &DnsAnswerSet::parse(&["10.0.0.8"]).unwrap(),
         )
-        .allowed
+        .allowed()
     );
 }
 
 #[test]
 fn redirects_deny_downgrade_cross_origin_credentials_and_unsafe_replay() {
-    let policy = compile(Some(vec![rule("*", &["GET", "POST"], &["/"])]), vec![]);
+    let policy = compile(
+        PublicScope::Rules(vec![rule("*", &["GET", "POST"], &["/"])]),
+        vec![],
+    );
     let answers = DnsAnswerSet::parse(&["93.184.216.34"]).unwrap();
     let from = request("https://a.example/start", "POST");
 
@@ -540,7 +575,7 @@ fn redirects_deny_downgrade_cross_origin_credentials_and_unsafe_replay() {
             BodyReplay::Replayable,
             &answers,
         )
-        .reason,
+        .reason(),
         DecisionReason::RedirectDowngrade
     );
     assert_eq!(
@@ -553,7 +588,7 @@ fn redirects_deny_downgrade_cross_origin_credentials_and_unsafe_replay() {
             BodyReplay::Replayable,
             &answers,
         )
-        .reason,
+        .reason(),
         DecisionReason::CrossOriginCredentialReplay
     );
     assert_eq!(
@@ -566,7 +601,7 @@ fn redirects_deny_downgrade_cross_origin_credentials_and_unsafe_replay() {
             BodyReplay::NonReplayable,
             &answers,
         )
-        .reason,
+        .reason(),
         DecisionReason::RedirectBodyReplayForbidden
     );
     assert_eq!(
@@ -579,14 +614,17 @@ fn redirects_deny_downgrade_cross_origin_credentials_and_unsafe_replay() {
             BodyReplay::Replayable,
             &answers,
         )
-        .reason,
+        .reason(),
         DecisionReason::RedirectMethodMismatch
     );
 }
 
 #[test]
 fn redirect_semantics_allow_only_explicitly_safe_method_body_combinations() {
-    let policy = compile(Some(vec![rule("*", &["GET", "POST"], &["/"])]), vec![]);
+    let policy = compile(
+        PublicScope::Rules(vec![rule("*", &["GET", "POST"], &["/"])]),
+        vec![],
+    );
     let answers = DnsAnswerSet::parse(&["93.184.216.34"]).unwrap();
     let post = request("https://a.example/start", "POST");
     assert!(
@@ -599,7 +637,7 @@ fn redirect_semantics_allow_only_explicitly_safe_method_body_combinations() {
             BodyReplay::None,
             &answers,
         )
-        .allowed
+        .allowed()
     );
     assert_eq!(
         evaluate_redirect(
@@ -611,7 +649,7 @@ fn redirect_semantics_allow_only_explicitly_safe_method_body_combinations() {
             BodyReplay::Replayable,
             &answers,
         )
-        .reason,
+        .reason(),
         DecisionReason::RedirectBodyReplayForbidden
     );
     let get = request("https://a.example/start", "GET");
@@ -625,7 +663,7 @@ fn redirect_semantics_allow_only_explicitly_safe_method_body_combinations() {
             BodyReplay::None,
             &answers,
         )
-        .allowed
+        .allowed()
     );
     assert_eq!(
         evaluate_redirect(
@@ -637,7 +675,7 @@ fn redirect_semantics_allow_only_explicitly_safe_method_body_combinations() {
             BodyReplay::None,
             &answers,
         )
-        .reason,
+        .reason(),
         DecisionReason::RedirectStatusUnsupported
     );
 }
@@ -646,7 +684,7 @@ fn redirect_semantics_allow_only_explicitly_safe_method_body_combinations() {
 fn malformed_policy_fails_visibly() {
     let invalid_version = DestinationPolicy::compile(PolicySpec {
         version: "future".to_owned(),
-        public_rules: None,
+        public_scope: PublicScope::Unrestricted,
         private_services: vec![],
     });
     assert!(matches!(
@@ -680,7 +718,7 @@ fn malformed_policy_fails_visibly() {
         assert!(matches!(
             DestinationPolicy::compile(PolicySpec {
                 version: DESTINATION_CONTRACT_VERSION.to_owned(),
-                public_rules: Some(vec![bad_rule]),
+                public_scope: PublicScope::Rules(vec![bad_rule]),
                 private_services: vec![],
             }),
             Err(ContractError::MalformedPolicy(_))
@@ -690,7 +728,7 @@ fn malformed_policy_fails_visibly() {
     assert!(matches!(
         DestinationPolicy::compile(PolicySpec {
             version: DESTINATION_CONTRACT_VERSION.to_owned(),
-            public_rules: None,
+            public_scope: PublicScope::Unrestricted,
             private_services: vec![PrivateServiceSpec {
                 host: "*.internal.test".to_owned(),
                 port: 443,
@@ -716,7 +754,7 @@ fn malformed_policy_fails_visibly() {
         assert!(matches!(
             DestinationPolicy::compile(PolicySpec {
                 version: DESTINATION_CONTRACT_VERSION.to_owned(),
-                public_rules: Some(vec![rule(host, &["GET"], &["/"])]),
+                public_scope: PublicScope::Rules(vec![rule(host, &["GET"], &["/"])]),
                 private_services: vec![],
             }),
             Err(ContractError::MalformedPolicy(_))
@@ -726,7 +764,7 @@ fn malformed_policy_fails_visibly() {
     assert!(matches!(
         DestinationPolicy::compile(PolicySpec {
             version: DESTINATION_CONTRACT_VERSION.to_owned(),
-            public_rules: None,
+            public_scope: PublicScope::Unrestricted,
             private_services: vec![private_service(&["93.184.216.34"])],
         }),
         Err(ContractError::MalformedPolicy(_))
@@ -758,10 +796,12 @@ fn destination_policy_contract_has_no_runtime_registration() {
 
 #[test]
 fn frozen_fixture_uses_the_compiled_contract_version() {
-    let fixture: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../qa/security-levels/sprints/PF-33-S03/contract-v1.json"
-    ))
-    .unwrap();
+    let fixture_source = include_str!("contract-v1.json");
+    assert_eq!(
+        format!("{:x}", Sha256::digest(fixture_source.as_bytes())),
+        FROZEN_FIXTURE_SHA256
+    );
+    let fixture: serde_json::Value = serde_json::from_str(fixture_source).unwrap();
     assert_eq!(
         fixture["contract_version"].as_str(),
         Some(DESTINATION_CONTRACT_VERSION)
@@ -805,9 +845,9 @@ fn frozen_fixture_uses_the_compiled_contract_version() {
                 &answers,
             )
         };
-        assert_eq!(decision.allowed, case["allowed"].as_bool().unwrap());
+        assert_eq!(decision.allowed(), case["allowed"].as_bool().unwrap());
         assert_eq!(
-            format!("{:?}", decision.reason),
+            format!("{:?}", decision.reason()),
             case["reason"].as_str().unwrap()
         );
     }
