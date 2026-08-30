@@ -3,18 +3,79 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 
 
 ROOT = Path(__file__).resolve().parent
 ALLOWED_KINDS = {"raw", "rendered", "sanitized", "quarantine-transitions"}
+EXPECTED_SCHEMA_SHA256 = "eb5637086be6cc07d4d7b8bffedc0a16d141d81772ce11e4b903e4053e997873"
 
 
 def fail(message: str) -> None:
     raise SystemExit(f"ingress-contract: {message}")
 
 
+def verify_schema() -> None:
+    schema_path = ROOT / "schema.json"
+    if schema_path.is_symlink() or not schema_path.is_file():
+        fail("schema must be a regular in-package file")
+    schema_bytes = schema_path.read_bytes()
+    if hashlib.sha256(schema_bytes).hexdigest() != EXPECTED_SCHEMA_SHA256:
+        fail("schema digest mismatch")
+    schema = json.loads(schema_bytes)
+    if (
+        schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema"
+        or schema.get("$id") != "https://corbanu.invalid/security/ingress-contract/v1"
+        or schema.get("additionalProperties") is not False
+    ):
+        fail("schema identity or closed-object semantics changed")
+
+
+def fixture_path(relative: PurePosixPath) -> Path:
+    path = ROOT.joinpath(*relative.parts)
+    cursor = ROOT
+    for part in relative.parts:
+        cursor /= part
+        if cursor.is_symlink():
+            fail(f"fixture path contains symlink: {relative}")
+    if not path.is_file():
+        fail(f"missing fixture: {relative}")
+    if not path.resolve().is_relative_to(ROOT.resolve()):
+        fail(f"fixture resolves outside package: {relative}")
+    return path
+
+
+def fixture_inventory() -> set[str]:
+    paths: set[str] = set()
+    fixture_root = ROOT / "fixtures"
+    for directory, directory_names, file_names in os.walk(fixture_root, followlinks=False):
+        base = Path(directory)
+        for name in directory_names:
+            candidate = base / name
+            if candidate.is_symlink():
+                fail(f"fixture inventory contains symlink: {candidate.relative_to(ROOT)}")
+        for name in file_names:
+            candidate = base / name
+            if candidate.is_symlink():
+                fail(f"fixture inventory contains symlink: {candidate.relative_to(ROOT)}")
+            if not candidate.is_file():
+                fail(f"fixture inventory contains non-file: {candidate.relative_to(ROOT)}")
+            paths.add(candidate.relative_to(ROOT).as_posix())
+    return paths
+
+
+def required_fixture(
+    fixture_by_id: dict[str, dict[str, object]], fixture_id: str
+) -> dict[str, object]:
+    fixture = fixture_by_id.get(fixture_id)
+    if fixture is None:
+        fail(f"required fixture is missing: {fixture_id}")
+    return fixture
+
+
 def main() -> None:
+    verify_schema()
     manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
     if set(manifest) != {
         "schema_version",
@@ -41,34 +102,33 @@ def main() -> None:
         if set(fixture) != {"id", "kind", "path", "sha256"}:
             fail("fixture entry has missing or unknown fields")
         fixture_id = fixture["id"]
-        relative = PurePosixPath(fixture["path"])
+        fixture_path_value = fixture["path"]
         if (
             not isinstance(fixture_id, str)
             or not fixture_id
             or fixture_id in seen_ids
             or fixture["kind"] not in ALLOWED_KINDS
-            or relative.is_absolute()
+            or not isinstance(fixture_path_value, str)
+        ):
+            fail(f"invalid fixture entry: {fixture_id!r}")
+        relative = PurePosixPath(fixture_path_value)
+        if (
+            relative.is_absolute()
             or ".." in relative.parts
             or not relative.parts
             or relative.parts[0] != "fixtures"
-            or fixture["path"] in seen_paths
+            or fixture_path_value in seen_paths
         ):
             fail(f"invalid fixture entry: {fixture_id!r}")
-        path = ROOT.joinpath(*relative.parts)
-        if not path.is_file():
-            fail(f"missing fixture: {relative}")
+        path = fixture_path(relative)
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         if digest != fixture["sha256"]:
             fail(f"digest mismatch: {relative}")
         seen_ids.add(fixture_id)
-        seen_paths.add(fixture["path"])
+        seen_paths.add(fixture_path_value)
         fixture_by_id[fixture_id] = fixture
 
-    expected_paths = {
-        path.relative_to(ROOT).as_posix()
-        for path in (ROOT / "fixtures").rglob("*")
-        if path.is_file()
-    }
+    expected_paths = fixture_inventory()
     if seen_paths != expected_paths:
         fail("manifest inventory does not exactly match fixture files")
 
@@ -105,7 +165,7 @@ def main() -> None:
             fail(f"source binding mismatch: {case_id}")
         transformation = case["transformation"]
         expected_digests = {
-            kind: fixture_by_id[f"{case_id}-{kind}"]["sha256"]
+            kind: required_fixture(fixture_by_id, f"{case_id}-{kind}")["sha256"]
             for kind in ("raw", "rendered", "sanitized")
         }
         if transformation != {
@@ -116,7 +176,8 @@ def main() -> None:
             "sanitized_sha256": expected_digests["sanitized"],
         }:
             fail(f"transformation binding mismatch: {case_id}")
-        sanitized_path = ROOT / fixture_by_id[f"{case_id}-sanitized"]["path"]
+        sanitized_fixture = required_fixture(fixture_by_id, f"{case_id}-sanitized")
+        sanitized_path = ROOT / sanitized_fixture["path"]
         sanitized = sanitized_path.read_bytes()
         segmentation = case["segmentation"]
         boundaries = segmentation.get("boundaries", [])

@@ -3,6 +3,14 @@
 //! This module is deliberately free of Core, provider, tool, and policy adapters.
 //! It binds opaque provenance supplied by the provenance owner to complete,
 //! transformed content and releases bytes only after a fresh, matching verdict.
+//!
+//! Verdicts are in-process values, not authenticated messages. Any future wire
+//! format must deserialize through validating `TryFrom` implementations and
+//! the constructors below; deriving `Deserialize` directly on these types would
+//! bypass their invariants. Callers must provide monotonic elapsed time. Buffered
+//! external content is dropped, but not zeroized, on failure or cancellation.
+//! Public enums are deliberately exhaustive in contract v1; adding a variant
+//! requires a contract-version bump rather than an implicit behavior change.
 
 use sha2::Digest as _;
 use sha2::Sha256;
@@ -12,6 +20,8 @@ pub const SCREENING_CONTRACT_VERSION: u32 = 1;
 pub const SCREENING_FIXTURE_SCHEMA_VERSION: u32 = 1;
 pub const MAX_SCREENED_CONTENT_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_SCREENING_SEGMENTS: u32 = 4_096;
+pub const MAX_SCREENING_ELAPSED_MS: u64 = 60 * 60 * 1_000;
+pub const MAX_VERDICT_AGE_MS: u64 = 5 * 60 * 1_000;
 const MAX_ID_BYTES: usize = 128;
 
 /// A SHA-256 identity used to bind content and immutable configuration.
@@ -52,7 +62,7 @@ impl ContentDigest {
     }
 }
 
-/// A bounded, display-safe identifier. It cannot carry attacker-controlled text.
+/// A bounded, display-safe identifier that cannot carry control characters.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ContractId(String);
 
@@ -300,16 +310,19 @@ pub struct ScreeningBudget {
 
 impl ScreeningBudget {
     pub fn validate(self) -> Result<Self, ContractError> {
+        let max_segments =
+            usize::try_from(self.max_segments).map_err(|_| ContractError::InvalidBudget)?;
         if self.max_content_bytes == 0
             || self.max_segment_bytes == 0
             || self.max_segment_bytes > self.max_content_bytes
             || self.max_content_bytes > MAX_SCREENED_CONTENT_BYTES
             || self.max_segments == 0
             || self.max_segments > MAX_SCREENING_SEGMENTS
-            || usize::try_from(self.max_segments)
-                .map_or(true, |count| count > self.max_content_bytes)
+            || max_segments > self.max_content_bytes
             || self.max_elapsed_ms == 0
+            || self.max_elapsed_ms > MAX_SCREENING_ELAPSED_MS
             || self.max_verdict_age_ms == 0
+            || self.max_verdict_age_ms > MAX_VERDICT_AGE_MS
         {
             return Err(ContractError::InvalidBudget);
         }
@@ -331,7 +344,7 @@ impl ScreeningTarget {
         reassembly_digest: ContentDigest,
         segment_count: u32,
     ) -> Result<Self, ContractError> {
-        if segment_count == 0 {
+        if segment_count == 0 || segment_count > MAX_SCREENING_SEGMENTS {
             return Err(ContractError::InvalidSegmentCount);
         }
         if binding.transformation().sanitized_digest() != reassembly_digest {
@@ -428,6 +441,26 @@ impl ClassifierVerdict {
             diagnostic,
         }
     }
+
+    pub const fn target(&self) -> &ScreeningTarget {
+        &self.target
+    }
+
+    pub const fn kind(&self) -> VerdictKind {
+        self.kind
+    }
+
+    pub const fn identity(&self) -> &VerdictIdentity {
+        &self.identity
+    }
+
+    pub const fn issued_at_ms(&self) -> u64 {
+        self.issued_at_ms
+    }
+
+    pub const fn diagnostic(&self) -> Option<DiagnosticCode> {
+        self.diagnostic
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -493,6 +526,20 @@ pub enum ContentAuthority {
     None,
 }
 
+/// A view that preserves the untrusted-content marker at the API boundary.
+///
+/// Raw bytes require the explicit, greppable [`Self::into_raw_untrusted`]
+/// escape hatch. This type intentionally implements neither `Deref` nor
+/// `AsRef<[u8]>`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UntrustedBytes<'a>(&'a [u8]);
+
+impl<'a> UntrustedBytes<'a> {
+    pub const fn into_raw_untrusted(self) -> &'a [u8] {
+        self.0
+    }
+}
+
 /// Complete content released only by a matching `Allow` verdict.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ScreenedContent {
@@ -502,8 +549,8 @@ pub struct ScreenedContent {
 }
 
 impl ScreenedContent {
-    pub fn bytes(&self) -> &[u8] {
-        &self.bytes
+    pub fn bytes(&self) -> UntrustedBytes<'_> {
+        UntrustedBytes(&self.bytes)
     }
 
     pub const fn target(&self) -> &ScreeningTarget {
@@ -628,7 +675,9 @@ impl ScreeningSession {
         if next_bytes > self.budget.max_content_bytes {
             return self.fail(UnavailableReason::ContentTooLarge);
         }
-        let slot = &mut self.segments[segment.index as usize];
+        let Some(slot) = self.segments.get_mut(segment.index as usize) else {
+            return self.fail(UnavailableReason::SegmentOutOfRange);
+        };
         if slot.is_some() {
             return self.fail(UnavailableReason::DuplicateSegment);
         }
@@ -647,6 +696,7 @@ impl ScreeningSession {
         if self.failure.is_none() {
             self.failure = Some(UnavailableReason::Cancelled);
             self.segments.iter_mut().for_each(|segment| *segment = None);
+            self.received_segments = 0;
             self.received_bytes = 0;
         }
     }
@@ -713,6 +763,7 @@ impl ScreeningSession {
     fn fail<T>(&mut self, reason: UnavailableReason) -> Result<T, UnavailableReason> {
         self.failure = Some(reason);
         self.segments.iter_mut().for_each(|segment| *segment = None);
+        self.received_segments = 0;
         self.received_bytes = 0;
         Err(reason)
     }
