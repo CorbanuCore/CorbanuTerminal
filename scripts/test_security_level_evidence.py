@@ -20,12 +20,17 @@ class EvidenceTests(unittest.TestCase):
             baseline = evidence.load_json(
                 ROOT / "qa/security-levels/permissive-baseline-v1.json"
             )
+            compatibility_control = evidence.load_json(
+                ROOT / "qa/security-levels/compatibility/upstream-control-v2.json"
+            )
             commands = [
                 [
                     "security-level-compat",
                     "--prepare",
                     "--baseline",
                     baseline["captured_from_commit"],
+                    "--upstream",
+                    compatibility_control["identity"]["upstream_commit"],
                     "--output",
                     str(output / "compat"),
                 ],

@@ -749,7 +749,7 @@ Run fix and formatting tools before the final affected tests.
 | --- | --- | --- | --- |
 | Plan and sprint lifecycle | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | pending | governance-check output |
 | Rust fix | `cd codex-rs && just fix -p <affected-project>` for every affected crate | pending; run before formatting/final tests | `qa/release/<version>/security/fix.txt` |
-| Permissive compatibility | `python3 scripts/security-level-compat --baseline <commit> --candidate <binary> --output <dir>` | pending final candidate; existing PF-21-S01 harness is extended by PF-21-S02/PF-26 | `qa/release/<version>/security/compatibility/` |
+| Permissive compatibility | `python3 scripts/security-level-compat --baseline <commit> --upstream <upstream-commit> --candidate <binary> --output <dir>` | pending final candidate; existing PF-21-S01 harness is extended by PF-21-S02/PF-26 | `qa/release/<version>/security/compatibility/` |
 | Security policy | `cd codex-rs && just test -p codex-security-policy` | pending | `qa/release/<version>/security/policy-tests.txt` |
 | Config and core integration | `cd codex-rs && just test -p codex-config && just test -p codex-core` | pending | `qa/release/<version>/security/integration-tests.txt` |
 | Vault and network boundaries | `cd codex-rs && just test -p codex-vault && just test -p codex-network-proxy` | pending | `qa/release/<version>/security/boundary-tests.txt` |

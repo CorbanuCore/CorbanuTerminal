@@ -46,7 +46,9 @@ must be new; the runners do not overwrite earlier preparation artifacts.
 
 ```sh
 python3 scripts/security-level-compat --prepare \
-  --baseline 3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb --output /tmp/pf26-compat-run
+  --baseline 3c1b2f6cbe11657ff4e3b72b11db029c9e7a92eb \
+  --upstream af5a4e39b590e7517120fd935ccfac8cbf7cf131 \
+  --output /tmp/pf26-compat-run
 python3 scripts/security-level-adversarial --prepare --output /tmp/pf26-attack-run
 python3 scripts/security-level-standards-check --template /tmp/pf26-crosswalk.json
 python3 scripts/security-level-standards-check --check-plan --manifest /tmp/pf26-crosswalk.json
