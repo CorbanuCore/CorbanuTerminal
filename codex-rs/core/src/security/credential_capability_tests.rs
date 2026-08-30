@@ -30,6 +30,7 @@ use codex_security_policy::PolicyAction;
 use codex_security_policy::PolicyPrincipal;
 use codex_security_policy::PrincipalKind;
 use codex_security_policy::ProtectedResource;
+use codex_security_policy::QuantitativeLimit;
 use codex_security_policy::ResourceKind;
 use codex_security_policy::RevocationEvent;
 use codex_security_policy::RevocationReason;
@@ -194,6 +195,120 @@ fn standard_request(revocations: &RevocationState) -> CredentialCapabilityReques
         "api.openai.com",
         "/v1/responses",
         "provider.openai",
+        revocations,
+    )
+}
+
+fn usage(requests: u64, tokens: u64, bytes: u64, spend_microunits: u64) -> CredentialUsage {
+    CredentialUsage::new(requests, tokens, bytes, spend_microunits)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn metered_request(
+    agent_id: &str,
+    scope: &str,
+    model: &str,
+    host: &str,
+    path: &str,
+    label: &str,
+    per_request: CredentialUsage,
+    aggregate: CredentialUsage,
+    revocations: &RevocationState,
+) -> CredentialCapabilityRequest {
+    let destination = CredentialDestination::https(host, 443).expect("destination");
+    let credential = CredentialReference::new(label, scope).expect("reference");
+    let authorization = AuthorizationRequest::new(
+        actors(agent_id),
+        ProtectedResource::new(ResourceKind::VaultCredential, label).expect("resource"),
+        PolicyAction::Use,
+        AuthorizationContext {
+            now_unix_seconds: 100,
+            session_id: text("session:credential-test"),
+            task_id: text("task:credential-test"),
+            purpose: text("model-inference"),
+            operation: credential.scope.clone(),
+            destination: Some(destination.authority().expect("authority")),
+            quantity: Some(
+                QuantitativeLimit::new("credential.aggregate.requests", aggregate.requests)
+                    .expect("quantity"),
+            ),
+            grant_id: None,
+        },
+    )
+    .expect("authorization");
+    let limits = |value: CredentialUsage| {
+        BTreeMap::from([
+            (text("requests"), value.requests),
+            (text("tokens"), value.tokens),
+            (text("bytes"), value.bytes),
+            (text("spend_microunits"), value.spend_microunits),
+        ])
+    };
+    let per_request_limits = limits(per_request);
+    let aggregate_limits = limits(aggregate);
+    let mut grant_limits = BTreeMap::new();
+    for (scope, limits) in [
+        ("per_request", &per_request_limits),
+        ("aggregate", &aggregate_limits),
+    ] {
+        for (dimension, limit) in limits {
+            grant_limits.insert(text(&format!("credential.{scope}.{dimension}")), *limit);
+        }
+    }
+    let grant = BoundedGrant::issue(
+        human(),
+        actors(agent_id),
+        GrantScope::new(
+            authorization.resource.clone(),
+            [PolicyAction::Use],
+            GrantContext::new(
+                authorization.context.session_id.clone(),
+                authorization.context.task_id.clone(),
+                authorization.context.purpose.clone(),
+                authorization.context.operation.clone(),
+            )
+            .with_model(text(model)),
+            authorization.context.destination.clone(),
+            grant_limits,
+        )
+        .expect("grant scope"),
+        90,
+        200,
+        text("metered-credential-grant-nonce"),
+    )
+    .expect("grant");
+    CredentialCapabilityRequest::new_with_usage_limits(
+        authorization,
+        grant,
+        credential,
+        CredentialHttpMethod::Post,
+        destination,
+        path,
+        100,
+        180,
+        revocations,
+        None,
+        model,
+        per_request_limits,
+        aggregate_limits,
+    )
+    .expect("usage policy")
+}
+
+fn standard_metered_request(revocations: &RevocationState) -> CredentialCapabilityRequest {
+    metered_request(
+        "agent:root",
+        "responses.create",
+        "gpt-5.5",
+        "api.openai.com",
+        "/v1/responses",
+        "provider.openai",
+        usage(
+            /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+        ),
+        usage(
+            /*requests*/ 2, /*tokens*/ 150, /*bytes*/ 1_500, /*spend*/ 150,
+        ),
         revocations,
     )
 }
@@ -552,6 +667,352 @@ fn clock_entropy_collision_and_lock_failures_are_fail_closed() {
         poisoned.len(),
         Err(CredentialCapabilityStoreError::StorePoisoned)
     ));
+}
+
+#[test]
+fn usage_reservation_enforces_limits_and_retry_cannot_reset_spent_authority() {
+    let revocations = RevocationState::new();
+    let store = store(4, TestClock::new(100));
+    let request = standard_metered_request(&revocations);
+    let capability = store
+        .issue(request.clone(), &revocations)
+        .expect("issue metered capability");
+
+    assert!(matches!(
+        store.consume(&capability, &request, &revocations),
+        Err(CredentialCapabilityStoreError::UsageReservationRequired)
+    ));
+    assert!(matches!(
+        store.reserve(
+            &capability,
+            &request,
+            usage(
+                /*requests*/ 1, /*tokens*/ 101, /*bytes*/ 1_000, /*spend*/ 100
+            ),
+            &revocations,
+        ),
+        Err(CredentialCapabilityStoreError::PerRequestUsageExceeded)
+    ));
+
+    let first = store
+        .reserve(
+            &capability,
+            &request,
+            usage(
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+            ),
+            &revocations,
+        )
+        .expect("reserve first request");
+    let first_settlement = store
+        .settle(
+            &first,
+            TrustedCredentialMetering::partial(usage(
+                /*requests*/ 1, /*tokens*/ 60, /*bytes*/ 600, /*spend*/ 60,
+            )),
+            &revocations,
+        )
+        .expect("settle partial response");
+    assert_eq!(first_settlement.outcome, CredentialUsageOutcome::Partial);
+    assert_eq!(
+        first_settlement.charged,
+        usage(
+            /*requests*/ 1, /*tokens*/ 60, /*bytes*/ 600, /*spend*/ 60
+        )
+    );
+
+    let retry = store
+        .reserve(
+            &capability,
+            &request,
+            usage(
+                /*requests*/ 1, /*tokens*/ 90, /*bytes*/ 900, /*spend*/ 90,
+            ),
+            &revocations,
+        )
+        .expect("reserve retry against remaining aggregate budget");
+    assert!(matches!(
+        store.reserve(
+            &capability,
+            &request,
+            usage(
+                /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1, /*spend*/ 1
+            ),
+            &revocations,
+        ),
+        Err(CredentialCapabilityStoreError::AggregateUsageExceeded)
+    ));
+    let cancellation = store
+        .settle(&retry, TrustedCredentialMetering::cancelled(), &revocations)
+        .expect("settle cancelled retry");
+    assert_eq!(
+        cancellation.charged,
+        usage(
+            /*requests*/ 1, /*tokens*/ 0, /*bytes*/ 0, /*spend*/ 0
+        )
+    );
+    assert_eq!(
+        store
+            .settle(&retry, TrustedCredentialMetering::unknown(), &revocations)
+            .expect("duplicate settlement is idempotent"),
+        cancellation
+    );
+    assert!(matches!(
+        store.reserve(
+            &capability,
+            &request,
+            usage(
+                /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1, /*spend*/ 1
+            ),
+            &revocations,
+        ),
+        Err(CredentialCapabilityStoreError::AggregateUsageExceeded)
+    ));
+}
+
+#[test]
+fn concurrent_usage_reservations_cannot_overcommit() {
+    let revocations = Arc::new(RevocationState::new());
+    let request = Arc::new(metered_request(
+        "agent:root",
+        "responses.create",
+        "gpt-5.5",
+        "api.openai.com",
+        "/v1/responses",
+        "provider.openai",
+        usage(
+            /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+        ),
+        usage(
+            /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+        ),
+        &revocations,
+    ));
+    let store = Arc::new(store(4, TestClock::new(100)));
+    let capability = Arc::new(
+        store
+            .issue(request.as_ref().clone(), &revocations)
+            .expect("issue capability"),
+    );
+    let barrier = Arc::new(std::sync::Barrier::new(8));
+    let mut workers = Vec::new();
+    for _ in 0..8 {
+        let barrier = Arc::clone(&barrier);
+        let capability = Arc::clone(&capability);
+        let request = Arc::clone(&request);
+        let revocations = Arc::clone(&revocations);
+        let store = Arc::clone(&store);
+        workers.push(std::thread::spawn(move || {
+            barrier.wait();
+            store
+                .reserve(
+                    &capability,
+                    &request,
+                    usage(
+                        /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000,
+                        /*spend*/ 100,
+                    ),
+                    &revocations,
+                )
+                .is_ok()
+        }));
+    }
+    assert_eq!(
+        workers
+            .into_iter()
+            .map(|worker| worker.join().expect("worker"))
+            .filter(|reserved| *reserved)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn trusted_settlement_rejects_forgery_and_unknown_usage_charges_the_full_reservation() {
+    let revocations = RevocationState::new();
+    let store = store(4, TestClock::new(100));
+    let request = standard_metered_request(&revocations);
+    let capability = store
+        .issue(request.clone(), &revocations)
+        .expect("issue capability");
+    let reservation = store
+        .reserve(
+            &capability,
+            &request,
+            usage(
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+            ),
+            &revocations,
+        )
+        .expect("reserve usage");
+    let forged = IssuedCredentialReservation {
+        capability_id: capability.capability_id().clone(),
+        reservation_id: reservation.reservation_id().clone(),
+        token: ReservationToken([0x55; CAPABILITY_TOKEN_BYTES]),
+        request: request,
+        reserved: reservation.reserved(),
+    };
+    assert!(matches!(
+        store.settle(&forged, TrustedCredentialMetering::unknown(), &revocations),
+        Err(CredentialCapabilityStoreError::ForgedReservation)
+    ));
+    assert!(matches!(
+        store.settle(
+            &reservation,
+            TrustedCredentialMetering::completed(usage(
+                /*requests*/ 1, /*tokens*/ 101, /*bytes*/ 1_000, /*spend*/ 100,
+            )),
+            &revocations,
+        ),
+        Err(CredentialCapabilityStoreError::MeteringExceedsReservation)
+    ));
+    let settlement = store
+        .settle(
+            &reservation,
+            TrustedCredentialMetering::unknown(),
+            &revocations,
+        )
+        .expect("settle unknown usage");
+    assert_eq!(settlement.charged, reservation.reserved());
+    assert_eq!(
+        store
+            .settle(
+                &reservation,
+                TrustedCredentialMetering::cancelled(),
+                &revocations,
+            )
+            .expect("duplicate settlement"),
+        settlement
+    );
+    assert!(format!("{reservation:?}").contains("ReservationToken(<redacted>)"));
+    assert_eq!(
+        reservation
+            .vault_ref()
+            .expect("opaque broker handoff")
+            .label(),
+        "provider.openai"
+    );
+}
+
+#[test]
+fn metered_authority_binds_operation_model_resource_and_settles_after_revocation() {
+    let mut revocations = RevocationState::new();
+    let clock = TestClock::new(100);
+    let store = store(4, clock.clone());
+    let request = standard_metered_request(&revocations);
+    let capability = store
+        .issue(request.clone(), &revocations)
+        .expect("issue capability");
+    let variants = [
+        metered_request(
+            "agent:root",
+            "responses.admin",
+            "gpt-5.5",
+            "api.openai.com",
+            "/v1/responses",
+            "provider.openai",
+            usage(
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+            ),
+            usage(
+                /*requests*/ 2, /*tokens*/ 150, /*bytes*/ 1_500, /*spend*/ 150,
+            ),
+            &revocations,
+        ),
+        metered_request(
+            "agent:root",
+            "responses.create",
+            "claude-opus-5",
+            "api.openai.com",
+            "/v1/responses",
+            "provider.openai",
+            usage(
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+            ),
+            usage(
+                /*requests*/ 2, /*tokens*/ 150, /*bytes*/ 1_500, /*spend*/ 150,
+            ),
+            &revocations,
+        ),
+        metered_request(
+            "agent:root",
+            "responses.create",
+            "gpt-5.5",
+            "api.openai.com",
+            "/v1/responses",
+            "provider.backup",
+            usage(
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+            ),
+            usage(
+                /*requests*/ 2, /*tokens*/ 150, /*bytes*/ 1_500, /*spend*/ 150,
+            ),
+            &revocations,
+        ),
+    ];
+    for variant in variants {
+        assert!(matches!(
+            store.reserve(
+                &capability,
+                &variant,
+                usage(
+                    /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1, /*spend*/ 1
+                ),
+                &revocations,
+            ),
+            Err(CredentialCapabilityStoreError::AuthorityMismatch)
+        ));
+    }
+
+    let reservation = store
+        .reserve(
+            &capability,
+            &request,
+            usage(
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+            ),
+            &revocations,
+        )
+        .expect("reserve before revocation");
+    revocations
+        .apply(
+            &RevocationEvent::new(
+                human(),
+                RevocationTarget::Grant {
+                    grant_id: request.grant.grant_id.clone(),
+                },
+                RevocationReason::HumanRequest,
+                110,
+            )
+            .expect("revocation event"),
+        )
+        .expect("apply revocation");
+    clock.set(181);
+    assert!(
+        store
+            .reserve(
+                &capability,
+                &request,
+                usage(
+                    /*requests*/ 1, /*tokens*/ 1, /*bytes*/ 1, /*spend*/ 1
+                ),
+                &revocations,
+            )
+            .is_err()
+    );
+    assert_eq!(store.purge(&revocations).expect("retain pending"), 0);
+    assert_eq!(
+        store
+            .settle(
+                &reservation,
+                TrustedCredentialMetering::unknown(),
+                &revocations,
+            )
+            .expect("settle pending after revocation")
+            .charged,
+        reservation.reserved()
+    );
+    assert_eq!(store.purge(&revocations).expect("purge settled"), 1);
 }
 
 #[test]

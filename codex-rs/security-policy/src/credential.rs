@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -22,7 +24,9 @@ use crate::RevocationState;
 use crate::digest::canonical_sha256;
 
 pub const CREDENTIAL_CAPABILITY_SCHEMA_VERSION: u32 = 1;
+pub const CREDENTIAL_USAGE_SCHEMA_VERSION: u32 = 1;
 pub const CAPABILITY_ID_HEX_LENGTH: usize = 64;
+const CREDENTIAL_USAGE_DIMENSIONS: [&str; 4] = ["requests", "tokens", "bytes", "spend_microunits"];
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
@@ -158,6 +162,14 @@ pub struct CredentialCapabilityRequest {
     pub revocation_generation: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub triggering_receipt: Option<ActionReceipt>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage_schema_version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<BoundedText>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub per_request_usage_limits: BTreeMap<BoundedText, u64>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub aggregate_usage_limits: BTreeMap<BoundedText, u64>,
 }
 
 impl CredentialCapabilityRequest {
@@ -186,6 +198,10 @@ impl CredentialCapabilityRequest {
             expires_at_unix_seconds,
             revocation_generation: revocations.generation,
             triggering_receipt,
+            usage_schema_version: None,
+            model: None,
+            per_request_usage_limits: BTreeMap::new(),
+            aggregate_usage_limits: BTreeMap::new(),
         };
         request.validate_at(issued_at_unix_seconds, revocations)?;
         Ok(request)
@@ -193,6 +209,58 @@ impl CredentialCapabilityRequest {
 
     pub fn actor_chain(&self) -> &ActorChain {
         &self.authorization.subject
+    }
+
+    /// Construct the optional PF-13 usage contract without changing legacy
+    /// one-shot capability behavior. Every limit and the exact model must
+    /// already be integrity-bound by the existing `BoundedGrant`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_usage_limits(
+        authorization: AuthorizationRequest,
+        grant: BoundedGrant,
+        credential: CredentialReference,
+        method: CredentialHttpMethod,
+        destination: CredentialDestination,
+        path: impl Into<String>,
+        issued_at_unix_seconds: i64,
+        expires_at_unix_seconds: i64,
+        revocations: &RevocationState,
+        triggering_receipt: Option<ActionReceipt>,
+        model: impl Into<String>,
+        per_request_usage_limits: BTreeMap<BoundedText, u64>,
+        aggregate_usage_limits: BTreeMap<BoundedText, u64>,
+    ) -> Result<Self, CredentialCapabilityError> {
+        let request = Self {
+            schema_version: CREDENTIAL_CAPABILITY_SCHEMA_VERSION,
+            authorization,
+            grant,
+            credential,
+            method,
+            destination,
+            path: BoundedText::new(path)?,
+            issued_at_unix_seconds,
+            expires_at_unix_seconds,
+            revocation_generation: revocations.generation,
+            triggering_receipt,
+            usage_schema_version: Some(CREDENTIAL_USAGE_SCHEMA_VERSION),
+            model: Some(BoundedText::new(model)?),
+            per_request_usage_limits,
+            aggregate_usage_limits,
+        };
+        request.validate_at(issued_at_unix_seconds, revocations)?;
+        Ok(request)
+    }
+
+    pub fn has_usage_limits(&self) -> bool {
+        self.usage_schema_version.is_some()
+    }
+
+    pub fn per_request_usage_limit(&self, dimension: &str) -> Option<u64> {
+        usage_limit(&self.per_request_usage_limits, dimension)
+    }
+
+    pub fn aggregate_usage_limit(&self, dimension: &str) -> Option<u64> {
+        usage_limit(&self.aggregate_usage_limits, dimension)
     }
 
     pub fn validate(&self) -> Result<(), CredentialCapabilityError> {
@@ -244,6 +312,84 @@ impl CredentialCapabilityRequest {
         }
         if let Some(receipt) = &self.triggering_receipt {
             receipt.validate()?;
+        }
+        self.validate_usage_limits()?;
+        Ok(())
+    }
+
+    fn validate_usage_limits(&self) -> Result<(), CredentialCapabilityError> {
+        let grant_usage_limit_count = self
+            .grant
+            .scope
+            .quantitative_limits
+            .keys()
+            .filter(|key| is_credential_usage_key(key.as_str()))
+            .count();
+        if self.usage_schema_version.is_none()
+            && self.model.is_none()
+            && self.per_request_usage_limits.is_empty()
+            && self.aggregate_usage_limits.is_empty()
+        {
+            return if grant_usage_limit_count != 0 {
+                Err(CredentialCapabilityError::GrantMismatch)
+            } else {
+                Ok(())
+            };
+        }
+        if self.usage_schema_version != Some(CREDENTIAL_USAGE_SCHEMA_VERSION) {
+            return Err(CredentialCapabilityError::UnsupportedSchemaVersion {
+                found: self.usage_schema_version.unwrap_or(0),
+                supported: CREDENTIAL_USAGE_SCHEMA_VERSION,
+            });
+        }
+        let model = self
+            .model
+            .as_ref()
+            .ok_or(CredentialCapabilityError::GrantMismatch)?;
+        validate_identifier("credential model", model.as_str())?;
+        if self.grant.scope.context.model.as_ref() != Some(model) {
+            return Err(CredentialCapabilityError::GrantMismatch);
+        }
+        if self.per_request_usage_limits.len() != CREDENTIAL_USAGE_DIMENSIONS.len()
+            || self.aggregate_usage_limits.len() != CREDENTIAL_USAGE_DIMENSIONS.len()
+            || grant_usage_limit_count != CREDENTIAL_USAGE_DIMENSIONS.len() * 2
+        {
+            return Err(CredentialCapabilityError::GrantMismatch);
+        }
+        for dimension in CREDENTIAL_USAGE_DIMENSIONS {
+            let per_request = self
+                .per_request_usage_limit(dimension)
+                .ok_or(CredentialCapabilityError::GrantMismatch)?;
+            let aggregate = self
+                .aggregate_usage_limit(dimension)
+                .ok_or(CredentialCapabilityError::GrantMismatch)?;
+            if per_request == 0 || aggregate == 0 {
+                return Err(CredentialCapabilityError::GrantMismatch);
+            }
+            if per_request > aggregate {
+                return Err(CredentialCapabilityError::GrantMismatch);
+            }
+            for (scope, expected) in [("per_request", per_request), ("aggregate", aggregate)] {
+                let grant_key = format!("credential.{scope}.{dimension}");
+                if usage_limit(&self.grant.scope.quantitative_limits, &grant_key) != Some(expected)
+                {
+                    return Err(CredentialCapabilityError::GrantMismatch);
+                }
+            }
+        }
+        if self.per_request_usage_limit("requests") != Some(1) {
+            return Err(CredentialCapabilityError::GrantMismatch);
+        }
+        let expected_requests = self.aggregate_usage_limit("requests");
+        if self
+            .authorization
+            .context
+            .quantity
+            .as_ref()
+            .map(|quantity| (quantity.asset.as_str(), quantity.max_units))
+            != expected_requests.map(|requests| ("credential.aggregate.requests", requests))
+        {
+            return Err(CredentialCapabilityError::GrantMismatch);
         }
         Ok(())
     }
@@ -372,6 +518,18 @@ fn validate_origin_path(path: &str) -> Result<(), CredentialCapabilityError> {
         return Err(CredentialCapabilityError::InvalidOriginPath);
     }
     Ok(())
+}
+
+fn usage_limit(limits: &BTreeMap<BoundedText, u64>, dimension: &str) -> Option<u64> {
+    limits
+        .iter()
+        .find_map(|(key, value)| (key.as_str() == dimension).then_some(*value))
+}
+
+fn is_credential_usage_key(key: &str) -> bool {
+    ["credential.per_request.", "credential.aggregate."]
+        .iter()
+        .any(|prefix| key.starts_with(prefix))
 }
 
 #[derive(Debug, Error)]

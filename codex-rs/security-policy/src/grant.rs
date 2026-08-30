@@ -27,6 +27,8 @@ pub struct GrantContext {
     pub task_id: BoundedText,
     pub purpose: BoundedText,
     pub operation: BoundedText,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<BoundedText>,
 }
 
 impl GrantContext {
@@ -41,7 +43,13 @@ impl GrantContext {
             task_id,
             purpose,
             operation,
+            model: None,
         }
+    }
+
+    pub fn with_model(mut self, model: BoundedText) -> Self {
+        self.model = Some(model);
+        self
     }
 }
 
