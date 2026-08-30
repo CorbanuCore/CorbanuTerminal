@@ -50,14 +50,13 @@ updated: 2026-08-28
 - [x] Pinned Scrapling 0.4.15 source, PyPI artifacts, OCI index/platform/config/provenance digests, exact observed runtime/browser versions, independent per-architecture SBOMs, license findings, signature gap and locked-rebuild policy.
 - [x] Frozen side-effect-free existing-engine selection: preserve explicit choice; otherwise prefer eligible Podman over eligible Docker; never install, elevate, change defaults or touch unrelated resources.
 - [x] Defined Corbanu ownership labels, one-worker/profile locking, reinspection and human-only pull/start/restart/reconciliation actions with visible no-fallback failures.
-- [x] Added 14 fake-engine fixtures covering absence, stopped/stalled states, mismatch, tamper, offline, architecture, duplicates, concurrency, explicit/automatic choice and unrelated resources; every fixture passes repeated idempotency evaluation on macOS and Linux.
-- [x] Measured the exact no-network image on macOS arm64 and Linux amd64, generated 5,332/5,323-component SBOMs and recorded conservative preparation resource limits.
+- [x] Added 14 fake-engine fixtures covering absence, stopped/stalled states, mismatch, tamper, offline, architecture, duplicates, concurrency, explicit/automatic choice and unrelated resources; every fixture passes repeated idempotency evaluation on macOS, Linux and Windows.
+- [x] Measured the exact no-network image on macOS arm64, Linux amd64 and Windows 11 Pro amd64/Linux-container mode with Docker and Podman, generated 5,332/5,323-component SBOMs and recorded conservative preparation resource limits.
+- [x] Selected and measured official Podman 5.8.3 client / 5.8.6 server on Windows in an isolated Corbanu-owned WSL machine; no product path installs, elevates, starts or selects an engine.
 - [x] Codex GPT-5.5 autoreview finding fixed and regression-tested; clean rerun reports no accepted/actionable findings.
 
 ## Remaining
 
-- [ ] Restore access to the supplied Windows host; run the 14-fixture portable suite and the digest-pinned Linux-container browser/resource probe, then record the exact Windows/engine identity and measured disk/CPU/RAM/PID results.
-- [ ] Select and review an exact supported Podman version; run the engine/resource matrix on Mac, Linux and Windows rather than inferring support from the pure fixture contract.
 - [ ] Obtain integration-owner decisions for the Corbanu signing identity/rebuild and for the unresolved SBOM license records; do not activate the unsigned floating-input upstream image.
 - [ ] Unlock the Mac and complete the mandated Computer Use review in a fresh Claude UI with Claude Opus 5.0 and Max visibly selected; preserve packet/model/effort/result evidence and disposition.
 - [ ] Hand the final candidate to Jim Ricketts for scope audit, combined-tree reruns, archive transition and explicit G2 slot rotation before PF-33-S03 starts.
@@ -65,9 +64,10 @@ updated: 2026-08-28
 ## Verification
 
 - [x] Affected format/fix tools run before tests; exact commands and 14 fixture/14 idempotency counts recorded.
-- [ ] Artifact-manifest and engine-fixture tests pass on macOS and Linux; Windows execution and resource measurements remain blocked by host reachability.
+- [x] Artifact-manifest and engine-fixture tests pass on macOS, Linux and Windows; exact-image resource measurements pass on all three hosts under Docker or Podman without inferring native-Windows-container support.
 - [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
 - [x] Scope audit proves no runtime route or profile becomes available from fixture-only preparation.
+- [ ] Receiving integration owner reruns the final candidate on the combined tree after Claude finding disposition and before archive transition.
 
 ## Exit evidence
 

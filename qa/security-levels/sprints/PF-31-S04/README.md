@@ -75,7 +75,7 @@ Results: Ruff clean; one manifest validated; 14/14 fixtures and 14/14 repeated
 idempotency checks passed; JSON parsing, byte compilation, plan governance,
 sprint governance and whitespace checks passed on macOS. The same portable
 bundle passed one manifest, 14/14 fixtures and 14/14 idempotency checks with
-Python 3.12.3 on Ubuntu 24.04 Linux.
+Python 3.12.3 on Ubuntu 24.04 Linux and Python 3.13.15 on Windows 11 Pro.
 
 Resource probes launched the exact image by digest with network disabled, one
 CPU, 1 GiB RAM and a 256-PID limit, opened a blank headless Chromium, recorded a
@@ -85,23 +85,23 @@ single idle sample, and exposed no port:
 | --- | --- | --- | --- | --- | --- |
 | macOS 26.0 arm64 | Docker 27.5.1 | `linux/arm64` | Chromium 151.0.7922.34 | 170.9 MiB, 0.02% CPU, 68 PIDs | pass |
 | Ubuntu 24.04 amd64 | Docker 29.1.3 | `linux/amd64` | Chromium 151.0.7922.34 | 152.8 MiB, 0.00% CPU, 72 PIDs | pass |
-| Windows amd64 | pending | `linux/amd64` in Linux-container mode only | pending | supplied host unreachable | blocked |
+| Windows 11 Pro 10.0.26200 amd64 | Podman 5.8.3 client / 5.8.6 server | `linux/amd64` in Linux-container mode only | Chromium 151.0.7922.34 | 462.7 MiB cgroup memory, 0.09% cgroup CPU, 71 PIDs | pass |
 
-The manifest reserves one CPU, 1 GiB RAM, 256 PIDs, 256 MiB temporary storage
-and 2.5 GiB disk. These are preparation limits, not PF-31-S01 workload or
-containment qualification.
+The Windows probe additionally confirmed a read-only root, memory plus swap
+capped at 1 GiB, no published ports and 1,647,867,740 bytes of Podman image
+storage. The manifest reserves one CPU, 1 GiB RAM, 256 PIDs, 256 MiB temporary
+storage and 2.5 GiB disk. These are preparation limits, not PF-31-S01 workload
+or containment qualification. Full Windows commands and outputs are preserved
+in `windows-podman.md`.
 
 ## Blockers and handoff
 
-- Windows engine/resource execution is incomplete because the supplied host was
-  unreachable.
-- Podman version selection and a three-host Podman matrix are unresolved.
 - Publisher signature and SBOM are absent; the independently generated license
   inventory is not approved.
 - A digest-locked Corbanu rebuild, signature identity and verification policy
   implementation belong to PF-31-S01 and need integration-owner approval.
-- Claude Opus 5.0 Max review and finding disposition are pending because the Mac
-  remained locked during two Computer Use attempts.
+- Claude Opus 5.0 Max review and finding disposition remain pending until the
+  unlocked Mac stays awake long enough to submit and collect the review.
 
 Hand back the final candidate commit and this evidence to Jim Ricketts. The
 integration owner audits scope and reruns the manifest, fixture and governance
