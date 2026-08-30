@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-13-S06"
 title: "Credential usage reservations"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 22
-owner: "Jim Ricketts"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Pauli — credential reservations lane"
+parallel_lane: "credential-reservations"
+write_scope: "codex-rs/security-policy/src/, codex-rs/core/src/security/credential_capability.rs, codex-rs/core/src/security/credential_capability_tests.rs, qa/security-levels/sprints/PF-13-S06/, docs/sprints/current/p0-security-levels/pf-13-s06-credential-usage-reservations.md"
+integration_gate: "The Codex ingress/classifier integration lane receives PF-13-S06, verifies it extends rather than replaces BoundedGrant and the opaque capability, serializes shared exports or manifests, reruns complete security-policy and focused Core capability suites plus governance checks, records consumer handoff, and archives without activating a transport."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-credential-reservations"
+branch: "feat/p0-security-credential-reservations"
+base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
 depends_on: "PF-13-S01, PF-17-S01"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-30
 ---
 
 # PF-13-S06 — Credential usage reservations

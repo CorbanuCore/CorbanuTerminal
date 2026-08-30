@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-35-S01"
 title: "Classifier corpus and leakage-free evaluation"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-35"
 execution_order: 20
-owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+owner: "Raman — classifier corpus lane"
+parallel_lane: "classifier-corpus"
+write_scope: "codex-rs/content-security/, scripts/security-classifier-eval, scripts/security_classifier_eval.py, scripts/test_security_classifier_eval.py, qa/security-levels/classifier/, qa/security-levels/sprints/PF-35-S01/, docs/sprints/current/p0-security-levels/pf-35-s01-classifier-corpus-and-evaluation.md"
+integration_gate: "The Codex ingress/classifier integration lane receives PF-35-S01, audits the literal scope and private-blind-data exclusion, serializes any workspace/build registration, reruns the full content-security and evaluator suites plus governance checks, preserves measured blockers honestly, and archives the sprint only when every required corpus/evaluation claim has final-tree evidence."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-classifier-corpus"
+branch: "feat/p0-security-classifier-corpus"
+base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
 depends_on: "PF-34-S04"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-30
 ---
 
 # PF-35-S01 — Classifier corpus and leakage-free evaluation

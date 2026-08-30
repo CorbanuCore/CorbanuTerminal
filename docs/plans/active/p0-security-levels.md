@@ -17,6 +17,15 @@ product_spec:
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-classifier-corpus"
+    branch: "feat/p0-security-classifier-corpus"
+    base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-credential-reservations"
+    branch: "feat/p0-security-credential-reservations"
+    base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-durable-events"
+    branch: "feat/p0-security-durable-events"
+    base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval"
     branch: "feat/p0-security-browser-retrieval-pf33"
     base_commit: "80a2469e401066ebaf04d95ba603ab68cb341854"
@@ -466,6 +475,40 @@ worktrees/branches/base commits, fill each sprint's literal write_scope and
 integration_gate, and record a dated capacity estimate. The existing shared
 coordinates are not permission for concurrent workers in the same checkout.
 
+## Round-three parallel allocation — 2026-08-30
+
+Product authority resolved PF-35-S01's corpus, custody, hardware, model/runtime,
+signing and distribution decisions and asked the integration owner to run the
+next three dependency-complete lanes through merge and push. The immutable
+dispatch base is `9d08b15fa94676c1383ee1605b77e7cc7218dcc4`.
+
+| Lane | Sprint | Owner | Worktree | Branch |
+| --- | --- | --- | --- | --- |
+| Classifier corpus | PF-35-S01 | Raman | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-classifier-corpus` | `feat/p0-security-classifier-corpus` |
+| Credential reservations | PF-13-S06 | Pauli | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-credential-reservations` | `feat/p0-security-credential-reservations` |
+| Durable events | PF-41-S03 | Huygens | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-durable-events` | `feat/p0-security-durable-events` |
+
+The scopes are disjoint. PF-35 owns only `content-security` evaluation,
+classifier manifests/tooling and its evidence; PF-13 owns the credential-usage
+contract in `security-policy` and the existing Core capability seam; PF-41 owns
+the new `security-audit` crate and its evidence. The integration owner alone
+edits workspace/build registrations, shared navigation, this plan,
+`humanTest.html` and `securityProgress.html`, merges each handback, and runs the
+combined-tree suites and TMUX evidence.
+
+Raw midpoint estimates are five days for PF-35-S01, three for PF-13-S06 and four
+for PF-41-S03. Their formula reserves are 2.5, 1.6 and 1.8 days respectively,
+including consumed contracts, serialized shared surfaces and required hardware
+or fault-injection evidence. Add one day for each merge convergence gate and
+reforecast after every handback. This retains at least the provisional 35%
+integration posture; it does not claim calendar completion.
+
+The checked handoff packet is
+[`parallel-handoffs-2026-08-30-round-3`](../../../qa/security-levels/planning/parallel-handoffs-2026-08-30-round-3/README.md).
+All three lanes require a real TMUX/Corbanu smoke and a read-only Claude Opus 5
+Max review despite having no feature-level TUI contract. Those smokes are
+supporting evidence and do not replace PF-26 true-TUI or human acceptance.
+
 ## Useful code references
 
 | Path or symbol | Why it matters |
@@ -593,6 +636,22 @@ for design provenance; product scope remains in the specification.
 ### PF-35
 
 **Local classifier and blind qualification.** Ship a licensed, reproducible, offline CPU detector with leakage-free evaluator-owned holdouts and profile-calibrated thresholds. Screen complete bounded inputs before exposure. Missing artifacts/timeouts pause ingestion in Moderate and Aggressive; forced false negatives still cannot authorize secrets or financial actions.
+
+The 2026-08-30 product decisions select a synthetic-first, commercial-safe
+English corpus with Qwen3.5-27B/vLLM as the pinned generator, a separately
+custodied encrypted blind corpus, and Intel N100/16 GiB/x86-64 Linux as the
+provisional weakest CPU. DeBERTa-v3-xsmall exported to signed INT8 ONNX Runtime
+is the primary detector path, with a custom lightweight classifier only if the
+primary cannot meet quality and resource gates. One calibrated score maps
+through two signed thresholds to allow/suspicious/hostile; unavailable is
+deterministic runtime state. The offline Ed25519 root authorizes a rotating
+release key, and immutable GitHub Release assets install atomically with local
+verification and rollback. The initial accepted-corpus target is approximately
+250,000 training, 25,000 development/calibration and 150,000 evaluator-owned
+blind records. Unsupported languages fail closed. Risk-triggered adjudication
+starts with complete disagreement/uncertainty review plus stratified 1% human
+and separate 1% Opus audits; reassess scalability after the first 10,000
+accepted records without weakening the blind qualification gates.
 
 ### PF-36
 
@@ -816,7 +875,7 @@ before qualification.
 | Expanded program capacity and integration allowance | Jim Ricketts / product authority | Execution scheduling | Maximal LLM capacity supplied; provisional 35% integration reserve and per-sprint/gate formula recorded above; three-active-sprint limit remains; October 8 feasibility pending measured estimates, no scope silently removed |
 | Platform access and isolation capability matrix | Jim Ricketts | PF-27-S03 completion and PF-27/PF-31 integration readiness | PF-27-S03 three-platform probes are accepted; all measured platforms remain ineligible, and unsupported protected paths block visibly pending real mechanism qualification |
 | Moderate workflow usability targets | Product authority / Jim Ricketts | PF-26-S02 readiness | Numeric task-completion, approval-count and latency targets with fixed workflows pending; no relaxation of protection |
-| Local detector hardware/corpus/license pins | Jim Ricketts / evaluator | PF-35-S01 | Exact weakest supported CPU, licensed corpus and blind evaluator ownership pending |
+| Local detector hardware/corpus/license pins | Jim Ricketts / evaluator | PF-35-S01 | Product decisions recorded for synthetic/open commercial-safe sources, independent evaluator custody, provisional N100 floor, Qwen3.5 generation, DeBERTa/ONNX primary, signing root and immutable-release distribution; exact source revisions, machine facts and measured evidence remain sprint work |
 | Retriever/API/model dependency pins | Jim Ricketts | Owning adapter sprint readiness | Verify then pin current supported artifacts and APIs; historical sources are not fresh release security evidence |
 | Optional hosted vendor and data terms | Product authority | PF-36-S02 real-service activation | No vendor selected; interface/fixtures and explicit disabled disposition are in scope |
 | First real login origin/test account | Human owner / security reviewer | PF-37-S01 readiness | Record one permitted exact HTTPS origin, reviewed form and non-production account; missing access blocks qualification |

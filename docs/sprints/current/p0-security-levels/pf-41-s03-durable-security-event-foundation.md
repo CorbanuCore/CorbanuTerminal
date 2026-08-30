@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-41-S03"
 title: "Durable security event and recovery foundation"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-41"
 execution_order: 25
-owner: "Jim Ricketts"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Huygens — durable events lane"
+parallel_lane: "durable-events"
+write_scope: "codex-rs/security-audit/, qa/security-levels/audit-foundation/, qa/security-levels/sprints/PF-41-S03/, docs/sprints/current/p0-security-levels/pf-41-s03-durable-security-event-foundation.md"
+integration_gate: "The Codex ingress/classifier integration lane receives PF-41-S03, audits secret-free event and ambiguous-commit semantics, alone registers the new crate in shared Cargo/Bazel/lock surfaces, reruns full security-audit fault-injection and consumed PF-19/PF-20 suites plus governance checks, and archives without enabling a producer or protected profile."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-durable-events"
+branch: "feat/p0-security-durable-events"
+base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
 depends_on: "PF-19-S02, PF-20-S02"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-30
 ---
 
 # PF-41-S03 — Durable security event and recovery foundation
