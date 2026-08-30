@@ -7,7 +7,7 @@ plan_feature: "PF-27"
 execution_order: 16
 owner: "Codex foundation/platform lane"
 parallel_lane: "foundation-platform"
-write_scope: "codex-rs/secret-broker/, codex-rs/Cargo.toml, codex-rs/Cargo.lock, MODULE.bazel.lock, scripts/security-platform-probe, scripts/security_platform_probe.py, scripts/test_security_platform_probe.py, qa/security-levels/platform/, qa/security-levels/sprints/PF-27-S03/, docs/sprints/current/p0-security-levels/pf-27-s03-platform-containment-contract.md"
+write_scope: "codex-rs/secret-broker/, codex-rs/Cargo.toml, codex-rs/Cargo.lock, BUILD.bazel, MODULE.bazel.lock, .github/workflows/security-platform-contract.yml, scripts/security-platform-probe, scripts/security_platform_probe.py, scripts/test_security_platform_probe.py, qa/security-levels/platform/, qa/security-levels/sprints/PF-27-S03/, docs/plans/active/p0-security-levels.md, docs/sprints/current/p0-security-levels/, docs/sprints/archive/p0-security-levels/pf-27-s03-platform-containment-contract.md, docs/sprints/index.md, mkdocs.yml"
 integration_gate: "Jim Ricketts receives the PF-27-S03 candidate at G1, audits the literal scope, exclusively registers codex-secret-broker Cargo/Bazel workspace surfaces after codex-content-security, reruns schema/probe/governance checks on the combined tree, then archives the sprint before a consumer can use the contract."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform"
 branch: "feat/p0-security-foundation-platform"
@@ -38,6 +38,7 @@ updated: 2026-08-30
 - G1 registration: codex-rs/secret-broker/{Cargo.toml,BUILD.bazel,src/lib.rs}; codex-rs/{Cargo.toml,Cargo.lock}; MODULE.bazel.lock. The integration owner alone changes these shared surfaces, after the completed codex-content-security registration.
 - Scope amendment (2026-08-30): the fifth independent review showed that the extensionless probe was omitted by standard Ruff and test discovery. The integration owner added only the conventional linted Python implementation and companion discovery test; the extensionless command remains a stable shim. No shared manifest, runtime route, or consumer surface is added.
 - G1 scope amendment (2026-08-30): after merging the completed PF-34-S04 registration, the integration owner reserved and registers the standalone `codex-secret-broker` crate on Cargo/Bazel surfaces. The crate exports only the frozen platform contract; no runtime consumer or protected-mode route is added.
+- Post-G1 review amendment (2026-08-30): the integration owner expanded the serialized scope to bind Rust tests to frozen schema/result fixtures, add an opaque activation witness, cover remaining rejection classes, add three-OS CI, make the IPC socket probe independent of long temporary paths, reconcile owner/state/count narratives, and perform the required archive/navigation transition. This remains contract and evidence work only.
 
 ## Preconditions
 
