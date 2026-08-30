@@ -1,3 +1,4 @@
+#[cfg(unix)]
 use std::fs;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -11,13 +12,16 @@ use codex_secret_broker::platform_contract::CapabilityStatus;
 use codex_secret_broker::platform_contract::FIXTURE_PROTOCOL_VERSION;
 use codex_secret_broker::platform_contract::Observation;
 use codex_secret_broker::platform_contract::PlatformReport;
+#[cfg(unix)]
 use codex_security_policy::SecurityLevel;
+#[cfg(unix)]
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
 use super::authoritative_state::AuthoritativeStateAnchor;
 use super::authoritative_state::AuthoritativeStateAnchorError;
 use super::authoritative_state::AuthoritativeStateAnchorStore;
+#[cfg(unix)]
 use super::authoritative_state::AuthoritativeStateLoad;
 use super::authoritative_state::AuthoritativeStateStore;
 use super::authoritative_state::AuthoritativeStateStoreError;
@@ -63,6 +67,7 @@ fn platform_report() -> PlatformReport<'static> {
     }
 }
 
+#[cfg(unix)]
 fn authorization(owner_id: &str, owner_generation: u64) -> TrustedControllerAuthorization {
     TrustedControllerAuthorization::from_platform_report(
         &platform_report(),
@@ -75,6 +80,7 @@ fn authorization(owner_id: &str, owner_generation: u64) -> TrustedControllerAuth
     .expect("valid platform authorization")
 }
 
+#[cfg(unix)]
 fn state(
     revision: u64,
     owner_id: &str,
@@ -95,6 +101,7 @@ fn state(
     .expect("valid state")
 }
 
+#[cfg(unix)]
 #[derive(Clone, Copy)]
 struct AuthorityGenerations {
     grant: u64,
@@ -102,6 +109,7 @@ struct AuthorityGenerations {
     kill_switch: u64,
 }
 
+#[cfg(unix)]
 const fn generations(grant: u64, revocation: u64, kill_switch: u64) -> AuthorityGenerations {
     AuthorityGenerations {
         grant,
@@ -737,9 +745,4 @@ fn write_private(path: &std::path::Path, contents: &[u8]) {
         .unwrap();
     file.write_all(contents).unwrap();
     file.sync_all().unwrap();
-}
-
-#[cfg(not(unix))]
-fn write_private(path: &std::path::Path, contents: &[u8]) {
-    fs::write(path, contents).unwrap();
 }
