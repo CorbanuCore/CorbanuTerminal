@@ -18,15 +18,24 @@ developer qualification infrastructure, not product auto-install behavior.
 
 ## Portable contract suite
 
-Bundle SHA-256:
-`f341b60b73d7d6a0845ccdc54c369cbfd150f848aab90f7dcbee79a21e6c493f`
+Final corrected-candidate bundle SHA-256:
+`5753260131b1c4fada152843a9ed792bbc5edb4b6d3e0634e90ee49d05661c0b`
+
+The bundle was transferred only after the SSH server's ED25519 fingerprint
+matched the previously pinned
+`SHA256:AL/bFpl1DX/lsk94alfnPXX20Fgx+PgIXyzsF9FATZ0` identity. It was extracted
+under the isolated user-local directory
+`%LOCALAPPDATA%\Temp\pf31-final-r3-57532601`; the remote SHA-256 matched
+before execution.
 
 ```text
 Microsoft Windows 11 Pro
 Version 10.0.26200, build 26200, 64-bit
 Python 3.13.15
 manifest: valid (qa\security-levels\retriever\artifact-manifest.json)
-fixtures: 14 passed; 14 idempotency checks passed
+fixtures: 27 passed; 27 deterministic replay checks passed
+manifest policies: 5 mutation checks passed
+evidence paths: 10 checks passed
 ```
 
 ## Exact-image probe
