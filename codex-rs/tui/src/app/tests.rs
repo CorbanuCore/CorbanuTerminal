@@ -7493,6 +7493,13 @@ async fn standard_crew_quick_start_uses_the_expected_role_picker_label() {
     // 3 Orcs), without restoring the old demo-task behavior.
     let mut app = make_test_app().await;
     app.open_spawn_role_picker();
+    let popup = render_bottom_popup(&app.chat_widget, /*width*/ 120);
+    assert_app_snapshot!("spawn_role_picker_with_corbanu_api_crew", popup);
+    assert!(
+        popup.contains("Create standard crew: Nazgul + Troll + 3 Orcs")
+            && popup.contains("Create Corbanu API crew: Fable Nazgul + Luna Troll + 3 Flash Orcs"),
+        "both built-in crew choices must remain visible:\n{popup}"
+    );
     // The picker is rendered into the chat widget; assert the role-picker path doesn't error and
     // the standard crew constants resolve to the intended models/providers.
     assert_eq!(App::STANDARD_NAZGUL_MODEL, CLAUDE_FABLE_5_PLAN_MODEL);

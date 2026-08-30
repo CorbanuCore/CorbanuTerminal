@@ -85,6 +85,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 - Share one wallet balance across independently revocable API keys and attribute spend per key.
 - Show a newly created plaintext key exactly once in a secure non-transcript view; persist only its hash server-side.
 - Add provider-neutral public model IDs, recommendation/speed guidance, privacy class, and versioned input/cache/output sell prices.
+- Add a separate `/spawn` quick-start crew that uses the wallet-funded Corbanu API routes: Fable Nazgul, GPT-5.6 Luna Troll, and three GLM 5.3 Flash Orcs, without replacing the existing Standard Crew.
 - Price every Corbanu API route at the pinned upstream cost with zero markup and microdollar settlement granularity.
 - Route GLM 5.3 Flash, GLM 5.3, GPT-5.6 Luna, and GPT-5.6 Sol through the protected server-side Vercel credential.
 - Route Claude Fable and DeepSeek V4 Pro through xAPI when enabled, cheaper, and healthy.
@@ -155,7 +156,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | `PF-31` | Provider-neutral backend registry and Vercel adapter | [PF-31-S01](../../sprints/archive/corbanu-api-balance/pf-31-s01-vercel-adapter.md) | completed at `ef31361e5becfabc971db7a3670ed340433f18ea` |
 | `PF-32` | Dollar balance, top-up intents, key lifecycle, and legacy migration | [PF-32-S01](../../sprints/archive/corbanu-api-balance/pf-32-s01-balance-topups-and-keys.md), [PF-32-S02](../../sprints/archive/corbanu-api-balance/pf-32-s02-terminal-wallet-auth.md) | completed; Terminal bridge at `cd79361d8b4f286291556a641288757d0451f52c` |
 | `PF-33` | Versioned at-cost metering and xAPI/Vercel selection | [PF-33-S01](../../sprints/archive/corbanu-api-balance/pf-33-s01-at-cost-metering.md), [PF-33-S02](../../sprints/archive/corbanu-api-balance/pf-33-s02-customer-response-boundary.md) | completed; response boundary corrected at `778b4b33445aa452dce09ab416e520e6b4aaeab1` |
-| `PF-34` | Terminal provider, balance/key/top-up UI, and one-time secret view | [PF-34-S01](../../sprints/archive/corbanu-api-balance/pf-34-s01-wallet-client.md), [PF-34-S02](../../sprints/current/corbanu-api-balance/pf-34-s02-wallet-ui.md) | wallet client complete; TUI in progress |
+| `PF-34` | Terminal provider, balance/key/top-up UI, one-time secret view, and Corbanu API spawn preset | [PF-34-S01](../../sprints/archive/corbanu-api-balance/pf-34-s01-wallet-client.md), [PF-34-S02](../../sprints/current/corbanu-api-balance/pf-34-s02-wallet-ui.md) | wallet client complete; TUI in progress |
 | `PF-35` | Qualification, deployment, migration docs, and human acceptance | [PF-35-S01](../../sprints/current/corbanu-api-balance/pf-35-s01-production-candidate.md) | production candidate in progress; final qualification follows PF-34 |
 
 ### Dependency graph and lane allocation
@@ -178,6 +179,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | Versioned per-model pricing | PF-33 / PF-33-S01 | completed | `6aa81161ece53b26915f05c3346a9ebe11b094fd`; zero-markup schedules, exact reservation/settlement, and provider-neutral catalog tests pass |
 | One-time key reveal and multiple keys | PF-32, PF-34 | backend complete | API response-only key tests pass; secure-view TUI proof remains PF-34 |
 | Provider-neutral customer surface with privacy class | PF-33, PF-34 | backend complete | `778b4b33445aa452dce09ab416e520e6b4aaeab1`; JSON/SSE/error sanitization and live provider-neutral response pass; Terminal snapshots remain PF-34 |
+| Corbanu API crew quick start | PF-34 / PF-34-S02 | in progress | Separate Fable → Luna → 3× Flash preset, spawn-picker snapshot, runtime mapping tests, and true-TUI proof |
 | Legacy plans deleted and deauthorized | PF-34, PF-35 | in progress | Terminal removal, production deletion audit, and balance/key preservation checks |
 
 ## Acceptance flows
@@ -189,6 +191,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | Failure/cancel | Locked wallet or cancelled confirmation | Cancel or fail signing/payment | No debit, credit, or key creation | Idempotent retry is safe |
 | Insufficient balance | Valid key, low balance | Submit priced inference | Rejected before upstream with required/available dollars | No negative balance or provider spend |
 | Recovery/resume | Existing wallet on fresh install | Restore and authenticate | Balance/key summaries recover; old plaintext does not reappear | New key can be created without top-up |
+| Corbanu API crew | Funded Corbanu API credential | Choose the Corbanu API crew from `/spawn` | Nazgul, Troll, and three Orcs are created with the exact requested Corbanu routes; no task starts | Existing Standard Crew remains available and the new crew has a distinct durable preset identity |
 | Legacy retirement | Any legacy Plan period or credential | Open `/wallet` or attempt legacy inference | No Plan surface or authorization; Corbanu API remains available | Legacy rows are absent and wallet/API state is preserved |
 
 ## Implementation sequence

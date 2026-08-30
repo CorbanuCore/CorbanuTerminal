@@ -7,7 +7,7 @@ plan_feature: "PF-34"
 execution_order: 7
 owner: "Jim Ricketts"
 lane: "terminal-tui"
-write_scope: "codex-rs/model-provider-info/src/lib.rs, codex-rs/model-provider-info/src/model_provider_info_tests.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/bottom_pane/mod.rs, codex-rs/tui/src/bottom_pane/snapshots, codex-rs/tui/src/chatwidget.rs, codex-rs/tui/src/chatwidget/model_popups.rs, codex-rs/tui/src/chatwidget/tests/popups_and_settings.rs, codex-rs/tui/src/chatwidget/snapshots, codex-rs/tui/src/chatwidget/wallet_account_actions.rs, codex-rs/tui/src/chatwidget/wallet_api.rs, codex-rs/tui/src/chatwidget/wallet_api_tests.rs, codex-rs/tui/src/chatwidget/wallet_menu.rs, codex-rs/tui/src/chatwidget/wallet_unlock.rs, codex-rs/tui/src/chatwidget/wallet_unlock_tests.rs, codex-rs/tui/src/slash_command.rs, codex-rs/wallet/src/corbanu_api.rs, codex-rs/wallet/src/corbanu_api_tests.rs, codex-rs/wallet/src/payment.rs"
+write_scope: "codex-rs/model-provider-info/src/lib.rs, codex-rs/model-provider-info/src/model_provider_info_tests.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app/tests.rs, codex-rs/tui/src/app/snapshots, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/bottom_pane/mod.rs, codex-rs/tui/src/bottom_pane/snapshots, codex-rs/tui/src/chatwidget.rs, codex-rs/tui/src/chatwidget/model_popups.rs, codex-rs/tui/src/chatwidget/tests/popups_and_settings.rs, codex-rs/tui/src/chatwidget/snapshots, codex-rs/tui/src/chatwidget/wallet_account_actions.rs, codex-rs/tui/src/chatwidget/wallet_api.rs, codex-rs/tui/src/chatwidget/wallet_api_tests.rs, codex-rs/tui/src/chatwidget/wallet_menu.rs, codex-rs/tui/src/chatwidget/wallet_unlock.rs, codex-rs/tui/src/chatwidget/wallet_unlock_tests.rs, codex-rs/tui/src/crew_presets.rs, codex-rs/tui/src/crew_presets_tests.rs, codex-rs/tui/src/crew_state_tests.rs, codex-rs/tui/src/slash_command.rs, codex-rs/tui/src/snapshots, codex-rs/tui/src/spawn_crew.rs, codex-rs/tui/src/spawn_orchestration.rs, codex-rs/wallet/src/corbanu_api.rs, codex-rs/wallet/src/corbanu_api_tests.rs, codex-rs/wallet/src/payment.rs"
 worktree: "/home/pfrpc/repos/CorbanuTerminal"
 branch: "feat/corbanu-api-wallet"
 base_commit: "4ff38e974b4e63cebffc5d608c5584e2d453cf1b"
@@ -20,7 +20,7 @@ updated: 2026-08-30
 
 ## Execution mandate
 
-- Deliver: replace all tier and legacy-plan UX with a `/wallet` Corbanu API surface for balance, at-cost prices, arbitrary top-up, key summaries, one-time secret reveal, create/revoke, and provider selection.
+- Deliver: replace all tier and legacy-plan UX with a `/wallet` Corbanu API surface for balance, at-cost prices, arbitrary top-up, key summaries, one-time secret reveal, create/revoke, provider selection, and a separate Corbanu API `/spawn` crew preset.
 - Excludes: production database deletion, deployment, compliance sign-off, and release publication.
 
 ## Plan linkage
@@ -31,7 +31,7 @@ updated: 2026-08-30
 
 ## Code boundaries
 
-- Existing: `codex-rs/tui/src/chatwidget/wallet_menu.rs`, `wallet_unlock.rs`, `model_popups.rs`
+- Existing: `codex-rs/tui/src/chatwidget/wallet_menu.rs`, `wallet_unlock.rs`, `model_popups.rs`, `crew_presets.rs`, `spawn_orchestration.rs`
 - Planned: `codex-rs/tui/src/chatwidget/wallet_api.rs` and focused tests
 - Tests: TUI unit/snapshot tests, provider-resolution tests, and true-PTY flow
 
@@ -63,6 +63,8 @@ updated: 2026-08-30
 
 ## Remaining
 
+- [ ] Add a distinct Corbanu API crew quick start with Fable Nazgul, Luna Troll, and three Flash Orcs while preserving the existing Standard Crew.
+- [ ] Add exact CrewSpec, event-routing, rendered-picker, and true-TUI evidence for the second preset.
 - [ ] Named human tester enters the wallet passcode and completes create/revoke plus one-time reveal against the disposable backend.
 - [ ] Named human tester repeats top-up, create/revoke, one-time reveal, inference, and recovery flows against the deployed backend.
 

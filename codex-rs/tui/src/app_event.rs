@@ -379,6 +379,8 @@ pub(crate) enum AppEvent {
     },
     /// Create the standard persistent crew: Nazgul (root) -> Troll -> 3 Orcs. No task is started.
     CreateSpawnStandardCrew,
+    /// Create the Corbanu API persistent crew: Fable Nazgul -> Luna Troll -> 3 Flash Orcs.
+    CreateSpawnCorbanuApiCrew,
     /// Open a prompt that sends work to an existing spawned-agent pane.
     OpenSpawnAgentTaskPrompt {
         thread_id: codex_protocol::ThreadId,

@@ -6,6 +6,7 @@ use pretty_assertions::assert_eq;
 fn crew_instance_round_trip_preserves_logical_to_native_identity() {
     for spec in [
         crew_presets::standard_crew_spec(),
+        crew_presets::corbanu_api_crew_spec(),
         crew_presets::multimodel_qualification_crew_spec(),
     ] {
         let mut state = CrewInstanceState::begin(spec).expect("valid crew");

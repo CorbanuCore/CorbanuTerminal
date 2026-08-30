@@ -3855,6 +3855,30 @@ impl App {
                     }
                 }
             }
+            AppEvent::CreateSpawnCorbanuApiCrew => {
+                match self.create_spawn_corbanu_api_crew(app_server).await {
+                    Ok((nazgul_thread_id, troll_thread_id)) => {
+                        self.open_spawn_status();
+                        self.chat_widget.add_info_message(
+                            "Created Corbanu API crew: Fable Nazgul + Luna Troll + 3 Flash Orcs."
+                                .to_string(),
+                            Some(format!(
+                                "Nazgul: {nazgul_thread_id}. Troll: {troll_thread_id}. No task was started. Send work explicitly from /spawn status or by dispatch block."
+                            )),
+                        );
+                    }
+                    Err(err) => {
+                        tracing::error!(
+                            error = ?err,
+                            error_chain = %format!("{err:#}"),
+                            "Corbanu API crew spawn failed; keeping all live panes available"
+                        );
+                        self.chat_widget.add_error_message(format!(
+                            "Failed to create Corbanu API crew: {err:#}"
+                        ));
+                    }
+                }
+            }
             AppEvent::OpenSpawnAgentTaskPrompt { thread_id } => {
                 self.open_spawn_agent_task_prompt(thread_id);
             }

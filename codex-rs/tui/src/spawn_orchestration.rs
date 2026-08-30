@@ -8,6 +8,7 @@ use crate::bottom_pane::custom_prompt_view::CustomPromptView;
 use crate::bottom_pane::popup_consts::standard_popup_hint_line;
 use crate::claude_panes::CODEX_MAIN_PANE_ID;
 use crate::claude_panes::ClaudeProviderProfileKind;
+#[cfg(test)]
 use crate::crew_presets;
 use crate::multi_agents::agent_picker_status_dot_spans;
 use crate::multi_agents::format_agent_picker_item_name;
@@ -181,6 +182,19 @@ impl App {
                 ),
                 actions: vec![Box::new(|tx| {
                     tx.send(AppEvent::CreateSpawnStandardCrew);
+                })],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "Create Corbanu API crew: Fable Nazgul + Luna Troll + 3 Flash Orcs"
+                    .to_string(),
+                description: Some(
+                    "Create persistent named panes using wallet-funded Corbanu API routes (Nazgul Claude Fable 5, Troll GPT-5.6 Luna xhigh, and 3 Orcs on GLM 5.3 Flash). No task is started."
+                        .to_string(),
+                ),
+                actions: vec![Box::new(|tx| {
+                    tx.send(AppEvent::CreateSpawnCorbanuApiCrew);
                 })],
                 dismiss_on_select: true,
                 ..Default::default()
@@ -649,10 +663,11 @@ impl App {
             {
                 runtime.clone()
             } else {
-                let (model, provider, reasoning_effort) =
-                        Self::standard_native_spawn_runtime_for_role(role).ok_or_else(|| {
+                let (model, provider, reasoning_effort) = self
+                    .saved_crew_runtime_for_node(&old_node_id)
+                    .ok_or_else(|| {
                             eyre!(
-                                "Cannot materialize {}: the standard crew is missing an exact runtime for role {}.",
+                                "Cannot materialize {}: its persisted crew specification is missing an exact runtime for role {}.",
                                 self.thread_label(old_thread_id),
                                 role.label()
                             )
@@ -748,22 +763,11 @@ impl App {
         Ok((role, nickname))
     }
 
-    fn standard_native_spawn_runtime_for_role(
-        role: SpawnRole,
+    fn saved_crew_runtime_for_node(
+        &self,
+        node_id: &str,
     ) -> Option<(String, String, Option<ReasoningEffort>)> {
-        crew_presets::standard_crew_spec()
-            .members
-            .into_iter()
-            .find(|member| member.role_profile == role.agent_type().unwrap_or_default())
-            .and_then(|member| match member.runtime_request {
-                RuntimeRequest::Exact {
-                    provider_id,
-                    model_id,
-                    reasoning_effort,
-                    ..
-                } => Some((model_id, provider_id, reasoning_effort)),
-                RuntimeRequest::Selector { .. } => None,
-            })
+        exact_crew_runtime_for_node(self.spawn_crew.as_ref()?, node_id)
     }
 
     pub(crate) fn replace_saved_native_spawn_thread(
@@ -5784,6 +5788,35 @@ fn format_spawn_agent_nickname(name: &str, nickname_reset_count: usize) -> Strin
     }
 }
 
+fn exact_crew_runtime_for_node(
+    crew: &crate::crew_state::CrewInstanceState,
+    node_id: &str,
+) -> Option<(String, String, Option<ReasoningEffort>)> {
+    let logical_member_id =
+        crew.member_node_by_id
+            .iter()
+            .find_map(|(member_id, member_node_id)| {
+                (member_node_id == node_id).then_some(member_id.as_str())
+            })?;
+    crew.spec
+        .members
+        .iter()
+        .find(|member| member.logical_member_id == logical_member_id)
+        .and_then(|member| match &member.runtime_request {
+            RuntimeRequest::Exact {
+                provider_id,
+                model_id,
+                reasoning_effort,
+                ..
+            } => Some((
+                model_id.clone(),
+                provider_id.clone(),
+                reasoning_effort.clone(),
+            )),
+            RuntimeRequest::Selector { .. } => None,
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5791,10 +5824,30 @@ mod tests {
     use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
     use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
     use codex_model_provider_info::OPENAI_PROVIDER_ID;
+    use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
     use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
     use codex_model_provider_info::ZAI_ANTHROPIC_PROVIDER_ID;
     use codex_model_provider_info::ZAI_DEFAULT_MODEL;
     use codex_model_provider_info::ZAI_PROVIDER_ID;
+
+    #[test]
+    fn saved_corbanu_api_crew_member_restores_its_exact_runtime() {
+        let mut crew =
+            crate::crew_state::CrewInstanceState::begin(crew_presets::corbanu_api_crew_spec())
+                .expect("valid Corbanu API crew");
+        let node_id = "thread:corbanu-api-orc-2";
+        crew.record_member("orc-2", node_id)
+            .expect("record Corbanu API Orc");
+
+        assert_eq!(
+            exact_crew_runtime_for_node(&crew, node_id),
+            Some((
+                crew_presets::CORBANU_API_ORC_MODEL.to_string(),
+                PFTERMINAL_PLAN_PROVIDER_ID.to_string(),
+                None,
+            ))
+        );
+    }
 
     #[test]
     fn corrected_native_spawn_provider_fixes_impossible_pairs_only() {
