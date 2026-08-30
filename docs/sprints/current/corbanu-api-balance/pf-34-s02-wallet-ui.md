@@ -7,7 +7,7 @@ plan_feature: "PF-34"
 execution_order: 7
 owner: "Jim Ricketts"
 lane: "terminal-tui"
-write_scope: "codex-rs/model-provider-info/src/lib.rs, codex-rs/model-provider-info/src/model_provider_info_tests.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/bottom_pane/mod.rs, codex-rs/tui/src/bottom_pane/snapshots, codex-rs/tui/src/chatwidget.rs, codex-rs/tui/src/chatwidget/model_popups.rs, codex-rs/tui/src/chatwidget/wallet_account_actions.rs, codex-rs/tui/src/chatwidget/wallet_api.rs, codex-rs/tui/src/chatwidget/wallet_api_tests.rs, codex-rs/tui/src/chatwidget/wallet_menu.rs, codex-rs/tui/src/chatwidget/wallet_unlock.rs, codex-rs/tui/src/chatwidget/wallet_unlock_tests.rs, codex-rs/tui/src/slash_command.rs, codex-rs/wallet/src/corbanu_api.rs, codex-rs/wallet/src/corbanu_api_tests.rs, codex-rs/wallet/src/payment.rs"
+write_scope: "codex-rs/model-provider-info/src/lib.rs, codex-rs/model-provider-info/src/model_provider_info_tests.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/bottom_pane/mod.rs, codex-rs/tui/src/bottom_pane/snapshots, codex-rs/tui/src/chatwidget.rs, codex-rs/tui/src/chatwidget/model_popups.rs, codex-rs/tui/src/chatwidget/tests/popups_and_settings.rs, codex-rs/tui/src/chatwidget/snapshots, codex-rs/tui/src/chatwidget/wallet_account_actions.rs, codex-rs/tui/src/chatwidget/wallet_api.rs, codex-rs/tui/src/chatwidget/wallet_api_tests.rs, codex-rs/tui/src/chatwidget/wallet_menu.rs, codex-rs/tui/src/chatwidget/wallet_unlock.rs, codex-rs/tui/src/chatwidget/wallet_unlock_tests.rs, codex-rs/tui/src/slash_command.rs, codex-rs/wallet/src/corbanu_api.rs, codex-rs/wallet/src/corbanu_api_tests.rs, codex-rs/wallet/src/payment.rs"
 worktree: "/home/pfrpc/repos/CorbanuTerminal"
 branch: "feat/corbanu-api-wallet"
 base_commit: "4ff38e974b4e63cebffc5d608c5584e2d453cf1b"
@@ -58,6 +58,7 @@ updated: 2026-08-30
 - [x] Rebuilt `corbanu-debug` and exercised `/wallet` against the production database after legacy deletion; only Receive, Corbanu API, unlock, API disconnect, backup/removal, and refresh actions remain.
 - [x] Generalized the x402 parser to preserve heterogeneous chain alternatives and select only the exact confirmed Solana offer; the production Solana-plus-Base challenge now passes typed parsing while retaining its wire fields.
 - [x] Corrected the shared unlock-capability lifecycle so one-action grants are removed from TUI state when any signing request begins, while timed grants remain reusable; successful top-ups no longer poison the following account refresh with a daemon `capability_invalid` refusal.
+- [x] Replaced the legacy four-row Plan relabeling with the exact six provider-neutral Corbanu API routes; Flash is marked recommended, GLM 5.3 is labeled as using balance faster, and upstream vendor identities stay out of the customer-facing tab.
 
 ## Remaining
 
@@ -72,6 +73,7 @@ updated: 2026-08-30
 - [x] Integrated interfaces in `594d618306d922963cf6676d3600cd381922759c`, `865ea2edd2`, and API-only wallet commit `66ff6579d7` match PF-34-S01 and backend `6cc7894`.
 - [x] Upstream picker/provider compatibility test passes with exact model-field selection.
 - [x] Capability-lifecycle and wallet API/unlock focus suite passes 13/13; the broad 3,842-test TUI run passes 3,811 and retains 31 known unrelated version/copy snapshot failures.
+- [x] Corbanu catalog mapping, rendered six-route picker snapshot, and existing cross-provider picker regression pass 3/3.
 - [ ] Named human passcode, top-up, one-time reveal, create/revoke, inference, and recovery acceptance pass against production.
 
 ## Exit evidence

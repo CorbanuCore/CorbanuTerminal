@@ -28,6 +28,12 @@ use codex_model_provider_info::CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+use codex_model_provider_info::CORBANU_API_CLAUDE_FABLE_5_MODEL;
+use codex_model_provider_info::CORBANU_API_DEEPSEEK_V4_PRO_MODEL;
+use codex_model_provider_info::CORBANU_API_GLM_5_3_FLASH_MODEL;
+use codex_model_provider_info::CORBANU_API_GLM_5_3_MODEL;
+use codex_model_provider_info::CORBANU_API_GPT_5_6_LUNA_MODEL;
+use codex_model_provider_info::CORBANU_API_GPT_5_6_SOL_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::DEEPSEEK_DEFAULT_MODEL;
 use codex_model_provider_info::DEEPSEEK_PRO_MODEL;
@@ -49,6 +55,8 @@ use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
+use codex_model_provider_info::VERCEL_GLM_5_3_FLASH_MODEL;
+use codex_model_provider_info::VERCEL_GLM_5_3_MODEL;
 use codex_model_provider_info::VERCEL_PROVIDER_ID;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 use codex_model_provider_info::ZAI_PROVIDER_ID;
@@ -73,6 +81,67 @@ const OPENAI_GPT_5_5_MODEL: &str = "gpt-5.5";
 const OPENAI_GPT_5_6_SOL_MODEL: &str = "gpt-5.6-sol";
 const OPENAI_GPT_5_6_TERRA_MODEL: &str = "gpt-5.6-terra";
 const OPENAI_GPT_5_6_LUNA_MODEL: &str = "gpt-5.6-luna";
+
+#[derive(Clone, Copy)]
+struct CorbanuApiModelTemplate {
+    source_model: &'static str,
+    public_model: &'static str,
+    display_name: &'static str,
+    description: &'static str,
+    provider_id: &'static str,
+    is_default: bool,
+}
+
+const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 6] = [
+    CorbanuApiModelTemplate {
+        source_model: VERCEL_GLM_5_3_FLASH_MODEL,
+        public_model: CORBANU_API_GLM_5_3_FLASH_MODEL,
+        display_name: "GLM 5.3 Flash (Recommended)",
+        description: "Recommended. Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
+        is_default: true,
+    },
+    CorbanuApiModelTemplate {
+        source_model: VERCEL_GLM_5_3_MODEL,
+        public_model: CORBANU_API_GLM_5_3_MODEL,
+        display_name: "GLM 5.3",
+        description: "Uses balance faster. Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
+        is_default: false,
+    },
+    CorbanuApiModelTemplate {
+        source_model: OPENAI_GPT_5_6_LUNA_MODEL,
+        public_model: CORBANU_API_GPT_5_6_LUNA_MODEL,
+        display_name: "GPT-5.6 Luna (xhigh)",
+        description: "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
+        is_default: false,
+    },
+    CorbanuApiModelTemplate {
+        source_model: OPENAI_GPT_5_6_SOL_MODEL,
+        public_model: CORBANU_API_GPT_5_6_SOL_MODEL,
+        display_name: "GPT-5.6 Sol",
+        description: "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
+        is_default: false,
+    },
+    CorbanuApiModelTemplate {
+        source_model: CLAUDE_FABLE_5_MODEL,
+        public_model: CORBANU_API_CLAUDE_FABLE_5_MODEL,
+        display_name: "Claude Fable 5",
+        description: "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        provider_id: PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+        is_default: false,
+    },
+    CorbanuApiModelTemplate {
+        source_model: DEEPSEEK_PRO_MODEL,
+        public_model: CORBANU_API_DEEPSEEK_V4_PRO_MODEL,
+        display_name: "DeepSeek V4 Pro",
+        description: "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
+        is_default: false,
+    },
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ModelSelectionPurpose {
@@ -188,6 +257,25 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 13] = [
 const ULTRA_REASONING_CONCURRENCY_WARNING_THRESHOLD: usize = 8;
 
 impl ChatWidget {
+    pub(crate) fn corbanu_api_presets(presets: &[ModelPreset]) -> Vec<ModelPreset> {
+        CORBANU_API_MODEL_TEMPLATES
+            .into_iter()
+            .filter_map(|template| {
+                let mut preset = presets
+                    .iter()
+                    .find(|preset| preset.model == template.source_model)?
+                    .clone();
+                preset.id = template.public_model.to_string();
+                preset.model = template.public_model.to_string();
+                preset.provider_id = Some(template.provider_id.to_string());
+                preset.display_name = template.display_name.to_string();
+                preset.description = template.description.to_string();
+                preset.is_default = template.is_default;
+                Some(preset)
+            })
+            .collect()
+    }
+
     /// Open a popup to choose a quick auto model. Selecting "All models"
     /// opens the full picker with every available preset.
     pub(crate) fn open_model_popup(&mut self) {
@@ -406,52 +494,8 @@ impl ChatWidget {
             .collect();
 
         if self.pfterminal_plan_key_is_linked() {
-            let paid_models = presets
-                .iter()
-                .filter(|preset| {
-                    matches!(
-                        preset.model.as_str(),
-                        AMBIENT_DEFAULT_MODEL
-                            | AMBIENT_KIMI_K2_7_CODE_MODEL
-                            | DEEPSEEK_PRO_MODEL
-                            | CLAUDE_FABLE_5_MODEL
-                    )
-                })
-                .cloned()
-                .map(|mut preset| {
-                    // Fable rides the plan's Anthropic-wire sibling provider;
-                    // every other plan model uses the chat-wire plan provider.
-                    preset.provider_id = Some(if preset.model == CLAUDE_FABLE_5_MODEL {
-                        PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID.to_string()
-                    } else {
-                        PFTERMINAL_PLAN_PROVIDER_ID.to_string()
-                    });
-                    if matches!(
-                        preset.model.as_str(),
-                        DEEPSEEK_PRO_MODEL | CLAUDE_FABLE_5_MODEL
-                    ) {
-                        preset.description = format!(
-                            "{} Non-private: served through a third-party provider.",
-                            preset.description
-                        )
-                        .trim_start()
-                        .to_string();
-                    }
-                    preset.is_default = preset.model == AMBIENT_DEFAULT_MODEL;
-                    preset
-                })
-                .collect::<Vec<_>>()
-                .into_iter()
-                .fold(Vec::<_>::new(), |mut unique, preset| {
-                    if !unique
-                        .iter()
-                        .any(|existing: &ModelPreset| existing.model == preset.model)
-                    {
-                        unique.push(preset);
-                    }
-                    unique
-                });
-            presets.extend(paid_models);
+            let corbanu_presets = Self::corbanu_api_presets(&presets);
+            presets.extend(corbanu_presets);
         }
 
         if presets.is_empty() {
@@ -1476,6 +1520,85 @@ mod tests {
             Some("OpenRouter")
         );
         assert_eq!(group_label(AMAZON_BEDROCK_PROVIDER_ID), None);
+    }
+
+    #[test]
+    fn corbanu_api_presets_publish_only_the_six_wallet_funded_routes() {
+        let source_presets = [
+            VERCEL_GLM_5_3_FLASH_MODEL,
+            VERCEL_GLM_5_3_MODEL,
+            OPENAI_GPT_5_6_LUNA_MODEL,
+            OPENAI_GPT_5_6_SOL_MODEL,
+            CLAUDE_FABLE_5_MODEL,
+            DEEPSEEK_PRO_MODEL,
+        ]
+        .into_iter()
+        .map(|model| preset(model, /*show_in_picker*/ true))
+        .collect::<Vec<_>>();
+
+        let presets = ChatWidget::corbanu_api_presets(&source_presets);
+        let actual = presets
+            .iter()
+            .map(|preset| {
+                (
+                    preset.model.as_str(),
+                    preset.provider_id.as_deref(),
+                    preset.display_name.as_str(),
+                    preset.is_default,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            actual,
+            vec![
+                (
+                    CORBANU_API_GLM_5_3_FLASH_MODEL,
+                    Some(PFTERMINAL_PLAN_PROVIDER_ID),
+                    "GLM 5.3 Flash (Recommended)",
+                    true,
+                ),
+                (
+                    CORBANU_API_GLM_5_3_MODEL,
+                    Some(PFTERMINAL_PLAN_PROVIDER_ID),
+                    "GLM 5.3",
+                    false,
+                ),
+                (
+                    CORBANU_API_GPT_5_6_LUNA_MODEL,
+                    Some(PFTERMINAL_PLAN_PROVIDER_ID),
+                    "GPT-5.6 Luna (xhigh)",
+                    false,
+                ),
+                (
+                    CORBANU_API_GPT_5_6_SOL_MODEL,
+                    Some(PFTERMINAL_PLAN_PROVIDER_ID),
+                    "GPT-5.6 Sol",
+                    false,
+                ),
+                (
+                    CORBANU_API_CLAUDE_FABLE_5_MODEL,
+                    Some(PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID),
+                    "Claude Fable 5",
+                    false,
+                ),
+                (
+                    CORBANU_API_DEEPSEEK_V4_PRO_MODEL,
+                    Some(PFTERMINAL_PLAN_PROVIDER_ID),
+                    "DeepSeek V4 Pro",
+                    false,
+                ),
+            ]
+        );
+        assert!(presets.iter().all(|preset| {
+            !["Ambient", "Vercel", "xAPI", "Direct"]
+                .into_iter()
+                .any(|vendor| {
+                    preset.display_name.contains(vendor) || preset.description.contains(vendor)
+                })
+        }));
+        assert!(presets[0].description.contains("Recommended"));
+        assert!(presets[1].description.contains("Uses balance faster"));
     }
 
     #[test]

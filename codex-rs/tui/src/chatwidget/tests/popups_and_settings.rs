@@ -21,6 +21,12 @@ use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
+use codex_model_provider_info::CORBANU_API_CLAUDE_FABLE_5_MODEL;
+use codex_model_provider_info::CORBANU_API_DEEPSEEK_V4_PRO_MODEL;
+use codex_model_provider_info::CORBANU_API_GLM_5_3_FLASH_MODEL;
+use codex_model_provider_info::CORBANU_API_GLM_5_3_MODEL;
+use codex_model_provider_info::CORBANU_API_GPT_5_6_LUNA_MODEL;
+use codex_model_provider_info::CORBANU_API_GPT_5_6_SOL_MODEL;
 use codex_model_provider_info::DEEPSEEK_DEFAULT_MODEL;
 use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_K3_MODEL;
@@ -4098,6 +4104,49 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         assert!(
             !reasoning_popup.contains(label),
             "expected old Ambient reasoning option {label:?} to be hidden:\n{reasoning_popup}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn corbanu_api_model_picker_shows_the_six_public_wallet_funded_routes() {
+    let (mut chat, _rx, _op_rx) =
+        make_chatwidget_manual(Some(CORBANU_API_GLM_5_3_FLASH_MODEL)).await;
+    chat.thread_id = Some(ThreadId::new());
+
+    let mut presets = chat
+        .model_catalog
+        .try_list_models()
+        .expect("model catalog should load");
+    presets.extend(ChatWidget::corbanu_api_presets(&presets));
+    chat.open_all_models_popup(presets);
+    let popup = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 40);
+
+    assert_chatwidget_snapshot!("corbanu_api_model_picker", popup);
+    assert!(popup.contains("[Corbanu API]"), "{popup}");
+    for model in [
+        CORBANU_API_GLM_5_3_FLASH_MODEL,
+        CORBANU_API_GLM_5_3_MODEL,
+        CORBANU_API_GPT_5_6_LUNA_MODEL,
+        CORBANU_API_GPT_5_6_SOL_MODEL,
+        CORBANU_API_CLAUDE_FABLE_5_MODEL,
+        CORBANU_API_DEEPSEEK_V4_PRO_MODEL,
+    ] {
+        assert!(
+            popup.contains(model),
+            "expected {model} in Corbanu API tab:\n{popup}"
+        );
+    }
+    assert!(popup.contains("Recommended"), "{popup}");
+    assert!(popup.contains("Uses balance faster"), "{popup}");
+    for legacy_row in [
+        "Ambient GLM 5.2",
+        "Ambient Kimi K2.7 Code",
+        "DeepSeek V4 Pro (Direct)",
+    ] {
+        assert!(
+            !popup.contains(legacy_row),
+            "legacy row {legacy_row:?} leaked into Corbanu API tab:\n{popup}"
         );
     }
 }

@@ -1,0 +1,23 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+expression: popup
+---
+  Select Model and Effort
+  At-cost, wallet-funded API balance
+
+  OpenAI  Ambient  [Corbanu API]  Kimi Code  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta  Vercel  Baseten  OpenRouter
+
+› 1. GLM 5.3 Flash (Recommended) (current)  Model: corbanu/glm-5.3-flash. Recommended. Wallet-funded at exact cost with zero markup.
+                                            Current prices are shown in /wallet. Third-party inference.
+  2. GLM 5.3                                Model: corbanu/glm-5.3. Uses balance faster. Wallet-funded at exact cost with zero markup.
+                                            Current prices are shown in /wallet. Third-party inference.
+  3. GPT-5.6 Luna (xhigh)                   Model: corbanu/gpt-5.6-luna. Wallet-funded at exact cost with zero markup. Current prices are
+                                            shown in /wallet. Third-party inference.
+  4. GPT-5.6 Sol                            Model: corbanu/gpt-5.6-sol. Wallet-funded at exact cost with zero markup. Current prices are
+                                            shown in /wallet. Third-party inference.
+  5. Claude Fable 5                         Model: corbanu/claude-fable-5. Wallet-funded at exact cost with zero markup. Current prices
+                                            are shown in /wallet. Third-party inference.
+  6. DeepSeek V4 Pro                        Model: corbanu/deepseek-v4-pro. Wallet-funded at exact cost with zero markup. Current prices
+                                            are shown in /wallet. Third-party inference.
+
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back
