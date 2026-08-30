@@ -57,7 +57,7 @@ updated: 2026-08-30
 
 ## Remaining
 
-- [ ] Commit the reviewed three-platform candidate, complete the integration-owner scope audit, and archive the sprint.
+- [ ] Complete the integration-owner shared-surface audit and archive the sprint at G1.
 
 ## Verification
 
@@ -70,6 +70,6 @@ updated: 2026-08-30
 
 ## Exit evidence
 
-- [ ] Commit, contract/fixture versions, owner review and final-tree outputs under `qa/security-levels/sprints/PF-27-S03/`.
-- [ ] PF-27-S04/S02 rerun all probes against the final actual launch path; this contract cannot activate a protected mode.
+- [x] Commit, contract/fixture versions, owner review and final-tree outputs under `qa/security-levels/sprints/PF-27-S03/`.
+- [x] Record that PF-27-S04/S02 must rerun all probes against the final actual launch path; this contract cannot activate a protected mode.
 - [ ] Record integration handoff and scope audit; complete all ledgers before archive and update plan/navigation.
