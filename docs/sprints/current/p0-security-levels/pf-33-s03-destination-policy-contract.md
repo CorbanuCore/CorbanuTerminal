@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-33-S03"
 title: "Pure destination-policy contract"
-status: draft
+status: ready
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-33"
 execution_order: 18
-owner: "Jim Ricketts"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Codex browser/retrieval lane"
+parallel_lane: "browser-retrieval"
+write_scope: "codex-rs/network-proxy/src/destination_contract.rs, codex-rs/network-proxy/tests/destination_contract.rs, qa/security-levels/sprints/PF-33-S03/, docs/sprints/current/p0-security-levels/pf-33-s03-destination-policy-contract.md"
+integration_gate: "Jim Ricketts receives the PF-33-S03 candidate, audits the literal scope, runs fix/format/tests and governance on the combined tree, then archives the sprint and returns the slot."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval"
+branch: "feat/p0-security-browser-retrieval-pf33"
+base_commit: "b415ca43d148c1b40c61e9d1fb7ce12929b33a3e"
 depends_on: "none"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-30
 ---
 
 # PF-33-S03 — Pure destination-policy contract
@@ -36,31 +39,31 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Plan active; dependencies in front matter completed and archived.
-- [ ] Assign a named execution owner and exact plan-matching worktree/branch/base; run the sprint checker before readiness.
-- [ ] Read root and nearest implementation AGENTS.md; reserve disjoint write scope and receiving integration gate if parallel.
+- [x] Plan active; dependencies in front matter are `none`, and PF-31-S04 completed and archived before this slot rotation.
+- [x] Named owner and exact plan-matching worktree/branch/base assigned; both governance checkers pass before implementation.
+- [x] Root and `codex-rs/AGENTS.md` read; disjoint write scope and receiving integration gate reserved.
 
 ## Done
 
 - [x] Bounded preparation/foundation mandate created from the accepted review; no implementation or platform acceptance claimed.
+- [x] Frozen `pf33-destination-policy/v1` pure normalization, policy-polarity, DNS-answer, private-service and redirect/replay decisions without runtime registration or socket access.
+- [x] Added standalone deterministic table/property coverage for URL ambiguity, IDNA, suffix/trailing-dot/path boundaries, unusual IPv4, mapped/translation/tunnel IPv6, reserved names, answer-set polarity and malformed policy.
+- [x] Recorded a hashed versioned representative fixture and the isolated 239/239 network-proxy result under `qa/security-levels/sprints/PF-33-S03/`; the suite executes every frozen fixture case.
 
 ## Remaining
 
-- [ ] Define normalized scheme/host/port/method/path, DNS-answer and redirect-decision types with versioned fixtures; no live socket or broker hooks in this sprint.
-- [ ] Distinguish absent restrictions, explicit empty deny-all, wildcard public scope and explicit private-service authorization. Moderate public retrieval need not acquire a blanket per-host grant; Aggressive still requires its narrow grants.
-- [ ] Keep private provider exceptions separate from public retrieval. Specify approved address/identity sets and change/revalidation rules; TLS identity alone does not authorize a private destination.
-- [ ] Add table/property tests for IDNA, userinfo, suffix/trailing-dot confusion, unusual IPv4, mapped IPv6, mixed/private answers, downgrade redirects, credential/body replay and malformed policy.
-- [ ] Freeze pure decision fixtures and ownership; PF-33-S01/S02 must wire actual DNS, retries, redirects and peer checks without replacing the decision contract with a permissive adapter.
+- [ ] Complete common Claude Opus 5.0 Max Computer Use review and Codex GPT-5.5 Autoreview; resolve accepted findings in scope and retain immutable evidence.
+- [ ] Integration owner audits the literal scope, reruns the ordered Rust and governance gates on the combined tree, archives the sprint, updates plan/navigation and returns the active lane slot.
 
 ## Verification
 
-- [ ] Run affected format/fix tools before final tests; record exact commands and actual test counts.
-- [ ] Run planned destination-contract unit/property tests with synthetic addresses; prove empty/absent/wildcard/private-policy polarity and bounded normalization.
+- [x] Ran `just fix -p codex-network-proxy`, `just fmt`, then `just test -p codex-network-proxy`: pre-final-review 239 passed, zero skipped across three binaries; sixteen destination-contract tests.
+- [x] Ran standalone deterministic table/property tests with synthetic address sets; proved empty/absent/wildcard/private polarity and bounded normalization.
 - [ ] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
-- [ ] Verify no runtime route or profile becomes available from fixture-only preparation.
+- [x] Verified the source has no socket/client call and remains absent from runtime/module/manifests; fixture-only preparation exposes no route or profile.
 
 ## Exit evidence
 
-- [ ] Commit, contract/fixture versions, owner review and final-tree outputs under `qa/security-levels/sprints/PF-33-S03/`.
-- [ ] No claim of SSRF prevention until PF-33-S01/S02 real resolver, connected-peer and alternate-egress qualification completes.
+- [ ] Commit, contract/fixture hashes, owner review and final-tree outputs under `qa/security-levels/sprints/PF-33-S03/`.
+- [x] No SSRF-prevention claim; PF-33-S01/S02 retain real resolver, connected-peer, pool/proxy and alternate-egress qualification.
 - [ ] Record integration handoff and scope audit; complete all ledgers before archive and update plan/navigation.
