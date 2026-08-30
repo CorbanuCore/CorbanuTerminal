@@ -1,0 +1,3 @@
+ACME synthetic quarterly note
+Revenue: 42 test-units
+Fixture data only. Not investment advice. No trade instruction.

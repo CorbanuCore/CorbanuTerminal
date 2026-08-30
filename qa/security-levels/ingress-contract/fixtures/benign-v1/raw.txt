@@ -1,0 +1,2 @@
+Market note: ACME reported synthetic quarterly revenue of 42 test-units.
+This is fixture data, not investment advice or an instruction to trade.

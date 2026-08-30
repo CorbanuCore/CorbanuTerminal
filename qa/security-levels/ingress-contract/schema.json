@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://corbanu.invalid/security/ingress-contract/v1",
+  "title": "Corbanu screening contract fixture manifest",
+  "type": "object",
+  "required": ["schema_version", "contract_version", "taint", "authority", "fixture_verdict_identity", "fixtures", "cases"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "contract_version": {"const": 1},
+    "taint": {"const": "untrusted"},
+    "authority": {"const": "none"},
+    "fixture_verdict_identity": {
+      "type": "object",
+      "required": ["model_id", "model_version", "artifact_sha256", "threshold_id", "threshold_version", "threshold_sha256"],
+      "additionalProperties": false
+    },
+    "fixtures": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "path", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+          "kind": {"enum": ["raw", "rendered", "sanitized", "quarantine-transitions"]},
+          "path": {"type": "string", "pattern": "^fixtures/[A-Za-z0-9._/-]+$"},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+        }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["id", "source_binding", "transformation", "segmentation", "expected_verdict"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+          "source_binding": {"type": "object"},
+          "transformation": {"type": "object"},
+          "segmentation": {"type": "object"},
+          "expected_verdict": {"enum": ["allow", "suspicious", "hostile", "unavailable"]}
+        }
+      }
+    }
+  }
+}
