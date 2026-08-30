@@ -87,6 +87,7 @@ fn tampered_event_identity_fails_closed() {
 #[test]
 fn reservation_identity_is_stable_and_generation_bound() {
     let request = request("research");
+    let secret_deduplication_key = "SECRET-deduplication-canary";
     let authority = AuthorityIdentity::Grant {
         grant_id: text("grant-1"),
     };
@@ -95,7 +96,7 @@ fn reservation_identity_is_stable_and_generation_bound() {
         None,
         &request,
         authority.clone(),
-        text("attempt-1"),
+        text(secret_deduplication_key),
         12,
     )
     .expect("first intent");
@@ -104,7 +105,7 @@ fn reservation_identity_is_stable_and_generation_bound() {
         None,
         &request,
         authority.clone(),
-        text("attempt-1"),
+        text(secret_deduplication_key),
         12,
     )
     .expect("duplicate intent");
@@ -113,13 +114,15 @@ fn reservation_identity_is_stable_and_generation_bound() {
         None,
         &request,
         authority,
-        text("attempt-1"),
+        text(secret_deduplication_key),
         12,
     )
     .expect("next-run intent");
 
     assert_eq!(duplicate, first);
     assert_ne!(next_run.event_id, first.event_id);
+    let encoded = serde_json::to_string(&first).expect("serialize intent");
+    assert!(!encoded.contains(secret_deduplication_key));
 }
 
 #[test]

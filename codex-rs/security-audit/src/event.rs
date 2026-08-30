@@ -199,7 +199,7 @@ pub enum SecurityEventKind {
         reservation_id: ReservationId,
         request: RequestIdentity,
         authority: AuthorityIdentity,
-        deduplication_key: BoundedText,
+        deduplication_digest: BoundedText,
     },
     DispatchResolution {
         action_id: ActionId,
@@ -274,11 +274,13 @@ impl SecurityEvent {
     ) -> Result<Self, SecurityEventError> {
         let request = RequestIdentity::from_request(request)?;
         let action_id = ActionId::from_digest(hash_value(&("action-v1", &request, &authority))?);
+        let deduplication_digest =
+            BoundedText::new(hash_value(&("deduplication-v1", &deduplication_key))?)?;
         let reservation_id = ReservationId::from_digest(hash_value(&(
             "reservation-v1",
             &action_id,
             &authority,
-            &deduplication_key,
+            &deduplication_digest,
             context.policy_generation,
             context.run_generation,
         ))?);
@@ -291,7 +293,7 @@ impl SecurityEvent {
                 reservation_id,
                 request,
                 authority,
-                deduplication_key,
+                deduplication_digest,
             },
         )
     }
@@ -392,17 +394,20 @@ impl SecurityEvent {
                 reservation_id,
                 request,
                 authority,
-                deduplication_key,
+                deduplication_digest,
             } => {
                 let expected_action = hash_value(&("action-v1", request, authority))?;
                 if action_id.as_str() != expected_action {
                     return Err(SecurityEventError::ActionIntegrityMismatch);
                 }
+                if !is_lower_hex_sha256(deduplication_digest.as_str()) {
+                    return Err(SecurityEventError::DeduplicationIntegrityMismatch);
+                }
                 let expected_reservation = hash_value(&(
                     "reservation-v1",
                     action_id,
                     authority,
-                    deduplication_key,
+                    deduplication_digest,
                     self.context.policy_generation,
                     self.context.run_generation,
                 ))?;
@@ -517,6 +522,8 @@ pub enum SecurityEventError {
     DecisionIntegrityMismatch,
     #[error("dispatch action identity is invalid")]
     ActionIntegrityMismatch,
+    #[error("dispatch deduplication identity is invalid")]
+    DeduplicationIntegrityMismatch,
     #[error("dispatch reservation identity is invalid")]
     ReservationIntegrityMismatch,
     #[error("dispatch receipt timestamp does not match the resolution event")]
