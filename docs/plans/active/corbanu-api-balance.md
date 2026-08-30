@@ -152,7 +152,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | --- | --- | --- | --- |
 | `PF-31` | Provider-neutral backend registry and Vercel adapter | [PF-31-S01](../../sprints/archive/corbanu-api-balance/pf-31-s01-vercel-adapter.md) | completed at `ef31361e5becfabc971db7a3670ed340433f18ea` |
 | `PF-32` | Dollar balance, top-up intents, key lifecycle, and legacy migration | [PF-32-S01](../../sprints/archive/corbanu-api-balance/pf-32-s01-balance-topups-and-keys.md) | completed at `00a410be45d6f463e04d6342255df864af56a92b` |
-| `PF-33` | Versioned at-cost metering and xAPI/Vercel selection | [PF-33-S01](../../sprints/archive/corbanu-api-balance/pf-33-s01-at-cost-metering.md) | completed at `6aa81161ece53b26915f05c3346a9ebe11b094fd` |
+| `PF-33` | Versioned at-cost metering and xAPI/Vercel selection | [PF-33-S01](../../sprints/archive/corbanu-api-balance/pf-33-s01-at-cost-metering.md), [PF-33-S02](../../sprints/archive/corbanu-api-balance/pf-33-s02-customer-response-boundary.md) | completed; response boundary corrected at `778b4b33445aa452dce09ab416e520e6b4aaeab1` |
 | `PF-34` | Terminal provider, balance/key/top-up UI, and one-time secret view | pending | pending PF-32/PF-33 |
 | `PF-35` | Qualification, deployment, migration docs, and human acceptance | pending | pending PF-31 through PF-34 |
 
@@ -163,6 +163,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | backend | PF-31-S01 (completed) | Jim Ricketts | `src/config.ts`, `src/models.ts`, `src/vercel.ts`, `tests/config.test.ts`, `tests/vercel-routing.test.ts` | Existing `ModelRoute` and configuration contracts | 86 package tests pass; staged routes remain outside legacy catalog |
 | backend | PF-32-S01 (completed) | Jim Ricketts | Store, payment, API, exact-money, and tests recorded in sprint | PF-31-S01 | 92 package tests pass; PostgreSQL fixture added but runtime unavailable |
 | backend | PF-33-S01 (completed) | Jim Ricketts | Versioned price registry, dollar reservation/settlement, active provider-neutral routes, and tests | PF-32-S01 | 101 package tests and 13 disposable-PostgreSQL tests pass; typecheck and build pass |
+| backend | PF-33-S02 (completed) | Jim Ricketts | Structured customer-response sanitization and live route regression | PF-33-S01 | 104 package tests pass; live GLM 5.3 Flash response is provider-neutral |
 
 ### Requirement traceability
 
@@ -172,7 +173,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | Dollar balance and no new tiers | PF-32 | completed | `00a410be45d6f463e04d6342255df864af56a92b`; exact top-up and compatibility tests |
 | Versioned per-model pricing | PF-33 / PF-33-S01 | completed | `6aa81161ece53b26915f05c3346a9ebe11b094fd`; zero-markup schedules, exact reservation/settlement, and provider-neutral catalog tests pass |
 | One-time key reveal and multiple keys | PF-32, PF-34 | backend complete | API response-only key tests pass; secure-view TUI proof remains PF-34 |
-| Provider-neutral customer surface with privacy class | PF-33, PF-34 | backend complete | Catalog and vendor-absence tests pass; Terminal snapshots remain PF-34 |
+| Provider-neutral customer surface with privacy class | PF-33, PF-34 | backend complete | `778b4b33445aa452dce09ab416e520e6b4aaeab1`; JSON/SSE/error sanitization and live provider-neutral response pass; Terminal snapshots remain PF-34 |
 | Legacy paid periods preserved | PF-32, PF-35 | backend complete | Legacy suite passes; production audit remains PF-35 |
 
 ## Acceptance flows
@@ -202,6 +203,7 @@ Restart and resume preserve balances, keys, idempotency, and unsettled work.
 | Backend full suite | `corepack pnpm test` | 101 passed, 0 failed | `6aa81161ece53b26915f05c3346a9ebe11b094fd` |
 | PostgreSQL integration | Isolated PostgreSQL 16 plus `tests/postgres-store.test.ts` | 13 passed, 0 failed | disposable container removed after run |
 | Backend build/typecheck | `corepack pnpm typecheck && corepack pnpm build` | passed | `6aa81161ece53b26915f05c3346a9ebe11b094fd` |
+| Customer response boundary | `corepack pnpm test && corepack pnpm typecheck && corepack pnpm build` plus live GLM 5.3 Flash probe | 104 passed; live 200 with Corbanu model identity and no vendor/cost metadata | `778b4b33445aa452dce09ab416e520e6b4aaeab1` |
 | Public Rust crates | `just test -p <affected-crate>` after `just fmt` | pending | pending |
 | Snapshot | `just test -p codex-tui` and reviewed `insta` changes | pending | pending |
 | Payment/adversarial | Duplicate settlement, concurrent reserve, key leakage, fail-closed route matrix | pending | pending |
