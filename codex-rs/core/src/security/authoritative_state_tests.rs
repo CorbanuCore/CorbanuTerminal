@@ -3,6 +3,7 @@ use std::fs;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+#[cfg(unix)]
 use codex_config::AuthoritativeSecurityState;
 use codex_config::AuthoritativeStateOwner;
 use codex_secret_broker::platform_contract::CONTRACT_VERSION;
