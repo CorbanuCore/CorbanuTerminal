@@ -120,6 +120,16 @@ The earlier 32-test report is superseded by the clean-source 36/36 report
 above and is not final evidence.
 
 The integration owner still must merge after PF-19/PF-20, rerun the combined
-tree, update the active plan's compatibility command to supply the now-required
-`--upstream <commit>` argument, update shared navigation, and archive
-PF-21-S02. This lane does not perform those shared actions.
+tree, update every pre-S02 caller to supply the now-required
+`--upstream <commit>` argument, update shared navigation, and archive PF-21-S02.
+The three exact out-of-scope call sites are:
+
+- `docs/plans/active/p0-security-levels.md:752` (release-gate command);
+- `scripts/test_security_level_evidence.py:23-31` (sibling discovered test); and
+- `qa/security-levels/fixtures/README.md:48-49` (`--prepare` operator runbook).
+
+The third read-only review identified this incomplete handback as its sole
+finding; its transcript is outside the repository at
+`tmux-review/final-review-one-finding-transcript.txt`, SHA-256
+`74bb69180b854c83ece3ac12145127a3dac57a9ca0c0f2c459a34240850cc5a2`.
+This lane does not edit those shared/out-of-scope surfaces.

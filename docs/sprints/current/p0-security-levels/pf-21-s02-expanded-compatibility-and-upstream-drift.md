@@ -65,7 +65,7 @@ updated: 2026-08-30
 
 - [x] Recorded implementation commit, changed paths, contract version and exact clean-tree commands/results under `qa/security-levels/sprints/PF-21-S02/`.
 - [x] Preserved the S01 archive/evidence unchanged and recorded the remediated three-source plus protected-boundary 36-test report separately from historical qualification.
-- [ ] Integration owner merges after PF-19/PF-20, reruns combined-tree checks, updates the active plan compatibility command with required `--upstream <commit>`, updates shared navigation and archives PF-21-S02.
+- [ ] Integration owner merges after PF-19/PF-20; updates all three out-of-scope callers with required `--upstream <commit>` (`docs/plans/active/p0-security-levels.md:752`, `scripts/test_security_level_evidence.py:23-31`, `qa/security-levels/fixtures/README.md:48-49`); reruns combined-tree checks; updates shared navigation; and archives PF-21-S02.
 
 ## Remaining
 
