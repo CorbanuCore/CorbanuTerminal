@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-31-S04"
 title: "Retriever artifact and engine preparation"
-status: ready
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-31"
 execution_order: 17
