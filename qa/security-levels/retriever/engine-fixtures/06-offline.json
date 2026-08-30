@@ -11,5 +11,5 @@
       }
     }
   },
-  "expected": {"status": "blocked", "engine": "docker", "worker": null, "reason_code": "offline_verification_unavailable", "actions": ["restore_connectivity_without_fallback", "rerun_check"]}
+  "expected": {"status": "action_required", "engine": "docker", "worker": null, "reason_code": "offline_verification_unavailable", "actions": ["restore_connectivity_without_fallback", "rerun_check"]}
 }
