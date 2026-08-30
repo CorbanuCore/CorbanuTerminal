@@ -48,7 +48,8 @@ updated: 2026-08-30
 - [x] Bounded preparation/foundation mandate created from the accepted review; no implementation or platform acceptance claimed.
 - [x] Reused PF-16–20 actor, request, mandate, receipt and revocation types; added versioned digest identities, causal parents, policy/run/owner generations and secret-free correlation records without reusable authority.
 - [x] Added bounded segmented append, acknowledgment, hash-chain, protected-checkpoint and recovery contracts with an explicit record-first, protected-root-last cross-store commit protocol.
-- [x] Added durable intent-before-dispatch permits and completed/unknown terminal receipts. Disk full, timeout, failed acknowledgment, ambiguous commit, saturation, missing keys and concurrent writers fail closed without automatic replay.
+- [x] Added durable intent-before-dispatch permits and completed/unknown terminal receipts. Action/dedup retries remain idempotent across timestamp and generation changes. Disk full, timeout, failed acknowledgment, ambiguous commit, saturation, missing keys and concurrent writers fail closed without automatic replay.
+- [x] Added validated recovery tail caching and explicit exact-event operator reconciliation for one-record ambiguous commits; restart/root changes invalidate the cache, reconciliation grants no permit and the journal requires recovery plus unknown resolution before dispatch.
 - [x] Emergency restriction applies the PF-19 fence before persistence; audit failure remains visible and blocks restart recovery while the PF-20 state and reconstructed ledger differ.
 - [x] Covered append/crash boundaries, duplicate IDs, rollback, truncation, mutation, rotation, saturation, key loss, owner rotation, malformed storage and concurrent writers.
 - [x] Published fixture-only consumer contract v1 and exact durability/ownership guarantees without registering a producer, consumer, runtime route or protected profile.
@@ -59,11 +60,11 @@ updated: 2026-08-30
 
 ## Verification
 
-- [x] Final Rust formatting, Clippy, 30 unit/fault tests, one public integration test, three fixture tests, 23 governance checker tests and both live governance checkers pass; exact commands are recorded in evidence.
+- [x] Final Rust formatting, full-workspace-deny Clippy, 34 unit/fault tests, one public integration test, three fixture tests, 23 governance checker tests and both live governance checkers pass; exact commands and artifact hashes are recorded in evidence.
 - [x] Fault tests cover before-write failure, post-sync crash, post-publish ambiguous commit and post-root lost acknowledgment, including immediate emergency fencing with unavailable audit storage.
 - [x] TUI applicability remains indirect for this unregistered foundation; the exact candidate passed the round-three TMUX/Corbanu `/status` and clean-exit smoke with trace logging.
 - [x] Contract fixture asserts `runtime_activation: false` with empty producer and consumer registrations; the lane changes no existing runtime route or profile.
-- [ ] Complete the fresh post-remediation read-only Claude Opus 5 Plan Max review in the TMUX/Corbanu harness; all nine first-review findings are remediated and retested.
+- [ ] Complete the fresh final read-only Claude Opus 5 Plan Max review in the TMUX/Corbanu harness; all nine first-review and six second-review findings are remediated and retested.
 
 ## Exit evidence
 
