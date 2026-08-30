@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-27-S03"
 title: "Platform containment contract and probes"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 16
@@ -59,14 +59,14 @@ updated: 2026-08-30
 
 ## Remaining
 
-- [ ] Complete the integration-owner shared-surface audit and archive the sprint at G1.
+- [x] Complete the integration-owner shared-surface audit and archive the sprint at G1.
 
 ## Verification
 
 - [x] Run affected format/fix tools before final tests; repository-standard `format.py --check` and focused Ruff discovery pass; Python self-test passes 8/8, discovered Python tests pass 7/7, and the registered Rust activation-gate tests pass 16/16 through nextest with the Bazel unit target green.
 - [x] Run the planned probe with synthetic canaries on Linux/macOS/Windows; record target versions, expected denial, actual results and unsupported configurations. Run schema/fixture tests and wrong-identity/stale-result cases.
 - [x] Record a clean independent review of the final three-platform evidence tree and rerun governance before archive.
-- [ ] Rerun the final focused and governance checks on the integration target before archive.
+- [x] Rerun the final focused and governance checks on the integration target before archive.
 - [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
 - [x] Verify no runtime route or profile becomes available from fixture-only preparation; Cargo/Bazel register only the standalone contract crate, no workspace crate consumes it, and the probe creates only bounded temporary synthetic fixtures.
 
@@ -74,4 +74,4 @@ updated: 2026-08-30
 
 - [x] Commit, contract/fixture versions, owner review and final-tree outputs under `qa/security-levels/sprints/PF-27-S03/`.
 - [x] Record that PF-27-S04/S02 must rerun all probes against the final actual launch path; this contract cannot activate a protected mode.
-- [ ] Record integration handoff and scope audit; complete all ledgers before archive and update plan/navigation.
+- [x] Record integration handoff and scope audit; complete all ledgers before archive and update plan/navigation.

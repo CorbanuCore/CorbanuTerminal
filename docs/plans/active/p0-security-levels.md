@@ -93,8 +93,8 @@ passing candidate evidence; no source citation alone closes an acceptance item.
   launch and deterministic ingress/disclosure policy. Unsupported adapters or
   isolation fail visibly; they never fall back to raw credentials.
 - **All source requirements have owners.** Earlier 68/73-record snapshots are
-  historical. Sprint 13 and PF-34-S04 integration preserve 18 completed archives
-  and leave **58 current units**. All 72
+  historical. Sprint 13, PF-34-S04, and PF-27-S03 integration preserve 19
+  completed archives and leave **57 current units**. All 72
   cancelled firewall records and seven unrelated Autoreview drafts are unchanged.
 - **No evidence is retroactively accepted.** Upstream's PF-15–22 and PF-13-S01
   completions remain accepted for their original scope. The stronger review
@@ -137,8 +137,8 @@ human final-acceptance gate.
 The coordination packet at
 `qa/security-levels/planning/parallel-handoffs-2026-08-29/README.md` divides the
 program into foundation/platform, browser/retrieval and ingress/classifier legs.
-PF-13-S05, PF-31-S04 and PF-33-S03 are completed and archived. PF-27-S03 now
-occupies the foundation/platform slot at dispatch base
+PF-13-S05, PF-31-S04, PF-33-S03, and PF-27-S03 are completed and archived.
+PF-27-S03 occupied the foundation/platform slot at dispatch base
 `1907d99aed9714f05a5f54fca1703658017d616c`; one sprint may run at a time in
 each lane. A handoff document is coordination, not execution authority: before a
 draft becomes `ready`, this plan and its sprint record must name the exact owner,
@@ -455,13 +455,13 @@ coordinates are not permission for concurrent workers in the same checkout.
 
 ## Sprint execution map
 
-This map covers **58 current and 18 completed archived sprints**.
+This map covers **57 current and 19 completed archived sprints**.
 The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
 is dependency-correct; feature IDs are not execution order. Archive orders 1–9
 stay unchanged and current orders start at 10. Existing allocation coordinates
 follow upstream; the five preparation/foundation drafts and five new follow-ups
-remain `UNALLOCATED` until assigned. PF-27-S03 is the checked, in-progress
-foundation/platform allocation, PF-34-S04 is completed and archived, and other current records are
+remain `UNALLOCATED` until assigned. PF-27-S03 and PF-34-S04 are completed and
+archived, and other current records are
 `draft`, with completed prerequisites and checked allocation
 required before execution. Archived links document original scope, not new passes.
 
@@ -480,7 +480,7 @@ required before execution. Archived links document original scope, not new passe
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
 | `PF-26` | Harnesses, true-TUI/live-repository qualification, human acceptance, and finished docs | [S01](../../sprints/archive/p0-security-levels/pf-26-s01-security-harnesses-and-standards-crosswalk.md), [S04](../../sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md), [S02](../../sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md), [S03](../../sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | S01 completed; S04/S02/S03 draft |
-| `PF-27` | Shared contracts, isolated credential broker and secretless launch | [S01](../../sprints/archive/p0-security-levels/pf-27-s01-shared-security-contracts.md), [S02](../../sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md), [S03](../../sprints/current/p0-security-levels/pf-27-s03-platform-containment-contract.md), [S04](../../sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md) | S01 completed; S03 in progress; S02/S04 draft |
+| `PF-27` | Shared contracts, isolated credential broker and secretless launch | [S01](../../sprints/archive/p0-security-levels/pf-27-s01-shared-security-contracts.md), [S02](../../sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md), [S03](../../sprints/archive/p0-security-levels/pf-27-s03-platform-containment-contract.md), [S04](../../sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md) | S01/S03 completed; S02/S04 draft |
 | `PF-28` | Central output and reflected-secret protection | [S01](../../sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md), [S02](../../sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) | draft |
 | `PF-29` | Protected-mode inventory and human migration | [S01](../../sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md), [S02](../../sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md) | draft |
 | `PF-30` | Durable provenance and post-taint authority | [S01](../../sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md), [S02](../../sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md), [S03](../../sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) | draft |
@@ -665,9 +665,9 @@ incomplete; do not substitute a wrapper heuristic or optional hosted service.
 
 ## Implementation sequence
 
-Use the [58-record current index](../../sprints/current/p0-security-levels/index.md)
+Use the [57-record current index](../../sprints/current/p0-security-levels/index.md)
 for exact dependencies. Bounded parallel allocations follow the sprint process;
-reading order is not a serial lock. Including 18 completed archives, the graph
+reading order is not a serial lock. Including 19 completed archives, the graph
 has 76 nodes; exact merged-tree ordering is maintained by the checked current
 index rather than inherited historical snapshot arithmetic.
 
@@ -803,7 +803,7 @@ before qualification.
 - [ ] Accepted architecture refinements and upstream-seam register have final-tree evidence.
 - [ ] Parallel allocations, scope audits and combined-tree integration evidence are complete.
 
-- [x] Complete source scope maps to 58 current and 18 completed single-feature sprints; all 72 cancelled records have explicit dispositions.
+- [x] Complete source scope maps to 57 current and 19 completed single-feature sprints; all 72 cancelled records have explicit dispositions.
 - [ ] Every PF-27–41 contract and protected-mode readiness condition passes final-candidate evidence.
 - [ ] Optional hosted/reviewer lanes are explicitly qualified-enabled or disabled with an auditable reason.
 - [ ] Permissive compatibility is proven against the frozen pre-feature baseline.
