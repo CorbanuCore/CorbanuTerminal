@@ -86,58 +86,78 @@ const OPENAI_GPT_5_6_LUNA_MODEL: &str = "gpt-5.6-luna";
 struct CorbanuApiModelTemplate {
     source_model: &'static str,
     public_model: &'static str,
-    display_name: &'static str,
-    description: &'static str,
+    display_name: Option<&'static str>,
+    description: Option<&'static str>,
     provider_id: &'static str,
     is_default: bool,
 }
 
-const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 6] = [
+const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 7] = [
     CorbanuApiModelTemplate {
         source_model: VERCEL_GLM_5_3_FLASH_MODEL,
         public_model: CORBANU_API_GLM_5_3_FLASH_MODEL,
-        display_name: "GLM 5.3 Flash (Recommended)",
-        description: "Recommended. Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        display_name: Some("GLM 5.3 Flash (Recommended)"),
+        description: Some(
+            "Recommended. Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        ),
         provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
         is_default: true,
     },
     CorbanuApiModelTemplate {
+        source_model: AMBIENT_DEFAULT_MODEL,
+        public_model: AMBIENT_DEFAULT_MODEL,
+        display_name: None,
+        description: None,
+        provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
+        is_default: false,
+    },
+    CorbanuApiModelTemplate {
         source_model: VERCEL_GLM_5_3_MODEL,
         public_model: CORBANU_API_GLM_5_3_MODEL,
-        display_name: "GLM 5.3",
-        description: "Uses balance faster. Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        display_name: Some("GLM 5.3"),
+        description: Some(
+            "Uses balance faster. Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        ),
         provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
         is_default: false,
     },
     CorbanuApiModelTemplate {
         source_model: OPENAI_GPT_5_6_LUNA_MODEL,
         public_model: CORBANU_API_GPT_5_6_LUNA_MODEL,
-        display_name: "GPT-5.6 Luna (xhigh)",
-        description: "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        display_name: Some("GPT-5.6 Luna (xhigh)"),
+        description: Some(
+            "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        ),
         provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
         is_default: false,
     },
     CorbanuApiModelTemplate {
         source_model: OPENAI_GPT_5_6_SOL_MODEL,
         public_model: CORBANU_API_GPT_5_6_SOL_MODEL,
-        display_name: "GPT-5.6 Sol",
-        description: "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        display_name: Some("GPT-5.6 Sol"),
+        description: Some(
+            "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        ),
         provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
         is_default: false,
     },
     CorbanuApiModelTemplate {
         source_model: CLAUDE_FABLE_5_MODEL,
         public_model: CORBANU_API_CLAUDE_FABLE_5_MODEL,
-        display_name: "Claude Fable 5",
-        description: "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        display_name: Some("Claude Fable 5"),
+        description: Some(
+            "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        ),
         provider_id: PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
         is_default: false,
     },
     CorbanuApiModelTemplate {
         source_model: DEEPSEEK_PRO_MODEL,
         public_model: CORBANU_API_DEEPSEEK_V4_PRO_MODEL,
-        display_name: "DeepSeek V4 Pro",
-        description: "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        display_name: Some("DeepSeek V4 Pro"),
+        description: Some(
+            "Wallet-funded at exact cost with zero markup. Current prices are shown in /wallet. Third-party inference.",
+        ),
         provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
         is_default: false,
     },
@@ -268,8 +288,12 @@ impl ChatWidget {
                 preset.id = template.public_model.to_string();
                 preset.model = template.public_model.to_string();
                 preset.provider_id = Some(template.provider_id.to_string());
-                preset.display_name = template.display_name.to_string();
-                preset.description = template.description.to_string();
+                if let Some(display_name) = template.display_name {
+                    preset.display_name = display_name.to_string();
+                }
+                if let Some(description) = template.description {
+                    preset.description = description.to_string();
+                }
                 preset.is_default = template.is_default;
                 Some(preset)
             })
@@ -1523,9 +1547,10 @@ mod tests {
     }
 
     #[test]
-    fn corbanu_api_presets_publish_only_the_six_wallet_funded_routes() {
+    fn corbanu_api_presets_preserve_ambient_and_publish_the_six_wallet_funded_routes() {
         let source_presets = [
             VERCEL_GLM_5_3_FLASH_MODEL,
+            AMBIENT_DEFAULT_MODEL,
             VERCEL_GLM_5_3_MODEL,
             OPENAI_GPT_5_6_LUNA_MODEL,
             OPENAI_GPT_5_6_SOL_MODEL,
@@ -1559,6 +1584,12 @@ mod tests {
                     true,
                 ),
                 (
+                    AMBIENT_DEFAULT_MODEL,
+                    Some(PFTERMINAL_PLAN_PROVIDER_ID),
+                    AMBIENT_DEFAULT_MODEL,
+                    false,
+                ),
+                (
                     CORBANU_API_GLM_5_3_MODEL,
                     Some(PFTERMINAL_PLAN_PROVIDER_ID),
                     "GLM 5.3",
@@ -1590,15 +1621,17 @@ mod tests {
                 ),
             ]
         );
-        assert!(presets.iter().all(|preset| {
-            !["Ambient", "Vercel", "xAPI", "Direct"]
-                .into_iter()
-                .any(|vendor| {
-                    preset.display_name.contains(vendor) || preset.description.contains(vendor)
-                })
+        assert!(presets.iter().skip(1).all(|preset| {
+            !["Vercel", "xAPI", "Direct"].into_iter().any(|vendor| {
+                preset.display_name.contains(vendor) || preset.description.contains(vendor)
+            })
         }));
         assert!(presets[0].description.contains("Recommended"));
-        assert!(presets[1].description.contains("Uses balance faster"));
+        assert_eq!(
+            presets[1].description,
+            format!("{AMBIENT_DEFAULT_MODEL} description")
+        );
+        assert!(presets[2].description.contains("Uses balance faster"));
     }
 
     #[test]

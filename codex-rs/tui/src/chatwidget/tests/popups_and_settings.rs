@@ -4109,7 +4109,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
 }
 
 #[tokio::test]
-async fn corbanu_api_model_picker_shows_the_six_public_wallet_funded_routes() {
+async fn corbanu_api_model_picker_preserves_ambient_and_shows_the_six_public_routes() {
     let (mut chat, _rx, _op_rx) =
         make_chatwidget_manual(Some(CORBANU_API_GLM_5_3_FLASH_MODEL)).await;
     chat.thread_id = Some(ThreadId::new());
@@ -4126,6 +4126,7 @@ async fn corbanu_api_model_picker_shows_the_six_public_wallet_funded_routes() {
     assert!(popup.contains("[Corbanu API]"), "{popup}");
     for model in [
         CORBANU_API_GLM_5_3_FLASH_MODEL,
+        AMBIENT_DEFAULT_MODEL,
         CORBANU_API_GLM_5_3_MODEL,
         CORBANU_API_GPT_5_6_LUNA_MODEL,
         CORBANU_API_GPT_5_6_SOL_MODEL,
@@ -4139,11 +4140,8 @@ async fn corbanu_api_model_picker_shows_the_six_public_wallet_funded_routes() {
     }
     assert!(popup.contains("Recommended"), "{popup}");
     assert!(popup.contains("Uses balance faster"), "{popup}");
-    for legacy_row in [
-        "Ambient GLM 5.2",
-        "Ambient Kimi K2.7 Code",
-        "DeepSeek V4 Pro (Direct)",
-    ] {
+    assert!(popup.contains("Ambient GLM 5.2"), "{popup}");
+    for legacy_row in ["Ambient Kimi K2.7 Code", "DeepSeek V4 Pro (Direct)"] {
         assert!(
             !popup.contains(legacy_row),
             "legacy row {legacy_row:?} leaked into Corbanu API tab:\n{popup}"
