@@ -53,7 +53,6 @@ updated: 2026-08-29
 - [x] Scanned test-constructed model/tool/environment, header, log/audit/receipt/error and artifact surfaces; the original production-hook and truncated-capture gaps are closed by the repair evidence below.
 - [x] Exercised malformed, forged, expired, revoked, replayed, wrong-actor/purpose/operation/method/host/scope, redirect, concurrent-use, and revocation-race cases.
 - [x] Proved bounded-store cleanup and denial before repeat resolution in component tests; no provider network round trips were measured.
-- [x] Ran Linux locally and attached passing commit-bound CI evidence for macOS and Windows without weakening host checks.
 - [x] Ran the approved complete Core suite on macOS and preserved its failing JUnit report without claiming a pass.
 - [x] Recorded historical pre-repair PF-13 credential qualification on Windows 2022 and committed its machine-readable report; it does not qualify repaired candidate `f6ec1c75f`.
 - [x] Merged all prior work at `044491b8b` before the Fable High outside review; recorded its provider-triggered interruption in `qa/security-levels/sprints/PF-13-S05/fable-outside-review.md` without accepting the automatic Opus substitution.
@@ -72,14 +71,15 @@ updated: 2026-08-29
 - [x] Re-ran complete Core on the transferred integrated tree with Rust 1.95 and all four companion executables: 3,393/3,411 passed, 18 failed and 19 skipped. All credential tests passed and the earlier prompt-cache failure passed; the new JUnit is preserved as repair input, not a clean qualification result.
 - [x] Scope-reviewed and repaired all 18 transferred-tree failures without weakening the credential boundary or test assertions; a final complete Core rerun passed 3,411/3,411 with 19 platform-filtered skips and no retry/flaky classification. JUnit run `fd5920a2-8b87-4e14-a2b8-a7201aed6304` is preserved as `repair-core-final-macos-junit.xml.gz` (SHA-256 `9eb1c35509c4cd4480f8491ed218b2b59a8e765d39c8fd71fdb8f7381f1f1a7e`).
 - [x] Re-ran the affected security crates after the Core repairs: 295/295 passed, zero skipped, run `c7938288-cff5-496f-b802-03d95adf7f19`; `repair-focused-final-macos-junit.xml.gz` SHA-256 `1c2d35ab9d5fc6a82884cac060446050a319f68e1f388c9e71a89b1d1c9c296a`. The canary harness unit suite also passed 11/11.
+- [x] Published integrated repair commit `be8153f2e29c360d83776441aed50deb204eafa7`; a clean macOS canary passed 47/47 tests and recorded exact executable/report hashes.
+- [x] On Windows 11 AMD64, fetched the same published commit into a clean `D:` checkout, pinned Rust/Cargo 1.95.0 and MSVC, and passed all nine canary groups / 47 tests. The four-test raw-export group executed the unprivileged `mklink /J` directory-junction posture case; independent `Get-FileHash` matched the report's executable SHA-256.
+- [x] Compared every path/source hash embedded by the retained Linux report with the integrated macOS report; all probe sources are identical. The Linux result remains honestly bound to `f6ec1c75f` rather than being relabeled after the non-probe Core repairs.
 
 ## Remaining
 
-- [ ] On the remote agent's working Windows route, fetch the published candidate, prepare Rust 1.95/Python and required test tools, then run the final canary including the directory-junction posture test. Final source/artifact identity must be recorded; historical results are not relabeled as qualification of the repaired candidate.
+- [ ] Review the newly scope-classified integrated Core repair through Computer Use with Claude Opus 5.0 Max, record findings/dispositions, and rerun any affected proof if the review causes changes. The current Mac lock prevents this UI-only gate; credential/platform tests are complete.
 
-Mac failure triage and qualification repairs may run concurrently within this
-sprint. This amended implementation mandate authorizes only the repairs above;
-additional runtime fixes return to scope review and require affected reruns.
+The amended mandate authorizes only the repairs above; additional runtime fixes return to scope review and require affected reruns.
 
 ## Verification
 
@@ -87,13 +87,14 @@ additional runtime fixes return to scope review and require affected reruns.
 - [x] Fix and format all affected crates before the final run; inspect the final diff.
 - [x] Final affected tests: `cd codex-rs && just test -p codex-security-policy -p codex-vault -p codex-network-proxy --test-threads 4` passed 295/295; `just test -p codex-core --test-threads 4` passed 3,411/3,411 with 19 platform-filtered skips.
 - [x] Canary: `python3 scripts/security-credential-canary --candidate <binary> --output qa/security-levels/sprints/PF-13-S05/`.
-- [ ] Final Windows canary on the published integrated repair commit, including the directory-junction posture case and exact source/executable identity.
+- [x] Final Windows canary on published commit `be8153f2e29c360d83776441aed50deb204eafa7`: 47/47 passed, including the directory-junction posture case; clean source and independent executable identity matched.
+- [ ] Claude Opus 5.0 Max Computer Use review of the integrated Core repair, with immutable result and dispositions.
 - [x] Reviewer, reviewed commit, commands and historical platform/canary identities are recorded without claiming a final integrated pass.
 - [x] TUI: production panic-hook subprocess proof plus final candidate startup/cancel/resume in a PTY; no new UI. PF-26-S02 retains integrated feature/live-repository qualification.
 
 ## Exit evidence
 
-- [x] Final integrated candidate `f6ec1c75f` and artifact/source manifests recorded after review repairs; Core and Windows limitations remain explicit.
-- [ ] Final all-platform canary proof: Mac/Linux required component surfaces, complete output and production panic hooks passed; Windows remains pending. Native PF-23 wiring is not claimed.
+- [x] Published integrated repair candidate `be8153f2e` and artifact/source manifests are recorded; historical `f6ec1c75f` evidence retains its original identity.
+- [x] Final all-platform component canary proof: macOS and Windows passed the published integrated candidate; Linux's clean report remains bound to its recorded candidate and has an identical complete probe-source hash set. Native PF-23 wiring is not claimed.
 - [x] Independent accepted-repair security review passes with no findings; native integration review remains downstream in PF-23/PF-26.
-- [ ] Ledgers reflect reality and the completed record is archived.
+- [ ] After the integrated repair review is clean, ensure ledgers reflect reality and archive the completed record.

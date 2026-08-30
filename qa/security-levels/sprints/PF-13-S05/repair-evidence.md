@@ -34,9 +34,42 @@ change Vault, broker, provider, security-profile, or Permissive behavior.
   and the sprint checker passed before the final runs. The formatter's unrelated
   `output_text_stream.rs` interpolation rewrite was excluded from this sprint.
 
-The final Windows report must bind the published integrated repair commit and
-the exact Windows executable. Until that succeeds, this record does not claim
-all-platform completion.
+## Published integrated candidate and final platform canaries
+
+Integrated repair commit `be8153f2e29c360d83776441aed50deb204eafa7` is
+published at `origin/feat/p0-security-foundation-platform`. `git ls-remote`
+matched that exact commit before remote qualification.
+
+- macOS 26.0 arm64, Python 3.14.4: all nine probe groups / **47 tests passed**
+  from a clean checkout state. Candidate `corbanu 0.1.35`, SHA-256
+  `6d4a01137de0e10a8f3dcf205709f1e28518a7c5e6d5efaa53a1ce60d764d135`;
+  report `repair-credential-canary-macos-integrated.json`, SHA-256
+  `af03fd29a03b6540b0cf22a1d4150ab4643152874ed4e27e7a2e5671d17160be`.
+- Windows 11 AMD64 (`10.0.26200.9168`), Python 3.13.15, Rust/Cargo 1.95.0,
+  MSVC Build Tools: all nine probe groups / **47 tests passed** from a fresh,
+  clean `D:\w13-be8153` checkout. The protected raw-export group executed all
+  four required tests, including the Windows `mklink /J` unprivileged
+  directory-junction posture test. Candidate `corbanu 0.1.35`, SHA-256
+  `37e0ac06e3f7cab75c684737c7d33e38453578dad5d5d8788ee8221ad8e23737`;
+  an independent remote `Get-FileHash` matched the report. Report
+  `repair-credential-canary-windows-integrated.json`, SHA-256
+  `1fe4f74bf8ae55645012f189dbdcf665175c0b1cb960788f7ce32e456382d4aa`.
+- Linux remains bound to the clean `f6ec1c75f` report recorded below. A
+  path-by-path comparison of every source hash embedded by all nine probes is
+  identical to the integrated macOS report. The transferred Core repairs do
+  not change any Linux-qualified probe source, so the Linux result is retained
+  with its original commit identity rather than relabeled as `be8153f2e`.
+
+The first Windows invocation failed before probes because an unquoted CMD
+`set VAR=value &&` stored a trailing space in `RUSTUP_HOME`. Reproducing the
+exact build exposed `D:\rustqa\rustup \settings.toml`; using CMD's canonical
+`set "VAR=value"` syntax fixed the environment. The subsequent candidate build
+and complete canary passed. No repository file was changed on Windows.
+
+The complete-Core, affected-crate, canary-unit and three-host component evidence
+now pass. Archive remains gated on review of the newly scope-classified Core
+repair and its recorded disposition; this is still not PF-23/PF-26 integrated
+release qualification.
 
 ## Authority and identity
 
