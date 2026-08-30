@@ -1,6 +1,6 @@
 # PF-34-S04 independent Claude Opus 5.0 Max review
 
-Date: 2026-08-30. Final lane verdict: **clean**.
+Date: 2026-08-30. Final lane verdict: **clean**. Integration follow-up pending.
 
 ## Runtime attestation
 
@@ -26,6 +26,7 @@ follow fixture content. Hostile fixture text was treated as inert review data.
 | `8a6256de83b000a3f19aa079ea46c00906cfa28c8514351fb83b7b3a872a5ac1` | changes-required: 4 P2, 12 P3, 0 P0/P1 | byte-bearing `Debug` was redacted; recurring CI and combined-tree verifier requirements, unit-test compile-data caveat, workspace dependency precondition, frozen ceilings, and handback hardening were added |
 | `3813e9783ddbf09fb9e2bdbb16fa9600adeb62b58fcd09385bf6328089bc3389` | changes-required: 1 P2, 4 P3, 0 P0/P1 | contract, fixtures, verifier, handback, and the 810-line scope exception were accepted; the sole P2 was stale pre-rebase evidence |
 | `9753a4b8046359e0c3e6e385fa86770fde692312f3a8c87e9ffd3a979c34ecca` | **clean**: 0 new P0/P1/P2 | confirmed N-5 resolved, all logs rebound to `a75efecc0a37d5544e123ad19d57867cac360a68`, 20 Rust and 14 verifier tests corroborated, and the evidence consistency guard reviewed |
+| `5ebbb39bbea56a3cc69549f6239e7346e627584d5b261e4dee556d87c5c1c8f4` | integration changes-required: 1 P2, 7 P3, 0 P0/P1 | accepted G1 registration, Bazel parity, 30-item private API, equivalent panic-free hex rewrite, locks, three-platform CI, scoped baseline failures and no runtime route; required the stale contract/test ledger, evidence identities and guard to be rebound to the combined tree |
 
 The reviewer independently recomputed the contract, test, schema, manifest,
 fixture, source, model, threshold, and handback hashes available in the packets.
@@ -51,6 +52,8 @@ contain local runtime metadata. No credentials or raw logs are committed.
   `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/tui-review/corbanu-home/sessions/2026/08/30/rollout-2026-08-30T00-49-03-01a051a4-b282-76b1-b2b8-15b3ec20b53e.jsonl`
   — SHA-256 `28e25bb31d9b01cfabc3e60d97ef5f66fdd04b2913c2ee9248d474784ee26469`
 
-This verdict is lane-local. It does not replace Jim Ricketts's G1 shared
-registration, combined-tree Cargo/Bazel/lock reruns, or the PF-35 corpus,
-evaluator, CPU, runtime, signing, and distribution gates.
+The user transferred Jim Ricketts's G1/G2 integration authority to this lane.
+The integration review accepted the registered boundary and found only stale
+audit evidence; a checksum-verified follow-up is required before archive. The
+PF-35 corpus, evaluator, CPU, runtime, signing, and distribution gates remain
+separate and are not claimed here.

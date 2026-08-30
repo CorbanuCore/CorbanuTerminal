@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when the PF-34-S04 candidate narrative and hash ledger diverge.
-
-Run this snapshot guard again at G1. Retire it only when the sprint is archived;
-combined-tree evidence may add identities but must retain these lane identities.
-"""
+"""Fail when the PF-34-S04 narrative and final-tree hash ledger diverge."""
 
 import hashlib
 from pathlib import Path, PurePosixPath
@@ -12,8 +8,8 @@ from pathlib import Path, PurePosixPath
 HERE = Path(__file__).resolve().parent
 REPOSITORY = HERE.parents[3]
 EVIDENCE = (HERE / "evidence.md").read_text(encoding="utf-8")
-EXPECTED_CANDIDATE = "a75efecc0a37d5544e123ad19d57867cac360a68"
-EXPECTED_REVIEW_PACKET = "3813e9783ddbf09fb9e2bdbb16fa9600adeb62b58fcd09385bf6328089bc3389"
+REVIEWED_INTEGRATION_COMMIT = "279ce48a9e8d3b28ab518ff184aae770d7462d2f"
+INTEGRATION_REVIEW_PACKET = "5ebbb39bbea56a3cc69549f6239e7346e627584d5b261e4dee556d87c5c1c8f4"
 NARRATED_FILES = {
     "Contract SHA-256": "codex-rs/content-security/src/contract.rs",
     "Contract tests SHA-256": "codex-rs/content-security/src/contract_tests.rs",
@@ -26,6 +22,12 @@ def main() -> None:
         if "  " not in line:
             raise SystemExit("PF-34-S04 ledger contains a malformed line")
         digest, relative = line.split("  ", maxsplit=1)
+        if len(digest) != 64 or any(
+            character not in "0123456789abcdef" for character in digest
+        ):
+            raise SystemExit(f"PF-34-S04 ledger digest is malformed: {digest}")
+        if relative in ledger:
+            raise SystemExit(f"PF-34-S04 ledger repeats a path: {relative}")
         relative_path = PurePosixPath(relative)
         if relative_path.is_absolute() or ".." in relative_path.parts:
             raise SystemExit(f"PF-34-S04 ledger path is unsafe: {relative}")
@@ -44,9 +46,10 @@ def main() -> None:
         if f"- {label}: `{digest}`" not in EVIDENCE:
             raise SystemExit(f"PF-34-S04 evidence omits current hash: {relative}")
     for required in (
-        f"Final Opus-remediated implementation: `{EXPECTED_CANDIDATE}`",
-        f"Third full review packet SHA-256: `{EXPECTED_REVIEW_PACKET}`",
+        f"Registered integration checkpoint: `{REVIEWED_INTEGRATION_COMMIT}`",
+        f"Integration review packet SHA-256: `{INTEGRATION_REVIEW_PACKET}`",
         "14 passed, 0 failed",
+        "21 passed, 0 failed",
     ):
         if required not in EVIDENCE:
             raise SystemExit(f"PF-34-S04 evidence omits current identity: {required}")

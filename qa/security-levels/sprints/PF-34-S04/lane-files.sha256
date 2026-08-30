@@ -1,5 +1,5 @@
-afde67e16a9117c3bf6052749e450ee805a8266862a87112e84b7918806c12ca  codex-rs/content-security/src/contract.rs
-895662f8139c0b5e6e9520cb3c9c52ded6812142b14aa2e1774336043728af1f  codex-rs/content-security/src/contract_tests.rs
+586acc231f3db2bfc426b14fc6ff51e9f47690333aabe10c86b24045b3261fef  codex-rs/content-security/src/contract.rs
+5b62a1bf69460ee014406c414b40f0b872a3ce0c674fbe08170040e42b3aeba1  codex-rs/content-security/src/contract_tests.rs
 c1b47d031fd54c2e3dccc2c9c25c776e8a0d9388f244617fce2f8a588af63c26  qa/security-levels/ingress-contract/.gitattributes
 bed898ac2d8942a4339b16aa11372cdcd9b54ad88acfb44429bec74efa17220e  qa/security-levels/ingress-contract/README.md
 b64866d85fdce7ac143f6940497c5d9851c7dc8fcf35e8566f53d6a70e342002  qa/security-levels/ingress-contract/fixtures/benign-v1/raw.txt

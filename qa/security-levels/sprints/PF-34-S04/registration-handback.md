@@ -1,8 +1,8 @@
-# PF-34-S04 G1 registration handback
+# PF-34-S04 G1 registration handback and completion record
 
-This lane deliberately did not edit shared registration surfaces. Jim Ricketts
-owns the serialized G1 application and combined-tree reruns. Apply these changes
-only after auditing collision order with PF-27-S03.
+The user transferred Jim Ricketts's serialized G1/G2 authority to the Codex
+ingress/classifier lane. The lane applied this recipe after auditing the current
+tree and preserves it here as the exact registration and qualification record.
 
 ## Lane identity
 
@@ -17,6 +17,9 @@ only after auditing collision order with PF-27-S03.
   `74e97148701ef541ff9ef2d0a9194ba472b2801c`
 - Final redacted-debug remediation commit:
   `a75efecc0a37d5544e123ad19d57867cac360a68`
+- Shared registration commit: `de99c7af1774cb964f9fcf0cbbfaf2a07c1a059d`
+- Registered integration checkpoint: `279ce48a9e8d3b28ab518ff184aae770d7462d2f`
+- Current-main reconciliation: `158b9b0ebe4b06a81c98be6a58a0d1c7919a0d08`
 - Contract version: `1`
 - Fixture schema version: `1`
 - Fixture manifest SHA-256: `7e8a4850f67052b2b5b2e0d17f5227116f226c65ee25a6945d04ff7a2a1a1fc3`
@@ -118,6 +121,10 @@ codex_rust_crate(
    six fixture paths from `compile_data`, with visibility limited to
    `//codex-rs/content-security:__pkg__`. Do not change the existing exports or
    their visibility.
+   Integration outcome: `cargo shear 1.11.2` correctly rejected this alias
+   because no crate consumes it yet, so commit `279ce48a9e8d3b28ab518ff184aae770d7462d2f`
+   removed it. The first consumer must add the workspace alias in the same
+   change as its dependency edge.
 4. Regenerate `codex-rs/Cargo.lock` and `MODULE.bazel.lock`; do not hand-edit
    either lock.
 
@@ -186,7 +193,7 @@ python3 docs/sprints/check.py
 git diff --check
 ```
 
-Confirm that 20 named Rust tests, 14 verifier regression tests, and seven
+Confirm that 21 named Rust tests, 14 verifier regression tests, and seven
 fixture files run, not merely that the commands exit successfully. Confirm the
 fixture attribute reports `text: unset`; its pinned bytes must not be converted.
 After the combined tree passes, record the integration commit, update the

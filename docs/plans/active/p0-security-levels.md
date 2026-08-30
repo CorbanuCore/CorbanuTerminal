@@ -379,9 +379,13 @@ After allocation, the lane rebased onto `main` at
 provider behavior before independent review. The final lane-owned remediation
 candidate is `a75efecc0a37d5544e123ad19d57867cac360a68`. On 2026-08-30 the user
 transferred Jim Ricketts's unavailable G1/G2 integration responsibility to the
-Codex ingress/classifier lane. The reviewed commits remain immutable while the
-lane combines current `main` at `1907d99aed9714f05a5f54fca1703658017d616c`
-for serialized integration and qualification.
+Codex ingress/classifier lane. The reviewed commits remain immutable. The lane
+combined `main` first at `1907d99aed9714f05a5f54fca1703658017d616c`,
+registered the crate at `de99c7af1774cb964f9fcf0cbbfaf2a07c1a059d`,
+removed the unused dependency alias at
+`279ce48a9e8d3b28ab518ff184aae770d7462d2f`, and reconciled the subsequently
+advanced `main` at `3232f5e65bae60bc86122a5495ebb4c280f7c8fb` in merge
+`158b9b0ebe4b06a81c98be6a58a0d1c7919a0d08` before final qualification.
 
 Literal PF-34-S04 write scope: `codex-rs/content-security/`,
 `codex-rs/Cargo.toml`, `codex-rs/Cargo.lock`, root `BUILD.bazel`, root

@@ -8,7 +8,7 @@ execution_order: 19
 owner: "Codex ingress/classifier lane"
 parallel_lane: "ingress-classifier"
 write_scope: "codex-rs/content-security/, codex-rs/Cargo.toml, codex-rs/Cargo.lock, BUILD.bazel, MODULE.bazel.lock, .github/workflows/security-ingress-contract.yml, qa/security-levels/ingress-contract/, qa/security-levels/sprints/PF-34-S04/, docs/sprints/current/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md, docs/sprints/archive/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md, docs/sprints/current/p0-security-levels/index.md, docs/sprints/index.md, docs/plans/active/p0-security-levels.md, mkdocs.yml"
-integration_gate: "Codex ingress/classifier lane owns the user-authorized G1/G2 transfer: combine current main at 1907d99aed9714f05a5f54fca1703658017d616c, audit the literal scope, serialize content-security crate/workspace/Cargo/Bazel/lock/CI registration, rerun governance and the complete content-security suite, obtain an independent TMUX plus Corbanu Terminal plus Claude Opus 5.0 Max review, then archive PF-34-S04 before PF-35-S01 allocation."
+integration_gate: "Codex ingress/classifier lane owns the user-authorized G1/G2 transfer: combine current main at 3232f5e65bae60bc86122a5495ebb4c280f7c8fb, audit the literal scope, serialize content-security crate/workspace/Cargo/Bazel/lock/CI registration, rerun governance and the complete content-security suite, obtain an independent TMUX plus Corbanu Terminal plus Claude Opus 5.0 Max review, then archive PF-34-S04 before PF-35-S01 allocation."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier"
 branch: "feat/p0-security-ingress-classifier"
 base_commit: "6a35712cd5731b191d875e8c6468f1abe23eb66e"
@@ -57,10 +57,13 @@ updated: 2026-08-30
 - [x] Supplemental structured Codex review verified four in-scope findings, drove bounded remediation and finished clean on the complete committed branch.
 - [x] Independent review ran through TMUX and rebased Corbanu Terminal using provider `claude-plan`, route `claude-opus-5-plan` (provider-reported Claude Opus 5.0), and effort `max`; four immutable passes ended `clean` with 0 new P0/P1/P2.
 - [x] Current `main` at `1907d99aed9714f05a5f54fca1703658017d616c` was combined without rewriting the immutable reviewed commits; PF-13-S05 archive and plan updates are preserved.
+- [x] Current `main` advanced to `3232f5e65bae60bc86122a5495ebb4c280f7c8fb` and was reconciled in merge `158b9b0ebe4b06a81c98be6a58a0d1c7919a0d08`; PF-31/PF-33 remediation remains intact.
+- [x] Transferred G1 registered the crate, Cargo lock, Bazel fixture visibility and recurring Linux/macOS/Windows contract CI; the unused dependency alias was removed after `cargo shear` rejected it.
+- [x] Combined-tree `just fix`, `just fmt`, strict Clippy, 21 focused/full tests, Bazel parity, fixture/schema checks and targeted argument-comment lint pass. The only repository-wide lint failures are two pre-existing `security-policy` argument comments outside this sprint.
 
 ## Remaining
 
-- [ ] Apply the exact shared registration handback, recurring cross-platform CI and combined-tree qualification under the transferred G1/G2 ownership.
+- [ ] Close the integration review's stale-evidence P2 with a clean checksum-verified follow-up, then archive this record.
 
 ## Verification
 
@@ -68,11 +71,13 @@ updated: 2026-08-30
 - [x] Run planned content-security contract tests including malformed/partial/duplicate segments, digest/version mismatch, timeout and forced-allow safety assertions at the interface.
 - [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
 - [x] Verified no runtime route or profile becomes available: the lane does not add `lib.rs`, Cargo/Bazel registration, Core/provider adapters or profile changes.
-- [ ] At G1, run registered-crate `just fix`, `just fmt`, named/full crate tests, lock regeneration, Bazel parity and recurring-CI contract checks on the combined tree.
+- [x] At G1, registered-crate `just fix`, `just fmt`, named/full crate tests, lock regeneration, Bazel parity and recurring-CI contract checks ran on the combined tree.
+- [ ] Confirm the evidence-only remediation through the checksum-verified TMUX/Corbanu Terminal/Claude Opus 5.0 Max follow-up.
 
 ## Exit evidence
 
 - [x] Commit contract/fixture versions, independent owner review, and lane-candidate outputs under `qa/security-levels/sprints/PF-34-S04/`; combined-tree outputs are now owned by this lane under the user-authorized transfer.
 - [x] PF-34-S01 and PF-35-S03 remain assigned actual rendering, PF-30 provenance and deterministic policy; fixture completion is not detector or ingestion qualification.
 - [x] Record the exact integration handoff and lane scope audit; archive and navigation changes remain after G1 combined-tree acceptance.
-- [ ] Record the transferred integration commit and combined-tree source hashes, then archive PF-34-S04 before PF-35-S01 allocation.
+- [x] Record the transferred integration commit and combined-tree source hashes.
+- [ ] Archive PF-34-S04 after the clean follow-up review; PF-35-S01 remains unallocated here.

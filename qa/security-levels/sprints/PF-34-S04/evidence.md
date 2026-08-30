@@ -1,7 +1,7 @@
 # PF-34-S04 lane evidence
 
-Date: 2026-08-30. Status: **lane candidate at G1; shared registration and
-combined-tree acceptance pending**.
+Date: 2026-08-30. Status: **registered combined-tree candidate; independent
+integration follow-up and archive pending**.
 
 Product citations:
 
@@ -14,7 +14,7 @@ Product citations:
 ## Candidate and scope
 
 - Lane owner: Codex ingress/classifier lane
-- Integration owner: Jim Ricketts
+- Integration owner: Codex ingress/classifier lane (user-authorized transfer)
 - Worktree: `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-ingress-classifier`
 - Branch: `feat/p0-security-ingress-classifier`
 - Base: `6a35712cd5731b191d875e8c6468f1abe23eb66e`
@@ -25,15 +25,22 @@ Product citations:
 - First Opus-remediated implementation: `74e97148701ef541ff9ef2d0a9194ba472b2801c`
 - Final Opus-remediated implementation: `a75efecc0a37d5544e123ad19d57867cac360a68`
 - Final lane evidence remediation: `c0ede26f2`
+- First combined `main`: `1907d99aed9714f05a5f54fca1703658017d616c`
+- Registration merge: `3f88a61df8aa6c0bc7bcff7641941bb0d79b5b2f`
+- Shared registration: `de99c7af1774cb964f9fcf0cbbfaf2a07c1a059d`
+- Registered integration checkpoint: `279ce48a9e8d3b28ab518ff184aae770d7462d2f`
+- Current `main` integration base: `3232f5e65bae60bc86122a5495ebb4c280f7c8fb`
+- Current-main reconciliation merge: `158b9b0ebe4b06a81c98be6a58a0d1c7919a0d08`
+- Integration guard hardening: `1ddd8e1c972463c9bcaf47db796322718c78187c`
 - Cache root: `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-ingress-classifier/`
-- Product TUI applicability: none; this is a pure, unregistered preparation
+- Product TUI applicability: none; this remains a pure, unconsumed preparation
   boundary. The mandated independent review itself ran through TMUX and the
   rebased Corbanu Terminal true TUI.
 
-The lane changed only its allocated contract/test files, versioned fixture
-directory, sprint evidence, and sprint record. It did not edit `lib.rs`, Cargo,
-Bazel, locks, shared registries, Core/TUI, plan indexes, MkDocs navigation, or
-archive state. Exact shared changes are in
+Under the transferred integration authority, the lane also registered the
+crate, Cargo/Bazel resources and lock state, and recurring three-platform CI.
+No consumer dependency, Core/TUI/provider adapter, profile activation, or
+runtime route was added. The exact recipe and outcomes are retained in
 [`registration-handback.md`](registration-handback.md).
 
 ## Delivered invariants
@@ -68,8 +75,8 @@ recorded cache root.
 | --- | --- |
 | isolated `cargo fmt --check` | pass; [log](lane-checks/fmt-check.log) |
 | isolated `cargo clippy --all-targets -- -D warnings` | pass; [log](lane-checks/clippy.log) |
-| isolated focused `cargo test … pf_34_s04 -- --nocapture` | 20 passed, 0 failed, 0 ignored; [log](lane-checks/focused-tests.log) |
-| isolated full harness `cargo test` | 20 passed, 0 failed, 0 ignored; [log](lane-checks/full-harness-tests.log) |
+| isolated focused `cargo test … pf_34_s04 -- --nocapture` | 20 passed, 0 failed, 0 ignored at the frozen lane candidate; [log](lane-checks/focused-tests.log) |
+| isolated full harness `cargo test` | 20 passed, 0 failed, 0 ignored at the frozen lane candidate; [log](lane-checks/full-harness-tests.log) |
 | repository `just argument-comment-lint` against the isolated harness | pass; [log](lane-checks/argument-comment-lint.log) |
 | `python3 qa/security-levels/ingress-contract/verify.py` | seven fixtures verified; schema 1; contract 1; [log](lane-checks/fixture-verifier.log) |
 | `python3 qa/security-levels/ingress-contract/test_verify.py` | 14 passed, 0 failed; [log](lane-checks/fixture-verifier-tests.log) |
@@ -88,10 +95,11 @@ machine is not claimed as the weakest supported CPU.
 
 - Contract/schema: `1` / `1`
 - Manifest SHA-256: `7e8a4850f67052b2b5b2e0d17f5227116f226c65ee25a6945d04ff7a2a1a1fc3`
-- Contract SHA-256: `afde67e16a9117c3bf6052749e450ee805a8266862a87112e84b7918806c12ca`
-- Contract tests SHA-256: `895662f8139c0b5e6e9520cb3c9c52ded6812142b14aa2e1774336043728af1f`
+- Contract SHA-256: `586acc231f3db2bfc426b14fc6ff51e9f47690333aabe10c86b24045b3261fef`
+- Contract tests SHA-256: `5b62a1bf69460ee014406c414b40f0b872a3ce0c674fbe08170040e42b3aeba1`
 - Third full review packet SHA-256: `3813e9783ddbf09fb9e2bdbb16fa9600adeb62b58fcd09385bf6328089bc3389`
 - Final evidence-confirmation packet SHA-256: `9753a4b8046359e0c3e6e385fa86770fde692312f3a8c87e9ffd3a979c34ecca`
+- Integration review packet SHA-256: `5ebbb39bbea56a3cc69549f6239e7346e627584d5b261e4dee556d87c5c1c8f4`
 
 ## Supplemental structured review
 
@@ -117,18 +125,43 @@ and reasoning effort `max`. Four checksum-verified immutable packets produced:
 3. 0 P1 / 1 P2 / 4 P3; the contract, fixtures, verifier, handback, and scope
    exception were accepted, with stale evidence as the sole P2.
 4. **clean**, with N-5 resolved and 0 new P0/P1/P2.
+5. G1/G2 integration review: **changes-required**, with 0 P0, 0 P1, 1 P2
+   and 7 P3. Registration, Bazel parity, public API, locks, CI, and the
+   behavior-preserving hex rewrite were accepted. The sole P2 was the stale
+   lane ledger and evidence after that rewrite; the ledger, guard, workflow,
+   dedicated known-answer test, and explicit no-unsafe policy were remediated.
 
 The complete runtime attestation, packet hashes, dispositions, and transient
 artifact hashes are recorded in
 [`claude-opus-5-max-review.md`](claude-opus-5-max-review.md).
 
-## Pending G1/G2 evidence
+## Combined-tree integration
 
-- Integration-owner Cargo/Bazel/module/lock registration.
-- Repository `just fix`, `just fmt`, named/full crate tests and Bazel parity on
-  the combined registered tree.
-- Integration commit, combined-tree source hashes and acceptance.
-- Sprint completion/archive and PF-35-S01 reallocation.
+- Cargo membership, crate manifest/public surface, Cargo lock, root fixture
+  exports, crate Bazel target and recurring Linux/macOS/Windows workflow are
+  registered. The unused workspace dependency alias was removed because
+  `cargo shear 1.11.2` correctly rejected a dependency with no consumer.
+- The registered combined tree passes `just fix`, `just fmt`, strict Clippy,
+  21 focused/full Rust tests (`21 passed, 0 failed`), 14 verifier regressions,
+  seven-fixture/schema
+  verification and targeted Bazel/argument-comment qualification.
+- `bazel test //codex-rs/content-security:all` proves the six `include_bytes!`
+  resources reach unit-test compilation. Repository-wide argument-comment
+  lint remains red only for two pre-existing `security-policy/src/grant.rs`
+  comments outside this scope; targeted content-security lint passes.
+- `MODULE.bazel.lock` regenerated byte-identical. `cargo shear` reports no
+  PF-34 error; its remaining warnings are pre-existing current-main files
+  outside this scope.
+- The recurring workflow reruns fixture attributes, verifier, verifier tests,
+  the 15-file ledger, narrative consistency guard, and registered Rust tests
+  on Linux, macOS and Windows. Existing repository Bazel CI selects
+  `//codex-rs/content-security:all`.
+- Exact final-tree commands and outcomes: [integration qualification](integration-qualification.md).
+
+## Remaining
+
+- Obtain a clean checksum-verified follow-up integration review through TMUX,
+  Corbanu Terminal, Claude Opus 5.0 Max, then archive PF-34-S04.
 
 No human or release acceptance is claimed; downstream PF-34/PF-35 consumers and
 PF-26 retain those gates.
