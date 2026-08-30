@@ -5,7 +5,8 @@
 - Branch: `feat/p0-security-credential-reservations`
 - Dispatch base: `9d08b15fa94676c1383ee1605b77e7cc7218dcc4`
 - Allocation commit: `e0c23fe95165636d621dae8c16a5366c4f7250ac`
-- Implementation candidate: recorded in the final handoff after commit
+- Initial implementation: `3250bf2345cb19edd8f867bbbd1ac99fc8104baf`
+- Lifecycle correction candidate: `e274c266a`
 - Contract versions: credential capability v1; additive credential usage v1
 
 ## Delivered contract
@@ -20,13 +21,17 @@ usage atomically before dispatch.
 Only trusted Core metering can settle a reservation. Completed and partial
 outcomes charge authenticated measured usage; cancellation charges the request
 attempt but releases unused token/byte/spend holds; unknown outcomes charge the
-entire reservation. Pending reservations survive expiry or revocation only to
-permit fail-closed settlement, while new reservations are denied. Duplicate
-settlement is idempotent and retries cannot replenish spent request authority.
+entire reservation. Pending reservations may settle after revocation only until
+the capability deadline; at expiry every abandoned hold is force-charged Unknown
+before the capability is reclaimed. Duplicate settlement is idempotent, settled
+history does not consume the active-reservation cap, and aggregate request count
+is hard-bounded at 1,024 so retained idempotency records remain bounded.
 
 The reservation bearer is private, non-serializable, redacted in Debug output,
-and zeroized on drop. This lane does not resolve a credential, return secret
-bytes, activate transport, or implement broker IPC.
+and zeroized on drop. Core authenticates it and authorizes at most one active
+broker dispatch; repeat or post-settlement authorization fails closed. This lane
+does not resolve a credential, return secret bytes, activate transport, or
+implement broker IPC.
 
 ## Changed paths
 
@@ -52,30 +57,52 @@ placed under `/Volumes/CorbanuDrive/Corbanu/.codex-work/credential-reservations/
 - `just test -p codex-security-policy credential`: 8 passed.
 - `just test -p codex-security-policy grant`: 5 passed.
 - `just test -p codex-security-policy`: 47 passed.
-- `just test -p codex-core credential_capability`: 15 passed; 2,348 Core unit
-  tests, 1,094 integration tests, and 4 header tests were outside the filter.
+- `just test -p codex-core credential_capability`: 17 passed; 3,440 tests across
+  the selected Core binaries were outside the filter.
 - `python3 docs/plans/check.py`: pass.
 - `python3 docs/sprints/check.py`: pass.
 - `git diff --check`: pass.
 
-The focused Core selection contains four new reservation tests and the eleven
+The focused Core selection contains six new reservation tests and the eleven
 accepted PF-13-S01 tests. New cases cover per-request and aggregate exhaustion,
 concurrent over-reservation, partial/cancelled/unknown settlement, retry request
 charging, duplicate settlement, forged bearer/excess metering, changed
-operation/model/resource, and settlement after expiry/revocation.
+operation/model/resource, settlement after revocation, expiry-bounded Unknown
+reclamation, active-only reservation capacity, the 1,024 request ceiling, and
+single-use/state-checked broker authorization.
+
+Final post-correction test transcript:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/credential-reservations/fixes-tests-clean.txt`
+(`sha256:3b1b4db5794a03f25bd6912b261300b6e14e3305ed3bff70b57c573c092ab23b`).
 
 ## TMUX smoke and independent review
 
-Final session names, artifact paths, SHA-256 hashes, exact model/effort, and the
-review disposition are recorded after the exact implementation candidate is
-committed and exercised. TUI behavior is not changed by this accounting-only
-contract; the smoke proves candidate startup, separate text/Enter input, and a
-completed response under trace logging.
+Exact correction-candidate smoke session `pf13-credential-fix-smoke` ran the
+lane-built binary under `RUST_LOG=trace`, read-only sandbox, and lane log directory
+`logs/fix-smoke`. Prompt text and Enter were sent separately; Corbanu returned
+`PF13-S06-FIX-SMOKE-OK`. Binary SHA-256:
+`f6044b8d274d409e590aacf31f5789a29299545225b0ab451536781334714dfa`.
+Transcript:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/credential-reservations/fix-smoke-transcript.txt`
+(`sha256:b2da38771a78acf2b466dc3576e1dc6fcd8376e26b3ede25486b3040b1c51d4f`).
+
+Initial independent review session `pf13-credential-opus5-review` used Corbanu
+Terminal with `claude-opus-5-plan`, provider `claude-plan`, reasoning effort
+`max`, read-only sandbox, and no approvals. It found three lifecycle issues:
+stale reservation reclamation, settled-history capacity accounting, and a
+settlement-agnostic vault-reference accessor. All were corrected in `e274c266a`.
+Initial transcript:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/credential-reservations/review/initial-review-transcript.txt`
+(`sha256:f17c87a1dcf66af0576282a11d9f172de8b8d57fa8313a6b2f50ccc49a888b73`).
+
+The clean follow-up review session and transcript hash are appended in the
+evidence-only commit after reviewing this exact correction candidate.
 
 ## Integration-owner handoff
 
 The shared `codex-rs/security-policy/src/lib.rs` export surface is outside this
-lane. Integration should re-export `CREDENTIAL_USAGE_SCHEMA_VERSION`, merge the
+lane. Integration should re-export `CREDENTIAL_USAGE_SCHEMA_VERSION` and
+`CREDENTIAL_USAGE_MAX_REQUESTS`, merge the
 other disjoint candidates, and rerun the complete policy plus focused Core
 credential suites and governance checks. PF-13-S03/PF-27 may later consume the
 opaque reservation at an authenticated Core-to-broker boundary; they must not
