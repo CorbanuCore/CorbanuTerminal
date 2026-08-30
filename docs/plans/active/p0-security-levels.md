@@ -11,7 +11,7 @@ activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to rec
 target_release: "TBD — candidate qualified by 2026-10-08"
 deadline: 2026-10-08
 created: 2026-08-23
-updated: 2026-08-28
+updated: 2026-08-29
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
@@ -107,6 +107,44 @@ with Jim Ricketts as integration owner. No extra execution owner or worktree has
 been allocated and no sprint is activated by this amendment. Keep PF-13-S05 and
 PF-26 final qualification, full Moderate/Aggressive guarantees, independent
 Permissive evidence and the existing deadline pending measured capacity review.
+
+## Execution capacity and handoff decision — 2026-08-29
+
+Product authority confirmed maximal LLM execution capacity, supplied platform
+access for Mac, Windows and Linux, and confirmed that LLM reviewers are always
+available. Sprint reviews use Computer Use to operate the logged-in Claude UI
+with **Claude Opus 5.0** visibly selected and effort visibly set to **Max**. Each
+review still requires immutable packet/model/effort/result evidence, verified
+finding disposition and reruns. Reviewer availability does not replace the named
+human final-acceptance gate.
+
+The coordination packet at
+`qa/security-levels/planning/parallel-handoffs-2026-08-29/README.md` divides the
+program into foundation/platform, browser/retrieval and ingress/classifier legs.
+PF-13-S05 already occupies one of the three global active-sprint slots. The two
+available initial preparation slots are PF-31-S04 and PF-34-S04; one sprint may
+run at a time in each lane. After PF-13-S05 closes, the primary slot rotates to
+PF-27-S03. A handoff document is coordination, not execution authority: before a
+draft becomes `ready`, this plan and its sprint record must name the exact owner,
+CorbanuDrive worktree and branch, 40-character post-handoff `main` base, parallel
+lane, literal disjoint `write_scope` and `integration_gate`, and both governance
+checkers must pass.
+
+Until midpoint sprint estimates exist, reserve **35% of total delivery capacity**
+for integration, rebases, reviewer-finding remediation, reruns and evidence.
+After estimates exist, each sprint reserves `max(0.5 day, 0.20 * midpoint)` plus
+0.5 day for each applicable serialized shared surface, consumed cross-lane
+contract, and all-OS/true-TUI/live-repository evidence requirement. Add one day
+per cross-lane convergence gate and two days for final PF-26 convergence;
+reforecast after every gate. Reviewer availability itself is not charged, but
+finding remediation is. No calendar feasibility claim is made until raw sprint
+estimates, retriever pins, corpus/licensing and the weakest-supported CPU exist.
+
+Credentials and machine login details remain only in the local gitignored
+`AgentCredentials.md` chain and must never enter a branch, evidence bundle,
+review packet or transcript. Supplied access proves reachability, not platform
+containment or release qualification. Tooling, builds, caches, temporary files
+and review exports for these lanes remain on CorbanuDrive.
 
 ## Upstream reconciliation — 2026-08-28
 
@@ -661,10 +699,10 @@ before qualification.
 | Existing foundations | Jim Ricketts | Current consumers | PF-15–22 and PF-13-S01 completed/archived upstream; five follow-ups remain draft for added review guarantees |
 | Moderate and Aggressive control matrix | Product authority | PF-23 review | Defined in the product specification; any change requires a product decision |
 | Persistence and downgrade invalidation | Jim Ricketts | PF-20-S02 / PF-23 | S01 versioned config accepted; protected authoritative store and transitions still pending |
-| Independent security reviewer | Release owner | PF-13-S05 and final qualification | Must be named before either review completes |
+| LLM security review route | Jim Ricketts | Every sprint candidate and final qualification | Reviewer capacity supplied; use Computer Use with visibly selected Claude Opus 5.0 and Max effort, preserve immutable evidence, verify findings and repeat after accepted fixes |
 | Human tester | Release owner | Final qualification | Must be named before acceptance |
-| Expanded program capacity | Jim Ricketts / product authority | Execution scheduling | 64 remaining units / 31 unweighted remaining stages; dated resource/effort/review estimate required before second worker allocation; October 8 feasibility pending, no scope silently removed |
-| Platform isolation capability matrix | Jim Ricketts | PF-27-S03 completion and PF-27/PF-31 integration readiness | Linux/macOS/Windows mechanism choices and probes required; unsupported protected paths block visibly |
+| Expanded program capacity and integration allowance | Jim Ricketts / product authority | Execution scheduling | Maximal LLM capacity supplied; provisional 35% integration reserve and per-sprint/gate formula recorded above; three-active-sprint limit remains; October 8 feasibility pending measured estimates, no scope silently removed |
+| Platform access and isolation capability matrix | Jim Ricketts | PF-27-S03 completion and PF-27/PF-31 integration readiness | Mac/Linux/Windows access supplied; actual mechanism choices, target identities and probes still required, and unsupported protected paths block visibly |
 | Moderate workflow usability targets | Product authority / Jim Ricketts | PF-26-S02 readiness | Numeric task-completion, approval-count and latency targets with fixed workflows pending; no relaxation of protection |
 | Local detector hardware/corpus/license pins | Jim Ricketts / evaluator | PF-35-S01 | Exact weakest supported CPU, licensed corpus and blind evaluator ownership pending |
 | Retriever/API/model dependency pins | Jim Ricketts | Owning adapter sprint readiness | Verify then pin current supported artifacts and APIs; historical sources are not fresh release security evidence |
