@@ -56,7 +56,7 @@ updated: 2026-08-30
 ## Verification
 
 - [x] Formatted and linted affected Python; `python3 -m unittest scripts.test_security_level_compat -v` passed 37/37. No Rust file or fixture changed.
-- [ ] The remediated extended harness must pass 36/36 against independently built baseline/upstream controls and the clean final implementation candidate; exact CLI arguments, identities and hashes will be recorded in the candidate evidence.
+- [x] The remediated extended harness passed 36/36 against independently built baseline/upstream controls and the clean final implementation candidate; exact CLI arguments, identities and hashes are recorded in the candidate evidence.
 - [x] Rust fix/format is not applicable because no Rust path changed.
 - [x] TUI applicability is automated-oracle-only; a supporting real-candidate TMUX `/status`/clean-exit smoke passed, while PF-26-S02 still owns both live repositories with actual keys.
 - [ ] Complete the mandatory read-only Corbanu Terminal + Claude Opus 5 Plan/max independent review and record its transcript hash.
@@ -64,11 +64,10 @@ updated: 2026-08-30
 ## Exit evidence
 
 - [x] Recorded implementation commit, changed paths, contract version and exact clean-tree commands/results under `qa/security-levels/sprints/PF-21-S02/`.
-- [ ] Preserve the S01 archive/evidence unchanged and record the remediated three-source plus protected-boundary 36-test report separately from historical qualification.
+- [x] Preserved the S01 archive/evidence unchanged and recorded the remediated three-source plus protected-boundary 36-test report separately from historical qualification.
 - [ ] Integration owner merges after PF-19/PF-20, reruns combined-tree checks, updates shared plan/navigation and archives PF-21-S02.
 
 ## Remaining
 
 - [ ] Close the independent-review Verification item above.
-- [ ] Close the remediated 36-test report Verification and Exit evidence items above.
 - [ ] Close the integration-owner Exit evidence item above.
