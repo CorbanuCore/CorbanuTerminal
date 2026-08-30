@@ -6,12 +6,12 @@ plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 13
 owner: "Jim Ricketts"
-parallel_lane: "credential-component-qualification"
+parallel_lane: "foundation-platform"
 integration_gate: "PF-13-S07 consumes the frozen component evidence after remaining repairs; Jim Ricketts owns integration."
-write_scope: "scripts/security-credential-canary, scripts/security_credential_canary.py, scripts/test_security_credential_canary.py, codex-rs/vault/src, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/providers.rs, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/cli/tests/vault.rs, codex-rs/tui/src/lib.rs, codex-rs/tui/src/tui.rs, codex-rs/tui/src/credential_panic_tests.rs, codex-rs/core/src/security/credential_capability_tests.rs, qa/security-levels/sprints/PF-13-S05"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-pf13-s02"
-branch: "feat/pf-13-s02-scoped-vault-resolver"
-base_commit: "1bdc515bff48a4d9048dae7d06c6214e884265bc"
+write_scope: "scripts/security-credential-canary, scripts/security_credential_canary.py, scripts/test_security_credential_canary.py, codex-rs/vault/src, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/providers.rs, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/cli/tests/vault.rs, codex-rs/tui/src/lib.rs, codex-rs/tui/src/tui.rs, codex-rs/tui/src/credential_panic_tests.rs, codex-rs/core/src/security/credential_capability_tests.rs, codex-rs/core/src/agent/control.rs, codex-rs/core/src/agent/control/spawn.rs, codex-rs/core/src/agent/control_tests.rs, codex-rs/core/src/security/effective_policy.rs, codex-rs/core/src/security/effective_policy_tests.rs, codex-rs/core/src/session/handlers.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/session/tests.rs, codex-rs/core/src/shell_snapshot.rs, codex-rs/core/src/shell_snapshot_tests.rs, codex-rs/core/src/tools/handlers/multi_agents.rs, codex-rs/core/src/tools/handlers/multi_agents_tests.rs, codex-rs/core/src/tools/handlers/multi_agents_v2.rs, codex-rs/core/src/tools/spec_plan.rs, codex-rs/core/src/tools/spec_plan_tests.rs, codex-rs/core/src/client.rs, codex-rs/core/tests/suite/auto_review.rs, codex-rs/core/tests/suite/client.rs, codex-rs/core/tests/suite/code_mode_elicitation.rs, codex-rs/core/tests/suite/compact.rs, codex-rs/core/tests/suite/multi_agent_resume.rs, codex-rs/core/tests/suite/tool_parallelism.rs, codex-rs/protocol/src/models.rs, qa/security-levels/sprints/PF-13-S05"
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform"
+branch: "feat/p0-security-foundation-platform"
+base_commit: "6a35712cd5731b191d875e8c6468f1abe23eb66e"
 depends_on: "PF-13-S04"
 created: 2026-08-24
 updated: 2026-08-28
@@ -67,10 +67,12 @@ updated: 2026-08-28
 - [x] Re-ran complete Core with companion executables: 3,388/3,407 passed, 19 failed; all 13 credential tests passed. Preserved full JUnit and classified every remaining failure without weakening tests.
 - [x] Rechecked corrected Windows endpoint `100.111.98.11`: reachable and supplied host fingerprint verified; login rejected. Recorded the authentication blocker in `qa/security-levels/sprints/PF-13-S05/windows-access-2026-08-28.md` without claiming test execution.
 - [x] Recorded the later agent-reported SSH/fingerprint success at `100.111.98.12` and independently verified publication through `a9ebfcc2f`, including required candidate `f6ec1c75f`. No Windows test result is inferred.
+- [x] Transferred the sprint explicitly to the CorbanuDrive foundation worktree at `6a35712cd5731b191d875e8c6468f1abe23eb66e`; prior evidence remains historical and is not relabeled.
+- [x] Re-ran complete Core on the transferred integrated tree with Rust 1.95 and all four companion executables: 3,393/3,411 passed, 18 failed and 19 skipped. All credential tests passed and the earlier prompt-cache failure passed; the new JUnit is preserved as repair input, not a clean qualification result.
 
 ## Remaining
 
-- [ ] Scope the remaining Core lifecycle/tool/shell/serialization repairs, then obtain a clean complete rerun. Nineteen failures remain; the additional prompt-cache failure passes in isolation but is not removed from the full-run result.
+- [ ] Repair and retest the 18 explicitly scoped Core lifecycle, effective-policy inheritance, MCP invalidation, portable shell snapshot, collaboration message, tool-spec, auto-review, skill-budget, compaction-serialization, code-mode elicitation and timing failures; then obtain a clean complete rerun.
 - [ ] On the remote agent's working Windows route, fetch the published candidate, prepare Rust 1.95/Python and required test tools, then run the final canary including the directory-junction posture test. Final source/artifact identity must be recorded; historical results are not relabeled as qualification of the repaired candidate.
 
 Mac failure triage and qualification repairs may run concurrently within this

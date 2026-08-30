@@ -26,6 +26,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-browser-retrieval"
     branch: "feat/p0-security-browser-retrieval"
     base_commit: "ea23dfa38bc4f2cbfe0aceadd6777c3e436a53d4"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-foundation-platform"
+    branch: "feat/p0-security-foundation-platform"
+    base_commit: "6a35712cd5731b191d875e8c6468f1abe23eb66e"
 ---
 
 # P0 `/security` levels
@@ -132,6 +135,14 @@ draft becomes `ready`, this plan and its sprint record must name the exact owner
 CorbanuDrive worktree and branch, 40-character post-handoff `main` base, parallel
 lane, literal disjoint `write_scope` and `integration_gate`, and both governance
 checkers must pass.
+
+PF-13-S05 transferred from its historical Travis worktree to the
+`foundation-platform` worktree at `6a35712cd5731b191d875e8c6468f1abe23eb66e`
+on 2026-08-29. Historical candidate, executable and platform evidence remains
+bound to the commits and paths recorded in that evidence; the transfer does not
+relabel it. The transferred sprint owns only the explicitly amended Core repair
+files and final qualification artifacts recorded in its sprint record. Jim
+Ricketts remains the integration owner.
 
 Until midpoint sprint estimates exist, reserve **35% of total delivery capacity**
 for integration, rebases, reviewer-finding remediation, reruns and evidence.
