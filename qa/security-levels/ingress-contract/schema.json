@@ -13,7 +13,15 @@
     "fixture_verdict_identity": {
       "type": "object",
       "required": ["model_id", "model_version", "artifact_sha256", "threshold_id", "threshold_version", "threshold_sha256"],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "properties": {
+        "model_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+        "model_version": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+        "artifact_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "threshold_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+        "threshold_version": {"type": "integer", "minimum": 1},
+        "threshold_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
     },
     "fixtures": {
       "type": "array",
@@ -39,9 +47,41 @@
         "additionalProperties": false,
         "properties": {
           "id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
-          "source_binding": {"type": "object"},
-          "transformation": {"type": "object"},
-          "segmentation": {"type": "object"},
+          "source_binding": {
+            "type": "object",
+            "required": ["schema_version", "opaque_id"],
+            "additionalProperties": false,
+            "properties": {
+              "schema_version": {"const": 1},
+              "opaque_id": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+            }
+          },
+          "transformation": {
+            "type": "object",
+            "required": ["pipeline_id", "pipeline_version", "raw_sha256", "rendered_sha256", "sanitized_sha256"],
+            "additionalProperties": false,
+            "properties": {
+              "pipeline_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
+              "pipeline_version": {"type": "integer", "minimum": 1},
+              "raw_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "rendered_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+              "sanitized_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+            }
+          },
+          "segmentation": {
+            "type": "object",
+            "required": ["count", "boundaries", "reassembly_sha256"],
+            "additionalProperties": false,
+            "properties": {
+              "count": {"type": "integer", "minimum": 1},
+              "boundaries": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {"type": "integer", "minimum": 1}
+              },
+              "reassembly_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+            }
+          },
           "expected_verdict": {"enum": ["allow", "suspicious", "hostile", "unavailable"]}
         }
       }
