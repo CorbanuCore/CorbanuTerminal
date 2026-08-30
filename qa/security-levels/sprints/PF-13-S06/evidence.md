@@ -75,6 +75,10 @@ Final post-correction test transcript:
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/credential-reservations/fixes-tests-clean.txt`
 (`sha256:3b1b4db5794a03f25bd6912b261300b6e14e3305ed3bff70b57c573c092ab23b`).
 
+Final governance transcript:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/credential-reservations/governance-final.txt`
+(`sha256:2a7ed587a4bf662ff92176bd3b1ff0bbc4e531d473f8422636a63b5690a30c86`).
+
 ## TMUX smoke and independent review
 
 Exact correction-candidate smoke session `pf13-credential-fix-smoke` ran the
@@ -95,8 +99,15 @@ Initial transcript:
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/credential-reservations/review/initial-review-transcript.txt`
 (`sha256:f17c87a1dcf66af0576282a11d9f172de8b8d57fa8313a6b2f50ccc49a888b73`).
 
-The clean follow-up review session and transcript hash are appended in the
-evidence-only commit after reviewing this exact correction candidate.
+Clean follow-up review session `pf13-credential-opus5-final-review` reviewed
+exact candidate `fbfe35c53363422166fdd290e04a67d2fb7de4fc` using Corbanu Terminal
+with `claude-opus-5-plan`, provider `claude-plan`, reasoning effort `max`,
+read-only sandbox, and no approvals. It independently rechecked the corrected
+lifecycle, authorization, integrity, race/atomicity, arithmetic, resource-bound,
+serde-compatibility, bearer-exposure, and test surfaces and concluded exactly:
+`No actionable findings.` Transcript:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/credential-reservations/review/final-review-transcript.txt`
+(`sha256:494a3a15c75cc3499295aca6c560f38809219c3b97d0e99701d7f7018ad373fb`).
 
 ## Integration-owner handoff
 
