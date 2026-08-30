@@ -1029,6 +1029,11 @@ fn revocation_targeted_event_fences_victim_without_revoking_sibling() {
         Err(RevocationError::AuthorityRevoked)
     ));
     assert!(matches!(
+        refresh_grant(&mut victim_fence, &victim_run, &victim, &revocations,),
+        Err(RevocationError::InvalidDispatchTransition)
+    ));
+    assert_eq!(victim_fence.phase(), DispatchPhase::Fenced);
+    assert!(matches!(
         authorize_grant(
             &mut sibling_fence,
             &sibling_run,
@@ -1114,6 +1119,19 @@ fn revocation_audit_unavailable_does_not_delay_emergency_restriction() {
         .unwrap();
     assert!(!repeated.event_was_effective);
     assert_eq!(repeated.generation, 1);
+
+    let deactivate = RevocationEvent::new(
+        human(),
+        RevocationTarget::KillSwitch { active: false },
+        RevocationReason::HumanRequest,
+        151,
+    )
+    .unwrap();
+    assert!(matches!(
+        revocations.apply_restriction(&deactivate, || panic!("audit must not run")),
+        Err(RevocationError::NotARestriction)
+    ));
+    assert!(revocations.kill_switch_active);
 }
 
 #[test]

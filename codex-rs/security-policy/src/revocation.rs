@@ -569,7 +569,9 @@ impl DispatchFence {
         revocations.validate()?;
         if matches!(
             self.phase,
-            DispatchPhase::Completed | DispatchPhase::UnknownFinancialOutcome
+            DispatchPhase::Fenced
+                | DispatchPhase::Completed
+                | DispatchPhase::UnknownFinancialOutcome
         ) {
             return Err(RevocationError::InvalidDispatchTransition);
         }
@@ -627,7 +629,9 @@ impl DispatchFence {
         revocations.validate()?;
         if matches!(
             self.phase,
-            DispatchPhase::Completed | DispatchPhase::UnknownFinancialOutcome
+            DispatchPhase::Fenced
+                | DispatchPhase::Completed
+                | DispatchPhase::UnknownFinancialOutcome
         ) {
             return Err(RevocationError::InvalidDispatchTransition);
         }
@@ -641,9 +645,6 @@ impl DispatchFence {
                 self.phase = DispatchPhase::Fenced;
                 return Err(RevocationError::AuthorityOutsideValidityWindow);
             }
-        }
-        if self.phase == DispatchPhase::Fenced {
-            return Err(RevocationError::InvalidDispatchTransition);
         }
         if revocations.generation < self.generation {
             return Err(RevocationError::StaleDispatchGeneration {

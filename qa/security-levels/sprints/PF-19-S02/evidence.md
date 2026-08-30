@@ -57,10 +57,10 @@ All caches, targets, temporary files, logs, and captures were placed below
 
 | Check | Result | CorbanuDrive artifact SHA-256 |
 | --- | --- | --- |
-| `cd codex-rs && just fix -p codex-security-policy` | PASS; Clippy completed without warnings | `e27a1892e29e52cf7541a2f7b56105e55dc4f53891dc9515a7edc0cb116d810d` |
+| `cd codex-rs && just fix -p codex-security-policy` | PASS; Clippy completed without warnings | `7a115ffa21f3b96a632c426cf551ceaccf19adbd09b5135313c6625a9b210b0d` |
 | `cd codex-rs && just fmt` | PASS; no output and no diff | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
-| `cd codex-rs && just test -p codex-security-policy revocation` | PASS; 10 passed, 36 filtered | `3a8b4389140bae300f203767549dd4caaeea3bffc352948fea320cb17f72d47f` |
-| `cd codex-rs && just test -p codex-security-policy` | PASS; 46 passed, 0 skipped | `ad0eb6a39d588c0cba244649e10ff583138e1e62b3a49818932ab6e92ef9d81e` |
+| `cd codex-rs && just test -p codex-security-policy revocation` | PASS; 10 passed, 36 filtered | `a8d9b267df6b16b97d50274a6a99223b721fc27783ffdfd853151e5e8a279a01` |
+| `cd codex-rs && just test -p codex-security-policy` | PASS; 46 passed, 0 skipped | `f10a4f84f7de8015c16628ae3b77f1242995485b66d6324d97f4e24ccb8cb663` |
 | `python3 docs/plans/check.py` | PASS; active 1/2, one slot available | `9386e473c028f912d1685f25a88db8d21e57b8a9ad0929b07fcca3262ecbc8fb` |
 | `python3 docs/sprints/check.py` | PASS; 64 current, 91 archived | `a7521385d2c53b4ba1b577fafc1b21953ef1325d024289d2af909facd941b370` |
 | `git diff --check` | PASS; no output | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
@@ -69,7 +69,7 @@ The same focused command ran in the real PTY session
 `pf19-revocation-final` with command text and Enter sent separately: 10/10 passed.
 Capture:
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-revocation-fence/tmux-artifacts/final-focused-tests-pane.txt`,
-SHA-256 `6b44ccd6fe01d11eae193102ba60f8bf824af10e9bf7cf596582a15087f790f5`.
+SHA-256 `a7b95ab98c494bb928a365c074eaca01128732e150ec09c0fb616f8127d2043f`.
 
 ## Consumer and integration handoff
 
