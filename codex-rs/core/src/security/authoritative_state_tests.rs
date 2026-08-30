@@ -153,6 +153,7 @@ fn set_private_directory(path: &std::path::Path) {
 #[cfg(not(unix))]
 fn set_private_directory(_path: &std::path::Path) {}
 
+#[cfg(unix)]
 #[test]
 fn empty_protected_root_is_the_only_legacy_first_install() {
     let (_root, store) = store();
@@ -195,6 +196,17 @@ fn model_supplied_identity_cannot_replace_platform_authorization() {
     ));
 }
 
+#[cfg(not(unix))]
+#[test]
+fn protected_persistence_is_an_explicit_platform_blocker() {
+    let (_root, store) = store();
+    assert!(matches!(
+        store.load(),
+        Err(AuthoritativeStateStoreError::UnsupportedPlatform)
+    ));
+}
+
+#[cfg(unix)]
 #[test]
 fn compare_and_activate_rejects_stale_revision_and_wrong_owner() {
     let (_root, store) = store();
@@ -230,6 +242,7 @@ fn compare_and_activate_rejects_stale_revision_and_wrong_owner() {
     ));
 }
 
+#[cfg(unix)]
 #[test]
 fn unanchored_pending_state_is_discarded_only_by_the_authorized_owner() {
     let (root, store) = store();
@@ -283,6 +296,7 @@ fn unanchored_pending_state_is_discarded_only_by_the_authorized_owner() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn missing_commit_resumes_without_activating_the_pending_state() {
     let (root, store) = store();
@@ -323,6 +337,7 @@ fn missing_commit_resumes_without_activating_the_pending_state() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn overwrite_delete_and_rename_do_not_fall_back_to_permissive() {
     let (root, store) = store();
@@ -352,6 +367,7 @@ fn overwrite_delete_and_rename_do_not_fall_back_to_permissive() {
     ));
 }
 
+#[cfg(unix)]
 #[test]
 fn deleting_all_records_does_not_recreate_a_legacy_first_install() {
     let (root, store) = store();
@@ -379,6 +395,7 @@ fn deleting_all_records_does_not_recreate_a_legacy_first_install() {
     ));
 }
 
+#[cfg(unix)]
 #[test]
 fn suffix_truncation_is_rejected_against_the_external_high_water_mark() {
     let (root, store) = store();
@@ -414,6 +431,7 @@ fn suffix_truncation_is_rejected_against_the_external_high_water_mark() {
     ));
 }
 
+#[cfg(unix)]
 #[test]
 fn clearing_kill_switch_requires_a_new_generation() {
     let (_root, store) = store();
@@ -481,6 +499,7 @@ fn symlink_and_permission_weakening_fail_closed() {
     ));
 }
 
+#[cfg(unix)]
 #[test]
 fn owner_rotation_blocks_stale_owner_recovery() {
     let (_root, store) = store();
@@ -515,6 +534,7 @@ fn owner_rotation_blocks_stale_owner_recovery() {
     ));
 }
 
+#[cfg(unix)]
 #[test]
 fn recovery_is_forward_only_and_preserves_restrictions() {
     let (_root, store) = store();
