@@ -84,6 +84,13 @@ pub use revocation::RevocationEvent;
 pub use revocation::RevocationReason;
 pub use revocation::RevocationState;
 pub use revocation::RevocationTarget;
+pub use revocation::DISPATCH_FENCE_SCHEMA_VERSION;
+pub use revocation::DispatchAuthorityKind;
+pub use revocation::DispatchFence;
+pub use revocation::DispatchPhase;
+pub use revocation::ProtectedDispatchStep;
+pub use revocation::RestrictionApplication;
+pub use revocation::RestrictionAuditStatus;
 
 #[cfg(test)]
 #[path = "provenance_tests.rs"]
