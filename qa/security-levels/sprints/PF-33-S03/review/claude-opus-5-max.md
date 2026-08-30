@@ -24,4 +24,10 @@ After these changes, the required sequence passed with 239/239 tests and zero sk
 
 ## Follow-up review
 
-Pending review of the corrected candidate and the disposition above in the same chat.
+- Corrected candidate: `e965c522f2eff367586aa03c70426c2cd0a26282`.
+- Corrected inline-only review material SHA-256: `4d04f8973d76baf2daff14c6fe7bada4f78c8fa72dc61aa5e547f7c28d66a7e3`.
+- Review remained in chat `89ed3157-0d5a-4178-9cfb-2510ce01d212` with Opus 5 Max shown by the desktop UI.
+- Verdict: `PASS` with no remaining in-scope defects.
+- Immutable UI evidence: `claude-opus-5-max-followup-verdict.png` (SHA-256 `575b10a1fe8c0e05d9776b44665285afc5d4af1a8be32aea3a90370e41807173`).
+
+The follow-up explicitly withdrew F1, F2 and F4, and the incorrect `localhost` portion of F3. It verified the accepted F3/F5/F6/F7 fixes, executable fixture, corrected evidence wording and deferred obligations, then returned `PASS`.

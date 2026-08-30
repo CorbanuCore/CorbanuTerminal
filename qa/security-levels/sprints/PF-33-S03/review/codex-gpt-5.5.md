@@ -20,4 +20,6 @@ The first amended full-commit candidate `a15750eb40dd2c314614283a955e14acfa0c72f
 
 The second amended full-commit candidate `90ffa6596c1d0c487f4b47c5a39930346db615a6` was reviewed in thread `01a05182-1fb4-7932-b366-6c3387eb95a5`. It found one P2: multiple trailing root dots were all trimmed, aliasing `example.com..` to `example.com`. Accepted: normalization now removes at most one root dot and then validates DNS name and label lengths/characters. Related empty/embedded port ambiguity is rejected before later consumers can reinterpret the authority.
 
-Pending a clean full-commit rerun after the third amended candidate is frozen.
+The third amended candidate `7fb11e9c12f94ba6a90209317bcc61a2a4451364` was reviewed in thread `01a05186-8089-7da2-85ca-601c3acda186`. Verdict: patch correct, no findings, confidence 0.86.
+
+The final full source candidate `e965c522f2eff367586aa03c70426c2cd0a26282` was reviewed in thread `01a05192-7d97-7600-84d5-37444a079559` after the Opus-driven hardening. Verdict: patch correct, no findings, confidence 0.86. The reviewer confirmed the contract remains isolated from runtime registration and fails closed across the covered private-address, private-name, mixed-answer, literal-mismatch and redirect-replay cases.

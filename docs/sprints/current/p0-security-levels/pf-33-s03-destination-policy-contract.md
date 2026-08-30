@@ -52,18 +52,18 @@ updated: 2026-08-30
 
 ## Remaining
 
-- [ ] Complete common Claude Opus 5.0 Max Computer Use review and Codex GPT-5.5 Autoreview; resolve accepted findings in scope and retain immutable evidence.
+- [x] Completed Claude Opus 5 Max Computer Use review (`PASS`) and Codex GPT-5.5 Autoreview (clean, 0.86 confidence); resolved accepted findings in scope and retained immutable evidence.
 - [ ] Integration owner audits the literal scope, reruns the ordered Rust and governance gates on the combined tree, archives the sprint, updates plan/navigation and returns the active lane slot.
 
 ## Verification
 
 - [x] Ran `just fix -p codex-network-proxy`, `just fmt`, then `just test -p codex-network-proxy`: pre-final-review 239 passed, zero skipped across three binaries; sixteen destination-contract tests.
 - [x] Ran standalone deterministic table/property tests with synthetic address sets; proved empty/absent/wildcard/private polarity and bounded normalization.
-- [ ] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
+- [x] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
 - [x] Verified the source has no socket/client call and remains absent from runtime/module/manifests; fixture-only preparation exposes no route or profile.
 
 ## Exit evidence
 
-- [ ] Commit, contract/fixture hashes, owner review and final-tree outputs under `qa/security-levels/sprints/PF-33-S03/`.
+- [x] Reviewed source commit, source/test/fixture hashes, owner review and final isolated outputs recorded under `qa/security-levels/sprints/PF-33-S03/`.
 - [x] No SSRF-prevention claim; PF-33-S01/S02 retain real resolver, connected-peer, pool/proxy and alternate-egress qualification.
 - [ ] Record integration handoff and scope audit; complete all ledgers before archive and update plan/navigation.
