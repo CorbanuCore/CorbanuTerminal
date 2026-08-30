@@ -5553,6 +5553,100 @@ async fn multi_agent_v2_interrupt_agent_accepts_task_name_target() {
 }
 
 #[tokio::test]
+async fn multi_agent_v2_interrupt_shutdown_agent_is_idempotent_and_preserves_identity() {
+    let (mut session, mut turn) = make_session_and_context().await;
+    let manager = thread_manager();
+    let root = manager
+        .start_thread(StartThreadOptions::new((*turn.config).clone()))
+        .await
+        .expect("root thread should start");
+    session.services.agent_control = manager.agent_control();
+    session.thread_id = root.thread_id;
+    let mut config = (*turn.config).clone();
+    config
+        .features
+        .enable(Feature::MultiAgentV2)
+        .expect("test config should allow feature update");
+    set_turn_config(&mut turn, config);
+
+    let session = Arc::new(session);
+    let turn = Arc::new(turn);
+    SpawnAgentHandlerV2::default()
+        .handle(invocation(
+            session.clone(),
+            turn.clone(),
+            "spawn_agent",
+            function_payload(json!({
+                "message": "inspect this repo",
+                "task_name": "worker"
+            })),
+        ))
+        .await
+        .expect("spawn_agent should succeed");
+    let agent_id = session
+        .services
+        .agent_control
+        .resolve_agent_reference(session.thread_id, &turn.session_source, "worker")
+        .await
+        .expect("worker path should resolve");
+    let worker = manager
+        .get_thread(agent_id)
+        .await
+        .expect("worker should be resident");
+    worker
+        .submit(Op::Shutdown {})
+        .await
+        .expect("worker shutdown should submit");
+    worker.wait_until_terminated().await;
+    assert_eq!(
+        session.services.agent_control.get_status(agent_id).await,
+        AgentStatus::Shutdown
+    );
+    let audit_count = manager
+        .captured_ops()
+        .iter()
+        .filter(|(thread_id, op)| {
+            *thread_id == agent_id && matches!(op, Op::InterAgentCommunication { .. })
+        })
+        .count();
+
+    for _ in 0..2 {
+        let output = InterruptAgentHandler
+            .handle(invocation(
+                session.clone(),
+                turn.clone(),
+                "interrupt_agent",
+                function_payload(json!({"target": "worker", "reason": "review correction"})),
+            ))
+            .await
+            .expect("interrupting a shutdown agent should be idempotent");
+        let (content, success) = expect_text_output(output);
+        let result: InterruptAgentResult =
+            serde_json::from_str(&content).expect("interrupt_agent result should be json");
+        assert_eq!(result.previous_status, AgentStatus::Shutdown);
+        assert_eq!(success, Some(true));
+    }
+
+    assert_eq!(
+        manager
+            .captured_ops()
+            .iter()
+            .filter(|(thread_id, op)| {
+                *thread_id == agent_id && matches!(op, Op::InterAgentCommunication { .. })
+            })
+            .count(),
+        audit_count
+    );
+    assert!(
+        session
+            .services
+            .agent_control
+            .get_agent_metadata(agent_id)
+            .is_some()
+    );
+}
+
+#[tokio::test]
 async fn multi_agent_v2_interrupt_agent_accepts_canonical_child_path() {
     let (mut session, mut turn) = make_session_and_context().await;
     let manager = thread_manager();

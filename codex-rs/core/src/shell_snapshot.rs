@@ -405,10 +405,11 @@ echo "# aliases $alias_count"
 alias -p
 echo ''
 export_lines=$(
+  # Keep credential-name filtering on Bash builtins. This runs after .bashrc,
+  # where external commands such as `tr` may be shadowed or unavailable.
+  shopt -s nocasematch
   while IFS= read -r name; do
-    # macOS still ships Bash 3.2, which does not support `${name^^}`.
-    upper_name=$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')
-    if [[ "$upper_name" =~ ^(EXCLUDED_EXPORTS)$ ]]; then
+    if [[ "$name" =~ ^(EXCLUDED_EXPORTS)$ ]]; then
       continue
     fi
     if [[ ! "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then

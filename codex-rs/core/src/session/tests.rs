@@ -7394,14 +7394,24 @@ async fn user_turn_updates_approvals_reviewer() {
     )
     .await;
 
+    session.refresh_mcp_if_dirty().await;
+    let runtime_binding = session
+        .services
+        .mcp_runtime
+        .current_binding()
+        .await
+        .expect("the user-turn path should publish an MCP runtime binding");
+
     let state = session.state.lock().await;
     assert_eq!(
-        state.session_configuration.approvals_reviewer,
-        codex_config::types::ApprovalsReviewer::AutoReview
-    );
-    assert!(
-        !session.mcp_refresh.is_pending(),
-        "the user-turn path must publish the refreshed MCP state before execution"
+        (
+            state.session_configuration.approvals_reviewer,
+            runtime_binding.config().approvals_reviewer,
+        ),
+        (
+            codex_config::types::ApprovalsReviewer::AutoReview,
+            codex_config::types::ApprovalsReviewer::AutoReview,
+        )
     );
 }
 
