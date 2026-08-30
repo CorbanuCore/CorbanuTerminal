@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-20-S02"
 title: "Protected authoritative-state persistence"
-status: ready
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-20"
 execution_order: 24
@@ -42,28 +42,31 @@ updated: 2026-08-30
 
 - [x] Plan active; all dependencies completed and archived.
 - [x] Assign a named execution owner and exact plan-matching worktree/branch/base; reserve disjoint scopes and integration gate if parallel.
-- [ ] Read root and nearest implementation AGENTS.md; run the sprint checker before readiness.
+- [x] Read root and nearest implementation AGENTS.md; run the sprint checker before readiness.
 
 ## Done
 
 - [x] Follow-up separated from the accepted upstream foundation; no new implementation or qualification claimed.
+- [x] Implement controller-owned level, authority generations, kill state, recovery state, and owner epochs outside agent-editable preferences.
+- [x] Bind append-only state, intent, and commit records to a protected external anchor with monotonic compare-and-store semantics.
+- [x] Reject rollback, deletion, truncation, symlink replacement, metadata weakening, stale-owner recovery, and forged pending records without weakening active restrictions.
+- [x] Keep non-Unix persistence and every PF-27-ineligible host visibly unavailable.
 
 ## Remaining
 
-- [ ] Implement controller-owned level, grant, revocation/kill generation and recovery state separate from agent-editable preferences. Authenticate mutation callers using the PF-27-S03 contract; do not trust a model-supplied role or ordinary config file as authority.
-- [ ] Reject overwrite, deletion, rename, symlink/replacement, permission changes, old snapshots and rollback by the untrusted context, including restart/resume. Distinguish a genuinely new legacy installation from missing state after protected activation; the latter cannot become Permissive.
-- [ ] Implement compare-and-activate revision checks and ownership-scoped rollback so stale recovery cannot overwrite a later credential/provenance owner. Test crash boundaries and durable recovery, not just in-memory snapshots.
-- [ ] Preserve PF-20-S01 legacy/config/schema behavior and the frozen Permissive oracle; document platform-specific unsupported cases as activation blockers. Hand any required Cargo/Bazel/schema synchronization to the integration owner; those shared surfaces are outside this lane.
+- [ ] Integration owner merges after PF-19, reruns combined-tree gates, archives the sprint, and preserves the explicit activation blocker.
 
 ## Verification
 
-- [ ] `cd codex-rs && just fix -p codex-config && just fix -p codex-core && just fmt` before final affected tests.
-- [ ] `cd codex-rs && just test -p codex-config && just test -p codex-core config:: && just test -p codex-core security::`; generate schema with `just write-config-schema` in `codex-rs` if affected.
-- [ ] Run PF-27-S03 tamper probes against this store on every supported OS; record actual identity, crash/restart and expected/actual denial.
-- [ ] TUI applicability: none for storage API; PF-24 and PF-26 own human transition/recovery flows.
+- [x] `cd codex-rs && just fix -p codex-config && just fix -p codex-core && just fmt` before final affected tests.
+- [x] `cd codex-rs && just test -p codex-config && just test -p codex-core config:: && just test -p codex-core security::`; `just write-config-schema` produced no diff.
+- [x] Reconcile against current PF-27-S03 macOS, Linux, and Windows probes: all report the protected store unsupported and protected mode ineligible, so activation remains blocked; no unsupported persistence pass is claimed.
+- [x] TUI applicability: storage has no direct UI; an authenticated Corbanu/TMUX smoke passed, while PF-24 and PF-26 retain human transition/recovery proof.
+- [ ] Integration-owner combined-tree config/security and governance rerun.
 
 ## Exit evidence
 
-- [ ] Record implementation commit, changed paths, contract version and exact final-tree commands/results under `qa/security-levels/sprints/PF-20-S02/`.
-- [ ] Preserve S01 archive/evidence unchanged; do not relabel historical passes as proof of these new cases.
-- [ ] Record consumer integration handoff; complete all ledgers before archive and update plan/navigation.
+- [x] Record implementation commit, changed paths, contract version and exact final-tree commands/results under `qa/security-levels/sprints/PF-20-S02/`.
+- [x] Preserve S01 archive/evidence unchanged; do not relabel historical passes as proof of these new cases.
+- [x] Record consumer integration handoff; lane-owned ledgers are complete and plan/navigation/archive remain integration-owner-only.
+- [ ] Integration owner records the merged candidate and moves this record to the archive with plan/navigation updates.
