@@ -12,6 +12,7 @@ integration_gate: "The Codex ingress/classifier integration lane receives PF-35-
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-classifier-corpus"
 branch: "feat/p0-security-classifier-corpus"
 base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
+allocation_commit: "e0c23fe95165636d621dae8c16a5366c4f7250ac"
 depends_on: "PF-34-S04"
 created: 2026-08-28
 updated: 2026-08-30
@@ -42,34 +43,38 @@ updated: 2026-08-30
 
 ## Preconditions
 
-- [ ] All dependencies in front matter are completed and archived; plan remains active.
-- [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
-- [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
+- [x] All dependencies in front matter are completed and archived; plan remains active.
+- [x] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
+- [x] Confirm source pins and declared crate/module paths.
+- [x] Reconciled the plan-mandated immutable dispatch base (`9d08b15f…`) with the later coordination/allocation commit (`e0c23fe95…`) from which this worktree was created; both coordinates are explicit.
+- [ ] Obtain external RTX, private-custodian, signing and qualifying-N100 availability; unresolved security prerequisites block readiness.
 
 ## Done
 
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
+- [x] Added public, commercially usable source metadata with immutable hashes, attribution, customer/protected-data exclusion, synthetic-campaign metadata, and human-owned blind custody.
+- [x] Added grouped train/development/blind targets and mandatory unseen-source/language/topic/position/adaptive holdouts, with no corpus or blind records committed.
+- [x] Added exact-allowlist, bounded-manifest development and aggregate-only blind evaluators. Ground truth drives metrics; Wilson confidence bounds, a conservative hard-negative difference bound, sample floors, and the approximately 150k blind-total tolerance drive statistical gates; manifest, model, artifact, and threshold identities are bound.
+- [x] Pinned canonical group-tuple fingerprinting, emitted the development fingerprint in the manifest-bound report, deduplicated same-label sibling records for the group set, and rejected contradictory-label tuples.
+- [x] Bound each snapshotted regular-file predictions/aggregate/development-report input by evaluator ID/report-schema version, portable path, kind, byte count and SHA-256; blind evaluation derives the expected fingerprint from the prior report, while artifact/threshold declarations remain explicitly unverified.
+- [x] Kept N100 latency/RSS, model size, signed release identity, private custody, and a custodian-side train/development/blind group-tuple overlap audit fail closed as external requirements; unequal fingerprint declarations alone do not prove disjointness.
+- [x] Added evaluator regression coverage plus a meaningful PF-35 Rust regression proving altered model-artifact and threshold digests cannot authorize release.
 
 ## Remaining
 
-- [ ] Build against the completed PF-34-S04 segment/verdict contract and frozen fixtures, without waiting for live browser/sanitizer integration. Separate licensed acquisition and blind evaluator ownership from training; publish measured CPU feasibility before costly tuning.
-
-- [ ] Use upstream heuristic/wrapper adversarial cases only as labeled regression seeds, not a training/test leak or a validated detector. Add benign lookalikes and independently held-out attacks; record no upstream classifier-quality evidence was established here.
-
-- [ ] Consume PF-34-S04 versioned allow/suspicious/hostile/unavailable results with model/version/threshold IDs and safe diagnostics; the evaluator cannot redefine trust or authorize actions.
-- [ ] Inventory licensed source data, allowed use, hashes and synthetic finance/repository/web/tool/child attacks; exclude customer secrets and identifying financial records.
-- [ ] Group splits by original source, template, attack family and semantic near-duplicates; retain independent unseen-source/language/topic/position/adaptive holdouts.
-- [ ] Include benign security research, legitimate human trading instructions and trigger-token hard negatives; freeze evaluator-owned blind data before training.
-- [ ] Implement metrics with sample counts/confidence intervals, family recall, FPR, CPU latency/RSS and artifact identity; pin the weakest supported CPU before qualification.
-- [ ] Add named `pf_35_s01` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
+- [ ] Acquire, license-review, group and freeze the approximately 250k/25k/150k train/development/blind records on the external RTX/custodian lanes; no such run or private corpus is claimed here.
+- [ ] Obtain the custodian's aggregate blind report and signed train/development/blind group-tuple overlap audit without disclosing record-level blind output; unequal fingerprints alone are declarations and do not prove disjointness.
+- [ ] Measure the signed production artifact on the qualifying Intel N100/16 GiB/x86-64 Linux floor at 2,048 tokens; prove model ≤300 MiB, p95 ≤50 ms and peak RSS ≤512 MiB.
+- [ ] Wire `scripts/test_security_classifier_eval.py` into recurring CI during integration; `.github/` is outside this sprint's literal write scope.
 
 ## Verification
 
-- [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
-- [ ] Focused: `cd codex-rs && just test -p codex-content-security pf_35_s01`; confirm tests actually ran.
-- [ ] Integration: full affected crate suites via `just test -p <affected-crate>`; update Bazel locks when manifests change.
-- [ ] TUI applicability: none; integration flows are re-run by PF-26-S02
-- [ ] Record candidate/commit, commands, expected/actual outcomes and safe artifact digests; no production credentials or funds.
+- [x] Run `cd codex-rs && just fix -p codex-content-security`, then `just fmt`; inspect the final diff.
+- [x] Focused: `cd codex-rs && just test -p codex-content-security pf_35_s01`; one named test ran and passed.
+- [x] Integration: `cd codex-rs && just test -p codex-content-security`; 22/22 tests passed. No Cargo/Bazel/lock change was required.
+- [x] Supporting TUI smoke: exact candidate Corbanu binary launched in a private TMUX server with trace logging; `/status` and clean `/exit` were verified using separate text/Enter sends.
+- [x] Record commands, outcomes and safe artifact digests under `qa/security-levels/sprints/PF-35-S01/`; no production credentials, blind data, weights or funds.
+- [ ] Run final external corpus, custodian, signed-artifact and qualifying-N100 evidence gates; the current preparation candidate cannot prove them.
 
 ## Exit evidence
 

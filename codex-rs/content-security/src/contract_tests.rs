@@ -815,3 +815,53 @@ fn pf_34_s04_fixture_schema_and_content_hashes_are_frozen() {
         "35ee161076c896f0767b96409664ce12741ce8d3aff1ec043280e7f21a113fc1"
     );
 }
+
+#[test]
+fn pf_35_s01_model_artifact_and_threshold_mismatches_fail_closed() {
+    let target = target_for(BENIGN_SANITIZED, /*count*/ 1);
+    let mismatched_identities = [
+        VerdictIdentity::new(
+            ModelIdentity::new(
+                id("fixture-detector"),
+                id("1.0.0"),
+                ContentDigest::of(b"different-model-artifact"),
+            )
+            .unwrap(),
+            threshold(),
+        ),
+        VerdictIdentity::new(
+            model(),
+            ThresholdIdentity::new(
+                id("moderate"),
+                /*profile_version*/ 1,
+                ContentDigest::of(b"different-threshold-config"),
+            )
+            .unwrap(),
+        ),
+    ];
+
+    for mismatched_identity in mismatched_identities {
+        let mut session = session(target.clone(), budget()).unwrap();
+        session
+            .ingest(
+                SegmentEnvelope::new(&target, /*index*/ 0, BENIGN_SANITIZED.to_vec()),
+                /*elapsed_ms*/ 1,
+            )
+            .unwrap();
+        let mismatched = ClassifierVerdict::new(
+            target.clone(),
+            VerdictKind::Allow,
+            mismatched_identity,
+            /*issued_at_ms*/ 10,
+        );
+
+        assert_eq!(
+            unavailable_reason(session.finish(
+                Some(mismatched),
+                /*now_ms*/ 20,
+                /*elapsed_ms*/ 2,
+            )),
+            Some(UnavailableReason::VerdictIdentityMismatch)
+        );
+    }
+}
