@@ -133,6 +133,7 @@ async fn remote_model_override_uses_catalog_model_for_strict_auto_review() -> Re
         codex,
         cwd,
         config,
+        home: _home,
         thread_manager,
         ..
     } = builder.build(&server).await?;
@@ -216,6 +217,17 @@ async fn remote_model_override_uses_catalog_model_for_strict_auto_review() -> Re
         })
         .await?;
 
+    wait_for_event_with_timeout(
+        &codex,
+        |event| {
+            matches!(
+                event,
+                EventMsg::AgentMessage(message) if message.message == "done"
+            )
+        },
+        Duration::from_secs(15),
+    )
+    .await;
     wait_for_event_with_timeout(
         &codex,
         |event| matches!(event, EventMsg::TurnComplete(_)),

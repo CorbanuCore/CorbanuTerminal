@@ -848,7 +848,7 @@ async fn record_responses_sets_span_fields_for_response_events() {
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let test = test_codex()
         .with_model("gpt-5.4")
         .with_config(|config| {
             config.model_reasoning_effort = Some(ReasoningEffort::High);
@@ -860,6 +860,7 @@ async fn record_responses_sets_span_fields_for_response_events() {
         .build(&server)
         .await
         .unwrap();
+    let codex = test.codex.clone();
 
     codex
         .submit(Op::UserInput {
@@ -876,6 +877,10 @@ async fn record_responses_sets_span_fields_for_response_events() {
         .unwrap();
 
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
+    tokio::time::timeout(Duration::from_secs(10), codex.shutdown_and_wait())
+        .await
+        .expect("session shutdown timed out")
+        .expect("session shutdown failed");
 
     let logs = String::from_utf8(buffer.lock().unwrap().clone()).unwrap();
 
