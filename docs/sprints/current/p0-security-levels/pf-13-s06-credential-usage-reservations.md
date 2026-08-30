@@ -38,29 +38,31 @@ updated: 2026-08-30
 
 ## Preconditions
 
-- [ ] Plan active; all dependencies completed and archived.
-- [ ] Assign a named execution owner and exact plan-matching worktree/branch/base; reserve disjoint scopes and integration gate if parallel.
-- [ ] Read root and nearest implementation AGENTS.md; run the sprint checker before readiness.
+- [x] Plan active; all dependencies completed and archived.
+- [x] Assign a named execution owner and exact plan-matching worktree/branch/base; reserve disjoint scopes and integration gate if parallel.
+- [x] Read root and nearest implementation AGENTS.md; run the sprint checker before readiness.
 
 ## Done
 
 - [x] Follow-up separated from the accepted upstream foundation; no new implementation or qualification claimed.
+- [x] Bound request, token, byte, and spend limits plus exact model/resource/operation/destination identity to the existing `BoundedGrant` and opaque capability authority.
+- [x] Added atomic worst-case reservation and trusted settlement accounting for completion, partial response, cancellation, retry, expiry/revocation, and unknown outcomes.
+- [x] Preserved private unguessable capability ownership and added a non-serializable, redacted, zeroizing reservation bearer for the later authenticated broker boundary; no vault resolution or transport was activated.
+- [x] Added deterministic coverage for per-request/aggregate exhaustion, concurrent over-reservation, changed authority, forged/excess metering, partial and duplicate settlement, cancellation/retry charging, revocation/expiry, and fail-closed unknown outcomes.
 
 ## Remaining
 
-- [ ] Bind request count, token, byte and spend limits to the existing `BoundedGrant`, actor/session, operation, model/resource and destination identities; do not introduce a competing authorization type.
-- [ ] Reserve worst-case bounded usage before dispatch; reconcile only from trusted metering. Define cancellation, partial usage, retries, concurrency, expiry and unknown outcomes without replenishing spent authority or treating unknown usage as unlimited.
-- [ ] Preserve the private, unguessable capability token and digest-only public ID from PF-13-S01. Specify authenticated opaque IPC handoff for the later broker without model/public serialization or a raw-secret return path.
-- [ ] Test aggregate and per-request exhaustion, parallel over-reservation, changed operation/model/resource, forged metering, partial response, duplicate settlement, revoked reservations and unknown outcomes. No retry may double-spend or reset a budget.
+- [ ] Integration owner exports the usage schema constant on the shared policy surface, reruns the combined-lane gates, records downstream PF-13-S03/PF-27 consumer handoff, updates shared navigation/plan state, and archives this sprint without activating transport.
 
 ## Verification
 
-- [ ] `cd codex-rs && just fix -p codex-security-policy && just fix -p codex-core && just fmt` before final affected tests.
-- [ ] `cd codex-rs && just test -p codex-security-policy credential && just test -p codex-security-policy grant && just test -p codex-core credential_capability`.
-- [ ] TUI applicability: none for this accounting contract; PF-13-S03/PF-27 integrate transport and PF-26-S02 proves the visible flow.
+- [x] `cd codex-rs && just fix -p codex-security-policy && just fix -p codex-core && just fmt` before final affected tests.
+- [x] `cd codex-rs && just test -p codex-security-policy credential && just test -p codex-security-policy grant && just test -p codex-core credential_capability`.
+- [x] TUI applicability: none for this accounting contract; an exact-candidate Corbanu TMUX startup/input/response smoke was still captured, while PF-13-S03/PF-27 integrate transport and PF-26-S02 proves the visible flow.
+- [ ] Integration owner reruns combined-lane policy/Core/governance gates after the shared export and before archive.
 
 ## Exit evidence
 
-- [ ] Record implementation commit, changed paths, contract version and exact final-tree commands/results under `qa/security-levels/sprints/PF-13-S06/`.
-- [ ] Preserve S01 archive/evidence unchanged; do not relabel historical passes as proof of these new cases.
-- [ ] Record consumer integration handoff; complete all ledgers before archive and update plan/navigation.
+- [x] Record implementation commit, changed paths, contract version and exact final-tree commands/results under `qa/security-levels/sprints/PF-13-S06/`.
+- [x] Preserve S01 archive/evidence unchanged; do not relabel historical passes as proof of these new cases.
+- [ ] Integration owner records the consumer handoff and shared export, completes combined ledgers, and updates plan/navigation while archiving.

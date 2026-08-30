@@ -83,6 +83,92 @@ fn capability_request(
     .expect("valid capability request")
 }
 
+fn usage_limits(requests: u64, tokens: u64, bytes: u64, spend: u64) -> BTreeMap<BoundedText, u64> {
+    BTreeMap::from([
+        (text("requests"), requests),
+        (text("tokens"), tokens),
+        (text("bytes"), bytes),
+        (text("spend_microunits"), spend),
+    ])
+}
+
+fn metered_capability_request(
+    model: &str,
+    revocations: &RevocationState,
+) -> CredentialCapabilityRequest {
+    let destination = CredentialDestination::https("api.openai.com", 443).expect("destination");
+    let credential =
+        CredentialReference::new("provider.openai", "responses.create").expect("reference");
+    let aggregate = usage_limits(
+        /*requests*/ 2, /*tokens*/ 150, /*bytes*/ 1_500, /*spend*/ 150,
+    );
+    let per_request = usage_limits(
+        /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+    );
+    let authorization = AuthorizationRequest::new(
+        actors("agent:root"),
+        ProtectedResource::new(ResourceKind::VaultCredential, "provider.openai").expect("resource"),
+        PolicyAction::Use,
+        AuthorizationContext {
+            now_unix_seconds: 100,
+            session_id: text("session:security-test"),
+            task_id: text("task:responses"),
+            purpose: text("model-inference"),
+            operation: credential.scope.clone(),
+            destination: Some(destination.authority().expect("authority")),
+            quantity: Some(
+                QuantitativeLimit::new("credential.aggregate.requests", 2).expect("quantity"),
+            ),
+            grant_id: None,
+        },
+    )
+    .expect("authorization");
+    let mut grant_limits = BTreeMap::new();
+    for (scope, limits) in [("per_request", &per_request), ("aggregate", &aggregate)] {
+        for (dimension, limit) in limits {
+            grant_limits.insert(text(&format!("credential.{scope}.{dimension}")), *limit);
+        }
+    }
+    let grant = BoundedGrant::issue(
+        human(),
+        actors("agent:root"),
+        GrantScope::new(
+            authorization.resource.clone(),
+            [PolicyAction::Use],
+            GrantContext::new(
+                authorization.context.session_id.clone(),
+                authorization.context.task_id.clone(),
+                authorization.context.purpose.clone(),
+                authorization.context.operation.clone(),
+            )
+            .with_model(text(model)),
+            authorization.context.destination.clone(),
+            grant_limits,
+        )
+        .expect("grant scope"),
+        90,
+        200,
+        text("metered-credential-grant-nonce"),
+    )
+    .expect("grant");
+    CredentialCapabilityRequest::new_with_usage_limits(
+        authorization,
+        grant,
+        credential,
+        CredentialHttpMethod::Post,
+        destination,
+        "/v1/responses",
+        100,
+        180,
+        revocations,
+        None,
+        model,
+        per_request,
+        aggregate,
+    )
+    .expect("usage limits")
+}
+
 #[test]
 fn credential_request_is_a_complete_secret_free_authority_object() {
     let revocations = RevocationState::new();
@@ -110,6 +196,10 @@ fn credential_request_is_a_complete_secret_free_authority_object() {
             expires_at_unix_seconds: 180,
             revocation_generation: 0,
             triggering_receipt: None,
+            usage_schema_version: None,
+            model: None,
+            per_request_usage_limits: BTreeMap::new(),
+            aggregate_usage_limits: BTreeMap::new(),
         }
     );
     assert_eq!(
@@ -311,4 +401,78 @@ fn capability_id_is_a_digest_identifier_not_a_bearer_value() {
     ] {
         assert!(CapabilityId::from_sha256_hex(invalid).is_err());
     }
+}
+
+#[test]
+fn credential_usage_policy_is_grant_bound_and_digest_sensitive() {
+    let revocations = RevocationState::new();
+    let request = metered_capability_request("gpt-5.5", &revocations);
+    assert!(request.has_usage_limits());
+    assert_eq!(request.per_request_usage_limit("requests"), Some(1));
+    assert_eq!(request.aggregate_usage_limit("tokens"), Some(150));
+
+    let changed_model = metered_capability_request("claude-opus-5", &revocations);
+    assert_ne!(
+        request.digest().expect("request digest"),
+        changed_model.digest().expect("changed digest")
+    );
+
+    let mut forged_model = request.clone();
+    forged_model.model = Some(text("claude-opus-5"));
+    assert!(matches!(
+        forged_model.validate(),
+        Err(CredentialCapabilityError::GrantMismatch)
+    ));
+
+    let mut forged_limit = request;
+    forged_limit
+        .aggregate_usage_limits
+        .insert(text("tokens"), 151);
+    assert!(matches!(
+        forged_limit.validate(),
+        Err(CredentialCapabilityError::GrantMismatch)
+    ));
+
+    let mut forged_extra_limit = changed_model;
+    let mut extra_scope = forged_extra_limit.grant.scope.clone();
+    extra_scope
+        .quantitative_limits
+        .insert(text("credential.aggregate.requests.backdoor"), 1);
+    forged_extra_limit.grant = BoundedGrant::issue(
+        forged_extra_limit.grant.issuer.clone(),
+        forged_extra_limit.grant.actor_chain.clone(),
+        extra_scope,
+        forged_extra_limit.grant.issued_at_unix_seconds,
+        forged_extra_limit.grant.expires_at_unix_seconds,
+        text("metered-extra-limit-nonce"),
+    )
+    .expect("internally valid grant with extra usage dimension");
+    assert!(matches!(
+        forged_extra_limit.validate(),
+        Err(CredentialCapabilityError::GrantMismatch)
+    ));
+
+    let mut oversized = metered_capability_request("gpt-5.5", &revocations);
+    oversized
+        .aggregate_usage_limits
+        .insert(text("requests"), 1_025);
+    oversized.authorization.context.quantity =
+        Some(QuantitativeLimit::new("credential.aggregate.requests", 1_025).expect("quantity"));
+    let mut oversized_scope = oversized.grant.scope.clone();
+    oversized_scope
+        .quantitative_limits
+        .insert(text("credential.aggregate.requests"), 1_025);
+    oversized.grant = BoundedGrant::issue(
+        oversized.grant.issuer.clone(),
+        oversized.grant.actor_chain.clone(),
+        oversized_scope,
+        oversized.grant.issued_at_unix_seconds,
+        oversized.grant.expires_at_unix_seconds,
+        text("metered-oversized-request-budget"),
+    )
+    .expect("internally valid oversized grant");
+    assert!(matches!(
+        oversized.validate(),
+        Err(CredentialCapabilityError::GrantMismatch)
+    ));
 }
