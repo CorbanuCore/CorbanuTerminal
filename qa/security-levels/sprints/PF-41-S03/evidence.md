@@ -4,7 +4,7 @@
 
 - Dispatch base: `9d08b15fa94676c1383ee1605b77e7cc7218dcc4`.
 - Allocation commit: `e0c23fe95165636d621dae8c16a5366c4f7250ac`.
-- Final implementation candidate: `3f8cef302caaf9658a84b7c488c08cead50a6402`.
+- Final implementation candidate: `2b3b168c322a9756a475bc19dea121c72b204e5e`.
 - Contract versions: security-audit event schema v1, integrity checkpoint v1,
   journal record v1 and consumer fixture v1.
 - Activation posture: fixture-only and fail closed. No producer, consumer,
@@ -91,23 +91,23 @@ crate source through the isolated manifest at
 | Check | Result |
 | --- | --- |
 | `rustfmt +nightly-2025-09-18 --edition 2024 codex-rs/security-audit/src/*.rs codex-rs/security-audit/tests/*.rs` | PASS |
-| `cargo +1.95.0 test --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/harness/Cargo.toml` with CorbanuDrive target/temp | PASS; 40 unit/fault + 1 public integration = 41/41 |
+| `cargo +1.95.0 test --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/harness/Cargo.toml` with CorbanuDrive target/temp | PASS; 41 unit/fault + 1 public integration = 42/42 |
 | `cargo +1.95.0 clippy --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/harness/Cargo.toml --all-targets -- -D warnings` | PASS; isolated workspace mirrors every root workspace Clippy deny |
 | `python3 -m unittest discover -s qa/security-levels/audit-foundation -p 'test_*.py' -v` | PASS; 3/3 |
 | `python3 -m unittest docs.plans.tests.test_check docs.sprints.tests.test_check` | PASS; 23/23 |
 | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | PASS; active 1/2, current 61, archived 94 |
 | `git diff --check` | PASS |
 
-Exact-commit final artifacts for `3f8cef302caaf9658a84b7c488c08cead50a6402`:
+Exact-commit final artifacts for `2b3b168c322a9756a475bc19dea121c72b204e5e`:
 
-- Rust test log: `test-rust-final-4.log`, SHA-256
-  `c067b2ba4769044f7f4fccbad7861a67b8e347091558f7c73ce00113c1c40ffb`.
-- full-workspace-lint Clippy log: `clippy-final-4.log`, SHA-256
-  `8c233a54790c4800d3dd585436af679aa838da259bfdb129412e2d51cdb75cdc`.
-- fixture log: `test-fixture-final-4.log`, SHA-256
-  `33060fd73862c5e1af97335504d5b45211fce6d229657f556d8deceeadc52ce4`.
-- governance test log: `test-governance-final-4.log`, SHA-256
-  `6088abc864f7d56c5fe6b87bf1e29d29d2b5316cd06831624ef6f758ff86d337`.
+- Rust test log: `test-rust-final-5.log`, SHA-256
+  `def1d46a7dff2bd4472353587e344cc04235a6ae2609800040723aa4cd04d6a7`.
+- full-workspace-lint Clippy log: `clippy-final-5.log`, SHA-256
+  `a9fcf8416cbf26bc16eb7261fdeaf718f1d0e643ef8d7a660bd8a82dfafefeb4`.
+- fixture log: `test-fixture-final-5.log`, SHA-256
+  `c80a081792c1328f46d1f385824d459d636bcb7a3b834976c060563bf2cef3fb`.
+- governance test log: `test-governance-final-5.log`, SHA-256
+  `9aef2c2141006594a82dea01df07805c4a1c1b3ef7d7bc733b3265aab8d1ba0a`.
 - isolated manifest with the exact root Clippy deny set: `harness/Cargo.toml`,
   SHA-256
   `b1de95677cf4f772334b66a7be5d07b0de7146643034ef31f901bccc941066e9`.
@@ -138,6 +138,9 @@ observable/clamped pending
 timestamps; structured chain failures; precise write-path CAS errors;
 validated-tail cache reuse; and cache invalidation on protected-root,
 writer-lock and persistence failures.
+Emergency-restriction regressions also prove that protected-root conflict and
+invalid-root failures retain distinct operator-visible audit-gap reasons rather
+than being mislabeled as invalid events.
 
 The foundation was landed in reviewable commits: initial event/storage/journal
 contracts and fixture, identity redaction, recovery/cache hardening, and focused
@@ -152,8 +155,8 @@ being split at individual transitions.
 
 ## TMUX smoke and independent review
 
-The final implementation candidate `3f8cef302caaf9658a84b7c488c08cead50a6402`
-ran in real TMUX session `pf41-durable-smoke-final-5` from the candidate worktree
+The final implementation candidate `2b3b168c322a9756a475bc19dea121c72b204e5e`
+ran in real TMUX session `pf41-durable-smoke-final-6` from the candidate worktree
 using Corbanu Terminal v0.1.35 with `RUST_LOG=trace`, read-only/never
 permissions, exact model `claude-opus-5-plan` at `max`, and an explicit
 CorbanuDrive `log_dir`. `/status` confirmed the candidate directory, connected
@@ -161,11 +164,11 @@ Claude Plan account, exact model and Corbanu version; `/quit` exited the session
 cleanly. Command text and Enter were sent as separate TMUX operations.
 
 - Status capture:
-  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final-5/status-pane.txt`,
-  SHA-256 `8d4d62a3d24b4e0411babd7cff47375a6e1638a67d29e73cfb58ddecbf6d7388`.
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final-6/status-pane.txt`,
+  SHA-256 `7f9641bfba3abf507c10d2b30255153b5bef314dffa5642f422ab41f60f5530f`.
 - Trace log:
-  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final-5/logs/codex-tui.log`,
-  SHA-256 `36f55656a0445489410921b57e6510585f65817d3133215143e96f37e6fbf8fc`.
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final-6/logs/codex-tui.log`,
+  SHA-256 `710f54fa2a8f9a73ce29112926df6ca971e87fdfd5cfc2b9222032640582fb80`.
 
 The first read-only review used real TMUX session `pf27-opus5-g1-review`
 with exact model `claude-opus-5-plan` at `max`. It found nine actionable
@@ -241,6 +244,18 @@ error contracts into the cohesive `event_identity.rs` boundary, and is the
 exact candidate exercised by the smoke and logs above. Transcript:
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/review/opus-sixth-review.txt`,
 SHA-256 `1cc6962a61ef8423a65f198420677a1af7824ed4915ea4516124adefa5ddd288`.
+
+A seventh fresh read-only review in the same real TMUX/Corbanu harness used
+exact model `claude-opus-5-plan` at `max` and reviewed immutable evidence
+candidate `f11c9dede0f52f0a80953d4e7c845aa641203b00`. It independently
+reverified the prior remediations and found two low-severity issues: one
+transcribed governance digest lacked two hex characters, and emergency
+restriction collapsed protected-root conflict/invalid failures into an invalid
+event gap. Implementation candidate `2b3b168c322a9756a475bc19dea121c72b204e5e`
+fixes both, preserves distinct public gap reasons, and adds the focused
+regression above. Transcript:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/review/opus-seventh-review-findings.txt`,
+SHA-256 `b9133c27c023b6f87abb97e92b00b96fc035d9ed14543c89739b564745888aac`.
 
 The final post-remediation read-only Claude Opus 5 Plan Max review is recorded
 here after it completes. Prompt and Enter are sent as separate TMUX operations;
