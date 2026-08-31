@@ -7,7 +7,7 @@ plan_feature: "PF-46"
 execution_order: 5
 owner: "Jim Ricketts"
 parallel_lane: "claude-auth-serial"
-write_scope: "MODULE.bazel.lock, codex-rs/Cargo.lock, codex-rs/Cargo.toml, codex-rs/cli/Cargo.toml, codex-rs/cli/src/claude_oauth.rs, codex-rs/cli/src/main.rs, codex-rs/login/Cargo.toml, codex-rs/login/src/auth/external_bearer.rs, codex-rs/model-provider-info/src/lib.rs, codex-rs/model-provider-info/src/model_provider_info_tests.rs, codex-rs/vault/Cargo.toml, codex-rs/vault/src/capability.rs, codex-rs/vault/src/capability_tests.rs, codex-rs/vault/src/claude_auth.rs, codex-rs/vault/src/claude_auth_tests.rs, codex-rs/vault/src/lib.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/chatwidget/claude_code_login.rs, codex-rs/tui/src/chatwidget/claude_code_login_tests.rs, codex-rs/tui/src/chatwidget/provider_credentials.rs, codex-rs/tui/src/chatwidget/snapshots/, codex-rs/tui/src/chatwidget/vault_menu.rs, codex-rs/tui/src/claude_panes/command_plan.rs, codex-rs/tui/src/claude_panes/execution.rs, codex-rs/tui/src/claude_panes/tests.rs, codex-rs/tui/src/claude_panes/turn_types.rs, codex-rs/tui/tests/support/tmux.rs, codex-rs/tui/tests/suite/claude_auth.rs, codex-rs/tui/tests/suite/mod.rs, docs/authentication.md, docs/features/claude-headless-panes.md, docs/features/claude-plan-authentication.md, docs/features/model-providers.md, docs/plans/active/claude-subscription-auth.md, docs/sprints/current/claude-subscription-auth/, docs/sprints/archive/claude-subscription-auth/, docs/sprints/index.md, mkdocs.yml, qa/claude-subscription-auth/"
+write_scope: "MODULE.bazel.lock, codex-rs/Cargo.lock, codex-rs/Cargo.toml, codex-rs/cli/Cargo.toml, codex-rs/cli/src/claude_oauth.rs, codex-rs/cli/src/main.rs, codex-rs/login/Cargo.toml, codex-rs/login/src/auth/auth_tests.rs, codex-rs/login/src/auth/external_bearer.rs, codex-rs/login/src/auth/manager.rs, codex-rs/login/src/auth/mod.rs, codex-rs/login/src/lib.rs, codex-rs/model-provider/src/auth.rs, codex-rs/model-provider-info/src/lib.rs, codex-rs/model-provider-info/src/model_provider_info_tests.rs, codex-rs/vault/Cargo.toml, codex-rs/vault/src/capability.rs, codex-rs/vault/src/capability_tests.rs, codex-rs/vault/src/claude_auth.rs, codex-rs/vault/src/claude_auth_tests.rs, codex-rs/vault/src/lib.rs, codex-rs/tui/src/app/event_dispatch.rs, codex-rs/tui/src/app_event.rs, codex-rs/tui/src/chatwidget/claude_code_login.rs, codex-rs/tui/src/chatwidget/claude_code_login_tests.rs, codex-rs/tui/src/chatwidget/provider_credentials.rs, codex-rs/tui/src/chatwidget/snapshots/, codex-rs/tui/src/chatwidget/vault_menu.rs, codex-rs/tui/src/claude_panes/command_plan.rs, codex-rs/tui/src/claude_panes/execution.rs, codex-rs/tui/src/claude_panes/tests.rs, codex-rs/tui/src/claude_panes/turn_types.rs, codex-rs/tui/tests/support/tmux.rs, codex-rs/tui/tests/suite/claude_auth.rs, codex-rs/tui/tests/suite/mod.rs, docs/authentication.md, docs/features/claude-headless-panes.md, docs/features/claude-plan-authentication.md, docs/features/model-providers.md, docs/plans/active/claude-subscription-auth.md, docs/sprints/current/claude-subscription-auth/, docs/sprints/archive/claude-subscription-auth/, docs/sprints/index.md, mkdocs.yml, qa/claude-subscription-auth/"
 integration_gate: "Jim Ricketts verifies the isolated final candidate from frozen base 8ae13e, closes structured and Corbanu/Opus 5 Max reviews, archives PF-46-S01, and pushes only feat/claude-subscription-auth-isolated."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/claude-subscription-auth-isolated"
 branch: "feat/claude-subscription-auth-isolated"
@@ -61,7 +61,7 @@ updated: 2026-08-31
 - [x] Finished the user/operator authentication guide and reconciled native-pane
   credential-boundary language with the behavior actually under Corbanu control.
 - [x] Closed the final bounded-output, missing-environment-source, generic vault
-  custody, stale navigation, and literal-scope review findings.
+  custody, source-change bearer-cache, stale navigation, and literal-scope findings.
 - [x] Ran retry-disabled affected tests and the required typed Tmux state-machine
   suite against the isolated final implementation candidate.
 - [x] Dispositioned structured and Corbanu/Opus 5 Max findings without weakening
@@ -86,7 +86,7 @@ tag, merge, and release-ledger decisions remain open on the active plan.
 
 ## Exit evidence
 
-- [x] Implementation commits through `34535821c` and the frozen base `8ae13e`
+- [x] Implementation commits through `f0d5b0b16` and the frozen base `8ae13e`
   are recorded in `qa/claude-subscription-auth/sprints/PF-46-S01/evidence.md`.
 - [x] Final-tree test, documentation, review protocol, and remote push gate are linked.
 - [x] Done and Remaining ledgers reflect reality without claiming external signoff.

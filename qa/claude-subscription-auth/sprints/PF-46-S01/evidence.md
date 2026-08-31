@@ -4,11 +4,11 @@
 
 - Frozen base: `8ae13e168817445205321bae410740cbc3e919b7`.
 - Isolated branch: `feat/claude-subscription-auth-isolated`.
-- Final implementation repair candidate: `34535821c`.
+- Final implementation repair candidate: `f0d5b0b16`.
 - Coordination-only lifecycle mirror: `f36c28770`; it does not import the
   corresponding P0 product implementation into this isolated lineage.
 - Candidate binary: `codex-rs/target/debug/corbanu`, version `0.1.35`, SHA-256
-  `0b3e6860695731eb3c2daff6c2459728858f2048486104bf312d3a7fa2301719`.
+  `b709b9eea122b1482cd965de643fbe57b88bdad1a24f217c54b16cb1ddfb65c5`.
 
 ## Formatting, static checks, and documentation
 
@@ -34,6 +34,9 @@
 | TUI Claude login after final repair | 22/22 passed | `f3dc0d72-87b5-42ea-807c-78c12f6a0a9b` |
 | CLI Claude OAuth after final repair | 120/120 passed | `63905eed-645a-43e8-bf66-7a5b3a842b6f` |
 | Generated Claude Plan settings | 1/1 passed | `2d25b766-21f9-49f2-ad90-6e0c3230e0f9` |
+| External bearer cache behavior | 4/4 passed | `b9fb3e75-7d58-428c-8f0e-996827d7c069` |
+| Claude Plan cache policy | 1/1 passed | `d2258b6b-ea30-439a-bb0b-b2a7251e2e16` |
+| Core provider auth and 401 | 2/2 passed | `1a46d371-8aea-4c7e-8347-b58cbbb6ae6e` |
 
 Rust 1.95 produced one incremental compiler ICE during an earlier CLI attempt.
 The affected suites were rerun with `CARGO_INCREMENTAL=0`; test retries remained
@@ -43,17 +46,17 @@ zero, so no failing test was hidden or retried.
 
 Command used `CORBANU_TMUX_REQUIRED=1`, an isolated
 `CORBANU_TMUX_ARTIFACT_DIR`, `CARGO_INCREMENTAL=0`, `-j 1`, and `--retries 0`.
-Nextest run `722fccd6-9297-4bc9-8329-2d53b9d41e19` passed 2/2:
+Nextest run `9b9d555f-b3ee-4b7f-8e8a-f7182a33cf8d` passed 2/2:
 
-- compatibility-login selection: 35.852 seconds;
+- compatibility-login selection: 17.991 seconds;
 - managed success, cancel, failure, recovery, masked cancel, and restart/resume:
-  56.770 seconds.
+  56.285 seconds.
 
 The typed harness sends text and Enter separately, uses typed Down/Enter/Escape
 keys, runs the real candidate binary with `RUST_LOG=trace`, and checks its unique
 synthetic credential canary against viewport, scrollback, isolated home, trace,
 and retained artifacts. The successful run emitted no failure bundle beneath
-`.codex-work/claude-subscription-auth/34535821-final-qualification/tmux`.
+`.codex-work/claude-subscription-auth/f0d5b0b1-final-qualification/tmux`.
 
 ## Review history and dispositions
 
@@ -69,6 +72,11 @@ and retained artifacts. The successful run emitted no failure bundle beneath
   `34535821c`: stale nav entries, literal sprint scope, bounded unterminated
   login output, accurate missing-environment-token recovery, and removal of an
   inert pane-precedence fixture/claim.
+- Final structured review then found that the generic 60-second external bearer
+  cache could outlive a newly persisted Claude auth choice. `f0d5b0b16` adds a
+  provider-owned fresh-per-request cache policy for Claude Plan only, plus
+  behavioral and policy regressions; custom command-auth providers retain their
+  existing configured cache semantics.
 - The immutable final documentation commit is reviewed again against the full
   frozen-base diff before push. A non-clean verdict blocks delivery; final
   external review artifacts and the pushed SHA are reported in the handoff.
