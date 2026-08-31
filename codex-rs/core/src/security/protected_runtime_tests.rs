@@ -205,7 +205,7 @@ fn protected_runtime_binds_configured_creator_and_effective_levels() {
     assert_eq!(
         runtime.snapshot(),
         &super::protected_runtime::ProtectedRuntimeSnapshot {
-            contract_version: 3,
+            contract_version: 4,
             configured_level: SecurityLevel::Moderate,
             creator_required_level: SecurityLevel::Aggressive,
             effective_level: SecurityLevel::Aggressive,
@@ -631,6 +631,12 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         Arc::clone(&revocations),
     )
     .expect("runtime");
+    let other_runtime = ProtectedRuntime::compose(
+        current(&effective, &state, &measured, &recovery),
+        routes(),
+        Arc::new(RwLock::new(RevocationState::new())),
+    )
+    .expect("distinct runtime instance");
     let (request, grant) = request_and_grant(&effective);
     let mut wrong_session_request = request.clone();
     wrong_session_request.context.session_id = text("session:other");
@@ -720,6 +726,19 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         )
         .expect("durable dispatch intent");
 
+    let fence_is_held = dispatch
+        .authorize(
+            &other_runtime,
+            current_at(&effective, &state, &measured, &recovery, 12),
+            ProtectedAuthority::Grant(&grant),
+            ProtectedDispatchStep::Admit,
+            || (),
+        )
+        .expect_err("another runtime cannot authorize the dispatch");
+    assert!(matches!(
+        fence_is_held,
+        ProtectedRuntimeError::RuntimeInstanceMismatch
+    ));
     let fence_is_held = dispatch
         .authorize(
             &runtime,
@@ -906,6 +925,160 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         )
         .expect("durable cancellation before admission");
     assert_eq!(cancelled.sequence, 8);
+
+    let expiring_preview =
+        ProtectedActionPreview::new(request.clone(), 17, text("expiring-mandate-preview"))
+            .expect("expiring preview");
+    let expiring_mandate = ProtectedActionMandate::approve(
+        &expiring_preview,
+        principal(PrincipalKind::Human, "human-runtime-owner"),
+        15,
+    )
+    .expect("expiring mandate");
+    let mut never_admitted_mandate = runtime
+        .reserve_dispatch(
+            current_at(&effective, &state, &measured, &recovery, 15),
+            "brokered-https",
+            &mut journal,
+            &request,
+            ProtectedAuthority::Mandate {
+                mandate: &expiring_mandate,
+                preview: &expiring_preview,
+            },
+            text("run-7"),
+            text("ignored-mandate-key"),
+        )
+        .expect("durable never-admitted mandate intent");
+    assert!(matches!(
+        never_admitted_mandate.authorize(
+            &runtime,
+            current_at(&effective, &state, &measured, &recovery, 18),
+            ProtectedAuthority::Mandate {
+                mandate: &expiring_mandate,
+                preview: &expiring_preview,
+            },
+            ProtectedDispatchStep::Admit,
+            || (),
+        ),
+        Err(ProtectedRuntimeError::Revocation(
+            codex_security_policy::RevocationError::AuthorityOutsideValidityWindow
+        ))
+    ));
+    let conservative_unknown = never_admitted_mandate
+        .resolve(
+            &runtime,
+            &mut journal,
+            DispatchResolution::Unknown {
+                reason: UnknownOutcomeReason::PersistenceUncertain,
+            },
+            18,
+        )
+        .expect("expired mandate closes conservatively as unknown");
+    assert_eq!(conservative_unknown.sequence, 10);
+
+    let collision_preview =
+        ProtectedActionPreview::new(request.clone(), 19, text("dedup-domain-preview"))
+            .expect("domain-separation preview");
+    let collision_mandate = ProtectedActionMandate::approve(
+        &collision_preview,
+        principal(PrincipalKind::Human, "human-runtime-owner"),
+        18,
+    )
+    .expect("domain-separation mandate");
+    let colliding_caller_key = BoundedText::new(format!(
+        "mandate-preview:{}",
+        collision_mandate.preview_digest
+    ))
+    .expect("caller-selected collision key");
+    let mut collision_grant = runtime
+        .reserve_dispatch(
+            current_at(&effective, &state, &measured, &recovery, 18),
+            "brokered-https",
+            &mut journal,
+            &request,
+            ProtectedAuthority::Grant(&grant),
+            text("run-7"),
+            colliding_caller_key,
+        )
+        .expect("domain-separated grant intent");
+    collision_grant
+        .authorize(
+            &runtime,
+            current_at(&effective, &state, &measured, &recovery, 18),
+            ProtectedAuthority::Grant(&grant),
+            ProtectedDispatchStep::Admit,
+            || (),
+        )
+        .expect("admit collision grant");
+    collision_grant
+        .resolve(
+            &runtime,
+            &mut journal,
+            DispatchResolution::Completed {
+                outcome: MandateOutcome::Cancelled,
+                mandate_receipt: None,
+            },
+            18,
+        )
+        .expect("cancel collision grant");
+    let collision_mandate_dispatch = runtime
+        .reserve_dispatch(
+            current_at(&effective, &state, &measured, &recovery, 18),
+            "brokered-https",
+            &mut journal,
+            &request,
+            ProtectedAuthority::Mandate {
+                mandate: &collision_mandate,
+                preview: &collision_preview,
+            },
+            text("run-7"),
+            text("ignored-second-caller-key"),
+        )
+        .expect("grant key cannot pre-burn mandate namespace");
+    let collision_receipt = collision_mandate_dispatch
+        .resolve(
+            &runtime,
+            &mut journal,
+            DispatchResolution::Unknown {
+                reason: UnknownOutcomeReason::PersistenceUncertain,
+            },
+            18,
+        )
+        .expect("close domain-separation mandate intent");
+    assert_eq!(collision_receipt.sequence, 14);
+
+    let mut wrong_runtime_resolution = runtime
+        .reserve_dispatch(
+            current_at(&effective, &state, &measured, &recovery, 18),
+            "brokered-https",
+            &mut journal,
+            &request,
+            ProtectedAuthority::Grant(&grant),
+            text("run-7"),
+            text("wrong-runtime-resolution"),
+        )
+        .expect("runtime-bound resolution intent");
+    wrong_runtime_resolution
+        .authorize(
+            &runtime,
+            current_at(&effective, &state, &measured, &recovery, 18),
+            ProtectedAuthority::Grant(&grant),
+            ProtectedDispatchStep::Admit,
+            || (),
+        )
+        .expect("admit runtime-bound resolution");
+    assert!(matches!(
+        wrong_runtime_resolution.resolve(
+            &other_runtime,
+            &mut journal,
+            DispatchResolution::Completed {
+                outcome: MandateOutcome::Cancelled,
+                mandate_receipt: None,
+            },
+            18,
+        ),
+        Err(ProtectedRuntimeError::RuntimeInstanceMismatch)
+    ));
 }
 
 #[test]

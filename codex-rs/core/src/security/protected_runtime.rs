@@ -38,11 +38,14 @@ use codex_security_policy::ProtectedDispatchStep;
 use codex_security_policy::RevocationError;
 use codex_security_policy::RevocationState;
 use codex_security_policy::SecurityLevel;
+use sha2::Digest as _;
+use sha2::Sha256;
 use thiserror::Error;
+use uuid::Uuid;
 
 use super::effective_policy::EffectivePolicySnapshot;
 
-pub(crate) const PROTECTED_RUNTIME_CONTRACT_VERSION: u32 = 3;
+pub(crate) const PROTECTED_RUNTIME_CONTRACT_VERSION: u32 = 4;
 const MAX_READINESS_WINDOW_SECONDS: i64 = 300;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -202,6 +205,7 @@ pub(crate) struct ProtectedRuntimeSnapshot {
 /// One immutable generation binding plus a live PF-19 revocation source.
 pub(crate) struct ProtectedRuntime {
     snapshot: ProtectedRuntimeSnapshot,
+    instance_id: [u8; 16],
     runtime_nonce: [u8; 16],
     configured_kill_switch_active: bool,
     readiness_producer: PolicyPrincipal,
@@ -235,6 +239,7 @@ impl ProtectedRuntime {
         };
         Ok(Self {
             snapshot,
+            instance_id: *Uuid::new_v4().as_bytes(),
             runtime_nonce: current.effective.runtime_nonce,
             configured_kill_switch_active: current.authoritative.kill_switch_active,
             readiness_producer: current.readiness.producer.clone(),
@@ -277,6 +282,8 @@ impl ProtectedRuntime {
         let now_unix_seconds = current.now_unix_seconds;
         self.validate_request_binding(request)?;
         authority.validate_request(request, now_unix_seconds)?;
+        let receiptless_never_admitted_completion =
+            matches!(authority, ProtectedAuthority::Grant(_));
         let revocations = self.read_revocations()?;
         let (fence, identity, deduplication_key) = match authority {
             ProtectedAuthority::Grant(grant) => (
@@ -288,7 +295,7 @@ impl ProtectedRuntime {
                     &revocations,
                 )?,
                 AuthorityIdentity::from_grant(grant)?,
-                deduplication_key,
+                domain_separated_deduplication_key("grant-effect", &deduplication_key)?,
             ),
             ProtectedAuthority::Mandate { mandate, .. } => (
                 DispatchFence::queued_for_mandate(
@@ -312,6 +319,8 @@ impl ProtectedRuntime {
             now_unix_seconds,
         )?;
         Ok(ProtectedDispatch {
+            runtime_instance_id: self.instance_id,
+            receiptless_never_admitted_completion,
             run_id,
             fence,
             permit,
@@ -355,6 +364,13 @@ impl ProtectedRuntime {
             || request.context.task_id != self.snapshot.task_id
         {
             return Err(ProtectedRuntimeError::RequestRuntimeMismatch);
+        }
+        Ok(())
+    }
+
+    fn validate_instance(&self, instance_id: [u8; 16]) -> Result<(), ProtectedRuntimeError> {
+        if self.instance_id != instance_id {
+            return Err(ProtectedRuntimeError::RuntimeInstanceMismatch);
         }
         Ok(())
     }
@@ -418,6 +434,8 @@ impl ProtectedAuthority<'_> {
 
 #[must_use = "a protected dispatch must be resolved as completed or unknown"]
 pub(crate) struct ProtectedDispatch {
+    runtime_instance_id: [u8; 16],
+    receiptless_never_admitted_completion: bool,
     run_id: BoundedText,
     fence: DispatchFence,
     permit: DispatchPermit,
@@ -437,6 +455,7 @@ impl ProtectedDispatch {
         step: ProtectedDispatchStep,
         effect: impl FnOnce() -> T,
     ) -> Result<T, ProtectedRuntimeError> {
+        runtime.validate_instance(self.runtime_instance_id)?;
         let now_unix_seconds = current.now_unix_seconds;
         runtime.validate_current(current)?;
         let revocations = runtime.read_revocations()?;
@@ -466,13 +485,19 @@ impl ProtectedDispatch {
         resolution: DispatchResolution,
         occurred_at_unix_seconds: i64,
     ) -> Result<AppendAcknowledgement, ProtectedRuntimeError> {
+        runtime.validate_instance(self.runtime_instance_id)?;
         let phase = self.fence.phase();
         let terminal_transition = match &resolution {
             DispatchResolution::Completed { .. } => self.fence.record_completed(),
             DispatchResolution::Unknown { .. } => self.fence.record_unknown_financial_outcome(),
         };
         if let Err(error) = terminal_transition
-            && !never_admitted_resolution_is_safe(phase, &resolution, &error)
+            && !never_admitted_resolution_is_safe(
+                phase,
+                self.receiptless_never_admitted_completion,
+                &resolution,
+                &error,
+            )
         {
             return Err(error.into());
         }
@@ -485,21 +510,33 @@ impl ProtectedDispatch {
     }
 }
 
+fn domain_separated_deduplication_key(
+    domain: &str,
+    key: &BoundedText,
+) -> Result<BoundedText, ProtectedRuntimeError> {
+    Ok(BoundedText::new(format!(
+        "{domain}:{:x}",
+        Sha256::digest(key.as_str().as_bytes())
+    ))?)
+}
+
 fn never_admitted_resolution_is_safe(
     phase: DispatchPhase,
+    receiptless_completion_allowed: bool,
     resolution: &DispatchResolution,
     error: &RevocationError,
 ) -> bool {
     matches!(error, RevocationError::InvalidDispatchTransition)
         && matches!(phase, DispatchPhase::Queued | DispatchPhase::Fenced)
-        && matches!(
-            resolution,
-            DispatchResolution::Unknown { .. }
-                | DispatchResolution::Completed {
-                    outcome: MandateOutcome::Denied | MandateOutcome::Cancelled,
-                    ..
-                }
-        )
+        && (matches!(resolution, DispatchResolution::Unknown { .. })
+            || receiptless_completion_allowed
+                && matches!(
+                    resolution,
+                    DispatchResolution::Completed {
+                        outcome: MandateOutcome::Denied | MandateOutcome::Cancelled,
+                        ..
+                    }
+                ))
 }
 
 fn validate_current_shape(
@@ -611,6 +648,8 @@ pub(crate) enum ProtectedRuntimeError {
     StaleRevocationState,
     #[error("protected runtime binding is stale")]
     StaleRuntimeBinding,
+    #[error("protected dispatch belongs to a different runtime instance")]
+    RuntimeInstanceMismatch,
     #[error("protected authority does not match the exact authorization request")]
     AuthorityRequestMismatch,
     #[error("authorization request does not match the protected runtime actor binding")]
