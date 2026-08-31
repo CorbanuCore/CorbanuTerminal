@@ -197,7 +197,7 @@ run `python3 docs/sprints/check.py`.
 | `PF-43` (`CSA-02`) | Secure long-lived subscription-token enrollment, storage, validation, replacement, and removal | [CSA-02 / PF-43-S01](../../sprints/archive/claude-subscription-auth/pf-43-s01-managed-token-lifecycle.md) | completed and archived |
 | `PF-44` (`CSA-03`) | Platform-authoritative Claude login adapters and deterministic provider resolution | [CSA-03 / PF-44-S01](../../sprints/archive/claude-subscription-auth/pf-44-s01-platform-auth-resolution.md) | completed and archived |
 | `PF-45` (`CSA-04`) | Legacy/conflict migration plus failure, recovery, and resume UX | [CSA-04 / PF-45-S01](../../sprints/archive/claude-subscription-auth/pf-45-s01-auth-choice-and-recovery.md) | completed and archived |
-| `PF-46` (`CSA-05`) | Final cross-platform, true-TUI, live-repository, human, documentation, and release qualification | Not created | planned; depends on CSA-04 |
+| `PF-46` (`CSA-05`) | Final cross-platform, true-TUI, live-repository, human, documentation, and release qualification | [CSA-05 / PF-46-S01](../../sprints/current/claude-subscription-auth/pf-46-s01-final-qualification.md) | in progress; depends on CSA-04 |
 
 ## Hard dependency graph
 
