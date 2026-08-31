@@ -1,8 +1,8 @@
 # PF-22-S02 evidence
 
 PF-22-S02 remains `in_progress`. The implementation, request-binding fix, and
-two Claude Opus 5 Max remediation cycles are committed. A final Opus rereview
-of the second remediated candidate and the integration-owner
+three Claude Opus 5 Max remediation cycles are committed. A final clean Opus
+rereview of the third remediated candidate and the integration-owner
 combined-tree/archive work remain open.
 
 ## Candidate identity and contracts
@@ -18,14 +18,16 @@ combined-tree/archive work remain open.
 - Opus P1/P2 remediation: `c0c00d443df7ba167c164a60685235d80cd6875b`.
 - Opus rereview P1/P2 remediation:
   `545456f07c48157c4a0d91fc6a981ab8e0561636`.
-- Protected runtime contract: `PROTECTED_RUNTIME_CONTRACT_VERSION = 3`.
-- Upstream seam register contract: `PF-22-S02-v3`; pinned inherited upstream
+- Opus final-pass P2 remediation:
+  `24a51cddb53f60a5ce6dad80c3806d96f2946c2f`.
+- Protected runtime contract: `PROTECTED_RUNTIME_CONTRACT_VERSION = 4`.
+- Upstream seam register contract: `PF-22-S02-v4`; pinned inherited upstream
   revision: `413492cd6c3a4d4f8dff6f406247ccda5a9d88aa`.
 - Pre-Opus-remediation compatibility candidate: `corbanu 0.1.35`, SHA-256
   `4f945cf64ab9d05a9a66035951807300828ea85806e92721528040dd45b52f97`.
 
-The implementation is deliberately cohesive: 641 production lines define one
-fail-closed state machine and 937 focused test lines provide its mechanical
+The implementation is deliberately cohesive: 680 production lines define one
+fail-closed state machine and 1,110 focused test lines provide its mechanical
 proof. The checker is a separate 400-line governance boundary with 126 lines
 of focused tests. Splitting the state transition/fence/journal composition
 across modules would weaken reviewability without reducing the security
@@ -104,9 +106,10 @@ inventing an automatic `Drop` outcome:
 
 - Mandate deduplication now uses the stable preview digest; two approvals at
   different times over one preview hit the same terminal reservation.
-- An intent fenced before first admission can be durably closed as Unknown,
-  Denied or Cancelled. Executed and Failed still require an admitted effect,
-  so the recovery fix cannot fabricate execution.
+- A grant fenced before first admission can be durably closed as Unknown,
+  Denied or Cancelled. A mandate without durable admission proof closes only
+  as Unknown; completed outcomes still require the non-forgeable receipt
+  contract, so the recovery fix cannot fabricate a mandate result.
 - `resolve` no longer accepts caller-supplied event generations; it derives
   the exact context from the bound runtime.
 - The exact readiness window is immutable for the runtime, and an atomic
@@ -123,6 +126,25 @@ inventing an automatic `Drop` outcome:
   literals before recognizing lifetimes, preserving brace scope; its tenth
   regression case proves following top-level and nested definitions remain
   distinguishable.
+
+The next Opus pass reported no P0/P1 and three P2 findings. Commit
+`24a51cddb53f60a5ce6dad80c3806d96f2946c2f` applies the two safe in-scope
+fixes and narrows the third claim:
+
+- Caller-controlled grant deduplication keys are hashed into a
+  `grant-effect:` domain. They can no longer collide with the
+  `mandate-preview:` namespace or pre-burn a mandate's stable reservation.
+- Every `ProtectedRuntime` now has an opaque random instance identity copied
+  into its dispatches. Both authorization and resolution reject a dispatch
+  presented to a different runtime, even when caller-visible generations and
+  revocation state happen to match.
+- A mandate that expires or is revoked before first admission is regression
+  tested to close conservatively as Unknown. PF-22 deliberately does not
+  relax the generic audit contract to accept caller-asserted receiptless
+  Denied/Cancelled outcomes: the current event shape has no authenticated
+  admission fact with which to distinguish that case. A durable admission
+  marker or non-forgeable `DispatchFence`-to-audit proof is a separately
+  scoped future contract dependency, not a completed PF-22 capability.
 
 ## Final-tree local verification
 
@@ -215,6 +237,29 @@ Post-rereview-remediation test-log SHA-256 values:
 - `plan-check-rereview-remediation.txt`:
   `9386e473c028f912d1685f25a88db8d21e57b8a9ad0929b07fcca3262ecbc8fb`
 
+Final-pass-remediation affected-test log SHA-256 values:
+
+- `protected-runtime-final-pass1-remediation.txt`:
+  `3e1564f304b329731295253c2b304d60c605268dc80edf1bb8b5f868309a524a`
+- `effective-policy-final-pass1-remediation.txt`:
+  `a7aac8b32a719f434414a62cd69f6dba640f76f2f049bdec39db89335cad1c07`
+- `security-inheritance-final-pass1-remediation.txt`:
+  `32cc7c48e93dc651dc6b127bc276fca1dbfe9daed1a1db882031fb57b19f7e05`
+- `authoritative-state-final-pass1-remediation.txt`:
+  `8029fcf6c457bf60ca3385bd877d10d87fba48b6becb7e9fa11732c55ae7f7e3`
+- `revocation-final-pass1-remediation.txt`:
+  `e5755747ef64fa2e5d7ed1b0593c01aa4e7aa145dd77c78772d38a4863b43c87`
+- `security-audit-final-pass1-remediation.txt`:
+  `4bd974dbb3cf46f1c323ec5aa1d7ea51ebe647b998a5830048e72658a678e882`
+- `seam-check-final-pass1-remediation.txt`:
+  `ad96a6c7d905ea21201b901f2f82ecf57117629ce349442422c88baec872a49b`
+- `seam-unit-final-pass1-remediation.txt`:
+  `5845d1bbf79c958d55cd13e7f56deeb6f4b8a5e4f16cb8bc810851947ec5ffcc`
+- `sprint-check-final-pass1-remediation.txt`:
+  `6b3b45c8eeb1144c261838f505ab6cbcf0f7e78800b5c3bad3077afe794e3fa3`
+- `plan-check-final-pass1-remediation.txt`:
+  `9386e473c028f912d1685f25a88db8d21e57b8a9ad0929b07fcca3262ecbc8fb`
+
 ## PF-21 compatibility comparison
 
 The pre-remediation implementation commit `85837f64b` passed all 36 cases, but
@@ -241,10 +286,10 @@ dirty. Final report:
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/pf22-protected-runtime/compat-run-final/compatibility-report.json`,
 SHA-256 `b5609927b183fe22c046ac714946f1bfefd7dba6d26c8d6847534ff18031e673`.
 
-Because both Opus remediation cycles change protected dispatch behavior, this clean
-comparison remains useful regression evidence but does not close compatibility
-for `545456f07`; the integration owner must rerun the 36-case comparison on the
-combined candidate.
+Because all three Opus remediation cycles change protected dispatch behavior,
+this clean comparison remains useful regression evidence but does not close
+compatibility for `24a51cddb`; the integration owner must rerun the 36-case
+comparison on the combined candidate.
 
 ## TMUX evidence
 
@@ -303,13 +348,28 @@ configuration:
 - Verdict: no P0, two P1 and five P2. All seven were independently confirmed
   and remediated in `545456f07` as recorded above.
 
-A final Opus 5 Max rereview of `545456f07` plus this evidence closeout remains
+The integration owner then reviewed range `7fca549f7..6f8a6d5c0` in the same
+read-only configuration:
+
+- Prompt:
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/claude-auth-review-runtime/pf22-final-review-prompt.md`,
+  SHA-256 `15d65fba0e357f424fde8614bc7de8799174163f153a5e4cb62483dc69747d4b`.
+- Transcript:
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/claude-auth-review-runtime/pf22-opus5-max-final-pass1.txt`,
+  16,387 bytes, SHA-256
+  `b58315b2637f4b6cb8084287c873a2e96a48fc93293fc043e8a27ffe6e36204c`.
+- Exact-pattern token-leak check: false.
+- Verdict: no P0/P1 and three P2. The two safe in-scope findings are fixed in
+  `24a51cddb`; the unsafe generic audit relaxation is rejected and replaced by
+  the conservative Unknown proof and explicit future dependency above.
+
+A final Opus 5 Max rereview of `24a51cddb` plus this evidence closeout remains
 mandatory. PF-22 does not claim clean review closure until that transcript has
 no actionable P0/P1/P2 findings.
 
 ## Upstream seam register
 
-The v3 register pins repository-contained paths, exact definitions, one tested
+The v4 register pins repository-contained paths, exact definitions, one tested
 revision, owners, semantic contracts, regression commands and verified
 Markdown evidence anchors. Child inheritance is verified.
 Ingress, egress, and the trusted human persistence adapter remain explicitly
@@ -318,8 +378,11 @@ adapters.
 
 ## Remaining gates and consumer handoff
 
-- Complete the final Claude Opus 5 Max read-only rereview of the twice-remediated candidate
+- Complete the final Claude Opus 5 Max read-only rereview of the three-times-remediated candidate
   and resolve any remaining actionable P0/P1/P2 finding.
+- Define in a future explicitly scoped cross-crate contract a durable admission
+  marker or non-forgeable fence-to-audit proof before allowing receiptless
+  mandate Denied/Cancelled closure; PF-22 only proves conservative Unknown.
 - PF-23/PF-24 must bind the runtime and journal-recovery expected run
   generation to one authenticated live-session source and add a combined-tree
   mismatch test; PF-22 cannot prove that root from `RecoveryReport` alone.

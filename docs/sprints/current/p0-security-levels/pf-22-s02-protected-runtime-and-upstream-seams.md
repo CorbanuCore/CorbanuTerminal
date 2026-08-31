@@ -53,13 +53,15 @@ updated: 2026-08-31
 - [x] Added an exact-symbol upstream seam register and mechanical checker; unverified adapter-owned seams remain explicitly pending.
 - [x] Bound grant and mandate authority to the exact durable request/approved preview, with negative cross-request substitution coverage.
 - [x] Remediated the first Opus review: trusted live dispatch time, durable mandate one-shot enforcement, bounded readiness, re-derived effective containment, consuming dispatch resolution and exact repository-contained seam evidence.
-- [x] Remediated the first Opus rereview: preview-stable mandate replay, never-admitted durable cancellation, internally derived event context, immutable/monotonic readiness, actor/request binding, available recovery-checkpoint binding and correct Rust char-literal lexing.
+- [x] Remediated the first Opus rereview: preview-stable mandate replay, conservative never-admitted closure, internally derived event context, immutable/monotonic readiness, actor/request binding, available recovery-checkpoint binding and correct Rust char-literal lexing.
+- [x] Remediated the next Opus pass: domain-separated grant/mandate deduplication, opaque per-runtime dispatch identity, and an explicit conservative Unknown-only mandate closure where durable admission proof does not exist.
 - [x] Recorded focused, affected, compatibility and real-TMUX evidence under `qa/security-levels/sprints/PF-22-S02/`.
 
 ## Remaining
 
-- [ ] Complete the final TMUX/Corbanu/Claude Opus 5 Max read-only rereview of the twice-remediated candidate and resolve any actionable P0/P1/P2 findings.
+- [ ] Complete the final TMUX/Corbanu/Claude Opus 5 Max read-only rereview of the three-times-remediated candidate and resolve any actionable P0/P1/P2 findings.
 - [ ] At the PF-23/PF-24 consumer boundary, bind runtime readiness and journal recovery to one authenticated live run-generation source and prove a mismatch fails closed.
+- [ ] Scope a future cross-crate durable-admission or non-forgeable fence-to-audit proof before supporting receiptless never-admitted mandate Denied/Cancelled outcomes; PF-22 only claims conservative Unknown.
 - [ ] Have the integration owner rerun combined-tree gates, archive the sprint and update shared plan/navigation ledgers.
 
 ## Verification
@@ -70,7 +72,8 @@ updated: 2026-08-31
 - [x] TUI applicability: no new UI here; PF-24/PF-25/PF-26 retain transition, stop and resume proof. A supporting pre-Opus-remediation TMUX smoke passed and is recorded honestly as superseded evidence.
 - [x] Run the first required read-only Claude Opus 5 Max review through Corbanu Terminal in TMUX; it returned no P0, two P1 and six P2 findings, all dispositioned in evidence.
 - [x] Rerun Opus 5 Max on the first P1/P2-remediated candidate; it returned no P0, two P1 and five P2 findings, all remediated and dispositioned in evidence.
-- [ ] Run the final Opus 5 Max review on the twice-remediated candidate.
+- [x] Rerun Opus 5 Max on the second remediated candidate; it returned no P0/P1 and three P2 findings, with two safely remediated and one narrowed to an explicit future contract dependency.
+- [ ] Run the final Opus 5 Max review on the three-times-remediated candidate.
 
 ## Exit evidence
 
