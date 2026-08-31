@@ -301,6 +301,41 @@ async fn unhealthy_platform_record_does_not_replace_the_previous_selection() {
     );
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn providers_status_reports_selected_login_reauthorization_need() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let fake_claude = temp_dir.path().join("claude");
+    std::fs::write(
+        &fake_claude,
+        "#!/bin/sh\n[ \"$1\" = \"internal-claude-login-health\" ] && exit 1\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\"}\\n'\n",
+    )
+    .expect("write fake claude");
+    let mut permissions = std::fs::metadata(&fake_claude)
+        .expect("fake claude metadata")
+        .permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&fake_claude, permissions).expect("make executable");
+    let selection = ClaudeAuthSelection::new(
+        ClaudeAuthSource::ClaudeCodeLogin,
+        current_platform_login_source_id().expect("current source id"),
+    )
+    .expect("selection");
+    Vault::new(temp_dir.path().to_path_buf())
+        .save_claude_auth_selection(&selection)
+        .expect("save selection");
+
+    let status = current_status_with_executables(
+        temp_dir.path(),
+        Duration::from_secs(1),
+        &fake_claude,
+        Some(&fake_claude),
+    )
+    .await;
+
+    assert_eq!(status, ClaudeCodePlanStatus::NeedsReauthorization);
+}
+
 #[tokio::test]
 async fn invalid_persisted_source_id_surfaces_recovery_status() {
     let temp_dir = tempfile::tempdir().expect("temp dir");

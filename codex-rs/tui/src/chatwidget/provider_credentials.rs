@@ -472,6 +472,9 @@ fn claude_status_description(status: &ClaudeCodePlanStatus) -> String {
         ClaudeCodePlanStatus::InvalidSelection => {
             "Recovery needed · selected method is not valid on this platform".to_string()
         }
+        ClaudeCodePlanStatus::NeedsReauthorization => {
+            "Recovery needed · selected login needs reauthorization".to_string()
+        }
         ClaudeCodePlanStatus::SignedIn {
             email,
             subscription,
@@ -795,6 +798,10 @@ mod tests {
         assert_eq!(
             claude_status_description(&ClaudeCodePlanStatus::InvalidSelection),
             "Recovery needed · selected method is not valid on this platform"
+        );
+        assert_eq!(
+            claude_status_description(&ClaudeCodePlanStatus::NeedsReauthorization),
+            "Recovery needed · selected login needs reauthorization"
         );
         assert_eq!(
             claude_status_description(&ClaudeCodePlanStatus::Unavailable),

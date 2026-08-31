@@ -64,6 +64,7 @@ pub(crate) enum ClaudeCodePlanStatus {
         existing_source_detected: bool,
     },
     InvalidSelection,
+    NeedsReauthorization,
     SignedIn {
         email: Option<String>,
         subscription: Option<String>,
@@ -76,6 +77,21 @@ pub(crate) enum ClaudeCodePlanStatus {
 pub(crate) async fn current_status_with_timeout(
     codex_home: &Path,
     timeout: Duration,
+) -> ClaudeCodePlanStatus {
+    current_status_with_executables(
+        codex_home,
+        timeout,
+        Path::new("claude"),
+        /*health_executable*/ None,
+    )
+    .await
+}
+
+async fn current_status_with_executables(
+    codex_home: &Path,
+    timeout: Duration,
+    claude_executable: &Path,
+    health_executable: Option<&Path>,
 ) -> ClaudeCodePlanStatus {
     let codex_home = codex_home.to_path_buf();
     let stored = tokio::task::spawn_blocking(move || {
@@ -107,10 +123,19 @@ pub(crate) async fn current_status_with_timeout(
                 .is_some_and(|token| !token.trim().is_empty()),
         },
         Some(ClaudeAuthSource::ClaudeCodeLogin) => {
-            status_with_timeout(Path::new("claude"), timeout).await
+            let status = status_with_timeout(claude_executable, timeout).await;
+            if matches!(status, ClaudeCodePlanStatus::SignedIn { .. })
+                && verify_current_platform_login_health(health_executable, timeout)
+                    .await
+                    .is_err()
+            {
+                ClaudeCodePlanStatus::NeedsReauthorization
+            } else {
+                status
+            }
         }
         None => {
-            let login = status_with_timeout(Path::new("claude"), timeout).await;
+            let login = status_with_timeout(claude_executable, timeout).await;
             let environment_available = std::env::var("CLAUDE_CODE_OAUTH_TOKEN")
                 .ok()
                 .is_some_and(|token| !token.trim().is_empty());
@@ -363,7 +388,7 @@ async fn verify_login(
 ) -> Result<String, String> {
     match read_status(executable).await {
         Ok(ClaudeCodePlanStatus::SignedIn { .. }) => {
-            verify_current_platform_login_health(health_executable).await?;
+            verify_current_platform_login_health(health_executable, LOGIN_HEALTH_TIMEOUT).await?;
             persist_claude_code_login_selection(codex_home).await?;
             Ok("Claude Code login selected. Retry the Claude Plan request or choose a model from /model.".to_string())
         }
@@ -382,7 +407,7 @@ pub(crate) async fn select_existing_claude_code_login(
 ) -> Result<bool, String> {
     match status_with_timeout(executable, status_timeout).await {
         ClaudeCodePlanStatus::SignedIn { .. } => {
-            verify_current_platform_login_health(health_executable).await?;
+            verify_current_platform_login_health(health_executable, LOGIN_HEALTH_TIMEOUT).await?;
             persist_claude_code_login_selection(codex_home).await?;
             Ok(true)
         }
@@ -393,11 +418,15 @@ pub(crate) async fn select_existing_claude_code_login(
         | ClaudeCodePlanStatus::EnvironmentToken { .. }
         | ClaudeCodePlanStatus::SelectionRequired { .. }
         | ClaudeCodePlanStatus::InvalidSelection
+        | ClaudeCodePlanStatus::NeedsReauthorization
         | ClaudeCodePlanStatus::Checking => Ok(false),
     }
 }
 
-async fn verify_current_platform_login_health(executable: Option<&Path>) -> Result<(), String> {
+async fn verify_current_platform_login_health(
+    executable: Option<&Path>,
+    health_timeout: Duration,
+) -> Result<(), String> {
     let current_executable;
     let executable = match executable {
         Some(executable) => executable,
@@ -409,7 +438,7 @@ async fn verify_current_platform_login_health(executable: Option<&Path>) -> Resu
         }
     };
     let status = timeout(
-        LOGIN_HEALTH_TIMEOUT,
+        health_timeout,
         Command::new(executable)
             .arg("internal-claude-login-health")
             .stdin(Stdio::null())
