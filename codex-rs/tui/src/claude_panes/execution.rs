@@ -96,6 +96,17 @@ pub(crate) async fn run_claude_command_plan(
     } else {
         None
     };
+    if let Some(token) = claude_plan_token.as_deref() {
+        let bridge = plan.bridge.as_mut().ok_or_else(|| {
+            anyhow!("Claude Plan credential broker is missing its loopback bridge")
+        })?;
+        if bridge.upstream_api_key.is_some() || bridge.deferred_vault_secret.is_some() {
+            return Err(anyhow!(
+                "Claude Plan credential broker has conflicting credential sources"
+            ));
+        }
+        bridge.upstream_api_key = Some(token.to_string());
+    }
     if let Some(bridge) = plan.bridge.as_mut()
         && bridge.upstream_api_key.is_none()
     {
@@ -123,8 +134,7 @@ pub(crate) async fn run_claude_command_plan(
             plan.audit_path.display()
         )),
     );
-    let redactor =
-        ClaudeSecretRedactor::from_plan(&plan, claude_plan_token.as_deref().map(String::as_str));
+    let redactor = ClaudeSecretRedactor::from_plan(&plan, /*additional_secret*/ None);
     let bridge_handle = plan
         .bridge
         .take()
@@ -137,9 +147,6 @@ pub(crate) async fn run_claude_command_plan(
     }
     for key in &plan.env_remove {
         command.env_remove(key);
-    }
-    if let Some(token) = claude_plan_token.as_deref() {
-        command.env("CLAUDE_CODE_OAUTH_TOKEN", token);
     }
     let mut child = command
         .args(&plan.args)

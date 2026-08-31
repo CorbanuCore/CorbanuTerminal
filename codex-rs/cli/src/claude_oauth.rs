@@ -91,11 +91,13 @@ impl std::fmt::Debug for ClaudeCodeCredentials {
 #[derive(Deserialize)]
 struct ClaudeCodeOauthCredentials {
     #[serde(
+        default,
         rename = "accessToken",
         deserialize_with = "deserialize_optional_zeroizing_string"
     )]
     access_token: Option<Zeroizing<String>>,
     #[serde(
+        default,
         rename = "refreshToken",
         deserialize_with = "deserialize_optional_zeroizing_string"
     )]
@@ -1698,6 +1700,39 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         assert_eq!(
             credentials_health(&live_access_blank_refresh),
             ClaudeAuthHealth::NeedsReauthorization
+        );
+    }
+
+    #[test]
+    fn platform_fixture_preserves_missing_optional_token_fields() {
+        let missing_access: ClaudeCodeCredentials = serde_json::from_value(json!({
+            "claudeAiOauth": {
+                "refreshToken": "rotating-refresh",
+                "expiresAt": 1_000_000,
+                "scopes": ["user:inference"]
+            }
+        }))
+        .expect("missing access token remains optional");
+        let missing_refresh: ClaudeCodeCredentials = serde_json::from_value(json!({
+            "claudeAiOauth": {
+                "accessToken": "live-access",
+                "expiresAt": 1_000_000,
+                "scopes": ["user:inference"]
+            }
+        }))
+        .expect("missing refresh token remains optional");
+
+        assert!(
+            missing_access
+                .claude_ai_oauth
+                .as_ref()
+                .is_some_and(|oauth| oauth.access_token.is_none())
+        );
+        assert!(
+            missing_refresh
+                .claude_ai_oauth
+                .as_ref()
+                .is_some_and(|oauth| oauth.refresh_token.is_none())
         );
     }
 

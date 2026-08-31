@@ -13,6 +13,10 @@ use serde_json::Value;
 use serde_json::json;
 use sha2::Digest;
 use sha2::Sha256;
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpListener;
+use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -22,6 +26,8 @@ use crate::spawn_orchestration::SpawnRole;
 
 use super::app_integration::new_pane_items;
 use super::bridge::ambient_retry_after_delay;
+use super::bridge::find_header_end;
+use super::bridge::handle_anthropic_passthrough_bridge_connection;
 use super::bridge_translate::ambient_chat_messages_from_claude_request;
 use super::bridge_translate::ambient_chat_tools_from_claude_request;
 use super::bridge_translate::anthropic_stream_error_event;
@@ -109,6 +115,38 @@ fn pane(profile: ClaudeProviderProfileKind) -> (tempfile::TempDir, ClaudePane) {
             next_turn_index: 1,
         },
     )
+}
+
+async fn read_http_request(stream: &mut TcpStream) -> Vec<u8> {
+    let mut request = Vec::new();
+    let mut chunk = [0_u8; 4096];
+    let mut expected_len = None;
+    loop {
+        let read = stream.read(&mut chunk).await.expect("read HTTP request");
+        if read == 0 {
+            break;
+        }
+        request.extend_from_slice(&chunk[..read]);
+        if expected_len.is_none()
+            && let Some(header_end) = find_header_end(&request)
+        {
+            let headers = String::from_utf8_lossy(&request[..header_end]);
+            let content_length = headers
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().ok())
+                        .flatten()
+                })
+                .unwrap_or(0);
+            expected_len = Some(header_end + 4 + content_length);
+        }
+        if expected_len.is_some_and(|expected_len| request.len() >= expected_len) {
+            break;
+        }
+    }
+    request
 }
 
 #[test]
@@ -1442,7 +1480,7 @@ fn settings_json_uses_helper_without_secret_material() {
 }
 
 #[test]
-fn claude_plan_generated_settings_pin_the_official_anthropic_destination() {
+fn claude_plan_generated_settings_route_through_the_local_credential_bridge() {
     let (dir, pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
     let plan = build_claude_command_plan(&pane, "hello".to_string(), dir.path())
         .expect("Claude Plan command");
@@ -1452,11 +1490,83 @@ fn claude_plan_generated_settings_pin_the_official_anthropic_destination() {
     )
     .expect("parse generated settings");
 
-    assert_eq!(
-        settings.pointer("/env/ANTHROPIC_BASE_URL"),
-        Some(&json!("https://api.anthropic.com"))
+    assert!(
+        settings
+            .pointer("/env/ANTHROPIC_BASE_URL")
+            .and_then(Value::as_str)
+            .is_some_and(|base_url| base_url.starts_with("http://127.0.0.1:"))
     );
     assert_eq!(settings.pointer("/apiKeyHelper"), None);
+    let bridge = plan.bridge.as_ref().expect("Claude Plan bridge");
+    assert_eq!(bridge.kind, ClaudeBridgeKind::AnthropicPassthrough);
+    assert_eq!(bridge.upstream_base_url, "https://api.anthropic.com");
+    assert!(bridge.upstream_api_key.is_none());
+    assert!(bridge.deferred_vault_secret.is_none());
+    assert_eq!(
+        plan.env.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str),
+        Some("pfterminal-local-bridge")
+    );
+}
+
+#[tokio::test]
+async fn anthropic_passthrough_bridge_replaces_client_auth_and_forwards_oauth_beta() {
+    let upstream_listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind fake Anthropic upstream");
+    let upstream_addr = upstream_listener
+        .local_addr()
+        .expect("fake upstream address");
+    let upstream = tokio::spawn(async move {
+        let (mut stream, _) = upstream_listener.accept().await.expect("accept upstream");
+        let request = read_http_request(&mut stream).await;
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+            )
+            .await
+            .expect("write fake upstream response");
+        request
+    });
+
+    let bridge_listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind credential bridge");
+    let bridge_addr = bridge_listener.local_addr().expect("bridge address");
+    let bridge = tokio::spawn(async move {
+        let (stream, _) = bridge_listener.accept().await.expect("accept bridge");
+        handle_anthropic_passthrough_bridge_connection(
+            stream,
+            Arc::new("bridge-upstream-secret-not-real".to_string()),
+            Arc::new(format!("http://{upstream_addr}")),
+            reqwest::Client::new(),
+        )
+        .await
+        .expect("proxy request");
+    });
+
+    let mut client = TcpStream::connect(bridge_addr)
+        .await
+        .expect("connect to bridge");
+    client
+        .write_all(
+            b"POST /v1/messages HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer local-bridge-sentinel\r\nAnthropic-Version: 2023-06-01\r\nAnthropic-Beta: oauth-2025-04-20\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+        )
+        .await
+        .expect("write bridge request");
+    let mut response = Vec::new();
+    client
+        .read_to_end(&mut response)
+        .await
+        .expect("read bridge response");
+
+    bridge.await.expect("bridge task");
+    let upstream_request = upstream.await.expect("upstream task");
+    let upstream_request = String::from_utf8(upstream_request).expect("UTF-8 upstream request");
+    let upstream_request = upstream_request.to_ascii_lowercase();
+    assert!(upstream_request.contains("authorization: bearer bridge-upstream-secret-not-real"));
+    assert!(!upstream_request.contains("local-bridge-sentinel"));
+    assert!(upstream_request.contains("anthropic-beta: oauth-2025-04-20"));
+    assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200 OK"));
 }
 
 #[test]
@@ -2298,9 +2408,9 @@ fn claude_secret_redactor_redacts_bridge_key() {
 
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn claude_plan_pane_binds_selected_auth_only_at_execution_and_redacts_short_token() {
+async fn claude_plan_pane_brokers_selected_auth_without_inheriting_the_token() {
     let (dir, pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
-    let secret = "short";
+    let secret = "pane-auth-secret-canary-not-real";
     let helper = dir.path().join("auth-helper");
     let helper_home_log = dir.path().join("auth-helper-home");
     std::fs::write(
@@ -2315,11 +2425,14 @@ async fn claude_plan_pane_binds_selected_auth_only_at_execution_and_redacts_shor
     std::fs::write(
         &claude,
         concat!(
-            "#!/bin/sh\n",
-            "[ \"$CLAUDE_CODE_OAUTH_TOKEN\" = \"short\" ] || exit 7\n",
+            "#!/bin/sh\nset -eu\n",
+            "[ -z \"${CLAUDE_CODE_OAUTH_TOKEN+x}\" ] || exit 7\n",
+            "[ \"$ANTHROPIC_AUTH_TOKEN\" = \"pfterminal-local-bridge\" ] || exit 8\n",
+            "case \"$ANTHROPIC_BASE_URL\" in http://127.0.0.1:*) ;; *) exit 9 ;; esac\n",
+            "env | grep -F 'pane-auth-secret-canary-not-real' >/dev/null && exit 10\n",
             "printf '{\"type\":\"result\",\"subtype\":\"success\",",
             "\"session_id\":\"11111111-1111-4111-8111-111111111111\",",
-            "\"result\":\"bound %s\"}\\n' \"$CLAUDE_CODE_OAUTH_TOKEN\"\n",
+            "\"result\":\"bound through local bridge\"}\\n'\n",
         ),
     )
     .expect("write claude");
@@ -2353,6 +2466,9 @@ async fn claude_plan_pane_binds_selected_auth_only_at_execution_and_redacts_shor
         .as_mut()
         .expect("deferred selected auth");
     deferred.helper_executable = helper;
+    let bridge = plan.bridge.as_ref().expect("Claude Plan bridge");
+    assert!(bridge.upstream_api_key.is_none());
+    assert!(bridge.deferred_vault_secret.is_none());
     plan.executable = claude.to_string_lossy().into_owned();
     let artifact_path = plan.artifact_path.clone();
 
@@ -2362,7 +2478,7 @@ async fn claude_plan_pane_binds_selected_auth_only_at_execution_and_redacts_shor
     let artifact = std::fs::read_to_string(artifact_path).expect("artifact");
 
     assert_eq!(output.status, ClaudePaneTurnStatus::Success);
-    assert_eq!(output.text, "bound [REDACTED_SECRET]");
+    assert_eq!(output.text, "bound through local bridge");
     assert!(!artifact.contains(secret));
     assert_eq!(
         std::fs::read_to_string(helper_home_log).expect("helper home log"),

@@ -27,11 +27,15 @@ use super::turn_types::DeferredClaudePlanAuth;
 use super::turn_types::DeferredVaultSecret;
 
 const ANTHROPIC_AUTH_ENV_KEYS: [&str; 2] = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
-const CLAUDE_PLAN_ROUTING_ENV_KEYS: [&str; 7] = [
+const CLAUDE_PLAN_ROUTING_ENV_KEYS: [&str; 11] = [
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_AUTH_TOKEN",
     "ANTHROPIC_BASE_URL",
     "CLAUDE_CODE_OAUTH_TOKEN",
+    "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
+    "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
+    "CLAUDE_CODE_OAUTH_SCOPES",
+    "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
     "CLAUDE_CODE_USE_BEDROCK",
     "CLAUDE_CODE_USE_VERTEX",
     "CLAUDE_CODE_USE_FOUNDRY",
@@ -79,14 +83,13 @@ pub(crate) fn build_claude_command_plan(
         .join(format!("turn-{turn_index:04}.audit.json"));
     let mut bridge = None;
     let mut base_url_override = None;
-    if matches!(
-        profile.transport,
-        ClaudeProviderTransport::AmbientChatBridge
-            | ClaudeProviderTransport::AnthropicPassthroughBridge
-    ) {
-        let Some(label) = profile.vault_label else {
-            return Err(anyhow!("Claude bridge requires a provider vault label"));
-        };
+    if matches!(profile.kind, ClaudeProviderProfileKind::ClaudePlan)
+        || matches!(
+            profile.transport,
+            ClaudeProviderTransport::AmbientChatBridge
+                | ClaudeProviderTransport::AnthropicPassthroughBridge
+        )
+    {
         let listener = StdTcpListener::bind("127.0.0.1:0")
             .context("failed to bind Claude bridge loopback listener")?;
         listener
@@ -95,23 +98,59 @@ pub(crate) fn build_claude_command_plan(
         let bind_addr = listener
             .local_addr()
             .context("failed to read Claude bridge listener address")?;
-        let (kind, upstream_base_url, upstream_model) = match profile.transport {
-            ClaudeProviderTransport::AmbientChatBridge => (
-                ClaudeBridgeKind::AmbientChat,
-                "https://api.ambient.xyz/v1/chat/completions".to_string(),
-                profile.provider_model.to_string(),
-            ),
-            ClaudeProviderTransport::AnthropicPassthroughBridge => (
+        let (kind, upstream_base_url, upstream_model, deferred_vault_secret) = match profile.kind {
+            ClaudeProviderProfileKind::ClaudePlan => (
                 ClaudeBridgeKind::AnthropicPassthrough,
-                profile
-                    .base_url
-                    .ok_or_else(|| anyhow!("Anthropic passthrough bridge requires base URL"))?
-                    .trim_end_matches('/')
-                    .to_string(),
+                "https://api.anthropic.com".to_string(),
                 profile.provider_model.to_string(),
+                None,
             ),
-            ClaudeProviderTransport::DirectAnthropic => {
-                unreachable!("direct providers do not use bridge")
+            _ if matches!(
+                profile.transport,
+                ClaudeProviderTransport::AmbientChatBridge
+            ) =>
+            {
+                (
+                    ClaudeBridgeKind::AmbientChat,
+                    "https://api.ambient.xyz/v1/chat/completions".to_string(),
+                    profile.provider_model.to_string(),
+                    Some(DeferredVaultSecret {
+                        codex_home: codex_home.to_path_buf(),
+                        label: profile
+                            .vault_label
+                            .ok_or_else(|| {
+                                anyhow!("Claude bridge requires a provider vault label")
+                            })?
+                            .to_string(),
+                    }),
+                )
+            }
+            _ if matches!(
+                profile.transport,
+                ClaudeProviderTransport::AnthropicPassthroughBridge
+            ) =>
+            {
+                (
+                    ClaudeBridgeKind::AnthropicPassthrough,
+                    profile
+                        .base_url
+                        .ok_or_else(|| anyhow!("Anthropic passthrough bridge requires base URL"))?
+                        .trim_end_matches('/')
+                        .to_string(),
+                    profile.provider_model.to_string(),
+                    Some(DeferredVaultSecret {
+                        codex_home: codex_home.to_path_buf(),
+                        label: profile
+                            .vault_label
+                            .ok_or_else(|| {
+                                anyhow!("Claude bridge requires a provider vault label")
+                            })?
+                            .to_string(),
+                    }),
+                )
+            }
+            _ => {
+                unreachable!("direct non-Claude-Plan providers do not use a bridge")
             }
         };
         base_url_override = Some(format!("http://{bind_addr}"));
@@ -121,10 +160,7 @@ pub(crate) fn build_claude_command_plan(
             bind_addr,
             upstream_base_url,
             upstream_api_key: None,
-            deferred_vault_secret: Some(DeferredVaultSecret {
-                codex_home: codex_home.to_path_buf(),
-                label: label.to_string(),
-            }),
+            deferred_vault_secret,
             upstream_model,
         });
     }
@@ -280,7 +316,11 @@ pub(crate) fn settings_json_with_base_url(
     if matches!(profile.kind, ClaudeProviderProfileKind::ClaudePlan) {
         env.insert(
             "ANTHROPIC_BASE_URL".to_string(),
-            Value::String("https://api.anthropic.com".to_string()),
+            Value::String(
+                base_url_override
+                    .unwrap_or("https://api.anthropic.com")
+                    .to_string(),
+            ),
         );
     }
     if profile.uses_bare_mode {

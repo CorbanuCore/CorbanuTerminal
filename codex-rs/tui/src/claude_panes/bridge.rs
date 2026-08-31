@@ -347,7 +347,7 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
         }
     };
 
-    let headers = String::from_utf8_lossy(&buffer[..header_end]);
+    let headers = String::from_utf8_lossy(&buffer[..header_end]).into_owned();
     let request_line = headers.lines().next().unwrap_or_default().to_string();
     let content_length = headers
         .lines()
@@ -390,11 +390,18 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
         upstream_base_url.trim_end_matches('/'),
         upstream_path
     );
-    let response = http
+    let mut upstream_request = http
         .post(upstream_url)
         .bearer_auth(api_key.as_str())
         .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .header("anthropic-version", "2023-06-01")
+        .header(
+            "anthropic-version",
+            request_header_value(&headers, "anthropic-version").unwrap_or("2023-06-01"),
+        );
+    if let Some(beta) = request_header_value(&headers, "anthropic-beta") {
+        upstream_request = upstream_request.header("anthropic-beta", beta);
+    }
+    let response = upstream_request
         .body(body.to_vec())
         .send()
         .await
@@ -547,4 +554,13 @@ pub(crate) fn request_target_from_request_line(request_line: &str) -> Option<&st
     let mut parts = request_line.split_whitespace();
     let _method = parts.next()?;
     parts.next()
+}
+
+fn request_header_value<'a>(headers: &'a str, expected_name: &str) -> Option<&'a str> {
+    headers.lines().skip(1).find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case(expected_name)
+            .then_some(value.trim())
+            .filter(|value| !value.is_empty())
+    })
 }
