@@ -301,7 +301,7 @@ supporting evidence only.
 
 | Finished-feature doc | Product-spec citation present | Verified candidate |
 | --- | --- | --- |
-| Planned Claude Plan authentication and migration guide under `docs/` | pending | pending |
+| [Reliable Claude Plan authentication](../../features/claude-plan-authentication.md) | yes — **Shipping MVP — LIVE** vault and multi-provider requirements | CSA-05 final candidate pending |
 
 The finished guide must begin with repeated-login pain, explain both choices in
 plain language, identify subscription eligibility and token limitations, cover

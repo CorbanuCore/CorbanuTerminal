@@ -59,6 +59,7 @@ nav:
   - Features:
       - Feature Catalog: features/index.md
       - "/providers, Account Login, and /model": features/model-providers.md
+      - "Reliable Claude Plan Authentication": features/claude-plan-authentication.md
       - "/vault Credentials": features/vault.md
       - "/wallet and Corbanu Plan": features/wallet-plan.md
       - "/gpu Rentals": features/gpu-rentals.md
