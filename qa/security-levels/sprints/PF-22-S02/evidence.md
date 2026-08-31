@@ -1,8 +1,8 @@
 # PF-22-S02 evidence
 
 PF-22-S02 remains `in_progress`. The implementation, request-binding fix, and
-the remediation of the first Claude Opus 5 Max review are committed. A fresh
-Opus rereview of the remediated candidate and the integration-owner
+two Claude Opus 5 Max remediation cycles are committed. A final Opus rereview
+of the second remediated candidate and the integration-owner
 combined-tree/archive work remain open.
 
 ## Candidate identity and contracts
@@ -16,15 +16,17 @@ combined-tree/archive work remain open.
   cross-request substitution fails closed).
 - Pending-review evidence checkpoint: `a59add9b1105020ddae464aa9996be23cbfcfbd8`.
 - Opus P1/P2 remediation: `c0c00d443df7ba167c164a60685235d80cd6875b`.
-- Protected runtime contract: `PROTECTED_RUNTIME_CONTRACT_VERSION = 2`.
-- Upstream seam register contract: `PF-22-S02-v2`; pinned inherited upstream
+- Opus rereview P1/P2 remediation:
+  `545456f07c48157c4a0d91fc6a981ab8e0561636`.
+- Protected runtime contract: `PROTECTED_RUNTIME_CONTRACT_VERSION = 3`.
+- Upstream seam register contract: `PF-22-S02-v3`; pinned inherited upstream
   revision: `413492cd6c3a4d4f8dff6f406247ccda5a9d88aa`.
 - Pre-Opus-remediation compatibility candidate: `corbanu 0.1.35`, SHA-256
   `4f945cf64ab9d05a9a66035951807300828ea85806e92721528040dd45b52f97`.
 
-The implementation is deliberately cohesive: 558 production lines define one
-fail-closed state machine and 723 focused test lines provide its mechanical
-proof. The checker is a separate 391-line governance boundary with 108 lines
+The implementation is deliberately cohesive: 641 production lines define one
+fail-closed state machine and 937 focused test lines provide its mechanical
+proof. The checker is a separate 400-line governance boundary with 126 lines
 of focused tests. Splitting the state transition/fence/journal composition
 across modules would weaken reviewability without reducing the security
 contract. The greater-than-800-line lane is therefore accepted as one
@@ -60,9 +62,10 @@ in-scope findings:
   request/preview binding. A regression uses distinct preview, approval and
   dispatch times, and a second case proves a grant that expires before live
   dispatch fails closed.
-- Mandates are one-shot in the durable journal: the internal deduplication key
-  is derived from `mandate_id`, so a caller cannot replay one mandate by
-  changing its request deduplication key.
+- The first remediation made mandates one-shot by `mandate_id`; the second
+  review correctly showed that reapproval changes that ID. The final key is
+  derived from the effect-stable `preview_digest`, so neither a caller-selected
+  key nor a second approval over the same preview escapes the durable fence.
 - Readiness is bounded to a five-minute measurement window and the runtime
   independently re-derives `effective == max(requested, creator_required)`.
 - The revocation read guard is explicitly dropped before journal I/O. It is
@@ -94,6 +97,33 @@ value, so PF-22 can cross-check its two inputs but cannot manufacture that
 root of trust. Adapter wiring and a combined-tree negative test remain an
 explicit integration gate below.
 
+The first rereview of `7fca549f7..114c2726a` then reported no P0, two P1 and
+five P2 findings. Commit `545456f07c48157c4a0d91fc6a981ab8e0561636`
+remediates every confirmed item without changing the accepted PF-19 guard or
+inventing an automatic `Drop` outcome:
+
+- Mandate deduplication now uses the stable preview digest; two approvals at
+  different times over one preview hit the same terminal reservation.
+- An intent fenced before first admission can be durably closed as Unknown,
+  Denied or Cancelled. Executed and Failed still require an admitted effect,
+  so the recovery fix cannot fabricate execution.
+- `resolve` no longer accepts caller-supplied event generations; it derives
+  the exact context from the bound runtime.
+- The exact readiness window is immutable for the runtime, and an atomic
+  accepted-time high-water mark rejects clock regression. An invalid
+  out-of-window future observation does not poison the accepted clock.
+- Actor chain, session and task are bound into the runtime snapshot and checked
+  against both every current policy snapshot and every authorization request.
+- Empty/ready recovery report shape and checkpoint sequence, producer, owner
+  generation, non-future policy generation and non-future run generation are
+  independently checked against values available to PF-22 today. The
+  authenticated source of the expected run generation remains the honest
+  PF-23/PF-24 integration gate described above.
+- The seam lexer parses complete plain, escaped, Unicode and byte-character
+  literals before recognizing lifetimes, preserving brace scope; its tenth
+  regression case proves following top-level and nested definitions remain
+  distinguishable.
+
 ## Final-tree local verification
 
 All build, cache, temporary, log, compatibility, and TMUX artifacts were kept
@@ -104,8 +134,10 @@ under `/Volumes/CorbanuDrive/Corbanu/.codex-work/pf22-protected-runtime/`.
   `just fmt` is clean.
 - `cd codex-rs && just test -p codex-core protected_runtime`: 6 passed, 3,458
   skipped. This includes distinct preview/approval/dispatch times, mandate
-  one-shot enforcement, readiness TTL/effective-level negatives, positive
-  grant/mandate flows and negative cross-request substitution cases.
+  reapproval replay, never-admitted cancellation, immutable/monotonic
+  readiness, actor/request and recovery-checkpoint bindings, readiness
+  TTL/effective-level negatives, positive grant/mandate flows and negative
+  cross-request substitution cases.
 - `cd codex-rs && just test -p codex-core effective_policy`: 7 passed, 3,457
   skipped.
 - `cd codex-rs && just test -p codex-core security_inheritance`: 3 passed,
@@ -119,7 +151,7 @@ under `/Volumes/CorbanuDrive/Corbanu/.codex-work/pf22-protected-runtime/`.
 - `python3 scripts/security-upstream-seams-check --manifest
   qa/security-levels/upstream-seams.json`: passed.
 - `python3 -m unittest discover -s scripts/tests -p
-  'test_security_upstream_seams.py'`: 9 passed.
+  'test_security_upstream_seams.py'`: 10 passed.
 - `python3 docs/sprints/check.py`: passed, 59 current and 96 archived.
 - `python3 docs/plans/check.py`: passed, one active of two allowed and
   one available slot at the recorded checkpoint.
@@ -160,6 +192,29 @@ Final governance log SHA-256 values:
 - `plan-check-opus-remediation.txt`:
   `9386e473c028f912d1685f25a88db8d21e57b8a9ad0929b07fcca3262ecbc8fb`
 
+Post-rereview-remediation test-log SHA-256 values:
+
+- `protected-runtime-rereview-remediation.txt`:
+  `6a2830b45f77fa31cc7caa9a403a9369aee7a9188c9114a45ad1321a1df5f124`
+- `effective-policy-rereview-remediation.txt`:
+  `13a7a1eff3979c1f94dd2f01856b2fee050995a036d633a6f6a7209a0415a3b1`
+- `security-inheritance-rereview-remediation.txt`:
+  `7e1ed16f55ddc48e29fade20cd9f791ed38d50a5af20ac1379f0af0c493fe45a`
+- `authoritative-state-rereview-remediation.txt`:
+  `f71ed95807fe9ada7040a44c31edc42c3fe984222f2c29daf9193ae0beaf2cd2`
+- `revocation-rereview-remediation.txt`:
+  `8b4f67cbdbd937cc4de6c63819ce3769516493df399e7b29ca937beb25c5983f`
+- `security-audit-rereview-remediation.txt`:
+  `70f2b4480bc5266ee1a7cc95e5122b70d55d4259e65aa32e0882068deeba2563`
+- `seam-check-rereview-remediation.txt`:
+  `ad96a6c7d905ea21201b901f2f82ecf57117629ce349442422c88baec872a49b`
+- `seam-unit-rereview-remediation.txt`:
+  `cb389234a5da43b5a4bbb531d37f6764ea82dcb0df693527cc4d194e885f407e`
+- `sprint-check-rereview-remediation.txt`:
+  `6b3b45c8eeb1144c261838f505ab6cbcf0f7e78800b5c3bad3077afe794e3fa3`
+- `plan-check-rereview-remediation.txt`:
+  `9386e473c028f912d1685f25a88db8d21e57b8a9ad0929b07fcca3262ecbc8fb`
+
 ## PF-21 compatibility comparison
 
 The pre-remediation implementation commit `85837f64b` passed all 36 cases, but
@@ -186,9 +241,9 @@ dirty. Final report:
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/pf22-protected-runtime/compat-run-final/compatibility-report.json`,
 SHA-256 `b5609927b183fe22c046ac714946f1bfefd7dba6d26c8d6847534ff18031e673`.
 
-Because the Opus remediation changes protected dispatch behavior, this clean
+Because both Opus remediation cycles change protected dispatch behavior, this clean
 comparison remains useful regression evidence but does not close compatibility
-for `c0c00d443`; the integration owner must rerun the 36-case comparison on the
+for `545456f07`; the integration owner must rerun the 36-case comparison on the
 combined candidate.
 
 ## TMUX evidence
@@ -233,13 +288,28 @@ Claude Opus 5, effort `max`:
 - Verdict: no P0, two P1 and six P2. The verified dispositions and remediation
   are recorded above.
 
-A fresh Opus 5 Max rereview of `c0c00d443` plus this evidence closeout remains
+The integration owner performed the required rereview of range
+`7fca549f7..114c2726a` in the same read-only TMUX + Corbanu + Claude Opus 5 Max
+configuration:
+
+- Prompt:
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/claude-auth-review-runtime/pf22-rereview-prompt.md`,
+  SHA-256 `0fe357c32e9b31934d7ba1b9139be8fc521ecab5863d2bcb8891742993ecf843`.
+- Transcript:
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/claude-auth-review-runtime/pf22-opus5-max-rereview.txt`,
+  24,635 bytes, SHA-256
+  `855a73f96fadcba5715d11a6f7549174734dc3cfa3ac04a9571e611f4f327537`.
+- Exact-pattern token-leak check: false.
+- Verdict: no P0, two P1 and five P2. All seven were independently confirmed
+  and remediated in `545456f07` as recorded above.
+
+A final Opus 5 Max rereview of `545456f07` plus this evidence closeout remains
 mandatory. PF-22 does not claim clean review closure until that transcript has
 no actionable P0/P1/P2 findings.
 
 ## Upstream seam register
 
-The v2 register pins repository-contained paths, exact definitions, one tested
+The v3 register pins repository-contained paths, exact definitions, one tested
 revision, owners, semantic contracts, regression commands and verified
 Markdown evidence anchors. Child inheritance is verified.
 Ingress, egress, and the trusted human persistence adapter remain explicitly
@@ -248,7 +318,7 @@ adapters.
 
 ## Remaining gates and consumer handoff
 
-- Complete the Claude Opus 5 Max read-only rereview of the remediated candidate
+- Complete the final Claude Opus 5 Max read-only rereview of the twice-remediated candidate
   and resolve any remaining actionable P0/P1/P2 finding.
 - PF-23/PF-24 must bind the runtime and journal-recovery expected run
   generation to one authenticated live-session source and add a combined-tree
