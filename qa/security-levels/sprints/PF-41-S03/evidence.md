@@ -4,7 +4,7 @@
 
 - Dispatch base: `9d08b15fa94676c1383ee1605b77e7cc7218dcc4`.
 - Allocation commit: `e0c23fe95165636d621dae8c16a5366c4f7250ac`.
-- Final implementation candidate: `4a2f1deb7e54410a08277c98fe4cec01e3c16cf5`.
+- Final implementation candidate: `3f8cef302caaf9658a84b7c488c08cead50a6402`.
 - Contract versions: security-audit event schema v1, integrity checkpoint v1,
   journal record v1 and consumer fixture v1.
 - Activation posture: fixture-only and fail closed. No producer, consumer,
@@ -91,23 +91,23 @@ crate source through the isolated manifest at
 | Check | Result |
 | --- | --- |
 | `rustfmt +nightly-2025-09-18 --edition 2024 codex-rs/security-audit/src/*.rs codex-rs/security-audit/tests/*.rs` | PASS |
-| `cargo +1.95.0 test --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/harness/Cargo.toml` with CorbanuDrive target/temp | PASS; 39 unit/fault + 1 public integration = 40/40 |
+| `cargo +1.95.0 test --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/harness/Cargo.toml` with CorbanuDrive target/temp | PASS; 40 unit/fault + 1 public integration = 41/41 |
 | `cargo +1.95.0 clippy --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/harness/Cargo.toml --all-targets -- -D warnings` | PASS; isolated workspace mirrors every root workspace Clippy deny |
 | `python3 -m unittest discover -s qa/security-levels/audit-foundation -p 'test_*.py' -v` | PASS; 3/3 |
 | `python3 -m unittest docs.plans.tests.test_check docs.sprints.tests.test_check` | PASS; 23/23 |
 | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | PASS; active 1/2, current 61, archived 94 |
 | `git diff --check` | PASS |
 
-Exact-commit final artifacts for `4a2f1deb7e54410a08277c98fe4cec01e3c16cf5`:
+Exact-commit final artifacts for `3f8cef302caaf9658a84b7c488c08cead50a6402`:
 
-- Rust test log: `test-rust-final-3.log`, SHA-256
-  `8e0e7ef041724ba752d12929294a9fd885534de519c5acfdc7149f0f0b5ae9cd`.
-- full-workspace-lint Clippy log: `clippy-final-3.log`, SHA-256
-  `5561d70ffe4ed061fbe181b17091e0c7ae01d2625dea6ef6463a5450ffbb8000`.
-- fixture log: `test-fixture-final-3.log`, SHA-256
+- Rust test log: `test-rust-final-4.log`, SHA-256
+  `c067b2ba4769044f7f4fccbad7861a67b8e347091558f7c73ce00113c1c40ffb`.
+- full-workspace-lint Clippy log: `clippy-final-4.log`, SHA-256
+  `8c233a54790c4800d3dd585436af679aa838da259bfdb129412e2d51cdb75cdc`.
+- fixture log: `test-fixture-final-4.log`, SHA-256
   `33060fd73862c5e1af97335504d5b45211fce6d229657f556d8deceeadc52ce4`.
-- governance test log: `test-governance-final-3.log`, SHA-256
-  `b8447aec702f8196aac886b2dc76d2b8bf93792c166701f5e67d77f1830eee14`.
+- governance test log: `test-governance-final-4.log`, SHA-256
+  `6088abc864f7d56c5fe6b87bf1e29d29b5316cd06831624ef6f758ff86d337`.
 - isolated manifest with the exact root Clippy deny set: `harness/Cargo.toml`,
   SHA-256
   `b1de95677cf4f772334b66a7be5d07b0de7146643034ef31f901bccc941066e9`.
@@ -133,7 +133,8 @@ terminal receipt recording after a live generation advance; clock-, session-,
 task-, generation- and reissued-authority-independent retry classification with
 original identity reporting; live dropped-permit fencing; exact one-record
 operator reconciliation with protected-prefix, owner and precise CAS-error
-validation; run-generation rollback at recovery; observable/clamped pending
+validation; run-generation rollback at recovery and ambiguous reconciliation;
+observable/clamped pending
 timestamps; structured chain failures; precise write-path CAS errors;
 validated-tail cache reuse; and cache invalidation on protected-root,
 writer-lock and persistence failures.
@@ -141,16 +142,18 @@ writer-lock and persistence failures.
 The foundation was landed in reviewable commits: initial event/storage/journal
 contracts and fixture, identity redaction, recovery/cache hardening, and focused
 review remediations. Journal lifecycle/append (`journal.rs`, 373 lines),
-filesystem publication (`journal_io.rs`, 131 lines), and recovery/reconciliation
-(`journal_recovery.rs`, 370 lines) are cohesive production boundaries below the
-500-line target; the former debug-only micro-module was folded into the core
-type. Record-first/root-last ordering stays directly visible in the append and
-recovery state machines rather than being split at individual transitions.
+filesystem publication (`journal_io.rs`, 131 lines), recovery/reconciliation
+(`journal_recovery.rs`, 372 lines), event contracts (`event.rs`, 461 lines),
+and canonical event identities/errors (`event_identity.rs`, 118 lines) are
+cohesive production boundaries below the 500-line target. The former debug-only
+micro-module was folded into the core type. Record-first/root-last ordering
+stays directly visible in the append and recovery state machines rather than
+being split at individual transitions.
 
 ## TMUX smoke and independent review
 
-The final implementation candidate `1c190e4fee649167ecc241e8113722d174b74a4c`
-ran in real TMUX session `pf41-durable-smoke-final-3` from the candidate worktree
+The final implementation candidate `3f8cef302caaf9658a84b7c488c08cead50a6402`
+ran in real TMUX session `pf41-durable-smoke-final-5` from the candidate worktree
 using Corbanu Terminal v0.1.35 with `RUST_LOG=trace`, read-only/never
 permissions, exact model `claude-opus-5-plan` at `max`, and an explicit
 CorbanuDrive `log_dir`. `/status` confirmed the candidate directory, connected
@@ -158,11 +161,11 @@ Claude Plan account, exact model and Corbanu version; `/quit` exited the session
 cleanly. Command text and Enter were sent as separate TMUX operations.
 
 - Status capture:
-  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final-3/status-pane.txt`,
-  SHA-256 `0cfa248a33de3a2a0d546210a5b4cee70cf675f148f83c9f60e214bebf57efff`.
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final-5/status-pane.txt`,
+  SHA-256 `8d4d62a3d24b4e0411babd7cff47375a6e1638a67d29e73cfb58ddecbf6d7388`.
 - Trace log:
-  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final-3/logs/codex-tui.log`,
-  SHA-256 `5458d36ab74428fee3b4e086540c644f44d2e70086a8ee9ade21e53cf961d8ef`.
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final-5/logs/codex-tui.log`,
+  SHA-256 `36f55656a0445489410921b57e6510585f65817d3133215143e96f37e6fbf8fc`.
 
 The first read-only review used real TMUX session `pf27-opus5-g1-review`
 with exact model `claude-opus-5-plan` at `max`. It found nine actionable
@@ -225,6 +228,19 @@ current anchoring checkpoint. Implementation candidate
 regressions. Transcript:
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/review/opus-fifth-review.txt`,
 SHA-256 `f45170f3737f2121a4def69c8aadb6012e198ae97bc0a8d068b1bca5a85b047e`.
+
+A sixth fresh read-only review in the same real TMUX/Corbanu harness used exact
+model `claude-opus-5-plan` at `max` and reviewed immutable evidence candidate
+`200b1a0f934ffda91a27f0f4aa417a24b9b3af8f`. It reconfirmed every earlier
+runtime remediation and found three remaining issues: the evidence referenced
+an obsolete candidate smoke, `event.rs` exceeded the 500-line production-module
+target, and ambiguous reconciliation did not compare the live run generation.
+Implementation candidate `3f8cef302caaf9658a84b7c488c08cead50a6402`
+fixes all three, adds a run-generation regression, splits canonical identity and
+error contracts into the cohesive `event_identity.rs` boundary, and is the
+exact candidate exercised by the smoke and logs above. Transcript:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/review/opus-sixth-review.txt`,
+SHA-256 `1cc6962a61ef8423a65f198420677a1af7824ed4915ea4516124adefa5ddd288`.
 
 The final post-remediation read-only Claude Opus 5 Plan Max review is recorded
 here after it completes. Prompt and Enter are sent as separate TMUX operations;

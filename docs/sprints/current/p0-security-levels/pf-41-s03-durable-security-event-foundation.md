@@ -49,7 +49,7 @@ updated: 2026-08-30
 - [x] Reused PF-16–20 actor, request, mandate, receipt and revocation types; added versioned digest identities, causal parents, policy/run/owner generations and secret-free correlation records without reusable authority.
 - [x] Added bounded segmented append, acknowledgment, hash-chain, protected-checkpoint and recovery contracts with an explicit record-first, protected-root-last cross-store commit protocol.
 - [x] Added durable intent-before-dispatch permits and completed/unknown terminal receipts. Stable effect/dedup retries remain idempotent across clock, session, task, generation and fresh grant/mandate authority; live authority remains separately recorded/revalidated. Disk full, protected-root timeout, ambiguous commit, saturation, missing keys and concurrent writers fail closed without automatic replay; duplicate errors preserve the original acknowledgement identity.
-- [x] Added validated recovery tail caching, a live unresolved-intent fence and explicit exact-event operator reconciliation for one-record ambiguous commits; recovery validates live policy and run generations, pending timestamps remain observable/clamped across backwards clock steps, restart/root changes invalidate the cache, reconciliation grants no permit and an unresolved intent must receive a completed/unknown terminal result before another dispatch.
+- [x] Added validated recovery tail caching, a live unresolved-intent fence and explicit exact-event operator reconciliation for one-record ambiguous commits; recovery and reconciliation validate live policy and run generations, pending timestamps remain observable/clamped across backwards clock steps, restart/root changes invalidate the cache, reconciliation grants no permit and an unresolved intent must receive a completed/unknown terminal result before another dispatch.
 - [x] Emergency restriction applies the PF-19 fence before persistence; audit failure remains visible and blocks restart recovery while the PF-20 state and reconstructed ledger differ.
 - [x] Covered append/crash boundaries, duplicate IDs, rollback, truncation, mutation, rotation, saturation, key loss, owner rotation, malformed storage and concurrent writers.
 - [x] Published fixture-only consumer contract v1 and exact durability/ownership guarantees without registering a producer, consumer, runtime route or protected profile.
@@ -60,11 +60,11 @@ updated: 2026-08-30
 
 ## Verification
 
-- [x] Final Rust formatting, full-workspace-deny Clippy, 39 unit/fault tests, one public integration test, three fixture tests, 23 governance checker tests and both live governance checkers pass; exact commands and artifact hashes are recorded in evidence.
+- [x] Final Rust formatting, full-workspace-deny Clippy, 40 unit/fault tests, one public integration test, three fixture tests, 23 governance checker tests and both live governance checkers pass; exact commands and artifact hashes are recorded in evidence.
 - [x] Fault tests cover before-write failure, post-sync crash, post-publish ambiguity and a real protected-root timeout, including immediate emergency fencing with unavailable audit storage. Transport acknowledgement loss is outside the in-process journal and uses the stable duplicate-retry contract.
 - [x] TUI applicability remains indirect for this unregistered foundation; the exact candidate passed the round-three TMUX/Corbanu `/status` and clean-exit smoke with trace logging.
 - [x] Contract fixture asserts `runtime_activation: false` with empty producer and consumer registrations; the lane changes no existing runtime route or profile.
-- [ ] Complete the fresh final read-only Claude Opus 5 Plan Max review in the TMUX/Corbanu harness; all five earlier review rounds are remediated and retested.
+- [ ] Complete the fresh final read-only Claude Opus 5 Plan Max review in the TMUX/Corbanu harness; all six earlier review rounds are remediated and retested.
 
 ## Exit evidence
 
