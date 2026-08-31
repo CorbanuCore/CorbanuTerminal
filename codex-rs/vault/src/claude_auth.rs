@@ -281,14 +281,6 @@ impl Vault {
         })
     }
 
-    /// Remove only Corbanu's source choice; provider-owned credentials are untouched.
-    pub fn clear_claude_auth_selection(&self) -> Result<bool, VaultError> {
-        self.with_storage_lock(|| {
-            let name = claude_auth_selection_secret_name()?;
-            Ok(self.secrets.delete(&SecretScope::Global, &name)?)
-        })
-    }
-
     /// Store or replace the managed token without exposing it through metadata.
     pub fn store_managed_claude_subscription_token(
         &self,

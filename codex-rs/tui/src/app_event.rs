@@ -1507,6 +1507,14 @@ pub(crate) enum AppEvent {
     /// Use or repair Claude Code's rotating subscription login.
     UseClaudeCodePlanLogin,
 
+    /// Persist an explicitly configured legacy environment token as the exact source.
+    UseLegacyClaudeEnvironmentToken,
+
+    /// Completion of the metadata-only legacy environment-token recovery.
+    LegacyClaudeEnvironmentTokenSelected {
+        result: Result<String, String>,
+    },
+
     /// Completion of the off-event-loop Claude Code status probe.
     ClaudeCodePlanLoginSelectionChecked {
         result: Result<bool, String>,

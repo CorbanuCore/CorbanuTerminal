@@ -75,6 +75,25 @@ fn claude_auth_recovery_snapshot() {
 }
 
 #[test]
+fn auth_recovery_exposes_explicit_legacy_environment_selection() {
+    let params = auth_recovery_params("recover".to_string());
+    let item = params
+        .items
+        .iter()
+        .find(|item| item.name.contains("CLAUDE_CODE_OAUTH_TOKEN"))
+        .expect("legacy environment recovery item");
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
+    let app_event_tx = AppEventSender::new(event_tx);
+
+    (item.actions[0])(&app_event_tx);
+
+    assert!(matches!(
+        event_rx.try_recv(),
+        Ok(AppEvent::UseLegacyClaudeEnvironmentToken)
+    ));
+}
+
+#[test]
 fn managed_token_app_event_debug_is_redacted() {
     let canary = "claude-token-canary-never-render";
     let event = AppEvent::SaveClaudeManagedSubscriptionToken {
@@ -164,10 +183,13 @@ fn claude_login_ready_view_snapshot() {
 async fn claude_cli_owns_token_exchange_and_status_verification() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_claude = temp_dir.path().join("claude");
+    let source_id = current_platform_login_source_id().expect("source id");
     std::fs::write(
         &fake_claude,
-        r#"#!/bin/sh
+        format!(
+            r#"#!/bin/sh
 if [ "$1" = "internal-claude-login-health" ]; then
+  printf '%s\n' '{source_id}'
   exit 0
 fi
 if [ "$1 $2" = "auth login" ]; then
@@ -177,11 +199,12 @@ if [ "$1 $2" = "auth login" ]; then
   exit
 fi
 if [ "$1 $2 $3" = "auth status --json" ]; then
-  printf '{"loggedIn":true,"authMethod":"claude.ai"}\n'
+  printf '{{"loggedIn":true,"authMethod":"claude.ai"}}\n'
   exit 0
 fi
 exit 2
-"#,
+"#
+        ),
     )
     .expect("write fake claude");
     let mut permissions = std::fs::metadata(&fake_claude)
@@ -232,9 +255,10 @@ exit 2
 async fn existing_claude_login_is_selected_without_reauthorization() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_claude = temp_dir.path().join("claude");
+    let source_id = current_platform_login_source_id().expect("source id");
     std::fs::write(
         &fake_claude,
-        "#!/bin/sh\n[ \"$1\" = \"internal-claude-login-health\" ] && exit 0\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\"}\\n'\n",
+        format!("#!/bin/sh\nif [ \"$1\" = \"internal-claude-login-health\" ]; then printf '%s\\n' '{source_id}'; exit 0; fi\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{{\"loggedIn\":true,\"authMethod\":\"claude.ai\"}}\\n'\n"),
     )
     .expect("write fake claude");
     let mut permissions = std::fs::metadata(&fake_claude)

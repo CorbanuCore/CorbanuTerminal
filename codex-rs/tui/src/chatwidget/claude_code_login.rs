@@ -35,7 +35,6 @@ use codex_vault::MANAGED_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::Vault;
 #[cfg(target_os = "macos")]
 use codex_vault::claude_code_macos_keychain_service;
-#[cfg(not(target_os = "macos"))]
 use codex_vault::credentials_file_claude_auth_source_id;
 #[cfg(target_os = "macos")]
 use codex_vault::macos_keychain_claude_auth_source_id;
@@ -113,21 +112,36 @@ async fn current_status_with_executables(
     {
         return ClaudeCodePlanStatus::InvalidSelection;
     }
-    match selection.map(|selection| selection.source) {
-        Some(ClaudeAuthSource::ManagedSubscriptionToken) => ClaudeCodePlanStatus::ManagedToken {
+    match selection {
+        Some(ClaudeAuthSelection {
+            source: ClaudeAuthSource::ManagedSubscriptionToken,
+            ..
+        }) => ClaudeCodePlanStatus::ManagedToken {
             stored: managed_stored,
         },
-        Some(ClaudeAuthSource::EnvironmentToken) => ClaudeCodePlanStatus::EnvironmentToken {
+        Some(ClaudeAuthSelection {
+            source: ClaudeAuthSource::EnvironmentToken,
+            ..
+        }) => ClaudeCodePlanStatus::EnvironmentToken {
             available: std::env::var("CLAUDE_CODE_OAUTH_TOKEN")
                 .ok()
                 .is_some_and(|token| !token.trim().is_empty()),
         },
-        Some(ClaudeAuthSource::ClaudeCodeLogin) => {
+        Some(
+            selection @ ClaudeAuthSelection {
+                source: ClaudeAuthSource::ClaudeCodeLogin,
+                ..
+            },
+        ) => {
             let status = status_with_timeout(claude_executable, timeout).await;
             if matches!(status, ClaudeCodePlanStatus::SignedIn { .. })
-                && verify_current_platform_login_health(health_executable, timeout)
-                    .await
-                    .is_err()
+                && verify_current_platform_login_health(
+                    health_executable,
+                    timeout,
+                    Some(&selection.source_id),
+                )
+                .await
+                .is_err()
             {
                 ClaudeCodePlanStatus::NeedsReauthorization
             } else {
@@ -149,12 +163,30 @@ async fn current_status_with_executables(
 }
 
 fn selection_source_id_is_current(selection: &ClaudeAuthSelection) -> bool {
-    let expected = match selection.source {
-        ClaudeAuthSource::ManagedSubscriptionToken => Ok(MANAGED_CLAUDE_AUTH_SOURCE_ID.to_string()),
-        ClaudeAuthSource::EnvironmentToken => Ok(ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID.to_string()),
-        ClaudeAuthSource::ClaudeCodeLogin => current_platform_login_source_id(),
-    };
-    expected.is_ok_and(|expected| selection.source_id == expected)
+    match selection.source {
+        ClaudeAuthSource::ManagedSubscriptionToken => {
+            selection.source_id == MANAGED_CLAUDE_AUTH_SOURCE_ID
+        }
+        ClaudeAuthSource::EnvironmentToken => {
+            selection.source_id == ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID
+        }
+        ClaudeAuthSource::ClaudeCodeLogin => accepted_platform_login_source_ids()
+            .is_ok_and(|expected| expected.contains(&selection.source_id)),
+    }
+}
+
+fn accepted_platform_login_source_ids() -> Result<Vec<String>, String> {
+    let mut source_ids = vec![current_platform_login_source_id()?];
+    #[cfg(target_os = "macos")]
+    {
+        let config_dir = claude_config_dir_for_source_id()?;
+        source_ids.push(
+            credentials_file_claude_auth_source_id(&config_dir).map_err(|error| {
+                format!("Could not identify legacy Claude credentials: {error}")
+            })?,
+        );
+    }
+    Ok(source_ids)
 }
 
 fn current_platform_login_source_id() -> Result<String, String> {
@@ -193,6 +225,17 @@ fn current_platform_login_source_id() -> Result<String, String> {
             format!("cannot identify Claude Code's credentials-file profile: {error}")
         })
     }
+}
+
+#[cfg(target_os = "macos")]
+fn claude_config_dir_for_source_id() -> Result<std::path::PathBuf, String> {
+    let home = std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .ok_or_else(|| "HOME is not set; cannot identify Claude Code's profile".to_string())?;
+    Ok(std::env::var_os("CLAUDE_CONFIG_DIR")
+        .filter(|value| !value.is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| home.join(".claude")))
 }
 
 async fn status_with_timeout(executable: &Path, timeout: Duration) -> ClaudeCodePlanStatus {
@@ -388,8 +431,13 @@ async fn verify_login(
 ) -> Result<String, String> {
     match read_status(executable).await {
         Ok(ClaudeCodePlanStatus::SignedIn { .. }) => {
-            verify_current_platform_login_health(health_executable, LOGIN_HEALTH_TIMEOUT).await?;
-            persist_claude_code_login_selection(codex_home).await?;
+            let source_id = verify_current_platform_login_health(
+                health_executable,
+                LOGIN_HEALTH_TIMEOUT,
+                /*selected_source_id*/ None,
+            )
+            .await?;
+            persist_claude_code_login_selection(codex_home, source_id).await?;
             Ok("Claude Code login selected. Retry the Claude Plan request or choose a model from /model.".to_string())
         }
         Ok(_) => {
@@ -407,8 +455,13 @@ pub(crate) async fn select_existing_claude_code_login(
 ) -> Result<bool, String> {
     match status_with_timeout(executable, status_timeout).await {
         ClaudeCodePlanStatus::SignedIn { .. } => {
-            verify_current_platform_login_health(health_executable, LOGIN_HEALTH_TIMEOUT).await?;
-            persist_claude_code_login_selection(codex_home).await?;
+            let source_id = verify_current_platform_login_health(
+                health_executable,
+                LOGIN_HEALTH_TIMEOUT,
+                /*selected_source_id*/ None,
+            )
+            .await?;
+            persist_claude_code_login_selection(codex_home, source_id).await?;
             Ok(true)
         }
         ClaudeCodePlanStatus::SignedOut
@@ -426,7 +479,8 @@ pub(crate) async fn select_existing_claude_code_login(
 async fn verify_current_platform_login_health(
     executable: Option<&Path>,
     health_timeout: Duration,
-) -> Result<(), String> {
+    selected_source_id: Option<&str>,
+) -> Result<String, String> {
     let current_executable;
     let executable = match executable {
         Some(executable) => executable,
@@ -437,32 +491,53 @@ async fn verify_current_platform_login_health(
             current_executable.as_path()
         }
     };
-    let status = timeout(
+    let mut command = Command::new(executable);
+    command.arg("internal-claude-login-health");
+    if let Some(source_id) = selected_source_id {
+        command.arg("--source-id").arg(source_id);
+    }
+    let output = timeout(
         health_timeout,
-        Command::new(executable)
-            .arg("internal-claude-login-health")
+        command
             .stdin(Stdio::null())
-            .stdout(Stdio::null())
+            .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .kill_on_drop(true)
-            .status(),
+            .output(),
     )
     .await
     .map_err(|_| "Timed out while verifying Claude Code's stored credentials".to_string())?
     .map_err(|error| format!("Could not verify Claude Code's stored credentials: {error}"))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(
+    if !output.status.success() {
+        return Err(
             "Claude Code reports a login, but its stored credential needs reauthorization. Run `claude auth login` again; your previous Corbanu method remains selected."
                 .to_string(),
-        )
+        );
     }
+    let source_id = String::from_utf8(output.stdout)
+        .map_err(|_| "Claude credential verification returned invalid metadata".to_string())?
+        .trim()
+        .to_string();
+    let accepted = accepted_platform_login_source_ids()?;
+    if !accepted.contains(&source_id)
+        || selected_source_id.is_some_and(|selected| selected != source_id)
+    {
+        return Err(
+            "Claude credential verification returned a different platform profile; the previous method remains selected."
+                .to_string(),
+        );
+    }
+    Ok(source_id)
 }
 
-async fn persist_claude_code_login_selection(codex_home: &Path) -> Result<(), String> {
+async fn persist_claude_code_login_selection(
+    codex_home: &Path,
+    source_id: String,
+) -> Result<(), String> {
     let codex_home = codex_home.to_path_buf();
-    tokio::task::spawn_blocking(move || persist_claude_code_login_selection_blocking(&codex_home))
+    tokio::task::spawn_blocking(move || {
+        persist_claude_code_login_selection_blocking(&codex_home, source_id)
+    })
         .await
         .map_err(|error| {
             format!(
@@ -471,12 +546,12 @@ async fn persist_claude_code_login_selection(codex_home: &Path) -> Result<(), St
         })?
 }
 
-fn persist_claude_code_login_selection_blocking(codex_home: &Path) -> Result<(), String> {
-    let selection = ClaudeAuthSelection::new(
-        ClaudeAuthSource::ClaudeCodeLogin,
-        current_platform_login_source_id()?,
-    )
-    .map_err(|error| format!("Could not select the current Claude Code login: {error}"))?;
+fn persist_claude_code_login_selection_blocking(
+    codex_home: &Path,
+    source_id: String,
+) -> Result<(), String> {
+    let selection = ClaudeAuthSelection::new(ClaudeAuthSource::ClaudeCodeLogin, source_id)
+        .map_err(|error| format!("Could not select the current Claude Code login: {error}"))?;
     Vault::new(codex_home.to_path_buf())
         .save_claude_auth_selection(&selection)
         .map_err(|error| {
@@ -547,6 +622,18 @@ fn auth_recovery_params(message: String) -> SelectionViewParams {
                 name: "Choose authentication method".to_string(),
                 description: Some("Return to the explicit source picker.".to_string()),
                 actions: vec![Box::new(|tx| tx.send(AppEvent::OpenClaudeCodePlanLogin))],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "Use CLAUDE_CODE_OAUTH_TOKEN (legacy)".to_string(),
+                description: Some(
+                    "Persist this exact legacy source only if the environment variable is currently set and nonblank."
+                        .to_string(),
+                ),
+                actions: vec![Box::new(|tx| {
+                    tx.send(AppEvent::UseLegacyClaudeEnvironmentToken)
+                })],
                 dismiss_on_select: true,
                 ..Default::default()
             },

@@ -122,7 +122,7 @@ fn absent_selection_preserves_existing_installations() {
 }
 
 #[test]
-fn selection_round_trips_across_vault_instances_and_can_be_cleared() {
+fn selection_round_trips_in_the_encrypted_store() {
     let (directory, vault) = test_vault();
     let selection = ClaudeAuthSelection::new_at(
         ClaudeAuthSource::ManagedSubscriptionToken,
@@ -133,8 +133,6 @@ fn selection_round_trips_across_vault_instances_and_can_be_cleared() {
     vault.save_claude_auth_selection(&selection).unwrap();
 
     assert_eq!(vault.load_claude_auth_selection().unwrap(), Some(selection));
-    assert!(vault.clear_claude_auth_selection().unwrap());
-    assert_eq!(vault.load_claude_auth_selection().unwrap(), None);
     assert!(directory.path().join("secrets").join("local.age").is_file());
 }
 

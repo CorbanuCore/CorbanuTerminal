@@ -79,17 +79,20 @@ Corbanu follows Claude Code's current platform ownership:
 | macOS | Keychain service `Claude Code-credentials`, or `Claude Code-custom-oauth-credentials` for custom OAuth. When `CLAUDE_CONFIG_DIR` is set, Claude Code appends the first eight hex characters of the normalized directory's SHA-256 digest. Corbanu persists that exact service identity. |
 | Linux and Windows | `${CLAUDE_CONFIG_DIR:-~/.claude}/.credentials.json`; Corbanu persists a digest of the exact absolute normalized profile path so changing `CLAUDE_CONFIG_DIR` fails closed. |
 
-On macOS, a legacy `.credentials.json` does not override the current Keychain
-record. `CLAUDE_CONFIG_DIR` selects a distinct hashed Keychain service. If that
-profile or service changes later, Corbanu fails closed and asks for an explicit
-selection instead of using the other account. Corbanu never deletes or
-rewrites Claude-owned credential records.
+On macOS, the current Keychain record wins when it exists. If that Keychain
+record is absent and the same profile has a legacy `.credentials.json`,
+Corbanu can preserve or explicitly select that exact file identity; it does not
+copy or delete the record. `CLAUDE_CONFIG_DIR` selects both a distinct hashed
+Keychain service and a distinct file-profile digest. After a method is saved,
+Corbanu verifies that exact store identity and never falls through to the other
+account.
 
 Existing installations without a saved Corbanu choice retain their historical
 behavior: a nonblank `CLAUDE_CODE_OAUTH_TOKEN` is used first, otherwise the
-current platform store is used. Once you successfully choose a method in
-`/providers`, that exact source is persisted; a failure never falls through to
-the environment or another store.
+current platform store is used, including a macOS file-only legacy profile when
+the corresponding Keychain record is absent. Once you successfully choose a
+method in `/providers`, that exact source is persisted; a failure never falls
+through to the environment or another store.
 
 ## Failure and recovery
 
@@ -98,11 +101,15 @@ its value. Missing managed tokens, missing environment values, blank refresh
 tokens, malformed credentials, unavailable stores, and ambiguous state lead to
 a source-specific recovery view.
 
-Recovery offers three inert-by-default actions: retry long-lived setup, choose
-an authentication method, or keep the current method. Esc also keeps the
-current method. After a successful recovery, retry the interrupted request or
-reselect the Claude Plan model. Restarting Corbanu preserves the exact selected
-source; it does not persist the raw token in chat or session history.
+Recovery offers four inert-by-default actions: retry long-lived setup, choose
+an authentication method, explicitly resume a currently nonblank legacy
+`CLAUDE_CODE_OAUTH_TOKEN`, or keep the current method. The legacy action does
+not alter any credential: it persists the environment variable as the exact
+selected source, so a later missing value fails closed instead of falling
+through to a Claude Code login. Esc also keeps the current method. After a
+successful recovery, retry the interrupted request or reselect the Claude Plan
+model. Restarting Corbanu preserves the exact selected source; it does not
+persist the raw token in chat or session history.
 
 For a broken Claude Code login, run `claude auth login` (or `/login` inside an
 interactive Claude Code session), then return to `/providers` and explicitly

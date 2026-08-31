@@ -39,6 +39,23 @@ const CLAUDE_REFRESH_TIMEOUT: Duration = Duration::from_secs(30);
 const CLAUDE_KEYCHAIN_TIMEOUT: Duration = Duration::from_secs(5);
 #[cfg(all(target_os = "macos", test))]
 const CLAUDE_KEYCHAIN_TIMEOUT: Duration = Duration::from_secs(30);
+#[cfg(target_os = "macos")]
+// `security` reports errSecItemNotFound (-25300) as the shell exit status 44.
+const SECURITY_ERR_SEC_ITEM_NOT_FOUND_EXIT: i32 = 44;
+
+#[cfg(target_os = "macos")]
+#[derive(Debug)]
+struct MissingMacosKeychainCredential;
+
+#[cfg(target_os = "macos")]
+impl std::fmt::Display for MissingMacosKeychainCredential {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("macOS Keychain did not contain current Claude Code credentials")
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl std::error::Error for MissingMacosKeychainCredential {}
 
 #[derive(Clone, Debug, Deserialize)]
 struct ClaudeCodeCredentials {
@@ -79,7 +96,16 @@ impl PlatformCredentialStore {
     fn metadata_store(self) -> ClaudeAuthStoreKind {
         match self {
             Self::MacosKeychain => ClaudeAuthStoreKind::MacosKeychain,
-            Self::CredentialsFile => ClaudeAuthStoreKind::CredentialsFile,
+            Self::CredentialsFile => {
+                #[cfg(target_os = "macos")]
+                {
+                    ClaudeAuthStoreKind::LegacyCredentialsFile
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    ClaudeAuthStoreKind::CredentialsFile
+                }
+            }
         }
     }
 }
@@ -102,7 +128,7 @@ async fn resolve_claude_oauth_access_token_for_selection(
     vault: &Vault,
 ) -> Result<String> {
     if let Some(selection) = selection {
-        let discovered = discover_selected_claude_auth_source(selection.source, vault).await?;
+        let discovered = discover_selected_claude_auth_source(selection, vault).await?;
         let metadata = resolve_selected_claude_auth_source(selection, &discovered)?;
         return match metadata.source {
             ClaudeAuthSource::ManagedSubscriptionToken => {
@@ -120,7 +146,7 @@ async fn resolve_claude_oauth_access_token_for_selection(
                 })
             }
             ClaudeAuthSource::ClaudeCodeLogin => {
-                resolve_current_platform_claude_oauth_access_token().await
+                resolve_selected_claude_code_login_access_token(&metadata.source_id).await
             }
         };
     }
@@ -156,9 +182,10 @@ fn resolve_selected_claude_auth_source(
 }
 
 async fn discover_selected_claude_auth_source(
-    source: ClaudeAuthSource,
+    selection: &ClaudeAuthSelection,
     vault: &Vault,
 ) -> Result<Vec<ClaudeAuthSourceMetadata>> {
+    let source = selection.source;
     let metadata = match source {
         ClaudeAuthSource::ManagedSubscriptionToken => ClaudeAuthSourceMetadata {
             source: ClaudeAuthSource::ManagedSubscriptionToken,
@@ -185,8 +212,9 @@ async fn discover_selected_claude_auth_source(
         ClaudeAuthSource::ClaudeCodeLogin => {
             let config_dir = claude_config_dir()?;
             let credentials_path = config_dir.join(CLAUDE_CREDENTIALS_FILE);
+            let store = platform_store_for_source_id(&config_dir, &selection.source_id)?;
             let health = match read_credentials(
-                CURRENT_PLATFORM_STORE,
+                store,
                 &config_dir,
                 &credentials_path,
                 /*security*/ None,
@@ -198,8 +226,8 @@ async fn discover_selected_claude_auth_source(
             };
             ClaudeAuthSourceMetadata {
                 source: ClaudeAuthSource::ClaudeCodeLogin,
-                source_id: CURRENT_PLATFORM_STORE.source_id(&config_dir)?,
-                store: CURRENT_PLATFORM_STORE.metadata_store(),
+                source_id: store.source_id(&config_dir)?,
+                store: store.metadata_store(),
                 health,
                 account_hint: None,
             }
@@ -211,14 +239,27 @@ async fn discover_selected_claude_auth_source(
 fn credentials_error_health(error: &anyhow::Error) -> ClaudeAuthHealth {
     if error.downcast_ref::<serde_json::Error>().is_some() {
         ClaudeAuthHealth::Malformed
-    } else if error
-        .downcast_ref::<io::Error>()
-        .is_some_and(|error| error.kind() == io::ErrorKind::NotFound)
+    } else if is_missing_macos_keychain_credential(error)
+        || error
+            .downcast_ref::<io::Error>()
+            .is_some_and(|error| error.kind() == io::ErrorKind::NotFound)
     {
         ClaudeAuthHealth::Missing
     } else {
         ClaudeAuthHealth::Unavailable
     }
+}
+
+#[cfg(target_os = "macos")]
+fn is_missing_macos_keychain_credential(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<MissingMacosKeychainCredential>()
+        .is_some()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn is_missing_macos_keychain_credential(_error: &anyhow::Error) -> bool {
+    false
 }
 
 fn unhealthy_selected_source_error(metadata: &ClaudeAuthSourceMetadata) -> anyhow::Error {
@@ -247,14 +288,29 @@ fn unhealthy_selected_source_error(metadata: &ClaudeAuthSourceMetadata) -> anyho
 async fn resolve_current_platform_claude_oauth_access_token() -> Result<String> {
     let config_dir = claude_config_dir()?;
 
+    let store = preferred_platform_store(&config_dir, /*security*/ None).await?;
+
+    resolve_claude_code_login_access_token(&config_dir, store).await
+}
+
+async fn resolve_selected_claude_code_login_access_token(source_id: &str) -> Result<String> {
+    let config_dir = claude_config_dir()?;
+    let store = platform_store_for_source_id(&config_dir, source_id)?;
+    resolve_claude_code_login_access_token(&config_dir, store).await
+}
+
+async fn resolve_claude_code_login_access_token(
+    config_dir: &Path,
+    store: PlatformCredentialStore,
+) -> Result<String> {
     let force_refresh =
         nonempty_env("PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH").as_deref() == Some("1");
     resolve_stored_claude_oauth_access_token(
-        &config_dir,
+        config_dir,
         /*claude_executable*/ None,
         current_time_ms(),
         force_refresh,
-        CURRENT_PLATFORM_STORE,
+        store,
         /*security*/ None,
     )
     .await
@@ -263,10 +319,68 @@ async fn resolve_current_platform_claude_oauth_access_token() -> Result<String> 
 /// Validate the exact platform credential record used by provider resolution without
 /// returning or printing credential material. The TUI calls this before persisting a
 /// compatibility selection so a superficial CLI status cannot commit an unhealthy source.
-pub(crate) async fn verify_current_platform_claude_login_health() -> Result<()> {
+pub(crate) async fn verify_current_platform_claude_login_health(
+    selected_source_id: Option<&str>,
+) -> Result<String> {
     let config_dir = claude_config_dir()?;
     let security = claude_test_security_executable();
-    verify_claude_login_health(&config_dir, CURRENT_PLATFORM_STORE, security.as_deref()).await
+    let store = match selected_source_id {
+        Some(source_id) => platform_store_for_source_id(&config_dir, source_id)?,
+        None => preferred_platform_store(&config_dir, security.as_deref()).await?,
+    };
+    verify_claude_login_health(&config_dir, store, security.as_deref()).await?;
+    store.source_id(&config_dir)
+}
+
+fn platform_store_for_source_id(
+    config_dir: &Path,
+    source_id: &str,
+) -> Result<PlatformCredentialStore> {
+    if source_id == CURRENT_PLATFORM_STORE.source_id(config_dir)? {
+        return Ok(CURRENT_PLATFORM_STORE);
+    }
+    #[cfg(target_os = "macos")]
+    if source_id == PlatformCredentialStore::CredentialsFile.source_id(config_dir)? {
+        return Ok(PlatformCredentialStore::CredentialsFile);
+    }
+    Err(anyhow!(
+        "the selected Claude Code login no longer matches this platform profile"
+    ))
+}
+
+async fn preferred_platform_store(
+    config_dir: &Path,
+    security: Option<&Path>,
+) -> Result<PlatformCredentialStore> {
+    #[cfg(target_os = "macos")]
+    {
+        let credentials_path = config_dir.join(CLAUDE_CREDENTIALS_FILE);
+        match read_credentials(
+            PlatformCredentialStore::MacosKeychain,
+            config_dir,
+            &credentials_path,
+            security,
+        )
+        .await
+        {
+            Ok(_) => return Ok(PlatformCredentialStore::MacosKeychain),
+            Err(error)
+                if error
+                    .downcast_ref::<MissingMacosKeychainCredential>()
+                    .is_some() =>
+            {
+                match tokio::fs::metadata(&credentials_path).await {
+                    Ok(_) => return Ok(PlatformCredentialStore::CredentialsFile),
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                    Err(error) => {
+                        return Err(error).context("failed to inspect legacy Claude credentials");
+                    }
+                }
+            }
+            Err(_) => return Ok(PlatformCredentialStore::MacosKeychain),
+        }
+    }
+    Ok(CURRENT_PLATFORM_STORE)
 }
 
 #[cfg(all(target_os = "macos", debug_assertions))]
@@ -432,11 +546,14 @@ async fn read_macos_keychain_credentials(
     .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "macOS Keychain lookup timed out"))?
     .with_context(|| format!("failed to start `{}`", executable.display()))?;
     if !output.status.success() {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            "macOS Keychain did not contain current Claude Code credentials",
-        )
-        .into());
+        return if output.status.code() == Some(SECURITY_ERR_SEC_ITEM_NOT_FOUND_EXIT) {
+            Err(MissingMacosKeychainCredential.into())
+        } else {
+            Err(anyhow!(
+                "macOS Keychain lookup failed with status {}",
+                output.status
+            ))
+        };
     }
     Ok(output.stdout)
 }
@@ -1090,6 +1207,86 @@ mod tests {
             usable_access_token(&credentials, now_ms).as_deref(),
             Some("keychain-access")
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn missing_keychain_selects_the_exact_legacy_file_profile() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let now_ms = current_time_ms();
+        write_credentials(
+            temp_dir.path(),
+            "legacy-file-access",
+            "legacy-file-refresh",
+            now_ms + 600_000,
+        );
+        let security = temp_dir.path().join("missing-security");
+        std::fs::write(&security, "#!/bin/sh\nexit 44\n").expect("write missing security");
+        let mut permissions = std::fs::metadata(&security)
+            .expect("missing security metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&security, permissions).expect("make missing security executable");
+
+        let store = preferred_platform_store(temp_dir.path(), Some(&security))
+            .await
+            .expect("select legacy file");
+        let source_id = store.source_id(temp_dir.path()).expect("legacy source id");
+
+        assert_eq!(store, PlatformCredentialStore::CredentialsFile);
+        assert_eq!(
+            store.metadata_store(),
+            ClaudeAuthStoreKind::LegacyCredentialsFile
+        );
+        assert_eq!(
+            platform_store_for_source_id(temp_dir.path(), &source_id)
+                .expect("resolve exact source"),
+            PlatformCredentialStore::CredentialsFile
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn malformed_or_unavailable_keychain_never_falls_back_to_legacy_file() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let now_ms = current_time_ms();
+        write_credentials(
+            temp_dir.path(),
+            "legacy-file-access",
+            "legacy-file-refresh",
+            now_ms + 600_000,
+        );
+        let malformed_security = temp_dir.path().join("malformed-security");
+        std::fs::write(&malformed_security, "#!/bin/sh\nprintf 'not-json\\n'\n")
+            .expect("write malformed security");
+        let mut permissions = std::fs::metadata(&malformed_security)
+            .expect("malformed security metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&malformed_security, permissions)
+            .expect("make malformed security executable");
+        let denied_security = temp_dir.path().join("denied-security");
+        std::fs::write(&denied_security, "#!/bin/sh\nexit 7\n").expect("write denied security");
+        let mut permissions = std::fs::metadata(&denied_security)
+            .expect("denied security metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&denied_security, permissions)
+            .expect("make denied security executable");
+
+        let unavailable_security = temp_dir.path().join("unavailable-security");
+        for security in [
+            malformed_security.as_path(),
+            denied_security.as_path(),
+            unavailable_security.as_path(),
+        ] {
+            assert_eq!(
+                preferred_platform_store(temp_dir.path(), Some(security))
+                    .await
+                    .expect("retain authoritative Keychain store"),
+                PlatformCredentialStore::MacosKeychain
+            );
+        }
     }
 
     fn write_credentials(

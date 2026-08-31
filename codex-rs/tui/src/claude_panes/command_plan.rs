@@ -277,6 +277,12 @@ pub(crate) fn settings_json_with_base_url(
     base_url_override: Option<&str>,
 ) -> Value {
     let mut env = serde_json::Map::new();
+    if matches!(profile.kind, ClaudeProviderProfileKind::ClaudePlan) {
+        env.insert(
+            "ANTHROPIC_BASE_URL".to_string(),
+            Value::String("https://api.anthropic.com".to_string()),
+        );
+    }
     if profile.uses_bare_mode {
         if let Some(base_url) = base_url_override.or(profile.base_url) {
             env.insert(

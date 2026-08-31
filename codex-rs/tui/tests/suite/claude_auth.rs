@@ -326,8 +326,14 @@ impl CompatibilityLoginFixture {
             output.status.success(),
             "isolated Claude login fixture failed hidden health verification"
         );
+        let source_id = String::from_utf8(output.stdout)
+            .context("hidden Claude login health command returned invalid metadata")?;
         ensure!(
-            output.stdout.is_empty(),
+            source_id.trim().starts_with("claude-login:"),
+            "hidden Claude login health command did not return a source identity"
+        );
+        ensure!(
+            !source_id.contains("fixture-access") && !source_id.contains("fixture-refresh"),
             "hidden Claude login health command exposed fixture credential data"
         );
         Ok(())
