@@ -139,7 +139,7 @@ fn readiness(status: ProtectionReadinessStatus) -> MeasuredProtectionReadiness {
 
 fn ready_recovery() -> RecoveryReport {
     RecoveryReport {
-        state: RecoveryState::Ready,
+        state: RecoveryState::Empty,
         event_count: 0,
         checkpoint: None,
         pending_dispatches: Vec::new(),
@@ -205,16 +205,23 @@ fn protected_runtime_binds_configured_creator_and_effective_levels() {
     assert_eq!(
         runtime.snapshot(),
         &super::protected_runtime::ProtectedRuntimeSnapshot {
-            contract_version: 2,
+            contract_version: 3,
             configured_level: SecurityLevel::Moderate,
             creator_required_level: SecurityLevel::Aggressive,
             effective_level: SecurityLevel::Aggressive,
             effective_policy_epoch: 0,
+            actor_chain: child_snapshot.actor_chain.clone(),
+            session_id: child_snapshot.session_id.clone(),
+            task_id: child_snapshot.task_id.clone(),
             generations: RuntimeGenerationBinding {
                 owner: 1,
                 policy: 1,
                 run: RUN_GENERATION,
                 revocation: 0,
+            },
+            readiness_window: ReadinessWindow {
+                measured_at_unix_seconds: 5,
+                expires_at_unix_seconds: 20,
             },
             state_owner: state_owner(),
             backend_id: text("broker-backend-v1"),
@@ -231,6 +238,16 @@ fn protected_runtime_binds_configured_creator_and_effective_levels() {
             revocations,
         ),
         Err(ProtectedRuntimeError::EffectivePolicyMismatch)
+    ));
+
+    let root_snapshot = view.snapshot_for_agent(root).expect("root snapshot");
+    assert!(matches!(
+        runtime.authorize_route(
+            current(&root_snapshot, &state, &measured, &recovery),
+            ProtectedRouteKind::Ingress,
+            "screened-retrieval",
+        ),
+        Err(ProtectedRuntimeError::StaleRuntimeBinding)
     ));
 }
 
@@ -323,6 +340,70 @@ fn protected_runtime_rejects_unavailable_stale_and_expired_readiness() {
         ),
         Err(ProtectedRuntimeError::InvalidReadinessMeasurement)
     ));
+
+    let clock_runtime = ProtectedRuntime::compose(
+        current(&effective, &state, &ready, &recovery),
+        routes(),
+        Arc::new(RwLock::new(RevocationState::new())),
+    )
+    .expect("clock-bound runtime");
+    clock_runtime
+        .authorize_route(
+            current_at(&effective, &state, &ready, &recovery, 12),
+            ProtectedRouteKind::Ingress,
+            "screened-retrieval",
+        )
+        .expect("advance runtime clock");
+    assert!(matches!(
+        clock_runtime.authorize_route(
+            current_at(&effective, &state, &ready, &recovery, 20),
+            ProtectedRouteKind::Ingress,
+            "screened-retrieval",
+        ),
+        Err(ProtectedRuntimeError::ExpiredReadiness)
+    ));
+    clock_runtime
+        .authorize_route(
+            current_at(&effective, &state, &ready, &recovery, 13),
+            ProtectedRouteKind::Ingress,
+            "screened-retrieval",
+        )
+        .expect("invalid future timestamp must not poison the clock");
+    assert!(matches!(
+        clock_runtime.authorize_route(
+            current_at(&effective, &state, &ready, &recovery, 12),
+            ProtectedRouteKind::Ingress,
+            "screened-retrieval",
+        ),
+        Err(ProtectedRuntimeError::RuntimeClockRegression)
+    ));
+
+    let substituted_window = MeasuredProtectionReadiness::new(
+        "broker-backend-v1",
+        "broker-identity-v1",
+        principal(PrincipalKind::Service, "security-audit-producer"),
+        state_owner(),
+        ProtectionReadinessStatus::Ready,
+        RuntimeGenerationBinding {
+            owner: 1,
+            policy: 1,
+            run: RUN_GENERATION,
+            revocation: 0,
+        },
+        ReadinessWindow {
+            measured_at_unix_seconds: 0,
+            expires_at_unix_seconds: 15,
+        },
+    )
+    .expect("substituted window");
+    assert!(matches!(
+        clock_runtime.authorize_route(
+            current_at(&effective, &state, &substituted_window, &recovery, 12),
+            ProtectedRouteKind::Ingress,
+            "screened-retrieval",
+        ),
+        Err(ProtectedRuntimeError::StaleRuntimeBinding)
+    ));
 }
 
 #[test]
@@ -386,6 +467,55 @@ fn restart_recovery_and_live_generation_changes_block_reuse() {
         ),
         Err(ProtectedRuntimeError::AuditRecoveryBlocked)
     ));
+
+    let matching_checkpoint = IntegrityCheckpoint {
+        schema_version: 1,
+        sequence: 1,
+        record_sha256: "0".repeat(64),
+        producer: principal(PrincipalKind::Service, "security-audit-producer"),
+        owner_generation: 1,
+        integrity_key_id: text("integrity-key-v1"),
+        policy_generation: 1,
+        run_generation: RUN_GENERATION,
+    };
+    let matching_recovery = RecoveryReport {
+        state: RecoveryState::Ready,
+        event_count: 1,
+        checkpoint: Some(matching_checkpoint.clone()),
+        pending_dispatches: Vec::new(),
+    };
+    runtime
+        .authorize_route(
+            current(&effective, &state, &measured, &matching_recovery),
+            ProtectedRouteKind::Ingress,
+            "screened-retrieval",
+        )
+        .expect("matching recovery identity");
+
+    let mut wrong_producer = matching_checkpoint.clone();
+    wrong_producer.producer = principal(PrincipalKind::Service, "other-audit-producer");
+    let mut wrong_owner = matching_checkpoint.clone();
+    wrong_owner.owner_generation = 2;
+    let mut future_policy = matching_checkpoint.clone();
+    future_policy.policy_generation = 2;
+    let mut future_run = matching_checkpoint;
+    future_run.run_generation = RUN_GENERATION + 1;
+    for mismatched_checkpoint in [wrong_producer, wrong_owner, future_policy, future_run] {
+        let mismatched_recovery = RecoveryReport {
+            state: RecoveryState::Ready,
+            event_count: 1,
+            checkpoint: Some(mismatched_checkpoint),
+            pending_dispatches: Vec::new(),
+        };
+        assert!(matches!(
+            runtime.authorize_route(
+                current(&effective, &state, &measured, &mismatched_recovery),
+                ProtectedRouteKind::Ingress,
+                "screened-retrieval",
+            ),
+            Err(ProtectedRuntimeError::AuditRecoveryBindingMismatch)
+        ));
+    }
 
     let event = RevocationEvent::new(
         principal(PrincipalKind::Human, "human-runtime-owner"),
@@ -502,6 +632,20 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     )
     .expect("runtime");
     let (request, grant) = request_and_grant(&effective);
+    let mut wrong_session_request = request.clone();
+    wrong_session_request.context.session_id = text("session:other");
+    assert!(matches!(
+        runtime.reserve_dispatch(
+            current(&effective, &state, &measured, &recovery),
+            "brokered-https",
+            &mut journal,
+            &wrong_session_request,
+            ProtectedAuthority::Grant(&grant),
+            text("run-7"),
+            text("wrong-runtime-session"),
+        ),
+        Err(ProtectedRuntimeError::RequestRuntimeMismatch)
+    ));
     let short_lived_grant = BoundedGrant::issue(
         grant.issuer.clone(),
         grant.actor_chain.clone(),
@@ -529,7 +673,7 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     substituted_request.context.destination = Some(text("https://other.example.test"));
     assert!(matches!(
         runtime.reserve_dispatch(
-            current(&effective, &state, &measured, &recovery),
+            current_at(&effective, &state, &measured, &recovery, 12),
             "brokered-https",
             &mut journal,
             &substituted_request,
@@ -566,7 +710,7 @@ fn durable_intent_and_live_fence_precede_the_effect() {
 
     let mut dispatch = runtime
         .reserve_dispatch(
-            current(&effective, &state, &measured, &recovery),
+            current_at(&effective, &state, &measured, &recovery, 12),
             "brokered-https",
             &mut journal,
             &request,
@@ -579,7 +723,7 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     let fence_is_held = dispatch
         .authorize(
             &runtime,
-            current(&effective, &state, &measured, &recovery),
+            current_at(&effective, &state, &measured, &recovery, 12),
             ProtectedAuthority::Grant(&grant),
             ProtectedDispatchStep::Admit,
             || revocations.try_write().is_err(),
@@ -591,13 +735,13 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     );
     let completion = dispatch
         .resolve(
+            &runtime,
             &mut journal,
-            runtime.event_context().expect("event context"),
             DispatchResolution::Completed {
                 outcome: MandateOutcome::Executed,
                 mandate_receipt: None,
             },
-            11,
+            12,
         )
         .expect("durable terminal receipt");
     assert_eq!(completion.sequence, 2);
@@ -624,8 +768,8 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         .expect("admit unknown dispatch");
     let unknown_completion = unknown_dispatch
         .resolve(
+            &runtime,
             &mut journal,
-            runtime.event_context().expect("event context"),
             DispatchResolution::Unknown {
                 reason: UnknownOutcomeReason::TransportLost,
             },
@@ -664,8 +808,8 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         .expect("mandate receipt");
     let mandate_completion = mandate_dispatch
         .resolve(
+            &runtime,
             &mut journal,
-            runtime.event_context().expect("event context"),
             DispatchResolution::Completed {
                 outcome: MandateOutcome::Executed,
                 mandate_receipt: Some(receipt),
@@ -692,6 +836,76 @@ fn durable_intent_and_live_fence_precede_the_effect() {
             codex_security_audit::JournalError::AlreadyResolved { .. }
         ))
     ));
+
+    let reapproved_mandate = ProtectedActionMandate::approve(
+        &preview,
+        principal(PrincipalKind::Human, "human-runtime-owner"),
+        12,
+    )
+    .expect("reapproved mandate");
+    assert_ne!(reapproved_mandate.mandate_id, mandate.mandate_id);
+    assert!(matches!(
+        runtime.reserve_dispatch(
+            current_at(&effective, &state, &measured, &recovery, 13),
+            "brokered-https",
+            &mut journal,
+            &request,
+            ProtectedAuthority::Mandate {
+                mandate: &reapproved_mandate,
+                preview: &preview,
+            },
+            text("run-7"),
+            text("caller-key-for-reapproval"),
+        ),
+        Err(ProtectedRuntimeError::Journal(
+            codex_security_audit::JournalError::AlreadyResolved { .. }
+        ))
+    ));
+
+    let expires_before_admission = BoundedGrant::issue(
+        grant.issuer.clone(),
+        grant.actor_chain.clone(),
+        grant.scope.clone(),
+        5,
+        14,
+        text("expires-before-admission"),
+    )
+    .expect("expiring grant");
+    let mut never_admitted = runtime
+        .reserve_dispatch(
+            current_at(&effective, &state, &measured, &recovery, 13),
+            "brokered-https",
+            &mut journal,
+            &request,
+            ProtectedAuthority::Grant(&expires_before_admission),
+            text("run-7"),
+            text("never-admitted"),
+        )
+        .expect("durable never-admitted intent");
+    assert!(matches!(
+        never_admitted.authorize(
+            &runtime,
+            current_at(&effective, &state, &measured, &recovery, 15),
+            ProtectedAuthority::Grant(&expires_before_admission),
+            ProtectedDispatchStep::Admit,
+            || (),
+        ),
+        Err(ProtectedRuntimeError::Revocation(
+            codex_security_policy::RevocationError::AuthorityOutsideValidityWindow
+        ))
+    ));
+    let cancelled = never_admitted
+        .resolve(
+            &runtime,
+            &mut journal,
+            DispatchResolution::Completed {
+                outcome: MandateOutcome::Cancelled,
+                mandate_receipt: None,
+            },
+            15,
+        )
+        .expect("durable cancellation before admission");
+    assert_eq!(cancelled.sequence, 8);
 }
 
 #[test]

@@ -160,8 +160,17 @@ def _rust_code(source: str) -> str:
             index = end
             continue
         if source[index] == "'" and index + 2 < len(source):
+            char_literal = re.match(
+                r"'(?:[^'\\\n]|\\(?:x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f_]{1,6}\}|[^\n]))'",
+                source[index:],
+            )
+            if char_literal:
+                end = index + char_literal.end()
+                chars[index:end] = " " * (end - index)
+                index = end
+                continue
             lifetime = re.match(r"'[A-Za-z_][A-Za-z0-9_]*", source[index:])
-            if lifetime and not source.startswith("'static'", index):
+            if lifetime:
                 index += lifetime.end()
                 continue
             end = index + 1

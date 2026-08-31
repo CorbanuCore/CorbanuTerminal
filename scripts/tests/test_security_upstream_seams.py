@@ -8,7 +8,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from security_upstream_seams_check import ManifestError, validate_manifest  # noqa: E402
+from security_upstream_seams_check import (  # noqa: E402
+    ManifestError,
+    _source_defines_symbol,
+    validate_manifest,
+)
 
 
 class SecurityUpstreamSeamsTest(unittest.TestCase):
@@ -46,6 +50,20 @@ class SecurityUpstreamSeamsTest(unittest.TestCase):
         manifest["seams"][0]["corbanu_symbol"] = "ProtectedRuntime::record_completed"
         with self.assertRaises(ManifestError):
             validate_manifest(manifest, ROOT)
+
+    def test_char_literals_preserve_following_definition_scope(self):
+        source = """
+const PLAIN: char = 'a';
+const ESCAPED: char = '\\'';
+const UNICODE: char = '\\u{7b}';
+fn visible() {}
+fn wrapper() {
+    let byte = b'}';
+    fn nested() {}
+}
+"""
+        self.assertTrue(_source_defines_symbol(source, "visible"))
+        self.assertFalse(_source_defines_symbol(source, "nested"))
 
     def test_paths_cannot_escape_and_evidence_anchor_must_exist(self):
         for field, value in (

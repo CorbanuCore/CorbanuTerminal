@@ -9,6 +9,8 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::sync::atomic::AtomicI64;
+use std::sync::atomic::Ordering;
 
 use codex_config::AuthoritativeSecurityState;
 use codex_security_audit::AppendAcknowledgement;
@@ -18,12 +20,16 @@ use codex_security_audit::DispatchResolution;
 use codex_security_audit::EventContext;
 use codex_security_audit::JournalError;
 use codex_security_audit::RecoveryReport;
+use codex_security_audit::RecoveryState;
 use codex_security_audit::ReferenceJournal;
 use codex_security_audit::SecurityEventError;
+use codex_security_policy::ActorChain;
 use codex_security_policy::AuthorizationRequest;
 use codex_security_policy::BoundedGrant;
 use codex_security_policy::BoundedText;
 use codex_security_policy::DispatchFence;
+use codex_security_policy::DispatchPhase;
+use codex_security_policy::MandateOutcome;
 use codex_security_policy::PolicyPrincipal;
 use codex_security_policy::PrincipalKind;
 use codex_security_policy::ProtectedActionMandate;
@@ -36,7 +42,7 @@ use thiserror::Error;
 
 use super::effective_policy::EffectivePolicySnapshot;
 
-pub(crate) const PROTECTED_RUNTIME_CONTRACT_VERSION: u32 = 2;
+pub(crate) const PROTECTED_RUNTIME_CONTRACT_VERSION: u32 = 3;
 const MAX_READINESS_WINDOW_SECONDS: i64 = 300;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -183,7 +189,11 @@ pub(crate) struct ProtectedRuntimeSnapshot {
     pub(crate) creator_required_level: SecurityLevel,
     pub(crate) effective_level: SecurityLevel,
     pub(crate) effective_policy_epoch: u64,
+    pub(crate) actor_chain: ActorChain,
+    pub(crate) session_id: BoundedText,
+    pub(crate) task_id: BoundedText,
     pub(crate) generations: RuntimeGenerationBinding,
+    pub(crate) readiness_window: ReadinessWindow,
     pub(crate) state_owner: codex_config::AuthoritativeStateOwner,
     pub(crate) backend_id: BoundedText,
     pub(crate) identity_id: BoundedText,
@@ -195,6 +205,7 @@ pub(crate) struct ProtectedRuntime {
     runtime_nonce: [u8; 16],
     configured_kill_switch_active: bool,
     readiness_producer: PolicyPrincipal,
+    last_observed_unix_seconds: AtomicI64,
     routes: ProtectedRouteRegistry,
     revocations: Arc<RwLock<RevocationState>>,
 }
@@ -206,13 +217,18 @@ impl ProtectedRuntime {
         revocations: Arc<RwLock<RevocationState>>,
     ) -> Result<Self, ProtectedRuntimeError> {
         validate_current_shape(&current, &revocations)?;
+        validate_readiness_time(&current)?;
         let snapshot = ProtectedRuntimeSnapshot {
             contract_version: PROTECTED_RUNTIME_CONTRACT_VERSION,
             configured_level: current.effective.requested_level,
             creator_required_level: current.effective.creator_required_level,
             effective_level: current.effective.level,
             effective_policy_epoch: current.effective.epoch,
+            actor_chain: current.effective.actor_chain.clone(),
+            session_id: current.effective.session_id.clone(),
+            task_id: current.effective.task_id.clone(),
             generations: current.readiness.generations,
+            readiness_window: current.readiness.window,
             state_owner: current.authoritative.owner.clone(),
             backend_id: current.readiness.backend_id.clone(),
             identity_id: current.readiness.identity_id.clone(),
@@ -222,6 +238,7 @@ impl ProtectedRuntime {
             runtime_nonce: current.effective.runtime_nonce,
             configured_kill_switch_active: current.authoritative.kill_switch_active,
             readiness_producer: current.readiness.producer.clone(),
+            last_observed_unix_seconds: AtomicI64::new(current.now_unix_seconds),
             routes,
             revocations,
         })
@@ -258,6 +275,7 @@ impl ProtectedRuntime {
     ) -> Result<ProtectedDispatch, ProtectedRuntimeError> {
         self.authorize_route(current, ProtectedRouteKind::Egress, egress_route_id)?;
         let now_unix_seconds = current.now_unix_seconds;
+        self.validate_request_binding(request)?;
         authority.validate_request(request, now_unix_seconds)?;
         let revocations = self.read_revocations()?;
         let (fence, identity, deduplication_key) = match authority {
@@ -281,7 +299,7 @@ impl ProtectedRuntime {
                     &revocations,
                 )?,
                 AuthorityIdentity::from_mandate(mandate)?,
-                BoundedText::new(format!("mandate:{}", mandate.mandate_id))?,
+                BoundedText::new(format!("mandate-preview:{}", mandate.preview_digest))?,
             ),
         };
         drop(revocations);
@@ -305,36 +323,49 @@ impl ProtectedRuntime {
         current: CurrentProtectedRuntime<'_>,
     ) -> Result<(), ProtectedRuntimeError> {
         validate_current_shape(&current, &self.revocations)?;
-        let candidate = (
-            current.effective.runtime_nonce,
-            current.effective.epoch,
-            current.effective.requested_level,
-            current.effective.creator_required_level,
-            current.effective.level,
-            current.authoritative.kill_switch_active,
-            current.readiness.generations,
-            &current.authoritative.owner,
-            &current.readiness.backend_id,
-            &current.readiness.identity_id,
-            &current.readiness.producer,
-        );
-        let bound = (
-            self.runtime_nonce,
-            self.snapshot.effective_policy_epoch,
-            self.snapshot.configured_level,
-            self.snapshot.creator_required_level,
-            self.snapshot.effective_level,
-            self.configured_kill_switch_active,
-            self.snapshot.generations,
-            &self.snapshot.state_owner,
-            &self.snapshot.backend_id,
-            &self.snapshot.identity_id,
-            &self.readiness_producer,
-        );
-        if candidate != bound {
+        if current.effective.runtime_nonce != self.runtime_nonce
+            || current.effective.epoch != self.snapshot.effective_policy_epoch
+            || current.effective.requested_level != self.snapshot.configured_level
+            || current.effective.creator_required_level != self.snapshot.creator_required_level
+            || current.effective.level != self.snapshot.effective_level
+            || current.effective.actor_chain != self.snapshot.actor_chain
+            || current.effective.session_id != self.snapshot.session_id
+            || current.effective.task_id != self.snapshot.task_id
+            || current.authoritative.kill_switch_active != self.configured_kill_switch_active
+            || current.readiness.generations != self.snapshot.generations
+            || current.readiness.window != self.snapshot.readiness_window
+            || current.authoritative.owner != self.snapshot.state_owner
+            || current.readiness.backend_id != self.snapshot.backend_id
+            || current.readiness.identity_id != self.snapshot.identity_id
+            || current.readiness.producer != self.readiness_producer
+        {
             return Err(ProtectedRuntimeError::StaleRuntimeBinding);
         }
+        validate_readiness_time(&current)?;
+        self.observe_time(current.now_unix_seconds)?;
         Ok(())
+    }
+
+    fn validate_request_binding(
+        &self,
+        request: &AuthorizationRequest,
+    ) -> Result<(), ProtectedRuntimeError> {
+        if request.subject != self.snapshot.actor_chain
+            || request.context.session_id != self.snapshot.session_id
+            || request.context.task_id != self.snapshot.task_id
+        {
+            return Err(ProtectedRuntimeError::RequestRuntimeMismatch);
+        }
+        Ok(())
+    }
+
+    fn observe_time(&self, now_unix_seconds: i64) -> Result<(), ProtectedRuntimeError> {
+        self.last_observed_unix_seconds
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |previous| {
+                (now_unix_seconds >= previous).then_some(now_unix_seconds)
+            })
+            .map(|_| ())
+            .map_err(|_| ProtectedRuntimeError::RuntimeClockRegression)
     }
 
     pub(crate) fn event_context(&self) -> Result<EventContext, ProtectedRuntimeError> {
@@ -430,24 +461,45 @@ impl ProtectedDispatch {
 
     pub(crate) fn resolve(
         mut self,
+        runtime: &ProtectedRuntime,
         journal: &mut ReferenceJournal,
-        current_context: EventContext,
         resolution: DispatchResolution,
         occurred_at_unix_seconds: i64,
     ) -> Result<AppendAcknowledgement, ProtectedRuntimeError> {
-        match resolution {
-            DispatchResolution::Completed { .. } => self.fence.record_completed()?,
-            DispatchResolution::Unknown { .. } => {
-                self.fence.record_unknown_financial_outcome()?;
-            }
+        let phase = self.fence.phase();
+        let terminal_transition = match &resolution {
+            DispatchResolution::Completed { .. } => self.fence.record_completed(),
+            DispatchResolution::Unknown { .. } => self.fence.record_unknown_financial_outcome(),
+        };
+        if let Err(error) = terminal_transition
+            && !never_admitted_resolution_is_safe(phase, &resolution, &error)
+        {
+            return Err(error.into());
         }
         Ok(journal.resolve_dispatch(
             self.permit,
-            current_context,
+            runtime.event_context()?,
             resolution,
             occurred_at_unix_seconds,
         )?)
     }
+}
+
+fn never_admitted_resolution_is_safe(
+    phase: DispatchPhase,
+    resolution: &DispatchResolution,
+    error: &RevocationError,
+) -> bool {
+    matches!(error, RevocationError::InvalidDispatchTransition)
+        && matches!(phase, DispatchPhase::Queued | DispatchPhase::Fenced)
+        && matches!(
+            resolution,
+            DispatchResolution::Unknown { .. }
+                | DispatchResolution::Completed {
+                    outcome: MandateOutcome::Denied | MandateOutcome::Cancelled,
+                    ..
+                }
+        )
 }
 
 fn validate_current_shape(
@@ -490,14 +542,10 @@ fn validate_current_shape(
     {
         return Err(ProtectedRuntimeError::StaleReadinessGeneration);
     }
-    if current.now_unix_seconds < current.readiness.window.measured_at_unix_seconds
-        || current.now_unix_seconds >= current.readiness.window.expires_at_unix_seconds
-    {
-        return Err(ProtectedRuntimeError::ExpiredReadiness);
-    }
     if !current.recovery.permits_protected_dispatch() {
         return Err(ProtectedRuntimeError::AuditRecoveryBlocked);
     }
+    validate_recovery_binding(current)?;
     let revocations = revocations
         .read()
         .map_err(|_| ProtectedRuntimeError::RevocationStatePoisoned)?;
@@ -508,6 +556,35 @@ fn validate_current_shape(
         return Err(ProtectedRuntimeError::StaleRevocationState);
     }
     Ok(())
+}
+
+fn validate_readiness_time(
+    current: &CurrentProtectedRuntime<'_>,
+) -> Result<(), ProtectedRuntimeError> {
+    if current.now_unix_seconds < current.readiness.window.measured_at_unix_seconds
+        || current.now_unix_seconds >= current.readiness.window.expires_at_unix_seconds
+    {
+        return Err(ProtectedRuntimeError::ExpiredReadiness);
+    }
+    Ok(())
+}
+
+fn validate_recovery_binding(
+    current: &CurrentProtectedRuntime<'_>,
+) -> Result<(), ProtectedRuntimeError> {
+    match (&current.recovery.state, &current.recovery.checkpoint) {
+        (RecoveryState::Empty, None) if current.recovery.event_count == 0 => Ok(()),
+        (RecoveryState::Ready, Some(checkpoint))
+            if u64::try_from(current.recovery.event_count) == Ok(checkpoint.sequence)
+                && checkpoint.producer == current.readiness.producer
+                && checkpoint.owner_generation == current.authoritative.owner.owner_generation
+                && checkpoint.policy_generation <= current.authoritative.revision
+                && checkpoint.run_generation <= current.run_generation =>
+        {
+            Ok(())
+        }
+        _ => Err(ProtectedRuntimeError::AuditRecoveryBindingMismatch),
+    }
 }
 
 #[derive(Debug, Error)]
@@ -536,6 +613,12 @@ pub(crate) enum ProtectedRuntimeError {
     StaleRuntimeBinding,
     #[error("protected authority does not match the exact authorization request")]
     AuthorityRequestMismatch,
+    #[error("authorization request does not match the protected runtime actor binding")]
+    RequestRuntimeMismatch,
+    #[error("protected runtime clock moved backwards")]
+    RuntimeClockRegression,
+    #[error("durable audit recovery does not match the protected runtime identity")]
+    AuditRecoveryBindingMismatch,
     #[error("protected revocation state lock is poisoned")]
     RevocationStatePoisoned,
     #[error("protected route is already registered")]
