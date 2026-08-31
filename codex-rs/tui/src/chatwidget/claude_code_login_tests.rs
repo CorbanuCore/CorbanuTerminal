@@ -21,6 +21,20 @@ async fn login_output_reader_bounds_unterminated_lines_before_allocation() {
     assert_eq!(line.len(), MAX_LOGIN_LINE_BYTES + 1);
 }
 
+#[tokio::test]
+async fn login_output_reader_preserves_the_oversize_signal_across_a_utf8_boundary() {
+    let oversized = "€".repeat(MAX_LOGIN_LINE_BYTES);
+    let mut reader = BufReader::new(oversized.as_bytes());
+
+    let line = read_bounded_output_line(&mut reader)
+        .await
+        .expect("read bounded UTF-8 output")
+        .expect("output line");
+
+    assert!(line.len() > MAX_LOGIN_LINE_BYTES);
+    assert!(line.contains(char::REPLACEMENT_CHARACTER));
+}
+
 fn render_selection(params: SelectionViewParams, width: u16) -> String {
     let (event_tx, _event_rx) = tokio::sync::mpsc::unbounded_channel();
     let app_event_tx = AppEventSender::new(event_tx);
@@ -430,6 +444,76 @@ async fn providers_status_reports_selected_login_reauthorization_need() {
     .await;
 
     assert_eq!(status, ClaudeCodePlanStatus::NeedsReauthorization);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn providers_status_reports_health_probe_timeout_as_error() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let hanging_health = temp_dir.path().join("hanging-health");
+    std::fs::write(&hanging_health, "#!/bin/sh\nsleep 30\n").expect("write health fixture");
+    let mut permissions = std::fs::metadata(&hanging_health)
+        .expect("health fixture metadata")
+        .permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&hanging_health, permissions).expect("make health fixture executable");
+    let selection = ClaudeAuthSelection::new(
+        ClaudeAuthSource::ClaudeCodeLogin,
+        current_platform_login_source_id().expect("current source id"),
+    )
+    .expect("selection");
+    Vault::new(temp_dir.path().to_path_buf())
+        .save_claude_auth_selection(&selection)
+        .expect("save selection");
+
+    let status = current_status_with_executables(
+        temp_dir.path(),
+        Duration::from_millis(25),
+        Path::new("claude"),
+        Some(&hanging_health),
+    )
+    .await;
+
+    assert_eq!(status, ClaudeCodePlanStatus::Error);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn providers_status_preserves_unavailable_claude_after_a_healthy_probe() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let healthy_probe = temp_dir.path().join("healthy-probe");
+    let source_id = current_platform_login_source_id().expect("current source id");
+    std::fs::write(
+        &healthy_probe,
+        format!("#!/bin/sh\nprintf '%s\\n' '{source_id}'\n"),
+    )
+    .expect("write health fixture");
+    let mut permissions = std::fs::metadata(&healthy_probe)
+        .expect("health fixture metadata")
+        .permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&healthy_probe, permissions).expect("make health fixture executable");
+    let authority_id = codex_vault::claude_login_authority_id(
+        "fixture@example.invalid",
+        "org-fixture",
+        Some("max"),
+    )
+    .expect("authority id");
+    let selection =
+        ClaudeAuthSelection::new_claude_code_login(source_id, authority_id).expect("selection");
+    Vault::new(temp_dir.path().to_path_buf())
+        .save_claude_auth_selection(&selection)
+        .expect("save selection");
+
+    let status = current_status_with_executables(
+        temp_dir.path(),
+        Duration::from_secs(1),
+        &temp_dir.path().join("missing-claude"),
+        Some(&healthy_probe),
+    )
+    .await;
+
+    assert_eq!(status, ClaudeCodePlanStatus::Unavailable);
 }
 
 #[tokio::test]

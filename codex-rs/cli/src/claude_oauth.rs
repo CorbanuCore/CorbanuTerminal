@@ -73,22 +73,46 @@ impl std::fmt::Display for MissingMacosKeychainCredential {
 #[cfg(target_os = "macos")]
 impl std::error::Error for MissingMacosKeychainCredential {}
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Deserialize)]
 struct ClaudeCodeCredentials {
     #[serde(rename = "claudeAiOauth")]
     claude_ai_oauth: Option<ClaudeCodeOauthCredentials>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+impl std::fmt::Debug for ClaudeCodeCredentials {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ClaudeCodeCredentials")
+            .field("claude_ai_oauth_present", &self.claude_ai_oauth.is_some())
+            .finish()
+    }
+}
+
+#[derive(Deserialize)]
 struct ClaudeCodeOauthCredentials {
-    #[serde(rename = "accessToken")]
-    access_token: Option<String>,
-    #[serde(rename = "refreshToken")]
-    refresh_token: Option<String>,
+    #[serde(
+        rename = "accessToken",
+        deserialize_with = "deserialize_optional_zeroizing_string"
+    )]
+    access_token: Option<Zeroizing<String>>,
+    #[serde(
+        rename = "refreshToken",
+        deserialize_with = "deserialize_optional_zeroizing_string"
+    )]
+    refresh_token: Option<Zeroizing<String>>,
     #[serde(rename = "expiresAt")]
     expires_at: Option<u64>,
     #[serde(default)]
     scopes: Vec<String>,
+}
+
+fn deserialize_optional_zeroizing_string<'de, D>(
+    deserializer: D,
+) -> Result<Option<Zeroizing<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Option::<String>::deserialize(deserializer).map(|value| value.map(Zeroizing::new))
 }
 
 #[derive(Deserialize)]
@@ -176,9 +200,7 @@ async fn resolve_claude_oauth_access_token_for_selection(
         return Ok(Zeroizing::new(token));
     }
 
-    resolve_current_platform_claude_oauth_access_token()
-        .await
-        .map(Zeroizing::new)
+    resolve_current_platform_claude_oauth_access_token().await
 }
 
 async fn resolve_selected_source_access_token(
@@ -197,9 +219,7 @@ async fn resolve_selected_source_access_token(
             selected_environment_token(selection).map(Zeroizing::new)
         }
         ClaudeAuthSource::ClaudeCodeLogin => {
-            resolve_selected_claude_code_login_access_token(&metadata.source_id)
-                .await
-                .map(Zeroizing::new)
+            resolve_selected_claude_code_login_access_token(&metadata.source_id).await
         }
     }
 }
@@ -512,7 +532,7 @@ fn unhealthy_selected_source_error(metadata: &ClaudeAuthSourceMetadata) -> anyho
     }
 }
 
-async fn resolve_current_platform_claude_oauth_access_token() -> Result<String> {
+async fn resolve_current_platform_claude_oauth_access_token() -> Result<Zeroizing<String>> {
     let config_dir = claude_config_dir()?;
 
     let store = preferred_platform_store(&config_dir, /*security*/ None).await?;
@@ -520,7 +540,9 @@ async fn resolve_current_platform_claude_oauth_access_token() -> Result<String> 
     resolve_claude_code_login_access_token(&config_dir, store).await
 }
 
-async fn resolve_selected_claude_code_login_access_token(source_id: &str) -> Result<String> {
+async fn resolve_selected_claude_code_login_access_token(
+    source_id: &str,
+) -> Result<Zeroizing<String>> {
     let config_dir = claude_config_dir()?;
     let store = platform_store_for_source_id(&config_dir, source_id)?;
     resolve_claude_code_login_access_token(&config_dir, store).await
@@ -529,7 +551,7 @@ async fn resolve_selected_claude_code_login_access_token(source_id: &str) -> Res
 async fn resolve_claude_code_login_access_token(
     config_dir: &Path,
     store: PlatformCredentialStore,
-) -> Result<String> {
+) -> Result<Zeroizing<String>> {
     let force_refresh =
         nonempty_env("PFTERMINAL_PROVIDER_AUTH_FORCE_REFRESH").as_deref() == Some("1");
     resolve_stored_claude_oauth_access_token(
@@ -719,7 +741,7 @@ async fn resolve_stored_claude_oauth_access_token(
     force_refresh: bool,
     store: PlatformCredentialStore,
     security: Option<&Path>,
-) -> Result<String> {
+) -> Result<Zeroizing<String>> {
     let credentials_path = config_dir.join(CLAUDE_CREDENTIALS_FILE);
     let credentials = read_credentials(store, config_dir, &credentials_path, security).await?;
     if !force_refresh && let Some(access_token) = usable_access_token(&credentials, now_ms) {
@@ -773,7 +795,7 @@ async fn read_credentials(
                     path.display()
                 )
             })?;
-            (contents, path.display().to_string())
+            (Zeroizing::new(contents), path.display().to_string())
         }
         PlatformCredentialStore::MacosKeychain => {
             #[cfg(target_os = "macos")]
@@ -801,7 +823,7 @@ async fn read_credentials(
 async fn read_macos_keychain_credentials(
     config_dir: &Path,
     security: Option<&Path>,
-) -> Result<Vec<u8>> {
+) -> Result<Zeroizing<Vec<u8>>> {
     let account = std::env::var("USER")
         .ok()
         .map(|value| value.trim().to_string())
@@ -838,7 +860,7 @@ async fn read_macos_keychain_credentials(
             ))
         };
     }
-    Ok(output.stdout)
+    Ok(Zeroizing::new(output.stdout))
 }
 
 /// Check only whether the selected Keychain item exists. This deliberately
@@ -894,7 +916,10 @@ fn claude_keychain_service(config_dir: &Path) -> String {
     )
 }
 
-fn usable_access_token(credentials: &ClaudeCodeCredentials, now_ms: u64) -> Option<String> {
+fn usable_access_token(
+    credentials: &ClaudeCodeCredentials,
+    now_ms: u64,
+) -> Option<Zeroizing<String>> {
     let oauth = credentials.claude_ai_oauth.as_ref()?;
     let expires_at = oauth.expires_at?;
     if expires_at <= now_ms.saturating_add(MIN_TOKEN_VALIDITY_MS) {
@@ -902,10 +927,11 @@ fn usable_access_token(credentials: &ClaudeCodeCredentials, now_ms: u64) -> Opti
     }
     oauth
         .access_token
-        .as_deref()
+        .as_ref()
+        .map(|token| token.as_str())
         .map(str::trim)
         .filter(|token| !token.is_empty())
-        .map(ToString::to_string)
+        .map(|token| Zeroizing::new(token.to_string()))
 }
 
 fn credentials_health(credentials: &ClaudeCodeCredentials) -> ClaudeAuthHealth {
@@ -914,7 +940,8 @@ fn credentials_health(credentials: &ClaudeCodeCredentials) -> ClaudeAuthHealth {
     };
     let has_refresh = oauth
         .refresh_token
-        .as_deref()
+        .as_ref()
+        .map(|token| token.as_str())
         .map(str::trim)
         .is_some_and(|token| !token.is_empty());
     if has_refresh && !oauth.scopes.is_empty() {
@@ -936,7 +963,8 @@ async fn refresh_with_claude_cli(
     })?;
     let refresh_token = oauth
         .refresh_token
-        .as_deref()
+        .as_ref()
+        .map(|token| token.as_str())
         .map(str::trim)
         .filter(|token| !token.is_empty())
         .ok_or_else(|| {
@@ -1395,7 +1423,7 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         .await
         .expect("valid token should be returned without starting Claude");
 
-        assert_eq!(token, "valid-access");
+        assert_eq!(token.as_str(), "valid-access");
     }
 
     #[cfg(unix)]
@@ -1427,7 +1455,7 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         .await
         .expect("Claude CLI should refresh expiring credentials");
 
-        assert_eq!(token, "refreshed-access");
+        assert_eq!(token.as_str(), "refreshed-access");
         let refresh_log =
             std::fs::read_to_string(temp_dir.path().join("refresh.log")).expect("refresh log");
         assert_eq!(
@@ -1445,8 +1473,10 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         assert_eq!(
             persisted
                 .claude_ai_oauth
-                .and_then(|oauth| oauth.refresh_token),
-            Some("refreshed-refresh".to_string())
+                .and_then(|oauth| oauth.refresh_token)
+                .as_ref()
+                .map(|token| token.as_str()),
+            Some("refreshed-refresh")
         );
     }
 
@@ -1491,8 +1521,8 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
             ),
         );
 
-        assert_eq!(first.expect("first refresh"), "refreshed-access");
-        assert_eq!(second.expect("second refresh"), "refreshed-access");
+        assert_eq!(first.expect("first refresh").as_str(), "refreshed-access");
+        assert_eq!(second.expect("second refresh").as_str(), "refreshed-access");
         let refresh_log =
             std::fs::read_to_string(temp_dir.path().join("refresh.log")).expect("refresh log");
         assert_eq!(refresh_log.lines().count(), 1);
@@ -1527,7 +1557,7 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         .await
         .expect("401 recovery should force Claude credential rotation");
 
-        assert_eq!(token, "refreshed-access");
+        assert_eq!(token.as_str(), "refreshed-access");
         assert_eq!(
             std::fs::read_to_string(temp_dir.path().join("refresh.log"))
                 .expect("refresh log")
@@ -1566,7 +1596,7 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         .await
         .expect("persisted credential rotation is the refresh authority");
 
-        assert_eq!(token, "refreshed-access");
+        assert_eq!(token.as_str(), "refreshed-access");
     }
 
     #[cfg(unix)]
@@ -1747,7 +1777,9 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         .expect("keychain credentials");
 
         assert_eq!(
-            usable_access_token(&credentials, now_ms).as_deref(),
+            usable_access_token(&credentials, now_ms)
+                .as_ref()
+                .map(|token| token.as_str()),
             Some("keychain-access")
         );
     }

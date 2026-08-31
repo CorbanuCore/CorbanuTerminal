@@ -140,17 +140,10 @@ impl ChatWidget {
         let keyring_backend_kind = self.config.auth_keyring_backend_kind();
         let app_event_tx = self.app_event_tx.clone();
         tokio::spawn(async move {
-            let claude_status = async {
-                tokio::time::timeout(
-                    PROVIDER_STATUS_TIMEOUT,
-                    crate::chatwidget::claude_code_login::current_status_with_timeout(
-                        plan_home.as_path(),
-                        PROVIDER_STATUS_TIMEOUT,
-                    ),
-                )
-                .await
-                .unwrap_or(ClaudeCodePlanStatus::Error)
-            };
+            let claude_status = crate::chatwidget::claude_code_login::current_status_with_timeout(
+                plan_home.as_path(),
+                PROVIDER_STATUS_TIMEOUT,
+            );
             let api_key_statuses = tokio::task::spawn_blocking(move || {
                 provider_api_key_statuses(codex_home.as_path())
             });

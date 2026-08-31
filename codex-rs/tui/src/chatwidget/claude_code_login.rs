@@ -66,6 +66,22 @@ pub(crate) enum ClaudeCodeLoginInput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+enum PlatformLoginHealthCheckError {
+    NeedsReauthorization(String),
+    Undetermined(String),
+}
+
+impl std::fmt::Display for PlatformLoginHealthCheckError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NeedsReauthorization(message) | Self::Undetermined(message) => {
+                formatter.write_str(message)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ClaudeCodePlanStatus {
     Checking,
     ManagedToken {
@@ -153,24 +169,35 @@ async fn current_status_with_executables(
                 ..
             },
         ) => {
-            if verify_current_platform_login_health(
+            match verify_current_platform_login_health(
                 health_executable,
                 timeout,
                 Some(&selection.source_id),
             )
             .await
-            .is_err()
             {
-                return ClaudeCodePlanStatus::NeedsReauthorization;
+                Ok(_) => {}
+                Err(PlatformLoginHealthCheckError::NeedsReauthorization(_)) => {
+                    return ClaudeCodePlanStatus::NeedsReauthorization;
+                }
+                Err(PlatformLoginHealthCheckError::Undetermined(_)) => {
+                    return ClaudeCodePlanStatus::Error;
+                }
             }
             let status = status_with_timeout(claude_executable, timeout).await;
-            match status_authority_id(&status) {
-                Ok(authority_id)
-                    if selection.authority_id.as_deref() == Some(authority_id.as_str()) =>
-                {
-                    status
-                }
-                _ => ClaudeCodePlanStatus::NeedsReauthorization,
+            match &status {
+                ClaudeCodePlanStatus::SignedIn { .. } => match status_authority_id(&status) {
+                    Ok(authority_id)
+                        if selection.authority_id.as_deref() == Some(authority_id.as_str()) =>
+                    {
+                        status
+                    }
+                    _ => ClaudeCodePlanStatus::NeedsReauthorization,
+                },
+                ClaudeCodePlanStatus::SignedOut => ClaudeCodePlanStatus::NeedsReauthorization,
+                ClaudeCodePlanStatus::Unavailable => ClaudeCodePlanStatus::Unavailable,
+                ClaudeCodePlanStatus::Error => ClaudeCodePlanStatus::Error,
+                _ => ClaudeCodePlanStatus::Error,
             }
         }
         None => {
@@ -503,9 +530,7 @@ async fn read_bounded_output_line<R: AsyncRead + Unpin>(
         }
     }
 
-    String::from_utf8(bytes)
-        .map(Some)
-        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+    Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
 }
 
 async fn verify_login(
@@ -557,7 +582,8 @@ async fn verify_login_inner(
                 verification_timeout,
                 /*selected_source_id*/ None,
             )
-            .await?;
+            .await
+            .map_err(|error| error.to_string())?;
             persist_claude_code_login_selection(codex_home, source_id, authority_id).await?;
             Ok("Claude Code login selected. Retry the Claude Plan request or choose a model from /model.".to_string())
         }
@@ -592,7 +618,8 @@ pub(crate) async fn select_existing_claude_code_login(
                 LOGIN_HEALTH_TIMEOUT,
                 /*selected_source_id*/ None,
             )
-            .await?;
+            .await
+            .map_err(|error| error.to_string())?;
             persist_claude_code_login_selection(codex_home, source_id, authority_id).await?;
             Ok(true)
         }
@@ -612,13 +639,15 @@ async fn verify_current_platform_login_health(
     executable: Option<&Path>,
     health_timeout: Duration,
     selected_source_id: Option<&str>,
-) -> Result<String, String> {
+) -> Result<String, PlatformLoginHealthCheckError> {
     let current_executable;
     let executable = match executable {
         Some(executable) => executable,
         None => {
             current_executable = std::env::current_exe().map_err(|error| {
-                format!("Could not locate Corbanu to verify Claude Code credentials: {error}")
+                PlatformLoginHealthCheckError::Undetermined(format!(
+                    "Could not locate Corbanu to verify Claude Code credentials: {error}"
+                ))
             })?;
             current_executable.as_path()
         }
@@ -638,26 +667,39 @@ async fn verify_current_platform_login_health(
             .output(),
     )
     .await
-    .map_err(|_| "Timed out while verifying Claude Code's stored credentials".to_string())?
-    .map_err(|error| format!("Could not verify Claude Code's stored credentials: {error}"))?;
+    .map_err(|_| {
+        PlatformLoginHealthCheckError::Undetermined(
+            "Timed out while verifying Claude Code's stored credentials".to_string(),
+        )
+    })?
+    .map_err(|error| {
+        PlatformLoginHealthCheckError::Undetermined(format!(
+            "Could not verify Claude Code's stored credentials: {error}"
+        ))
+    })?;
     if !output.status.success() {
-        return Err(
+        return Err(PlatformLoginHealthCheckError::NeedsReauthorization(
             "Claude Code reports a login, but its stored credential needs reauthorization. Run `claude auth login` again; your previous Corbanu method remains selected."
                 .to_string(),
-        );
+        ));
     }
     let source_id = String::from_utf8(output.stdout)
-        .map_err(|_| "Claude credential verification returned invalid metadata".to_string())?
+        .map_err(|_| {
+            PlatformLoginHealthCheckError::Undetermined(
+                "Claude credential verification returned invalid metadata".to_string(),
+            )
+        })?
         .trim()
         .to_string();
-    let accepted = accepted_platform_login_source_ids()?;
+    let accepted = accepted_platform_login_source_ids()
+        .map_err(PlatformLoginHealthCheckError::Undetermined)?;
     if !accepted.contains(&source_id)
         || selected_source_id.is_some_and(|selected| selected != source_id)
     {
-        return Err(
+        return Err(PlatformLoginHealthCheckError::NeedsReauthorization(
             "Claude credential verification returned a different platform profile; the previous method remains selected."
                 .to_string(),
-        );
+        ));
     }
     Ok(source_id)
 }

@@ -1105,6 +1105,37 @@ async fn fresh_per_request_external_bearer_never_reuses_the_previous_token() {
 }
 
 #[tokio::test]
+async fn fresh_per_request_external_bearer_does_not_retain_a_refreshed_token() {
+    let script = ProviderAuthScript::new(&[
+        "first-source-token",
+        "refreshed-source-token",
+        "replacement-source-token",
+    ])
+    .unwrap();
+    let manager = AuthManager::external_bearer_only_with_cache_policy(
+        script.auth_config(),
+        ExternalBearerCachePolicy::FreshPerRequest,
+    );
+    let mut recovery = manager.unauthorized_recovery();
+
+    let first = manager
+        .auth()
+        .await
+        .and_then(|auth| auth.api_key().map(str::to_string));
+    recovery
+        .next()
+        .await
+        .expect("external refresh should succeed");
+    let replacement = manager
+        .auth()
+        .await
+        .and_then(|auth| auth.api_key().map(str::to_string));
+
+    assert_eq!(first.as_deref(), Some("first-source-token"));
+    assert_eq!(replacement.as_deref(), Some("replacement-source-token"));
+}
+
+#[tokio::test]
 async fn external_bearer_only_auth_manager_disables_auto_refresh_when_interval_is_zero() {
     let script = ProviderAuthScript::new(&["provider-token", "next-token"]).unwrap();
     let mut auth_config = script.auth_config();

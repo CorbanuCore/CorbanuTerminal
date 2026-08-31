@@ -70,11 +70,13 @@ impl BearerTokenRefresher {
     async fn refresh(&self, _context: ExternalAuthRefreshContext) -> io::Result<CodexAuth> {
         let access_token =
             run_provider_auth_command(&self.state.config, /*force_refresh*/ true).await?;
-        let mut cached = self.state.cached_token.lock().await;
-        *cached = Some(CachedExternalBearerToken {
-            access_token: access_token.clone(),
-            fetched_at: Instant::now(),
-        });
+        if self.state.cache_policy == ExternalBearerCachePolicy::Timed {
+            let mut cached = self.state.cached_token.lock().await;
+            *cached = Some(CachedExternalBearerToken {
+                access_token: access_token.clone(),
+                fetched_at: Instant::now(),
+            });
+        }
         Ok(CodexAuth::from_api_key(access_token.as_str()))
     }
 }
