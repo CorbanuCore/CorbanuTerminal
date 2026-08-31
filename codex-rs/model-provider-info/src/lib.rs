@@ -48,7 +48,10 @@ const MAX_STREAM_MAX_RETRIES: u64 = 100;
 const MAX_REQUEST_MAX_RETRIES: u64 = 100;
 
 fn provider_auth_timeout_ms() -> NonZeroU64 {
-    match NonZeroU64::new(5_000) {
+    // Claude Code refresh may itself take up to 30 seconds, and the managed
+    // source must unlock the encrypted vault before emitting its token. Keep
+    // the outer provider boundary above both documented inner operations.
+    match NonZeroU64::new(60_000) {
         Some(timeout_ms) => timeout_ms,
         None => panic!("provider auth timeout must be non-zero"),
     }

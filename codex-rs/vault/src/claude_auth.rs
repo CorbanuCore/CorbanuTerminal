@@ -19,6 +19,10 @@ const MAX_MANAGED_TOKEN_BYTES: usize = 16 * 1024;
 
 /// Stable encrypted-vault label for Corbanu's managed Claude subscription token.
 pub const MANAGED_CLAUDE_TOKEN_LABEL: &str = "provider/claude-code-oauth-token";
+pub const MANAGED_CLAUDE_AUTH_SOURCE_ID: &str = "corbanu-vault:claude-plan";
+pub const ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID: &str = "environment:CLAUDE_CODE_OAUTH_TOKEN";
+pub const MACOS_KEYCHAIN_CLAUDE_AUTH_SOURCE_ID: &str = "claude-login:macos-keychain";
+pub const CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID: &str = "claude-login:credentials-file";
 
 /// Metadata-only status for the managed long-lived token.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

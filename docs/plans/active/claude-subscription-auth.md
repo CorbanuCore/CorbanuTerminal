@@ -195,7 +195,7 @@ run `python3 docs/sprints/check.py`.
 | --- | --- | --- | --- |
 | `PF-42` (`CSA-01`) | Typed authentication source, selection, health, and persistence contract | [CSA-01 / PF-42-S01](../../sprints/archive/claude-subscription-auth/pf-42-s01-auth-source-contract.md) | completed and archived |
 | `PF-43` (`CSA-02`) | Secure long-lived subscription-token enrollment, storage, validation, replacement, and removal | [CSA-02 / PF-43-S01](../../sprints/archive/claude-subscription-auth/pf-43-s01-managed-token-lifecycle.md) | completed and archived |
-| `PF-44` (`CSA-03`) | Platform-authoritative Claude login adapters and deterministic provider resolution | Not created | planned; depends on CSA-01 |
+| `PF-44` (`CSA-03`) | Platform-authoritative Claude login adapters and deterministic provider resolution | [CSA-03 / PF-44-S01](../../sprints/current/claude-subscription-auth/pf-44-s01-platform-auth-resolution.md) | in progress; depends on PF-42-S01 |
 | `PF-45` (`CSA-04`) | Legacy/conflict migration plus failure, recovery, and resume UX | Not created | planned; depends on CSA-02 and CSA-03 |
 | `PF-46` (`CSA-05`) | Final cross-platform, true-TUI, live-repository, human, documentation, and release qualification | Not created | planned; depends on CSA-04 |
 
@@ -324,7 +324,7 @@ due benchmark work is neither added nor waived by this plan.
 | Current official `claude setup-token` CLI/output contract and supported version floor | external compatibility | Jim Ricketts | CSA-02 readiness | verified 2026-08-30 against `https://code.claude.com/docs/en/authentication`: one-year, model-request-only token for Pro, Max, Team, or Enterprise; command prints but does not save it. Local Claude Code 2.1.92 advertises `setup-token`. |
 | Secure storage seam and protected-mode composition | architecture/security | Jim Ricketts | CSA-01/CSA-02 readiness | extend existing vault/keyring/broker boundaries; do not create a parallel plaintext store |
 | Long-lived token replacement/revocation semantics | external compatibility | Jim Ricketts | CSA-02/CSA-04 readiness | verified documented replacement requires a new token and restart; Corbanu local removal is explicitly not server revocation |
-| Exact platform credential naming and `CLAUDE_CONFIG_DIR` behavior | compatibility | Jim Ricketts | CSA-03 readiness | verify macOS/Linux/Windows fixtures and current Claude versions |
+| Exact platform credential naming and `CLAUDE_CONFIG_DIR` behavior | compatibility | Jim Ricketts | CSA-03 readiness | verified 2026-08-30 against current Anthropic authentication and settings docs: macOS uses Keychain service `Claude Code-credentials`; Linux and Windows use `${CLAUDE_CONFIG_DIR:-~/.claude}/.credentials.json`; `CLAUDE_CONFIG_DIR` does not redirect the macOS Keychain service. Custom OAuth uses `Claude Code-custom-oauth-credentials`. |
 | Release target and named human tester | release | release owner | CSA-05 | pending |
 
 ## Release linkage

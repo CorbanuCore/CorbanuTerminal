@@ -2349,7 +2349,8 @@ async fn run_vault_command(command: VaultCommand) -> anyhow::Result<()> {
 }
 
 async fn run_internal_claude_oauth_token() -> anyhow::Result<()> {
-    let access_token = claude_oauth::resolve_claude_oauth_access_token().await?;
+    let codex_home = find_codex_home()?;
+    let access_token = claude_oauth::resolve_claude_oauth_access_token(&codex_home).await?;
     std::io::stdout().write_all(access_token.as_bytes())?;
     Ok(())
 }

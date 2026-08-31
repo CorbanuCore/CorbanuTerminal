@@ -625,7 +625,7 @@ fn test_create_claude_plan_provider() {
             auth: Some(ModelProviderAuthInfo {
                 command: CORBANU_PROVIDER_AUTH_COMMAND.to_string(),
                 args: vec!["internal-claude-oauth-token".to_string()],
-                timeout_ms: NonZeroU64::new(5_000).expect("timeout should be non-zero"),
+                timeout_ms: NonZeroU64::new(60_000).expect("timeout should be non-zero"),
                 refresh_interval_ms: 60_000,
                 cwd: expected_root,
             }),
