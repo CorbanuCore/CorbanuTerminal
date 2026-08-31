@@ -357,6 +357,9 @@ impl Vault {
         } = entry;
         let label = normalize_label(&entry_label)?;
         let secret = Zeroizing::new(secret);
+        if label == MANAGED_CLAUDE_TOKEN_LABEL {
+            return Err(VaultError::ProviderManagedCredential { label });
+        }
         if secret.trim().is_empty() {
             return Err(VaultError::EmptySecret);
         }
@@ -396,6 +399,10 @@ impl Vault {
         revocation_notes: Option<Option<String>>,
     ) -> Result<VaultCredentialMeta, VaultError> {
         let label = normalize_label(label)?;
+        if label == MANAGED_CLAUDE_TOKEN_LABEL {
+            drop(secret.map(Zeroizing::new));
+            return Err(VaultError::ProviderManagedCredential { label });
+        }
         self.with_storage_lock(|| {
             let mut index = self.load_index()?;
             let meta = index

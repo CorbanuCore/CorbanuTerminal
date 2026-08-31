@@ -4,6 +4,7 @@ use codex_keyring_store::tests::MockKeyringStore;
 use pretty_assertions::assert_eq;
 
 use super::*;
+use crate::AddCredential;
 use crate::scoped_credential_callback_active;
 
 fn test_vault() -> (tempfile::TempDir, Vault) {
@@ -388,6 +389,44 @@ fn managed_token_round_trip_status_and_replace_are_metadata_only() {
     let encrypted = std::fs::read(directory.path().join("secrets").join("local.age")).unwrap();
     assert!(!String::from_utf8_lossy(&encrypted).contains(first));
     assert!(!String::from_utf8_lossy(&encrypted).contains(second));
+}
+
+#[test]
+fn generic_vault_writes_cannot_create_or_replace_the_managed_token() {
+    let (_directory, vault) = test_vault();
+    assert!(matches!(
+        vault.add(AddCredential {
+            label: MANAGED_CLAUDE_TOKEN_LABEL.to_string(),
+            credential_type: CredentialType::ManualSecret,
+            provider: None,
+            notes: None,
+            revocation_notes: None,
+            secret: "bypass-managed-token-validation".to_string(),
+        }),
+        Err(VaultError::ProviderManagedCredential { .. })
+    ));
+    assert_eq!(
+        vault.managed_claude_subscription_token_status().unwrap(),
+        ManagedClaudeTokenStatus::Missing
+    );
+
+    vault
+        .store_managed_claude_subscription_token("synthetic-managed-token".to_string())
+        .unwrap();
+    assert!(matches!(
+        vault.update(
+            MANAGED_CLAUDE_TOKEN_LABEL,
+            Some("bypass-managed-token-replacement".to_string()),
+            None,
+            None,
+            None,
+        ),
+        Err(VaultError::ProviderManagedCredential { .. })
+    ));
+    let resolved = vault
+        .with_managed_claude_subscription_token(ToString::to_string)
+        .unwrap();
+    assert_eq!(resolved, "synthetic-managed-token");
 }
 
 #[test]
