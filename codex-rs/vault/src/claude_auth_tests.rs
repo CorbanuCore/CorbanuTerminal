@@ -69,6 +69,21 @@ fn credentials_file_identity_binds_the_exact_profile_without_exposing_its_path()
 }
 
 #[test]
+fn relative_credentials_file_identity_is_bound_to_the_callers_working_directory() {
+    let base = std::path::Path::new("/fixture/project");
+    let relative =
+        credentials_file_claude_auth_source_id_against(std::path::Path::new(".claude-work"), base)
+            .unwrap();
+    let absolute = credentials_file_claude_auth_source_id_against(
+        std::path::Path::new("/fixture/project/.claude-work"),
+        std::path::Path::new("/different-caller"),
+    )
+    .unwrap();
+
+    assert_eq!(relative, absolute);
+}
+
+#[test]
 fn absent_selection_preserves_existing_installations() {
     let (_directory, vault) = test_vault();
     assert_eq!(vault.load_claude_auth_selection().unwrap(), None);

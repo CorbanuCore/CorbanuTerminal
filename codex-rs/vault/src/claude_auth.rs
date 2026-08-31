@@ -65,7 +65,19 @@ pub fn macos_keychain_claude_auth_source_id(service: &str) -> String {
 /// `CLAUDE_CONFIG_DIR` against the process working directory. NFC normalization keeps
 /// equivalent Unicode spellings aligned across persistence and provider resolution.
 pub fn credentials_file_claude_auth_source_id(config_dir: &Path) -> std::io::Result<String> {
-    let absolute = std::path::absolute(config_dir)?;
+    credentials_file_claude_auth_source_id_against(config_dir, &std::env::current_dir()?)
+}
+
+fn credentials_file_claude_auth_source_id_against(
+    config_dir: &Path,
+    base_dir: &Path,
+) -> std::io::Result<String> {
+    let path = if config_dir.is_absolute() {
+        config_dir.to_path_buf()
+    } else {
+        base_dir.join(config_dir)
+    };
+    let absolute = std::path::absolute(path)?;
     let normalized = absolute.to_string_lossy().nfc().collect::<String>();
     let digest = format!("{:x}", Sha256::digest(normalized.as_bytes()));
     Ok(format!("{CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID}:{digest}"))

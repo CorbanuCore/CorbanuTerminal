@@ -57,14 +57,15 @@ fn claude_provider_auth_timeout_ms() -> NonZeroU64 {
     }
 }
 
-fn root_absolute_path() -> AbsolutePathBuf {
-    let current_dir = AbsolutePathBuf::current_dir().unwrap_or_else(|err| {
-        panic!("current directory must resolve to determine provider auth cwd: {err}")
-    });
-    current_dir
-        .ancestors()
-        .last()
-        .unwrap_or_else(|| panic!("current directory must have a filesystem root"))
+fn claude_provider_auth_cwd() -> AbsolutePathBuf {
+    // Claude Code resolves a relative CLAUDE_CONFIG_DIR against the caller's
+    // working directory. Keep the provider helper on that same directory so
+    // its credentials-file identity cannot drift from the profile selected by
+    // the TUI. The command remains a bare installed executable resolved via
+    // PATH, never a project-relative program.
+    AbsolutePathBuf::current_dir().unwrap_or_else(|err| {
+        panic!("current directory must resolve to determine Claude provider auth cwd: {err}")
+    })
 }
 
 const OPENAI_PROVIDER_NAME: &str = "OpenAI";
@@ -1051,7 +1052,7 @@ impl ModelProviderInfo {
                 args: vec!["internal-claude-oauth-token".to_string()],
                 timeout_ms: claude_provider_auth_timeout_ms(),
                 refresh_interval_ms: 60_000,
-                cwd: root_absolute_path(),
+                cwd: claude_provider_auth_cwd(),
             }),
             aws: None,
             wire_api: WireApi::Anthropic,
