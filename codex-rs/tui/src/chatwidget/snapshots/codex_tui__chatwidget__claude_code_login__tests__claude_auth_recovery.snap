@@ -1,0 +1,15 @@
+---
+source: tui/src/chatwidget/claude_code_login_tests.rs
+expression: "render_selection(auth_recovery_params(\"Selected token missing. Restore it or explicitly choose another method.\".to_string(),),\n76,)"
+---
+
+  Claude authentication needs attention
+  Selected token missing. Restore it or explicitly choose another method.
+
+› Retry long-lived token setup  Run `claude setup-token` again, then save
+                                it securely.
+  Choose authentication method  Return to the explicit source picker.
+  Keep current method           Close this message without changing
+                                credentials.
+
+  No fallback occurred. Esc closes this without choosing another method.

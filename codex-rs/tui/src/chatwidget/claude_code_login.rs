@@ -20,13 +20,24 @@ use tokio::time::timeout;
 
 use super::ChatWidget;
 use crate::app_event::AppEvent;
+use crate::app_event::ClaudeSubscriptionTokenSecret;
 use crate::app_event_sender::AppEventSender;
 use crate::bottom_pane::BottomPaneView;
 use crate::bottom_pane::CancellationEvent;
+use crate::bottom_pane::SelectionItem;
+use crate::bottom_pane::SelectionViewParams;
 use crate::bottom_pane::ViewCompletion;
 use crate::render::renderable::Renderable;
+#[cfg(not(target_os = "macos"))]
+use codex_vault::CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID;
+use codex_vault::ClaudeAuthSelection;
+use codex_vault::ClaudeAuthSource;
+#[cfg(target_os = "macos")]
+use codex_vault::MACOS_KEYCHAIN_CLAUDE_AUTH_SOURCE_ID;
+use codex_vault::Vault;
 
 const CLAUDE_CODE_LOGIN_VIEW_ID: &str = "claude-code-plan-login";
+const CLAUDE_AUTH_METHOD_VIEW_ID: &str = "claude-plan-auth-method";
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const MAX_LOGIN_LINE_BYTES: usize = 16 * 1024;
 
@@ -38,6 +49,15 @@ pub(crate) enum ClaudeCodeLoginInput {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ClaudeCodePlanStatus {
     Checking,
+    ManagedToken {
+        stored: bool,
+    },
+    EnvironmentToken {
+        available: bool,
+    },
+    SelectionRequired {
+        existing_source_detected: bool,
+    },
     SignedIn {
         email: Option<String>,
         subscription: Option<String>,
@@ -47,8 +67,48 @@ pub(crate) enum ClaudeCodePlanStatus {
     Error,
 }
 
-pub(crate) async fn current_status_with_timeout(timeout: Duration) -> ClaudeCodePlanStatus {
-    status_with_timeout(Path::new("claude"), timeout).await
+pub(crate) async fn current_status_with_timeout(
+    codex_home: &Path,
+    timeout: Duration,
+) -> ClaudeCodePlanStatus {
+    let codex_home = codex_home.to_path_buf();
+    let stored = tokio::task::spawn_blocking(move || {
+        let vault = Vault::new(codex_home);
+        let selection = vault.load_claude_auth_selection()?;
+        let managed_stored = matches!(
+            vault.managed_claude_subscription_token_status()?,
+            codex_vault::ManagedClaudeTokenStatus::Stored { .. }
+        );
+        Ok::<_, codex_vault::VaultError>((selection, managed_stored))
+    })
+    .await;
+    let Ok(Ok((selection, managed_stored))) = stored else {
+        return ClaudeCodePlanStatus::Error;
+    };
+    match selection.map(|selection| selection.source) {
+        Some(ClaudeAuthSource::ManagedSubscriptionToken) => ClaudeCodePlanStatus::ManagedToken {
+            stored: managed_stored,
+        },
+        Some(ClaudeAuthSource::EnvironmentToken) => ClaudeCodePlanStatus::EnvironmentToken {
+            available: std::env::var("CLAUDE_CODE_OAUTH_TOKEN")
+                .ok()
+                .is_some_and(|token| !token.trim().is_empty()),
+        },
+        Some(ClaudeAuthSource::ClaudeCodeLogin) => {
+            status_with_timeout(Path::new("claude"), timeout).await
+        }
+        None => {
+            let login = status_with_timeout(Path::new("claude"), timeout).await;
+            let environment_available = std::env::var("CLAUDE_CODE_OAUTH_TOKEN")
+                .ok()
+                .is_some_and(|token| !token.trim().is_empty());
+            ClaudeCodePlanStatus::SelectionRequired {
+                existing_source_detected: managed_stored
+                    || environment_available
+                    || matches!(login, ClaudeCodePlanStatus::SignedIn { .. }),
+            }
+        }
+    }
 }
 
 async fn status_with_timeout(executable: &Path, timeout: Duration) -> ClaudeCodePlanStatus {
@@ -61,19 +121,30 @@ async fn status_with_timeout(executable: &Path, timeout: Duration) -> ClaudeCode
     }
 }
 
-pub(crate) fn start(app_event_tx: AppEventSender) -> mpsc::UnboundedSender<ClaudeCodeLoginInput> {
-    start_with_executable(app_event_tx, Path::new("claude"))
+pub(crate) fn start(
+    app_event_tx: AppEventSender,
+    codex_home: std::path::PathBuf,
+) -> mpsc::UnboundedSender<ClaudeCodeLoginInput> {
+    start_with_executable(app_event_tx, Path::new("claude"), codex_home)
 }
 
 fn start_with_executable(
     app_event_tx: AppEventSender,
     executable: &Path,
+    codex_home: std::path::PathBuf,
 ) -> mpsc::UnboundedSender<ClaudeCodeLoginInput> {
     let (input_tx, input_rx) = mpsc::unbounded_channel();
     let task_input_tx = input_tx.clone();
     let executable = executable.to_path_buf();
     tokio::spawn(async move {
-        let result = run_login(&executable, app_event_tx.clone(), task_input_tx, input_rx).await;
+        let result = run_login(
+            &executable,
+            &codex_home,
+            app_event_tx.clone(),
+            task_input_tx,
+            input_rx,
+        )
+        .await;
         app_event_tx.send(AppEvent::ClaudeCodePlanLoginFinished { result });
     });
     input_tx
@@ -81,6 +152,7 @@ fn start_with_executable(
 
 async fn run_login(
     executable: &Path,
+    codex_home: &Path,
     app_event_tx: AppEventSender,
     input_tx: mpsc::UnboundedSender<ClaudeCodeLoginInput>,
     mut input_rx: mpsc::UnboundedReceiver<ClaudeCodeLoginInput>,
@@ -191,7 +263,7 @@ async fn run_login(
         return Some(Err(format!("Claude Code rejected the login ({status}).")));
     }
 
-    Some(verify_login(executable).await)
+    Some(verify_login(executable, codex_home).await)
 }
 
 fn spawn_output_reader(
@@ -216,15 +288,162 @@ fn spawn_output_reader(
     });
 }
 
-async fn verify_login(executable: &Path) -> Result<String, String> {
+async fn verify_login(executable: &Path, codex_home: &Path) -> Result<String, String> {
     match read_status(executable).await {
-        Ok(ClaudeCodePlanStatus::SignedIn { .. }) => Ok(
-            "Claude Code plan login complete. Choose a Claude Plan model from /model.".to_string(),
-        ),
+        Ok(ClaudeCodePlanStatus::SignedIn { .. }) => {
+            persist_claude_code_login_selection(codex_home).await?;
+            Ok("Claude Code login selected. Retry the Claude Plan request or choose a model from /model.".to_string())
+        }
         Ok(_) => {
             Err("Claude Code is not signed in with a Claude subscription after login.".to_string())
         }
         Err(err) => Err(format!("Could not verify Claude Code login: {err}")),
+    }
+}
+
+pub(crate) async fn run_setup_token(executable: &Path) -> Result<(), String> {
+    let status = Command::new(executable)
+        .arg("setup-token")
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .kill_on_drop(true)
+        .status()
+        .await
+        .map_err(|error| {
+            format!(
+                "Could not start `claude setup-token`: {error}. Install or update Claude Code, then retry."
+            )
+        })?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "`claude setup-token` exited with {status}. Your previous Claude authentication method is unchanged; retry when ready."
+        ))
+    }
+}
+
+pub(crate) async fn select_existing_claude_code_login(
+    executable: &Path,
+    codex_home: &Path,
+    status_timeout: Duration,
+) -> Result<bool, String> {
+    match status_with_timeout(executable, status_timeout).await {
+        ClaudeCodePlanStatus::SignedIn { .. } => {
+            persist_claude_code_login_selection(codex_home).await?;
+            Ok(true)
+        }
+        ClaudeCodePlanStatus::SignedOut
+        | ClaudeCodePlanStatus::Unavailable
+        | ClaudeCodePlanStatus::Error
+        | ClaudeCodePlanStatus::ManagedToken { .. }
+        | ClaudeCodePlanStatus::EnvironmentToken { .. }
+        | ClaudeCodePlanStatus::SelectionRequired { .. }
+        | ClaudeCodePlanStatus::Checking => Ok(false),
+    }
+}
+
+async fn persist_claude_code_login_selection(codex_home: &Path) -> Result<(), String> {
+    let codex_home = codex_home.to_path_buf();
+    tokio::task::spawn_blocking(move || persist_claude_code_login_selection_blocking(&codex_home))
+        .await
+        .map_err(|error| {
+            format!(
+                "Claude Code login succeeded, but Corbanu could not finish selecting it: {error}. Your previous method remains selected; retry from Providers."
+            )
+        })?
+}
+
+fn persist_claude_code_login_selection_blocking(codex_home: &Path) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let source_id = MACOS_KEYCHAIN_CLAUDE_AUTH_SOURCE_ID;
+    #[cfg(not(target_os = "macos"))]
+    let source_id = CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID;
+    let selection = ClaudeAuthSelection::new(ClaudeAuthSource::ClaudeCodeLogin, source_id)
+        .map_err(|error| format!("Could not select the current Claude Code login: {error}"))?;
+    Vault::new(codex_home.to_path_buf())
+        .save_claude_auth_selection(&selection)
+        .map_err(|error| {
+            format!(
+                "Claude Code login succeeded, but Corbanu could not select it: {error}. Your previous method remains selected; retry from Providers."
+            )
+        })
+}
+
+fn auth_method_choice_params() -> SelectionViewParams {
+    SelectionViewParams {
+        view_id: Some(CLAUDE_AUTH_METHOD_VIEW_ID),
+        title: Some("Claude Plan authentication".to_string()),
+        subtitle: Some(
+            "Choose one source; Corbanu never falls back to another account.".to_string(),
+        ),
+        footer_note: Some(Line::from(
+            "Your account and billing path change only after success. Esc keeps the current method."
+                .dim(),
+        )),
+        items: vec![
+            SelectionItem {
+                name: "Long-lived subscription token (Recommended)".to_string(),
+                description: Some(
+                    "Run `claude setup-token` for an approximately one-year token (Pro, Max, Team, or Enterprise)."
+                        .to_string(),
+                ),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::RunClaudeSetupToken))],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "Claude Code login".to_string(),
+                description: Some(
+                    "Use Claude Code's rotating login state; reauthorization may be needed more often."
+                        .to_string(),
+                ),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::UseClaudeCodePlanLogin))],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+        ],
+        initial_selected_idx: Some(0),
+        allow_number_shortcuts: false,
+        ..Default::default()
+    }
+}
+
+fn auth_recovery_params(message: String) -> SelectionViewParams {
+    SelectionViewParams {
+        title: Some("Claude authentication needs attention".to_string()),
+        subtitle: Some(message),
+        footer_note: Some(Line::from(
+            "No fallback occurred. Esc closes this without choosing another method.".dim(),
+        )),
+        items: vec![
+            SelectionItem {
+                name: "Retry long-lived token setup".to_string(),
+                description: Some(
+                    "Run `claude setup-token` again, then save it securely.".to_string(),
+                ),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::RunClaudeSetupToken))],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "Choose authentication method".to_string(),
+                description: Some("Return to the explicit source picker.".to_string()),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenClaudeCodePlanLogin))],
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "Keep current method".to_string(),
+                description: Some("Close this message without changing credentials.".to_string()),
+                dismiss_on_select: true,
+                ..Default::default()
+            },
+        ],
+        initial_selected_idx: Some(0),
+        allow_number_shortcuts: false,
+        ..Default::default()
     }
 }
 
@@ -270,6 +489,45 @@ fn extract_https_url(line: &str) -> Option<String> {
 }
 
 impl ChatWidget {
+    pub(crate) fn open_claude_auth_method_choice(&mut self) {
+        self.show_selection_view(auth_method_choice_params());
+    }
+
+    pub(crate) fn open_claude_auth_recovery(&mut self, message: String) {
+        self.show_selection_view(auth_recovery_params(message));
+    }
+
+    pub(crate) fn open_claude_subscription_token_entry(&mut self) {
+        let submit_tx = self.app_event_tx.clone();
+        let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret_with_cancel(
+            "claude-subscription-token".to_string(),
+            "Save Claude subscription token".to_string(),
+            "Long-lived token — masked".to_string(),
+            "Paste the token printed by `claude setup-token`; it is encrypted and never added to chat."
+                .to_string(),
+            Box::new(move |_label, token| {
+                submit_tx.send(AppEvent::SaveClaudeManagedSubscriptionToken {
+                    token: ClaudeSubscriptionTokenSecret::new(token),
+                });
+            }),
+            Box::new(|| {}),
+        );
+        self.bottom_pane.show_view(Box::new(view));
+    }
+
+    pub(crate) fn on_claude_managed_subscription_token_saved(
+        &mut self,
+        result: Result<String, String>,
+    ) {
+        match result {
+            Ok(message) => self.add_info_message(message, /*hint*/ None),
+            Err(message) => {
+                self.add_error_message(message.clone());
+                self.open_claude_auth_recovery(message);
+            }
+        }
+    }
+
     pub(crate) fn open_claude_code_plan_login_pending(
         &mut self,
         input_tx: mpsc::UnboundedSender<ClaudeCodeLoginInput>,
@@ -326,7 +584,9 @@ impl ChatWidget {
         match result {
             Some(Ok(message)) => self.add_info_message(message, /*hint*/ None),
             Some(Err(message)) => {
-                self.add_error_message(format!("Claude Code plan login failed: {message}"))
+                let message = format!("Claude Code plan login failed: {message}");
+                self.add_error_message(message.clone());
+                self.open_claude_auth_recovery(message);
             }
             None => {}
         }

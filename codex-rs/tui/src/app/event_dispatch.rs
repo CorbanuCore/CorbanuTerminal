@@ -2250,10 +2250,82 @@ impl App {
                 });
             }
             AppEvent::OpenClaudeCodePlanLogin => {
-                let input_tx =
-                    crate::chatwidget::claude_code_login::start(self.app_event_tx.clone());
+                self.chat_widget.open_claude_auth_method_choice();
+            }
+            AppEvent::RunClaudeSetupToken => {
+                let result = tui
+                    .with_restored(|| async {
+                        crate::chatwidget::claude_code_login::run_setup_token(std::path::Path::new(
+                            "claude",
+                        ))
+                        .await
+                    })
+                    .await;
+                match result {
+                    Ok(()) => self.chat_widget.open_claude_subscription_token_entry(),
+                    Err(message) => {
+                        self.chat_widget.add_error_message(message.clone());
+                        self.chat_widget.open_claude_auth_recovery(message);
+                    }
+                }
+                tui.frame_requester().schedule_frame();
+            }
+            AppEvent::UseClaudeCodePlanLogin => {
+                let codex_home = self.config.codex_home.clone();
+                match crate::chatwidget::claude_code_login::select_existing_claude_code_login(
+                    std::path::Path::new("claude"),
+                    codex_home.as_path(),
+                    Duration::from_secs(10),
+                )
+                .await
+                {
+                    Ok(true) => self.chat_widget.add_info_message(
+                        "Existing Claude Code login selected. Retry the Claude Plan request or choose a model from /model."
+                            .to_string(),
+                        /*hint*/ None,
+                    ),
+                    Ok(false) => {
+                        let input_tx = crate::chatwidget::claude_code_login::start(
+                            self.app_event_tx.clone(),
+                            codex_home.to_path_buf(),
+                        );
+                        self.chat_widget
+                            .open_claude_code_plan_login_pending(input_tx);
+                    }
+                    Err(message) => self.chat_widget.add_error_message(message),
+                }
+            }
+            AppEvent::SaveClaudeManagedSubscriptionToken { token } => {
+                let codex_home = self.config.codex_home.clone();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || {
+                        codex_vault::Vault::new(codex_home.to_path_buf())
+                            .enroll_managed_claude_subscription_token(token.into_inner())
+                    })
+                    .await
+                    .map_err(|error| {
+                        format!(
+                            "Claude subscription token setup could not finish: {error}. No fallback was attempted; inspect Providers and retry."
+                        )
+                    })
+                    .and_then(|result| {
+                        result.map_err(|error| {
+                            format!(
+                                "Claude subscription token was not saved: {error}. No fallback was attempted; inspect Providers and retry."
+                            )
+                        })
+                    })
+                    .map(|_| {
+                        "Long-lived Claude subscription token saved and selected. Retry the interrupted request or choose a Claude Plan model from /model."
+                            .to_string()
+                    });
+                    tx.send(AppEvent::ClaudeManagedSubscriptionTokenSaved { result });
+                });
+            }
+            AppEvent::ClaudeManagedSubscriptionTokenSaved { result } => {
                 self.chat_widget
-                    .open_claude_code_plan_login_pending(input_tx);
+                    .on_claude_managed_subscription_token_saved(result);
             }
             AppEvent::ClaudeCodePlanLoginReady {
                 verification_url,

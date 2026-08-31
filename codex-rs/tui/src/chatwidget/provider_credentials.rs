@@ -141,6 +141,7 @@ impl ChatWidget {
         let app_event_tx = self.app_event_tx.clone();
         tokio::spawn(async move {
             let claude_status = crate::chatwidget::claude_code_login::current_status_with_timeout(
+                plan_home.as_path(),
                 PROVIDER_STATUS_TIMEOUT,
             );
             let api_key_statuses = tokio::task::spawn_blocking(move || {
@@ -450,6 +451,24 @@ fn provider_credential_item(
 fn claude_status_description(status: &ClaudeCodePlanStatus) -> String {
     match status {
         ClaudeCodePlanStatus::Checking => "Checking sign-in...".to_string(),
+        ClaudeCodePlanStatus::ManagedToken { stored: true } => {
+            "Selected · long-lived subscription token".to_string()
+        }
+        ClaudeCodePlanStatus::ManagedToken { stored: false } => {
+            "Recovery needed · selected token is missing".to_string()
+        }
+        ClaudeCodePlanStatus::EnvironmentToken { available: true } => {
+            "Selected · CLAUDE_CODE_OAUTH_TOKEN".to_string()
+        }
+        ClaudeCodePlanStatus::EnvironmentToken { available: false } => {
+            "Recovery needed · selected environment token is missing".to_string()
+        }
+        ClaudeCodePlanStatus::SelectionRequired {
+            existing_source_detected: true,
+        } => "Choose method · existing credentials detected".to_string(),
+        ClaudeCodePlanStatus::SelectionRequired {
+            existing_source_detected: false,
+        } => "Choose authentication method".to_string(),
         ClaudeCodePlanStatus::SignedIn {
             email,
             subscription,
@@ -755,6 +774,20 @@ mod tests {
         assert_eq!(
             claude_status_description(&ClaudeCodePlanStatus::SignedOut),
             "Not signed in"
+        );
+        assert_eq!(
+            claude_status_description(&ClaudeCodePlanStatus::ManagedToken { stored: true }),
+            "Selected · long-lived subscription token"
+        );
+        assert_eq!(
+            claude_status_description(&ClaudeCodePlanStatus::ManagedToken { stored: false }),
+            "Recovery needed · selected token is missing"
+        );
+        assert_eq!(
+            claude_status_description(&ClaudeCodePlanStatus::SelectionRequired {
+                existing_source_detected: true,
+            }),
+            "Choose method · existing credentials detected"
         );
         assert_eq!(
             claude_status_description(&ClaudeCodePlanStatus::Unavailable),

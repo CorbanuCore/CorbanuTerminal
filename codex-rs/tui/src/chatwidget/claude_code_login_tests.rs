@@ -8,6 +8,81 @@ use std::os::unix::fs::PermissionsExt;
 
 use super::*;
 
+fn render_selection(params: SelectionViewParams, width: u16) -> String {
+    let (event_tx, _event_rx) = tokio::sync::mpsc::unbounded_channel();
+    let app_event_tx = AppEventSender::new(event_tx);
+    let view = crate::bottom_pane::ListSelectionView::new(
+        params,
+        app_event_tx,
+        crate::keymap::RuntimeKeymap::defaults().list,
+    );
+    let area = Rect::new(0, 0, width, view.desired_height(width));
+    let mut buffer = Buffer::empty(area);
+    view.render(area, &mut buffer);
+    (0..area.height)
+        .map(|y| {
+            (0..area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+                .trim_end()
+                .to_string()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn auth_method_choice_is_recommended_by_default_and_dispatches_exact_actions() {
+    let params = auth_method_choice_params();
+    assert_eq!(params.initial_selected_idx, Some(0));
+    assert!(params.items[0].name.contains("Recommended"));
+    assert!(!params.allow_number_shortcuts);
+
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
+    let app_event_tx = AppEventSender::new(event_tx);
+    (params.items[0].actions[0])(&app_event_tx);
+    assert!(matches!(
+        event_rx.try_recv(),
+        Ok(AppEvent::RunClaudeSetupToken)
+    ));
+    (params.items[1].actions[0])(&app_event_tx);
+    assert!(matches!(
+        event_rx.try_recv(),
+        Ok(AppEvent::UseClaudeCodePlanLogin)
+    ));
+}
+
+#[test]
+fn claude_auth_method_choice_snapshot() {
+    insta::assert_snapshot!(
+        "claude_auth_method_choice",
+        render_selection(auth_method_choice_params(), 76)
+    );
+}
+
+#[test]
+fn claude_auth_recovery_snapshot() {
+    insta::assert_snapshot!(
+        "claude_auth_recovery",
+        render_selection(
+            auth_recovery_params(
+                "Selected token missing. Restore it or explicitly choose another method."
+                    .to_string(),
+            ),
+            76,
+        )
+    );
+}
+
+#[test]
+fn managed_token_app_event_debug_is_redacted() {
+    let canary = "claude-token-canary-never-render";
+    let event = AppEvent::SaveClaudeManagedSubscriptionToken {
+        token: ClaudeSubscriptionTokenSecret::new(canary.to_string()),
+    };
+    assert!(!format!("{event:?}").contains(canary));
+}
+
 #[test]
 fn extracts_url_from_claude_osc8_link() {
     let line = concat!(
@@ -114,7 +189,8 @@ exit 2
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
     let app_event_tx = AppEventSender::new(event_tx);
 
-    let _input_tx = start_with_executable(app_event_tx, &fake_claude);
+    let _input_tx =
+        start_with_executable(app_event_tx, &fake_claude, temp_dir.path().to_path_buf());
     let input_tx = match event_rx.recv().await {
         Some(AppEvent::ClaudeCodePlanLoginReady {
             verification_url,
@@ -135,8 +211,60 @@ exit 2
         event_rx.recv().await,
         Some(AppEvent::ClaudeCodePlanLoginFinished {
             result: Some(Ok(message))
-        }) if message.contains("login complete")
+        }) if message.contains("login selected")
     ));
+    let selection = Vault::new(temp_dir.path().to_path_buf())
+        .load_claude_auth_selection()
+        .expect("load selection")
+        .expect("selection persisted");
+    assert_eq!(selection.source, ClaudeAuthSource::ClaudeCodeLogin);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn existing_claude_login_is_selected_without_reauthorization() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let fake_claude = temp_dir.path().join("claude");
+    std::fs::write(
+        &fake_claude,
+        "#!/bin/sh\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\"}\\n'\n",
+    )
+    .expect("write fake claude");
+    let mut permissions = std::fs::metadata(&fake_claude)
+        .expect("fake claude metadata")
+        .permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&fake_claude, permissions).expect("make executable");
+
+    assert!(
+        select_existing_claude_code_login(&fake_claude, temp_dir.path(), Duration::from_secs(1),)
+            .await
+            .expect("select existing login")
+    );
+    let selection = Vault::new(temp_dir.path().to_path_buf())
+        .load_claude_auth_selection()
+        .expect("load selection")
+        .expect("selection persisted");
+    assert_eq!(selection.source, ClaudeAuthSource::ClaudeCodeLogin);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn setup_token_command_success_and_failure_are_bounded_to_status() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let success = temp_dir.path().join("claude-success");
+    let failure = temp_dir.path().join("claude-failure");
+    std::fs::write(&success, "#!/bin/sh\n[ \"$1\" = setup-token ]\n").expect("success");
+    std::fs::write(&failure, "#!/bin/sh\nexit 7\n").expect("failure");
+    for executable in [&success, &failure] {
+        let mut permissions = std::fs::metadata(executable).unwrap().permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(executable, permissions).unwrap();
+    }
+
+    run_setup_token(&success).await.expect("setup succeeds");
+    let error = run_setup_token(&failure).await.expect_err("setup fails");
+    assert!(error.contains("previous Claude authentication method is unchanged"));
 }
 
 #[cfg(unix)]

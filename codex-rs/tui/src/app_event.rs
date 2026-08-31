@@ -197,6 +197,24 @@ impl fmt::Debug for ProviderApiKeySecret {
     }
 }
 
+pub(crate) struct ClaudeSubscriptionTokenSecret(zeroize::Zeroizing<String>);
+
+impl ClaudeSubscriptionTokenSecret {
+    pub(crate) fn new(value: String) -> Self {
+        Self(zeroize::Zeroizing::new(value))
+    }
+
+    pub(crate) fn into_inner(self) -> String {
+        self.0.to_string()
+    }
+}
+
+impl fmt::Debug for ClaudeSubscriptionTokenSecret {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("<redacted Claude subscription token>")
+    }
+}
+
 pub(crate) struct TelegramBotSecret(String);
 
 impl TelegramBotSecret {
@@ -1480,8 +1498,24 @@ pub(crate) enum AppEvent {
     /// Start OpenAI Codex account device-code login from the Providers screen.
     OpenCodexAccountDeviceLogin,
 
-    /// Start Claude Code's subscription OAuth flow from the Providers screen.
+    /// Open the explicit Claude Plan authentication-method choice.
     OpenClaudeCodePlanLogin,
+
+    /// Run the official long-lived `claude setup-token` flow in the user's terminal.
+    RunClaudeSetupToken,
+
+    /// Use or repair Claude Code's rotating subscription login.
+    UseClaudeCodePlanLogin,
+
+    /// Store and select a masked long-lived Claude subscription token.
+    SaveClaudeManagedSubscriptionToken {
+        token: ClaudeSubscriptionTokenSecret,
+    },
+
+    /// Completion of the encrypted managed-token enrollment transaction.
+    ClaudeManagedSubscriptionTokenSaved {
+        result: Result<String, String>,
+    },
 
     /// Claude Code opened a browser login URL and is waiting for its authorization code.
     ClaudeCodePlanLoginReady {
