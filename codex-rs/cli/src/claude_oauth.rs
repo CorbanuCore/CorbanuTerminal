@@ -170,7 +170,7 @@ async fn inspect_selected_claude_auth_source(
             )
             .await
             {
-                Ok(credentials) => credentials_health(&credentials, current_time_ms()),
+                Ok(credentials) => credentials_health(&credentials),
                 Err(error) => credentials_error_health(&error),
             };
             (CURRENT_PLATFORM_STORE.metadata_store(), health)
@@ -401,10 +401,7 @@ fn usable_access_token(credentials: &ClaudeCodeCredentials, now_ms: u64) -> Opti
         .map(ToString::to_string)
 }
 
-fn credentials_health(credentials: &ClaudeCodeCredentials, now_ms: u64) -> ClaudeAuthHealth {
-    if usable_access_token(credentials, now_ms).is_some() {
-        return ClaudeAuthHealth::Healthy;
-    }
+fn credentials_health(credentials: &ClaudeCodeCredentials) -> ClaudeAuthHealth {
     let Some(oauth) = credentials.claude_ai_oauth.as_ref() else {
         return ClaudeAuthHealth::NeedsReauthorization;
     };
@@ -825,7 +822,7 @@ mod tests {
     }
 
     #[test]
-    fn platform_fixture_health_classifies_stale_and_blank_refresh_records() {
+    fn platform_fixture_health_classifies_stale_live_and_blank_refresh_records() {
         let now_ms = 1_000_000;
         let refreshable: ClaudeCodeCredentials = serde_json::from_value(json!({
             "claudeAiOauth": {
@@ -845,13 +842,23 @@ mod tests {
             }
         }))
         .expect("blank refresh fixture");
+        let live_access_blank_refresh: ClaudeCodeCredentials = serde_json::from_value(json!({
+            "claudeAiOauth": {
+                "accessToken": "live-access",
+                "refreshToken": "  ",
+                "expiresAt": now_ms + MIN_TOKEN_VALIDITY_MS + 1,
+                "scopes": ["user:inference"]
+            }
+        }))
+        .expect("live access with blank refresh fixture");
 
+        assert_eq!(credentials_health(&refreshable), ClaudeAuthHealth::Healthy);
         assert_eq!(
-            credentials_health(&refreshable, now_ms),
-            ClaudeAuthHealth::Healthy
+            credentials_health(&blank_refresh),
+            ClaudeAuthHealth::NeedsReauthorization
         );
         assert_eq!(
-            credentials_health(&blank_refresh, now_ms),
+            credentials_health(&live_access_blank_refresh),
             ClaudeAuthHealth::NeedsReauthorization
         );
     }
