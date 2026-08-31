@@ -311,7 +311,11 @@ impl ChatWidget {
             let task = tokio::task::spawn_blocking({
                 let label = label.clone();
                 move || {
-                    if let Some(provider_key_id) =
+                    if label == codex_vault::MANAGED_CLAUDE_TOKEN_LABEL {
+                        codex_vault::Vault::new(codex_home)
+                            .remove_managed_claude_subscription_token()
+                            .map_err(|error| error.to_string())
+                    } else if let Some(provider_key_id) =
                         codex_login::provider_api_key_id_from_vault_label(&label)
                     {
                         codex_login::delete_provider_api_key(&codex_home, &provider_key_id)

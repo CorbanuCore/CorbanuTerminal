@@ -511,7 +511,7 @@ fn invalid_managed_tokens_fail_without_echoing_input() {
 
 #[test]
 fn managed_token_removal_preserves_unrelated_credentials() {
-    let (_directory, vault) = test_vault();
+    let (directory, vault) = test_vault();
     vault
         .add(crate::AddCredential {
             label: "provider/unrelated".to_string(),
@@ -525,8 +525,25 @@ fn managed_token_removal_preserves_unrelated_credentials() {
     vault
         .store_managed_claude_subscription_token("synthetic-token".to_string())
         .unwrap();
+    let selection = ClaudeAuthSelection::new_at(
+        ClaudeAuthSource::ManagedSubscriptionToken,
+        MANAGED_CLAUDE_AUTH_SOURCE_ID,
+        1_777_777_777,
+    )
+    .unwrap();
+    vault.save_claude_auth_selection(&selection).unwrap();
+    let revision_before =
+        std::fs::read(claude_auth_selection_revision_path(directory.path())).unwrap();
 
     assert!(vault.remove_managed_claude_subscription_token().unwrap());
+    let revision_after =
+        std::fs::read(claude_auth_selection_revision_path(directory.path())).unwrap();
+    assert_ne!(revision_before, revision_after);
+    assert_eq!(vault.load_claude_auth_selection().unwrap(), Some(selection));
+    assert!(matches!(
+        vault.load_managed_claude_subscription_token(),
+        Err(VaultError::NotFound { .. })
+    ));
     let labels = vault
         .list()
         .unwrap()
