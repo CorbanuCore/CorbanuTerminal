@@ -669,9 +669,9 @@ async fn verify_claude_login_health(
 }
 
 fn claude_config_dir() -> Result<PathBuf> {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .ok_or_else(|| anyhow!("HOME is not set; cannot read Claude Code credentials"))?;
+    let home = dirs::home_dir().ok_or_else(|| {
+        anyhow!("cannot determine the home directory for Claude Code credentials")
+    })?;
     claude_config_dir_for_profile(
         &home,
         std::env::var_os("CLAUDE_CONFIG_DIR")

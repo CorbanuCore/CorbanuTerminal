@@ -229,11 +229,9 @@ fn accepted_platform_login_source_ids() -> Result<Vec<String>, String> {
 fn current_platform_login_source_id() -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
-        let home = std::env::var_os("HOME")
-            .map(std::path::PathBuf::from)
-            .ok_or_else(|| {
-                "HOME is not set; cannot identify Claude Code's Keychain profile".to_string()
-            })?;
+        let home = dirs::home_dir().ok_or_else(|| {
+            "cannot determine the home directory for Claude Code's Keychain profile".to_string()
+        })?;
         let configured = std::env::var_os("CLAUDE_CONFIG_DIR")
             .filter(|value| !value.is_empty())
             .map(std::path::PathBuf::from);
@@ -244,12 +242,10 @@ fn current_platform_login_source_id() -> Result<String, String> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let home = std::env::var_os("HOME")
-            .map(std::path::PathBuf::from)
-            .ok_or_else(|| {
-                "HOME is not set; cannot identify Claude Code's credentials-file profile"
-                    .to_string()
-            })?;
+        let home = dirs::home_dir().ok_or_else(|| {
+            "cannot determine the home directory for Claude Code's credentials-file profile"
+                .to_string()
+        })?;
         let config_dir = std::env::var_os("CLAUDE_CONFIG_DIR")
             .filter(|value| !value.is_empty())
             .map(std::path::PathBuf::from)
@@ -283,9 +279,9 @@ fn macos_platform_login_source_id(
 
 #[cfg(target_os = "macos")]
 fn claude_config_dir_for_source_id() -> Result<std::path::PathBuf, String> {
-    let home = std::env::var_os("HOME")
-        .map(std::path::PathBuf::from)
-        .ok_or_else(|| "HOME is not set; cannot identify Claude Code's profile".to_string())?;
+    let home = dirs::home_dir().ok_or_else(|| {
+        "cannot determine the home directory for Claude Code's profile".to_string()
+    })?;
     Ok(std::env::var_os("CLAUDE_CONFIG_DIR")
         .filter(|value| !value.is_empty())
         .map(std::path::PathBuf::from)

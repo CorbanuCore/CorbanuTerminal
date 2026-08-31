@@ -423,6 +423,8 @@ async fn resolve_deferred_claude_plan_token(
         CLAUDE_PLAN_AUTH_TIMEOUT,
         Command::new(&deferred.helper_executable)
             .arg("internal-claude-oauth-token")
+            .env("CORBANU_HOME", &deferred.codex_home)
+            .env("PFTERMINAL_HOME", &deferred.codex_home)
             .env("CODEX_HOME", &deferred.codex_home)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())

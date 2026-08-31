@@ -216,6 +216,8 @@ fn exit_tui(pane: &TmuxPane<'_>) -> Result<()> {
 
 fn assert_managed_resolver_returns(codex: &Path, codex_home: &Path, canary: &str) -> Result<()> {
     let output = Command::new(codex)
+        .env("CORBANU_HOME", codex_home)
+        .env("PFTERMINAL_HOME", codex_home)
         .env("CODEX_HOME", codex_home)
         .arg("internal-claude-oauth-token")
         .output()
@@ -241,6 +243,8 @@ fn session_spec(
     login_fixture: Option<&CompatibilityLoginFixture>,
 ) -> SessionSpec {
     let mut command = CommandSpec::new(codex.to_path_buf())
+        .env("CORBANU_HOME", codex_home)
+        .env("PFTERMINAL_HOME", codex_home)
         .env("CODEX_HOME", codex_home)
         .env("OPENAI_API_KEY", "tmux-claude-auth-openai-fixture")
         .env("PATH", fake.path())
@@ -312,6 +316,9 @@ impl CompatibilityLoginFixture {
 
     fn verify_hidden_health_command(&self, codex: &Path) -> Result<()> {
         let output = Command::new(codex)
+            .env("CORBANU_HOME", &self.home)
+            .env("PFTERMINAL_HOME", &self.home)
+            .env("CODEX_HOME", &self.home)
             .env("HOME", &self.home)
             .env("USER", "corbanu-claude-auth-fixture")
             .env("CLAUDE_CONFIG_DIR", &self.config_dir)

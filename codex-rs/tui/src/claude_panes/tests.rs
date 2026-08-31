@@ -2310,7 +2310,15 @@ async fn claude_plan_pane_binds_selected_auth_only_at_execution_and_redacts_shor
     let (dir, pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
     let secret = "short";
     let helper = dir.path().join("auth-helper");
-    std::fs::write(&helper, format!("#!/bin/sh\nprintf '%s' '{secret}'\n")).expect("write helper");
+    let helper_home_log = dir.path().join("auth-helper-home");
+    std::fs::write(
+        &helper,
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$CORBANU_HOME\" \"$PFTERMINAL_HOME\" \"$CODEX_HOME\" > '{}'\nprintf '%s' '{secret}'\n",
+            helper_home_log.display()
+        ),
+    )
+    .expect("write helper");
     let claude = dir.path().join("claude");
     std::fs::write(
         &claude,
@@ -2364,6 +2372,10 @@ async fn claude_plan_pane_binds_selected_auth_only_at_execution_and_redacts_shor
     assert_eq!(output.status, ClaudePaneTurnStatus::Success);
     assert_eq!(output.text, "bound [REDACTED_SECRET]");
     assert!(!artifact.contains(secret));
+    assert_eq!(
+        std::fs::read_to_string(helper_home_log).expect("helper home log"),
+        format!("{home}\n{home}\n{home}\n", home = dir.path().display())
+    );
 }
 
 #[cfg(unix)]
