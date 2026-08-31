@@ -52,11 +52,13 @@ updated: 2026-08-31
 - [x] Bound configured, creator-required and effective containment plus owner/policy/run/revocation generations, measured readiness, expiry and recovery status without adding an adapter activation path.
 - [x] Added an exact-symbol upstream seam register and mechanical checker; unverified adapter-owned seams remain explicitly pending.
 - [x] Bound grant and mandate authority to the exact durable request/approved preview, with negative cross-request substitution coverage.
+- [x] Remediated the first Opus review: trusted live dispatch time, durable mandate one-shot enforcement, bounded readiness, re-derived effective containment, consuming dispatch resolution and exact repository-contained seam evidence.
 - [x] Recorded focused, affected, compatibility and real-TMUX evidence under `qa/security-levels/sprints/PF-22-S02/`.
 
 ## Remaining
 
-- [ ] Complete the required TMUX/Corbanu/Claude Opus 5 Max read-only review and remediate/rereview any actionable P0/P1/P2 findings.
+- [ ] Complete the required TMUX/Corbanu/Claude Opus 5 Max read-only rereview of the remediated candidate and resolve any actionable P0/P1/P2 findings.
+- [ ] At the PF-23/PF-24 consumer boundary, bind runtime readiness and journal recovery to one authenticated live run-generation source and prove a mismatch fails closed.
 - [ ] Have the integration owner rerun combined-tree gates, archive the sprint and update shared plan/navigation ledgers.
 
 ## Verification
@@ -64,12 +66,13 @@ updated: 2026-08-31
 - [x] `cd codex-rs && just fix -p codex-core && just fmt` before final affected tests.
 - [x] `cd codex-rs && just test -p codex-core effective_policy && just test -p codex-core security_inheritance` plus focused new integration cases.
 - [x] `python3 scripts/security-upstream-seams-check --manifest qa/security-levels/upstream-seams.json` and `python3 -m unittest discover -s scripts/tests -p 'test_security_upstream_seams.py'`; missing hook/owner/commit/command/evidence must fail.
-- [x] TUI applicability: no new UI here; PF-24/PF-25/PF-26 retain transition, stop and resume proof. A supporting post-remediation TMUX smoke passed.
-- [ ] Run the required read-only Claude Opus 5 Max review through Corbanu Terminal in TMUX after provider authentication is restored.
+- [x] TUI applicability: no new UI here; PF-24/PF-25/PF-26 retain transition, stop and resume proof. A supporting pre-Opus-remediation TMUX smoke passed and is recorded honestly as superseded evidence.
+- [x] Run the first required read-only Claude Opus 5 Max review through Corbanu Terminal in TMUX; it returned no P0, two P1 and six P2 findings, all dispositioned in evidence.
+- [ ] Rerun the same Opus 5 Max review on the P1/P2-remediated candidate.
 
 ## Exit evidence
 
 - [x] Record implementation/remediation commits, changed paths, contract versions and exact final-tree commands/results under `qa/security-levels/sprints/PF-22-S02/`.
 - [x] Preserve S01 archive/evidence unchanged; do not relabel historical passes as proof of these new cases.
 - [x] Record the consumer integration handoff and pending adapter owners in evidence.
-- [ ] Complete the Opus review, integration-owner combined-tree matrix and all shared ledgers before archive and plan/navigation updates.
+- [ ] Complete the Opus rereview, authenticated run-generation adapter proof, integration-owner combined-tree matrix and all shared ledgers before archive and plan/navigation updates.

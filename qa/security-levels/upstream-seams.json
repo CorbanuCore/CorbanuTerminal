@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "contract_version": "PF-22-S02-v1",
+  "contract_version": "PF-22-S02-v2",
   "upstream_revision": "413492cd6c3a4d4f8dff6f406247ccda5a9d88aa",
-  "last_tested_revision": "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4",
+  "last_tested_revision": "c0c00d443df7ba167c164a60685235d80cd6875b",
   "requalification_commands": [
     "python3 scripts/security-upstream-seams-check --manifest qa/security-levels/upstream-seams.json",
     "cd codex-rs && just test -p codex-core protected_runtime",
@@ -26,7 +26,7 @@
       "owner": "PF-23 ingress adapter owner",
       "semantic_contract": "Every protected model or external tool input is classified into a registered ingress route before protected dispatch; unknown routes fail closed and input data does not create authority.",
       "regression_command": "cd codex-rs && just test -p codex-core unregistered_ingress_and_egress_fail_closed",
-      "last_tested_revision": "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4",
+      "last_tested_revision": "c0c00d443df7ba167c164a60685235d80cd6875b",
       "evidence": "qa/security-levels/sprints/PF-22-S02/evidence.md#upstream-seam-register",
       "blocker": "PF-22 supplies the closed-world contract only; the hook-owning PF-23 sprint must connect this upstream symbol and convert the entry to verified."
     },
@@ -42,7 +42,7 @@
       "owner": "PF-23 egress adapter owner",
       "semantic_contract": "A protected side effect requires a registered egress route, a generation-bound PF-19 fence, and a durable PF-41 intent before the effect starts; the live revocation read fence spans the effect.",
       "regression_command": "cd codex-rs && just test -p codex-core durable_intent_and_live_fence_precede_the_effect",
-      "last_tested_revision": "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4",
+      "last_tested_revision": "c0c00d443df7ba167c164a60685235d80cd6875b",
       "evidence": "qa/security-levels/sprints/PF-22-S02/evidence.md#upstream-seam-register",
       "blocker": "PF-22 does not own tool dispatch adapters; PF-23 must connect the dispatch hook without bypassing existing approvals."
     },
@@ -58,7 +58,7 @@
       "owner": "PF-22",
       "semantic_contract": "Every explicit, nested, or auxiliary child receives an immutable actor binding whose creator-required containment is at least as strict as the parent and any stricter child configuration.",
       "regression_command": "cd codex-rs && just test -p codex-core security_inheritance",
-      "last_tested_revision": "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4",
+      "last_tested_revision": "c0c00d443df7ba167c164a60685235d80cd6875b",
       "evidence": "qa/security-levels/sprints/PF-22-S02/evidence.md#upstream-seam-register",
       "blocker": null
     },
@@ -74,7 +74,7 @@
       "owner": "PF-24 trusted-controller owner",
       "semantic_contract": "Human configuration is only a request input; protected state becomes effective after controller-owned authenticated persistence, anchored generation checks, and fail-closed restart recovery.",
       "regression_command": "cd codex-rs && just test -p codex-core authoritative_state",
-      "last_tested_revision": "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4",
+      "last_tested_revision": "c0c00d443df7ba167c164a60685235d80cd6875b",
       "evidence": "qa/security-levels/sprints/PF-22-S02/evidence.md#upstream-seam-register",
       "blocker": "PF-20 provides authenticated persistence and PF-22 consumes it; PF-24 must connect the human update adapter before this upstream seam can be verified."
     }
