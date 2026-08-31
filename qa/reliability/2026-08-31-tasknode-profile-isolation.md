@@ -10,6 +10,8 @@
 - Implementation commit: `4cb0a21352331999f6292db89dcfc5d702fc2759`.
 - Product linkage: **Shipping MVP — LIVE**, “Task Node and identity”; **Product
   principles**, “Security is the product” and “One product.”
+- Next-agent handoff:
+  [P0 Task Node profile isolation handoff](2026-08-31-tasknode-profile-isolation-handoff.md).
 
 ## Root cause and repair
 
