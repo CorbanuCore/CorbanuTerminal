@@ -121,6 +121,17 @@ def identifier(value: Any, subject: str) -> str:
     return value
 
 
+def bounded_text(value: Any, subject: str, maximum: int = 1024) -> str:
+    if (
+        not isinstance(value, str)
+        or not 1 <= len(value) <= maximum
+        or any(ord(character) < 0x20 for character in value)
+        or "\x7f" in value
+    ):
+        raise CampaignError(f"invalid {subject}")
+    return value
+
+
 def instruction_items(value: Any, subject: str) -> list[dict[str, str]]:
     if not isinstance(value, list) or not value:
         raise CampaignError(f"{subject} must be non-empty")
@@ -757,9 +768,8 @@ def load_decisions(
                 )
         elif label not in LABEL_SCOPES or scope not in LABEL_SCOPES[label]:
             raise CampaignError(f"contradictory {subject} final label/scope")
-        for key in ("reviewer", "reason"):
-            if not isinstance(row[key], str) or not 1 <= len(row[key]) <= 1024:
-                raise CampaignError(f"invalid {subject} {key}")
+        identifier(row["reviewer"], f"{subject} reviewer")
+        bounded_text(row["reason"], f"{subject} reason")
         utc_timestamp(row["timestamp_utc"], f"{subject} timestamp_utc")
         decisions[record_id] = row
     return decisions
@@ -1119,8 +1129,10 @@ def main() -> int:
         if arguments.requests < 1 or not 1 <= arguments.concurrency <= 512:
             raise CampaignError("requests/concurrency are out of range")
         arguments.endpoint = loopback_endpoint(arguments.endpoint)
+        arguments.operator = identifier(arguments.operator, "operator")
         return asyncio.run(run_generate(arguments))
     if arguments.command == "adjudicate":
+        arguments.operator = identifier(arguments.operator, "operator")
         return run_adjudicate(arguments)
     raise CampaignError("unsupported command")
 

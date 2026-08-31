@@ -106,6 +106,11 @@ class CampaignTests(unittest.TestCase):
             with self.assertRaisesRegex(campaign.CampaignError, "outside"):
                 campaign.ensure_outside_repository(root / "private" / "round", "output")
 
+    def test_ledger_identity_text_is_bounded(self) -> None:
+        self.assertEqual(campaign.identifier("operator-01", "operator"), "operator-01")
+        with self.assertRaisesRegex(campaign.CampaignError, "invalid reason"):
+            campaign.bounded_text("bad\nreason", "reason")
+
     def test_strict_response_and_privacy_rejection(self) -> None:
         plan = campaign.request_plan(self.config(), "pilot-r1", 0)
         records = [
