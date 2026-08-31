@@ -234,6 +234,74 @@ fn managed_token_round_trip_status_and_replace_are_metadata_only() {
 }
 
 #[test]
+fn managed_enrollment_commits_token_and_exact_selection_together() {
+    let (_directory, vault) = test_vault();
+    let selection = vault
+        .enroll_managed_claude_subscription_token("synthetic-enrollment-token".to_string())
+        .unwrap();
+
+    assert_eq!(selection.source, ClaudeAuthSource::ManagedSubscriptionToken);
+    assert_eq!(selection.source_id, MANAGED_CLAUDE_AUTH_SOURCE_ID);
+    assert_eq!(vault.load_claude_auth_selection().unwrap(), Some(selection));
+    assert_eq!(
+        vault
+            .with_managed_claude_subscription_token(ToString::to_string)
+            .unwrap(),
+        "synthetic-enrollment-token"
+    );
+}
+
+#[test]
+fn managed_enrollment_rolls_back_an_injected_token_write_failure() {
+    assert_managed_enrollment_rollback(EnrollmentFailurePoint::AfterTokenWrite);
+}
+
+#[test]
+fn managed_enrollment_rolls_back_an_injected_index_write_failure() {
+    assert_managed_enrollment_rollback(EnrollmentFailurePoint::AfterIndexWrite);
+}
+
+fn assert_managed_enrollment_rollback(failure_point: EnrollmentFailurePoint) {
+    let (_directory, vault) = test_vault();
+    let previous_selection = ClaudeAuthSelection::new_at(
+        ClaudeAuthSource::ClaudeCodeLogin,
+        MACOS_KEYCHAIN_CLAUDE_AUTH_SOURCE_ID,
+        10,
+    )
+    .unwrap();
+    vault
+        .save_claude_auth_selection(&previous_selection)
+        .unwrap();
+    vault
+        .store_managed_claude_subscription_token("previous-managed-token".to_string())
+        .unwrap();
+    let error = vault
+        .enroll_managed_claude_subscription_token_at(
+            "replacement-managed-token".to_string(),
+            20,
+            failure_point,
+        )
+        .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("injected managed-token enrollment failure")
+    );
+    assert_eq!(
+        vault.load_claude_auth_selection().unwrap(),
+        Some(previous_selection)
+    );
+    assert_eq!(
+        vault
+            .with_managed_claude_subscription_token(ToString::to_string)
+            .unwrap(),
+        "previous-managed-token"
+    );
+    assert!(!format!("{error:?}").contains("replacement-managed-token"));
+}
+
+#[test]
 fn invalid_managed_tokens_fail_without_echoing_input() {
     let (_directory, vault) = test_vault();
     for token in ["", " leading", "two lines\nsecret"] {

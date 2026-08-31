@@ -17,6 +17,15 @@ const CLAUDE_AUTH_SELECTION_VERSION: u32 = 1;
 const MAX_SOURCE_ID_BYTES: usize = 256;
 const MAX_MANAGED_TOKEN_BYTES: usize = 16 * 1024;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EnrollmentFailurePoint {
+    None,
+    #[cfg(test)]
+    AfterTokenWrite,
+    #[cfg(test)]
+    AfterIndexWrite,
+}
+
 /// Stable encrypted-vault label for Corbanu's managed Claude subscription token.
 pub const MANAGED_CLAUDE_TOKEN_LABEL: &str = "provider/claude-code-oauth-token";
 pub const MANAGED_CLAUDE_AUTH_SOURCE_ID: &str = "corbanu-vault:claude-plan";
@@ -240,35 +249,127 @@ impl Vault {
         self.with_storage_lock(|| {
             let mut index = self.load_index()?;
             let now = Utc::now().timestamp();
-            if let Some(metadata) = index.credentials.get_mut(MANAGED_CLAUDE_TOKEN_LABEL) {
-                metadata.credential_type = CredentialType::BearerToken;
-                metadata.provider = Some("claude-plan".to_string());
-                metadata.notes = Some("Managed long-lived Claude subscription token".to_string());
-                metadata.revocation_notes = Some(
-                    "Local removal does not revoke the token; generate a replacement with `claude setup-token`"
-                        .to_string(),
-                );
-                metadata.updated_at = now;
-            } else {
-                let label = crate::normalize_label(MANAGED_CLAUDE_TOKEN_LABEL)?;
-                let metadata = crate::VaultCredentialMeta {
-                    label: label.clone(),
-                    credential_type: CredentialType::BearerToken,
-                    provider: Some("claude-plan".to_string()),
-                    notes: Some("Managed long-lived Claude subscription token".to_string()),
-                    revocation_notes: Some(
-                        "Local removal does not revoke the token; generate a replacement with `claude setup-token`"
-                            .to_string(),
-                    ),
-                    created_at: now,
-                    updated_at: now,
-                    storage_backend: crate::StorageBackend::EncryptedSecrets,
-                };
-                index.credentials.insert(label, metadata);
-            }
+            upsert_managed_token_metadata(&mut index, now)?;
             self.write_secret(MANAGED_CLAUDE_TOKEN_LABEL, token.as_str())?;
             self.save_index(&index)?;
             Ok(ManagedClaudeTokenStatus::Stored { updated_at: now })
+        })
+        .map_err(Into::into)
+    }
+
+    /// Atomically enroll a managed token and select it for Claude Plan requests.
+    ///
+    /// If any encrypted-store write fails, the previous token, metadata index,
+    /// and source selection are restored before the error is returned.
+    pub fn enroll_managed_claude_subscription_token(
+        &self,
+        token: String,
+    ) -> Result<ClaudeAuthSelection, ClaudeSubscriptionTokenError> {
+        self.enroll_managed_claude_subscription_token_at(
+            token,
+            Utc::now().timestamp(),
+            EnrollmentFailurePoint::None,
+        )
+    }
+
+    fn enroll_managed_claude_subscription_token_at(
+        &self,
+        token: String,
+        selected_at: i64,
+        failure_point: EnrollmentFailurePoint,
+    ) -> Result<ClaudeAuthSelection, ClaudeSubscriptionTokenError> {
+        #[cfg(not(test))]
+        let _ = failure_point;
+        let token = Zeroizing::new(token);
+        validate_managed_token(token.as_str())?;
+        let selection = ClaudeAuthSelection::new_at(
+            ClaudeAuthSource::ManagedSubscriptionToken,
+            MANAGED_CLAUDE_AUTH_SOURCE_ID,
+            selected_at,
+        )
+        .map_err(|error| VaultError::Storage(anyhow::anyhow!(error)))?;
+
+        self.with_storage_lock(|| {
+            let selection_name = claude_auth_selection_secret_name()?;
+            let previous_index = self.load_index()?;
+            let previous_token = self
+                .read_secret(MANAGED_CLAUDE_TOKEN_LABEL)?
+                .map(Zeroizing::new);
+            let previous_selection = self.secrets.get(&SecretScope::Global, &selection_name)?;
+            let mut next_index = previous_index.clone();
+            let now = Utc::now().timestamp();
+            upsert_managed_token_metadata(&mut next_index, now)?;
+            let serialized_selection = serde_json::to_string(&selection)
+                .map_err(|error| VaultError::Storage(error.into()))?;
+
+            let mut token_written = false;
+            let mut index_written = false;
+            let mut selection_write_attempted = false;
+            let write_result = (|| -> Result<(), VaultError> {
+                self.write_secret(MANAGED_CLAUDE_TOKEN_LABEL, token.as_str())?;
+                token_written = true;
+                #[cfg(test)]
+                if failure_point == EnrollmentFailurePoint::AfterTokenWrite {
+                    return Err(VaultError::Storage(anyhow::anyhow!(
+                        "injected managed-token enrollment failure after token write"
+                    )));
+                }
+                self.save_index(&next_index)?;
+                index_written = true;
+                #[cfg(test)]
+                if failure_point == EnrollmentFailurePoint::AfterIndexWrite {
+                    return Err(VaultError::Storage(anyhow::anyhow!(
+                        "injected managed-token enrollment failure after index write"
+                    )));
+                }
+                selection_write_attempted = true;
+                self.secrets.set(
+                    &SecretScope::Global,
+                    &selection_name,
+                    &serialized_selection,
+                )?;
+                Ok(())
+            })();
+
+            if let Err(write_error) = write_result {
+                let rollback_result = (|| -> Result<(), VaultError> {
+                    if token_written {
+                        match previous_token.as_deref() {
+                            Some(previous_token) => {
+                                self.write_secret(MANAGED_CLAUDE_TOKEN_LABEL, previous_token)?;
+                            }
+                            None => {
+                                self.delete_secret(MANAGED_CLAUDE_TOKEN_LABEL)?;
+                            }
+                        }
+                    }
+                    if index_written {
+                        self.save_index(&previous_index)?;
+                    }
+                    if selection_write_attempted {
+                        match previous_selection.as_deref() {
+                            Some(previous_selection) => self.secrets.set(
+                                &SecretScope::Global,
+                                &selection_name,
+                                previous_selection,
+                            )?,
+                            None => {
+                                self.secrets
+                                    .delete(&SecretScope::Global, &selection_name)?;
+                            }
+                        }
+                    }
+                    Ok(())
+                })();
+                if rollback_result.is_err() {
+                    return Err(VaultError::Storage(anyhow::anyhow!(
+                        "managed Claude token enrollment failed and encrypted-state rollback was incomplete"
+                    )));
+                }
+                return Err(write_error);
+            }
+
+            Ok(selection.clone())
         })
         .map_err(Into::into)
     }
@@ -306,6 +407,39 @@ impl Vault {
     pub fn remove_managed_claude_subscription_token(&self) -> Result<bool, VaultError> {
         self.delete(MANAGED_CLAUDE_TOKEN_LABEL)
     }
+}
+
+fn upsert_managed_token_metadata(
+    index: &mut crate::VaultIndex,
+    now: i64,
+) -> Result<(), VaultError> {
+    if let Some(metadata) = index.credentials.get_mut(MANAGED_CLAUDE_TOKEN_LABEL) {
+        metadata.credential_type = CredentialType::BearerToken;
+        metadata.provider = Some("claude-plan".to_string());
+        metadata.notes = Some("Managed long-lived Claude subscription token".to_string());
+        metadata.revocation_notes = Some(
+            "Local removal does not revoke the token; generate a replacement with `claude setup-token`"
+                .to_string(),
+        );
+        metadata.updated_at = now;
+    } else {
+        let label = crate::normalize_label(MANAGED_CLAUDE_TOKEN_LABEL)?;
+        let metadata = crate::VaultCredentialMeta {
+            label: label.clone(),
+            credential_type: CredentialType::BearerToken,
+            provider: Some("claude-plan".to_string()),
+            notes: Some("Managed long-lived Claude subscription token".to_string()),
+            revocation_notes: Some(
+                "Local removal does not revoke the token; generate a replacement with `claude setup-token`"
+                    .to_string(),
+            ),
+            created_at: now,
+            updated_at: now,
+            storage_backend: crate::StorageBackend::EncryptedSecrets,
+        };
+        index.credentials.insert(label, metadata);
+    }
+    Ok(())
 }
 
 fn validate_managed_token(token: &str) -> Result<(), ClaudeSubscriptionTokenError> {
