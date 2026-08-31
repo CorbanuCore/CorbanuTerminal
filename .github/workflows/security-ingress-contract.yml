@@ -89,7 +89,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest scripts.test_security_classifier_eval
-          scripts/security-classifier-eval \
+          python scripts/security_classifier_eval.py \
             --manifest qa/security-levels/classifier/corpus-manifest.json \
             --splits qa/security-levels/classifier/split-manifest.json \
             --repo-root . \

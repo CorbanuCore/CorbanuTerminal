@@ -19,9 +19,10 @@ their accepted one-shot behavior; metered capabilities must reserve worst-case
 usage atomically before dispatch.
 
 Only trusted Core metering can settle a reservation. Completed and partial
-outcomes charge authenticated measured usage; cancellation charges the request
-attempt but releases unused token/byte/spend holds; unknown outcomes charge the
-entire reservation. Pending reservations may settle after revocation only until
+outcomes charge authenticated measured usage. Pre-dispatch cancellation charges
+the request attempt and releases unused token/byte/spend holds; once dispatch is
+authorized, an unmeasured cancellation charges the entire reservation, as does
+an unknown outcome. Pending reservations may settle after revocation only until
 the capability deadline; at expiry every abandoned hold is force-charged Unknown
 before the capability is reclaimed. Duplicate settlement is idempotent, settled
 history does not consume the active-reservation cap, and aggregate request count
