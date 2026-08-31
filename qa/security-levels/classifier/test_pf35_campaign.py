@@ -73,6 +73,14 @@ class CampaignTests(unittest.TestCase):
             with self.assertRaisesRegex(campaign.CampaignError, "sampling top_p"):
                 campaign.load_config(path)
 
+    def test_generation_endpoint_must_be_loopback(self) -> None:
+        self.assertEqual(
+            campaign.loopback_endpoint("http://127.0.0.1:8000/v1/chat/completions"),
+            "http://127.0.0.1:8000/v1/chat/completions",
+        )
+        with self.assertRaisesRegex(campaign.CampaignError, "loopback"):
+            campaign.loopback_endpoint("https://api.example.com/v1/chat/completions")
+
     def test_strict_response_and_privacy_rejection(self) -> None:
         plan = campaign.request_plan(self.config(), "pilot-r1", 0)
         records = [

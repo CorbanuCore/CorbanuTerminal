@@ -16,6 +16,14 @@ SPEC.loader.exec_module(bakeoff)
 
 
 class BakeoffTests(unittest.TestCase):
+    def test_endpoint_must_be_loopback(self) -> None:
+        self.assertEqual(
+            bakeoff.loopback_endpoint("http://[::1]:8000/v1/chat/completions"),
+            "http://[::1]:8000/v1/chat/completions",
+        )
+        with self.assertRaisesRegex(bakeoff.BakeoffError, "loopback"):
+            bakeoff.loopback_endpoint("http://example.com/v1/chat/completions")
+
     def test_valid_fixture_output_is_exact(self) -> None:
         content = json.dumps(
             {

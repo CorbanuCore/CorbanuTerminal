@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import ipaddress
 import json
 import math
 import os
@@ -14,6 +15,7 @@ import statistics
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
@@ -88,6 +90,26 @@ def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 def strict_json_loads(value: str | bytes) -> Any:
     return json.loads(value, object_pairs_hook=reject_duplicate_keys)
+
+
+def loopback_endpoint(value: str) -> str:
+    parsed = urllib.parse.urlsplit(value)
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise BakeoffError("endpoint must be a loopback HTTP URL")
+    try:
+        is_loopback = ipaddress.ip_address(parsed.hostname).is_loopback
+    except ValueError:
+        is_loopback = parsed.hostname.casefold() == "localhost"
+    if not is_loopback or parsed.path != "/v1/chat/completions":
+        raise BakeoffError("endpoint must be a loopback HTTP URL")
+    return value
 
 
 def canonical_json(value: Any) -> bytes:
@@ -319,6 +341,7 @@ def main() -> int:
     for name in ("revision", "model_sha256", "tokenizer_sha256"):
         if re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", getattr(arguments, name)) is None:
             raise BakeoffError(f"invalid {name}")
+    arguments.endpoint = loopback_endpoint(arguments.endpoint)
     return asyncio.run(run(arguments))
 
 

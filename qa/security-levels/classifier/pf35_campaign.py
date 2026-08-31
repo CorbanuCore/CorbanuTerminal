@@ -15,6 +15,7 @@ import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -129,6 +130,28 @@ def utc_timestamp(value: Any, subject: str) -> str:
         raise CampaignError(f"invalid {subject}") from error
     if parsed.tzinfo is None or parsed.utcoffset() != UTC.utcoffset(parsed):
         raise CampaignError(f"invalid {subject}")
+    return value
+
+
+def loopback_endpoint(value: Any) -> str:
+    if not isinstance(value, str):
+        raise CampaignError("endpoint must be a loopback HTTP URL")
+    parsed = urllib.parse.urlsplit(value)
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise CampaignError("endpoint must be a loopback HTTP URL")
+    try:
+        is_loopback = ipaddress.ip_address(parsed.hostname).is_loopback
+    except ValueError:
+        is_loopback = parsed.hostname.casefold() == "localhost"
+    if not is_loopback or parsed.path != "/v1/chat/completions":
+        raise CampaignError("endpoint must be a loopback HTTP URL")
     return value
 
 
@@ -1058,6 +1081,7 @@ def main() -> int:
     if arguments.command == "generate":
         if arguments.requests < 1 or not 1 <= arguments.concurrency <= 512:
             raise CampaignError("requests/concurrency are out of range")
+        arguments.endpoint = loopback_endpoint(arguments.endpoint)
         return asyncio.run(run_generate(arguments))
     if arguments.command == "adjudicate":
         return run_adjudicate(arguments)
