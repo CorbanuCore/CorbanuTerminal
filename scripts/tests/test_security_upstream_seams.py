@@ -41,6 +41,44 @@ class SecurityUpstreamSeamsTest(unittest.TestCase):
         with self.assertRaises(ManifestError):
             validate_manifest(manifest, ROOT)
 
+    def test_tokens_in_different_impls_do_not_form_a_symbol(self):
+        manifest = copy.deepcopy(self.manifest)
+        manifest["seams"][0]["corbanu_symbol"] = "ProtectedRuntime::record_completed"
+        with self.assertRaises(ManifestError):
+            validate_manifest(manifest, ROOT)
+
+    def test_paths_cannot_escape_and_evidence_anchor_must_exist(self):
+        for field, value in (
+            ("corbanu_path", "/tmp/protected_runtime.rs"),
+            ("corbanu_path", "../protected_runtime.rs"),
+            ("evidence", "/tmp/evidence.md#upstream-seam-register"),
+            ("evidence", "../evidence.md#upstream-seam-register"),
+            (
+                "evidence",
+                "qa/security-levels/sprints/PF-22-S02/evidence.md#missing-anchor",
+            ),
+        ):
+            with self.subTest(field=field, value=value):
+                manifest = copy.deepcopy(self.manifest)
+                manifest["seams"][0][field] = value
+                with self.assertRaises(ManifestError):
+                    validate_manifest(manifest, ROOT)
+
+    def test_last_tested_revision_is_shared_and_contains_exact_seams(self):
+        mismatched = copy.deepcopy(self.manifest)
+        mismatched["seams"][0]["last_tested_revision"] = (
+            "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4"
+        )
+        with self.assertRaises(ManifestError):
+            validate_manifest(mismatched, ROOT)
+
+        stale = copy.deepcopy(self.manifest)
+        stale["last_tested_revision"] = "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4"
+        for seam in stale["seams"]:
+            seam["last_tested_revision"] = stale["last_tested_revision"]
+        with self.assertRaises(ManifestError):
+            validate_manifest(stale, ROOT)
+
     def test_pending_requires_blocker_and_verified_forbids_one(self):
         pending = copy.deepcopy(self.manifest)
         pending["seams"][0]["blocker"] = None

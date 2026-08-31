@@ -4,15 +4,17 @@
 //! broker adapter. It binds the completed policy, authoritative-state,
 //! revocation-fence, and durable-event contracts so later adapters cannot use a
 //! stale measurement or an unregistered route as authority.
-#![allow(dead_code)]
+#![cfg_attr(not(test), allow(dead_code))]
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::sync::RwLock;
 
 use codex_config::AuthoritativeSecurityState;
+use codex_security_audit::AppendAcknowledgement;
 use codex_security_audit::AuthorityIdentity;
 use codex_security_audit::DispatchPermit;
+use codex_security_audit::DispatchResolution;
 use codex_security_audit::EventContext;
 use codex_security_audit::JournalError;
 use codex_security_audit::RecoveryReport;
@@ -34,7 +36,8 @@ use thiserror::Error;
 
 use super::effective_policy::EffectivePolicySnapshot;
 
-pub(crate) const PROTECTED_RUNTIME_CONTRACT_VERSION: u32 = 1;
+pub(crate) const PROTECTED_RUNTIME_CONTRACT_VERSION: u32 = 2;
+const MAX_READINESS_WINDOW_SECONDS: i64 = 300;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ProtectionReadinessStatus {
@@ -106,6 +109,8 @@ impl MeasuredProtectionReadiness {
             || self.generations.run == 0
             || self.window.measured_at_unix_seconds < 0
             || self.window.expires_at_unix_seconds <= self.window.measured_at_unix_seconds
+            || self.window.expires_at_unix_seconds - self.window.measured_at_unix_seconds
+                > MAX_READINESS_WINDOW_SECONDS
         {
             return Err(ProtectedRuntimeError::InvalidReadinessMeasurement);
         }
@@ -162,6 +167,11 @@ pub(crate) struct CurrentProtectedRuntime<'a> {
     pub(crate) authoritative: &'a AuthoritativeSecurityState,
     pub(crate) readiness: &'a MeasuredProtectionReadiness,
     pub(crate) recovery: &'a RecoveryReport,
+    /// Expected live run generation supplied by the hook-owning adapter.
+    ///
+    /// PF-22 cross-checks it against measured readiness, but cannot authenticate
+    /// it independently until the adapter binds the session source and the same
+    /// value passed to `ReferenceJournal::recover`.
     pub(crate) run_generation: u64,
     pub(crate) now_unix_seconds: i64,
 }
@@ -247,37 +257,41 @@ impl ProtectedRuntime {
         deduplication_key: BoundedText,
     ) -> Result<ProtectedDispatch, ProtectedRuntimeError> {
         self.authorize_route(current, ProtectedRouteKind::Egress, egress_route_id)?;
-        authority.validate_request(request)?;
+        let now_unix_seconds = current.now_unix_seconds;
+        authority.validate_request(request, now_unix_seconds)?;
         let revocations = self.read_revocations()?;
-        let (fence, identity) = match authority {
+        let (fence, identity, deduplication_key) = match authority {
             ProtectedAuthority::Grant(grant) => (
                 DispatchFence::queued_for_grant(
                     run_id.clone(),
                     self.snapshot.generations.revocation,
-                    request.context.now_unix_seconds,
+                    now_unix_seconds,
                     grant,
                     &revocations,
                 )?,
                 AuthorityIdentity::from_grant(grant)?,
+                deduplication_key,
             ),
             ProtectedAuthority::Mandate { mandate, .. } => (
                 DispatchFence::queued_for_mandate(
                     run_id.clone(),
                     self.snapshot.generations.revocation,
-                    request.context.now_unix_seconds,
+                    now_unix_seconds,
                     mandate,
                     &revocations,
                 )?,
                 AuthorityIdentity::from_mandate(mandate)?,
+                BoundedText::new(format!("mandate:{}", mandate.mandate_id))?,
             ),
         };
+        drop(revocations);
         let (permit, _) = journal.reserve_dispatch(
             self.event_context()?,
             None,
             request,
             identity,
             deduplication_key,
-            request.context.now_unix_seconds,
+            now_unix_seconds,
         )?;
         Ok(ProtectedDispatch {
             run_id,
@@ -323,7 +337,7 @@ impl ProtectedRuntime {
         Ok(())
     }
 
-    fn event_context(&self) -> Result<EventContext, ProtectedRuntimeError> {
+    pub(crate) fn event_context(&self) -> Result<EventContext, ProtectedRuntimeError> {
         Ok(EventContext::new(
             self.readiness_producer.clone(),
             self.snapshot.generations.policy,
@@ -350,13 +364,17 @@ pub(crate) enum ProtectedAuthority<'a> {
 }
 
 impl ProtectedAuthority<'_> {
-    fn validate_request(self, request: &AuthorizationRequest) -> Result<(), ProtectedRuntimeError> {
+    fn validate_request(
+        self,
+        request: &AuthorizationRequest,
+        now_unix_seconds: i64,
+    ) -> Result<(), ProtectedRuntimeError> {
         let matches = match self {
             Self::Grant(grant) => grant.matches_request(request).unwrap_or(false),
             Self::Mandate { mandate, preview } => {
                 preview.request == *request
                     && mandate
-                        .matches_preview(preview, request.context.now_unix_seconds)
+                        .matches_preview(preview, now_unix_seconds)
                         .unwrap_or(false)
             }
         };
@@ -367,6 +385,7 @@ impl ProtectedAuthority<'_> {
     }
 }
 
+#[must_use = "a protected dispatch must be resolved as completed or unknown"]
 pub(crate) struct ProtectedDispatch {
     run_id: BoundedText,
     fence: DispatchFence,
@@ -374,6 +393,11 @@ pub(crate) struct ProtectedDispatch {
 }
 
 impl ProtectedDispatch {
+    /// Authorize and perform one bounded effect while holding the PF-19 read
+    /// guard that defines revocation linearization.
+    ///
+    /// Stream and channel adapters must call this for each individual write;
+    /// journal persistence happens outside this guard.
     pub(crate) fn authorize<T>(
         &mut self,
         runtime: &ProtectedRuntime,
@@ -404,14 +428,25 @@ impl ProtectedDispatch {
         Ok(effect())
     }
 
-    pub(crate) fn record_completed(mut self) -> Result<DispatchPermit, ProtectedRuntimeError> {
-        self.fence.record_completed()?;
-        Ok(self.permit)
-    }
-
-    pub(crate) fn record_unknown(mut self) -> Result<DispatchPermit, ProtectedRuntimeError> {
-        self.fence.record_unknown_financial_outcome()?;
-        Ok(self.permit)
+    pub(crate) fn resolve(
+        mut self,
+        journal: &mut ReferenceJournal,
+        current_context: EventContext,
+        resolution: DispatchResolution,
+        occurred_at_unix_seconds: i64,
+    ) -> Result<AppendAcknowledgement, ProtectedRuntimeError> {
+        match resolution {
+            DispatchResolution::Completed { .. } => self.fence.record_completed()?,
+            DispatchResolution::Unknown { .. } => {
+                self.fence.record_unknown_financial_outcome()?;
+            }
+        }
+        Ok(journal.resolve_dispatch(
+            self.permit,
+            current_context,
+            resolution,
+            occurred_at_unix_seconds,
+        )?)
     }
 }
 
@@ -425,6 +460,11 @@ fn validate_current_shape(
         return Err(ProtectedRuntimeError::ProtectedLevelRequired);
     }
     if current.effective.requested_level != current.authoritative.level
+        || current.effective.level
+            != current
+                .effective
+                .requested_level
+                .max(current.effective.creator_required_level)
         || current.effective.revocation_generation != current.authoritative.revocation_generation
         || current.authoritative.kill_switch_active
             != current.effective.authority_kill_switch_active
