@@ -26,11 +26,54 @@ const CLAUDE_LOGIN_AUTHORITY_PREFIX: &str = "claude-login-authority:sha256:";
 const CLAUDE_ENVIRONMENT_TOKEN_AUTHORITY_PREFIX: &str =
     "claude-environment-token-authority:sha256:";
 const MAX_MANAGED_TOKEN_BYTES: usize = 16 * 1024;
+const CLAUDE_AUTH_SELECTION_SENTINEL_FILE: &str = ".claude-auth-selection-present";
 const CLAUDE_AUTH_SELECTION_REVISION_FILE: &str = ".claude-auth-selection-revision";
+
+/// Non-secret sentinel distinguishing explicit selection from legacy discovery.
+pub fn claude_auth_selection_sentinel_path(codex_home: &Path) -> PathBuf {
+    codex_home.join(CLAUDE_AUTH_SELECTION_SENTINEL_FILE)
+}
 
 /// Non-secret revision marker used to invalidate command-backed bearer caches.
 pub fn claude_auth_selection_revision_path(codex_home: &Path) -> PathBuf {
     codex_home.join(CLAUDE_AUTH_SELECTION_REVISION_FILE)
+}
+
+fn ensure_claude_auth_selection_sentinel(codex_home: &Path) -> Result<(), VaultError> {
+    std::fs::create_dir_all(codex_home).map_err(|error| {
+        VaultError::Storage(anyhow::anyhow!(
+            "failed to create Claude auth selection directory: {error}"
+        ))
+    })?;
+    let path = claude_auth_selection_sentinel_path(codex_home);
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+    {
+        Ok(file) => file.sync_all().map_err(|error| {
+            VaultError::Storage(anyhow::anyhow!(
+                "failed to persist Claude auth selection sentinel: {error}"
+            ))
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let metadata = std::fs::symlink_metadata(&path).map_err(|metadata_error| {
+                VaultError::Storage(anyhow::anyhow!(
+                    "failed to inspect Claude auth selection sentinel: {metadata_error}"
+                ))
+            })?;
+            if metadata.file_type().is_file() {
+                Ok(())
+            } else {
+                Err(VaultError::Storage(anyhow::anyhow!(
+                    "Claude auth selection sentinel is not a regular file"
+                )))
+            }
+        }
+        Err(error) => Err(VaultError::Storage(anyhow::anyhow!(
+            "failed to create Claude auth selection sentinel: {error}"
+        ))),
+    }
 }
 
 struct PreparedClaudeAuthRevision {
@@ -459,6 +502,10 @@ impl Vault {
         selection
             .validate()
             .map_err(|error| VaultError::Storage(anyhow::anyhow!(error)))?;
+        // Publish the non-secret opt-in boundary before touching encrypted
+        // selection state. If the later write fails, resolution remains
+        // fail-closed instead of silently returning to legacy env-first auth.
+        ensure_claude_auth_selection_sentinel(&self.codex_home)?;
         let revision = PreparedClaudeAuthRevision::new(&self.codex_home)?;
         let result = self.with_storage_lock(|| {
             let name = claude_auth_selection_secret_name()?;
@@ -547,6 +594,7 @@ impl Vault {
         )
         .map_err(|error| VaultError::Storage(anyhow::anyhow!(error)))?;
 
+        ensure_claude_auth_selection_sentinel(&self.codex_home)?;
         let revision = PreparedClaudeAuthRevision::new(&self.codex_home)?;
 
         let result = self.with_storage_lock(|| {

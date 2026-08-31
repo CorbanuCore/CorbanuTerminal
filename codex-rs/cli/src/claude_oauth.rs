@@ -23,6 +23,7 @@ use codex_vault::ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::MANAGED_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::ManagedClaudeTokenStatus;
 use codex_vault::Vault;
+use codex_vault::claude_auth_selection_sentinel_path;
 use codex_vault::claude_code_macos_keychain_service;
 use codex_vault::claude_environment_token_authority_id;
 use codex_vault::credentials_file_claude_auth_source_id;
@@ -173,11 +174,26 @@ const CURRENT_PLATFORM_STORE: PlatformCredentialStore = PlatformCredentialStore:
 pub(crate) async fn resolve_claude_oauth_access_token(
     codex_home: &Path,
 ) -> Result<Zeroizing<String>> {
+    if let Some(token) = legacy_environment_token_without_explicit_selection(
+        codex_home,
+        nonempty_env("CLAUDE_CODE_OAUTH_TOKEN"),
+    ) {
+        return Ok(Zeroizing::new(token));
+    }
     let vault = Vault::new(codex_home.to_path_buf());
     let selection = vault
         .load_claude_auth_selection()
         .context("failed to load the selected Claude authentication method")?;
     resolve_claude_oauth_access_token_for_selection(selection.as_ref(), &vault).await
+}
+
+fn legacy_environment_token_without_explicit_selection(
+    codex_home: &Path,
+    environment_token: Option<String>,
+) -> Option<String> {
+    (!claude_auth_selection_sentinel_path(codex_home).exists())
+        .then_some(environment_token)
+        .flatten()
 }
 
 async fn resolve_claude_oauth_access_token_for_selection(
@@ -1342,6 +1358,27 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         )
         .expect_err("unbound explicit selection must fail closed");
         assert!(error.to_string().contains("predates authority binding"));
+    }
+
+    #[test]
+    fn legacy_environment_token_bypasses_vault_only_before_explicit_selection() {
+        let codex_home = tempfile::tempdir().expect("codex home");
+        let token = "legacy-environment-token".to_string();
+
+        assert_eq!(
+            legacy_environment_token_without_explicit_selection(
+                codex_home.path(),
+                Some(token.clone()),
+            ),
+            Some(token.clone())
+        );
+
+        std::fs::write(claude_auth_selection_sentinel_path(codex_home.path()), "")
+            .expect("selection sentinel");
+        assert_eq!(
+            legacy_environment_token_without_explicit_selection(codex_home.path(), Some(token),),
+            None
+        );
     }
 
     #[test]

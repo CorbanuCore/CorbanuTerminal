@@ -99,8 +99,9 @@ fn managed_token_load_returns_zeroizing_owned_memory() {
 
 #[test]
 fn absent_selection_preserves_existing_installations() {
-    let (_directory, vault) = test_vault();
+    let (directory, vault) = test_vault();
     assert_eq!(vault.load_claude_auth_selection().unwrap(), None);
+    assert!(!claude_auth_selection_sentinel_path(directory.path()).exists());
 }
 
 #[test]
@@ -115,6 +116,7 @@ fn selection_round_trips_in_the_encrypted_store() {
     vault.save_claude_auth_selection(&selection).unwrap();
 
     assert_eq!(vault.load_claude_auth_selection().unwrap(), Some(selection));
+    assert!(claude_auth_selection_sentinel_path(directory.path()).is_file());
     assert!(directory.path().join("secrets").join("local.age").is_file());
     assert!(claude_auth_selection_revision_path(directory.path()).is_file());
 }
