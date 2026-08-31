@@ -237,14 +237,10 @@ fn current_platform_login_source_id() -> Result<String, String> {
         let configured = std::env::var_os("CLAUDE_CONFIG_DIR")
             .filter(|value| !value.is_empty())
             .map(std::path::PathBuf::from);
-        let config_dir_overridden = configured.is_some();
-        let config_dir = configured.unwrap_or_else(|| home.join(".claude"));
         let custom_oauth = std::env::var("CLAUDE_CODE_CUSTOM_OAUTH_URL")
             .ok()
             .is_some_and(|value| !value.trim().is_empty());
-        let service =
-            claude_code_macos_keychain_service(&config_dir, config_dir_overridden, custom_oauth);
-        Ok(macos_keychain_claude_auth_source_id(&service))
+        macos_platform_login_source_id(&home, configured, custom_oauth)
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -262,6 +258,27 @@ fn current_platform_login_source_id() -> Result<String, String> {
             format!("cannot identify Claude Code's credentials-file profile: {error}")
         })
     }
+}
+
+#[cfg(target_os = "macos")]
+fn macos_platform_login_source_id(
+    home: &std::path::Path,
+    configured: Option<std::path::PathBuf>,
+    custom_oauth: bool,
+) -> Result<String, String> {
+    let config_dir_overridden = configured.is_some();
+    let config_dir = match configured {
+        Some(path) => std::path::absolute(&path).map_err(|error| {
+            format!(
+                "cannot identify Claude Code's Keychain profile at {}: {error}",
+                path.display()
+            )
+        })?,
+        None => home.join(".claude"),
+    };
+    let service =
+        claude_code_macos_keychain_service(&config_dir, config_dir_overridden, custom_oauth);
+    Ok(macos_keychain_claude_auth_source_id(&service))
 }
 
 #[cfg(target_os = "macos")]

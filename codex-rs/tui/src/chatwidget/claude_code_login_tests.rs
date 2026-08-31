@@ -62,6 +62,19 @@ fn account_authority_requires_reported_subscription_type() {
     assert!(status_authority_id(&status).is_err());
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn relative_config_dir_matches_runtime_keychain_profile_identity() {
+    let relative = std::path::PathBuf::from("target/claude-relative-profile-fixture");
+    let absolute = std::path::absolute(&relative).expect("absolute fixture profile");
+    let home = std::path::Path::new("/unused-home");
+
+    assert_eq!(
+        macos_platform_login_source_id(home, Some(relative), false).expect("relative source id"),
+        macos_platform_login_source_id(home, Some(absolute), false).expect("absolute source id"),
+    );
+}
+
 #[test]
 fn selected_environment_token_status_requires_the_bound_token() {
     let selection = ClaudeAuthSelection::new_environment_token("selected-environment-token")

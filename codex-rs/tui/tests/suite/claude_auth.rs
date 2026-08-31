@@ -355,7 +355,7 @@ impl FakeClaude {
             &executable,
             r#"#!/bin/sh
 if [ "$1 $2 $3" = "auth status --json" ]; then
-  printf '{"loggedIn":true,"authMethod":"claude.ai","email":"fixture@example.invalid","subscriptionType":"max"}\n'
+  printf '{"loggedIn":true,"authMethod":"claude.ai","email":"fixture@example.invalid","orgId":"org-tmux-fixture","subscriptionType":"max"}\n'
   exit 0
 fi
 exit 2
