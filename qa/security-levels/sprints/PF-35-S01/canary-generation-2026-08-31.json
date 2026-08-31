@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "kind": "pf35-semantic-canary-generation-aggregate",
+  "date": "2026-08-31",
+  "status": "deterministic-gates-pass-human-audit-pending",
+  "qualification_boundary": "Canary-r3 passes deterministic compatibility, semantic-exposition, inert-hard-negative, privacy, duplication and natural-length gates. It is not training data, a replacement 10000-acceptance pilot, or final human/Opus adjudication evidence.",
+  "product_decision": {
+    "authority": "Travis Good — final product authority",
+    "decision": "Reject the first pilot as training input, correct the generation contract, and require a 1000-candidate canary before a replacement pilot.",
+    "reason": "Attack-class records mixed operative phrases with didactic explanations that leaked classification rationale."
+  },
+  "host_id": "rtx6000-blackwell-01",
+  "generator": {
+    "repository": "preetpatel/Qwen3.8-27B-Uncensored-NVFP4",
+    "revision": "37b5130a2d2a1f7d4456ab3f8d05d0b2a45ea350",
+    "runtime": "vllm-0.27.1-pipfreeze-779bcffe1c5ad92966c554914dd969833cb59888ea7528b568a92a19773ae83d",
+    "concurrency": 64
+  },
+  "corrected_contract": {
+    "config_schema_version": 2,
+    "config_file": "qa/security-levels/classifier/campaign-config-canary-v2.json",
+    "legacy_schema_1_generation_allowed": false,
+    "class_conditioned_coverage": true,
+    "attack_artifact_only": true,
+    "hard_negative_inert_context_required": true,
+    "length_buckets": ["short", "medium", "long"],
+    "length_ceiling_rejected": true,
+    "quarantined_round_adjudication_allowed": false
+  },
+  "quarantined_rounds": [
+    {
+      "round_id": "pilot-r1",
+      "generation_entry_sha256": "ae033f22c5f8b0d06d906fccb0aac7413287bd14b2a76d2ae711ba51175e49e8",
+      "quarantine_entry_sha256": "c72df19a0f05b1316995a5b964faf82cdbdfbfd88347f830d660a037298fee60",
+      "marker_sha256": "67b83fc581c4742d8fe5ea1a97e2e96a9b2b10626d981b37dfdf8cdb9f9ff1e0",
+      "reason": "Systemic attack-class didactic exposition."
+    },
+    {
+      "round_id": "canary-r1",
+      "generation_entry_sha256": "85d3ca3812b3c3ebd405be07fbe3e35303cadd51464fad7460cd1ac43221ce8e",
+      "quarantine_entry_sha256": "36c3c633dec3d4f6f011b4d00abeb4c8679edb7dece740fc5daeaa5adda3678c",
+      "marker_sha256": "2f539c2d147f6756c6bee8485c5c049ed42402731cc48538faaaa1cb8ac34d83",
+      "reason": "Length-ceiling truncation and residual mechanism exposition."
+    },
+    {
+      "round_id": "canary-r2",
+      "generation_entry_sha256": "4f2872a94632fd3c947562e66abf113363b7490aba6bb8303fb581a01c2c214e",
+      "quarantine_entry_sha256": "e18213502bb54d69105188420280437e5fe3e9c88536fe6b5534c6dbc2f09d21",
+      "marker_sha256": "9e23d982b54de0b76eb627ceb70e0f4363884f23b7b029313e5c37ba3afd6291",
+      "reason": "Residual placeholder, translation and fragment-joining self-description."
+    }
+  ],
+  "accepted_canary": {
+    "campaign_id": "qwen38-27b-preet-nvfp4-vllm-en-v2",
+    "round_id": "canary-r3",
+    "operator": "travis",
+    "completed_utc": "2026-08-31T22:56:01.758108+00:00",
+    "identity": {
+      "config_sha256": "6a36fd1ab79dd95bec2018d496f1aa2eb3c01c54bbb65c5c3695c835d1584ebb",
+      "prompt_sha256": "ed367905cc0fa1452b0e70bae15480020736f109f846fa2fc25b4c24298ad203",
+      "seed_sequence_sha256": "83e7531ead5fba115a7b6dd0abf4fc9560b23209e3fa8a8afcd3e82a4fc321de",
+      "source_manifest_sha256": "c0dd2e6c5028ddf9889af6d85bd60074dab94ca55b44f6694db4bcf932ed3384",
+      "ledger_entry_sha256": "21ea6aaf189d32bd0863b3c66430c601b1ca24e83f9786e174bfd3437ac6c98f"
+    },
+    "generation": {
+      "requests": 250,
+      "requested_records": 1000,
+      "provisional_records": 829,
+      "provisional_yield_fraction": 0.829,
+      "candidate_shortfall": 171,
+      "final_accepted_records": 0,
+      "prompt_tokens": 117023,
+      "completion_tokens": 150411
+    },
+    "rejections": {
+      "entries": 168,
+      "record_level_entries": 167,
+      "request_level_entries": 1,
+      "reason_counts_may_overlap": true,
+      "taxonomy": {
+        "hard_negative_missing_inert_context": 68,
+        "attack_meta_exposition": 27,
+        "text_at_length_ceiling": 57,
+        "private_material_pattern": 6,
+        "near_duplicate_cross_group": 34,
+        "invalid_or_truncated_json_response": 1
+      }
+    },
+    "balance": {
+      "labels": {"allow": 563, "suspicious": 38, "hostile": 228},
+      "family_scopes": {"benign": 439, "hard_negative": 124, "known": 154, "unseen": 112},
+      "length_buckets": {"short": 320, "medium": 294, "long": 215},
+      "coverage_dimensions": {
+        "benign-security-research": 89,
+        "legitimate-human-trading-instructions": 71,
+        "trigger-token-hard-negatives": 21,
+        "finance": 136,
+        "repository": 113,
+        "web": 96,
+        "tool-output": 92,
+        "child-agent": 84,
+        "cross-segment": 59,
+        "unsupported-language": 68
+      }
+    },
+    "deterministic_quality": {
+      "incompatible_coverage_scope_records": 0,
+      "accepted_attack_self_description_matches": 0,
+      "accepted_attack_fragment_mechanism_matches": 0,
+      "accepted_records_at_length_ceiling": 0,
+      "text_characters": {"minimum": 22, "median": 238, "p90": 1160, "maximum": 1758}
+    },
+    "review": {
+      "human_review_queue": 82,
+      "required_human_review": 50,
+      "suspicious_label": 38,
+      "low_confidence": 13,
+      "high_confidence_human_audit": 32,
+      "high_confidence_opus_audit": 32,
+      "human_adjudicated": 0,
+      "opus_audited": 0
+    },
+    "external_outputs": {
+      "raw-responses.jsonl": {"records": 250, "bytes": 698651, "sha256": "d93f377b46f875eed8c54df25ea3169a3048eee159516cdb183372d7c9e85192"},
+      "provisional-records.jsonl": {"records": 829, "bytes": 1090782, "sha256": "6a59d745585cbcb9962984a13044d21f3bf33741151fc544c9a0e7d8b2699415"},
+      "rejected.jsonl": {"records": 168, "bytes": 13581, "sha256": "ef95392e88add3df374d16368782c6eb4a3b59b91d3ce7eb5e23fb67dcab8cca"},
+      "human-review-queue.jsonl": {"records": 82, "bytes": 108491, "sha256": "d89b10b8cadfbba559fd6f6e114b3815d07561c6d9aca0affab781403d2cda98"},
+      "human-review-workbook.xlsx": {"records": 82, "bytes": 44517, "sha256": "c44bf5b49ca333a7bdd17b95eb6515311b9b95c0884fbfac326cdb74862b8b75", "record_material_in_git": false},
+      "opus-audit-queue.jsonl": {"records": 32, "bytes": 46024, "sha256": "e6a25df68d929b6c8d319a2e97f7bf7c7431002a65dd45e66e90d2fdfb3576a6"}
+    },
+    "storage": {
+      "record_material_location": "/home/travis/pf35-qualification/campaign/canary-v2-r3/canary-r3",
+      "record_material_in_git": false,
+      "blind_material": false
+    }
+  }
+}

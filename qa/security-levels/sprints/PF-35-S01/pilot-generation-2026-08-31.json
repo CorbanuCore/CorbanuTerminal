@@ -2,8 +2,8 @@
   "schema_version": 1,
   "kind": "pf35-pilot-generation-aggregate",
   "date": "2026-08-31",
-  "status": "provisional-review-pending",
-  "qualification_boundary": "This is generation and validation evidence, not a claim of 10000 finally accepted or adjudicated records.",
+  "status": "quarantined-semantic-generation-failure",
+  "qualification_boundary": "This round proves generation capacity only. Product authority rejected it as training input after systemic attack-class didactic exposition; it cannot be adjudicated, imported, trained on or used to authorize scale-up.",
   "host_id": "rtx6000-blackwell-01",
   "campaign_id": "qwen38-27b-preet-nvfp4-vllm-en-v1",
   "round_id": "pilot-r1",
@@ -21,6 +21,13 @@
     "source_manifest_sha256": "c0dd2e6c5028ddf9889af6d85bd60074dab94ca55b44f6694db4bcf932ed3384",
     "ledger_entry_sha256": "ae033f22c5f8b0d06d906fccb0aac7413287bd14b2a76d2ae711ba51175e49e8",
     "previous_ledger_entry_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "quarantine": {
+    "timestamp_utc": "2026-08-31T22:43:49.867530+00:00",
+    "reason": "Systemic attack-class didactic exposition.",
+    "adjudication_allowed": false,
+    "ledger_entry_sha256": "c72df19a0f05b1316995a5b964faf82cdbdfbfd88347f830d660a037298fee60",
+    "marker_sha256": "67b83fc581c4742d8fe5ea1a97e2e96a9b2b10626d981b37dfdf8cdb9f9ff1e0"
   },
   "timing": {
     "started_utc": "2026-08-31T20:34:15Z",

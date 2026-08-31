@@ -11,7 +11,7 @@ activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to rec
 target_release: "TBD — candidate qualified by 2026-10-08"
 deadline: 2026-10-08
 created: 2026-08-23
-updated: 2026-08-30
+updated: 2026-08-31
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
@@ -695,6 +695,19 @@ evaluator-owned blind records. Unsupported languages fail closed. Risk-triggered
 adjudication starts with complete disagreement/uncertainty review plus
 stratified 1% human and separate 1% Opus audits; reassess scalability after the
 first 10,000 accepted records without weakening the blind qualification gates.
+
+The 2026-08-31 product decision rejects the first 12,000-candidate pilot as
+training input after human review found attack-class records padded with
+didactic classification explanations. Preserve its hashes and aggregate
+evidence as a quarantined failed round, but do not adjudicate, train on, import,
+or scale from its records. Attack-class fixtures must be attacker-authentic
+synthetic artifacts without label, family, detector, research-fixture, or
+classification-rationale leakage; explanatory, quoted, negated, historical,
+and classifier-discussion fixtures belong only to compatible benign or hard-
+negative plans. Generation must use an explicit label/scope-compatible coverage
+matrix and deterministic semantic lint. A fresh 1,000-candidate canary must pass
+those gates plus stratified content audit before a replacement 10,000-acceptance
+pilot may begin.
 
 ### PF-36
 

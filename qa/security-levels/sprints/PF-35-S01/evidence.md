@@ -89,7 +89,7 @@ kernel compilation; serial compilation peaked with ample RAM and is now part of
 the frozen launch configuration. No hardware repair or capacity upgrade is
 indicated for this campaign.
 
-## Pilot generation — review still required
+## First pilot generation — quarantined failure evidence
 
 The versioned `pilot-r1` round issued 3,000 requests at concurrency 64 and
 requested 12,000 candidates. It completed in 1,000.1 seconds with 1,466,372
@@ -99,7 +99,7 @@ secret-pattern matches and 34 request-level invalid/truncated JSON responses;
 the 97 record-level and 34 four-record request-level rejections account exactly
 for the 233-candidate shortfall.
 
-The provisional set contains 7,667 `allow`, 578 `suspicious` and 3,522
+The provisional set contained 7,667 `allow`, 578 `suspicious` and 3,522
 `hostile` records. Every required coverage dimension has 1,160–1,195 records;
 all configured positions and attack families are present. The deterministic
 review selection contains 579 mandatory human reviews, 130 separate
@@ -113,10 +113,46 @@ The external campaign ledger verifies to
 Independent SHA-256 and line-count checks reproduced all five recorded output
 identities. Raw responses, provisional records and review queues remain solely
 under `/home/travis/pf35-qualification/campaign/pilot-v1/pilot-r1`; Git contains
-only the safe aggregate. `final_accepted_records` remains zero until Travis and
-the independent Opus reviewer return complete decisions and the adjudication
-subcommand succeeds. Therefore this run clears generation capacity but does
-not yet claim the brief's 10,000 accepted-record gate.
+only the safe aggregate. Human review found a systemic semantic-generation
+failure: attack-class artifacts were padded with didactic explanations that
+named classification signals and attack mechanics. On 2026-08-31 product
+authority rejected this round as training input. The external campaign now has
+a hash-bound `QUARANTINED.json` marker and ledger entry
+`c72df19a0f05b1316995a5b964faf82cdbdfbfd88347f830d660a037298fee60`;
+the adjudicator refuses the round. It must not be reviewed to acceptance,
+trained on, imported or used to authorize scale-up.
+
+## Corrected semantic canary — human audit pending
+
+The schema-2 campaign contract replaces unrestricted coverage combination with
+a label/scope compatibility matrix, separates attacker-authentic artifacts from
+benign/hard-negative exposition, assigns short/medium/long length buckets,
+rejects strings that hit their schema ceiling, requires explicit inert context
+for hard negatives, and deterministically rejects attack-class self-description,
+classification rationale, family names, placeholder explanation and fragment-
+joining mechanics. Legacy schema-1 configuration remains readable as immutable
+failure evidence but cannot launch generation. The new `quarantine` command
+hash-binds every output and prevents later adjudication.
+
+Two 1,000-candidate canaries were deliberately rejected and quarantined while
+the audit exposed length-ceiling truncation and residual mechanism exposition.
+The clean-root `canary-r3` then requested 1,000 candidates and retained 829. It
+rejected 168 entries, including 68 improperly framed hard negatives, 27 attack
+expositions and 57 length-ceiling records. All accepted records passed the
+configured compatibility and semantic lint; independent aggregate scans found
+zero accepted attack self-description, fragment-mechanism or length-ceiling
+matches. The retained set covers all labels/scopes, all ten coverage dimensions
+and all three length buckets. Exact hashes, balance and the three quarantine
+chains are recorded in
+[canary generation aggregate](canary-generation-2026-08-31.json).
+
+The canary remains provisional until Travis completes the 82-record human queue
+and the separate reviewer completes the disjoint 32-record Opus queue. No
+canary record is training data, and no replacement 10,000-acceptance pilot may
+start until that audit is accepted. The rendered, formula-checked human packet
+is bound to the queue by workbook SHA-256
+`c44bf5b49ca333a7bdd17b95eb6515311b9b95c0884fbfac326cdb74862b8b75`
+and remains outside Git with the private record material.
 
 ## Exact-candidate TMUX smoke
 

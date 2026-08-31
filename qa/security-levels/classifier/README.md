@@ -84,11 +84,22 @@ labels, minimum text length and additional-property exclusion are enforced
 during decoding. Keep raw output outside Git until reviewed and reduced to safe
 aggregate evidence.
 
-`pf35_campaign.py` creates deterministic balanced request plans and validates
-the returned provisional records. It rejects unexpected schemas, invalid
-label/scope pairs, secret-like material, exact duplicates and cross-group
-near-duplicates. Its per-plan response schema fixes the item count, label,
-family scope, text bounds and confidence bounds during decoding. Every
+`campaign-config-pilot-v1.json` is retained only to reproduce the quarantined
+first-pilot identity; generation refuses legacy schema 1 configurations.
+`campaign-config-canary-v2.json` uses a label/scope-compatible coverage matrix,
+short/medium/long artifact buckets and class-specific artifact contracts.
+Attack-class text must be attacker-authentic content without research,
+classification, family, decisive-signal, placeholder or fragment-mechanism
+exposition. Benign and hard-negative plans carry the descriptive, quoted,
+negated, historical, classifier-discussion and inert-code cases instead.
+
+`pf35_campaign.py` creates deterministic balanced compatible request plans and
+validates the returned provisional records. It rejects unexpected schemas,
+invalid label/scope pairs, secret-like material, exact duplicates, cross-group
+near-duplicates, semantic exposition, improperly framed hard negatives and
+text that reaches the schema ceiling rather than ending naturally. Its
+per-plan response schema fixes the item count, label, family scope, assigned
+length bounds and confidence bounds during decoding. Every
 disagreement, low-confidence record and `suspicious` label enters the
 human-review queue. High-confidence agreements receive
 deterministic, non-overlapping, per-stratum 1% human and 1% Opus audit samples.
@@ -96,6 +107,12 @@ The tool writes raw/provisional/rejected JSONL only to an operator-supplied
 external directory and appends a verified SHA-256 hash-chained campaign ledger.
 Prior rounds are loaded before deduplication so a new round cannot silently
 repeat an earlier group.
+
+The `quarantine` subcommand verifies every generation output against the
+campaign ledger, writes a hash-bound `QUARANTINED.json` marker and appends the
+decision to the ledger. A marked round cannot be adjudicated. Quarantined
+records remain failure evidence only and must not enter training, import,
+deduplication roots for replacement rounds, or scale-up decisions.
 
 After reviewers return strict-schema JSONL decisions, the `adjudicate`
 subcommand requires a human decision for every mandatory review and human

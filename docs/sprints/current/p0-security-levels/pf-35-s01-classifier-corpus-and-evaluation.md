@@ -14,7 +14,7 @@ branch: "feat/pf-35-s01-external-qualification-20260830"
 base_commit: "2bcaf8d0b70f039f48165d0e4a4f291101574a41"
 depends_on: "PF-34-S04"
 created: 2026-08-28
-updated: 2026-08-30
+updated: 2026-08-31
 ---
 
 # PF-35-S01 — Classifier corpus and leakage-free evaluation
@@ -61,10 +61,14 @@ updated: 2026-08-30
 - [x] Integration owner wired `scripts/test_security_classifier_eval.py` and a shipped-CLI smoke into recurring CI without expanding this lane's literal write scope.
 - [x] Pinned and license-reviewed the exact Qwen 3.8 generator, tokenizer, vLLM environment, launch recipe, prompt schemas, seeds and sampling; the same-host benchmark and 128/128 structured bakeoff qualify it for the pilot.
 - [x] Generated 11,767 hash-bound provisional pilot records from 12,000 candidates on the RTX host, with privacy/dedup rejections and disjoint human/Opus review queues; no record material entered Git.
+- [x] Human semantic review rejected that first pilot for systemic attack-class didactic leakage; preserve it as quarantined failure evidence and prohibit adjudication, training, import, or scale-up from its records.
+- [x] Replaced free Cartesian generation with a label/scope-compatible matrix, attacker-authentic attack contracts, inert hard-negative contracts, short/medium/long length buckets, deterministic semantic-leakage rejection, and hash-bound quarantine enforcement.
+- [x] Ran three versioned 1,000-candidate canaries: quarantined the first two as semantic failures, then produced `canary-r3`, which retained 829 records with zero deterministic compatibility, accepted attack self-description, fragment-mechanism, or length-ceiling matches. The 82-record human packet and disjoint 32-record Opus audit remain pending.
 
 ## Remaining
 
-- [ ] Complete human decisions for 709 selected records and Opus decisions for 130 disjoint audit records, run hash-bound adjudication, prove at least 10,000 final accepted pilot records, and obtain integration-owner acceptance before scaling.
+- [ ] Complete and validate all 82 `canary-r3` human decisions plus the disjoint 32-record Opus audit, adjudicate the canary, and obtain integration-owner acceptance of its content quality.
+- [ ] Generate and adjudicate a replacement pilot with at least 10,000 final accepted records, including complete human decisions for disagreement/uncertainty/suspicious rows and disjoint 1% human/Opus high-confidence audits; obtain integration-owner acceptance before scaling.
 - [ ] Group and freeze approximately 250k training and 25k development records on the RTX lane; preserve hashes and aggregate evidence without committing record data or weights.
 - [ ] Have Travis independently freeze/encrypt/sign the approximately 150k blind manifest and return a signed train/development/blind canonical group-tuple overlap audit without exposing blind rows, labels or row-level errors.
 
