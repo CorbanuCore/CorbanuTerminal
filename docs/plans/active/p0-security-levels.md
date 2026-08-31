@@ -17,9 +17,9 @@ product_spec:
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-classifier-corpus"
-    branch: "feat/p0-security-classifier-corpus"
-    base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-35-s01-external-qualification"
+    branch: "feat/pf-35-s01-external-qualification-20260830"
+    base_commit: "2bcaf8d0b70f039f48165d0e4a4f291101574a41"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-credential-reservations"
     branch: "feat/p0-security-credential-reservations"
     base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
@@ -521,6 +521,28 @@ are now dependency-complete and may be allocated in parallel. PF-35-S01's
 external qualification is the third independent lane. PF-35-S02 remains gated
 until S01 is honestly completed and archived.
 
+## PF-35 external qualification reallocation — 2026-08-30
+
+Product authority authorized `Codex — PF-35 external qualification lane` to
+continue PF-35-S01 from current `origin/main` commit
+`2bcaf8d0b70f039f48165d0e4a4f291101574a41` in the distinct CorbanuDrive
+worktree and branch recorded in front matter. The literal repository write
+scope remains the PF-35-S01 scope; the Codex ingress/classifier integration lane
+receives the handback, audits that scope and private-data exclusions, and reruns
+governance plus content-security/evaluator tests on the combined tree.
+
+Travis is the human blind-data custodian and the authorized RTX and signing
+operator. Alex is the authorized Intel N100 operator and has approved this
+qualification run. Credentials, private blind rows and signing keys remain
+outside Git, chat, logs and reviewer context.
+
+The sprint boundary is now explicit: S01 freezes licensed train/development
+corpora, independent blind custody and the signed canonical group-tuple overlap
+audit; S02 alone builds/signs the production artifact and measures it on the
+N100; S03 alone calibrates on development data and obtains the aggregate signed
+blind evaluation before ingress enforcement. S01 does not require the
+model-dependent S02/S03 evidence that depends on its own completion.
+
 ## Useful code references
 
 | Path or symbol | Why it matters |
@@ -725,8 +747,10 @@ advertise a working protected mode.
 
 Retain the researched targets from the historical proposal as this feature's
 qualification baseline, not a new repository-wide policy or a detector guarantee.
-PF-35-S01 records the exact weakest supported CPU and evaluation manifests before
-training; threshold/resource changes require product review before acceptance.
+PF-35-S01 records the provisional weakest supported CPU and freezes the corpus,
+split and custody manifests before training. PF-35-S02 measures the frozen
+artifact on that CPU, and PF-35-S03 owns final calibrated blind qualification;
+threshold/resource changes require product review before acceptance.
 
 | Measure | Target |
 | --- | --- |

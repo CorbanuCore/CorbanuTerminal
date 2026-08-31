@@ -55,6 +55,7 @@ updated: 2026-08-28
 
 - [ ] Compare untuned and small fine-tuned candidates using the frozen training/validation split; retain model selection rationale, licenses and reproducible seeds/config.
 - [ ] Package selected model/tokenizer and ONNX-compatible CPU runtime with pinned hashes, dependency inventory, signature and deterministic artifact verification.
+- [ ] Have Alex measure the complete 2,048-token tokenization-plus-inference path on Intel N100/16 GiB/x86-64 Linux; require model ≤300 MiB, p95 ≤50 ms and peak RSS ≤512 MiB, preserving failed evidence without retargeting the floor.
 - [ ] Enforce memory/latency/segment limits and offline operation; no external telemetry, protected-data training, hidden downloads or runtime model replacement.
 - [ ] Return typed unavailable on missing/corrupt artifact, unsupported CPU, timeout and resource exhaustion; never silently return benign.
 - [ ] Test repeatability, signature/hash failure, tokenizer/version mismatch, truncated/multi-chunk inputs and shutdown cleanup.

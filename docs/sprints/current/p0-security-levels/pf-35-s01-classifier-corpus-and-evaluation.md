@@ -5,14 +5,13 @@ status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-35"
 execution_order: 20
-owner: "Raman — classifier corpus lane"
+owner: "Codex — PF-35 external qualification lane"
 parallel_lane: "classifier-corpus"
 write_scope: "codex-rs/content-security/, scripts/security-classifier-eval, scripts/security_classifier_eval.py, scripts/test_security_classifier_eval.py, qa/security-levels/classifier/, qa/security-levels/sprints/PF-35-S01/, docs/sprints/current/p0-security-levels/pf-35-s01-classifier-corpus-and-evaluation.md"
 integration_gate: "The Codex ingress/classifier integration lane receives PF-35-S01, audits the literal scope and private-blind-data exclusion, serializes any workspace/build registration, reruns the full content-security and evaluator suites plus governance checks, preserves measured blockers honestly, and archives the sprint only when every required corpus/evaluation claim has final-tree evidence."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-classifier-corpus"
-branch: "feat/p0-security-classifier-corpus"
-base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
-allocation_commit: "e0c23fe95165636d621dae8c16a5366c4f7250ac"
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/pf-35-s01-external-qualification"
+branch: "feat/pf-35-s01-external-qualification-20260830"
+base_commit: "2bcaf8d0b70f039f48165d0e4a4f291101574a41"
 depends_on: "PF-34-S04"
 created: 2026-08-28
 updated: 2026-08-30
@@ -46,8 +45,8 @@ updated: 2026-08-30
 - [x] All dependencies in front matter are completed and archived; plan remains active.
 - [x] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
 - [x] Confirm source pins and declared crate/module paths.
-- [x] Reconciled the plan-mandated immutable dispatch base (`9d08b15f…`) with the later coordination/allocation commit (`e0c23fe95…`) from which this worktree was created; both coordinates are explicit.
-- [ ] Obtain external RTX, private-custodian, signing and qualifying-N100 availability; unresolved security prerequisites block readiness.
+- [x] Reallocated from current `origin/main` (`2bcaf8d0…`) into the distinct recorded CorbanuDrive worktree and branch.
+- [x] Confirmed Travis as blind custodian plus RTX/signing operator and Alex as the authorized N100 operator; credentials, keys and blind rows remain outside this lane.
 
 ## Done
 
@@ -63,9 +62,10 @@ updated: 2026-08-30
 
 ## Remaining
 
-- [ ] Acquire, license-review, group and freeze the approximately 250k/25k/150k train/development/blind records on the external RTX/custodian lanes; no such run or private corpus is claimed here.
-- [ ] Obtain the custodian's aggregate blind report and signed train/development/blind group-tuple overlap audit without disclosing record-level blind output; unequal fingerprints alone are declarations and do not prove disjointness.
-- [ ] Measure the signed production artifact on the qualifying Intel N100/16 GiB/x86-64 Linux floor at 2,048 tokens; prove model ≤300 MiB, p95 ≤50 ms and peak RSS ≤512 MiB.
+- [ ] Pin and license-review the exact Qwen 3.8 27B-family generator, tokenizer, vLLM/container revision, prompts, seeds and sampling settings; freeze source/campaign ledgers before generation.
+- [ ] Run the balanced 10,000-acceptance pilot, complete required adjudication and disjoint 1% human/1% Opus audits, and obtain integration-owner acceptance before scaling.
+- [ ] Group and freeze approximately 250k training and 25k development records on the RTX lane; preserve hashes and aggregate evidence without committing record data or weights.
+- [ ] Have Travis independently freeze/encrypt/sign the approximately 150k blind manifest and return a signed train/development/blind canonical group-tuple overlap audit without exposing blind rows, labels or row-level errors.
 
 ## Verification
 
@@ -74,7 +74,7 @@ updated: 2026-08-30
 - [x] Integration: `cd codex-rs && just test -p codex-content-security`; 22/22 tests passed. No Cargo/Bazel/lock change was required.
 - [x] Supporting TUI smoke: exact candidate Corbanu binary launched in a private TMUX server with trace logging; `/status` and clean `/exit` were verified using separate text/Enter sends.
 - [x] Record commands, outcomes and safe artifact digests under `qa/security-levels/sprints/PF-35-S01/`; no production credentials, blind data, weights or funds.
-- [ ] Run final external corpus, custodian, signed-artifact and qualifying-N100 evidence gates; the current preparation candidate cannot prove them.
+- [ ] Run final S01 corpus/custody evidence gates; signed-artifact/N100 proof remains S02 and calibrated aggregate blind evaluation remains S03.
 
 ## Exit evidence
 

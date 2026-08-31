@@ -53,7 +53,8 @@ updated: 2026-08-28
 
 - [ ] Force classifier allow/error/timeout on hostile wrappers, metadata, cache and child/memory content; required screening failure must pause/quarantine, while an allow verdict cannot erase provenance or authorize an effect.
 
-- [ ] Calibrate Moderate and stricter Aggressive thresholds on validation data only; run the untouched blind suite against retained plan targets and record confidence intervals.
+- [ ] Calibrate Moderate and stricter Aggressive thresholds on development data only; freeze the exact artifact, tokenizer and signed threshold identities before any blind evaluation.
+- [ ] Have Travis run the untouched blind evaluator under independent custody and return only the allowlisted aggregate plus detached signature envelope, bound to the development report, artifact and threshold identities; no blind rows, labels or row-level errors enter training, review or Git.
 - [ ] Screen every external/tool/search/child segment and reassembled multi-chunk content before model ingestion; prevent streaming prefixes from reaching the model before a decision.
 - [ ] Route allow, bounded sanitize-and-rescan, quarantine and reject outcomes; retries cannot bypass limits, and missing/unavailable classifier pauses external ingestion in both protected modes.
 - [ ] Shadow evaluation is an isolated test harness, not a shipping protected mode or silent change to Permissive; no threshold adjustment from the blind holdout.
