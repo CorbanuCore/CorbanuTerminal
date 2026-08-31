@@ -35,6 +35,7 @@ use codex_vault::MANAGED_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::Vault;
 #[cfg(target_os = "macos")]
 use codex_vault::claude_code_macos_keychain_service;
+use codex_vault::claude_login_authority_id;
 use codex_vault::credentials_file_claude_auth_source_id;
 #[cfg(target_os = "macos")]
 use codex_vault::macos_keychain_claude_auth_source_id;
@@ -44,6 +45,18 @@ const CLAUDE_AUTH_METHOD_VIEW_ID: &str = "claude-plan-auth-method";
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const LOGIN_HEALTH_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_LOGIN_LINE_BYTES: usize = 16 * 1024;
+const CLAUDE_STATUS_ENV_REMOVE: [&str; 8] = [
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+    "CLAUDE_CODE_USE_FOUNDRY",
+    "ANTHROPIC_MODEL",
+];
+// Preserve `CLAUDE_CODE_CUSTOM_OAUTH_URL`: it is profile identity, not provider routing.
+// Claude Code needs it to inspect the same custom-OAuth login/Keychain slot Corbanu selected.
 
 pub(crate) enum ClaudeCodeLoginInput {
     AuthorizationCode(String),
@@ -66,6 +79,7 @@ pub(crate) enum ClaudeCodePlanStatus {
     NeedsReauthorization,
     SignedIn {
         email: Option<String>,
+        organization_id: Option<String>,
         subscription: Option<String>,
     },
     SignedOut,
@@ -134,18 +148,24 @@ async fn current_status_with_executables(
             },
         ) => {
             let status = status_with_timeout(claude_executable, timeout).await;
-            if matches!(status, ClaudeCodePlanStatus::SignedIn { .. })
-                && verify_current_platform_login_health(
-                    health_executable,
-                    timeout,
-                    Some(&selection.source_id),
-                )
-                .await
-                .is_err()
-            {
-                ClaudeCodePlanStatus::NeedsReauthorization
-            } else {
-                status
+            match status_authority_id(&status) {
+                Ok(authority_id)
+                    if selection.authority_id.as_deref() == Some(authority_id.as_str()) =>
+                {
+                    if verify_current_platform_login_health(
+                        health_executable,
+                        timeout,
+                        Some(&selection.source_id),
+                    )
+                    .await
+                    .is_err()
+                    {
+                        ClaudeCodePlanStatus::NeedsReauthorization
+                    } else {
+                        status
+                    }
+                }
+                _ => ClaudeCodePlanStatus::NeedsReauthorization,
             }
         }
         None => {
@@ -430,14 +450,15 @@ async fn verify_login(
     codex_home: &Path,
 ) -> Result<String, String> {
     match read_status(executable).await {
-        Ok(ClaudeCodePlanStatus::SignedIn { .. }) => {
+        Ok(status @ ClaudeCodePlanStatus::SignedIn { .. }) => {
+            let authority_id = status_authority_id(&status)?;
             let source_id = verify_current_platform_login_health(
                 health_executable,
                 LOGIN_HEALTH_TIMEOUT,
                 /*selected_source_id*/ None,
             )
             .await?;
-            persist_claude_code_login_selection(codex_home, source_id).await?;
+            persist_claude_code_login_selection(codex_home, source_id, authority_id).await?;
             Ok("Claude Code login selected. Retry the Claude Plan request or choose a model from /model.".to_string())
         }
         Ok(_) => {
@@ -454,14 +475,15 @@ pub(crate) async fn select_existing_claude_code_login(
     status_timeout: Duration,
 ) -> Result<bool, String> {
     match status_with_timeout(executable, status_timeout).await {
-        ClaudeCodePlanStatus::SignedIn { .. } => {
+        status @ ClaudeCodePlanStatus::SignedIn { .. } => {
+            let authority_id = status_authority_id(&status)?;
             let source_id = verify_current_platform_login_health(
                 health_executable,
                 LOGIN_HEALTH_TIMEOUT,
                 /*selected_source_id*/ None,
             )
             .await?;
-            persist_claude_code_login_selection(codex_home, source_id).await?;
+            persist_claude_code_login_selection(codex_home, source_id, authority_id).await?;
             Ok(true)
         }
         ClaudeCodePlanStatus::SignedOut
@@ -533,10 +555,11 @@ async fn verify_current_platform_login_health(
 async fn persist_claude_code_login_selection(
     codex_home: &Path,
     source_id: String,
+    authority_id: String,
 ) -> Result<(), String> {
     let codex_home = codex_home.to_path_buf();
     tokio::task::spawn_blocking(move || {
-        persist_claude_code_login_selection_blocking(&codex_home, source_id)
+        persist_claude_code_login_selection_blocking(&codex_home, source_id, authority_id)
     })
         .await
         .map_err(|error| {
@@ -549,8 +572,9 @@ async fn persist_claude_code_login_selection(
 fn persist_claude_code_login_selection_blocking(
     codex_home: &Path,
     source_id: String,
+    authority_id: String,
 ) -> Result<(), String> {
-    let selection = ClaudeAuthSelection::new(ClaudeAuthSource::ClaudeCodeLogin, source_id)
+    let selection = ClaudeAuthSelection::new_claude_code_login(source_id, authority_id)
         .map_err(|error| format!("Could not select the current Claude Code login: {error}"))?;
     Vault::new(codex_home.to_path_buf())
         .save_claude_auth_selection(&selection)
@@ -651,8 +675,48 @@ fn auth_recovery_params(message: String) -> SelectionViewParams {
 }
 
 async fn read_status(executable: &Path) -> std::io::Result<ClaudeCodePlanStatus> {
+    let config_dir_override = std::env::var_os("CLAUDE_CONFIG_DIR")
+        .filter(|value| !value.is_empty())
+        .map(std::path::PathBuf::from)
+        .map(std::path::absolute)
+        .transpose()?;
+    let custom_oauth_url = std::env::var("CLAUDE_CODE_CUSTOM_OAUTH_URL")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(std::ffi::OsString::from);
+    read_status_with_profile(
+        executable,
+        config_dir_override.as_deref(),
+        custom_oauth_url.as_deref(),
+    )
+    .await
+}
+
+async fn read_status_with_profile(
+    executable: &Path,
+    config_dir_override: Option<&Path>,
+    custom_oauth_url: Option<&std::ffi::OsStr>,
+) -> std::io::Result<ClaudeCodePlanStatus> {
+    let neutral_cwd = tempfile::tempdir()?;
     let mut command = Command::new(executable);
-    command.kill_on_drop(true);
+    command
+        .current_dir(neutral_cwd.path())
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    if let Some(config_dir) = config_dir_override {
+        command.env("CLAUDE_CONFIG_DIR", config_dir);
+    } else {
+        command.env_remove("CLAUDE_CONFIG_DIR");
+    }
+    for name in CLAUDE_STATUS_ENV_REMOVE {
+        command.env_remove(name);
+    }
+    command.env_remove("CLAUDE_CODE_CUSTOM_OAUTH_URL");
+    if let Some(custom_oauth_url) = custom_oauth_url {
+        command.env("CLAUDE_CODE_CUSTOM_OAUTH_URL", custom_oauth_url);
+    }
     let output = command.args(["auth", "status", "--json"]).output().await?;
     if !output.status.success() {
         return Ok(ClaudeCodePlanStatus::SignedOut);
@@ -673,11 +737,30 @@ async fn read_status(executable: &Path) -> std::io::Result<ClaudeCodePlanStatus>
             .get("email")
             .and_then(serde_json::Value::as_str)
             .map(str::to_string),
+        organization_id: status
+            .get("orgId")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string),
         subscription: status
             .get("subscriptionType")
             .and_then(serde_json::Value::as_str)
             .map(str::to_string),
     })
+}
+
+fn status_authority_id(status: &ClaudeCodePlanStatus) -> Result<String, String> {
+    let ClaudeCodePlanStatus::SignedIn {
+        email: Some(email),
+        organization_id: Some(organization_id),
+        subscription,
+    } = status
+    else {
+        return Err(
+            "Claude Code did not report a complete account identity; run `claude auth login` again."
+                .to_string(),
+        );
+    };
+    claude_login_authority_id(email, organization_id, subscription.as_deref())
 }
 
 fn extract_https_url(line: &str) -> Option<String> {

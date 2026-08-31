@@ -478,6 +478,7 @@ fn claude_status_description(status: &ClaudeCodePlanStatus) -> String {
         ClaudeCodePlanStatus::SignedIn {
             email,
             subscription,
+            ..
         } => signed_in_description(email.as_deref(), subscription.as_deref()),
         ClaudeCodePlanStatus::SignedOut => "Not signed in".to_string(),
         ClaudeCodePlanStatus::Unavailable => "Claude Code not installed".to_string(),
@@ -773,6 +774,7 @@ mod tests {
         assert_eq!(
             claude_status_description(&ClaudeCodePlanStatus::SignedIn {
                 email: Some("user@example.com".to_string()),
+                organization_id: Some("org-fixture".to_string()),
                 subscription: Some("max".to_string()),
             }),
             "Signed in · user@example.com · Max plan"

@@ -76,16 +76,24 @@ Corbanu follows Claude Code's current platform ownership:
 
 | Platform | Authoritative login store |
 | --- | --- |
-| macOS | Keychain service `Claude Code-credentials`, or `Claude Code-custom-oauth-credentials` for custom OAuth. When `CLAUDE_CONFIG_DIR` is set, Claude Code appends the first eight hex characters of the normalized directory's SHA-256 digest. Corbanu persists that exact service identity. |
+| macOS | Keychain service `Claude Code-credentials`, or `Claude Code-custom-oauth-credentials` for custom OAuth. When `CLAUDE_CONFIG_DIR` is set, Claude Code appends the first eight hex characters of the normalized directory's SHA-256 digest. Corbanu persists that exact service identity. Account-health probes preserve `CLAUDE_CODE_CUSTOM_OAUTH_URL` because Claude Code uses it to select that custom-OAuth login slot; provider/API/cloud routing overrides are removed. |
 | Linux and Windows | `${CLAUDE_CONFIG_DIR:-~/.claude}/.credentials.json`; Corbanu persists a digest of the exact absolute normalized profile path so changing `CLAUDE_CONFIG_DIR` fails closed. |
 
 On macOS, the current Keychain record wins when it exists. If that Keychain
 record is absent and the same profile has a legacy `.credentials.json`,
-Corbanu can preserve or explicitly select that exact file identity; it does not
-copy or delete the record. `CLAUDE_CONFIG_DIR` selects both a distinct hashed
-Keychain service and a distinct file-profile digest. After a method is saved,
-Corbanu verifies that exact store identity and never falls through to the other
-account.
+Corbanu preserves that exact file identity for selection-less legacy use; it
+does not copy or delete the record. Explicit compatibility selection also
+requires current Claude Code to report its organization and subscription
+identity, so a file-only profile that current Claude Code no longer recognizes
+must be reauthorized with `claude auth login`. `CLAUDE_CONFIG_DIR` selects both
+a distinct hashed Keychain service and a distinct file-profile digest.
+
+After a Claude Code login method is saved, Corbanu binds both the exact store
+and a domain-separated digest of Claude Code's reported organization, email,
+and subscription type. The digest is encrypted with the selection metadata and
+is never rendered. A later external login to a different account or plan fails
+closed and asks for an explicit selection; ordinary access/refresh-token
+rotation within the same reported authority does not invalidate it.
 
 Existing installations without a saved Corbanu choice retain their historical
 behavior: a nonblank `CLAUDE_CODE_OAUTH_TOKEN` is used first, otherwise the

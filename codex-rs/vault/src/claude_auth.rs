@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use sha2::Digest;
 use sha2::Sha256;
+use std::fmt;
 use std::path::Path;
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
@@ -19,6 +20,7 @@ use codex_secrets::SecretScope;
 const CLAUDE_AUTH_SELECTION_SECRET_NAME: &str = "CLAUDE_AUTH_SELECTION";
 const CLAUDE_AUTH_SELECTION_VERSION: u32 = 1;
 const MAX_SOURCE_ID_BYTES: usize = 256;
+const CLAUDE_LOGIN_AUTHORITY_PREFIX: &str = "claude-login-authority:sha256:";
 const MAX_MANAGED_TOKEN_BYTES: usize = 16 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -66,6 +68,44 @@ pub fn macos_keychain_claude_auth_source_id(service: &str) -> String {
 /// equivalent Unicode spellings aligned across persistence and provider resolution.
 pub fn credentials_file_claude_auth_source_id(config_dir: &Path) -> std::io::Result<String> {
     credentials_file_claude_auth_source_id_against(config_dir, &std::env::current_dir()?)
+}
+
+/// Bind a Claude-owned login slot to the exact account and subscription selected by the user.
+///
+/// The returned digest is persisted only inside the encrypted selection record. The raw email,
+/// organization identifier, and subscription name are never stored or rendered by Corbanu.
+pub fn claude_login_authority_id(
+    email: &str,
+    organization_id: &str,
+    subscription_type: Option<&str>,
+) -> Result<String, String> {
+    let email = email.trim().nfc().collect::<String>().to_lowercase();
+    let organization_id = organization_id
+        .trim()
+        .nfc()
+        .collect::<String>()
+        .to_lowercase();
+    let subscription_type = subscription_type
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "Claude login account identity is incomplete".to_string())?
+        .nfc()
+        .collect::<String>()
+        .to_lowercase();
+    if email.is_empty() || organization_id.is_empty() {
+        return Err("Claude login account identity is incomplete".to_string());
+    }
+    let mut digest = Sha256::new();
+    digest.update(b"corbanu:claude-login-authority:v1\0");
+    digest.update(organization_id.as_bytes());
+    digest.update(b"\0");
+    digest.update(email.as_bytes());
+    digest.update(b"\0");
+    digest.update(subscription_type.as_bytes());
+    Ok(format!(
+        "{CLAUDE_LOGIN_AUTHORITY_PREFIX}{:x}",
+        digest.finalize()
+    ))
 }
 
 fn credentials_file_claude_auth_source_id_against(
@@ -137,12 +177,27 @@ pub enum ClaudeAuthHealth {
 }
 
 /// Persisted user choice. `source_id` names a store/account slot, never a secret.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClaudeAuthSelection {
     version: u32,
     pub source: ClaudeAuthSource,
     pub source_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authority_id: Option<String>,
     pub selected_at: i64,
+}
+
+impl fmt::Debug for ClaudeAuthSelection {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ClaudeAuthSelection")
+            .field("version", &self.version)
+            .field("source", &self.source)
+            .field("source_id", &self.source_id)
+            .field("authority_bound", &self.authority_id.is_some())
+            .field("selected_at", &self.selected_at)
+            .finish()
+    }
 }
 
 impl ClaudeAuthSelection {
@@ -159,8 +214,19 @@ impl ClaudeAuthSelection {
             version: CLAUDE_AUTH_SELECTION_VERSION,
             source,
             source_id: source_id.into(),
+            authority_id: None,
             selected_at,
         };
+        selection.validate()?;
+        Ok(selection)
+    }
+
+    pub fn new_claude_code_login(
+        source_id: impl Into<String>,
+        authority_id: impl Into<String>,
+    ) -> Result<Self, String> {
+        let mut selection = Self::new(ClaudeAuthSource::ClaudeCodeLogin, source_id)?;
+        selection.authority_id = Some(authority_id.into());
         selection.validate()?;
         Ok(selection)
     }
@@ -178,6 +244,17 @@ impl ClaudeAuthSelection {
         }
         if id.chars().any(char::is_control) {
             return Err("Claude authentication source id contains control characters".to_string());
+        }
+        if let Some(authority_id) = self.authority_id.as_deref() {
+            let digest = authority_id
+                .strip_prefix(CLAUDE_LOGIN_AUTHORITY_PREFIX)
+                .ok_or_else(|| "Claude login authority id is invalid".to_string())?;
+            if self.source != ClaudeAuthSource::ClaudeCodeLogin
+                || digest.len() != 64
+                || !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+            {
+                return Err("Claude login authority id is invalid".to_string());
+            }
         }
         Ok(())
     }

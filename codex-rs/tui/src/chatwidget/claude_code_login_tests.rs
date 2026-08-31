@@ -53,6 +53,16 @@ fn auth_method_choice_is_recommended_by_default_and_dispatches_exact_actions() {
 }
 
 #[test]
+fn account_authority_requires_reported_subscription_type() {
+    let status = ClaudeCodePlanStatus::SignedIn {
+        email: Some("fixture@example.invalid".to_string()),
+        organization_id: Some("org-fixture".to_string()),
+        subscription: None,
+    };
+    assert!(status_authority_id(&status).is_err());
+}
+
+#[test]
 fn claude_auth_method_choice_snapshot() {
     insta::assert_snapshot!(
         "claude_auth_method_choice",
@@ -199,7 +209,7 @@ if [ "$1 $2" = "auth login" ]; then
   exit
 fi
 if [ "$1 $2 $3" = "auth status --json" ]; then
-  printf '{{"loggedIn":true,"authMethod":"claude.ai"}}\n'
+  printf '{{"loggedIn":true,"authMethod":"claude.ai","email":"fixture@example.invalid","orgId":"org-fixture","subscriptionType":"max"}}\n'
   exit 0
 fi
 exit 2
@@ -248,6 +258,7 @@ exit 2
         .expect("load selection")
         .expect("selection persisted");
     assert_eq!(selection.source, ClaudeAuthSource::ClaudeCodeLogin);
+    assert!(selection.authority_id.is_some());
 }
 
 #[cfg(unix)]
@@ -258,7 +269,7 @@ async fn existing_claude_login_is_selected_without_reauthorization() {
     let source_id = current_platform_login_source_id().expect("source id");
     std::fs::write(
         &fake_claude,
-        format!("#!/bin/sh\nif [ \"$1\" = \"internal-claude-login-health\" ]; then printf '%s\\n' '{source_id}'; exit 0; fi\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{{\"loggedIn\":true,\"authMethod\":\"claude.ai\"}}\\n'\n"),
+        format!("#!/bin/sh\nif [ \"$1\" = \"internal-claude-login-health\" ]; then printf '%s\\n' '{source_id}'; exit 0; fi\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{{\"loggedIn\":true,\"authMethod\":\"claude.ai\",\"email\":\"fixture@example.invalid\",\"orgId\":\"org-fixture\",\"subscriptionType\":\"max\"}}\\n'\n"),
     )
     .expect("write fake claude");
     let mut permissions = std::fs::metadata(&fake_claude)
@@ -282,6 +293,7 @@ async fn existing_claude_login_is_selected_without_reauthorization() {
         .expect("load selection")
         .expect("selection persisted");
     assert_eq!(selection.source, ClaudeAuthSource::ClaudeCodeLogin);
+    assert!(selection.authority_id.is_some());
 }
 
 #[cfg(unix)]
@@ -291,7 +303,7 @@ async fn unhealthy_platform_record_does_not_replace_the_previous_selection() {
     let fake_claude = temp_dir.path().join("claude");
     std::fs::write(
         &fake_claude,
-        "#!/bin/sh\n[ \"$1\" = \"internal-claude-login-health\" ] && exit 1\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\"}\\n'\n",
+        "#!/bin/sh\n[ \"$1\" = \"internal-claude-login-health\" ] && exit 1\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\",\"email\":\"fixture@example.invalid\",\"orgId\":\"org-fixture\",\"subscriptionType\":\"max\"}\\n'\n",
     )
     .expect("write fake claude");
     let mut permissions = std::fs::metadata(&fake_claude)
@@ -332,7 +344,7 @@ async fn providers_status_reports_selected_login_reauthorization_need() {
     let fake_claude = temp_dir.path().join("claude");
     std::fs::write(
         &fake_claude,
-        "#!/bin/sh\n[ \"$1\" = \"internal-claude-login-health\" ] && exit 1\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\"}\\n'\n",
+        "#!/bin/sh\n[ \"$1\" = \"internal-claude-login-health\" ] && exit 1\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\",\"email\":\"fixture@example.invalid\",\"orgId\":\"org-fixture\",\"subscriptionType\":\"max\"}\\n'\n",
     )
     .expect("write fake claude");
     let mut permissions = std::fs::metadata(&fake_claude)
@@ -398,4 +410,32 @@ async fn claude_status_timeout_resolves_to_error() {
     .expect("status check must remain bounded");
 
     assert_eq!(status, ClaudeCodePlanStatus::Error);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn claude_status_preserves_custom_oauth_profile_identity() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let fake_claude = temp_dir.path().join("claude");
+    std::fs::write(
+        &fake_claude,
+        "#!/bin/sh\n[ \"$CLAUDE_CODE_CUSTOM_OAUTH_URL\" = \"https://oauth.example.invalid\" ] || exit 3\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\",\"email\":\"fixture@example.invalid\",\"orgId\":\"org-fixture\",\"subscriptionType\":\"max\"}\\n'\n",
+    )
+    .expect("write fake claude");
+    let mut permissions = std::fs::metadata(&fake_claude)
+        .expect("fake claude metadata")
+        .permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&fake_claude, permissions).expect("make executable");
+
+    assert!(matches!(
+        read_status_with_profile(
+            &fake_claude,
+            None,
+            Some(std::ffi::OsStr::new("https://oauth.example.invalid")),
+        )
+        .await
+        .expect("status"),
+        ClaudeCodePlanStatus::SignedIn { .. }
+    ));
 }

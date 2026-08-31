@@ -264,6 +264,53 @@ fn serialized_selection_contains_metadata_only() {
 }
 
 #[test]
+fn claude_login_authority_is_normalized_bound_and_metadata_only() {
+    let authority =
+        claude_login_authority_id(" User@Example.COM ", " ORG-Work ", Some(" Max ")).unwrap();
+    assert_eq!(
+        authority,
+        claude_login_authority_id("user@example.com", "org-work", Some("max")).unwrap()
+    );
+    assert_ne!(
+        authority,
+        claude_login_authority_id("other@example.com", "org-work", Some("max")).unwrap()
+    );
+    assert_ne!(
+        authority,
+        claude_login_authority_id("user@example.com", "org-personal", Some("max")).unwrap()
+    );
+    assert_ne!(
+        authority,
+        claude_login_authority_id("user@example.com", "org-work", Some("team")).unwrap()
+    );
+
+    let selection =
+        ClaudeAuthSelection::new_claude_code_login("claude-login:fixture", authority.clone())
+            .unwrap();
+    let serialized = serde_json::to_string(&selection).unwrap();
+    for raw in [
+        "User@Example.COM",
+        "user@example.com",
+        "ORG-Work",
+        "org-work",
+        "Max",
+    ] {
+        assert!(!serialized.contains(raw));
+    }
+    assert!(serialized.contains("claude-login-authority:sha256:"));
+    let debug = format!("{selection:?}");
+    assert!(!debug.contains(&authority));
+    assert!(debug.contains("authority_bound: true"));
+
+    for missing_subscription in [None, Some(""), Some("   ")] {
+        assert!(
+            claude_login_authority_id("user@example.com", "org-work", missing_subscription,)
+                .is_err()
+        );
+    }
+}
+
+#[test]
 fn invalid_source_ids_are_rejected() {
     for source_id in ["", "line\nbreak"] {
         assert!(

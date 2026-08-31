@@ -16,6 +16,16 @@ The user-requested product behavior is:
   silently fall back to a different source, identity, account, or billing path.
   Native Claude Plan panes must bind that same selection at execution without
   persisting credential material in their plans, settings, artifacts, or audits.
+- The plan intentionally preserves historical env-first, then platform-store
+  resolution only while an existing installation has no saved Corbanu choice;
+  this is the explicit migration compatibility decision in plan lines 80–82
+  and archived PF-44. Do not classify that selection-less compatibility path
+  as fallback after a persisted choice. Once any choice is saved, failure must
+  never fall through.
+- Claude Code compatibility selections bind the exact platform slot and the
+  encrypted, non-rendered digest of Claude Code's reported organization,
+  email, and subscription identity. External account/plan drift must fail
+  closed; ordinary OAuth token rotation within the same authority remains valid.
 - Managed tokens use the established encrypted vault with masked entry and
   metadata-only inspection. Raw values must not enter config, chat, rollout,
   logs, snapshots, errors, debug output, test artifacts, or generic vault

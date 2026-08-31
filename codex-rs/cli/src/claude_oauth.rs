@@ -35,6 +35,20 @@ const CLAUDE_REFRESH_LOCK_FILE: &str = ".pfterminal-oauth-refresh.lock";
 const CLAUDE_CUSTOM_OAUTH_REFRESH_LOCK_FILE: &str = ".pfterminal-custom-oauth-refresh.lock";
 const MIN_TOKEN_VALIDITY_MS: u64 = 60_000;
 const CLAUDE_REFRESH_TIMEOUT: Duration = Duration::from_secs(30);
+const CLAUDE_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
+const CLAUDE_STATUS_ENV_REMOVE: [&str; 8] = [
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+    "CLAUDE_CODE_USE_FOUNDRY",
+    "ANTHROPIC_MODEL",
+];
+// `CLAUDE_CODE_CUSTOM_OAUTH_URL` is intentionally preserved. Claude Code uses it to select
+// the matching custom-OAuth profile and macOS Keychain service; removing it would verify a
+// different login slot than the one Corbanu selected.
 #[cfg(all(target_os = "macos", not(test)))]
 const CLAUDE_KEYCHAIN_TIMEOUT: Duration = Duration::from_secs(5);
 #[cfg(all(target_os = "macos", test))]
@@ -73,6 +87,19 @@ struct ClaudeCodeOauthCredentials {
     expires_at: Option<u64>,
     #[serde(default)]
     scopes: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct ClaudeAuthStatus {
+    #[serde(rename = "loggedIn")]
+    logged_in: bool,
+    #[serde(rename = "authMethod")]
+    auth_method: Option<String>,
+    email: Option<String>,
+    #[serde(rename = "orgId")]
+    organization_id: Option<String>,
+    #[serde(rename = "subscriptionType")]
+    subscription_type: Option<String>,
 }
 
 #[allow(dead_code)] // The other variant is exercised by cross-platform fixtures.
@@ -130,7 +157,7 @@ async fn resolve_claude_oauth_access_token_for_selection(
     if let Some(selection) = selection {
         let discovered = discover_selected_claude_auth_source(selection, vault).await?;
         let metadata = resolve_selected_claude_auth_source(selection, &discovered)?;
-        return match metadata.source {
+        let access_token = match metadata.source {
             ClaudeAuthSource::ManagedSubscriptionToken => {
                 vault
                     .with_managed_claude_subscription_token(ToString::to_string)
@@ -148,7 +175,13 @@ async fn resolve_claude_oauth_access_token_for_selection(
             ClaudeAuthSource::ClaudeCodeLogin => {
                 resolve_selected_claude_code_login_access_token(&metadata.source_id).await
             }
-        };
+        }?;
+        if selection.source == ClaudeAuthSource::ClaudeCodeLogin {
+            // Verify after the selected slot is read/refreshed and immediately before its token is
+            // returned. This keeps external account replacement from winning the wider I/O window.
+            verify_selected_claude_login_authority(selection, /*claude_executable*/ None).await?;
+        }
+        return Ok(access_token);
     }
 
     // Existing installations have no persisted selection. Preserve their exact
@@ -158,6 +191,100 @@ async fn resolve_claude_oauth_access_token_for_selection(
     }
 
     resolve_current_platform_claude_oauth_access_token().await
+}
+
+async fn verify_selected_claude_login_authority(
+    selection: &ClaudeAuthSelection,
+    claude_executable: Option<&Path>,
+) -> Result<()> {
+    let config_dir_override = absolute_claude_config_dir_override()?;
+    let custom_oauth_url =
+        nonempty_env("CLAUDE_CODE_CUSTOM_OAUTH_URL").map(std::ffi::OsString::from);
+    verify_selected_claude_login_authority_with_profile(
+        selection,
+        claude_executable,
+        config_dir_override.as_deref(),
+        custom_oauth_url.as_deref(),
+    )
+    .await
+}
+
+async fn verify_selected_claude_login_authority_with_profile(
+    selection: &ClaudeAuthSelection,
+    claude_executable: Option<&Path>,
+    config_dir_override: Option<&Path>,
+    custom_oauth_url: Option<&std::ffi::OsStr>,
+) -> Result<()> {
+    let expected = selection.authority_id.as_deref().ok_or_else(|| {
+        anyhow!(
+            "the selected Claude Code login predates account binding; explicitly choose Claude Code login again"
+        )
+    })?;
+    let neutral_cwd = tempfile::tempdir().context("failed to isolate Claude account status")?;
+    let executable = claude_executable.unwrap_or_else(|| Path::new("claude"));
+    let mut command = Command::new(executable);
+    command
+        .args(["auth", "status", "--json"])
+        .current_dir(neutral_cwd.path())
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    if let Some(config_dir) = config_dir_override {
+        command.env("CLAUDE_CONFIG_DIR", config_dir);
+    } else {
+        command.env_remove("CLAUDE_CONFIG_DIR");
+    }
+    for name in CLAUDE_STATUS_ENV_REMOVE {
+        command.env_remove(name);
+    }
+    command.env_remove("CLAUDE_CODE_CUSTOM_OAUTH_URL");
+    if let Some(custom_oauth_url) = custom_oauth_url {
+        command.env("CLAUDE_CODE_CUSTOM_OAUTH_URL", custom_oauth_url);
+    }
+    let output = tokio::time::timeout(CLAUDE_STATUS_TIMEOUT, command.output())
+        .await
+        .map_err(|_| anyhow!("Claude Code account verification timed out"))?
+        .context("failed to start Claude Code account verification")?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "Claude Code could not verify the selected subscription account; explicitly choose Claude Code login again"
+        ));
+    }
+    let status: ClaudeAuthStatus = serde_json::from_slice(&output.stdout)
+        .map_err(|_| anyhow!("Claude Code returned invalid account status metadata"))?;
+    if !status.logged_in || status.auth_method.as_deref() != Some("claude.ai") {
+        return Err(anyhow!(
+            "Claude Code is not signed in to the selected subscription account"
+        ));
+    }
+    let actual = codex_vault::claude_login_authority_id(
+        status.email.as_deref().unwrap_or_default(),
+        status.organization_id.as_deref().unwrap_or_default(),
+        status.subscription_type.as_deref(),
+    )
+    .map_err(|_| anyhow!("Claude Code did not report a complete account identity"))?;
+    if actual != expected {
+        return Err(anyhow!(
+            "the Claude Code account or subscription changed; explicitly choose Claude Code login again"
+        ));
+    }
+    Ok(())
+}
+
+fn absolute_claude_config_dir_override() -> Result<Option<PathBuf>> {
+    let Some(config_dir) = std::env::var_os("CLAUDE_CONFIG_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+    else {
+        return Ok(None);
+    };
+    if config_dir.is_absolute() {
+        Ok(Some(config_dir))
+    } else {
+        Ok(Some(std::path::absolute(config_dir).context(
+            "failed to resolve the exact Claude Code configuration profile",
+        )?))
+    }
 }
 
 fn resolve_selected_claude_auth_source(
@@ -753,6 +880,103 @@ mod tests {
             health,
             account_hint: None,
         }
+    }
+
+    #[cfg(unix)]
+    fn fake_claude_status(
+        directory: &Path,
+        email: &str,
+        organization_id: &str,
+        subscription_type: &str,
+    ) -> (PathBuf, PathBuf, PathBuf) {
+        let executable = directory.join(format!("status-claude-{organization_id}"));
+        let cwd_log = directory.join(format!("status-cwd-{organization_id}"));
+        let custom_oauth_log = directory.join(format!("status-custom-oauth-{organization_id}"));
+        let script = format!(
+            r#"#!/bin/sh
+set -eu
+[ "$1 $2 $3" = "auth status --json" ]
+[ -z "${{CLAUDE_CODE_OAUTH_TOKEN+x}}" ]
+[ -z "${{ANTHROPIC_API_KEY+x}}" ]
+[ -z "${{ANTHROPIC_BASE_URL+x}}" ]
+printf '%s' "$PWD" > '{}'
+printf '%s' "${{CLAUDE_CODE_CUSTOM_OAUTH_URL-}}" > '{}'
+printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","orgId":"{organization_id}","subscriptionType":"{subscription_type}"}}'
+"#,
+            cwd_log.display(),
+            custom_oauth_log.display()
+        );
+        std::fs::write(&executable, script).expect("write fake status Claude");
+        let mut permissions = std::fs::metadata(&executable)
+            .expect("fake status Claude metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&executable, permissions)
+            .expect("make fake status Claude executable");
+        (executable, cwd_log, custom_oauth_log)
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn selected_claude_account_authority_isolated_and_fails_closed_on_drift() {
+        let directory = tempfile::tempdir().expect("status fixture");
+        let expected = codex_vault::claude_login_authority_id(
+            "fixture@example.invalid",
+            "org-work",
+            Some("max"),
+        )
+        .expect("authority");
+        let selection =
+            ClaudeAuthSelection::new_claude_code_login("claude-login:fixture", expected)
+                .expect("selection");
+        let (matching, matching_cwd, custom_oauth_log) = fake_claude_status(
+            directory.path(),
+            "fixture@example.invalid",
+            "org-work",
+            "max",
+        );
+        let (drifted, _, _) = fake_claude_status(
+            directory.path(),
+            "other@example.invalid",
+            "org-personal",
+            "team",
+        );
+        let (incomplete, _, _) = fake_claude_status(
+            directory.path(),
+            "fixture@example.invalid",
+            "org-incomplete",
+            "",
+        );
+
+        let custom_oauth_url = std::ffi::OsStr::new("https://oauth.example.invalid");
+        verify_selected_claude_login_authority_with_profile(
+            &selection,
+            Some(&matching),
+            None,
+            Some(custom_oauth_url),
+        )
+        .await
+        .expect("matching authority");
+        let observed_cwd = std::fs::read_to_string(matching_cwd).expect("status cwd");
+        assert_ne!(Path::new(&observed_cwd), std::env::current_dir().unwrap());
+        assert_eq!(
+            std::fs::read_to_string(custom_oauth_log).expect("custom OAuth profile"),
+            custom_oauth_url.to_string_lossy()
+        );
+        let error = verify_selected_claude_login_authority(&selection, Some(&drifted))
+            .await
+            .expect_err("account drift must fail closed");
+        assert!(
+            error
+                .to_string()
+                .contains("account or subscription changed")
+        );
+        assert!(!error.to_string().contains("fixture@example.invalid"));
+        assert!(!error.to_string().contains("other@example.invalid"));
+        let error = verify_selected_claude_login_authority(&selection, Some(&incomplete))
+            .await
+            .expect_err("missing subscription identity must fail closed");
+        assert!(error.to_string().contains("complete account identity"));
     }
 
     #[test]
