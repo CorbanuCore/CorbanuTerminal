@@ -4,7 +4,7 @@
 
 - Dispatch base: `9d08b15fa94676c1383ee1605b77e7cc7218dcc4`.
 - Allocation commit: `e0c23fe95165636d621dae8c16a5366c4f7250ac`.
-- Final implementation candidate: `2b3b168c322a9756a475bc19dea121c72b204e5e`.
+- Final implementation candidate: `e0725a3f97e52588ab2189c636630b4e3fe0a8b3`.
 - Contract versions: security-audit event schema v1, integrity checkpoint v1,
   journal record v1 and consumer fixture v1.
 - Activation posture: fixture-only and fail closed. No producer, consumer,
@@ -91,23 +91,23 @@ crate source through the isolated manifest at
 | Check | Result |
 | --- | --- |
 | `rustfmt +nightly-2025-09-18 --edition 2024 codex-rs/security-audit/src/*.rs codex-rs/security-audit/tests/*.rs` | PASS |
-| `cargo +1.95.0 test --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/harness/Cargo.toml` with CorbanuDrive target/temp | PASS; 41 unit/fault + 1 public integration = 42/42 |
+| `cargo +1.95.0 test --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/harness/Cargo.toml` with CorbanuDrive target/temp | PASS; 43 unit/fault + 1 public integration = 44/44 |
 | `cargo +1.95.0 clippy --manifest-path /Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/harness/Cargo.toml --all-targets -- -D warnings` | PASS; isolated workspace mirrors every root workspace Clippy deny |
 | `python3 -m unittest discover -s qa/security-levels/audit-foundation -p 'test_*.py' -v` | PASS; 3/3 |
 | `python3 -m unittest docs.plans.tests.test_check docs.sprints.tests.test_check` | PASS; 23/23 |
 | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | PASS; active 1/2, current 61, archived 94 |
 | `git diff --check` | PASS |
 
-Exact-commit final artifacts for `2b3b168c322a9756a475bc19dea121c72b204e5e`:
+Exact-commit final artifacts for `e0725a3f97e52588ab2189c636630b4e3fe0a8b3`:
 
-- Rust test log: `test-rust-final-5.log`, SHA-256
-  `def1d46a7dff2bd4472353587e344cc04235a6ae2609800040723aa4cd04d6a7`.
-- full-workspace-lint Clippy log: `clippy-final-5.log`, SHA-256
-  `a9fcf8416cbf26bc16eb7261fdeaf718f1d0e643ef8d7a660bd8a82dfafefeb4`.
-- fixture log: `test-fixture-final-5.log`, SHA-256
+- Rust test log: `test-rust-final-6.log`, SHA-256
+  `3bf7ab813ab26fd4ba8715c0b5b459256b164fd1827db5afcefedfe013030ac3`.
+- full-workspace-lint Clippy log: `clippy-final-6.log`, SHA-256
+  `ff680f02c593ed4938d0069621175080cc2381b4d360f5e972ad6744518b8dfa`.
+- fixture log: `test-fixture-final-6.log`, SHA-256
   `c80a081792c1328f46d1f385824d459d636bcb7a3b834976c060563bf2cef3fb`.
-- governance test log: `test-governance-final-5.log`, SHA-256
-  `9aef2c2141006594a82dea01df07805c4a1c1b3ef7d7bc733b3265aab8d1ba0a`.
+- governance test log: `test-governance-final-6.log`, SHA-256
+  `726a0624b7b6223cdb3a8772c9b60b8e39c953f36bad4b64be143102b9b3bf6a`.
 - isolated manifest with the exact root Clippy deny set: `harness/Cargo.toml`,
   SHA-256
   `b1de95677cf4f772334b66a7be5d07b0de7146643034ef31f901bccc941066e9`.
@@ -141,6 +141,10 @@ writer-lock and persistence failures.
 Emergency-restriction regressions also prove that protected-root conflict and
 invalid-root failures retain distinct operator-visible audit-gap reasons rather
 than being mislabeled as invalid events.
+Recovery regressions distinguish real writer contention from audit-root
+storage/tamper failures and report temporary-cleanup failures as storage
+unavailability, keeping the public blocker diagnostic precise while remaining
+fail closed.
 
 The foundation was landed in reviewable commits: initial event/storage/journal
 contracts and fixture, identity redaction, recovery/cache hardening, and focused
@@ -155,8 +159,8 @@ being split at individual transitions.
 
 ## TMUX smoke and independent review
 
-The final implementation candidate `2b3b168c322a9756a475bc19dea121c72b204e5e`
-ran in real TMUX session `pf41-durable-smoke-final-6` from the candidate worktree
+The final implementation candidate `e0725a3f97e52588ab2189c636630b4e3fe0a8b3`
+ran in real TMUX session `pf41-durable-smoke-final-7` from the candidate worktree
 using Corbanu Terminal v0.1.35 with `RUST_LOG=trace`, read-only/never
 permissions, exact model `claude-opus-5-plan` at `max`, and an explicit
 CorbanuDrive `log_dir`. `/status` confirmed the candidate directory, connected
@@ -164,11 +168,11 @@ Claude Plan account, exact model and Corbanu version; `/quit` exited the session
 cleanly. Command text and Enter were sent as separate TMUX operations.
 
 - Status capture:
-  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final-6/status-pane.txt`,
-  SHA-256 `7f9641bfba3abf507c10d2b30255153b5bef314dffa5642f422ab41f60f5530f`.
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final-7/status-pane.txt`,
+  SHA-256 `4ba4dea407105018accf4166a20205b7f11ee5e3ee295e7b1e12ce82443e59a4`.
 - Trace log:
-  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final-6/logs/codex-tui.log`,
-  SHA-256 `710f54fa2a8f9a73ce29112926df6ca971e87fdfd5cfc2b9222032640582fb80`.
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/tmux-smoke-final-7/logs/codex-tui.log`,
+  SHA-256 `32a9b9fd38e57d5db0ab8882944d4836290071f227db1bab6fe4a78fd02ade4d`.
 
 The first read-only review used real TMUX session `pf27-opus5-g1-review`
 with exact model `claude-opus-5-plan` at `max`. It found nine actionable
@@ -256,6 +260,18 @@ fixes both, preserves distinct public gap reasons, and adds the focused
 regression above. Transcript:
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/review/opus-seventh-review-findings.txt`,
 SHA-256 `b9133c27c023b6f87abb97e92b00b96fc035d9ed14543c89739b564745888aac`.
+
+An eighth fresh read-only review in the same real TMUX/Corbanu harness used
+exact model `claude-opus-5-plan` at `max` and reviewed immutable evidence
+candidate `dd6b3fce52aba2535b5f25f7ea99aaa78a27fb59`. It independently
+reverified every earlier remediation and found one low-severity diagnostic
+issue: recovery classified audit-root storage/tamper and temporary-cleanup
+failures as writer contention or interrupted writes. Implementation candidate
+`e0725a3f97e52588ab2189c636630b4e3fe0a8b3` adds the distinct
+`StorageUnavailable` recovery blocker, preserves real lock contention, and adds
+focused regressions for both storage paths. Transcript:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/review/opus-eighth-review-findings.txt`,
+SHA-256 `400fadf5b9c0dc77369dc2b24cb34dbb5fb24e78ecb4b4acc9ac09b53aebab3b`.
 
 The final post-remediation read-only Claude Opus 5 Plan Max review is recorded
 here after it completes. Prompt and Enter are sent as separate TMUX operations;
