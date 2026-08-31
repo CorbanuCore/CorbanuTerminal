@@ -45,6 +45,8 @@ product behavior.
    TUI actions.
 6. Contributors and coding agents must read the
    [Corbanu Terminal development skill](corbanu-terminal-development-skill.md).
+7. Reproduced defects awaiting a generalized repair are tracked in
+   [Bug reports](bug-reports/index.md).
 
 ## Core Claim
 
