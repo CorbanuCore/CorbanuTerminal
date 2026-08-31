@@ -248,51 +248,6 @@ async fn existing_claude_login_is_selected_without_reauthorization() {
     assert_eq!(selection.source, ClaudeAuthSource::ClaudeCodeLogin);
 }
 
-#[cfg(unix)]
-#[tokio::test]
-async fn setup_token_command_success_and_failure_are_bounded_to_status() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let success = temp_dir.path().join("claude-success");
-    let failure = temp_dir.path().join("claude-failure");
-    std::fs::write(&success, "#!/bin/sh\n[ \"$1\" = setup-token ]\n").expect("success");
-    std::fs::write(&failure, "#!/bin/sh\nexit 7\n").expect("failure");
-    for executable in [&success, &failure] {
-        let mut permissions = std::fs::metadata(executable).unwrap().permissions();
-        permissions.set_mode(0o700);
-        std::fs::set_permissions(executable, permissions).unwrap();
-    }
-
-    run_setup_token(&success).await.expect("setup succeeds");
-    let error = run_setup_token(&failure).await.expect_err("setup fails");
-    assert!(error.contains("previous Claude authentication method is unchanged"));
-}
-
-#[cfg(unix)]
-#[tokio::test]
-async fn setup_token_timeout_kills_the_child_and_preserves_the_previous_method() {
-    let temp_dir = tempfile::tempdir().expect("temp dir");
-    let hanging = temp_dir.path().join("claude-hanging");
-    std::fs::write(
-        &hanging,
-        "#!/bin/sh\n[ \"$1\" = setup-token ] || exit 2\nwhile :; do :; done\n",
-    )
-    .expect("hanging setup-token fixture");
-    let mut permissions = std::fs::metadata(&hanging).unwrap().permissions();
-    permissions.set_mode(0o700);
-    std::fs::set_permissions(&hanging, permissions).unwrap();
-
-    let error = tokio::time::timeout(
-        Duration::from_secs(1),
-        run_setup_token_with_timeout(&hanging, Duration::from_millis(25)),
-    )
-    .await
-    .expect("setup-token timeout must remain bounded")
-    .expect_err("hanging setup-token must fail");
-
-    assert!(error.contains("timed out"));
-    assert!(error.contains("previous Claude authentication method is unchanged"));
-}
-
 #[tokio::test]
 async fn invalid_persisted_source_id_surfaces_recovery_status() {
     let temp_dir = tempfile::tempdir().expect("temp dir");

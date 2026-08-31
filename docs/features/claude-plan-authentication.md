@@ -24,21 +24,24 @@ new method succeeds, and it does not silently fall back to the other method.
 ## Recommended long-lived token
 
 Claude Code must be installed. When you choose the recommended method, Corbanu
-temporarily restores the terminal and runs:
+opens masked token entry and asks you to run this command in a separate private
+terminal:
 
 ```text
 claude setup-token
 ```
 
-Complete Anthropic's authorization. Claude Code displays the resulting token;
-Corbanu does not capture that command's output. Paste the token into Corbanu's
-masked entry view and press Enter. Corbanu encrypts it in the existing vault
+Complete Anthropic's authorization there. Claude Code displays the resulting
+token in that private terminal; Corbanu does not execute or capture the
+token-producing command. Paste the token into Corbanu's masked entry view and
+press Enter. Corbanu encrypts it in the existing vault
 and selects it as one transaction. If saving fails, the previous token,
 metadata, and selected method are restored.
 
-If setup is no longer making progress, cancel Claude Code with Ctrl-C. Corbanu
-also bounds the setup process to 15 minutes, terminates it on timeout, and
-returns to source-specific recovery without changing the previous method.
+If setup is no longer making progress, cancel Claude Code with Ctrl-C in the
+private terminal. Esc cancels Corbanu's masked handoff without changing the
+previous method. Command failures remain outside Corbanu's terminal history;
+rerun the command or choose the compatibility method explicitly.
 
 The token is currently intended for Claude model requests, lasts approximately
 one year, and is not an Anthropic API key. It does not add Claude Desktop or
@@ -70,12 +73,14 @@ Corbanu follows Claude Code's current platform ownership:
 
 | Platform | Authoritative login store |
 | --- | --- |
-| macOS | Keychain service `Claude Code-credentials`, or `Claude Code-custom-oauth-credentials` for custom OAuth. |
+| macOS | Keychain service `Claude Code-credentials`, or `Claude Code-custom-oauth-credentials` for custom OAuth. When `CLAUDE_CONFIG_DIR` is set, Claude Code appends the first eight hex characters of the normalized directory's SHA-256 digest. Corbanu persists that exact service identity. |
 | Linux and Windows | `${CLAUDE_CONFIG_DIR:-~/.claude}/.credentials.json`. |
 
 On macOS, a legacy `.credentials.json` does not override the current Keychain
-record, and `CLAUDE_CONFIG_DIR` does not rename or redirect the Keychain
-service. Corbanu never deletes or rewrites Claude-owned credential records.
+record. `CLAUDE_CONFIG_DIR` selects a distinct hashed Keychain service. If that
+profile or service changes later, Corbanu fails closed and asks for an explicit
+selection instead of using the other account. Corbanu never deletes or
+rewrites Claude-owned credential records.
 
 Existing installations without a saved Corbanu choice retain their historical
 behavior: a nonblank `CLAUDE_CODE_OAUTH_TOKEN` is used first, otherwise the
@@ -99,7 +104,9 @@ source; it does not persist the raw token in chat or session history.
 For a broken Claude Code login, run `claude auth login` (or `/login` inside an
 interactive Claude Code session), then return to `/providers` and explicitly
 choose **Claude Code login** again. A missing or blank refresh token requires
-reauthorization; ordinary refresh cannot repair it.
+reauthorization even while the current access token has not yet expired;
+Corbanu does not represent a source guaranteed to fail at its next refresh as
+healthy.
 
 ## Security boundary
 

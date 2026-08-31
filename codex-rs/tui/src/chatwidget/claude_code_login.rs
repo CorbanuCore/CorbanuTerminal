@@ -33,15 +33,16 @@ use codex_vault::CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::ClaudeAuthSelection;
 use codex_vault::ClaudeAuthSource;
 use codex_vault::ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID;
-#[cfg(target_os = "macos")]
-use codex_vault::MACOS_KEYCHAIN_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::MANAGED_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::Vault;
+#[cfg(target_os = "macos")]
+use codex_vault::claude_code_macos_keychain_service;
+#[cfg(target_os = "macos")]
+use codex_vault::macos_keychain_claude_auth_source_id;
 
 const CLAUDE_CODE_LOGIN_VIEW_ID: &str = "claude-code-plan-login";
 const CLAUDE_AUTH_METHOD_VIEW_ID: &str = "claude-plan-auth-method";
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const SETUP_TOKEN_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const MAX_LOGIN_LINE_BYTES: usize = 16 * 1024;
 
 pub(crate) enum ClaudeCodeLoginInput {
@@ -123,21 +124,36 @@ pub(crate) async fn current_status_with_timeout(
 
 fn selection_source_id_is_current(selection: &ClaudeAuthSelection) -> bool {
     let expected = match selection.source {
-        ClaudeAuthSource::ManagedSubscriptionToken => MANAGED_CLAUDE_AUTH_SOURCE_ID,
-        ClaudeAuthSource::EnvironmentToken => ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID,
+        ClaudeAuthSource::ManagedSubscriptionToken => Ok(MANAGED_CLAUDE_AUTH_SOURCE_ID.to_string()),
+        ClaudeAuthSource::EnvironmentToken => Ok(ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID.to_string()),
         ClaudeAuthSource::ClaudeCodeLogin => current_platform_login_source_id(),
     };
-    selection.source_id == expected
+    expected.is_ok_and(|expected| selection.source_id == expected)
 }
 
-fn current_platform_login_source_id() -> &'static str {
+fn current_platform_login_source_id() -> Result<String, String> {
     #[cfg(target_os = "macos")]
     {
-        MACOS_KEYCHAIN_CLAUDE_AUTH_SOURCE_ID
+        let home = std::env::var_os("HOME")
+            .map(std::path::PathBuf::from)
+            .ok_or_else(|| {
+                "HOME is not set; cannot identify Claude Code's Keychain profile".to_string()
+            })?;
+        let configured = std::env::var_os("CLAUDE_CONFIG_DIR")
+            .filter(|value| !value.is_empty())
+            .map(std::path::PathBuf::from);
+        let config_dir_overridden = configured.is_some();
+        let config_dir = configured.unwrap_or_else(|| home.join(".claude"));
+        let custom_oauth = std::env::var("CLAUDE_CODE_CUSTOM_OAUTH_URL")
+            .ok()
+            .is_some_and(|value| !value.trim().is_empty());
+        let service =
+            claude_code_macos_keychain_service(&config_dir, config_dir_overridden, custom_oauth);
+        Ok(macos_keychain_claude_auth_source_id(&service))
     }
     #[cfg(not(target_os = "macos"))]
     {
-        CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID
+        Ok(CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID.to_string())
     }
 }
 
@@ -331,51 +347,6 @@ async fn verify_login(executable: &Path, codex_home: &Path) -> Result<String, St
     }
 }
 
-pub(crate) async fn run_setup_token(executable: &Path) -> Result<(), String> {
-    run_setup_token_with_timeout(executable, SETUP_TOKEN_TIMEOUT).await
-}
-
-async fn run_setup_token_with_timeout(
-    executable: &Path,
-    setup_timeout: Duration,
-) -> Result<(), String> {
-    let mut child = Command::new(executable)
-        .arg("setup-token")
-        .stdin(Stdio::inherit())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|error| {
-            format!(
-                "Could not start `claude setup-token`: {error}. Install or update Claude Code, then retry."
-            )
-        })?;
-    let status = match timeout(setup_timeout, child.wait()).await {
-        Ok(Ok(status)) => status,
-        Ok(Err(error)) => {
-            return Err(format!(
-                "`claude setup-token` failed to finish: {error}. Your previous Claude authentication method is unchanged; retry when ready."
-            ));
-        }
-        Err(_) => {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            return Err(
-                "`claude setup-token` timed out before authorization completed. Your previous Claude authentication method is unchanged; retry when ready."
-                    .to_string(),
-            );
-        }
-    };
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "`claude setup-token` exited with {status}. Your previous Claude authentication method is unchanged; retry when ready."
-        ))
-    }
-}
-
 pub(crate) async fn select_existing_claude_code_login(
     executable: &Path,
     codex_home: &Path,
@@ -411,7 +382,7 @@ async fn persist_claude_code_login_selection(codex_home: &Path) -> Result<(), St
 fn persist_claude_code_login_selection_blocking(codex_home: &Path) -> Result<(), String> {
     let selection = ClaudeAuthSelection::new(
         ClaudeAuthSource::ClaudeCodeLogin,
-        current_platform_login_source_id(),
+        current_platform_login_source_id()?,
     )
     .map_err(|error| format!("Could not select the current Claude Code login: {error}"))?;
     Vault::new(codex_home.to_path_buf())
@@ -438,7 +409,7 @@ fn auth_method_choice_params() -> SelectionViewParams {
             SelectionItem {
                 name: "Long-lived subscription token (Recommended)".to_string(),
                 description: Some(
-                    "Run `claude setup-token` for an approximately one-year token (Pro, Max, Team, or Enterprise)."
+                    "Run `claude setup-token` in a private terminal, then paste its approximately one-year token here (Pro, Max, Team, or Enterprise)."
                         .to_string(),
                 ),
                 actions: vec![Box::new(|tx| tx.send(AppEvent::RunClaudeSetupToken))],
@@ -473,7 +444,8 @@ fn auth_recovery_params(message: String) -> SelectionViewParams {
             SelectionItem {
                 name: "Retry long-lived token setup".to_string(),
                 description: Some(
-                    "Run `claude setup-token` again, then save it securely.".to_string(),
+                    "Run `claude setup-token` in a private terminal, then return to masked entry."
+                        .to_string(),
                 ),
                 actions: vec![Box::new(|tx| tx.send(AppEvent::RunClaudeSetupToken))],
                 dismiss_on_select: true,
@@ -555,7 +527,7 @@ impl ChatWidget {
             "claude-subscription-token".to_string(),
             "Save Claude subscription token".to_string(),
             "Long-lived token — masked".to_string(),
-            "Paste the token printed by `claude setup-token`; it is encrypted and never added to chat."
+            "In a separate private terminal, run `claude setup-token`. Paste its token here; Corbanu never captures the command output or adds the token to chat."
                 .to_string(),
             Box::new(move |_label, token| {
                 submit_tx.send(AppEvent::SaveClaudeManagedSubscriptionToken {

@@ -30,6 +30,29 @@ fn source(
 }
 
 #[test]
+fn macos_keychain_identity_matches_claude_code_profiles() {
+    let config_dir = std::path::Path::new("/fixture/config");
+    assert_eq!(
+        claude_code_macos_keychain_service(config_dir, false, false),
+        "Claude Code-credentials"
+    );
+    assert_eq!(
+        claude_code_macos_keychain_service(config_dir, true, false),
+        "Claude Code-credentials-9e67da4d"
+    );
+    let custom = claude_code_macos_keychain_service(config_dir, true, true);
+    assert_eq!(custom, "Claude Code-custom-oauth-credentials-9e67da4d");
+    assert_eq!(
+        macos_keychain_claude_auth_source_id(&custom),
+        "claude-login:macos-keychain:Claude Code-custom-oauth-credentials-9e67da4d"
+    );
+    assert_eq!(
+        claude_code_macos_keychain_service(std::path::Path::new("/fixture/café"), true, false,),
+        claude_code_macos_keychain_service(std::path::Path::new("/fixture/café"), true, false,)
+    );
+}
+
+#[test]
 fn absent_selection_preserves_existing_installations() {
     let (_directory, vault) = test_vault();
     assert_eq!(vault.load_claude_auth_selection().unwrap(), None);

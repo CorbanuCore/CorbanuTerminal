@@ -15,15 +15,18 @@ use anyhow::Result;
 use anyhow::anyhow;
 use codex_vault::CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::ClaudeAuthHealth;
+use codex_vault::ClaudeAuthResolution;
 use codex_vault::ClaudeAuthSelection;
 use codex_vault::ClaudeAuthSource;
 use codex_vault::ClaudeAuthSourceMetadata;
 use codex_vault::ClaudeAuthStoreKind;
 use codex_vault::ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID;
-use codex_vault::MACOS_KEYCHAIN_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::MANAGED_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::ManagedClaudeTokenStatus;
 use codex_vault::Vault;
+use codex_vault::claude_code_macos_keychain_service;
+use codex_vault::macos_keychain_claude_auth_source_id;
+use codex_vault::resolve_claude_auth_source;
 use serde::Deserialize;
 use tokio::process::Command;
 
@@ -63,10 +66,12 @@ enum PlatformCredentialStore {
 }
 
 impl PlatformCredentialStore {
-    fn source_id(self) -> &'static str {
+    fn source_id(self, config_dir: &Path) -> String {
         match self {
-            Self::MacosKeychain => MACOS_KEYCHAIN_CLAUDE_AUTH_SOURCE_ID,
-            Self::CredentialsFile => CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID,
+            Self::MacosKeychain => {
+                macos_keychain_claude_auth_source_id(&claude_keychain_service(config_dir))
+            }
+            Self::CredentialsFile => CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID.to_string(),
         }
     }
 
@@ -96,13 +101,10 @@ async fn resolve_claude_oauth_access_token_for_selection(
     vault: &Vault,
 ) -> Result<String> {
     if let Some(selection) = selection {
-        let metadata = inspect_selected_claude_auth_source(selection, vault).await?;
-        if metadata.health != ClaudeAuthHealth::Healthy {
-            return Err(unhealthy_selected_source_error(&metadata));
-        }
-        return match selection.source {
+        let discovered = discover_selected_claude_auth_source(selection.source, vault).await?;
+        let metadata = resolve_selected_claude_auth_source(selection, &discovered)?;
+        return match metadata.source {
             ClaudeAuthSource::ManagedSubscriptionToken => {
-                require_source_id(selection, MANAGED_CLAUDE_AUTH_SOURCE_ID)?;
                 vault
                     .with_managed_claude_subscription_token(ToString::to_string)
                     .context(
@@ -110,7 +112,6 @@ async fn resolve_claude_oauth_access_token_for_selection(
                     )
             }
             ClaudeAuthSource::EnvironmentToken => {
-                require_source_id(selection, ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID)?;
                 nonempty_env("CLAUDE_CODE_OAUTH_TOKEN").ok_or_else(|| {
                     anyhow!(
                         "the selected CLAUDE_CODE_OAUTH_TOKEN source is missing or blank; set it again or explicitly choose another Claude authentication method"
@@ -118,7 +119,6 @@ async fn resolve_claude_oauth_access_token_for_selection(
                 })
             }
             ClaudeAuthSource::ClaudeCodeLogin => {
-                require_source_id(selection, CURRENT_PLATFORM_STORE.source_id())?;
                 resolve_current_platform_claude_oauth_access_token().await
             }
         };
@@ -133,38 +133,60 @@ async fn resolve_claude_oauth_access_token_for_selection(
     resolve_current_platform_claude_oauth_access_token().await
 }
 
-async fn inspect_selected_claude_auth_source(
+fn resolve_selected_claude_auth_source(
     selection: &ClaudeAuthSelection,
-    vault: &Vault,
+    discovered: &[ClaudeAuthSourceMetadata],
 ) -> Result<ClaudeAuthSourceMetadata> {
-    let expected_id = match selection.source {
-        ClaudeAuthSource::ManagedSubscriptionToken => MANAGED_CLAUDE_AUTH_SOURCE_ID,
-        ClaudeAuthSource::EnvironmentToken => ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID,
-        ClaudeAuthSource::ClaudeCodeLogin => CURRENT_PLATFORM_STORE.source_id(),
-    };
-    require_source_id(selection, expected_id)?;
-    let (store, health) = match selection.source {
-        ClaudeAuthSource::ManagedSubscriptionToken => {
-            let health = match vault.managed_claude_subscription_token_status() {
+    match resolve_claude_auth_source(Some(selection), discovered) {
+        ClaudeAuthResolution::Selected(metadata) => Ok(metadata),
+        ClaudeAuthResolution::UnhealthySelected(metadata) => {
+            Err(unhealthy_selected_source_error(&metadata))
+        }
+        ClaudeAuthResolution::MissingSelected(_) => Err(anyhow!(
+            "the selected Claude authentication source no longer matches the current platform or profile; explicitly choose the intended method again"
+        )),
+        ClaudeAuthResolution::Conflict { .. } => Err(anyhow!(
+            "the selected Claude authentication source is ambiguous; explicitly choose one current source again"
+        )),
+        ClaudeAuthResolution::SelectionRequired { .. } => {
+            Err(anyhow!("Claude authentication selection is required"))
+        }
+    }
+}
+
+async fn discover_selected_claude_auth_source(
+    source: ClaudeAuthSource,
+    vault: &Vault,
+) -> Result<Vec<ClaudeAuthSourceMetadata>> {
+    let metadata = match source {
+        ClaudeAuthSource::ManagedSubscriptionToken => ClaudeAuthSourceMetadata {
+            source: ClaudeAuthSource::ManagedSubscriptionToken,
+            source_id: MANAGED_CLAUDE_AUTH_SOURCE_ID.to_string(),
+            store: ClaudeAuthStoreKind::CorbanuVault,
+            health: match vault.managed_claude_subscription_token_status() {
                 Ok(ManagedClaudeTokenStatus::Stored { .. }) => ClaudeAuthHealth::Healthy,
                 Ok(ManagedClaudeTokenStatus::Missing) => ClaudeAuthHealth::NeedsEnrollment,
                 Err(_) => ClaudeAuthHealth::Unavailable,
-            };
-            (ClaudeAuthStoreKind::CorbanuVault, health)
-        }
-        ClaudeAuthSource::EnvironmentToken => {
-            let health = if nonempty_env("CLAUDE_CODE_OAUTH_TOKEN").is_some() {
+            },
+            account_hint: None,
+        },
+        ClaudeAuthSource::EnvironmentToken => ClaudeAuthSourceMetadata {
+            source: ClaudeAuthSource::EnvironmentToken,
+            source_id: ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID.to_string(),
+            store: ClaudeAuthStoreKind::Environment,
+            health: if nonempty_env("CLAUDE_CODE_OAUTH_TOKEN").is_some() {
                 ClaudeAuthHealth::Healthy
             } else {
                 ClaudeAuthHealth::Missing
-            };
-            (ClaudeAuthStoreKind::Environment, health)
-        }
+            },
+            account_hint: None,
+        },
         ClaudeAuthSource::ClaudeCodeLogin => {
             let config_dir = claude_config_dir()?;
             let credentials_path = config_dir.join(CLAUDE_CREDENTIALS_FILE);
             let health = match read_credentials(
                 CURRENT_PLATFORM_STORE,
+                &config_dir,
                 &credentials_path,
                 /*security*/ None,
             )
@@ -173,16 +195,16 @@ async fn inspect_selected_claude_auth_source(
                 Ok(credentials) => credentials_health(&credentials),
                 Err(error) => credentials_error_health(&error),
             };
-            (CURRENT_PLATFORM_STORE.metadata_store(), health)
+            ClaudeAuthSourceMetadata {
+                source: ClaudeAuthSource::ClaudeCodeLogin,
+                source_id: CURRENT_PLATFORM_STORE.source_id(&config_dir),
+                store: CURRENT_PLATFORM_STORE.metadata_store(),
+                health,
+                account_hint: None,
+            }
         }
     };
-    Ok(ClaudeAuthSourceMetadata {
-        source: selection.source,
-        source_id: expected_id.to_string(),
-        store,
-        health,
-        account_hint: None,
-    })
+    Ok(vec![metadata])
 }
 
 fn credentials_error_health(error: &anyhow::Error) -> ClaudeAuthHealth {
@@ -221,15 +243,6 @@ fn unhealthy_selected_source_error(metadata: &ClaudeAuthSourceMetadata) -> anyho
     }
 }
 
-fn require_source_id(selection: &ClaudeAuthSelection, expected: &str) -> Result<()> {
-    if selection.source_id == expected {
-        return Ok(());
-    }
-    Err(anyhow!(
-        "the selected Claude authentication source is not valid on this platform; explicitly choose a current authentication method"
-    ))
-}
-
 async fn resolve_current_platform_claude_oauth_access_token() -> Result<String> {
     let config_dir = claude_config_dir()?;
 
@@ -265,7 +278,7 @@ async fn resolve_stored_claude_oauth_access_token(
     security: Option<&Path>,
 ) -> Result<String> {
     let credentials_path = config_dir.join(CLAUDE_CREDENTIALS_FILE);
-    let credentials = read_credentials(store, &credentials_path, security).await?;
+    let credentials = read_credentials(store, config_dir, &credentials_path, security).await?;
     if !force_refresh && let Some(access_token) = usable_access_token(&credentials, now_ms) {
         return Ok(access_token);
     }
@@ -277,7 +290,7 @@ async fn resolve_stored_claude_oauth_access_token(
     let _refresh_lock = acquire_refresh_lock(config_dir, store).await?;
 
     // Another PFTerminal process may have refreshed while this process waited.
-    let credentials = read_credentials(store, &credentials_path, security).await?;
+    let credentials = read_credentials(store, config_dir, &credentials_path, security).await?;
     if let Some(access_token) = usable_access_token(&credentials, current_time_ms().max(now_ms))
         && (!force_refresh || Some(access_token.clone()) != original_access_token)
     {
@@ -285,9 +298,9 @@ async fn resolve_stored_claude_oauth_access_token(
     }
 
     let refresh_status =
-        refresh_with_claude_cli(config_dir, &credentials, claude_executable, store).await?;
+        refresh_with_claude_cli(config_dir, &credentials, claude_executable).await?;
 
-    let refreshed = read_credentials(store, &credentials_path, security).await?;
+    let refreshed = read_credentials(store, config_dir, &credentials_path, security).await?;
     if let Some(access_token) = usable_access_token(&refreshed, current_time_ms().max(now_ms))
         && Some(access_token.clone()) != original_access_token
     {
@@ -305,6 +318,7 @@ async fn resolve_stored_claude_oauth_access_token(
 
 async fn read_credentials(
     store: PlatformCredentialStore,
+    config_dir: &Path,
     path: &Path,
     security: Option<&Path>,
 ) -> Result<ClaudeCodeCredentials> {
@@ -321,12 +335,12 @@ async fn read_credentials(
         PlatformCredentialStore::MacosKeychain => {
             #[cfg(target_os = "macos")]
             {
-                let contents = read_macos_keychain_credentials(security).await?;
+                let contents = read_macos_keychain_credentials(config_dir, security).await?;
                 (contents, "the macOS Keychain".to_string())
             }
             #[cfg(not(target_os = "macos"))]
             {
-                let _ = security;
+                let _ = (config_dir, security);
                 return Err(anyhow!(
                     "macOS Keychain Claude credentials are unavailable on this platform"
                 ));
@@ -341,13 +355,16 @@ async fn read_credentials(
 }
 
 #[cfg(target_os = "macos")]
-async fn read_macos_keychain_credentials(security: Option<&Path>) -> Result<Vec<u8>> {
+async fn read_macos_keychain_credentials(
+    config_dir: &Path,
+    security: Option<&Path>,
+) -> Result<Vec<u8>> {
     let account = std::env::var("USER")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(whoami::username);
-    let service = claude_keychain_service(nonempty_env("CLAUDE_CODE_CUSTOM_OAUTH_URL").is_some());
+    let service = claude_keychain_service(config_dir);
     let executable = security.unwrap_or_else(|| Path::new("/usr/bin/security"));
     let output = tokio::time::timeout(
         CLAUDE_KEYCHAIN_TIMEOUT,
@@ -358,7 +375,7 @@ async fn read_macos_keychain_credentials(security: Option<&Path>) -> Result<Vec<
                 account.as_str(),
                 "-w",
                 "-s",
-                service,
+                service.as_str(),
             ])
             .stdin(Stdio::null())
             .stderr(Stdio::null())
@@ -378,13 +395,14 @@ async fn read_macos_keychain_credentials(security: Option<&Path>) -> Result<Vec<
     Ok(output.stdout)
 }
 
-#[cfg(target_os = "macos")]
-fn claude_keychain_service(custom_oauth: bool) -> &'static str {
-    if custom_oauth {
-        "Claude Code-custom-oauth-credentials"
-    } else {
-        "Claude Code-credentials"
-    }
+fn claude_keychain_service(config_dir: &Path) -> String {
+    claude_code_macos_keychain_service(
+        config_dir,
+        std::env::var_os("CLAUDE_CONFIG_DIR")
+            .filter(|value| !value.is_empty())
+            .is_some(),
+        nonempty_env("CLAUDE_CODE_CUSTOM_OAUTH_URL").is_some(),
+    )
 }
 
 fn usable_access_token(credentials: &ClaudeCodeCredentials, now_ms: u64) -> Option<String> {
@@ -421,7 +439,6 @@ async fn refresh_with_claude_cli(
     config_dir: &Path,
     credentials: &ClaudeCodeCredentials,
     claude_executable: Option<&Path>,
-    store: PlatformCredentialStore,
 ) -> Result<std::process::ExitStatus> {
     let oauth = credentials.claude_ai_oauth.as_ref().ok_or_else(|| {
         anyhow!(
@@ -449,9 +466,9 @@ async fn refresh_with_claude_cli(
     };
     let mut command = Command::new(&executable);
     command.args(["auth", "login"]);
-    if store == PlatformCredentialStore::MacosKeychain || claude_config_dir_is_default(config_dir) {
-        // CLAUDE_CONFIG_DIR does not redirect Claude Code's macOS Keychain
-        // credential. Keep the refresh on the authoritative current service.
+    if claude_config_dir_is_default(config_dir) {
+        // Claude Code's default profile has no config hash in its Keychain
+        // service. Avoid creating a different service for the same directory.
         command.env_remove("CLAUDE_CONFIG_DIR");
     } else {
         command.env("CLAUDE_CONFIG_DIR", config_dir);
@@ -517,26 +534,21 @@ async fn acquire_refresh_lock(config_dir: &Path, store: PlatformCredentialStore)
 }
 
 fn refresh_lock_path(config_dir: &Path, store: PlatformCredentialStore) -> Result<PathBuf> {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .ok_or_else(|| anyhow!("HOME is not set; cannot lock Claude Code credentials"))?;
-    Ok(refresh_lock_path_for_home(
+    Ok(refresh_lock_path_for_store(
         config_dir,
         store,
-        &home,
         nonempty_env("CLAUDE_CODE_CUSTOM_OAUTH_URL").is_some(),
     ))
 }
 
-fn refresh_lock_path_for_home(
+fn refresh_lock_path_for_store(
     config_dir: &Path,
     store: PlatformCredentialStore,
-    home: &Path,
     custom_oauth: bool,
 ) -> PathBuf {
     match store {
         PlatformCredentialStore::CredentialsFile => config_dir.join(CLAUDE_REFRESH_LOCK_FILE),
-        PlatformCredentialStore::MacosKeychain => home.join(".claude").join(if custom_oauth {
+        PlatformCredentialStore::MacosKeychain => config_dir.join(if custom_oauth {
             CLAUDE_CUSTOM_OAUTH_REFRESH_LOCK_FILE
         } else {
             CLAUDE_REFRESH_LOCK_FILE
@@ -565,6 +577,53 @@ mod tests {
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+
+    fn source_metadata(
+        source: ClaudeAuthSource,
+        source_id: &str,
+        health: ClaudeAuthHealth,
+    ) -> ClaudeAuthSourceMetadata {
+        ClaudeAuthSourceMetadata {
+            source,
+            source_id: source_id.to_string(),
+            store: ClaudeAuthStoreKind::Environment,
+            health,
+            account_hint: None,
+        }
+    }
+
+    #[test]
+    fn production_selection_path_uses_exact_typed_resolution() {
+        let selection = ClaudeAuthSelection::new_at(
+            ClaudeAuthSource::EnvironmentToken,
+            ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID,
+            10,
+        )
+        .expect("selection");
+        let selected = source_metadata(
+            ClaudeAuthSource::EnvironmentToken,
+            ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID,
+            ClaudeAuthHealth::Healthy,
+        );
+        assert_eq!(
+            resolve_selected_claude_auth_source(&selection, std::slice::from_ref(&selected))
+                .expect("exact healthy source"),
+            selected
+        );
+
+        let drifted = source_metadata(
+            ClaudeAuthSource::EnvironmentToken,
+            "environment:different-account-slot",
+            ClaudeAuthHealth::Healthy,
+        );
+        let error = resolve_selected_claude_auth_source(&selection, &[drifted])
+            .expect_err("profile drift must fail closed");
+        assert!(error.to_string().contains("no longer matches"));
+
+        let error = resolve_selected_claude_auth_source(&selection, &[selected.clone(), selected])
+            .expect_err("duplicate identities must fail as a conflict");
+        assert!(error.to_string().contains("ambiguous"));
+    }
 
     #[tokio::test]
     async fn valid_access_token_does_not_require_claude_cli() {
@@ -629,6 +688,7 @@ mod tests {
         );
         let persisted = read_credentials(
             PlatformCredentialStore::CredentialsFile,
+            temp_dir.path(),
             &temp_dir.path().join(CLAUDE_CREDENTIALS_FILE),
             /*security*/ None,
         )
@@ -869,6 +929,7 @@ mod tests {
         let path = temp_dir.path().join(CLAUDE_CREDENTIALS_FILE);
         let missing = read_credentials(
             PlatformCredentialStore::CredentialsFile,
+            temp_dir.path(),
             &path,
             /*security*/ None,
         )
@@ -882,6 +943,7 @@ mod tests {
         std::fs::write(&path, b"not-json").expect("malformed fixture");
         let malformed = read_credentials(
             PlatformCredentialStore::CredentialsFile,
+            temp_dir.path(),
             &path,
             /*security*/ None,
         )
@@ -894,62 +956,23 @@ mod tests {
     }
 
     #[test]
-    fn persisted_source_ids_are_bound_to_the_current_platform_store() {
-        let mismatched = ClaudeAuthSelection::new_at(
-            ClaudeAuthSource::ClaudeCodeLogin,
-            "claude-login:legacy-store",
-            10,
-        )
-        .expect("selection");
-        let error = require_source_id(&mismatched, CURRENT_PLATFORM_STORE.source_id())
-            .expect_err("legacy source cannot silently fall through");
-        assert!(error.to_string().contains("not valid on this platform"));
-        assert!(!error.to_string().contains("legacy-store"));
-    }
-
-    #[test]
     fn refresh_lock_follows_the_authoritative_store_identity() {
-        let home = Path::new("/fixture/home");
         let config_a = Path::new("/fixture/config-a");
         let config_b = Path::new("/fixture/config-b");
 
         assert_ne!(
-            refresh_lock_path_for_home(
-                config_a,
-                PlatformCredentialStore::CredentialsFile,
-                home,
-                false,
-            ),
-            refresh_lock_path_for_home(
-                config_b,
-                PlatformCredentialStore::CredentialsFile,
-                home,
-                false,
-            )
+            refresh_lock_path_for_store(config_a, PlatformCredentialStore::CredentialsFile, false),
+            refresh_lock_path_for_store(config_b, PlatformCredentialStore::CredentialsFile, false)
         );
-        let keychain_lock = refresh_lock_path_for_home(
-            config_a,
-            PlatformCredentialStore::MacosKeychain,
-            home,
-            false,
-        );
-        assert_eq!(
+        let keychain_lock =
+            refresh_lock_path_for_store(config_a, PlatformCredentialStore::MacosKeychain, false);
+        assert_ne!(
             keychain_lock,
-            refresh_lock_path_for_home(
-                config_b,
-                PlatformCredentialStore::MacosKeychain,
-                home,
-                false,
-            )
+            refresh_lock_path_for_store(config_b, PlatformCredentialStore::MacosKeychain, false,)
         );
         assert_ne!(
             keychain_lock,
-            refresh_lock_path_for_home(
-                config_b,
-                PlatformCredentialStore::MacosKeychain,
-                home,
-                true,
-            )
+            refresh_lock_path_for_store(config_a, PlatformCredentialStore::MacosKeychain, true,)
         );
     }
 
@@ -968,6 +991,7 @@ mod tests {
 
         let credentials = read_credentials(
             PlatformCredentialStore::MacosKeychain,
+            temp_dir.path(),
             &temp_dir.path().join(CLAUDE_CREDENTIALS_FILE),
             Some(&security),
         )
@@ -977,16 +1001,6 @@ mod tests {
         assert_eq!(
             usable_access_token(&credentials, now_ms).as_deref(),
             Some("keychain-access")
-        );
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn keychain_service_names_match_current_claude_code_contract() {
-        assert_eq!(claude_keychain_service(false), "Claude Code-credentials");
-        assert_eq!(
-            claude_keychain_service(true),
-            "Claude Code-custom-oauth-credentials"
         );
     }
 

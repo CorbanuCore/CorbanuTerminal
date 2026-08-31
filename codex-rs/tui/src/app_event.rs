@@ -1501,11 +1501,16 @@ pub(crate) enum AppEvent {
     /// Open the explicit Claude Plan authentication-method choice.
     OpenClaudeCodePlanLogin,
 
-    /// Run the official long-lived `claude setup-token` flow in the user's terminal.
+    /// Open the safe handoff for the official long-lived `claude setup-token` flow.
     RunClaudeSetupToken,
 
     /// Use or repair Claude Code's rotating subscription login.
     UseClaudeCodePlanLogin,
+
+    /// Completion of the off-event-loop Claude Code status probe.
+    ClaudeCodePlanLoginSelectionChecked {
+        result: Result<bool, String>,
+    },
 
     /// Store and select a masked long-lived Claude subscription token.
     SaveClaudeManagedSubscriptionToken {

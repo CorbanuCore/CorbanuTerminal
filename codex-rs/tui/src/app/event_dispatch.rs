@@ -2253,32 +2253,24 @@ impl App {
                 self.chat_widget.open_claude_auth_method_choice();
             }
             AppEvent::RunClaudeSetupToken => {
-                let result = tui
-                    .with_restored(|| async {
-                        crate::chatwidget::claude_code_login::run_setup_token(std::path::Path::new(
-                            "claude",
-                        ))
-                        .await
-                    })
-                    .await;
-                match result {
-                    Ok(()) => self.chat_widget.open_claude_subscription_token_entry(),
-                    Err(message) => {
-                        self.chat_widget.add_error_message(message.clone());
-                        self.chat_widget.open_claude_auth_recovery(message);
-                    }
-                }
+                self.chat_widget.open_claude_subscription_token_entry();
                 tui.frame_requester().schedule_frame();
             }
             AppEvent::UseClaudeCodePlanLogin => {
                 let codex_home = self.config.codex_home.clone();
-                match crate::chatwidget::claude_code_login::select_existing_claude_code_login(
-                    std::path::Path::new("claude"),
-                    codex_home.as_path(),
-                    Duration::from_secs(10),
-                )
-                .await
-                {
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result =
+                        crate::chatwidget::claude_code_login::select_existing_claude_code_login(
+                            std::path::Path::new("claude"),
+                            codex_home.as_path(),
+                            Duration::from_secs(10),
+                        )
+                        .await;
+                    tx.send(AppEvent::ClaudeCodePlanLoginSelectionChecked { result });
+                });
+            }
+            AppEvent::ClaudeCodePlanLoginSelectionChecked { result } => match result {
                     Ok(true) => self.chat_widget.add_info_message(
                         "Existing Claude Code login selected. Retry the Claude Plan request or choose a model from /model."
                             .to_string(),
@@ -2287,14 +2279,13 @@ impl App {
                     Ok(false) => {
                         let input_tx = crate::chatwidget::claude_code_login::start(
                             self.app_event_tx.clone(),
-                            codex_home.to_path_buf(),
+                            self.config.codex_home.to_path_buf(),
                         );
                         self.chat_widget
                             .open_claude_code_plan_login_pending(input_tx);
                     }
                     Err(message) => self.chat_widget.add_error_message(message),
-                }
-            }
+                },
             AppEvent::SaveClaudeManagedSubscriptionToken { token } => {
                 let codex_home = self.config.codex_home.clone();
                 let tx = self.app_event_tx.clone();

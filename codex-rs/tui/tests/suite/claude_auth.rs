@@ -67,12 +67,13 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
     pane.wait_stable_contains("saved and selected", Duration::from_secs(45))?;
     assert_managed_resolver_returns(&codex, codex_home.path(), &canary)?;
 
-    fs::write(&fake.failure_marker, b"fail setup-token")?;
     open_claude_auth_choice(pane)?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Long-lived token — masked", READY_TIMEOUT)?;
+    pane.send_secret_literal(" invalid-token")?;
     pane.send_key(TmuxKey::Enter)?;
     pane.wait_stable_contains("Claude authentication needs attention", READY_TIMEOUT)?;
     pane.wait_stable_contains("No fallback occurred", READY_TIMEOUT)?;
-    fs::remove_file(&fake.failure_marker)?;
     pane.send_key(TmuxKey::Enter)?;
     pane.wait_stable_contains("Long-lived token — masked", READY_TIMEOUT)?;
     pane.send_key(TmuxKey::Escape)?;
@@ -240,7 +241,6 @@ fn session_spec(
             .env("CODEX_HOME", codex_home)
             .env("OPENAI_API_KEY", "tmux-claude-auth-openai-fixture")
             .env("PATH", fake.path())
-            .env("CLAUDE_SETUP_FAIL_MARKER", fake.failure_marker.as_os_str())
             .env("RUST_LOG", "trace")
             .arg("-c")
             .arg(format!("log_dir=\"{}\"", log_dir.display()))
@@ -256,7 +256,6 @@ fn session_spec(
 struct FakeClaude {
     _directory: TempDir,
     bin_dir: PathBuf,
-    failure_marker: PathBuf,
 }
 
 impl FakeClaude {
@@ -264,17 +263,10 @@ impl FakeClaude {
         let directory = tempdir()?;
         let bin_dir = directory.path().join("bin");
         fs::create_dir_all(&bin_dir)?;
-        let failure_marker = directory.path().join("fail-setup-token");
         let executable = bin_dir.join("claude");
         fs::write(
             &executable,
             r#"#!/bin/sh
-if [ "$1" = "setup-token" ]; then
-  if [ -f "$CLAUDE_SETUP_FAIL_MARKER" ]; then
-    exit 7
-  fi
-  exit 0
-fi
 if [ "$1 $2 $3" = "auth status --json" ]; then
   printf '{"loggedIn":true,"authMethod":"claude.ai","email":"fixture@example.invalid","subscriptionType":"max"}\n'
   exit 0
@@ -288,7 +280,6 @@ exit 2
         Ok(Self {
             _directory: directory,
             bin_dir,
-            failure_marker,
         })
     }
 

@@ -6,10 +6,11 @@ expression: "render_selection(auth_method_choice_params(), 76)"
   Claude Plan authentication
   Choose one source; Corbanu never falls back to another account.
 
-› Long-lived subscription token (Recommended)  Run `claude setup-token`
-                                               for an approximately one-
-                                               year token (Pro, Max, Team,
-                                               or Enterprise).
+› Long-lived subscription token (Recommended)  Run `claude setup-token` in
+                                               a private terminal, then
+                                               paste its approximately
+                                               one-year token here (Pro,
+                                               Max, Team, or Enterprise).
   Claude Code login                            Use Claude Code's rotating
                                                login state;
                                                reauthorization may be

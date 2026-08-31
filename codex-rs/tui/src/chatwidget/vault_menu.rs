@@ -557,14 +557,14 @@ fn vault_credential_action_items(codex_home: PathBuf, label: String) -> Vec<Sele
     let copy_label = label.clone();
     let replace_label = label.clone();
     let delete_label = label.clone();
-    vec![
-        vault_history_item(
-            "Show metadata",
-            "Inspect metadata only; secret remains hidden",
-            codex_home,
-            format!("show {label}"),
-        ),
-        SelectionItem {
+    let mut items = vec![vault_history_item(
+        "Show metadata",
+        "Inspect metadata only; secret remains hidden",
+        codex_home,
+        format!("show {label}"),
+    )];
+    if label != codex_vault::MANAGED_CLAUDE_TOKEN_LABEL {
+        items.push(SelectionItem {
             name: "Reveal secret".to_string(),
             description: Some("Show raw secret only in a transient secure view".to_string()),
             actions: vec![Box::new(move |tx| {
@@ -574,8 +574,8 @@ fn vault_credential_action_items(codex_home: PathBuf, label: String) -> Vec<Sele
             })],
             dismiss_on_select: true,
             ..Default::default()
-        },
-        SelectionItem {
+        });
+        items.push(SelectionItem {
             name: "Copy secret".to_string(),
             description: Some(
                 "Copy raw secret to clipboard; it is not printed to chat".to_string(),
@@ -587,7 +587,9 @@ fn vault_credential_action_items(codex_home: PathBuf, label: String) -> Vec<Sele
             })],
             dismiss_on_select: true,
             ..Default::default()
-        },
+        });
+    }
+    items.extend([
         SelectionItem {
             name: "Replace secret".to_string(),
             description: Some("Enter a masked replacement for this credential".to_string()),
@@ -610,7 +612,8 @@ fn vault_credential_action_items(codex_home: PathBuf, label: String) -> Vec<Sele
             dismiss_on_select: true,
             ..Default::default()
         },
-    ]
+    ]);
+    items
 }
 
 fn vault_history_item(
@@ -761,6 +764,23 @@ mod tests {
                 "Replace secret",
                 "Delete credential"
             ]
+        );
+    }
+
+    #[test]
+    fn managed_claude_token_actions_are_metadata_only() {
+        let items = vault_credential_action_items(
+            PathBuf::from("/tmp/codex-home"),
+            codex_vault::MANAGED_CLAUDE_TOKEN_LABEL.to_string(),
+        );
+        let names = items
+            .iter()
+            .map(|item| item.name.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            names,
+            vec!["Show metadata", "Replace secret", "Delete credential"]
         );
     }
 }

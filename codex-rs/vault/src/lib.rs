@@ -71,6 +71,8 @@ pub use claude_auth::MACOS_KEYCHAIN_CLAUDE_AUTH_SOURCE_ID;
 pub use claude_auth::MANAGED_CLAUDE_AUTH_SOURCE_ID;
 pub use claude_auth::MANAGED_CLAUDE_TOKEN_LABEL;
 pub use claude_auth::ManagedClaudeTokenStatus;
+pub use claude_auth::claude_code_macos_keychain_service;
+pub use claude_auth::macos_keychain_claude_auth_source_id;
 pub use claude_auth::resolve_claude_auth_source;
 pub use credential_panic::scoped_credential_callback_active;
 

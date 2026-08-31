@@ -6,8 +6,8 @@ expression: "render_selection(auth_recovery_params(\"Selected token missing. Res
   Claude authentication needs attention
   Selected token missing. Restore it or explicitly choose another method.
 
-› Retry long-lived token setup  Run `claude setup-token` again, then save
-                                it securely.
+› Retry long-lived token setup  Run `claude setup-token` in a private
+                                terminal, then return to masked entry.
   Choose authentication method  Return to the explicit source picker.
   Keep current method           Close this message without changing
                                 credentials.

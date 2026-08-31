@@ -47,13 +47,13 @@ const MAX_STREAM_MAX_RETRIES: u64 = 100;
 /// Hard cap for user-configured `request_max_retries`.
 const MAX_REQUEST_MAX_RETRIES: u64 = 100;
 
-fn provider_auth_timeout_ms() -> NonZeroU64 {
+fn claude_provider_auth_timeout_ms() -> NonZeroU64 {
     // Claude Code refresh may itself take up to 30 seconds, and the managed
     // source must unlock the encrypted vault before emitting its token. Keep
-    // the outer provider boundary above both documented inner operations.
+    // only Claude's outer provider boundary above both inner operations.
     match NonZeroU64::new(60_000) {
         Some(timeout_ms) => timeout_ms,
-        None => panic!("provider auth timeout must be non-zero"),
+        None => panic!("Claude provider auth timeout must be non-zero"),
     }
 }
 
@@ -1049,7 +1049,7 @@ impl ModelProviderInfo {
             auth: Some(ModelProviderAuthInfo {
                 command: CORBANU_PROVIDER_AUTH_COMMAND.to_string(),
                 args: vec!["internal-claude-oauth-token".to_string()],
-                timeout_ms: provider_auth_timeout_ms(),
+                timeout_ms: claude_provider_auth_timeout_ms(),
                 refresh_interval_ms: 60_000,
                 cwd: root_absolute_path(),
             }),
