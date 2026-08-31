@@ -1250,6 +1250,41 @@ fn emergency_restriction_fences_immediately_and_exposes_audit_gap() {
 }
 
 #[test]
+fn emergency_restriction_preserves_precise_integrity_root_gap() {
+    for (root_error, expected_gap) in [
+        (
+            IntegrityRootError::Conflict,
+            AuditGapReason::IntegrityRootConflict,
+        ),
+        (
+            IntegrityRootError::Invalid,
+            AuditGapReason::IntegrityRootInvalid,
+        ),
+    ] {
+        let mut fixture = Fixture::new(JournalConfig::default());
+        fixture.append_decision();
+        fixture.roots.fail_store(root_error);
+        let mut state = RevocationState::new();
+        let context = fixture.context();
+        let result = apply_emergency_restriction(
+            &mut state,
+            &kill_event(),
+            &mut fixture.journal,
+            context,
+            None,
+        )
+        .expect("restriction applies before protected-root rejection");
+
+        assert!(state.kill_switch_active);
+        assert_eq!(result.gap, Some(expected_gap));
+        assert_eq!(
+            result.application.audit_status,
+            codex_security_policy::RestrictionAuditStatus::Unavailable
+        );
+    }
+}
+
+#[test]
 fn recorded_restriction_recovers_with_the_controller_state() {
     let mut fixture = Fixture::new(JournalConfig::default());
     fixture.append_decision();

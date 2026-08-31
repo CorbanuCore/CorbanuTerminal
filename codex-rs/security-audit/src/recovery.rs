@@ -91,6 +91,8 @@ impl RecoveryReport {
 pub enum AuditGapReason {
     InvalidEvent,
     StorageUnavailable,
+    IntegrityRootConflict,
+    IntegrityRootInvalid,
     CommitUnknown,
     RecoveryRequired,
     ConcurrentWriter,
@@ -150,6 +152,8 @@ impl From<&JournalError> for AuditGapReason {
             JournalError::StorageUnavailable | JournalError::IntegrityRootUnavailable => {
                 Self::StorageUnavailable
             }
+            JournalError::IntegrityRootConflict => Self::IntegrityRootConflict,
+            JournalError::IntegrityRootInvalid => Self::IntegrityRootInvalid,
             JournalError::CommitUnknown { .. } => Self::CommitUnknown,
             JournalError::RecoveryRequired | JournalError::ReconciliationRequired => {
                 Self::RecoveryRequired
@@ -161,8 +165,6 @@ impl From<&JournalError> for AuditGapReason {
             | JournalError::InvalidConfig
             | JournalError::WrongEventKind
             | JournalError::AmbiguousCommitMismatch
-            | JournalError::IntegrityRootConflict
-            | JournalError::IntegrityRootInvalid
             | JournalError::Serialization => Self::InvalidEvent,
         }
     }

@@ -107,7 +107,7 @@ Exact-commit final artifacts for `3f8cef302caaf9658a84b7c488c08cead50a6402`:
 - fixture log: `test-fixture-final-4.log`, SHA-256
   `33060fd73862c5e1af97335504d5b45211fce6d229657f556d8deceeadc52ce4`.
 - governance test log: `test-governance-final-4.log`, SHA-256
-  `6088abc864f7d56c5fe6b87bf1e29d29b5316cd06831624ef6f758ff86d337`.
+  `6088abc864f7d56c5fe6b87bf1e29d29d2b5316cd06831624ef6f758ff86d337`.
 - isolated manifest with the exact root Clippy deny set: `harness/Cargo.toml`,
   SHA-256
   `b1de95677cf4f772334b66a7be5d07b0de7146643034ef31f901bccc941066e9`.
