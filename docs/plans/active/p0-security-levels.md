@@ -771,7 +771,7 @@ incomplete; do not substitute a wrapper heuristic or optional hosted service.
 
 ## Implementation sequence
 
-Use the [54-record current index](../../sprints/current/p0-security-levels/index.md)
+Use the [52-record current index](../../sprints/current/p0-security-levels/index.md)
 for exact dependencies. Bounded parallel allocations follow the sprint process;
 reading order is not a serial lock. Including 24 completed archives, the graph
 has 76 nodes; exact merged-tree ordering is maintained by the checked current

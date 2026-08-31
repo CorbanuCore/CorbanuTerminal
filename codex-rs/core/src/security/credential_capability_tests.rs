@@ -900,6 +900,40 @@ fn trusted_settlement_rejects_forgery_and_unknown_usage_charges_the_full_reserva
 }
 
 #[test]
+fn cancellation_after_dispatch_charges_the_full_reservation() {
+    let revocations = RevocationState::new();
+    let store = store(4, TestClock::new(100));
+    let request = standard_metered_request(&revocations);
+    let capability = store
+        .issue(request.clone(), &revocations)
+        .expect("issue capability");
+    let reservation = store
+        .reserve(
+            &capability,
+            &request,
+            usage(
+                /*requests*/ 1, /*tokens*/ 100, /*bytes*/ 1_000, /*spend*/ 100,
+            ),
+            &revocations,
+        )
+        .expect("reserve usage");
+
+    store
+        .authorize_reservation_dispatch(&reservation, &revocations)
+        .expect("authorize dispatch");
+    let settlement = store
+        .settle(
+            &reservation,
+            TrustedCredentialMetering::cancelled(),
+            &revocations,
+        )
+        .expect("settle post-dispatch cancellation");
+
+    assert_eq!(settlement.outcome, CredentialUsageOutcome::Cancelled);
+    assert_eq!(settlement.charged, reservation.reserved());
+}
+
+#[test]
 fn settled_history_does_not_consume_active_reservation_capacity() {
     let revocations = RevocationState::new();
     let store = store(4, TestClock::new(100));

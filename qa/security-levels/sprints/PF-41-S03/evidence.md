@@ -341,7 +341,7 @@ evidence record's commit.
   `//codex-rs/security-audit:security-audit-unit-tests` and
   `//codex-rs/security-audit:security-audit-consumer_contract-test` both passed.
 - Consumed PF-19/PF-20 regression gates passed: security-policy 47/47,
-  configuration 229/229, Core `config::` 487/487, and Core `security::` 50/50.
+  configuration 229/229, Core `config::` 487/487, and Core `security::` 51/51.
 - No producer, consumer, runtime route or protected profile was registered.
   PF-20 and later consumers retain every live-adapter obligation above.
 

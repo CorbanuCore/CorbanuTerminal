@@ -130,7 +130,7 @@ validated the combined tree based on merge commit
 registration/archive diff contained by this evidence record's commit.
 
 - `cargo test -p codex-security-policy`: 47/47 passed.
-- `cargo test -p codex-core security::`: 50/50 passed, including all 17 focused
+- `cargo test -p codex-core security::`: 51/51 passed, including all 18 focused
   credential-capability cases.
 - `cargo test -p codex-config`: 229/229 passed; `cargo test -p codex-core
   config::`: 487/487 passed.
