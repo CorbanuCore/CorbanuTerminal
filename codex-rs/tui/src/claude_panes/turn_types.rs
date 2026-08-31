@@ -186,6 +186,7 @@ pub(crate) struct ClaudeBridgePlan {
     pub(crate) kind: ClaudeBridgeKind,
     pub(crate) listener: StdTcpListener,
     pub(crate) bind_addr: SocketAddr,
+    pub(crate) client_auth_token: String,
     pub(crate) upstream_base_url: String,
     pub(crate) upstream_api_key: Option<String>,
     pub(crate) deferred_vault_secret: Option<DeferredVaultSecret>,
@@ -208,6 +209,7 @@ pub(crate) struct DeferredClaudePlanAuth {
 pub(crate) enum ClaudeBridgeKind {
     AmbientChat,
     AnthropicPassthrough,
+    AnthropicOauthPassthrough,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -100,7 +100,7 @@ pub(crate) fn build_claude_command_plan(
             .context("failed to read Claude bridge listener address")?;
         let (kind, upstream_base_url, upstream_model, deferred_vault_secret) = match profile.kind {
             ClaudeProviderProfileKind::ClaudePlan => (
-                ClaudeBridgeKind::AnthropicPassthrough,
+                ClaudeBridgeKind::AnthropicOauthPassthrough,
                 "https://api.anthropic.com".to_string(),
                 profile.provider_model.to_string(),
                 None,
@@ -158,6 +158,7 @@ pub(crate) fn build_claude_command_plan(
             kind,
             listener,
             bind_addr,
+            client_auth_token: Uuid::new_v4().to_string(),
             upstream_base_url,
             upstream_api_key: None,
             deferred_vault_secret,
@@ -196,12 +197,12 @@ pub(crate) fn build_claude_command_plan(
     if let Some(base_url) = base_url_override.as_deref().or(profile.base_url) {
         env.insert("ANTHROPIC_BASE_URL".to_string(), base_url.to_string());
     }
-    if bridge.is_some() {
+    if let Some(bridge) = bridge.as_ref() {
         env_remove.extend(ANTHROPIC_AUTH_ENV_KEYS.map(ToString::to_string));
         env.insert("ANTHROPIC_API_KEY".to_string(), String::new());
         env.insert(
             "ANTHROPIC_AUTH_TOKEN".to_string(),
-            "pfterminal-local-bridge".to_string(),
+            bridge.client_auth_token.clone(),
         );
     } else if profile.vault_label.is_some() {
         env_remove.extend(ANTHROPIC_AUTH_ENV_KEYS.map(ToString::to_string));

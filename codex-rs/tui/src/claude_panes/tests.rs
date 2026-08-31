@@ -1498,14 +1498,16 @@ fn claude_plan_generated_settings_route_through_the_local_credential_bridge() {
     );
     assert_eq!(settings.pointer("/apiKeyHelper"), None);
     let bridge = plan.bridge.as_ref().expect("Claude Plan bridge");
-    assert_eq!(bridge.kind, ClaudeBridgeKind::AnthropicPassthrough);
+    assert_eq!(bridge.kind, ClaudeBridgeKind::AnthropicOauthPassthrough);
     assert_eq!(bridge.upstream_base_url, "https://api.anthropic.com");
     assert!(bridge.upstream_api_key.is_none());
     assert!(bridge.deferred_vault_secret.is_none());
-    assert_eq!(
-        plan.env.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str),
-        Some("pfterminal-local-bridge")
-    );
+    let client_auth_token = plan
+        .env
+        .get("ANTHROPIC_AUTH_TOKEN")
+        .expect("per-turn bridge credential");
+    assert_eq!(client_auth_token, &bridge.client_auth_token);
+    assert!(Uuid::parse_str(client_auth_token).is_ok());
 }
 
 #[tokio::test]
@@ -1533,23 +1535,43 @@ async fn anthropic_passthrough_bridge_replaces_client_auth_and_forwards_oauth_be
         .expect("bind credential bridge");
     let bridge_addr = bridge_listener.local_addr().expect("bridge address");
     let bridge = tokio::spawn(async move {
-        let (stream, _) = bridge_listener.accept().await.expect("accept bridge");
-        handle_anthropic_passthrough_bridge_connection(
-            stream,
-            Arc::new("bridge-upstream-secret-not-real".to_string()),
-            Arc::new(format!("http://{upstream_addr}")),
-            reqwest::Client::new(),
+        for _ in 0..2 {
+            let (stream, _) = bridge_listener.accept().await.expect("accept bridge");
+            handle_anthropic_passthrough_bridge_connection(
+                stream,
+                Arc::new("local-bridge-capability".to_string()),
+                Arc::new("bridge-upstream-secret-not-real".to_string()),
+                Arc::new(format!("http://{upstream_addr}")),
+                reqwest::Client::new(),
+                /*proxy_count_tokens*/ true,
+            )
+            .await
+            .expect("proxy request");
+        }
+    });
+
+    let mut unauthorized_client = TcpStream::connect(bridge_addr)
+        .await
+        .expect("connect unauthorized client");
+    unauthorized_client
+        .write_all(
+            b"POST /v1/messages/count_tokens HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer wrong-capability\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
         )
         .await
-        .expect("proxy request");
-    });
+        .expect("write unauthorized request");
+    let mut unauthorized_response = Vec::new();
+    unauthorized_client
+        .read_to_end(&mut unauthorized_response)
+        .await
+        .expect("read unauthorized response");
+    assert!(String::from_utf8_lossy(&unauthorized_response).starts_with("HTTP/1.1 401"));
 
     let mut client = TcpStream::connect(bridge_addr)
         .await
         .expect("connect to bridge");
     client
         .write_all(
-            b"POST /v1/messages HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer local-bridge-sentinel\r\nAnthropic-Version: 2023-06-01\r\nAnthropic-Beta: oauth-2025-04-20\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+            b"POST /v1/messages/count_tokens HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer local-bridge-capability\r\nAnthropic-Version: 2023-06-01\r\nAnthropic-Beta: oauth-2025-04-20\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
         )
         .await
         .expect("write bridge request");
@@ -1564,7 +1586,8 @@ async fn anthropic_passthrough_bridge_replaces_client_auth_and_forwards_oauth_be
     let upstream_request = String::from_utf8(upstream_request).expect("UTF-8 upstream request");
     let upstream_request = upstream_request.to_ascii_lowercase();
     assert!(upstream_request.contains("authorization: bearer bridge-upstream-secret-not-real"));
-    assert!(!upstream_request.contains("local-bridge-sentinel"));
+    assert!(!upstream_request.contains("local-bridge-capability"));
+    assert!(upstream_request.starts_with("post /v1/messages/count_tokens http/1.1"));
     assert!(upstream_request.contains("anthropic-beta: oauth-2025-04-20"));
     assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200 OK"));
 }
@@ -2247,10 +2270,12 @@ fn vercel_fast_command_plan_uses_count_tokens_passthrough_bridge() {
             .map(|secret| secret.label.as_str()),
         Some("provider/ai_gateway_api_key")
     );
-    assert_eq!(
-        plan.env.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str),
-        Some("pfterminal-local-bridge")
-    );
+    let client_auth_token = plan
+        .env
+        .get("ANTHROPIC_AUTH_TOKEN")
+        .expect("per-turn bridge credential");
+    assert_eq!(client_auth_token, &bridge.client_auth_token);
+    assert!(Uuid::parse_str(client_auth_token).is_ok());
     assert!(
         plan.env_remove
             .iter()
@@ -2386,6 +2411,7 @@ fn bridge_redaction_plan(
             kind: ClaudeBridgeKind::AnthropicPassthrough,
             listener,
             bind_addr,
+            client_auth_token: "bridge-test-client-token".to_string(),
             upstream_base_url: "https://example.invalid".to_string(),
             upstream_api_key: Some(secret.to_string()),
             deferred_vault_secret: None,
@@ -2427,7 +2453,8 @@ async fn claude_plan_pane_brokers_selected_auth_without_inheriting_the_token() {
         concat!(
             "#!/bin/sh\nset -eu\n",
             "[ -z \"${CLAUDE_CODE_OAUTH_TOKEN+x}\" ] || exit 7\n",
-            "[ \"$ANTHROPIC_AUTH_TOKEN\" = \"pfterminal-local-bridge\" ] || exit 8\n",
+            "[ -n \"$ANTHROPIC_AUTH_TOKEN\" ] || exit 8\n",
+            "[ \"$ANTHROPIC_AUTH_TOKEN\" != \"pane-auth-secret-canary-not-real\" ] || exit 11\n",
             "case \"$ANTHROPIC_BASE_URL\" in http://127.0.0.1:*) ;; *) exit 9 ;; esac\n",
             "env | grep -F 'pane-auth-secret-canary-not-real' >/dev/null && exit 10\n",
             "printf '{\"type\":\"result\",\"subtype\":\"success\",",
