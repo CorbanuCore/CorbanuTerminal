@@ -449,7 +449,14 @@ impl Vault {
                     label: MANAGED_CLAUDE_TOKEN_LABEL.to_string(),
                 })?;
             let token = Zeroizing::new(token);
-            Ok(use_token(token.as_str()))
+            let _panic_guard = crate::credential_panic::ScopedCredentialPanicGuard::enter();
+            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                use_token(token.as_str())
+            }));
+            drop(token);
+            outcome.map_err(|_| {
+                VaultError::Storage(anyhow::anyhow!("managed Claude token callback panicked"))
+            })
         })
     }
 

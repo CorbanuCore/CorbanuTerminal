@@ -48,6 +48,7 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
         codex_home.path(),
         &log_dir,
         &fake,
+        None,
     ))?;
     let pane = session.primary_pane();
     pane.wait_stable_contains("Corbanu Terminal", READY_TIMEOUT)?;
@@ -100,6 +101,7 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
         codex_home.path(),
         &log_dir,
         &fake,
+        None,
     ))?;
     let resumed_pane = resumed.primary_pane();
     resumed_pane.wait_stable_contains("Corbanu Terminal", READY_TIMEOUT)?;
@@ -150,6 +152,8 @@ fn tmux_claude_auth_compatibility_selects_existing_login() -> Result<()> {
     fs::create_dir_all(&log_dir)?;
     write_test_config(codex_home.path(), &repo_root)?;
     let fake = FakeClaude::new()?;
+    let login_fixture = CompatibilityLoginFixture::new()?;
+    login_fixture.verify_hidden_health_command(&codex)?;
 
     let tmux = TmuxServer::start("tmux_claude_auth_compatibility")?;
     tmux.register_artifact("config.toml", codex_home.path().join("config.toml"));
@@ -161,6 +165,7 @@ fn tmux_claude_auth_compatibility_selects_existing_login() -> Result<()> {
         codex_home.path(),
         &log_dir,
         &fake,
+        Some(&login_fixture),
     ))?;
     let pane = session.primary_pane();
     pane.wait_stable_contains("Corbanu Terminal", READY_TIMEOUT)?;
@@ -233,24 +238,100 @@ fn session_spec(
     codex_home: &Path,
     log_dir: &Path,
     fake: &FakeClaude,
+    login_fixture: Option<&CompatibilityLoginFixture>,
 ) -> SessionSpec {
+    let mut command = CommandSpec::new(codex.to_path_buf())
+        .env("CODEX_HOME", codex_home)
+        .env("OPENAI_API_KEY", "tmux-claude-auth-openai-fixture")
+        .env("PATH", fake.path())
+        .env("RUST_LOG", "trace")
+        .arg("-c")
+        .arg(format!("log_dir=\"{}\"", log_dir.display()))
+        .arg("-c")
+        .arg("analytics.enabled=false")
+        .arg("--no-alt-screen")
+        .arg("-C")
+        .arg(repo_root);
+    if let Some(login_fixture) = login_fixture {
+        command = login_fixture.apply_to(command);
+    }
     SessionSpec::new(
         name,
         TerminalSize::new(/*columns*/ 140, /*rows*/ 44),
-        CommandSpec::new(codex.to_path_buf())
-            .env("CODEX_HOME", codex_home)
-            .env("OPENAI_API_KEY", "tmux-claude-auth-openai-fixture")
-            .env("PATH", fake.path())
-            .env("RUST_LOG", "trace")
-            .arg("-c")
-            .arg(format!("log_dir=\"{}\"", log_dir.display()))
-            .arg("-c")
-            .arg("analytics.enabled=false")
-            .arg("--no-alt-screen")
-            .arg("-C")
-            .arg(repo_root),
+        command,
     )
     .current_dir(repo_root)
+}
+
+struct CompatibilityLoginFixture {
+    _directory: TempDir,
+    home: PathBuf,
+    config_dir: PathBuf,
+    security_executable: PathBuf,
+}
+
+impl CompatibilityLoginFixture {
+    fn new() -> Result<Self> {
+        let directory = tempdir()?;
+        let home = directory.path().join("home");
+        let config_dir = directory.path().join("claude-profile");
+        fs::create_dir_all(&home)?;
+        fs::create_dir_all(&config_dir)?;
+        let credentials = r#"{"claudeAiOauth":{"accessToken":"fixture-access","refreshToken":"fixture-refresh","expiresAt":4102444800000,"scopes":["user:profile","user:inference"]}}"#;
+        fs::write(config_dir.join(".credentials.json"), credentials)?;
+
+        let security_executable = directory.path().join("security-fixture");
+        fs::write(
+            &security_executable,
+            format!(
+                "#!/bin/sh\n[ \"$1\" = \"find-generic-password\" ] || exit 2\nprintf '%s\\n' '{credentials}'\n"
+            ),
+        )?;
+        let mut permissions = fs::metadata(&security_executable)?.permissions();
+        permissions.set_mode(0o700);
+        fs::set_permissions(&security_executable, permissions)?;
+
+        Ok(Self {
+            _directory: directory,
+            home,
+            config_dir,
+            security_executable,
+        })
+    }
+
+    fn apply_to(&self, command: CommandSpec) -> CommandSpec {
+        command
+            .env("HOME", &self.home)
+            .env("USER", "corbanu-claude-auth-fixture")
+            .env("CLAUDE_CONFIG_DIR", &self.config_dir)
+            .env(
+                "CORBANU_TEST_CLAUDE_SECURITY_EXECUTABLE",
+                &self.security_executable,
+            )
+    }
+
+    fn verify_hidden_health_command(&self, codex: &Path) -> Result<()> {
+        let output = Command::new(codex)
+            .env("HOME", &self.home)
+            .env("USER", "corbanu-claude-auth-fixture")
+            .env("CLAUDE_CONFIG_DIR", &self.config_dir)
+            .env(
+                "CORBANU_TEST_CLAUDE_SECURITY_EXECUTABLE",
+                &self.security_executable,
+            )
+            .arg("internal-claude-login-health")
+            .output()
+            .context("run hidden Claude login health command against isolated fixture")?;
+        ensure!(
+            output.status.success(),
+            "isolated Claude login fixture failed hidden health verification"
+        );
+        ensure!(
+            output.stdout.is_empty(),
+            "hidden Claude login health command exposed fixture credential data"
+        );
+        Ok(())
+    }
 }
 
 struct FakeClaude {
@@ -323,19 +404,20 @@ fn tree_contains(root: &Path, needle: &[u8]) -> Result<bool> {
 }
 
 fn codex_binary(repo_root: &Path) -> Result<PathBuf> {
-    if let Ok(path) = codex_utils_cargo_bin::cargo_bin("codex") {
-        return Ok(path);
+    for binary in ["corbanu", "pfterminal", "codex"] {
+        if let Ok(path) = codex_utils_cargo_bin::cargo_bin(binary) {
+            return Ok(path);
+        }
     }
-    if let Ok(path) = codex_utils_cargo_bin::cargo_bin("codex-tui") {
-        return Ok(path);
-    }
-    for binary in ["codex", "codex-tui"] {
+    for binary in ["corbanu", "pfterminal", "codex"] {
         let fallback = repo_root.join("codex-rs/target/debug").join(binary);
         if fallback.is_file() {
             return Ok(fallback);
         }
     }
-    anyhow::bail!("Corbanu TUI binary is unavailable; build `codex` or `codex-tui` first")
+    anyhow::bail!(
+        "Corbanu CLI binary with internal Claude-auth helpers is unavailable; build `corbanu` first"
+    )
 }
 
 fn write_test_config(codex_home: &Path, repo_root: &Path) -> Result<()> {

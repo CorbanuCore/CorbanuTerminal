@@ -44,6 +44,14 @@ This activation allocates a plan and branch only. It does not create an
 implementation sprint or authorize edits outside a future `ready` or
 `in_progress` single-feature sprint.
 
+Coordination commit `f36c28770` is a lifecycle-only mirror of the finalized
+PF-13-S06 and PF-41-S03 allocation state from committed main. The isolated
+Claude-auth branch does not contain or re-qualify those features' product code
+or evidence; their completed/archive claims are valid only when this delivery
+is integrated onto the main lineage that already contains that work. The mirror
+predates every CSA sprint and remains outside PF-46's literal scope because the
+active P0 records are already owned by PF-35's disjoint live scope.
+
 ## User pain
 
 Claude Plan works until the shared Claude Code OAuth record loses or rotates its

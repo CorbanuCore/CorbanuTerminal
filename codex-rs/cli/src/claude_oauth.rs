@@ -265,7 +265,20 @@ async fn resolve_current_platform_claude_oauth_access_token() -> Result<String> 
 /// compatibility selection so a superficial CLI status cannot commit an unhealthy source.
 pub(crate) async fn verify_current_platform_claude_login_health() -> Result<()> {
     let config_dir = claude_config_dir()?;
-    verify_claude_login_health(&config_dir, CURRENT_PLATFORM_STORE, /*security*/ None).await
+    let security = claude_test_security_executable();
+    verify_claude_login_health(&config_dir, CURRENT_PLATFORM_STORE, security.as_deref()).await
+}
+
+#[cfg(all(target_os = "macos", debug_assertions))]
+fn claude_test_security_executable() -> Option<PathBuf> {
+    std::env::var_os("CORBANU_TEST_CLAUDE_SECURITY_EXECUTABLE")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+
+#[cfg(not(all(target_os = "macos", debug_assertions)))]
+fn claude_test_security_executable() -> Option<PathBuf> {
+    None
 }
 
 async fn verify_claude_login_health(

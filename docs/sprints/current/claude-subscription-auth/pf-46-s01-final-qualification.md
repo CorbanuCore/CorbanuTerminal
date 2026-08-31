@@ -40,6 +40,13 @@ updated: 2026-08-30
   documentation, compact QA/review evidence, and remote branch verification.
 - Tests: affected Rust crates, typed tmux state-machine suite, secret scans,
   structured branch autoreview, and Corbanu Terminal Opus 5 Max review.
+- Coordination-only: pre-sprint commit `f36c28770` mirrors P0 lifecycle state
+  solely so global allocation accounting matches committed main. Its paths are
+  intentionally excluded from PF-46's feature scope because adding the active
+  P0 records would overlap PF-35's live literal scope. This isolated branch does
+  not contain or re-qualify PF-13-S06 or PF-41-S03 product code/evidence; those
+  archive claims become valid only when integrated onto the main lineage that
+  already contains their implementation.
 
 ## Preconditions
 

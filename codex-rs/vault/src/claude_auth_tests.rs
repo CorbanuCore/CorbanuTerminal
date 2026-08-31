@@ -4,6 +4,7 @@ use codex_keyring_store::tests::MockKeyringStore;
 use pretty_assertions::assert_eq;
 
 use super::*;
+use crate::scoped_credential_callback_active;
 
 fn test_vault() -> (tempfile::TempDir, Vault) {
     let directory = tempfile::tempdir().expect("tempdir");
@@ -81,6 +82,37 @@ fn relative_credentials_file_identity_is_bound_to_the_callers_working_directory(
     .unwrap();
 
     assert_eq!(relative, absolute);
+}
+
+#[test]
+fn managed_token_callback_activates_the_secret_bearing_panic_guard() {
+    let (_directory, vault) = test_vault();
+    vault
+        .store_managed_claude_subscription_token("fixture-managed-token".to_string())
+        .unwrap();
+
+    let guard_was_active = vault
+        .with_managed_claude_subscription_token(|_| scoped_credential_callback_active())
+        .unwrap();
+
+    assert!(guard_was_active);
+    assert!(!scoped_credential_callback_active());
+}
+
+#[test]
+fn managed_token_callback_panic_is_contained_without_formatting_its_payload() {
+    let (_directory, vault) = test_vault();
+    vault
+        .store_managed_claude_subscription_token("fixture-managed-token".to_string())
+        .unwrap();
+
+    let error = vault
+        .with_managed_claude_subscription_token(|_| -> () { panic!("managed-token-panic-canary") })
+        .unwrap_err();
+
+    assert!(error.to_string().contains("callback panicked"));
+    assert!(!error.to_string().contains("managed-token-panic-canary"));
+    assert!(!scoped_credential_callback_active());
 }
 
 #[test]
