@@ -1,6 +1,7 @@
 //! Task Node menu, terminal auth, and task actions.
 
 use super::*;
+use codex_config::ConfigLayerSource;
 use codex_vault::Vault;
 use ratatui::text::Span;
 use ratatui::widgets::Paragraph;
@@ -45,13 +46,19 @@ impl TaskNodeMenuCountsCache {
 impl ChatWidget {
     pub(crate) fn open_tasknode_menu(&mut self) {
         let codex_home = self.config.codex_home.as_path().to_path_buf();
-        let state = load_tasknode_local_state(&codex_home);
+        let scope = tasknode_session_scope(&self.config);
+        let state = load_tasknode_local_state(&codex_home, &scope);
         let counts = self.tasknode_menu_counts.clone();
         let should_refresh_counts = state
             .as_ref()
             .is_ok_and(|state| state.active.as_ref().is_some_and(|a| !a.is_expired()));
         self.show_or_replace_tasknode_selection(TASKNODE_MENU_VIEW_ID, || {
-            tasknode_menu_params(state, counts.as_ref(), /*refresh_error*/ None)
+            tasknode_menu_params(
+                state,
+                scope.profile(),
+                counts.as_ref(),
+                /*refresh_error*/ None,
+            )
         });
         if should_refresh_counts {
             self.tasknode_menu_poll_generation = self.tasknode_menu_poll_generation.wrapping_add(1);
@@ -101,6 +108,7 @@ impl ChatWidget {
             /*hint*/ None,
         );
         let codex_home = self.config.codex_home.as_path().to_path_buf();
+        let scope = tasknode_session_scope(&self.config);
         let tx = self.app_event_tx.clone();
         let spawn_result = std::thread::Builder::new()
             .name("tasknode-link".to_string())
@@ -119,8 +127,9 @@ impl ChatWidget {
                             verification_url: started.verification_url.clone(),
                             started_at: unix_timestamp_string(),
                         };
-                        codex_tasknode_session::save_pending(
+                        codex_tasknode_session::save_pending_scoped(
                             &Vault::new(codex_home.clone()),
+                            &scope,
                             &pending,
                         )
                         .map_err(|err| format!("Failed to store Task Node link request: {err}"))?;
@@ -931,6 +940,7 @@ impl ChatWidget {
 
     pub(crate) fn logout_tasknode(&mut self) {
         let codex_home = self.config.codex_home.as_path().to_path_buf();
+        let scope = tasknode_session_scope(&self.config);
         self.tasknode_menu_counts = None;
         self.tasknode_menu_poll_generation = self.tasknode_menu_poll_generation.wrapping_add(1);
         self.add_info_message(
@@ -941,7 +951,7 @@ impl ChatWidget {
         let spawn_result = std::thread::Builder::new()
             .name("tasknode-logout".to_string())
             .spawn(move || {
-                let state = load_tasknode_local_state(&codex_home)
+                let state = load_tasknode_local_state(&codex_home, &scope)
                     .ok()
                     .unwrap_or_default();
                 let revoke_error = state
@@ -949,14 +959,15 @@ impl ChatWidget {
                     .as_ref()
                     .map(|active| active.terminal_token.clone())
                     .and_then(|token| TaskNodeClient::new(token).revoke().err());
-                let result = codex_tasknode_session::clear_all(&Vault::new(codex_home))
-                    .map(|_| match revoke_error {
-                        Some(error) => format!(
-                            "Task Node session removed locally; remote revoke failed: {error}"
-                        ),
-                        None => "Task Node session removed.".to_string(),
-                    })
-                    .map_err(|err| format!("Failed to remove Task Node session: {err}"));
+                let result =
+                    codex_tasknode_session::clear_all_scoped(&Vault::new(codex_home), &scope)
+                        .map(|_| match revoke_error {
+                            Some(error) => format!(
+                                "Task Node session removed locally; remote revoke failed: {error}"
+                            ),
+                            None => "Task Node session removed.".to_string(),
+                        })
+                        .map_err(|err| format!("Failed to remove Task Node session: {err}"));
                 tx.send(AppEvent::TaskNodeLogoutResult { result });
             });
         if let Err(err) = spawn_result {
@@ -978,11 +989,12 @@ impl ChatWidget {
         event: impl FnOnce(Result<Value, String>) -> AppEvent + Send + 'static,
     ) {
         let codex_home = self.config.codex_home.as_path().to_path_buf();
+        let scope = tasknode_session_scope(&self.config);
         let tx = self.app_event_tx.clone();
         let spawn_result = std::thread::Builder::new()
             .name(format!("tasknode-{label}"))
             .spawn(move || {
-                let result = tasknode_client_for_codex_home(&codex_home).and_then(fetch);
+                let result = tasknode_client_for_codex_home(&codex_home, &scope).and_then(fetch);
                 tx.send(event(result));
             });
         if let Err(err) = spawn_result {
@@ -1019,7 +1031,8 @@ impl ChatWidget {
 
     fn has_linked_tasknode_session(&self) -> bool {
         let codex_home = self.config.codex_home.as_path().to_path_buf();
-        load_tasknode_local_state(&codex_home)
+        let scope = tasknode_session_scope(&self.config);
+        load_tasknode_local_state(&codex_home, &scope)
             .is_ok_and(|state| state.active.as_ref().is_some_and(|a| !a.is_expired()))
     }
 
@@ -1028,9 +1041,15 @@ impl ChatWidget {
             return;
         }
         let codex_home = self.config.codex_home.as_path().to_path_buf();
-        let state = load_tasknode_local_state(&codex_home);
+        let scope = tasknode_session_scope(&self.config);
+        let state = load_tasknode_local_state(&codex_home, &scope);
         let counts = self.tasknode_menu_counts.clone();
-        let params = tasknode_menu_params(state, counts.as_ref(), refresh_error.as_deref());
+        let params = tasknode_menu_params(
+            state,
+            scope.profile(),
+            counts.as_ref(),
+            refresh_error.as_deref(),
+        );
         let _ = self
             .bottom_pane
             .replace_selection_view_if_active(TASKNODE_MENU_VIEW_ID, params);
@@ -1051,13 +1070,21 @@ impl ChatWidget {
         message: String,
     ) {
         let codex_home = self.config.codex_home.as_path().to_path_buf();
+        let scope = tasknode_session_scope(&self.config);
         let tx = self.app_event_tx.clone();
         let spawn_result = std::thread::Builder::new()
             .name("tasknode-chat-stream".to_string())
             .spawn(move || {
-                let result = tasknode_client_for_codex_home(&codex_home).and_then(|client| {
-                    client.stream_chat(&conversation_id, &message, &stream_id, &title, tx.clone())
-                });
+                let result =
+                    tasknode_client_for_codex_home(&codex_home, &scope).and_then(|client| {
+                        client.stream_chat(
+                            &conversation_id,
+                            &message,
+                            &stream_id,
+                            &title,
+                            tx.clone(),
+                        )
+                    });
                 tx.send(AppEvent::TaskNodeChatStreamDone {
                     stream_id,
                     conversation_id,
@@ -1111,8 +1138,11 @@ fn tasknode_should_open_browser() -> bool {
     }
 }
 
-fn tasknode_client_for_codex_home(codex_home: &std::path::Path) -> Result<TaskNodeClient, String> {
-    let session = ensure_tasknode_session(codex_home).map_err(|err| err.to_string())?;
+fn tasknode_client_for_codex_home(
+    codex_home: &std::path::Path,
+    scope: &codex_tasknode_session::SessionScope,
+) -> Result<TaskNodeClient, String> {
+    let session = ensure_tasknode_session(codex_home, scope).map_err(|err| err.to_string())?;
     Ok(TaskNodeClient::new(session.terminal_token))
 }
 
@@ -1171,6 +1201,7 @@ fn tasknode_error_selection_params(
 
 fn tasknode_menu_params(
     state: Result<codex_tasknode_session::LocalState, TaskNodeLocalError>,
+    profile: Option<&str>,
     counts: Option<&TaskNodeMenuCountsCache>,
     refresh_error: Option<&str>,
 ) -> SelectionViewParams {
@@ -1180,6 +1211,9 @@ fn tasknode_menu_params(
         "GitHub-linked tasks, rewards, and account status.".dim(),
     ));
     header.push(Line::from(format!("Origin: {}", tasknode_origin()).dim()));
+    if let Some(profile) = profile {
+        header.push(Line::from(format!("Corbanu profile: {profile}").dim()));
+    }
     let linked = state
         .as_ref()
         .is_ok_and(|state| state.active.as_ref().is_some_and(|a| !a.is_expired()));
@@ -2613,8 +2647,9 @@ fn tasknode_response_hint(value: &Value) -> Option<String> {
 
 fn load_tasknode_local_state(
     codex_home: &Path,
+    scope: &codex_tasknode_session::SessionScope,
 ) -> Result<codex_tasknode_session::LocalState, TaskNodeLocalError> {
-    codex_tasknode_session::load(&Vault::new(codex_home.to_path_buf()))
+    codex_tasknode_session::load_scoped(&Vault::new(codex_home.to_path_buf()), scope)
         .map_err(|err| TaskNodeLocalError::Vault(err.to_string()))
 }
 
@@ -2626,8 +2661,9 @@ fn load_tasknode_local_state(
 /// so unproven authority never replaces stored state.
 fn ensure_tasknode_session(
     codex_home: &Path,
+    scope: &codex_tasknode_session::SessionScope,
 ) -> Result<codex_tasknode_session::ActiveSession, TaskNodeLocalError> {
-    let state = load_tasknode_local_state(codex_home)?;
+    let state = load_tasknode_local_state(codex_home, scope)?;
     // Only a *fresh* active session wins outright. An expired one must not
     // shadow a completable link attempt: sending its dead token would just
     // bounce off the server with an unhelpful 401.
@@ -2655,8 +2691,9 @@ fn ensure_tasknode_session(
                         "issued Task Node token failed validation; keeping link pending: {err}"
                     ))
                 })?;
-            codex_tasknode_session::promote_active(
+            codex_tasknode_session::promote_active_scoped(
                 &Vault::new(codex_home.to_path_buf()),
+                scope,
                 &candidate,
             )
             .map_err(|err| TaskNodeLocalError::Vault(err.to_string()))?;
@@ -2668,13 +2705,31 @@ fn ensure_tasknode_session(
         Err(TaskNodeClientError::Gone(message)) => {
             // The server no longer recognizes this attempt (expired or already
             // consumed). Clearing it cannot lose authority: it never held any.
-            let _ = codex_tasknode_session::clear_pending(&Vault::new(codex_home.to_path_buf()));
+            let _ = codex_tasknode_session::clear_pending_scoped(
+                &Vault::new(codex_home.to_path_buf()),
+                scope,
+            );
             Err(TaskNodeLocalError::Client(format!(
                 "Task Node link attempt expired ({message}). Run /tasknode link to start again."
             )))
         }
         Err(err) => Err(TaskNodeLocalError::Client(err.to_string())),
     }
+}
+
+fn tasknode_session_scope(
+    config: &crate::legacy_core::config::Config,
+) -> codex_tasknode_session::SessionScope {
+    let profile = config
+        .config_layer_stack
+        .get_active_user_layer()
+        .and_then(|layer| match layer.metadata().name {
+            ConfigLayerSource::User { profile, .. } => profile,
+            _ => None,
+        });
+    profile
+        .map(codex_tasknode_session::SessionScope::for_profile)
+        .unwrap_or_default()
 }
 
 fn unix_timestamp_string() -> Option<String> {
@@ -3472,6 +3527,35 @@ struct TaskNodeChatUsage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn tasknode_menu_renders_the_selected_profile_scope() {
+        let (mut chat, _tx, _event_rx, _op_rx) =
+            crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+        let profile = "goodalexander"
+            .parse::<codex_config::ProfileV2Name>()
+            .expect("valid profile");
+        let profile_path = crate::legacy_core::config::resolve_profile_v2_config_path(
+            chat.config.codex_home.as_path(),
+            &profile,
+        );
+        chat.config.config_layer_stack = chat
+            .config
+            .config_layer_stack
+            .with_user_config_profile(
+                &profile_path,
+                Some(&profile),
+                toml::Value::Table(Default::default()),
+            )
+            .expect("install profile layer");
+
+        chat.open_tasknode_menu();
+        let rendered =
+            crate::chatwidget::tests::helpers::render_bottom_popup(&chat, /*width*/ 84);
+
+        assert!(rendered.contains("Corbanu profile: goodalexander"));
+        assert!(!rendered.contains("secondfoundation"));
+    }
 
     #[test]
     fn tasknode_sse_parser_handles_delta_and_done_events() {

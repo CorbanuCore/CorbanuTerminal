@@ -1594,6 +1594,9 @@ async fn cli_main(
                 &mut tasknode_cli.config_overrides,
                 root_config_overrides.clone(),
             );
+            if tasknode_cli.config_profile.is_none() {
+                tasknode_cli.config_profile = interactive.config_profile_v2.clone();
+            }
             tasknode_cmd::run(tasknode_cli).await?;
         }
         Some(Subcommand::ClaudePaneSmoke(mut smoke_cli)) => {
@@ -1911,13 +1914,14 @@ fn profile_v2_for_subcommand<'a>(
         | Subcommand::Unarchive(_)
         | Subcommand::Fork(_)
         | Subcommand::Telegram(_)
+        | Subcommand::Tasknode(_)
         | Subcommand::Mcp(_)
         | Subcommand::Sandbox(_)
         | Subcommand::Debug(DebugCommand {
             subcommand: DebugSubcommand::PromptInput(_),
         }) => Ok(Some(profile_v2)),
         _ => anyhow::bail!(
-            "--profile only applies to runtime commands and `corbanu mcp`: `corbanu`, `corbanu exec`, `corbanu review`, `corbanu resume`, `corbanu archive`, `corbanu delete`, `corbanu unarchive`, `corbanu fork`, `corbanu telegram`, `corbanu mcp`, `corbanu sandbox`, and `corbanu debug prompt-input`."
+            "--profile only applies to runtime commands, `corbanu tasknode`, and `corbanu mcp`: `corbanu`, `corbanu exec`, `corbanu review`, `corbanu resume`, `corbanu archive`, `corbanu delete`, `corbanu unarchive`, `corbanu fork`, `corbanu telegram`, `corbanu tasknode`, `corbanu mcp`, `corbanu sandbox`, and `corbanu debug prompt-input`."
         ),
     }
 }
@@ -3325,6 +3329,19 @@ mod tests {
                 .expect("sandbox supports config profile")
                 .as_deref(),
             Some("work")
+        );
+        assert_eq!(
+            profile_v2_for_args(&[
+                "codex",
+                "--profile",
+                "goodalexander",
+                "tasknode",
+                "link",
+                "status",
+            ])
+            .expect("tasknode supports profile-scoped credentials")
+            .as_deref(),
+            Some("goodalexander")
         );
     }
 

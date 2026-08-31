@@ -30,6 +30,8 @@ use codex_vault::Vault;
 use codex_vault::VaultError;
 use serde::Deserialize;
 use serde::Serialize;
+use sha2::Digest;
+use sha2::Sha256;
 
 /// Vault label holding the active terminal session (bearer token). Kept at the
 /// pre-split value so existing linked installations keep working unchanged.
@@ -37,6 +39,46 @@ pub const TASKNODE_ACTIVE_SESSION_LABEL: &str = "tasknode/session";
 /// Vault label holding an in-flight GitHub link attempt. Never contains a
 /// usable bearer token.
 pub const TASKNODE_PENDING_LINK_LABEL: &str = "tasknode/link-pending";
+
+/// Selects the local Corbanu profile that owns a Task Node session.
+///
+/// Named profiles must never share bearer authority. Their vault labels use a
+/// stable hash of the profile name so every valid profile name fits the vault
+/// label contract and cannot inject label separators. The default scope keeps
+/// the legacy labels for installations that do not use profiles.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SessionScope {
+    profile: Option<String>,
+}
+
+impl SessionScope {
+    pub fn for_profile(profile: impl Into<String>) -> Self {
+        Self {
+            profile: Some(profile.into()),
+        }
+    }
+
+    pub fn profile(&self) -> Option<&str> {
+        self.profile.as_deref()
+    }
+
+    fn label(&self, legacy_label: &str, suffix: &str) -> String {
+        let Some(profile) = self.profile.as_deref() else {
+            return legacy_label.to_string();
+        };
+        let digest = Sha256::digest(profile.as_bytes());
+        let fingerprint = format!("{digest:x}");
+        format!("tasknode/profiles/{}/{suffix}", &fingerprint[..32])
+    }
+
+    fn active_label(&self) -> String {
+        self.label(TASKNODE_ACTIVE_SESSION_LABEL, "session")
+    }
+
+    fn pending_label(&self) -> String {
+        self.label(TASKNODE_PENDING_LINK_LABEL, "link-pending")
+    }
+}
 
 /// A proven, usable terminal session.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -115,16 +157,34 @@ pub fn load(vault: &Vault) -> Result<LocalState, SessionStoreError> {
     load_from_store(vault)
 }
 
-fn load_from_store<S: SessionStore + ?Sized>(store: &S) -> Result<LocalState, SessionStoreError> {
-    let mut state = LocalState::default();
+/// Load only the Task Node state owned by `scope`.
+///
+/// A named profile may import the legacy global active session once, but only
+/// when the session's GitHub username matches the profile name. A mismatched
+/// global session is never returned to the named profile.
+pub fn load_scoped(vault: &Vault, scope: &SessionScope) -> Result<LocalState, SessionStoreError> {
+    load_scoped_from_store(vault, scope)
+}
 
-    if let Some(raw) = store.reveal_optional(TASKNODE_PENDING_LINK_LABEL)? {
+fn load_from_store<S: SessionStore + ?Sized>(store: &S) -> Result<LocalState, SessionStoreError> {
+    load_scoped_from_store(store, &SessionScope::default())
+}
+
+fn load_scoped_from_store<S: SessionStore + ?Sized>(
+    store: &S,
+    scope: &SessionScope,
+) -> Result<LocalState, SessionStoreError> {
+    let mut state = LocalState::default();
+    let pending_label = scope.pending_label();
+    let active_label = scope.active_label();
+
+    if let Some(raw) = store.reveal_optional(&pending_label)? {
         let pending: PendingLink = serde_json::from_str(&raw)
             .map_err(|err| SessionStoreError::Corrupt(format!("pending link: {err}")))?;
         state.pending = Some(pending);
     }
 
-    if let Some(raw) = store.reveal_optional(TASKNODE_ACTIVE_SESSION_LABEL)? {
+    if let Some(raw) = store.reveal_optional(&active_label)? {
         let record: LegacyRecord = serde_json::from_str(&raw)
             .map_err(|err| SessionStoreError::Corrupt(format!("active session: {err}")))?;
         let origin = record.origin.unwrap_or_default();
@@ -151,13 +211,29 @@ fn load_from_store<S: SessionStore + ?Sized>(store: &S) -> Result<LocalState, Se
                         verification_url: record.pending_verification_url.unwrap_or_default(),
                         started_at: None,
                     };
-                    save_pending_to_store(store, &pending)?;
+                    save_pending_scoped_to_store(store, scope, &pending)?;
                     state.pending = Some(pending);
                 }
                 // Either way the active label holds no authority; clear it so
                 // a real session can be written cleanly later.
-                let _ = store.delete(TASKNODE_ACTIVE_SESSION_LABEL);
+                let _ = store.delete(&active_label);
             }
+        }
+    }
+
+    if state.active.is_none()
+        && state.pending.is_none()
+        && let Some(profile) = scope.profile()
+    {
+        let legacy = load_from_store(store)?;
+        if let Some(active) = legacy.active
+            && active
+                .github_username
+                .as_deref()
+                .is_some_and(|username| username.eq_ignore_ascii_case(profile))
+        {
+            promote_active_scoped_to_store(store, scope, &active)?;
+            state.active = Some(active);
         }
     }
 
@@ -169,14 +245,30 @@ pub fn save_pending(vault: &Vault, pending: &PendingLink) -> Result<(), SessionS
     save_pending_to_store(vault, pending)
 }
 
+pub fn save_pending_scoped(
+    vault: &Vault,
+    scope: &SessionScope,
+    pending: &PendingLink,
+) -> Result<(), SessionStoreError> {
+    save_pending_scoped_to_store(vault, scope, pending)
+}
+
 fn save_pending_to_store<S: SessionStore + ?Sized>(
     store: &S,
+    pending: &PendingLink,
+) -> Result<(), SessionStoreError> {
+    save_pending_scoped_to_store(store, &SessionScope::default(), pending)
+}
+
+fn save_pending_scoped_to_store<S: SessionStore + ?Sized>(
+    store: &S,
+    scope: &SessionScope,
     pending: &PendingLink,
 ) -> Result<(), SessionStoreError> {
     let secret = serde_json::to_string(pending)
         .map_err(|err| SessionStoreError::Corrupt(format!("serialize pending link: {err}")))?;
     store.upsert(
-        TASKNODE_PENDING_LINK_LABEL,
+        &scope.pending_label(),
         secret,
         "Task Node link attempt in progress; holds no usable token.",
         &pending.origin,
@@ -191,21 +283,37 @@ pub fn promote_active(vault: &Vault, session: &ActiveSession) -> Result<(), Sess
     promote_active_to_store(vault, session)
 }
 
+pub fn promote_active_scoped(
+    vault: &Vault,
+    scope: &SessionScope,
+    session: &ActiveSession,
+) -> Result<(), SessionStoreError> {
+    promote_active_scoped_to_store(vault, scope, session)
+}
+
 fn promote_active_to_store<S: SessionStore + ?Sized>(
     store: &S,
+    session: &ActiveSession,
+) -> Result<(), SessionStoreError> {
+    promote_active_scoped_to_store(store, &SessionScope::default(), session)
+}
+
+fn promote_active_scoped_to_store<S: SessionStore + ?Sized>(
+    store: &S,
+    scope: &SessionScope,
     session: &ActiveSession,
 ) -> Result<(), SessionStoreError> {
     let secret = serde_json::to_string(session)
         .map_err(|err| SessionStoreError::Corrupt(format!("serialize session: {err}")))?;
     store.upsert(
-        TASKNODE_ACTIVE_SESSION_LABEL,
+        &scope.active_label(),
         secret,
         "Task Node terminal session; token is not printed to chat.",
         &session.origin,
     )?;
     // Best-effort: a leftover pending record cannot shadow the active session
     // (load prefers active), so a failed delete here is not fatal.
-    let _ = store.delete(TASKNODE_PENDING_LINK_LABEL);
+    let _ = store.delete(&scope.pending_label());
     Ok(())
 }
 
@@ -214,10 +322,24 @@ pub fn clear_pending(vault: &Vault) -> Result<bool, SessionStoreError> {
     clear_pending_from_store(vault)
 }
 
+pub fn clear_pending_scoped(
+    vault: &Vault,
+    scope: &SessionScope,
+) -> Result<bool, SessionStoreError> {
+    clear_pending_scoped_from_store(vault, scope)
+}
+
 fn clear_pending_from_store<S: SessionStore + ?Sized>(
     store: &S,
 ) -> Result<bool, SessionStoreError> {
-    store.delete(TASKNODE_PENDING_LINK_LABEL)
+    clear_pending_scoped_from_store(store, &SessionScope::default())
+}
+
+fn clear_pending_scoped_from_store<S: SessionStore + ?Sized>(
+    store: &S,
+    scope: &SessionScope,
+) -> Result<bool, SessionStoreError> {
+    store.delete(&scope.pending_label())
 }
 
 /// Remove all Task Node authentication state (unlink).
@@ -225,9 +347,20 @@ pub fn clear_all(vault: &Vault) -> Result<(), SessionStoreError> {
     clear_all_from_store(vault)
 }
 
+pub fn clear_all_scoped(vault: &Vault, scope: &SessionScope) -> Result<(), SessionStoreError> {
+    clear_all_scoped_from_store(vault, scope)
+}
+
 fn clear_all_from_store<S: SessionStore + ?Sized>(store: &S) -> Result<(), SessionStoreError> {
-    let _ = store.delete(TASKNODE_PENDING_LINK_LABEL);
-    let _ = store.delete(TASKNODE_ACTIVE_SESSION_LABEL);
+    clear_all_scoped_from_store(store, &SessionScope::default())
+}
+
+fn clear_all_scoped_from_store<S: SessionStore + ?Sized>(
+    store: &S,
+    scope: &SessionScope,
+) -> Result<(), SessionStoreError> {
+    let _ = store.delete(&scope.pending_label());
+    let _ = store.delete(&scope.active_label());
     Ok(())
 }
 

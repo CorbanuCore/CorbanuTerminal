@@ -4,6 +4,7 @@ use clap::Parser;
 use clap::Subcommand;
 use codex_core::config::ConfigBuilder;
 use codex_utils_cli::CliConfigOverrides;
+use codex_utils_cli::ProfileV2Name;
 use serde_json::Map;
 use serde_json::Value;
 use serde_json::json;
@@ -18,6 +19,10 @@ const DEFAULT_TASKNODE_ORIGIN: &str = "https://tasknode.postfiat.org";
 pub(crate) struct TaskNodeCli {
     #[clap(skip)]
     pub config_overrides: CliConfigOverrides,
+
+    /// Use Task Node credentials owned by this Corbanu profile.
+    #[arg(long = "profile", short = 'p', global = true)]
+    pub config_profile: Option<ProfileV2Name>,
 
     /// Emit JSON. This helper always emits JSON; the flag is accepted for scripts.
     #[arg(long, global = true, default_value_t = false)]
@@ -406,11 +411,12 @@ pub(crate) async fn run(command: TaskNodeCli) -> anyhow::Result<()> {
 
 async fn run_inner(command: TaskNodeCli) -> anyhow::Result<i32> {
     let _json_flag = command.json;
+    let scope = tasknode_session_scope(command.config_profile.as_ref());
     // `link` must work without an existing session; everything else requires one.
     if let TaskNodeCommand::Link(link) = command.command {
-        return run_link_command(command.config_overrides, command.origin, link).await;
+        return run_link_command(command.config_overrides, command.origin, scope, link).await;
     }
-    let client = TaskNodeClient::from_cli(command.config_overrides, command.origin).await?;
+    let client = TaskNodeClient::from_cli(command.config_overrides, command.origin, &scope).await?;
 
     match command.command {
         TaskNodeCommand::Link(_) => unreachable!("handled above"),
@@ -844,10 +850,11 @@ async fn resolve_codex_home(
 async fn run_link_command(
     config_overrides: CliConfigOverrides,
     origin_override: Option<String>,
+    scope: codex_tasknode_session::SessionScope,
     link: LinkCli,
 ) -> anyhow::Result<i32> {
     let codex_home = resolve_codex_home(config_overrides).await?;
-    let state = load_tasknode_state(&codex_home)?;
+    let state = load_tasknode_state(&codex_home, &scope)?;
     let saved_origin = state
         .active
         .as_ref()
@@ -856,20 +863,27 @@ async fn run_link_command(
     let origin = resolve_origin(origin_override, saved_origin.as_deref());
 
     match link.action.unwrap_or(LinkCommand::Start) {
-        LinkCommand::Start => run_link_start(&codex_home, &origin, &state).await,
-        LinkCommand::Poll(args) => run_link_poll(&codex_home, &origin, args.wait).await,
+        LinkCommand::Start => run_link_start(&codex_home, &scope, &origin, &state).await,
+        LinkCommand::Poll(args) => run_link_poll(&codex_home, &scope, &origin, args.wait).await,
         LinkCommand::Status => {
             let mut summary = codex_tasknode_session::state_summary(&state);
             if let Some(map) = summary.as_object_mut() {
                 map.insert("ok".to_string(), Value::Bool(true));
                 map.insert("origin".to_string(), Value::String(origin));
+                map.insert(
+                    "profile".to_string(),
+                    scope
+                        .profile()
+                        .map_or(Value::Null, |profile| Value::String(profile.to_string())),
+                );
             }
             print_json(&summary)?;
             Ok(0)
         }
         LinkCommand::Cancel => {
-            let removed = codex_tasknode_session::clear_pending(&tasknode_vault(&codex_home))
-                .map_err(|err| anyhow::anyhow!("failed to clear pending link: {err}"))?;
+            let removed =
+                codex_tasknode_session::clear_pending_scoped(&tasknode_vault(&codex_home), &scope)
+                    .map_err(|err| anyhow::anyhow!("failed to clear pending link: {err}"))?;
             print_json(&json!({
                 "ok": true,
                 "action": "link_cancelled",
@@ -883,6 +897,7 @@ async fn run_link_command(
 
 async fn run_link_start(
     codex_home: &std::path::Path,
+    scope: &codex_tasknode_session::SessionScope,
     origin: &str,
     state: &codex_tasknode_session::LocalState,
 ) -> anyhow::Result<i32> {
@@ -906,7 +921,7 @@ async fn run_link_start(
         verification_url: started.verification_url.clone(),
         started_at: Some(now_unix_string()),
     };
-    codex_tasknode_session::save_pending(&tasknode_vault(codex_home), &pending)
+    codex_tasknode_session::save_pending_scoped(&tasknode_vault(codex_home), scope, &pending)
         .map_err(|err| anyhow::anyhow!("failed to store link attempt: {err}"))?;
     print_json(&json!({
         "ok": true,
@@ -925,10 +940,11 @@ async fn run_link_start(
 
 async fn run_link_poll(
     codex_home: &std::path::Path,
+    scope: &codex_tasknode_session::SessionScope,
     origin: &str,
     wait_seconds: u64,
 ) -> anyhow::Result<i32> {
-    let state = load_tasknode_state(codex_home)?;
+    let state = load_tasknode_state(codex_home, scope)?;
     let Some(pending) = state.pending else {
         if state.active.as_ref().is_some_and(|a| !a.is_expired()) {
             print_json(&json!({
@@ -985,8 +1001,12 @@ async fn run_link_poll(
                     }))?;
                     return Ok(1);
                 }
-                codex_tasknode_session::promote_active(&tasknode_vault(codex_home), &candidate)
-                    .map_err(|err| anyhow::anyhow!("failed to store session: {err}"))?;
+                codex_tasknode_session::promote_active_scoped(
+                    &tasknode_vault(codex_home),
+                    scope,
+                    &candidate,
+                )
+                .map_err(|err| anyhow::anyhow!("failed to store session: {err}"))?;
                 print_json(&json!({
                     "ok": true,
                     "state": "linked",
@@ -1011,7 +1031,10 @@ async fn run_link_poll(
             404 | 409 => {
                 // The attempt is unknown or consumed server-side; keeping the
                 // local record can only produce the same failure forever.
-                let _ = codex_tasknode_session::clear_pending(&tasknode_vault(codex_home));
+                let _ = codex_tasknode_session::clear_pending_scoped(
+                    &tasknode_vault(codex_home),
+                    scope,
+                );
                 print_json(&json!({
                     "ok": false,
                     "error": "tasknode_link_expired",
@@ -1036,6 +1059,7 @@ impl TaskNodeClient {
     async fn from_cli(
         config_overrides: CliConfigOverrides,
         origin_override: Option<String>,
+        scope: &codex_tasknode_session::SessionScope,
     ) -> anyhow::Result<Self> {
         let cli_kv_overrides = config_overrides
             .parse_overrides()
@@ -1044,7 +1068,7 @@ impl TaskNodeClient {
             .cli_overrides(cli_kv_overrides)
             .build()
             .await?;
-        let session = require_active_session(config.codex_home.as_path())?;
+        let session = require_active_session(config.codex_home.as_path(), scope)?;
         Ok(Self {
             origin: resolve_origin(origin_override, Some(session.origin.as_str())),
             token: session.terminal_token,
@@ -1163,16 +1187,18 @@ fn tasknode_vault(codex_home: &std::path::Path) -> codex_vault::Vault {
 
 fn load_tasknode_state(
     codex_home: &std::path::Path,
+    scope: &codex_tasknode_session::SessionScope,
 ) -> anyhow::Result<codex_tasknode_session::LocalState> {
-    codex_tasknode_session::load(&tasknode_vault(codex_home))
+    codex_tasknode_session::load_scoped(&tasknode_vault(codex_home), scope)
         .map_err(|err| anyhow::anyhow!("failed to read local Task Node state: {err}"))
 }
 
 /// Resolve the active session or explain exactly which state the user is in.
 fn require_active_session(
     codex_home: &std::path::Path,
+    scope: &codex_tasknode_session::SessionScope,
 ) -> anyhow::Result<codex_tasknode_session::ActiveSession> {
-    let state = load_tasknode_state(codex_home)?;
+    let state = load_tasknode_state(codex_home, scope)?;
     let expired_active = match state.active {
         Some(active) if !active.is_expired() => return Ok(active),
         other => other,
@@ -1199,6 +1225,12 @@ fn require_active_session(
             "Task Node is not linked. Run `corbanu tasknode link` (or /tasknode link in the TUI)."
         ),
     }
+}
+
+fn tasknode_session_scope(profile: Option<&ProfileV2Name>) -> codex_tasknode_session::SessionScope {
+    profile
+        .map(|profile| codex_tasknode_session::SessionScope::for_profile(profile.as_str()))
+        .unwrap_or_default()
 }
 
 fn resolve_origin(origin_override: Option<String>, saved_origin: Option<&str>) -> String {
@@ -1461,6 +1493,28 @@ fn reqwest_error(err: reqwest::Error) -> anyhow::Error {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+
+    #[test]
+    fn tasknode_cli_accepts_profile_scoped_credentials() {
+        let cli = TaskNodeCli::try_parse_from([
+            "tasknode",
+            "--profile",
+            "goodalexander",
+            "link",
+            "status",
+        ])
+        .expect("parse profile-scoped Task Node command");
+
+        assert_eq!(
+            cli.config_profile.as_deref(),
+            Some("goodalexander"),
+            "the helper must select the same credential scope as the profile tab"
+        );
+        assert_eq!(
+            tasknode_session_scope(cli.config_profile.as_ref()).profile(),
+            Some("goodalexander")
+        );
+    }
 
     #[test]
     fn evidence_mode_preflight_routes_verification_to_the_distinct_command() {
