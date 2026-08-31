@@ -145,6 +145,7 @@ def load_config(path: Path) -> dict[str, Any]:
             "records_per_request",
             "low_confidence_below",
             "sampling",
+            "chat_template_kwargs",
             "mix",
             "coverage_dimensions",
             "source_positions",
@@ -197,6 +198,13 @@ def load_config(path: Path) -> dict[str, Any]:
         raise CampaignError("invalid sampling temperature")
     if not 0 < sampling["top_p"] <= 1:
         raise CampaignError("invalid sampling top_p")
+    chat_template_kwargs = exact_object(
+        value["chat_template_kwargs"],
+        frozenset({"enable_thinking"}),
+        "chat_template_kwargs",
+    )
+    if chat_template_kwargs["enable_thinking"] is not False:
+        raise CampaignError("campaign generation must disable hidden reasoning")
     if not isinstance(sampling["max_tokens"], int) or sampling["max_tokens"] < 256:
         raise CampaignError("invalid max_tokens")
     mix = value["mix"]
@@ -527,6 +535,7 @@ async def generate_one(
         "max_tokens": config["sampling"]["max_tokens"],
         "seed": plan.seed,
         "response_format": {"type": "json_object"},
+        "chat_template_kwargs": config["chat_template_kwargs"],
     }
     started = time.perf_counter()
     error: str | None = None
@@ -881,6 +890,7 @@ async def run_generate(arguments: argparse.Namespace) -> int:
             canonical_json([plan.seed for plan in plans])
         ),
         "sampling": config["sampling"],
+        "chat_template_kwargs": config["chat_template_kwargs"],
         "source_manifest_sha256": config["source_manifest_sha256"],
         "request_count": arguments.requests,
         "requested_record_count": arguments.requests * config["records_per_request"],

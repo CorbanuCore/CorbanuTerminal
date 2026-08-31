@@ -178,6 +178,7 @@ async def run_one(
         "max_tokens": 2048,
         "seed": 35_000 + index,
         "response_format": {"type": "json_object"},
+        "chat_template_kwargs": {"enable_thinking": False},
     }
     started = time.perf_counter()
     async with semaphore:
@@ -243,7 +244,20 @@ async def run(arguments: argparse.Namespace) -> int:
         "concurrency": arguments.concurrency,
         "request_count": arguments.requests,
         "case_count": len(CASES),
-        "prompt_set_sha256": hashlib.sha256(canonical_json(CASES)).hexdigest(),
+        "prompt_set_sha256": hashlib.sha256(
+            canonical_json(
+                {
+                    "system": SYSTEM_PROMPT,
+                    "cases": CASES,
+                    "temperature": 0.7,
+                    "top_p": 0.9,
+                    "max_tokens": 2048,
+                    "seed_start": 35_000,
+                    "chat_template_kwargs": {"enable_thinking": False},
+                    "response_format": {"type": "json_object"},
+                }
+            )
+        ).hexdigest(),
         "wall_seconds": round(wall_seconds, 6),
         "completion_tokens": completion_tokens,
         "completion_tokens_per_second": round(completion_tokens / wall_seconds, 3),

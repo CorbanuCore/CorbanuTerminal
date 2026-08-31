@@ -32,6 +32,7 @@ class CampaignTests(unittest.TestCase):
             "records_per_request": 2,
             "low_confidence_below": 0.8,
             "sampling": {"temperature": 0.7, "top_p": 0.9, "max_tokens": 1024},
+            "chat_template_kwargs": {"enable_thinking": False},
             "mix": [
                 {"provisional_label": "allow", "family_scope": "benign"},
                 {"provisional_label": "allow", "family_scope": "hard_negative"},
