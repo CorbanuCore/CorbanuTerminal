@@ -35,6 +35,7 @@ use codex_vault::MANAGED_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::Vault;
 #[cfg(target_os = "macos")]
 use codex_vault::claude_code_macos_keychain_service;
+use codex_vault::claude_environment_token_authority_id;
 use codex_vault::claude_login_authority_id;
 use codex_vault::credentials_file_claude_auth_source_id;
 #[cfg(target_os = "macos")]
@@ -133,13 +134,13 @@ async fn current_status_with_executables(
         }) => ClaudeCodePlanStatus::ManagedToken {
             stored: managed_stored,
         },
-        Some(ClaudeAuthSelection {
-            source: ClaudeAuthSource::EnvironmentToken,
-            ..
-        }) => ClaudeCodePlanStatus::EnvironmentToken {
-            available: std::env::var("CLAUDE_CODE_OAUTH_TOKEN")
-                .ok()
-                .is_some_and(|token| !token.trim().is_empty()),
+        Some(
+            selection @ ClaudeAuthSelection {
+                source: ClaudeAuthSource::EnvironmentToken,
+                ..
+            },
+        ) => ClaudeCodePlanStatus::EnvironmentToken {
+            available: environment_token_matches_selection(&selection),
         },
         Some(
             selection @ ClaudeAuthSelection {
@@ -180,6 +181,23 @@ async fn current_status_with_executables(
             }
         }
     }
+}
+
+fn environment_token_matches_selection(selection: &ClaudeAuthSelection) -> bool {
+    environment_token_matches_selection_value(
+        selection,
+        std::env::var("CLAUDE_CODE_OAUTH_TOKEN").ok().as_deref(),
+    )
+}
+
+fn environment_token_matches_selection_value(
+    selection: &ClaudeAuthSelection,
+    token: Option<&str>,
+) -> bool {
+    let Some(token) = token.map(str::trim).filter(|token| !token.is_empty()) else {
+        return false;
+    };
+    selection.authority_id.as_deref() == Some(claude_environment_token_authority_id(token).as_str())
 }
 
 fn selection_source_id_is_current(selection: &ClaudeAuthSelection) -> bool {

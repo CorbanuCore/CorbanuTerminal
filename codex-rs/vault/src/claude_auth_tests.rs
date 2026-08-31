@@ -311,6 +311,32 @@ fn claude_login_authority_is_normalized_bound_and_metadata_only() {
 }
 
 #[test]
+fn environment_token_authority_is_normalized_bound_and_metadata_only() {
+    let selected = " environment-token-fixture ";
+    let selection = ClaudeAuthSelection::new_environment_token(selected).unwrap();
+    let authority = selection
+        .authority_id
+        .as_deref()
+        .expect("authority binding");
+
+    assert_eq!(
+        authority,
+        claude_environment_token_authority_id("environment-token-fixture")
+    );
+    assert_ne!(
+        authority,
+        claude_environment_token_authority_id("different-environment-token")
+    );
+    assert!(ClaudeAuthSelection::new_environment_token(" \t ").is_err());
+
+    let serialized = serde_json::to_string(&selection).unwrap();
+    assert!(!serialized.contains(selected));
+    assert!(!serialized.contains("environment-token-fixture"));
+    assert!(serialized.contains("claude-environment-token-authority:sha256:"));
+    assert!(!format!("{selection:?}").contains(authority));
+}
+
+#[test]
 fn invalid_source_ids_are_rejected() {
     for source_id in ["", "line\nbreak"] {
         assert!(

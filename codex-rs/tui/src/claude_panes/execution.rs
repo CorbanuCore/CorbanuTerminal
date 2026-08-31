@@ -474,9 +474,7 @@ impl ClaudeSecretRedactor {
             .filter(|secret| secret.len() >= MIN_REDACTED_SECRET_LEN)
             .map(|secret| Zeroizing::new(secret.to_string()))
             .collect::<Vec<_>>();
-        if let Some(secret) =
-            additional_secret.filter(|secret| secret.len() >= MIN_REDACTED_SECRET_LEN)
-        {
+        if let Some(secret) = additional_secret.filter(|secret| !secret.is_empty()) {
             secrets.push(Zeroizing::new(secret.to_string()));
         }
         Self { secrets }

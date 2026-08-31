@@ -24,6 +24,7 @@ use codex_vault::MANAGED_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::ManagedClaudeTokenStatus;
 use codex_vault::Vault;
 use codex_vault::claude_code_macos_keychain_service;
+use codex_vault::claude_environment_token_authority_id;
 use codex_vault::credentials_file_claude_auth_source_id;
 use codex_vault::macos_keychain_claude_auth_source_id;
 use codex_vault::resolve_claude_auth_source;
@@ -188,16 +189,38 @@ async fn resolve_selected_source_access_token(
                 "the selected managed Claude subscription token is unavailable; run Claude authentication setup again",
             ),
         ClaudeAuthSource::EnvironmentToken => {
-            nonempty_env("CLAUDE_CODE_OAUTH_TOKEN").ok_or_else(|| {
-                anyhow!(
-                    "the selected CLAUDE_CODE_OAUTH_TOKEN source is missing or blank; set it again or explicitly choose another Claude authentication method"
-                )
-            })
+            selected_environment_token(selection)
         }
         ClaudeAuthSource::ClaudeCodeLogin => {
             resolve_selected_claude_code_login_access_token(&metadata.source_id).await
         }
     }
+}
+
+fn selected_environment_token(selection: &ClaudeAuthSelection) -> Result<String> {
+    resolve_selected_environment_token(selection, nonempty_env("CLAUDE_CODE_OAUTH_TOKEN"))
+}
+
+fn resolve_selected_environment_token(
+    selection: &ClaudeAuthSelection,
+    token: Option<String>,
+) -> Result<String> {
+    let token = token.ok_or_else(|| {
+        anyhow!(
+            "the selected CLAUDE_CODE_OAUTH_TOKEN source is missing or blank; set it again or explicitly choose another Claude authentication method"
+        )
+    })?;
+    let expected = selection.authority_id.as_deref().ok_or_else(|| {
+        anyhow!(
+            "the selected CLAUDE_CODE_OAUTH_TOKEN predates authority binding; explicitly choose it again"
+        )
+    })?;
+    if expected != claude_environment_token_authority_id(&token) {
+        return Err(anyhow!(
+            "the selected CLAUDE_CODE_OAUTH_TOKEN changed; explicitly choose it again or select another Claude authentication method"
+        ));
+    }
+    Ok(token)
 }
 
 async fn with_verified_claude_login_authority<T, Resolve, ResolveFuture>(
@@ -353,10 +376,10 @@ async fn discover_selected_claude_auth_source(
             source: ClaudeAuthSource::EnvironmentToken,
             source_id: ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID.to_string(),
             store: ClaudeAuthStoreKind::Environment,
-            health: if nonempty_env("CLAUDE_CODE_OAUTH_TOKEN").is_some() {
+            health: if selected_environment_token(selection).is_ok() {
                 ClaudeAuthHealth::Healthy
             } else {
-                ClaudeAuthHealth::Missing
+                ClaudeAuthHealth::NeedsReauthorization
             },
             account_hint: None,
         },
@@ -418,9 +441,14 @@ fn unhealthy_selected_source_error(metadata: &ClaudeAuthSourceMetadata) -> anyho
         ClaudeAuthHealth::NeedsEnrollment => anyhow!(
             "the selected managed Claude subscription token is missing; run Claude authentication setup again"
         ),
-        ClaudeAuthHealth::NeedsReauthorization => anyhow!(
-            "the selected Claude Code login needs reauthorization; run `claude auth login` again or explicitly choose another method"
-        ),
+        ClaudeAuthHealth::NeedsReauthorization => match metadata.source {
+            ClaudeAuthSource::EnvironmentToken => anyhow!(
+                "the selected CLAUDE_CODE_OAUTH_TOKEN changed or predates authority binding; explicitly choose it again or select another Claude authentication method"
+            ),
+            _ => anyhow!(
+                "the selected Claude Code login needs reauthorization; run `claude auth login` again or explicitly choose another method"
+            ),
+        },
         ClaudeAuthHealth::Missing => anyhow!(
             "the selected Claude authentication source is missing; restore it or explicitly choose another method"
         ),
@@ -1067,6 +1095,42 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         let error = resolve_selected_claude_auth_source(&selection, &[selected.clone(), selected])
             .expect_err("duplicate identities must fail as a conflict");
         assert!(error.to_string().contains("ambiguous"));
+    }
+
+    #[test]
+    fn selected_environment_token_is_bound_and_fails_closed_on_drift() {
+        let selection = ClaudeAuthSelection::new_environment_token("selected-environment-token")
+            .expect("selection");
+
+        assert_eq!(
+            resolve_selected_environment_token(
+                &selection,
+                Some("selected-environment-token".to_string()),
+            )
+            .expect("matching token"),
+            "selected-environment-token"
+        );
+        let error = resolve_selected_environment_token(
+            &selection,
+            Some("replaced-environment-token".to_string()),
+        )
+        .expect_err("environment token drift must fail closed");
+        assert!(error.to_string().contains("changed"));
+        assert!(!error.to_string().contains("replaced-environment-token"));
+        assert!(!error.to_string().contains("selected-environment-token"));
+
+        let legacy = ClaudeAuthSelection::new_at(
+            ClaudeAuthSource::EnvironmentToken,
+            ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID,
+            10,
+        )
+        .expect("legacy selection");
+        let error = resolve_selected_environment_token(
+            &legacy,
+            Some("selected-environment-token".to_string()),
+        )
+        .expect_err("unbound explicit selection must fail closed");
+        assert!(error.to_string().contains("predates authority binding"));
     }
 
     #[test]

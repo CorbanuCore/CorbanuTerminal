@@ -2306,9 +2306,9 @@ fn claude_secret_redactor_redacts_bridge_key() {
 
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn claude_plan_pane_binds_selected_auth_only_at_execution_and_redacts_it() {
+async fn claude_plan_pane_binds_selected_auth_only_at_execution_and_redacts_short_token() {
     let (dir, pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
-    let secret = "pane-auth-test-secret-not-real";
+    let secret = "short";
     let helper = dir.path().join("auth-helper");
     std::fs::write(&helper, format!("#!/bin/sh\nprintf '%s' '{secret}'\n")).expect("write helper");
     let claude = dir.path().join("claude");
@@ -2316,7 +2316,7 @@ async fn claude_plan_pane_binds_selected_auth_only_at_execution_and_redacts_it()
         &claude,
         concat!(
             "#!/bin/sh\n",
-            "[ \"$CLAUDE_CODE_OAUTH_TOKEN\" = \"pane-auth-test-secret-not-real\" ] || exit 7\n",
+            "[ \"$CLAUDE_CODE_OAUTH_TOKEN\" = \"short\" ] || exit 7\n",
             "printf '{\"type\":\"result\",\"subtype\":\"success\",",
             "\"session_id\":\"11111111-1111-4111-8111-111111111111\",",
             "\"result\":\"bound %s\"}\\n' \"$CLAUDE_CODE_OAUTH_TOKEN\"\n",

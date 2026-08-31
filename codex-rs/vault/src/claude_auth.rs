@@ -21,6 +21,8 @@ const CLAUDE_AUTH_SELECTION_SECRET_NAME: &str = "CLAUDE_AUTH_SELECTION";
 const CLAUDE_AUTH_SELECTION_VERSION: u32 = 1;
 const MAX_SOURCE_ID_BYTES: usize = 256;
 const CLAUDE_LOGIN_AUTHORITY_PREFIX: &str = "claude-login-authority:sha256:";
+const CLAUDE_ENVIRONMENT_TOKEN_AUTHORITY_PREFIX: &str =
+    "claude-environment-token-authority:sha256:";
 const MAX_MANAGED_TOKEN_BYTES: usize = 16 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -106,6 +108,21 @@ pub fn claude_login_authority_id(
         "{CLAUDE_LOGIN_AUTHORITY_PREFIX}{:x}",
         digest.finalize()
     ))
+}
+
+/// Bind an explicitly selected environment token without persisting its value.
+///
+/// The digest makes a later shell/profile token replacement fail closed while
+/// leaving selection-less legacy environment resolution unchanged.
+pub fn claude_environment_token_authority_id(token: &str) -> String {
+    let token = token.trim();
+    let mut digest = Sha256::new();
+    digest.update(b"corbanu:claude-environment-token-authority:v1\0");
+    digest.update(token.as_bytes());
+    format!(
+        "{CLAUDE_ENVIRONMENT_TOKEN_AUTHORITY_PREFIX}{:x}",
+        digest.finalize()
+    )
 }
 
 fn credentials_file_claude_auth_source_id_against(
@@ -231,6 +248,19 @@ impl ClaudeAuthSelection {
         Ok(selection)
     }
 
+    pub fn new_environment_token(token: &str) -> Result<Self, String> {
+        if token.trim().is_empty() {
+            return Err("Claude environment token is empty".to_string());
+        }
+        let mut selection = Self::new(
+            ClaudeAuthSource::EnvironmentToken,
+            ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID,
+        )?;
+        selection.authority_id = Some(claude_environment_token_authority_id(token));
+        selection.validate()?;
+        Ok(selection)
+    }
+
     fn validate(&self) -> Result<(), String> {
         if self.version != CLAUDE_AUTH_SELECTION_VERSION {
             return Err(format!(
@@ -246,18 +276,25 @@ impl ClaudeAuthSelection {
             return Err("Claude authentication source id contains control characters".to_string());
         }
         if let Some(authority_id) = self.authority_id.as_deref() {
-            let digest = authority_id
-                .strip_prefix(CLAUDE_LOGIN_AUTHORITY_PREFIX)
-                .ok_or_else(|| "Claude login authority id is invalid".to_string())?;
-            if self.source != ClaudeAuthSource::ClaudeCodeLogin
-                || digest.len() != 64
-                || !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
-            {
-                return Err("Claude login authority id is invalid".to_string());
+            let valid = match self.source {
+                ClaudeAuthSource::ClaudeCodeLogin => authority_id
+                    .strip_prefix(CLAUDE_LOGIN_AUTHORITY_PREFIX)
+                    .is_some_and(valid_claude_authority_digest),
+                ClaudeAuthSource::EnvironmentToken => authority_id
+                    .strip_prefix(CLAUDE_ENVIRONMENT_TOKEN_AUTHORITY_PREFIX)
+                    .is_some_and(valid_claude_authority_digest),
+                ClaudeAuthSource::ManagedSubscriptionToken => false,
+            };
+            if !valid {
+                return Err("Claude authentication authority id is invalid".to_string());
             }
         }
         Ok(())
     }
+}
+
+fn valid_claude_authority_digest(digest: &str) -> bool {
+    digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 /// Safe status for a source. Account hints are display metadata such as an email address.

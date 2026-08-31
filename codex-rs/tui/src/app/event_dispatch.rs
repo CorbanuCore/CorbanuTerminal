@@ -2276,18 +2276,15 @@ impl App {
                 let tx = self.app_event_tx.clone();
                 tokio::spawn(async move {
                     let result = tokio::task::spawn_blocking(move || {
-                        let available = std::env::var("CLAUDE_CODE_OAUTH_TOKEN")
+                        let token = std::env::var("CLAUDE_CODE_OAUTH_TOKEN")
                             .ok()
-                            .is_some_and(|value| !value.trim().is_empty());
-                        if !available {
-                            return Err(
+                            .filter(|value| !value.trim().is_empty())
+                            .ok_or_else(|| {
                                 "CLAUDE_CODE_OAUTH_TOKEN is missing or blank; the current method was not changed."
-                                    .to_string(),
-                            );
-                        }
-                        let selection = codex_vault::ClaudeAuthSelection::new(
-                            codex_vault::ClaudeAuthSource::EnvironmentToken,
-                            codex_vault::ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID,
+                                    .to_string()
+                            })?;
+                        let selection = codex_vault::ClaudeAuthSelection::new_environment_token(
+                            &token,
                         )
                         .map_err(|error| {
                             format!("Could not identify CLAUDE_CODE_OAUTH_TOKEN: {error}")

@@ -63,6 +63,36 @@ fn account_authority_requires_reported_subscription_type() {
 }
 
 #[test]
+fn selected_environment_token_status_requires_the_bound_token() {
+    let selection = ClaudeAuthSelection::new_environment_token("selected-environment-token")
+        .expect("selection");
+
+    assert!(environment_token_matches_selection_value(
+        &selection,
+        Some(" selected-environment-token "),
+    ));
+    assert!(!environment_token_matches_selection_value(
+        &selection,
+        Some("replaced-environment-token"),
+    ));
+    assert!(!environment_token_matches_selection_value(
+        &selection,
+        Some("   ")
+    ));
+
+    let legacy = ClaudeAuthSelection::new_at(
+        ClaudeAuthSource::EnvironmentToken,
+        ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID,
+        10,
+    )
+    .expect("legacy selection");
+    assert!(!environment_token_matches_selection_value(
+        &legacy,
+        Some("selected-environment-token"),
+    ));
+}
+
+#[test]
 fn claude_auth_method_choice_snapshot() {
     insta::assert_snapshot!(
         "claude_auth_method_choice",

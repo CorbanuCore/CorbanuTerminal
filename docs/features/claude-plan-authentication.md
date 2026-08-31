@@ -113,8 +113,9 @@ Recovery offers four inert-by-default actions: retry long-lived setup, choose
 an authentication method, explicitly resume a currently nonblank legacy
 `CLAUDE_CODE_OAUTH_TOKEN`, or keep the current method. The legacy action does
 not alter any credential: it persists the environment variable as the exact
-selected source, so a later missing value fails closed instead of falling
-through to a Claude Code login. Esc also keeps the current method. After a
+selected source with an encrypted, non-rendered token fingerprint. A later
+missing or changed value fails closed instead of falling through to a Claude
+Code login. Esc also keeps the current method. After a
 successful recovery, retry the interrupted request or reselect the Claude Plan
 model. Restarting Corbanu preserves the exact selected source; it does not
 persist the raw token in chat or session history.
