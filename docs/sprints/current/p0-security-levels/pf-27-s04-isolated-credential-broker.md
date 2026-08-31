@@ -48,33 +48,48 @@ updated: 2026-08-31
 
 ## Done
 
-- [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
+- [x] Reconciled the record with current ownership and archived design input.
+- [x] Added bounded authenticated IPC and a typed exact-host operation with canonical opaque references, replay/binding checks, and no generic resolver API.
+- [x] Added a fail-closed PF-27-S03-authorized runtime with OS-observed peers, resource caps, lifecycle fences, and PF-41 intent-before-effect semantics.
+- [x] Added named `pf_27_s04_pf_27_s01` regressions for malformed frames, wrong peers, forged references, replay, cross-run theft, expiry, replacement, restart, audit failure, bounds, and concurrent upload cancellation.
+- [x] Verified leaf/Bazel/proxy/Vault/audit/platform/governance checks and recorded evidence plus the serialized shared-integration handoff.
+- [x] Added the Core authenticated broker client/config adapter, the
+  network-proxy isolated exact-host route with no header injection, and the
+  in-broker Vault typed backend; compiled and tested them under temporary
+  integration-owner registrations that were restored before handback.
 
 ## Remaining
 
-- [ ] Implement the completed PF-27-S03 OS identity/IPC/handle design and PF-41-S03 durable-event contract; verify controller/broker state cannot be read or rewritten by the real agent process.
-- [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.
-
-- [ ] Keep sentinel keys/raw registries outside agent-accessible processes; test open-channel revocation, upload cancellation, same-run-ID replacement and broker restart with old handles. The proxy's retained RegisteredRun concern requires a native regression, not just a copied new-connection test.
-
-- [ ] Move raw credential resolution/substitution and its key material into a separately constrained trusted process; Core, model clients, and agent-accessible workers receive only opaque references.
-- [ ] Reuse PF-16–19 decision, actor, mandate, expiry, and revocation types over versioned, bounded IPC; authenticate OS peer plus session/task/run, reject replay and malformed frames.
-- [ ] Permit typed credential operations only; disallow generic resolve-to-string, arbitrary shell/URL/header/body injection, debug dumps, and unbounded credential enumeration.
-- [ ] Make cancellation, run replacement, revocation, broker death, and restart close outstanding channels and invalidate capabilities; never restore a stale capability or fall back to raw auth.
-- [ ] Add broker-crash, cross-run theft, wrong-peer, forged-reference, bounded-resource, and concurrent-revoke integration tests; preserve PF-13's exact OpenAI adapter.
-- [ ] Add named `pf_27_s01` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
+- [ ] Integrate and qualify the completed PF-27-S03 OS service transports and
+  PF-41-S03 durable journal adapter; verify controller/broker state cannot be
+  read or rewritten by the real agent process.
+- [ ] Add real broker-crash/service-death integration tests and measured
+  Linux/macOS/Windows wrong-peer, state-isolation, resource, replacement, fresh
+  connection, cached-handler, open-channel, upload, and concurrent-revoke proof.
+- [ ] Let the integration owner apply the recorded Cargo/Bazel/shared-lock and
+  Core module registrations without broadening this lane.
 
 ## Verification
 
-- [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
-- [ ] Focused: `cd codex-rs && just test -p codex-secret-broker pf_27_s01 && just test -p codex-core pf_27_s01`; confirm tests actually ran.
-- [ ] Integration: full affected crate suites via `just test -p <affected-crate>`; update Bazel locks when manifests change.
-- [ ] TUI applicability: none; integration flows are re-run by PF-26-S02
-- [ ] Record candidate/commit, commands, expected/actual outcomes and safe artifact digests; no production credentials or funds.
+- [x] Ran fix/format for the owned leaf, inspected the final diff, and kept all
+  targets/caches/logs on CorbanuDrive.
+- [x] Ran focused secret-broker/Core/network/Vault tests; the Core and adapter
+  leaves were compiled under temporary serialized registrations that were
+  restored before handback.
+- [x] Ran full secret-broker, network-proxy, Vault and security-audit suites,
+  the Bazel unit target, platform-probe contracts, and governance checks.
+- [x] Captured a supporting real-TMUX Corbanu Terminal smoke in
+  read-only/never mode with Claude Opus 5 Plan Max selected.
+- [x] Recorded implementation candidate `75bce53ef`, commands, outcomes and
+  safe artifact digests; no production credentials or funds were used.
+- [ ] Complete the preserved TMUX/Corbanu/Claude Opus 5 Max review after the
+  current Claude credential blocker is cleared; no clean verdict is claimed.
 
 ## Exit evidence
 
-- [ ] Implementation commit and final-tree outputs under `qa/security-levels/sprints/PF-27-S04/`.
-- [ ] Acceptance and source-mapping assertions proven; applicable true-TUI keys/checkpoints captured after formatting.
+- [x] Implementation commit and final-tree outputs recorded under
+  `qa/security-levels/sprints/PF-27-S04/`.
+- [x] Acceptance and source-mapping assertions proven for the scoped leaf;
+  supporting true-TUI status checkpoints captured after formatting.
 - [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
 - [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.
