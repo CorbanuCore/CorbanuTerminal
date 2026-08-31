@@ -3,7 +3,7 @@
   "created": "2026-08-30",
   "purpose": "PF-35 synthetic English prompt-injection research fixture generation",
   "commercial_use_required": true,
-  "allowed_spdx": ["Apache-2.0"],
+  "allowed_spdx": ["Apache-2.0", "MIT"],
   "upstream": {
     "repository": "Qwen/Qwen3.8-27B",
     "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
@@ -26,6 +26,13 @@
       "model_type": "qwen3_5",
       "quantization": "compressed-tensors NVFP4 W4A4, group size 16",
       "runtime_claim": "vLLM 0.27.1 measured on RTX 5090 Blackwell",
+      "calibration": {
+        "source": "HuggingFaceH4/ultrachat_200k",
+        "revision": null,
+        "license": "MIT",
+        "method": "20 samples at 2048 tokens to set activation global scales",
+        "provenance_limit": "The quantizer card does not pin the dataset revision or exact sample IDs; the immutable output weights are verified directly."
+      },
       "weight_files": [
         {
           "path": "model.safetensors",
@@ -40,7 +47,7 @@
       },
       "config_sha256": "0d6026f034dcd49bcfda896969fd4ae2a54dbdf92c7e68adeb46587bc27f6801",
       "advantages": ["Blackwell-native FP4 weights and activations", "smallest single-file candidate", "standard vLLM release validation"],
-      "risks": ["No preserved MTP head", "quantizer card reports a fused-scale rounding caveat", "license file is inherited rather than copied into this revision"]
+      "risks": ["No preserved MTP head", "quantizer card reports a fused-scale rounding caveat", "license file is inherited rather than copied into this revision", "calibration dataset revision and sample IDs are not declared"]
     },
     {
       "repository": "twolven/Qwen3.8-27B-abliterated-AWQ-MTP",
@@ -53,6 +60,13 @@
       "model_type": "qwen3_5",
       "quantization": "compressed-tensors W4A16 asymmetric AWQ, group size 128",
       "runtime_claim": "vLLM nightly v0.20.2rc1.dev129 measured on two RTX 3090 GPUs",
+      "calibration": {
+        "source": "HuggingFaceH4/ultrachat_200k",
+        "revision": null,
+        "license": "MIT",
+        "method": "128 samples at 1024 tokens for AWQ calibration",
+        "provenance_limit": "The quantizer card does not pin the dataset revision or exact sample IDs; the immutable output weights would require direct verification."
+      },
       "weight_files": [
         {
           "path": "model.safetensors",
@@ -72,7 +86,7 @@
       },
       "config_sha256": "5cac12087df9690ce133dc9d66b9104c818014fea6b788f2f676359ca06635fc",
       "advantages": ["Preserved MTP speculative head", "small W4 weight footprint", "explicit copied license and parent chain"],
-      "risks": ["Weight-only quantization does not use Blackwell FP4 activations", "published validation used a nightly runtime", "model card warns greedy decoding can repeat"]
+      "risks": ["Weight-only quantization does not use Blackwell FP4 activations", "published validation used a nightly runtime", "model card warns greedy decoding can repeat", "calibration dataset revision and sample IDs are not declared"]
     },
     {
       "repository": "johnnyeric/Qwen3.8-27B-Uncensored-NVFP4",
