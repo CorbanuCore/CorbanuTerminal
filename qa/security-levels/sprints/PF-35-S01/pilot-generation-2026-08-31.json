@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "kind": "pf35-pilot-generation-aggregate",
+  "date": "2026-08-31",
+  "status": "provisional-review-pending",
+  "qualification_boundary": "This is generation and validation evidence, not a claim of 10000 finally accepted or adjudicated records.",
+  "host_id": "rtx6000-blackwell-01",
+  "campaign_id": "qwen38-27b-preet-nvfp4-vllm-en-v1",
+  "round_id": "pilot-r1",
+  "operator": "travis",
+  "generator": {
+    "repository": "preetpatel/Qwen3.8-27B-Uncensored-NVFP4",
+    "revision": "37b5130a2d2a1f7d4456ab3f8d05d0b2a45ea350",
+    "runtime": "vllm-0.27.1-pipfreeze-779bcffe1c5ad92966c554914dd969833cb59888ea7528b568a92a19773ae83d",
+    "concurrency": 64
+  },
+  "identity": {
+    "config_sha256": "d50820c72134ae3b1e06e4f4461899b1941e4c3e3f35e13b514951c2d784bfb9",
+    "prompt_sha256": "fd2ab451baf6dde5c93e95e6d5b4804a8e5d65f0ee1c99ce66ca7bf43833ee4f",
+    "seed_sequence_sha256": "c0559180385664ab7f60d918e810fe05e010771dac504c73c7bfe5ccd95e2344",
+    "source_manifest_sha256": "c0dd2e6c5028ddf9889af6d85bd60074dab94ca55b44f6694db4bcf932ed3384",
+    "ledger_entry_sha256": "ae033f22c5f8b0d06d906fccb0aac7413287bd14b2a76d2ae711ba51175e49e8",
+    "previous_ledger_entry_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "timing": {
+    "started_utc": "2026-08-31T20:34:15Z",
+    "completed_utc": "2026-08-31T20:50:55.099908Z",
+    "observed_wall_seconds": 1000.1
+  },
+  "generation": {
+    "requests": 3000,
+    "requested_records": 12000,
+    "provisional_records": 11767,
+    "provisional_yield_fraction": 0.980583,
+    "candidate_shortfall": 233,
+    "final_accepted_records": 0,
+    "prompt_tokens": 929158,
+    "completion_tokens": 1466372
+  },
+  "rejections": {
+    "entries": 131,
+    "record_level_entries": 97,
+    "request_level_entries": 34,
+    "taxonomy": {
+      "exact_duplicate": 46,
+      "near_duplicate_cross_group": 33,
+      "private_material_pattern": 18,
+      "invalid_or_truncated_json_response": 34
+    }
+  },
+  "review": {
+    "human_review_queue": 709,
+    "required_human_review": 579,
+    "suspicious_label": 578,
+    "low_confidence": 1,
+    "high_confidence_human_audit": 130,
+    "high_confidence_opus_audit": 130,
+    "audit_samples_overlap": 0,
+    "human_adjudicated": 0,
+    "opus_audited": 0
+  },
+  "balance": {
+    "labels": {"allow": 7667, "suspicious": 578, "hostile": 3522},
+    "family_scopes": {"benign": 5303, "hard_negative": 2364, "known": 2358, "unseen": 1742},
+    "coverage_dimensions": {
+      "benign-security-research": 1184,
+      "legitimate-human-trading-instructions": 1188,
+      "trigger-token-hard-negatives": 1175,
+      "finance": 1167,
+      "repository": 1167,
+      "web": 1171,
+      "tool-output": 1182,
+      "child-agent": 1178,
+      "cross-segment": 1195,
+      "unsupported-language": 1160
+    },
+    "source_positions": {
+      "prefix": 2376,
+      "middle": 1565,
+      "suffix": 1578,
+      "quoted-block": 1551,
+      "metadata": 1568,
+      "tool-output-field": 1557,
+      "cross-segment": 1572
+    },
+    "attack_families": {
+      "neutral-documentation": 1343,
+      "legitimate-analysis": 1361,
+      "security-research": 1309,
+      "ordinary-tool-output": 1290,
+      "quoted-trigger": 476,
+      "negated-instruction": 478,
+      "historical-incident": 467,
+      "classifier-discussion": 473,
+      "benign-code-string": 470,
+      "direct-override": 399,
+      "fake-system-message": 388,
+      "tool-redirection": 400,
+      "placeholder-secret-request": 396,
+      "authority-impersonation": 396,
+      "cross-segment-stitching": 379,
+      "encoded-indirection": 276,
+      "policy-shadowing": 296,
+      "recursive-delegation": 300,
+      "metadata-channel-switch": 290,
+      "multilingual-evasion": 292,
+      "split-context-adaptive": 288
+    }
+  },
+  "record_ranges": {
+    "text_characters": {"minimum": 80, "median": 320, "maximum": 4000},
+    "confidence": {"minimum": 0.78, "median": 0.95, "maximum": 0.99}
+  },
+  "external_outputs": {
+    "raw-responses.jsonl": {"records": 3000, "bytes": 7076093, "sha256": "cb01263a2011e2b3a3e4db71a8b22742a7cbe92b43a18ccd42c3a973dda2c4b6"},
+    "provisional-records.jsonl": {"records": 11767, "bytes": 14382603, "sha256": "f3b04ba917e7649c12016b2b669672c6b5ae3d8c3a14a7776dbbd82c566c44d7"},
+    "rejected.jsonl": {"records": 131, "bytes": 10893, "sha256": "18789293706ded82ac653a0425e0a5581eaacfcff03fb96958651201f4431764"},
+    "human-review-queue.jsonl": {"records": 709, "bytes": 849153, "sha256": "9f495adb55bd1fac6b0645f723548133d37b7015a2778debf7530d312b828ae5"},
+    "opus-audit-queue.jsonl": {"records": 130, "bytes": 160778, "sha256": "5bd9cb4e5d3b1a7db4a047ac092a7779e9186214a2724ded68ca9f4ff5b0bb2f"}
+  },
+  "storage": {
+    "record_material_location": "/home/travis/pf35-qualification/campaign/pilot-v1/pilot-r1",
+    "record_material_in_git": false,
+    "blind_material": false
+  }
+}

@@ -58,9 +58,9 @@
     }
   ],
   "synthetic_campaign": {
-    "campaign_id": "qwen35-27b-vllm-en-v1",
-    "generator_model": "Qwen3.5-27B",
-    "runtime": "vLLM",
+    "campaign_id": "qwen38-27b-preet-nvfp4-vllm-en-v1",
+    "generator_model": "preetpatel/Qwen3.8-27B-Uncensored-NVFP4@37b5130a2d2a1f7d4456ab3f8d05d0b2a45ea350",
+    "runtime": "vLLM-0.27.1",
     "language": "en",
     "status": "external_evidence_required",
     "records_committed": 0,
@@ -71,12 +71,16 @@
       "sampling_parameters",
       "model_revision",
       "runtime_version",
-      "container_digest",
+      "runtime_environment_sha256",
+      "model_sha256",
+      "tokenizer_sha256",
+      "config_sha256",
+      "optimization_config_sha256",
       "driver_version",
       "campaign_id",
       "output_sha256"
     ],
-    "generation_host": "RTX host supplied by product owner",
+    "generation_host": "rtx6000-blackwell-01",
     "comfyui_must_be_stopped": true,
     "targets": {
       "train": 250000,

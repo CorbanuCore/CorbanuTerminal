@@ -66,22 +66,31 @@ and SHA-256 all use those identical bytes. Reports are written atomically.
 
 `generator-candidates-v1.json` pins the candidate repositories, immutable
 revisions, parent provenance, licenses, architectures, quantization formats,
-tokenizers and artifact hashes considered for the external generator. Its
-selection remains pending until the same-host bakeoff evidence is recorded; a
-model-card performance claim is not campaign evidence.
+tokenizers and artifact hashes considered for the external generator. The
+selection pins `preetpatel/Qwen3.8-27B-Uncensored-NVFP4` at its immutable
+revision after the same-host result recorded in
+`../sprints/PF-35-S01/generator-qualification-2026-08-31.json`; model-card
+performance claims remain comparators, not campaign evidence.
+`pf35_vllm_launch.sh` is the secret-free exact launch recipe for that accepted
+host/runtime layout. It binds loopback only, disables request/output logging,
+uses the measured O2/CUDA-graph configuration and serializes compilation to
+avoid the observed parallel-build memory spike.
 
 `pf35_bakeoff.py` sends only bounded synthetic defensive research requests to a
 local OpenAI-compatible endpoint. It records refusal, exact JSON-format,
 throughput, latency and request-error aggregates plus response hashes, never
-response content. Run it separately for every candidate and concurrency point;
-keep its output outside Git until reviewed and reduced to safe aggregate
-evidence.
+response content. The selected runtime uses a strict JSON schema so item count,
+labels, minimum text length and additional-property exclusion are enforced
+during decoding. Keep raw output outside Git until reviewed and reduced to safe
+aggregate evidence.
 
 `pf35_campaign.py` creates deterministic balanced request plans and validates
 the returned provisional records. It rejects unexpected schemas, invalid
 label/scope pairs, secret-like material, exact duplicates and cross-group
-near-duplicates. Every disagreement, low-confidence record and `suspicious`
-label enters the human-review queue. High-confidence agreements receive
+near-duplicates. Its per-plan response schema fixes the item count, label,
+family scope, text bounds and confidence bounds during decoding. Every
+disagreement, low-confidence record and `suspicious` label enters the
+human-review queue. High-confidence agreements receive
 deterministic, non-overlapping, per-stratum 1% human and 1% Opus audit samples.
 The tool writes raw/provisional/rejected JSONL only to an operator-supplied
 external directory and appends a verified SHA-256 hash-chained campaign ledger.

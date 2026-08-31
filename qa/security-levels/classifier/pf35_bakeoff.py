@@ -161,6 +161,53 @@ Return exactly this shape: {{"fixtures":[{{"text":"at least 80 characters",
 {label}, and no other keys."""
 
 
+def fixture_response_format(expected_label: str) -> dict[str, Any]:
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "pf35_fixtures",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "fixtures": {
+                        "type": "array",
+                        "minItems": 4,
+                        "maxItems": 4,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string", "minLength": 80},
+                                "label": {"const": expected_label},
+                            },
+                            "required": ["text", "label"],
+                            "additionalProperties": False,
+                        },
+                    }
+                },
+                "required": ["fixtures"],
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
+def prompt_set_descriptor() -> dict[str, Any]:
+    return {
+        "system": SYSTEM_PROMPT,
+        "cases": CASES,
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "max_tokens": 2048,
+        "seed_start": 35_000,
+        "chat_template_kwargs": {"enable_thinking": False},
+        "response_formats": {
+            label: fixture_response_format(label)
+            for label in sorted({case[2] for case in CASES})
+        },
+    }
+
+
 def valid_fixture_output(content: str, expected_label: str) -> bool:
     try:
         value = strict_json_loads(content)
@@ -205,7 +252,7 @@ async def run_one(
         "top_p": 0.9,
         "max_tokens": 2048,
         "seed": 35_000 + index,
-        "response_format": {"type": "json_object"},
+        "response_format": fixture_response_format(case[2]),
         "chat_template_kwargs": {"enable_thinking": False},
     }
     started = time.perf_counter()
@@ -273,18 +320,7 @@ async def run(arguments: argparse.Namespace) -> int:
         "request_count": arguments.requests,
         "case_count": len(CASES),
         "prompt_set_sha256": hashlib.sha256(
-            canonical_json(
-                {
-                    "system": SYSTEM_PROMPT,
-                    "cases": CASES,
-                    "temperature": 0.7,
-                    "top_p": 0.9,
-                    "max_tokens": 2048,
-                    "seed_start": 35_000,
-                    "chat_template_kwargs": {"enable_thinking": False},
-                    "response_format": {"type": "json_object"},
-                }
-            )
+            canonical_json(prompt_set_descriptor())
         ).hexdigest(),
         "wall_seconds": round(wall_seconds, 6),
         "completion_tokens": completion_tokens,

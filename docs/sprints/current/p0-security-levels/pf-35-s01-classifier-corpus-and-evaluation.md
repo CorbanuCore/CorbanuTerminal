@@ -59,11 +59,12 @@ updated: 2026-08-30
 - [x] Kept N100 latency/RSS, model size, signed release identity, private custody, and a custodian-side train/development/blind group-tuple overlap audit fail closed as external requirements; unequal fingerprint declarations alone do not prove disjointness.
 - [x] Added evaluator regression coverage plus a meaningful PF-35 Rust regression proving altered model-artifact and threshold digests cannot authorize release.
 - [x] Integration owner wired `scripts/test_security_classifier_eval.py` and a shipped-CLI smoke into recurring CI without expanding this lane's literal write scope.
+- [x] Pinned and license-reviewed the exact Qwen 3.8 generator, tokenizer, vLLM environment, launch recipe, prompt schemas, seeds and sampling; the same-host benchmark and 128/128 structured bakeoff qualify it for the pilot.
+- [x] Generated 11,767 hash-bound provisional pilot records from 12,000 candidates on the RTX host, with privacy/dedup rejections and disjoint human/Opus review queues; no record material entered Git.
 
 ## Remaining
 
-- [ ] Pin and license-review the exact Qwen 3.8 27B-family generator, tokenizer, vLLM/container revision, prompts, seeds and sampling settings; freeze source/campaign ledgers before generation.
-- [ ] Run the balanced 10,000-acceptance pilot, complete required adjudication and disjoint 1% human/1% Opus audits, and obtain integration-owner acceptance before scaling.
+- [ ] Complete human decisions for 709 selected records and Opus decisions for 130 disjoint audit records, run hash-bound adjudication, prove at least 10,000 final accepted pilot records, and obtain integration-owner acceptance before scaling.
 - [ ] Group and freeze approximately 250k training and 25k development records on the RTX lane; preserve hashes and aggregate evidence without committing record data or weights.
 - [ ] Have Travis independently freeze/encrypt/sign the approximately 150k blind manifest and return a signed train/development/blind canonical group-tuple overlap audit without exposing blind rows, labels or row-level errors.
 

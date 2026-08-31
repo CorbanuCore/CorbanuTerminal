@@ -42,6 +42,16 @@ class SecurityClassifierEvalTests(unittest.TestCase):
         with self.assertRaisesRegex(evaluator.EvaluationError, "unapproved license"):
             evaluator.validate_corpus_manifest(manifest, self.root)
 
+    def test_pf_35_s01_rejects_generator_identity_drift(self) -> None:
+        manifest = copy.deepcopy(self.corpus)
+        manifest["synthetic_campaign"]["generator_model"] = "Qwen3.5-27B"
+        with self.assertRaisesRegex(evaluator.EvaluationError, "generator model"):
+            evaluator.validate_corpus_manifest(manifest, self.root)
+        manifest = copy.deepcopy(self.corpus)
+        manifest["synthetic_campaign"]["runtime"] = "vLLM"
+        with self.assertRaisesRegex(evaluator.EvaluationError, "generator runtime"):
+            evaluator.validate_corpus_manifest(manifest, self.root)
+
     def test_pf_35_s01_rejects_source_hash_drift_and_traversal(self) -> None:
         drift = copy.deepcopy(self.corpus)
         drift["sources"][0]["sha256"] = "0" * 64

@@ -1,9 +1,10 @@
 # PF-35-S01 evidence
 
-Date: 2026-08-30. Sprint status: **in progress**. This evidence proves only the
-public deterministic contracts and evaluator implementation. It does not claim
-an RTX campaign, private corpus access, blind qualification, production model
-weights, signing, or Intel N100 performance.
+Dates: 2026-08-30 through 2026-08-31. Sprint status: **in progress**. This
+evidence proves the public deterministic contracts, evaluator implementation,
+and the exact RTX generator qualification described below. It does not claim a
+completed or adjudicated corpus, private blind access, blind qualification,
+production detector weights, signing, or Intel N100 performance.
 
 ## Candidate and scope
 
@@ -12,10 +13,13 @@ weights, signing, or Intel N100 performance.
   `e0c23fe95165636d621dae8c16a5366c4f7250ac`.
 - Branch/worktree: `feat/p0-security-classifier-corpus` at the worktree recorded
   in the sprint front matter.
-- Public corpus manifest SHA-256:
-  `ea5c27983dd2ff4ffef18a7f423dea92439a71f7bdf021ba3fbcf97785dbc339`.
-- Split contract SHA-256:
-  `58e6eaf7a2add997d5194fb9a619c9612e8b9ac3580744dec1e2bc1a2f1a0dcf`.
+- Current public corpus manifest SHA-256:
+  `c0dd2e6c5028ddf9889af6d85bd60074dab94ca55b44f6694db4bcf932ed3384`.
+- Current split contract SHA-256:
+  `5bede5a495031dda8b523ef3ece01e6f7a69ba46550a998b1a3a8fb78e81f8c7`.
+- The external continuation uses recorded base `2bcaf8d0b70f039f48165d0e4a4f291101574a41`,
+  branch `feat/pf-35-s01-external-qualification-20260830`, and the distinct
+  CorbanuDrive worktree in sprint front matter.
 - No Cargo, Bazel, lock, workspace-registry or schema-registry edge changed.
 - Integration registration completed: recurring CI now runs
   `python -m unittest scripts.test_security_classifier_eval` plus the shipped
@@ -46,6 +50,73 @@ weights, signing, or Intel N100 performance.
   21 skipped; the named PF-35 test ran.
 - `cd codex-rs && just test -p codex-content-security`: 22 passed, 0 skipped.
 - Governance: active plan and sprint checks pass; final diff check is clean.
+
+## RTX generator qualification
+
+The owner-authorized Ubuntu host `rtx6000-blackwell-01` has an NVIDIA RTX PRO
+6000 Blackwell Workstation Edition with 97,887 MiB VRAM, driver 595.84, CUDA
+driver 13.2, an AMD Ryzen 9 9950X3D and 89 GiB RAM. ComfyUI was stopped before
+model work and remained stopped. Model traffic binds only to
+`127.0.0.1:8000`; no corpus request or response crosses the network API
+boundary.
+
+The selected generator is
+`preetpatel/Qwen3.8-27B-Uncensored-NVFP4@37b5130a2d2a1f7d4456ab3f8d05d0b2a45ea350`.
+The 18.36 GiB model, tokenizer and config SHA-256 identities, Apache-2.0 parent
+chain, calibration-provenance limit, host facts, exact vLLM 0.27.1 environment,
+launch configuration, benchmark method and safe result hashes are recorded in
+[generator qualification](generator-qualification-2026-08-31.json). The direct
+isolated venv is identified by the SHA-256 of its sorted package freeze; no
+container was used or claimed.
+
+The initial deliberately conservative eager/O0 server delivered 22.63 output
+tokens/s at concurrency 1 and 87.72 at concurrency 4. Enabling vLLM O2,
+FlashInfer autotuning and bounded CUDA graphs raised the same fixed 1,024-input,
+512-output workload to 75.54 at concurrency 1, 280.33 at 4, 516.26 at 8,
+904.96 at 16, 1,392.41 at 32 and 1,860.61 at 64; every measured request
+succeeded. The single-stream result is consistent with the cited published
+non-MTP comparison, while the larger concurrency points establish this host's
+campaign capacity rather than claiming cross-host equivalence.
+
+PF-35 requests use strict JSON-schema constrained decoding. The final 128-request
+bakeoff at concurrency 64 produced 128/128 exact-format responses, zero
+refusals, zero request errors and 1,290.724 completion tokens/s. A separate
+1,600-candidate campaign smoke retained 1,587 provisional records, rejected
+secret-like material and duplicates, populated distinct human and Opus queues,
+and sustained 100% GPU utilization without swap, OOM, thermal failure or power
+limiting. The earlier host reboots were isolated to unconstrained parallel
+kernel compilation; serial compilation peaked with ample RAM and is now part of
+the frozen launch configuration. No hardware repair or capacity upgrade is
+indicated for this campaign.
+
+## Pilot generation — review still required
+
+The versioned `pilot-r1` round issued 3,000 requests at concurrency 64 and
+requested 12,000 candidates. It completed in 1,000.1 seconds with 1,466,372
+completion tokens and retained 11,767 provisional records (98.0583%). The
+validator rejected 46 exact duplicates, 33 cross-group near duplicates, 18
+secret-pattern matches and 34 request-level invalid/truncated JSON responses;
+the 97 record-level and 34 four-record request-level rejections account exactly
+for the 233-candidate shortfall.
+
+The provisional set contains 7,667 `allow`, 578 `suspicious` and 3,522
+`hostile` records. Every required coverage dimension has 1,160–1,195 records;
+all configured positions and attack families are present. The deterministic
+review selection contains 579 mandatory human reviews, 130 separate
+high-confidence human audits and 130 disjoint Opus audits. The human queue has
+709 records and the Opus queue has 130. Exact label/scope/family/coverage
+counts, file sizes, output hashes and ledger identities are recorded in the
+[pilot generation aggregate](pilot-generation-2026-08-31.json).
+
+The external campaign ledger verifies to
+`ae033f22c5f8b0d06d906fccb0aac7413287bd14b2a76d2ae711ba51175e49e8`.
+Independent SHA-256 and line-count checks reproduced all five recorded output
+identities. Raw responses, provisional records and review queues remain solely
+under `/home/travis/pf35-qualification/campaign/pilot-v1/pilot-r1`; Git contains
+only the safe aggregate. `final_accepted_records` remains zero until Travis and
+the independent Opus reviewer return complete decisions and the adjudication
+subcommand succeeds. Therefore this run clears generation capacity but does
+not yet claim the brief's 10,000 accepted-record gate.
 
 ## Exact-candidate TMUX smoke
 
@@ -178,7 +249,11 @@ Cycle-8 trace SHA-256:
 
 ## External blockers kept open
 
-- Qwen3.5-27B/vLLM generation and corpus hashes on the owner-supplied RTX host.
+- Human and Opus decisions for the generated pilot, successful hash-bound
+  adjudication, and integration-owner acceptance before scaling beyond the
+  pilot.
+- Frozen approximately 250k training and 25k development corpora with grouped
+  split and leakage-audit evidence.
 - Human-custodied private blind corpus, aggregate report and signed group-tuple overlap audit; unequal split fingerprints alone do not prove disjointness.
 - Production DeBERTa/ONNX artifact, weights, rotating release signature and offline-root authorization.
 - Intel N100, 16 GiB, x86-64 Linux measurements at 2,048 tokens. The available

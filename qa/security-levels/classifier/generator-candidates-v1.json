@@ -117,9 +117,9 @@
     }
   ],
   "selection": {
-    "status": "bakeoff-pending",
-    "accepted_repository": null,
-    "accepted_revision": null,
-    "decision_evidence": null
+    "status": "accepted-after-same-host-bakeoff",
+    "accepted_repository": "preetpatel/Qwen3.8-27B-Uncensored-NVFP4",
+    "accepted_revision": "37b5130a2d2a1f7d4456ab3f8d05d0b2a45ea350",
+    "decision_evidence": "qa/security-levels/sprints/PF-35-S01/generator-qualification-2026-08-31.json"
   }
 }

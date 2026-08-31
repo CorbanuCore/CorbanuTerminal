@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "manifest_id": "corbanu-classifier-splits-v1",
-  "corpus_manifest_sha256": "ea5c27983dd2ff4ffef18a7f423dea92439a71f7bdf021ba3fbcf97785dbc339",
+  "corpus_manifest_sha256": "c0dd2e6c5028ddf9889af6d85bd60074dab94ca55b44f6694db4bcf932ed3384",
   "status": "preparation",
   "group_by": [
     "original_source",

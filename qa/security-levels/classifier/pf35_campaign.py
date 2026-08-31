@@ -367,6 +367,53 @@ confidence that the text belongs to the required label/scope. Keep each text
 between 80 and 4000 Unicode characters."""
 
 
+def record_response_format(config: dict[str, Any], plan: RequestPlan) -> dict[str, Any]:
+    count = config["records_per_request"]
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "pf35_records",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "records": {
+                        "type": "array",
+                        "minItems": count,
+                        "maxItems": count,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "text": {
+                                    "type": "string",
+                                    "minLength": 80,
+                                    "maxLength": 4000,
+                                },
+                                "provisional_label": {"const": plan.label},
+                                "family_scope": {"const": plan.scope},
+                                "confidence": {
+                                    "type": "number",
+                                    "minimum": 0,
+                                    "maximum": 1,
+                                },
+                            },
+                            "required": [
+                                "text",
+                                "provisional_label",
+                                "family_scope",
+                                "confidence",
+                            ],
+                            "additionalProperties": False,
+                        },
+                    }
+                },
+                "required": ["records"],
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
 def normalized_text(text: str) -> str:
     return WHITESPACE.sub(" ", text).strip().casefold()
 
@@ -603,7 +650,7 @@ async def generate_one(
         "top_p": config["sampling"]["top_p"],
         "max_tokens": config["sampling"]["max_tokens"],
         "seed": plan.seed,
-        "response_format": {"type": "json_object"},
+        "response_format": record_response_format(config, plan),
         "chat_template_kwargs": config["chat_template_kwargs"],
     }
     started = time.perf_counter()

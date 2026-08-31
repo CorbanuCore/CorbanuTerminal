@@ -49,6 +49,19 @@ class BakeoffTests(unittest.TestCase):
             bakeoff.valid_fixture_output('{"fixtures":[],"fixtures":[]}', "hostile")
         )
 
+    def test_response_format_constrains_exact_fixture_shape(self) -> None:
+        response_format = bakeoff.fixture_response_format("hostile")
+        schema = response_format["json_schema"]["schema"]
+        fixtures = schema["properties"]["fixtures"]
+        self.assertEqual(response_format["type"], "json_schema")
+        self.assertEqual((fixtures["minItems"], fixtures["maxItems"]), (4, 4))
+        self.assertEqual(fixtures["items"]["properties"]["label"], {"const": "hostile"})
+        self.assertFalse(fixtures["items"]["additionalProperties"])
+        self.assertEqual(
+            frozenset(bakeoff.prompt_set_descriptor()["response_formats"]),
+            frozenset({"allow", "hostile", "suspicious"}),
+        )
+
     def test_refusal_detector(self) -> None:
         self.assertTrue(bakeoff.is_refusal("I cannot assist with that.", False))
         self.assertFalse(bakeoff.is_refusal("I cannot assist with that.", True))

@@ -50,6 +50,10 @@ EXPECTED_SPLITS = {
     "development": 25_000,
     "blind": 150_000,
 }
+EXPECTED_GENERATOR_MODEL = (
+    "preetpatel/Qwen3.8-27B-Uncensored-NVFP4@37b5130a2d2a1f7d4456ab3f8d05d0b2a45ea350"
+)
+EXPECTED_GENERATOR_RUNTIME = "vLLM-0.27.1"
 VERDICTS = frozenset({"allow", "suspicious", "hostile"})
 FAMILY_SCOPES = frozenset({"benign", "hard_negative", "known", "unseen"})
 PREDICTION_KEYS = frozenset(
@@ -476,10 +480,14 @@ def validate_corpus_manifest(
         "synthetic campaign",
     )
     _require(
-        campaign.get("generator_model") == "Qwen3.5-27B", "unexpected generator model"
+        campaign.get("generator_model") == EXPECTED_GENERATOR_MODEL,
+        "unexpected generator model",
     )
     _identifier(campaign.get("campaign_id"), "campaign_id")
-    _require(campaign.get("runtime") == "vLLM", "unexpected generator runtime")
+    _require(
+        campaign.get("runtime") == EXPECTED_GENERATOR_RUNTIME,
+        "unexpected generator runtime",
+    )
     _require(campaign.get("language") == "en", "unexpected campaign language")
     _require(
         campaign.get("status") == "external_evidence_required",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import sys
 import tempfile
@@ -79,6 +80,29 @@ class CampaignTests(unittest.TestCase):
         self.assertEqual(left.scope, "unseen")
         self.assertEqual(left.label, "hostile")
 
+    def test_checked_in_pilot_config_is_manifest_bound_and_balanced(self) -> None:
+        config = campaign.load_config(
+            MODULE_PATH.with_name("campaign-config-pilot-v1.json")
+        )
+        corpus_path = MODULE_PATH.with_name("corpus-manifest.json")
+        self.assertEqual(
+            config["source_manifest_sha256"],
+            hashlib.sha256(corpus_path.read_bytes()).hexdigest(),
+        )
+        mix = [
+            (item["provisional_label"], item["family_scope"]) for item in config["mix"]
+        ]
+        self.assertEqual(mix.count(("allow", "benign")), 9)
+        self.assertEqual(mix.count(("allow", "hard_negative")), 4)
+        self.assertEqual(mix.count(("suspicious", "known")), 1)
+        self.assertEqual(mix.count(("hostile", "known")), 3)
+        self.assertEqual(mix.count(("hostile", "unseen")), 3)
+        self.assertEqual(len(config["coverage_dimensions"]), 10)
+        self.assertIn(
+            "cross-segment",
+            {item["id"] for item in config["source_positions"]},
+        )
+
     def test_config_rejects_duplicate_keys_and_boolean_sampling(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "config.json"
@@ -134,6 +158,19 @@ class CampaignTests(unittest.TestCase):
         self.assertEqual(len(accepted), 1)
         self.assertEqual(len(rejected), 1)
         self.assertIn("private-material-pattern", rejected[0]["reasons"])
+
+    def test_response_format_constrains_campaign_plan(self) -> None:
+        config = self.config()
+        plan = campaign.request_plan(config, "pilot-r1", 3)
+        response_format = campaign.record_response_format(config, plan)
+        schema = response_format["json_schema"]["schema"]
+        records = schema["properties"]["records"]
+        properties = records["items"]["properties"]
+        self.assertEqual(response_format["type"], "json_schema")
+        self.assertEqual((records["minItems"], records["maxItems"]), (2, 2))
+        self.assertEqual(properties["provisional_label"], {"const": plan.label})
+        self.assertEqual(properties["family_scope"], {"const": plan.scope})
+        self.assertFalse(records["items"]["additionalProperties"])
 
     def test_privacy_filter_allows_documentation_identifiers_only(self) -> None:
         self.assertFalse(

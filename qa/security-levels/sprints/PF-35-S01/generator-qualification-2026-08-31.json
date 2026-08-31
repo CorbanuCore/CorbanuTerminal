@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "kind": "pf35-generator-qualification",
+  "date": "2026-08-31",
+  "status": "accepted-for-10000-record-pilot",
+  "candidate": {
+    "repository": "preetpatel/Qwen3.8-27B-Uncensored-NVFP4",
+    "revision": "37b5130a2d2a1f7d4456ab3f8d05d0b2a45ea350",
+    "parent_repository": "orcarouter/Qwen3.8-27B-Uncensored",
+    "parent_revision": "404ea47aaa5d8a8b00049c9e9750089aca011ab2",
+    "upstream_repository": "Qwen/Qwen3.8-27B",
+    "upstream_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "license": "Apache-2.0",
+    "architecture": "Qwen3_5ForConditionalGeneration",
+    "quantization": "compressed-tensors NVFP4 W4A4 group-size 16 with BF16 Gated DeltaNet layers",
+    "model_sha256": "bc642c1159ab9b0fcd2fdc65be4fee72fa560cf0570604741db50061ea063277",
+    "tokenizer_sha256": "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523",
+    "config_sha256": "0d6026f034dcd49bcfda896969fd4ae2a54dbdf92c7e68adeb46587bc27f6801"
+  },
+  "runtime": {
+    "deployment": "direct isolated Python virtual environment; no container used",
+    "vllm": "0.27.1",
+    "python": "3.12.11",
+    "cuda_packages": "13.0.88 compatibility toolchain",
+    "runtime_environment_sha256": "779bcffe1c5ad92966c554914dd969833cb59888ea7528b568a92a19773ae83d",
+    "runtime_environment_hash_subject": "sorted pip freeze output after CUDA compatibility pins",
+    "container_digest": null
+  },
+  "launch_recipe": {
+    "path": "qa/security-levels/classifier/pf35_vllm_launch.sh",
+    "sha256": "6b684411461f8ecfdccb901e4b9b771c0c4d496cab28001553fedf6e85cd77e1"
+  },
+  "host": {
+    "host_id": "rtx6000-blackwell-01",
+    "os": "Ubuntu 26.04 LTS",
+    "kernel": "7.0.0-30-generic",
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "vram_mib": 97887,
+    "driver": "595.84",
+    "cuda_driver": "13.2",
+    "cpu": "AMD Ryzen 9 9950X3D",
+    "ram_gib": 89,
+    "comfyui_stopped": true
+  },
+  "server_config": {
+    "bind": "127.0.0.1:8000",
+    "max_model_len": 4096,
+    "kv_cache_dtype": "fp8",
+    "kv_cache_memory_gib": 48,
+    "max_num_seqs": 64,
+    "max_num_batched_tokens": 8192,
+    "prefix_caching": true,
+    "chunked_prefill": true,
+    "language_model_only": true,
+    "enable_thinking": false,
+    "optimization_level": 2,
+    "enforce_eager": false,
+    "cudagraph_capture_sizes": [1, 2, 4, 8, 16, 32, 64],
+    "flashinfer_autotune": true,
+    "jit_warmup": true,
+    "compile_parallelism": 1,
+    "optimization_config_sha256": "a38bb00b25b5dace14ec27fb1dee8cd5e54ffef31fa821740a1efb7c2216398e"
+  },
+  "fixed_decode_method": {
+    "tool": "vllm bench serve 0.27.1",
+    "backend": "vllm",
+    "input_tokens_per_request": 1024,
+    "output_tokens_per_request": 512,
+    "ignore_eos": true,
+    "temperature": 0.0,
+    "seed": 35,
+    "requests_per_point": {
+      "1": 8,
+      "4": 16,
+      "8": 32,
+      "16": 64,
+      "32": 128,
+      "64": 256
+    }
+  },
+  "fixed_decode_results": [
+    {"config": "eager-o0", "concurrency": 1, "output_tokens_per_second": 22.63, "failed_requests": 0, "source_sha256": "cde8f30b2cbdf137c764aff436531ddcb9b28cd6bd2a821790fb01b904163b0f"},
+    {"config": "eager-o0", "concurrency": 4, "output_tokens_per_second": 87.72, "failed_requests": 0, "source_sha256": "7c845aeed170ea4b0e457e13bf42a61ecd1df2f9b6eb3114a646fed609108c2b"},
+    {"config": "o2-cg64", "concurrency": 1, "output_tokens_per_second": 75.54, "failed_requests": 0, "source_sha256": "9c0de4c23dd4e777776483ab8d74896e5c2bd7acee1b24ae242f5821ba0dddc2"},
+    {"config": "o2-cg64", "concurrency": 4, "output_tokens_per_second": 280.33, "failed_requests": 0, "source_sha256": "926fbd55ecaf53bd91394c45a6010da8e1b4a60de1b5c7498b34610014ee2f9a"},
+    {"config": "o2-cg64", "concurrency": 8, "output_tokens_per_second": 516.26, "failed_requests": 0, "source_sha256": "ba6fe4e69620fdcabf7045bcb3bafa8588c8b241f7d41c76cbe7f01eb88e8149"},
+    {"config": "o2-cg64", "concurrency": 16, "output_tokens_per_second": 904.96, "failed_requests": 0, "source_sha256": "75f11abd2004c4730174dc98f376b5b02a667fd3abc6f13563870cafe404106c"},
+    {"config": "o2-cg64", "concurrency": 32, "output_tokens_per_second": 1392.41, "failed_requests": 0, "source_sha256": "be7cd814a2f7ff4d93c83a9c3d9c8439513837b05439fe0b2efc0ce43bb830cf"},
+    {"config": "o2-cg64", "concurrency": 64, "output_tokens_per_second": 1860.61, "failed_requests": 0, "source_sha256": "4d3dd119d2c48f3c2fb8fda20a09d7e20b5f8ea38f8bd8158f4b0be5ee0874e9"}
+  ],
+  "published_comparators": [
+    {
+      "source": "https://github.com/adrienbrault/qwen3.8-27b-rtx5090/blob/main/bench/RESULTS.md",
+      "hardware": "RTX 5090",
+      "method": "fixed 1024-output steady-state serving benchmark",
+      "non_mtp_output_tokens_per_second": {"1": 73.2, "2": 126.4, "4": 213.4}
+    },
+    {
+      "source": "https://github.com/gisenberg/local-model-eval/blob/main/results/QWEN36_RTXPRO6000.md",
+      "hardware": "RTX PRO 6000 Blackwell",
+      "method": "community Qwen3.6 comparison on the same GPU class",
+      "single_stream_output_tokens_per_second": {"no_mtp": 63.6, "mtp2": 113.2}
+    }
+  ],
+  "structured_bakeoff": {
+    "concurrency": 64,
+    "requests": 128,
+    "completion_tokens_per_second": 1290.724,
+    "format_valid": 128,
+    "refusals": 0,
+    "errors": 0,
+    "response_content_recorded": false,
+    "response_hashes_recorded": true,
+    "json_schema_constrained": true,
+    "source_sha256": "a9c8f6e3f13992cf48a421a0a1cbff9e8ab2b6973b18d3382c2f176456dea2dd"
+  },
+  "campaign_smoke": {
+    "requests": 400,
+    "requested_records": 1600,
+    "provisional_records": 1587,
+    "rejection_entries": 10,
+    "human_review_queue": 120,
+    "opus_audit_queue": 40,
+    "labels": {"allow": 1028, "suspicious": 80, "hostile": 479},
+    "hardware_observation": {"gpu_utilization_percent": 100, "gpu_power_watts": 452.07, "gpu_power_limit_watts": 600, "gpu_temperature_c": 65, "available_ram_gib": 81, "swap_used_gib": 0}
+  },
+  "decision": {
+    "accepted_for_pilot": true,
+    "campaign_concurrency": 64,
+    "rationale": "The pinned checkpoint exceeded the published non-MTP single-stream comparator, scaled without request failure to 64 streams, and produced 128 of 128 schema-valid defensive research responses with no refusal.",
+    "hardware_problem_observed": false,
+    "known_limits": [
+      "The checkpoint has no MTP speculative head.",
+      "vLLM warns that parallel fused NVFP4 layers use differing global scales; labels remain provisional and quality is independently reviewed.",
+      "FP8 KV cache uses runtime scaling rather than a separately calibrated KV scale.",
+      "The quantizer card does not pin calibration sample identities.",
+      "This qualification does not claim N100 performance, a trained classifier, a blind result, or a signed production artifact."
+    ]
+  }
+}
