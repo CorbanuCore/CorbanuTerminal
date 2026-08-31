@@ -1219,6 +1219,43 @@ fn concurrent_writer_lock_blocks_append() {
 }
 
 #[test]
+fn recovery_distinguishes_storage_failure_from_writer_contention() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    fixture.append_decision();
+    fs::remove_dir_all(fixture.root_path.as_path()).expect("remove journal directory");
+    fs::write(fixture.root_path.as_path(), b"not a directory").expect("replace journal root");
+
+    let report = fixture
+        .restarted_journal()
+        .recover(1, 1, &RevocationState::new());
+    assert_eq!(
+        report.state,
+        RecoveryState::Blocked(RecoveryBlocker::StorageUnavailable)
+    );
+}
+
+#[test]
+fn recovery_reports_temp_cleanup_failure_as_storage_unavailable() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    fixture.append_decision();
+    let segment = fs::read_dir(fixture.root_path.as_path())
+        .expect("read journal root")
+        .filter_map(Result::ok)
+        .find(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+        .expect("journal segment");
+    fs::create_dir(segment.path().join("record-00000000000000000002.json.tmp"))
+        .expect("create non-removable temp directory");
+
+    let report = fixture
+        .restarted_journal()
+        .recover(1, 1, &RevocationState::new());
+    assert_eq!(
+        report.state,
+        RecoveryState::Blocked(RecoveryBlocker::StorageUnavailable)
+    );
+}
+
+#[test]
 fn emergency_restriction_fences_immediately_and_exposes_audit_gap() {
     let mut fixture = Fixture::new(JournalConfig::default());
     fixture.append_decision();

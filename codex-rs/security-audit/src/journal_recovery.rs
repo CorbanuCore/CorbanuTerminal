@@ -64,13 +64,20 @@ impl ReferenceJournal {
         expected_run_generation: u64,
         expected_revocations: &RevocationState,
     ) -> RecoveryReport {
-        let Ok(_lock) = self.writer_lock() else {
-            self.mark_blocked();
-            return RecoveryReport::blocked(RecoveryBlocker::ConcurrentWriter);
+        let _lock = match self.writer_lock() {
+            Ok(lock) => lock,
+            Err(JournalError::ConcurrentWriter) => {
+                self.mark_blocked();
+                return RecoveryReport::blocked(RecoveryBlocker::ConcurrentWriter);
+            }
+            Err(_) => {
+                self.mark_blocked();
+                return RecoveryReport::blocked(RecoveryBlocker::StorageUnavailable);
+            }
         };
         if self.clean_temps().is_err() {
             self.mark_blocked();
-            return RecoveryReport::blocked(RecoveryBlocker::InterruptedWrite);
+            return RecoveryReport::blocked(RecoveryBlocker::StorageUnavailable);
         }
         let (report, validated) = self.inspect(Some((
             expected_policy_generation,

@@ -18,6 +18,7 @@ use crate::SecurityEventId;
 #[serde(rename_all = "snake_case")]
 pub enum RecoveryBlocker {
     ConcurrentWriter,
+    StorageUnavailable,
     InvalidRecord,
     InterruptedWrite,
     IntegrityRootUnavailable,

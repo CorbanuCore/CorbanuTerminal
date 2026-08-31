@@ -318,6 +318,7 @@ pub(crate) fn is_lower_hex_sha256(value: &str) -> bool {
 pub(crate) fn map_blocker(blocker: RecoveryBlocker) -> JournalError {
     match blocker {
         RecoveryBlocker::ConcurrentWriter => JournalError::ConcurrentWriter,
+        RecoveryBlocker::StorageUnavailable => JournalError::StorageUnavailable,
         RecoveryBlocker::IntegrityRootUnavailable | RecoveryBlocker::MissingIntegrityKey => {
             JournalError::IntegrityRootUnavailable
         }
