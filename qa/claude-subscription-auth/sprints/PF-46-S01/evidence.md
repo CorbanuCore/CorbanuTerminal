@@ -4,11 +4,11 @@
 
 - Frozen base: `8ae13e168817445205321bae410740cbc3e919b7`.
 - Isolated branch: `feat/claude-subscription-auth-isolated`.
-- Final implementation repair candidate: `f0d5b0b16`.
+- Final implementation repair candidate: `b96326f01`.
 - Coordination-only lifecycle mirror: `f36c28770`; it does not import the
   corresponding P0 product implementation into this isolated lineage.
 - Candidate binary: `codex-rs/target/debug/corbanu`, version `0.1.35`, SHA-256
-  `b709b9eea122b1482cd965de643fbe57b88bdad1a24f217c54b16cb1ddfb65c5`.
+  `9517a17105e62697bcdef0da68a26fceb04821b7643e82c8ec86d9a5ef3acf4e`.
 
 ## Formatting, static checks, and documentation
 
@@ -37,6 +37,9 @@
 | External bearer cache behavior | 4/4 passed | `b9fb3e75-7d58-428c-8f0e-996827d7c069` |
 | Claude Plan cache policy | 1/1 passed | `d2258b6b-ea30-439a-bb0b-b2a7251e2e16` |
 | Core provider auth and 401 | 2/2 passed | `1a46d371-8aea-4c7e-8347-b58cbbb6ae6e` |
+| Final FreshPerRequest refresh behavior | 3/3 passed | `754b39d7-3e13-449f-8bc8-d0e23b8cb1ce` |
+| Final CLI Claude OAuth custody and rotation | 120/120 passed | `93a0303b-3941-4f36-a06e-8ac070cb5209` |
+| Final TUI status and bounded-output regressions | 7/7 passed | `b90d9758-c100-4bed-aaed-b40ff8aa0745` |
 
 Rust 1.95 produced one incremental compiler ICE during an earlier CLI attempt.
 The affected suites were rerun with `CARGO_INCREMENTAL=0`; test retries remained
@@ -51,6 +54,13 @@ Nextest run `9b9d555f-b3ee-4b7f-8e8a-f7182a33cf8d` passed 2/2:
 - compatibility-login selection: 17.991 seconds;
 - managed success, cancel, failure, recovery, masked cancel, and restart/resume:
   56.285 seconds.
+
+After the final Opus repairs, retry-disabled serial Nextest run
+`34bcd442-2f4e-4fe5-b3d1-5e8445007982` passed the same 2/2 harness cases in
+15.546 and 56.334 seconds. A preceding concurrent invocation was excluded from
+evidence because the managed case crossed Nextest's 60-second ceiling while
+competing with the compatibility case and the local profile retried it; the
+recorded serial run used `--test-threads 1 --retries 0`.
 
 The typed harness sends text and Enter separately, uses typed Down/Enter/Escape
 keys, runs the real candidate binary with `RUST_LOG=trace`, and checks its unique
@@ -77,6 +87,21 @@ and retained artifacts. The successful run emitted no failure bundle beneath
   provider-owned fresh-per-request cache policy for Claude Plan only, plus
   behavioral and policy regressions; custom command-auth providers retain their
   existing configured cache semantics.
+- The exact `41164e358` Corbanu Terminal Opus 5 Max review found transient
+  health failures collapsed into reauthorization, a split UTF-8 boundary in the
+  bounded login reader, dead FreshPerRequest refresh retention, and ordinary
+  heap custody for compatibility credentials. `b96326f01` fixes all four with
+  typed transient status mapping, lossy conversion only for the already-bounded
+  oversize signal, cache-policy-symmetric refresh behavior, and zeroizing raw
+  JSON/access/refresh-token custody plus a redacted credential `Debug` surface.
+  Its trace SHA-256 was
+  `eaf8ae66d971b73e9719272747300e38596e4acc6a2272715aa303b8084d61e3`.
+- The review's proposed removal of the post-resolution authority check was
+  rejected because a non-mutating credential read can still race an external
+  account replacement. The bare-command/cwd concern was rejected because Core
+  rewrites the built-in provider to the absolute runtime executable before
+  merge and tests that invariant. Opus independently withdrew its short-token
+  redactor finding after reading the explicit no-disclosure regression.
 - The immutable final documentation commit is reviewed again against the full
   frozen-base diff before push. A non-clean verdict blocks delivery; final
   external review artifacts and the pushed SHA are reported in the handoff.

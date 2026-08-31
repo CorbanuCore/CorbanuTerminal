@@ -60,8 +60,9 @@ updated: 2026-08-31
 - [x] Sprint record created and linked to PF-46.
 - [x] Finished the user/operator authentication guide and reconciled native-pane
   credential-boundary language with the behavior actually under Corbanu control.
-- [x] Closed the final bounded-output, missing-environment-source, generic vault
-  custody, source-change bearer-cache, stale navigation, and literal-scope findings.
+- [x] Closed the final bounded-output, missing-environment-source, transient
+  health classification, compatibility-token custody, generic vault custody,
+  source-change bearer-cache, stale navigation, and literal-scope findings.
 - [x] Ran retry-disabled affected tests and the required typed Tmux state-machine
   suite against the isolated final implementation candidate.
 - [x] Dispositioned structured and Corbanu/Opus 5 Max findings without weakening
@@ -86,7 +87,7 @@ tag, merge, and release-ledger decisions remain open on the active plan.
 
 ## Exit evidence
 
-- [x] Implementation commits through `f0d5b0b16` and the frozen base `8ae13e`
+- [x] Implementation commits through `b96326f01` and the frozen base `8ae13e`
   are recorded in `qa/claude-subscription-auth/sprints/PF-46-S01/evidence.md`.
 - [x] Final-tree test, documentation, review protocol, and remote push gate are linked.
 - [x] Done and Remaining ledgers reflect reality without claiming external signoff.
