@@ -266,7 +266,7 @@ Run fix and formatting tools before the final affected tests.
 | Sprint lifecycle | `python3 docs/sprints/check.py` | pending first and final sprint | pending |
 | CLI OAuth helper | `just test -p codex-cli -E 'test(/claude_oauth/)'` | pending | pending |
 | External provider auth | `just test -p codex-login` plus affected Core provider-auth integration filter | pending exact sprint allocation | pending |
-| TUI choice/recovery | `just test -p codex-tui` with exact focused filters and snapshots assigned by CSA-04 | pending | pending |
+| TUI choice/recovery | `just test -p codex-tui claude_code_login -j 1 --retries 0`; `just test -p codex-tui provider_credentials -j 1 --retries 0`; required typed-tmux `tmux_claude_auth` filter | 12/12 snapshots, 9/9 status, 2/2 tmux state-machine flows passed on CSA-04 candidate; exact canary and independent artifact-prefix scans clean | PF-45-S01 verification |
 | Adversarial/redaction | Missing, blank, malformed, conflicting, partial-write, timeout, cancellation, debug-log, history, and telemetry cases | pending | pending |
 | Cross-platform | Repository-approved macOS, Linux, and Windows test commands recorded by CSA-03/CSA-05 | pending | pending |
 
@@ -282,6 +282,7 @@ supporting evidence only.
 | Compatibility alternative | pending | TensorCash disposable worktree | Choose shared Claude login, select exact source, send a real prompt | Source metadata, warning, response | pending | pending |
 | Cancel/failure | pending | Isometric Game disposable worktree | Cancel enrollment; inject unavailable/malformed/blank source | Inert cancel and actionable safe failures | pending | pending |
 | Recovery/resume | pending | Both applicable repositories | Reject selected credential, replace/switch explicitly, restart, resume pane | No fallback drift; exact method and pane recover | pending | pending |
+| Typed state-machine qualification | `codex-rs/target/debug/codex` (`corbanu 0.1.35`, SHA-256 `21d05d33822c42e7e9b9e70ec1f96936bc37f9c045205cff3155fef4fa081816`) | Isolated repository and `CODEX_HOME` fixtures | Text and Enter sent separately; Down, Enter, and Esc sent as typed keys across recommended, compatibility, cancel, setup failure, retry, masked cancel, and restart | Exact selected source remains stable; recommended and compatibility paths both persist only after success; no canary in terminal/home/log/artifact surfaces | passed 2/2, retry-disabled, tmux required | `/Volumes/CorbanuDrive/Corbanu/.codex-work/claude-subscription-auth/tmux-csa04-run-20260830-1` (successful run emitted no failure bundle) |
 
 ## Live-repository applicability
 
