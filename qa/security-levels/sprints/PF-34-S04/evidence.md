@@ -165,6 +165,12 @@ artifact hashes are recorded in
   the 15-file ledger, narrative consistency guard, and registered Rust tests
   on Linux, macOS and Windows. Existing repository Bazel CI selects
   `//codex-rs/content-security:all`.
+- The first final-tree recurring run passed Linux and macOS but exposed Git's
+  default CRLF checkout conversion for the `.sha256` ledger on Windows. Root
+  attributes now pin every checksum manifest and the sealed content-security
+  Rust sources plus classifier evidence JSON inputs to LF, matching the fixture
+  byte contract and allowing the ledger and classifier identity checks to
+  consume identical paths and bytes on all three platforms.
 - Exact final-tree commands and outcomes: [integration qualification](integration-qualification.md).
 
 ## Completion
