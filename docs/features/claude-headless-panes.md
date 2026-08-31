@@ -59,9 +59,10 @@ ordinary Claude Plan requests, removes inherited API-key/cloud-routing
 overrides, and supplies the credential only to that child process. The value is
 not written to pane arguments, settings, artifacts, audits, or persisted pane
 metadata.
-For the Claude Plan profile, Corbanu also pins `ANTHROPIC_BASE_URL` to Anthropic's
-official API in its higher-precedence generated settings, so repository project
-settings cannot redirect the selected subscription credential.
+For the Claude Plan profile, Corbanu also writes Anthropic's official API endpoint
+to the generated per-pane settings passed with `--settings`. The command still
+enables Claude Code's project setting source for normal repository behavior;
+setting precedence remains controlled by Claude Code.
 Vault-backed profiles use the credential label associated with that provider.
 
 ## Failure and recovery

@@ -8,6 +8,19 @@ use std::os::unix::fs::PermissionsExt;
 
 use super::*;
 
+#[tokio::test]
+async fn login_output_reader_bounds_unterminated_lines_before_allocation() {
+    let oversized = vec![b'x'; MAX_LOGIN_LINE_BYTES * 4];
+    let mut reader = BufReader::new(oversized.as_slice());
+
+    let line = read_bounded_output_line(&mut reader)
+        .await
+        .expect("read bounded output")
+        .expect("output line");
+
+    assert_eq!(line.len(), MAX_LOGIN_LINE_BYTES + 1);
+}
+
 fn render_selection(params: SelectionViewParams, width: u16) -> String {
     let (event_tx, _event_rx) = tokio::sync::mpsc::unbounded_channel();
     let app_event_tx = AppEventSender::new(event_tx);

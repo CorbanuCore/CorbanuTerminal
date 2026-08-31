@@ -11,6 +11,7 @@ use ratatui::text::Line;
 use ratatui::widgets::Paragraph;
 use ratatui::widgets::Widget;
 use tokio::io::AsyncBufReadExt;
+use tokio::io::AsyncRead;
 use tokio::io::AsyncWriteExt;
 use tokio::io::BufReader;
 use tokio::process::Command;
@@ -457,16 +458,15 @@ async fn run_login(
 }
 
 fn spawn_output_reader(
-    output: impl tokio::io::AsyncRead + Unpin + Send + 'static,
+    output: impl AsyncRead + Unpin + Send + 'static,
     output_tx: mpsc::UnboundedSender<String>,
 ) {
     tokio::spawn(async move {
         let mut output = BufReader::new(output);
         loop {
-            let mut line = String::new();
-            match output.read_line(&mut line).await {
-                Ok(0) | Err(_) => return,
-                Ok(_) => {
+            match read_bounded_output_line(&mut output).await {
+                Ok(None) | Err(_) => return,
+                Ok(Some(line)) => {
                     if output_tx.send(line).is_err() {
                         let mut sink = tokio::io::sink();
                         let _ = tokio::io::copy(&mut output, &mut sink).await;
@@ -476,6 +476,36 @@ fn spawn_output_reader(
             }
         }
     });
+}
+
+async fn read_bounded_output_line<R: AsyncRead + Unpin>(
+    output: &mut BufReader<R>,
+) -> std::io::Result<Option<String>> {
+    let mut bytes = Vec::with_capacity(1024);
+    loop {
+        let available = output.fill_buf().await?;
+        if available.is_empty() {
+            if bytes.is_empty() {
+                return Ok(None);
+            }
+            break;
+        }
+
+        let newline = available.iter().position(|byte| *byte == b'\n');
+        let chunk_len = newline.map_or(available.len(), |index| index + 1);
+        let remaining = (MAX_LOGIN_LINE_BYTES + 1).saturating_sub(bytes.len());
+        let copied = chunk_len.min(remaining);
+        bytes.extend_from_slice(&available[..copied]);
+        output.consume(copied);
+
+        if bytes.len() > MAX_LOGIN_LINE_BYTES || newline.is_some() {
+            break;
+        }
+    }
+
+    String::from_utf8(bytes)
+        .map(Some)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
 }
 
 async fn verify_login(

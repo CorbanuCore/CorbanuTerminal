@@ -208,6 +208,22 @@ fn selected_environment_token(selection: &ClaudeAuthSelection) -> Result<String>
     resolve_selected_environment_token(selection, nonempty_env("CLAUDE_CODE_OAUTH_TOKEN"))
 }
 
+fn environment_token_health(
+    selection: &ClaudeAuthSelection,
+    token: Option<String>,
+) -> ClaudeAuthHealth {
+    match token {
+        None => ClaudeAuthHealth::Missing,
+        Some(token) => {
+            if resolve_selected_environment_token(selection, Some(token)).is_ok() {
+                ClaudeAuthHealth::Healthy
+            } else {
+                ClaudeAuthHealth::NeedsReauthorization
+            }
+        }
+    }
+}
+
 fn resolve_selected_environment_token(
     selection: &ClaudeAuthSelection,
     token: Option<String>,
@@ -407,11 +423,7 @@ async fn discover_selected_claude_auth_source(
             source: ClaudeAuthSource::EnvironmentToken,
             source_id: ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID.to_string(),
             store: ClaudeAuthStoreKind::Environment,
-            health: if selected_environment_token(selection).is_ok() {
-                ClaudeAuthHealth::Healthy
-            } else {
-                ClaudeAuthHealth::NeedsReauthorization
-            },
+            health: environment_token_health(selection, nonempty_env("CLAUDE_CODE_OAUTH_TOKEN")),
             account_hint: None,
         },
         ClaudeAuthSource::ClaudeCodeLogin => {
@@ -480,9 +492,14 @@ fn unhealthy_selected_source_error(metadata: &ClaudeAuthSourceMetadata) -> anyho
                 "the selected Claude Code login needs reauthorization; run `claude auth login` again or explicitly choose another method"
             ),
         },
-        ClaudeAuthHealth::Missing => anyhow!(
-            "the selected Claude authentication source is missing; restore it or explicitly choose another method"
-        ),
+        ClaudeAuthHealth::Missing => match metadata.source {
+            ClaudeAuthSource::EnvironmentToken => anyhow!(
+                "the selected CLAUDE_CODE_OAUTH_TOKEN source is missing or blank; set it again or explicitly choose another Claude authentication method"
+            ),
+            _ => anyhow!(
+                "the selected Claude authentication source is missing; restore it or explicitly choose another method"
+            ),
+        },
         ClaudeAuthHealth::Malformed => anyhow!(
             "the selected Claude Code credential record is malformed; run `claude auth login` again"
         ),
@@ -1295,6 +1312,23 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         )
         .expect_err("unbound explicit selection must fail closed");
         assert!(error.to_string().contains("predates authority binding"));
+    }
+
+    #[test]
+    fn missing_selected_environment_token_reaches_production_recovery_wording() {
+        let selection = ClaudeAuthSelection::new_environment_token("selected-environment-token")
+            .expect("selection");
+        let metadata = source_metadata(
+            ClaudeAuthSource::EnvironmentToken,
+            ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID,
+            environment_token_health(&selection, None),
+        );
+
+        let error = resolve_selected_claude_auth_source(&selection, &[metadata])
+            .expect_err("missing environment token must fail closed");
+
+        assert!(error.to_string().contains("missing or blank"));
+        assert!(!error.to_string().contains("changed"));
     }
 
     #[test]
