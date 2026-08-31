@@ -11,7 +11,7 @@ activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to rec
 target_release: "TBD — candidate qualified by 2026-10-08"
 deadline: 2026-10-08
 created: 2026-08-23
-updated: 2026-08-30
+updated: 2026-08-31
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
@@ -41,6 +41,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-compatibility-drift"
     branch: "feat/p0-security-compatibility-drift"
     base_commit: "5521b681fff0ecb50b17c10bc1dd1356cbecc1b6"
+  - path: "/home/pfrpc/repos/CorbanuTerminal"
+    branch: "fix/tasknode-profile-isolation"
+    base_commit: "5e681b388e4d19d0bdd49d07c08803591bad31e5"
 ---
 
 # P0 `/security` levels
@@ -103,7 +106,7 @@ passing candidate evidence; no source citation alone closes an acceptance item.
   isolation fail visibly; they never fall back to raw credentials.
 - **All source requirements have owners.** Earlier 68/73-record snapshots are
   historical. Sprint 13, PF-34-S04, and PF-27-S03 integration preserve 19
-  completed archives and leave **57 current units**. All 72
+  completed security-program archives and leave **57 current units**. All 72
   cancelled firewall records and seven unrelated Autoreview drafts are unchanged.
 - **No evidence is retroactively accepted.** Upstream's PF-15–22 and PF-13-S01
   completions remain accepted for their original scope. The stronger review
@@ -193,6 +196,31 @@ Credentials and machine login details remain only in the local gitignored
 review packet or transcript. Supplied access proves reachability, not platform
 containment or release qualification. Tooling, builds, caches, temporary files
 and review exports for these lanes remain on CorbanuDrive.
+
+## P0 Task Node profile isolation decision — 2026-08-31
+
+The CEO reported that a Terminal launched under the `goodalexander` Corbanu
+profile displayed and authorized the machine-global `secondfoundation` Task
+Node identity, and explicitly directed immediate P0 repair. Product authority
+therefore added `PF-42` to this active security plan rather than opening a third
+plan beyond the two-plan WIP limit.
+
+The authorized outcome is the existing product contract under **Shipping MVP —
+LIVE**, “Task Node and identity: Tasks, evidence, verification, rewards,
+balances, chat, context, linked identity, and live Task Node-linked Nostr
+identity,” composed with **Product principles**, “Security is the product.” The
+repair is limited to binding Task Node bearer authority and pending-link state
+to the selected Corbanu profile. It does not add an identity provider, change
+Task Node server behavior, or alter wallet/provider credentials.
+
+The emergency implementation candidate is commit
+`4cb0a21352331999f6292db89dcfc5d702fc2759` on
+`fix/tasknode-profile-isolation`, based on
+`5e681b388e4d19d0bdd49d07c08803591bad31e5`. Its code paths are disjoint from
+the three already-running sprint scopes; no snapshot-directory ownership from
+the Corbanu API wallet sprint is included. PF-42-S01 is completed and archived
+with focused, CLI, true-PTY, migration, recovery, and documentation evidence.
+Release publication remains subject to the normal release gate.
 
 ## Upstream reconciliation — 2026-08-28
 
@@ -399,6 +427,7 @@ update; it cannot silently change Permissive or an accepted security level.
 | Codex revocation/fence lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-revocation-fence` | `feat/p0-security-revocation-fence` | `5521b681fff0ecb50b17c10bc1dd1356cbecc1b6` | Ready PF-19-S02 revocation dispatch-fence contract and isolated security-policy tests |
 | Codex authoritative-state lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-authoritative-state` | `feat/p0-security-authoritative-state` | `5521b681fff0ecb50b17c10bc1dd1356cbecc1b6` | Ready PF-20-S02 controller-owned authoritative state and focused config/Core adapters |
 | Codex compatibility/drift lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-compatibility-drift` | `feat/p0-security-compatibility-drift` | `5521b681fff0ecb50b17c10bc1dd1356cbecc1b6` | Ready PF-21-S02 scripts-and-evidence-only independent compatibility and upstream-drift work |
+| Codex Task Node identity lane | `/home/pfrpc/repos/CorbanuTerminal` | `fix/tasknode-profile-isolation` | `5e681b388e4d19d0bdd49d07c08803591bad31e5` | Completed CEO-authorized PF-42-S01 profile-scoped Task Node vault, CLI/TUI propagation, migration, regression, PTY, and documentation work |
 
 The PF-34-S04 creation coordinate remains the immutable base recorded above.
 After allocation, the lane rebased onto `main` at
@@ -495,7 +524,7 @@ coordinates are not permission for concurrent workers in the same checkout.
 
 ## Sprint execution map
 
-This map covers **57 current and 19 completed archived sprints**.
+This map covers **57 current and 20 completed archived sprints**.
 The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
 is dependency-correct; feature IDs are not execution order. Archive orders 1–9
 stay unchanged and current orders start at 10. Existing allocation coordinates
@@ -535,6 +564,7 @@ required before execution. Archived links document original scope, not new passe
 | `PF-39` | Derived financial views and disclosure control | [S01](../../sprints/current/p0-security-levels/pf-39-s01-protected-financial-derived-views.md), [S02](../../sprints/current/p0-security-levels/pf-39-s02-outbound-disclosure-controls.md) | draft |
 | `PF-40` | Agent Sweep and safe recovery | [S01](../../sprints/current/p0-security-levels/pf-40-s01-sweep-events-and-rules.md), [S02](../../sprints/current/p0-security-levels/pf-40-s02-isolated-sweep-reviewer.md), [S03](../../sprints/current/p0-security-levels/pf-40-s03-sweep-alerts-and-recovery.md) | draft |
 | `PF-41` | Effective security inspector and audit | [S01](../../sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md), [S02](../../sprints/current/p0-security-levels/pf-41-s02-tamper-evident-security-audit.md), [S03](../../sprints/current/p0-security-levels/pf-41-s03-durable-security-event-foundation.md) | draft |
+| `PF-42` | Task Node profile-scoped identity authority | [S01](../../sprints/archive/p0-security-levels/pf-42-s01-tasknode-profile-isolation.md) | S01 completed and archived |
 
 ### PF-13 integration contract
 
@@ -624,6 +654,35 @@ for design provenance; product scope remains in the specification.
 
 **Effective security inspector and audit.** First provide shared versioned event IDs, durable commit/failure and recovery contracts in PF-41-S03; inspector/export integration stays later. Display requested versus actual level/backend/isolation/egress, broker/classifier readiness, leases/grants/expiry, taint, denials, retention and audit integrity. Degradation must be visible. Human support exports are minimized and disclosure-gated; an integrity gap cannot be hidden behind a healthy badge.
 
+### PF-42
+
+**Task Node profile-scoped identity authority.** Every named Corbanu profile
+owns an independent active Task Node bearer session and pending link attempt.
+The TUI and CLI derive the same scope from the selected validated profile, show
+that profile next to Task Node identity, and limit logout to that scope. The
+unprofiled launch preserves its legacy namespace. A named profile imports a
+legacy machine-global session only when the linked GitHub username matches the
+profile name case-insensitively; mismatch leaves the profile unlinked and never
+returns the wrong bearer authority.
+
+Success is two named profiles concurrently retaining different sessions and
+independent pending/link/logout state. Failure is corruption or vault access
+error surfaced without falling back to another scope. Recovery is a one-time
+relink for a profile whose earlier token was overwritten; a matching legacy
+identity migrates once without deleting the unprofiled compatibility record.
+Restart/resume reloads the same deterministic hashed scope. The scope hash
+prevents arbitrary valid profile names from becoming vault-label separators.
+
+Upstream-touch record: the verified baseline is
+`5e681b388e4d19d0bdd49d07c08803591bad31e5`; the change is Corbanu-owned Task
+Node session, CLI, and TUI adapter behavior and does not alter an upstream Codex
+contract. Compatibility evidence covers the unchanged unprofiled wrappers,
+root- and subcommand-level CLI profile forms, and existing session semantics.
+No live application repository is behaviorally relevant to this local identity
+store; true-PTY proof in the affected repository is the feature-level live
+workflow. No benchmark is applicable because this is a bounded local vault
+lookup on an interactive command, not a latency-sensitive agent/model path.
+
 ### Profile and failure contract
 
 | Surface | Permissive | Moderate | Aggressive |
@@ -691,6 +750,7 @@ incomplete; do not substitute a wrapper heuristic or optional hosted service.
 | Financial effect | Fake wallet/venue | Preview, sign, separately approve broadcast; simulate timeout | Complete expected effect and honest uncertain status | No mutation, duplicate transfer or blind resubmission |
 | Derived-data disclosure | Synthetic protected portfolio | Request view/export, cancel, grant exact permitted view | Only authorized derived data leaves trusted boundary | Reconstruction, raw portfolio and secret export deny |
 | Sweep/inspector | Active protected task | Trigger anomaly; inspect runtime; recover and restart | Actual degradation, stop and fresh-authority requirements visible | Old grants remain revoked and audit is secret-free |
+| Task Node profile isolation | Two named Corbanu profiles on one machine | Link or inspect Task Node independently, logout one, restart both | Each menu names its Corbanu profile and uses only that profile's active/pending state | Tokens, pending links, status, requests, and logout never cross profile scopes; mismatched legacy identity stays unlinked |
 
 ## Standards-derived acceptance contract
 
@@ -707,8 +767,8 @@ incomplete; do not substitute a wrapper heuristic or optional hosted service.
 
 Use the [57-record current index](../../sprints/current/p0-security-levels/index.md)
 for exact dependencies. Bounded parallel allocations follow the sprint process;
-reading order is not a serial lock. Including 19 completed archives, the graph
-has 76 nodes; exact merged-tree ordering is maintained by the checked current
+reading order is not a serial lock. Including 20 completed archives, the graph
+has 77 nodes; exact merged-tree ordering is maintained by the checked current
 index rather than inherited historical snapshot arithmetic.
 
 1. **Prepare independent boundaries and reconcile foundations.** Allocate up to
@@ -740,6 +800,10 @@ index rather than inherited historical snapshot arithmetic.
 9. **Accept and document.** PF-26-S03 requires named human/independent review,
    finished-only guidance and release/benchmark evidence. Planning completeness
    is not implementation, release readiness or a promised ship date.
+10. **Preserve profile-scoped Task Node authority.** PF-42-S01 is an independent
+    completed P0 repair. Its acceptance remains part of every candidate that
+    includes the Task Node session store; later security work must not collapse
+    named profiles back into a machine-global bearer namespace.
 
 ## Automated evidence
 
@@ -760,6 +824,7 @@ Run fix and formatting tools before the final affected tests.
 | Standards crosswalk | `python3 scripts/security-level-standards-check --manifest qa/release/<version>/security/standards-crosswalk.yaml` | pending; checker and manifest are part of stage 5 | `qa/release/<version>/security/standards-crosswalk.yaml` |
 | Formatting | `cd codex-rs && just fmt`, then inspect the diff | pending; precedes final affected tests | `qa/release/<version>/security/fmt.txt` |
 | Final affected tests | `cd codex-rs && just test -p <affected-project>` for each changed project; never direct `cargo test` | pending | `qa/release/<version>/security/final-tests.txt` |
+| PF-42 Task Node identity isolation | `cd codex-rs && cargo test -p codex-tasknode-session`; focused CLI and TUI profile tests; true PTY with both named profiles | passed for `4cb0a21352331999f6292db89dcfc5d702fc2759` | `qa/reliability/2026-08-31-tasknode-profile-isolation.md` |
 
 ## True-TUI evidence
 
@@ -843,7 +908,7 @@ before qualification.
 - [ ] Accepted architecture refinements and upstream-seam register have final-tree evidence.
 - [ ] Parallel allocations, scope audits and combined-tree integration evidence are complete.
 
-- [x] Complete source scope maps to 57 current and 19 completed single-feature sprints; all 72 cancelled records have explicit dispositions.
+- [x] Complete source scope maps to 57 current and 20 completed single-feature sprints; all 72 cancelled records have explicit dispositions.
 - [ ] Every PF-27–41 contract and protected-mode readiness condition passes final-candidate evidence.
 - [ ] Optional hosted/reviewer lanes are explicitly qualified-enabled or disabled with an auditable reason.
 - [ ] Permissive compatibility is proven against the frozen pre-feature baseline.

@@ -1,13 +1,15 @@
 # P0 security-level execution sprints
 
 The active [P0 security plan](../../../plans/active/p0-security-levels.md) owns
-**57 current sprints** and **19 completed archives**.
+**57 current sprints** and **20 completed archives**.
 The integrated Sprint 13 branch completes PF-13-S02–S04 and the early PF-26-S01
 harness; PF-13-S05 is also completed and archived after its integrated Core and
 platform qualification. PF-13-S07 is the final composed credential-boundary gate. PF-27-S01 is the
 accepted shared-contract foundation, while PF-27-S04 owns the refactored isolated
 broker. Superseded pre-reconciliation PF-28–30 planning records do not compete
-with this canonical PF-27–41 graph.
+with this canonical PF-27–42 graph. PF-42-S01 is the completed independent P0
+Task Node identity-isolation repair and adds no unfinished dependency to the
+ordered program below.
 
 All review follow-ups remain explicit. Up to three independent allocations follow
 the checked scope/integration rules. Order is topological, not a duration estimate;
