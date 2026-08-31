@@ -120,23 +120,3 @@ opaque reservation at an authenticated Core-to-broker boundary; they must not
 bypass `reserve`/`settle`, serialize bearer bytes onto model/public surfaces, or
 introduce a raw-secret return path. Shared manifests, Bazel/lock files,
 navigation, plan mutation, archival, and transport activation remain untouched.
-
-## Integration completion
-
-The integration owner merged the clean lane, re-exported
-`CREDENTIAL_USAGE_SCHEMA_VERSION` and `CREDENTIAL_USAGE_MAX_REQUESTS`, and
-validated the combined tree based on merge commit
-`c30ee50dceb4e4a34df87b9114fcec1ccb866f92` plus the integration-only
-registration/archive diff contained by this evidence record's commit.
-
-- `cargo test -p codex-security-policy`: 47/47 passed.
-- `cargo test -p codex-core security::`: 50/50 passed, including all 17 focused
-  credential-capability cases.
-- `cargo test -p codex-config`: 229/229 passed; `cargo test -p codex-core
-  config::`: 487/487 passed.
-- No transport, vault-resolution path, broker consumer, protected profile or
-  TUI control was activated. PF-13-S03/PF-27 retain the authenticated-consumer
-  obligations above, and PF-13-S07 retains final composed qualification.
-
-Cargo homes, targets and temporary output for these reruns remained under
-`/Volumes/CorbanuDrive/Corbanu/.codex-work/round3-integration/`.

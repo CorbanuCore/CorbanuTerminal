@@ -111,9 +111,8 @@ passing candidate evidence; no source citation alone closes an acceptance item.
   launch and deterministic ingress/disclosure policy. Unsupported adapters or
   isolation fail visibly; they never fall back to raw credentials.
 - **All source requirements have owners.** Earlier 68/73-record snapshots are
-  historical. Sprint 13, PF-34-S04, PF-27-S03, round-two integration, and the
-  completed PF-13-S06/PF-41-S03 round-three foundations preserve 24 completed
-  archives and leave **52 current units**. All 72
+  historical. Sprint 13, PF-34-S04, PF-27-S03, and round-two integration preserve 22
+  completed archives and leave **54 current units**. All 72
   cancelled firewall records and seven unrelated Autoreview drafts are unchanged.
 - **No evidence is retroactively accepted.** Upstream's PF-15–22 and PF-13-S01
   completions remain accepted for their original scope. The stronger review
@@ -441,12 +440,14 @@ callers, rebuilt the merged Corbanu binary, reran the policy/config/Core suites,
 passed the 36/36 compatibility matrix, and completed a true-TMUX smoke. Protected
 activation remains unavailable.
 
-That next frontier was subsequently allocated as round three below. PF-41-S03
-and PF-13-S06 completed their disjoint foundation work. Product authority also
-resolved PF-35-S01's preparation decisions, but the real corpus campaign,
-private blind-custodian aggregate, signed production artifact and N100
-measurements remain evidence gates rather than inferred passes. The 35%
-integration allowance was recalculated for round three.
+The next dependency-complete frontier is PF-41-S03 and PF-13-S06. They have
+disjoint planned ownership but require a fresh checked allocation before any
+implementation begins. PF-41-S03 unlocks the durable recovery/event seam needed
+by PF-22-S02; PF-13-S06 advances the independent credential-usage chain.
+PF-35-S01 is dependency-ready but remains readiness-blocked until corpus licenses,
+blind-evaluator custody, weakest-supported CPU, model/runtime, signing root, and
+artifact-distribution ownership are recorded. The 35% integration allowance was
+consumed for round-two convergence and must be recalculated at the next allocation.
 
 After PF-34-S04 was archived, the user's 2026-08-30 integration instruction kept
 the Codex ingress/classifier lane as integration owner and assigned PF-27-S03's
@@ -508,19 +509,6 @@ All three lanes require a real TMUX/Corbanu smoke and a read-only Claude Opus 5
 Max review despite having no feature-level TUI contract. Those smokes are
 supporting evidence and do not replace PF-26 true-TUI or human acceptance.
 
-Round-three integration completed the PF-13-S06 credential reservation contract
-and PF-41-S03 durable security-event foundation, including remediation from
-independent Opus reviews, combined-tree reruns, shared export/workspace/build
-registration and archival. PF-35-S01 delivered a deterministic, fail-closed
-manifest/evaluator foundation and recurring CI coverage, but remains
-`in_progress`: no private blind result, production signature, complete synthetic
-corpus campaign or weakest-supported N100 performance result is claimed.
-
-PF-22-S02 protected runtime integration and PF-27-S04 isolated credential broker
-are now dependency-complete and may be allocated in parallel. PF-35-S01's
-external qualification is the third independent lane. PF-35-S02 remains gated
-until S01 is honestly completed and archived.
-
 ## Useful code references
 
 | Path or symbol | Why it matters |
@@ -543,17 +531,16 @@ until S01 is honestly completed and archived.
 
 ## Sprint execution map
 
-This map covers **52 current and 24 completed archived sprints**.
+This map covers **54 current and 22 completed archived sprints**.
 The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
 is dependency-correct; feature IDs are not execution order. Archive orders 1–9
 stay unchanged and current orders start at 10. Existing allocation coordinates
 follow upstream; the five preparation/foundation drafts and five new follow-ups
 remain `UNALLOCATED` until assigned. PF-27-S03 and PF-34-S04 are completed and
-archived; PF-19-S02, PF-20-S02, PF-21-S02, PF-13-S06, and PF-41-S03 are also
-completed and archived. PF-35-S01 remains `in_progress` pending external
-qualification evidence; other current records are `draft`, with completed
-prerequisites and checked allocation required before execution. Archived links
-document original scope, not new passes.
+archived; PF-19-S02, PF-20-S02, and PF-21-S02 are also completed and archived;
+and other current records are `draft`, with completed prerequisites and checked
+allocation required before execution. Archived links document original scope,
+not new passes.
 
 | Feature ID | Plan feature | Sprint records (completed links are archived) | State |
 | --- | --- | --- | --- |
@@ -565,7 +552,7 @@ document original scope, not new passes.
 | `PF-20` | Versioned security persistence | [PF-20-S01](../../sprints/archive/p0-security-levels/pf-20-s01-versioned-security-persistence.md), [PF-20-S02](../../sprints/archive/p0-security-levels/pf-20-s02-protected-authoritative-state.md) | S01/S02 completed and archived; protected activation blocked |
 | `PF-21` | Frozen Permissive compatibility | [PF-21-S01](../../sprints/archive/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md), [PF-21-S02](../../sprints/archive/p0-security-levels/pf-21-s02-expanded-compatibility-and-upstream-drift.md) | S01/S02 completed and archived |
 | `PF-22` | Effective runtime policy and agent inheritance | [PF-22-S01](../../sprints/archive/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md), [PF-22-S02](../../sprints/current/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md) | S01 completed; S02 follow-up draft |
-| `PF-13` | Vault-backed exact-host credential boundary | [S01](../../sprints/archive/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md), [S02](../../sprints/archive/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/archive/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/archive/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/archive/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md), [S06](../../sprints/archive/p0-security-levels/pf-13-s06-credential-usage-reservations.md), [S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md) | S01–S06 completed; S07 draft |
+| `PF-13` | Vault-backed exact-host credential boundary | [S01](../../sprints/archive/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md), [S02](../../sprints/archive/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/archive/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/archive/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/archive/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md), [S06](../../sprints/current/p0-security-levels/pf-13-s06-credential-usage-reservations.md), [S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md) | S01–S05 completed; S06–S07 draft |
 | `PF-23` | Moderate/Aggressive protected-surface enforcement | [S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), [S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md), [S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | draft |
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
 | `PF-25` | Human grants, revocation, and kill-switch TUI | [S01](../../sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md), [S02](../../sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md) | draft |
@@ -578,13 +565,13 @@ document original scope, not new passes.
 | `PF-32` | Screened web facade and search providers | [S01](../../sprints/current/p0-security-levels/pf-32-s01-web-facade-and-registry.md), [S02](../../sprints/current/p0-security-levels/pf-32-s02-existing-search-and-native-bypass.md), [S03](../../sprints/current/p0-security-levels/pf-32-s03-exa-search-adapter.md), [S04](../../sprints/current/p0-security-levels/pf-32-s04-brave-search-adapter.md), [S05](../../sprints/current/p0-security-levels/pf-32-s05-searxng-search-adapter.md), [S06](../../sprints/current/p0-security-levels/pf-32-s06-privacy-routing-and-failover.md) | draft |
 | `PF-33` | Destination validation and connection enforcement | [S01](../../sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md), [S02](../../sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md), [S03 completed](../../sprints/archive/p0-security-levels/pf-33-s03-destination-policy-contract.md) | S03 completed; S01/S02 draft |
 | `PF-34` | Sanitization quarantine and safe review | [S01](../../sprints/current/p0-security-levels/pf-34-s01-render-aware-sanitization.md), [S02](../../sprints/current/p0-security-levels/pf-34-s02-quarantine-state-and-store.md), [S03](../../sprints/current/p0-security-levels/pf-34-s03-safe-quarantine-review.md), [S04 completed](../../sprints/archive/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md) | S04 completed; S01-S03 draft |
-| `PF-35` | Local classifier and blind qualification | [S01](../../sprints/current/p0-security-levels/pf-35-s01-classifier-corpus-and-evaluation.md), [S02](../../sprints/current/p0-security-levels/pf-35-s02-local-cpu-detector-artifact.md), [S03](../../sprints/current/p0-security-levels/pf-35-s03-calibration-and-ingress-gate.md) | S01 in progress; deterministic foundation merged, external qualification open; S02/S03 draft |
+| `PF-35` | Local classifier and blind qualification | [S01](../../sprints/current/p0-security-levels/pf-35-s01-classifier-corpus-and-evaluation.md), [S02](../../sprints/current/p0-security-levels/pf-35-s02-local-cpu-detector-artifact.md), [S03](../../sprints/current/p0-security-levels/pf-35-s03-calibration-and-ingress-gate.md) | draft |
 | `PF-36` | Optional hosted detector and safe fallback | [S01](../../sprints/current/p0-security-levels/pf-36-s01-hosted-detector-consent-contract.md), [S02](../../sprints/current/p0-security-levels/pf-36-s02-hosted-bakeoff-and-local-fallback.md) | draft |
 | `PF-37` | Origin-bound browser login and human handoff | [S01](../../sprints/current/p0-security-levels/pf-37-s01-origin-bound-browser-login.md), [S02](../../sprints/current/p0-security-levels/pf-37-s02-human-auth-handoff-lifecycle.md) | draft |
 | `PF-38` | Typed financial execution and exact effects | [S01](../../sprints/current/p0-security-levels/pf-38-s01-typed-financial-executor.md), [S02](../../sprints/current/p0-security-levels/pf-38-s02-full-effect-preview-and-mandate.md), [S03](../../sprints/current/p0-security-levels/pf-38-s03-sign-broadcast-and-receipts.md) | draft |
 | `PF-39` | Derived financial views and disclosure control | [S01](../../sprints/current/p0-security-levels/pf-39-s01-protected-financial-derived-views.md), [S02](../../sprints/current/p0-security-levels/pf-39-s02-outbound-disclosure-controls.md) | draft |
 | `PF-40` | Agent Sweep and safe recovery | [S01](../../sprints/current/p0-security-levels/pf-40-s01-sweep-events-and-rules.md), [S02](../../sprints/current/p0-security-levels/pf-40-s02-isolated-sweep-reviewer.md), [S03](../../sprints/current/p0-security-levels/pf-40-s03-sweep-alerts-and-recovery.md) | draft |
-| `PF-41` | Effective security inspector and audit | [S01](../../sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md), [S02](../../sprints/current/p0-security-levels/pf-41-s02-tamper-evident-security-audit.md), [S03](../../sprints/archive/p0-security-levels/pf-41-s03-durable-security-event-foundation.md) | S03 completed; S01/S02 draft |
+| `PF-41` | Effective security inspector and audit | [S01](../../sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md), [S02](../../sprints/current/p0-security-levels/pf-41-s02-tamper-evident-security-audit.md), [S03](../../sprints/current/p0-security-levels/pf-41-s03-durable-security-event-foundation.md) | draft |
 
 ### PF-13 integration contract
 
@@ -773,7 +760,7 @@ incomplete; do not substitute a wrapper heuristic or optional hosted service.
 
 Use the [54-record current index](../../sprints/current/p0-security-levels/index.md)
 for exact dependencies. Bounded parallel allocations follow the sprint process;
-reading order is not a serial lock. Including 24 completed archives, the graph
+reading order is not a serial lock. Including 22 completed archives, the graph
 has 76 nodes; exact merged-tree ordering is maintained by the checked current
 index rather than inherited historical snapshot arithmetic.
 
@@ -909,7 +896,7 @@ before qualification.
 - [ ] Accepted architecture refinements and upstream-seam register have final-tree evidence.
 - [ ] Parallel allocations, scope audits and combined-tree integration evidence are complete.
 
-- [x] Complete source scope maps to 52 current and 24 completed single-feature sprints; all 72 cancelled records have explicit dispositions.
+- [x] Complete source scope maps to 54 current and 22 completed single-feature sprints; all 72 cancelled records have explicit dispositions.
 - [ ] Every PF-27–41 contract and protected-mode readiness condition passes final-candidate evidence.
 - [ ] Optional hosted/reviewer lanes are explicitly qualified-enabled or disabled with an auditable reason.
 - [ ] Permissive compatibility is proven against the frozen pre-feature baseline.

@@ -11,13 +11,7 @@ on:
       - "codex-rs/Cargo.toml"
       - "codex-rs/content-security/**"
       - "qa/security-levels/ingress-contract/**"
-      - "qa/security-levels/classifier/**"
-      - "qa/security-levels/planning/openclaw-2026-08-28/source-manifest.json"
       - "qa/security-levels/sprints/PF-34-S04/**"
-      - "qa/security-levels/sprints/PF-35-S01/**"
-      - "scripts/security-classifier-eval"
-      - "scripts/security_classifier_eval.py"
-      - "scripts/test_security_classifier_eval.py"
   push:
     branches:
       - main
@@ -29,13 +23,7 @@ on:
       - "codex-rs/Cargo.toml"
       - "codex-rs/content-security/**"
       - "qa/security-levels/ingress-contract/**"
-      - "qa/security-levels/classifier/**"
-      - "qa/security-levels/planning/openclaw-2026-08-28/source-manifest.json"
       - "qa/security-levels/sprints/PF-34-S04/**"
-      - "qa/security-levels/sprints/PF-35-S01/**"
-      - "scripts/security-classifier-eval"
-      - "scripts/security_classifier_eval.py"
-      - "scripts/test_security_classifier_eval.py"
 
 permissions:
   contents: read
@@ -84,16 +72,6 @@ jobs:
         shell: bash
         working-directory: codex-rs
         run: cargo test -p codex-content-security
-      - name: Test classifier evaluation contract
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m unittest scripts.test_security_classifier_eval
-          scripts/security-classifier-eval \
-            --manifest qa/security-levels/classifier/corpus-manifest.json \
-            --splits qa/security-levels/classifier/split-manifest.json \
-            --repo-root . \
-            --output "${RUNNER_TEMP}/pf35-evaluator-smoke"
       - name: Check for a clean worktree
         if: always() && !cancelled()
         uses: ./.github/actions/check-clean-worktree

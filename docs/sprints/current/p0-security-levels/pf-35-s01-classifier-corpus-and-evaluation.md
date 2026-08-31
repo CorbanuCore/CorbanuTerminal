@@ -59,13 +59,13 @@ updated: 2026-08-30
 - [x] Bound each snapshotted regular-file predictions/aggregate/development-report input by evaluator ID/report-schema version, portable path, kind, byte count and SHA-256; blind evaluation derives the expected fingerprint from the prior report, while artifact/threshold declarations remain explicitly unverified.
 - [x] Kept N100 latency/RSS, model size, signed release identity, private custody, and a custodian-side train/development/blind group-tuple overlap audit fail closed as external requirements; unequal fingerprint declarations alone do not prove disjointness.
 - [x] Added evaluator regression coverage plus a meaningful PF-35 Rust regression proving altered model-artifact and threshold digests cannot authorize release.
-- [x] Integration owner wired `scripts/test_security_classifier_eval.py` and a shipped-CLI smoke into recurring CI without expanding this lane's literal write scope.
 
 ## Remaining
 
 - [ ] Acquire, license-review, group and freeze the approximately 250k/25k/150k train/development/blind records on the external RTX/custodian lanes; no such run or private corpus is claimed here.
 - [ ] Obtain the custodian's aggregate blind report and signed train/development/blind group-tuple overlap audit without disclosing record-level blind output; unequal fingerprints alone are declarations and do not prove disjointness.
 - [ ] Measure the signed production artifact on the qualifying Intel N100/16 GiB/x86-64 Linux floor at 2,048 tokens; prove model ≤300 MiB, p95 ≤50 ms and peak RSS ≤512 MiB.
+- [ ] Wire `scripts/test_security_classifier_eval.py` into recurring CI during integration; `.github/` is outside this sprint's literal write scope.
 
 ## Verification
 
@@ -78,7 +78,7 @@ updated: 2026-08-30
 
 ## Exit evidence
 
-- [x] Implementation commits and deterministic final-tree outputs are recorded under `qa/security-levels/sprints/PF-35-S01/`; external qualification outputs remain pending.
+- [ ] Implementation commit and final-tree outputs under `qa/security-levels/sprints/PF-35-S01/`.
 - [ ] Acceptance and source-mapping assertions proven; applicable true-TUI keys/checkpoints captured after formatting.
 - [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
 - [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.

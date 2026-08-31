@@ -3,8 +3,6 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Human acceptance checks for the current Corbanu Terminal round-three build">
-  <link rel="icon" href="data:,">
   <title>Corbanu Terminal — Human Test Plan</title>
   <style>
     :root {
@@ -143,7 +141,7 @@
 
     .evidence {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      grid-template-columns: repeat(4, 1fr);
       gap: 10px;
       margin: 18px 0 42px;
     }
@@ -202,46 +200,47 @@
     <header>
       <p class="eyebrow">Corbanu Terminal · human QA</p>
       <h1>Did the latest work land cleanly?</h1>
-      <p class="lede">A direct 25–35 minute check of the current Mac build. Complete the nine checks in order. If any red failure condition appears, stop and record what you saw.</p>
+      <p class="lede">A direct 15–20 minute check of the current Mac build. Complete the six checks in order. If any red failure condition appears, stop and record what you saw.</p>
       <div class="release-strip">
         <span><strong>Candidate:</strong> Corbanu 0.1.35</span>
-        <span><strong>Source baseline:</strong> <code>main · 9ac9fb682</code></span>
+        <span><strong>Source:</strong> <code>main @ be800fd2e</code></span>
         <span><strong>Built:</strong> 30 Aug 2026</span>
         <span><strong>Shortcut:</strong> stable release build on CorbanuDrive</span>
       </div>
       <div class="actions">
         <button type="button" onclick="window.print()">Print / save PDF</button>
         <button type="button" id="reset">Reset checks</button>
-        <div class="progress-shell" id="progressShell" role="progressbar" aria-label="Test progress" aria-valuemin="0" aria-valuemax="9" aria-valuenow="0"><div class="progress-bar" id="progress"></div></div>
-        <span class="progress-label" id="progressLabel" aria-live="polite">0 / 9</span>
+        <div class="progress-shell" aria-label="Test progress"><div class="progress-bar" id="progress"></div></div>
+        <span class="progress-label" id="progressLabel">0 / 6</span>
       </div>
     </header>
 
     <figure class="map" aria-labelledby="map-caption">
       <svg viewBox="0 0 900 220" role="img" aria-labelledby="map-title map-desc">
-        <title id="map-title">The three round-three security workstreams</title>
-        <desc id="map-desc">PF-13 credential reservations and PF-41 durable events are archived. PF-35 has a merged deterministic evaluator foundation while external classifier qualification remains open.</desc>
+        <title id="map-title">The three recently integrated security sprints</title>
+        <desc id="map-desc">PF-19 revocation fence, PF-20 authoritative protected state, and PF-21 compatibility drift controls feed into current main. The first two are internal contracts and the third is an automated compatibility harness.</desc>
         <defs>
           <linearGradient id="flow" x1="0" x2="1"><stop stop-color="#57d6d0"/><stop offset="1" stop-color="#8ddd8c"/></linearGradient>
           <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#57d6d0"/></marker>
         </defs>
+        <path d="M228 92 H330 M518 92 H620" stroke="url(#flow)" stroke-width="3" marker-end="url(#arrow)"/>
         <rect x="20" y="34" width="208" height="116" rx="16" fill="#191c22" stroke="#303641"/>
         <rect x="330" y="34" width="188" height="116" rx="16" fill="#191c22" stroke="#303641"/>
         <rect x="620" y="34" width="260" height="116" rx="16" fill="#191c22" stroke="#303641"/>
-        <text x="42" y="65" fill="#57d6d0" font-size="15" font-family="sans-serif" font-weight="700">PF-13</text>
-        <text x="42" y="91" fill="#f7f6ef" font-size="18" font-family="sans-serif" font-weight="700">Usage reservations</text>
-        <text x="42" y="118" fill="#aaaeb7" font-size="14" font-family="sans-serif">Archived · 6/7</text>
-        <text x="352" y="65" fill="#f6c76a" font-size="15" font-family="sans-serif" font-weight="700">PF-35</text>
-        <text x="352" y="91" fill="#f7f6ef" font-size="18" font-family="sans-serif" font-weight="700">Classifier evaluator</text>
-        <text x="352" y="118" fill="#aaaeb7" font-size="14" font-family="sans-serif">Qualification open</text>
-        <text x="642" y="65" fill="#57d6d0" font-size="15" font-family="sans-serif" font-weight="700">PF-41</text>
-        <text x="642" y="91" fill="#f7f6ef" font-size="18" font-family="sans-serif" font-weight="700">Durable audit base</text>
-        <text x="642" y="118" fill="#aaaeb7" font-size="14" font-family="sans-serif">Archived · 1/3</text>
-        <path d="M124 150 V164 H450 V174 M424 150 V174 M750 150 V164 H450" fill="none" stroke="#303641" stroke-width="2"/>
+        <text x="42" y="65" fill="#57d6d0" font-size="15" font-family="sans-serif" font-weight="700">PF-19</text>
+        <text x="42" y="91" fill="#f7f6ef" font-size="18" font-family="sans-serif" font-weight="700">Revocation fence</text>
+        <text x="42" y="118" fill="#aaaeb7" font-size="14" font-family="sans-serif">Internal contract</text>
+        <text x="352" y="65" fill="#57d6d0" font-size="15" font-family="sans-serif" font-weight="700">PF-20</text>
+        <text x="352" y="91" fill="#f7f6ef" font-size="18" font-family="sans-serif" font-weight="700">Protected state</text>
+        <text x="352" y="118" fill="#aaaeb7" font-size="14" font-family="sans-serif">Internal contract</text>
+        <text x="642" y="65" fill="#57d6d0" font-size="15" font-family="sans-serif" font-weight="700">PF-21</text>
+        <text x="642" y="91" fill="#f7f6ef" font-size="18" font-family="sans-serif" font-weight="700">Compatibility guard</text>
+        <text x="642" y="118" fill="#aaaeb7" font-size="14" font-family="sans-serif">Automated harness</text>
+        <path d="M124 150 V188 H750 V150" fill="none" stroke="#303641" stroke-width="2"/>
         <rect x="330" y="174" width="240" height="36" rx="18" fill="#0c0e12" stroke="#8ddd8c"/>
-        <text x="450" y="197" text-anchor="middle" fill="#8ddd8c" font-size="14" font-family="sans-serif" font-weight="700">2 ARCHIVED · 1 QUALIFYING</text>
+        <text x="450" y="197" text-anchor="middle" fill="#8ddd8c" font-size="14" font-family="sans-serif" font-weight="700">MERGED INTO MAIN ✓</text>
       </svg>
-      <figcaption id="map-caption">This round strengthens internal foundations. It deliberately does not turn on Moderate/Aggressive security modes or add a new security screen.</figcaption>
+      <figcaption id="map-caption">These sprints strengthen the foundation. They deliberately do not turn on Moderate/Aggressive security modes or add a new security screen.</figcaption>
     </figure>
 
     <aside class="callout">
@@ -249,7 +248,7 @@
     </aside>
 
     <section aria-labelledby="checks-title">
-      <h2 id="checks-title">Nine checks</h2>
+      <h2 id="checks-title">Six checks</h2>
       <div class="checklist">
         <label class="test">
           <input type="checkbox" data-check="launch">
@@ -310,36 +309,6 @@
             <p class="failure">Fail: windows overlap, appear on the wrong desktop, or a new launch reuses/closes an existing session.</p>
           </span>
         </label>
-
-        <label class="test">
-          <input type="checkbox" data-check="soak">
-          <span>
-            <h3>7. Run a short long-session soak</h3>
-            <p>In one window, complete five prompt/response turns. Make turns two and four long enough to stream for several seconds; cancel turn four with <span class="keys">Escape</span>, then continue normally.</p>
-            <p class="expected">Pass: every turn has one coherent response, cancellation recovers, memory remains responsive, and no panic or orphaned output appears.</p>
-            <p class="failure">Fail: duplicate text, a stalled composer, “OutputTextDelta without active item”, an application panic, or a forced restart.</p>
-          </span>
-        </label>
-
-        <label class="test">
-          <input type="checkbox" data-check="restart">
-          <span>
-            <h3>8. Restart after active use</h3>
-            <p>Quit the soaked Corbanu window normally. Launch a fresh window with the shortcut, run <span class="keys">/status</span>, then send <span class="keys">Reply with exactly: RESTART_OK</span>.</p>
-            <p class="expected">Pass: startup is clean, the intended provider remains available, and the response is <code>RESTART_OK</code>.</p>
-            <p class="failure">Fail: startup reports journal/recovery corruption, MCP or Code Mode regressions, stale output from the prior session, or provider authentication loss.</p>
-          </span>
-        </label>
-
-        <label class="test">
-          <input type="checkbox" data-check="activation">
-          <span>
-            <h3>9. Confirm protected modes did not activate early</h3>
-            <p>Open the slash-command picker and inspect the available commands. Continue one ordinary permissive conversation without changing configuration.</p>
-            <p class="expected">Pass: no unfinished <code>/security</code> activation control appears, normal permissive behavior is unchanged, and no classifier verdict or credential accounting detail leaks into chat.</p>
-            <p class="failure">Fail: Moderate/Aggressive mode appears enabled, ordinary work is unexpectedly blocked, or internal audit/classifier/credential data is printed to the conversation.</p>
-          </span>
-        </label>
       </div>
     </section>
 
@@ -347,12 +316,10 @@
       <h2 id="evidence-title">What the automated merge checks already proved</h2>
       <p style="color:var(--muted)">You do not need to reproduce these internals by hand. The human checks above look for integration regressions around them.</p>
       <div class="evidence">
-        <div class="metric"><b>47 / 47</b><span>security-policy tests</span></div>
+        <div class="metric"><b>46 / 46</b><span>security-policy tests</span></div>
         <div class="metric"><b>229 / 229</b><span>configuration tests</span></div>
-        <div class="metric"><b>50 / 50</b><span>Core security tests</span></div>
-        <div class="metric"><b>44 / 44</b><span>security-audit tests</span></div>
-        <div class="metric"><b>22 / 22</b><span>content-security tests</span></div>
-        <div class="metric"><b>21 / 21</b><span>classifier evaluator tests</span></div>
+        <div class="metric"><b>53 / 53</b><span>core security tests</span></div>
+        <div class="metric"><b>36 / 36</b><span>compatibility matrix</span></div>
       </div>
     </section>
 
@@ -362,9 +329,9 @@
         <p>Paste this into a normal shell—not into Corbanu chat—to confirm the shortcut target and source commit:</p>
         <pre><code>/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/bin/corbanu --version
 cd /Volumes/CorbanuDrive/Corbanu/CorbanuTerminal
-git merge-base --is-ancestor 9ac9fb682f0f1fee967036d4a4888c7c230e06c3 HEAD &amp;&amp; echo "round-three source baseline present"
+git rev-parse HEAD
 readlink /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/bin/corbanu</code></pre>
-        <p>Expected: <code>corbanu 0.1.35</code>, <code>round-three source baseline present</code>, and <code>../target/release/corbanu</code>. A later documentation-only commit may be the repository HEAD.</p>
+        <p>Expected: <code>corbanu 0.1.35</code>, commit <code>be800fd2efcffe0e893248031320bc26564f1bcf</code>, and <code>../target/release/corbanu</code>.</p>
       </div>
     </details>
 
@@ -385,7 +352,7 @@ readlink /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/bin/corbanu<
   <script>
     const boxes = [...document.querySelectorAll('[data-check]')];
     const notes = [...document.querySelectorAll('[data-note]')];
-    const key = 'corbanu-human-test-9ac9fb682';
+    const key = 'corbanu-human-test-be800fd2e';
 
     function loadState() {
       try {
@@ -407,7 +374,6 @@ readlink /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/bin/corbanu<
     function updateProgress() {
       const complete = boxes.filter(box => box.checked).length;
       document.getElementById('progress').style.width = `${(complete / boxes.length) * 100}%`;
-      document.getElementById('progressShell').setAttribute('aria-valuenow', String(complete));
       document.getElementById('progressLabel').textContent = `${complete} / ${boxes.length}`;
     }
 

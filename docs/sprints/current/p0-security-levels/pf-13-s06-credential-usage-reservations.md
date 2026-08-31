@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-13-S06"
 title: "Credential usage reservations"
-status: completed
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-13"
 execution_order: 22
@@ -52,17 +52,17 @@ updated: 2026-08-30
 
 ## Remaining
 
-- [x] Integration owner exported the usage schema constants on the shared policy surface, reran the combined-lane gates, recorded the downstream PF-13-S03/PF-27 consumer handoff, updated shared navigation/plan state, and archived this sprint without activating transport.
+- [ ] Integration owner exports the usage schema constant on the shared policy surface, reruns the combined-lane gates, records downstream PF-13-S03/PF-27 consumer handoff, updates shared navigation/plan state, and archives this sprint without activating transport.
 
 ## Verification
 
 - [x] `cd codex-rs && just fix -p codex-security-policy && just fix -p codex-core && just fmt` before final affected tests.
 - [x] `cd codex-rs && just test -p codex-security-policy credential && just test -p codex-security-policy grant && just test -p codex-core credential_capability`.
 - [x] TUI applicability: none for this accounting contract; an exact-candidate Corbanu TMUX startup/input/response smoke was still captured, while PF-13-S03/PF-27 integrate transport and PF-26-S02 proves the visible flow.
-- [x] Integration owner reran combined-lane policy/Core/governance gates after the shared export and before archive.
+- [ ] Integration owner reruns combined-lane policy/Core/governance gates after the shared export and before archive.
 
 ## Exit evidence
 
 - [x] Record implementation commit, changed paths, contract version and exact final-tree commands/results under `qa/security-levels/sprints/PF-13-S06/`.
 - [x] Preserve S01 archive/evidence unchanged; do not relabel historical passes as proof of these new cases.
-- [x] Integration owner recorded the consumer handoff and shared export, completed combined ledgers, and updated plan/navigation while archiving.
+- [ ] Integration owner records the consumer handoff and shared export, completes combined ledgers, and updates plan/navigation while archiving.
