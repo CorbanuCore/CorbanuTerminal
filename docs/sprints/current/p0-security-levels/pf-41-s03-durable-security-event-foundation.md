@@ -39,32 +39,36 @@ updated: 2026-08-30
 
 ## Preconditions
 
-- [ ] Plan active; dependencies in front matter completed and archived.
-- [ ] Assign a named execution owner and exact plan-matching worktree/branch/base; run the sprint checker before readiness.
-- [ ] Read root and nearest implementation AGENTS.md; reserve disjoint write scope and receiving integration gate if parallel.
+- [x] Plan active; dependencies in front matter completed and archived.
+- [x] Named owner, exact worktree/branch/base and disjoint literal write scope allocated; both governance checkers passed before implementation.
+- [x] Read root and nearest implementation AGENTS.md plus the exact product, active-plan, round-three and lane handoff requirements.
 
 ## Done
 
 - [x] Bounded preparation/foundation mandate created from the accepted review; no implementation or platform acceptance claimed.
+- [x] Reused PF-16–20 actor, request, mandate, receipt and revocation types; added versioned digest identities, causal parents, policy/run/owner generations and secret-free correlation records without reusable authority.
+- [x] Added bounded segmented append, acknowledgment, hash-chain, protected-checkpoint and recovery contracts with an explicit record-first, protected-root-last cross-store commit protocol.
+- [x] Added durable intent-before-dispatch permits and completed/unknown terminal receipts. Stable effect/dedup retries remain idempotent across clock, session, task, generation and fresh grant/mandate authority; live authority remains separately recorded/revalidated. Disk full, protected-root timeout, ambiguous commit, saturation, missing keys and concurrent writers fail closed without automatic replay; duplicate errors preserve the original acknowledgement identity.
+- [x] Added validated recovery tail caching, a live unresolved-intent fence and explicit exact-event operator reconciliation for one-record ambiguous commits; recovery and reconciliation validate live policy and run generations, pending timestamps remain observable/clamped across backwards clock steps, restart/root changes invalidate the cache, reconciliation grants no permit and an unresolved intent must receive a completed/unknown terminal result before another dispatch.
+- [x] Emergency restriction applies the PF-19 fence before persistence; audit failure remains visible and blocks restart recovery while the PF-20 state and reconstructed ledger differ.
+- [x] Covered append/crash boundaries, duplicate IDs, rollback, truncation, mutation, rotation, saturation, key loss, owner rotation, malformed storage and concurrent writers.
+- [x] Published fixture-only consumer contract v1 and exact durability/ownership guarantees without registering a producer, consumer, runtime route or protected profile.
 
 ## Remaining
 
-- [ ] Reuse PF-16–20 actor, request, mandate and revocation types. Define versioned event/decision/action/reservation IDs, causal parents, policy/run generation, producer ownership and deduplication; no raw content, secrets or reusable capabilities.
-- [ ] Implement bounded append/acknowledgment, integrity-chain/checkpoint and recovery interfaces with a reference durable store; separate physical stores are allowed with explicit cross-store commit/recovery protocol, not assumed distributed atomicity.
-- [ ] Define reservation/intent-before-dispatch and completion/unknown receipts; disk-full, timeout, failed acknowledgment and ambiguous commit cannot become silent success or trigger replay. Required record failure blocks new protected dispatch.
-- [ ] Emergency kill/restriction must still fence new dispatch immediately when audit persistence fails; retain fail-closed startup/recovery state and expose the gap. Never wait for uncertain financial settlement or claim an unrecorded stop survived restart without evidence.
-- [ ] Test append/crash boundaries, duplicate IDs, rollback/truncation/rotation, queue saturation, missing keys and concurrent writers. Protect integrity roots through PF-20's controller-owned store; a local hash chain alone is not host-compromise resistance.
-- [ ] Publish consumer contract fixtures and exact durability/ownership guarantees; broker, quarantine, financial and Sweep sprints test their real adapters, while PF-41-S02 retains joined inspection/export and end-to-end chain checks.
+- [ ] Integration owner audits the literal scope, registers the crate and shared dependencies on the combined tree, reruns consumed PF-19/PF-20 and security-audit suites, updates shared navigation/plan evidence and archives the sprint without activating a consumer.
 
 ## Verification
 
-- [ ] Run affected format/fix tools before final tests; record exact commands and actual test counts.
-- [ ] Run planned security-audit unit/integration fault-injection tests; record crash points and restart outcomes, including immediate stop with unavailable audit storage.
-- [ ] TUI applicability: none for this pure preparation/foundation boundary; user-facing consumer sprints retain true-TUI proof.
-- [ ] Verify no runtime route or profile becomes available from fixture-only preparation.
+- [x] Final Rust formatting, full-workspace-deny Clippy, 43 unit/fault tests, one public integration test, three fixture tests, 23 governance checker tests and both live governance checkers pass; exact commands and artifact hashes are recorded in evidence.
+- [x] Fault tests cover before-write failure, post-sync crash, post-publish ambiguity and a real protected-root timeout, including immediate emergency fencing with unavailable audit storage. Transport acknowledgement loss is outside the in-process journal and uses the stable duplicate-retry contract.
+- [x] TUI applicability remains indirect for this unregistered foundation; the exact candidate passed the round-three TMUX/Corbanu `/status` and clean-exit smoke with trace logging.
+- [x] Contract fixture asserts `runtime_activation: false` with empty producer and consumer registrations; the lane changes no existing runtime route or profile.
+- [x] Completed the final read-only Claude Opus 5 Plan Max review in the TMUX/Corbanu harness; all nine earlier review rounds are remediated and retested, and the final exact verdict is `NO FINDINGS`.
+- [ ] Integration owner registers the shared Cargo/Bazel/lock surfaces and reruns the combined-tree security-audit, consumed PF-19/PF-20 and repository Bazel validation before archive.
 
 ## Exit evidence
 
-- [ ] Commit, contract/fixture versions, owner review and final-tree outputs under `qa/security-levels/sprints/PF-41-S03/`.
+- [x] Recorded the clean independent review and final-tree digests under `qa/security-levels/sprints/PF-41-S03/`; exact-candidate TMUX smoke is complete.
 - [ ] Consumers depend on this completed foundation; final PF-41-S02 and PF-26 revalidate combined-tree audit/recovery rather than accepting fake producer fixtures.
 - [ ] Record integration handoff and scope audit; complete all ledgers before archive and update plan/navigation.

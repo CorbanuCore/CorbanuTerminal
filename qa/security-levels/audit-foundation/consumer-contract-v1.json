@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "runtime_activation": false,
+  "producer_registrations": [],
+  "consumer_adapters": [],
+  "identity_contract": {
+    "digest": "sha256_canonical_json",
+    "event_schema_version": 1,
+    "secret_free": true,
+    "reusable_capabilities": false,
+    "generation_bindings": [
+      "policy_generation",
+      "run_generation",
+      "owner_generation"
+    ]
+  },
+  "commit_protocol": [
+    "write_record",
+    "sync_record",
+    "publish_record_no_clobber",
+    "sync_segment_directory",
+    "compare_and_store_pf20_integrity_root",
+    "acknowledge"
+  ],
+  "protected_root_owner": "pf20_controller_owned_store",
+  "dispatch_contract": {
+    "intent_before_external_effect": true,
+    "permit_serializable": false,
+    "duplicate_intent_returns_permit": false,
+    "duplicate_identity_spans_generation_and_timestamp": true,
+    "duplicate_identity_spans_authority_reissue": true,
+    "recovery_required_before_append": true,
+    "recovery_validates_policy_and_run_generation": true,
+    "live_pending_intents_block_new_dispatch": true,
+    "recovered_pending_intents_block_new_dispatch": true,
+    "pending_intents_reconcile_as_unknown": true,
+    "pending_intent_timestamp_is_observable_and_clamped": true,
+    "ambiguous_commit_operator_reconciliation": "exactly_one_matching_event_then_recover",
+    "append_uses_recovery_validated_tail_cache": true,
+    "terminal_receipts": [
+      "completed",
+      "unknown"
+    ],
+    "automatic_replay_after_unknown": false
+  },
+  "fail_closed_outcomes": [
+    "disk_full",
+    "integrity_root_timeout_commit_unknown",
+    "integrity_root_unavailable",
+    "integrity_root_conflict",
+    "integrity_root_invalid",
+    "ambiguous_commit",
+    "queue_saturation",
+    "missing_integrity_key",
+    "concurrent_writer",
+    "rollback",
+    "run_generation_rollback",
+    "truncation",
+    "owner_rotation",
+    "restriction_audit_gap"
+  ]
+}
