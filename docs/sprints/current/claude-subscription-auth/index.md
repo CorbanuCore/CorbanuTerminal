@@ -1,12 +1,12 @@
 # Claude subscription-auth execution sprint
 
 The active [Claude subscription-auth plan](../../../plans/active/claude-subscription-auth.md)
-allows one serial sprint. CSA-01 is the current typed-contract unit; later units
-remain plan-only until their dependencies are completed and archived.
+allows one serial sprint. CSA-01 is completed and archived; the next dependency-
+complete unit remains plan-only until its sprint is allocated.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
-| 1 | [CSA-01 / PF-42-S01](pf-42-s01-auth-source-contract.md) | Typed source, selection, health, and persistence | in progress | none |
+| 1 | [CSA-01 / PF-42-S01](../../../sprints/archive/claude-subscription-auth/pf-42-s01-auth-source-contract.md) | Typed source, selection, health, and persistence | completed | none |
 
 ## Machine checks
 

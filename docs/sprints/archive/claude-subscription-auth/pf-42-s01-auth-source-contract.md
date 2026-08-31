@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-42-S01"
 title: "Claude authentication source contract"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/claude-subscription-auth.md"
 plan_feature: "PF-42"
 execution_order: 1
@@ -45,22 +45,23 @@ updated: 2026-08-30
 ## Done
 
 - [x] Sprint record created and linked to CSA-01.
+- [x] Defined stable source, selection, health, metadata, and resolution result types with no secret-bearing fields.
+- [x] Added versioned persistence through the vault's existing encrypted, locked transaction substrate; absence preserves existing installations.
+- [x] Added deterministic selected-source, missing-source, conflict, invalid-state, restart, and redaction tests.
 
 ## Remaining
 
-- [ ] Define stable source, selection, health, metadata, and resolution result types with no secret-bearing fields.
-- [ ] Add versioned atomic metadata persistence that preserves absence for existing installations.
-- [ ] Add deterministic selected-source, missing-source, conflict, invalid-state, restart, and redaction tests.
+- [x] All CSA-01 implementation tasks are complete; provider behavior remains assigned to dependent sprints.
 
 ## Verification
 
-- [ ] `cd codex-rs && just fix -p codex-vault && just fmt` precedes final tests.
-- [ ] `cd codex-rs && just test -p codex-vault` passes on the final CSA-01 tree.
-- [ ] TUI applicability: none; this sprint adds no user-visible behavior.
+- [x] `cd codex-rs && just fix -p codex-vault && just fmt` passed before final tests.
+- [x] `cd codex-rs && just test -p codex-vault` passed 41/41; a focused zero-retry rerun confirmed the one transient nextest leak annotation was scheduling noise.
+- [x] TUI applicability: none; this sprint adds no user-visible behavior.
 
 ## Exit evidence
 
-- [ ] Implementation commit and exact test output recorded.
-- [ ] Contract has no raw credential field and serialized state is metadata-only.
-- [ ] Done and Remaining ledgers reflect reality.
-- [ ] Completed record moved to `docs/sprints/archive/claude-subscription-auth/`.
+- [x] Implementation commit `af6ff246754458d7cbbac06e7de673d6b6b005a4` recorded.
+- [x] Contract has no raw credential field and serialized state is metadata-only.
+- [x] Done and Remaining ledgers reflect reality.
+- [x] Completed record moved to `docs/sprints/archive/claude-subscription-auth/`.
