@@ -18,10 +18,20 @@ pub(crate) struct BearerTokenRefresher {
     state: Arc<ExternalBearerAuthState>,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ExternalBearerCachePolicy {
+    #[default]
+    Timed,
+    FreshPerRequest,
+}
+
 impl BearerTokenRefresher {
-    pub(crate) fn new(config: ModelProviderAuthInfo) -> Self {
+    pub(crate) fn new(
+        config: ModelProviderAuthInfo,
+        cache_policy: ExternalBearerCachePolicy,
+    ) -> Self {
         Self {
-            state: Arc::new(ExternalBearerAuthState::new(config)),
+            state: Arc::new(ExternalBearerAuthState::new(config, cache_policy)),
         }
     }
 
@@ -32,7 +42,9 @@ impl BearerTokenRefresher {
     async fn resolve(&self) -> io::Result<CodexAuth> {
         let access_token = {
             let mut cached = self.state.cached_token.lock().await;
-            if let Some(cached_token) = cached.as_ref() {
+            if self.state.cache_policy == ExternalBearerCachePolicy::Timed
+                && let Some(cached_token) = cached.as_ref()
+            {
                 let should_use_cached_token = match self.state.config.refresh_interval() {
                     Some(refresh_interval) => cached_token.fetched_at.elapsed() < refresh_interval,
                     None => true,
@@ -44,10 +56,12 @@ impl BearerTokenRefresher {
 
             let access_token =
                 run_provider_auth_command(&self.state.config, /*force_refresh*/ false).await?;
-            *cached = Some(CachedExternalBearerToken {
-                access_token: access_token.clone(),
-                fetched_at: Instant::now(),
-            });
+            if self.state.cache_policy == ExternalBearerCachePolicy::Timed {
+                *cached = Some(CachedExternalBearerToken {
+                    access_token: access_token.clone(),
+                    fetched_at: Instant::now(),
+                });
+            }
             access_token
         };
         Ok(CodexAuth::from_api_key(access_token.as_str()))
@@ -84,13 +98,15 @@ impl fmt::Debug for BearerTokenRefresher {
 
 struct ExternalBearerAuthState {
     config: ModelProviderAuthInfo,
+    cache_policy: ExternalBearerCachePolicy,
     cached_token: Mutex<Option<CachedExternalBearerToken>>,
 }
 
 impl ExternalBearerAuthState {
-    fn new(config: ModelProviderAuthInfo) -> Self {
+    fn new(config: ModelProviderAuthInfo, cache_policy: ExternalBearerCachePolicy) -> Self {
         Self {
             config,
+            cache_policy,
             cached_token: Mutex::new(None),
         }
     }

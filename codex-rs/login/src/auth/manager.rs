@@ -40,6 +40,7 @@ use super::agent_identity::register_managed_chatgpt_agent_identity;
 use super::agent_identity::require_agent_identity_authapi_base_url;
 use super::agent_identity::verified_record_from_jwt;
 use super::external_bearer::BearerTokenRefresher;
+use super::external_bearer::ExternalBearerCachePolicy;
 use super::revoke::revoke_auth_tokens;
 use crate::auth::AuthHeaders;
 pub use crate::auth::agent_identity::AgentIdentityAuth;
@@ -2469,6 +2470,13 @@ impl AuthManager {
     }
 
     pub fn external_bearer_only(config: ModelProviderAuthInfo) -> Arc<Self> {
+        Self::external_bearer_only_with_cache_policy(config, ExternalBearerCachePolicy::Timed)
+    }
+
+    pub fn external_bearer_only_with_cache_policy(
+        config: ModelProviderAuthInfo,
+        cache_policy: ExternalBearerCachePolicy,
+    ) -> Arc<Self> {
         let (auth_change_tx, _auth_change_rx) = watch::channel(0);
         Arc::new(Self {
             codex_home: PathBuf::from("non-existent"),
@@ -2486,9 +2494,10 @@ impl AuthManager {
             refresh_lock: Semaphore::new(/*permits*/ 1),
             agent_identity_lock: Semaphore::new(/*permits*/ 1),
             agent_identity_bootstrap_cooldown: Mutex::default(),
-            external_auth: RwLock::new(Some(
-                Arc::new(BearerTokenRefresher::new(config)) as Arc<dyn ExternalAuth>
-            )),
+            external_auth: RwLock::new(Some(Arc::new(BearerTokenRefresher::new(
+                config,
+                cache_policy,
+            )) as Arc<dyn ExternalAuth>)),
             provider_api_key_cache: RwLock::new(ProviderApiKeyCache::new()),
             // External bearer auth refreshes by running the provider's command and never makes
             // auth-owned HTTP requests, so this route is intentionally inert.

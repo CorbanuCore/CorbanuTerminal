@@ -10,6 +10,7 @@ use codex_api::SharedAuthProvider;
 use codex_login::AuthHeaders;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
+use codex_login::ExternalBearerCachePolicy;
 use codex_login::auth::AgentIdentityAuth;
 use codex_login::auth::AgentIdentityAuthError;
 use codex_login::auth::AgentIdentityAuthPolicy;
@@ -195,8 +196,21 @@ pub(crate) fn auth_manager_for_provider(
     provider: &ModelProviderInfo,
 ) -> Option<Arc<AuthManager>> {
     match provider.auth.clone() {
-        Some(config) => Some(AuthManager::external_bearer_only(config)),
+        Some(config) => Some(AuthManager::external_bearer_only_with_cache_policy(
+            config,
+            external_bearer_cache_policy(provider),
+        )),
         None => auth_manager,
+    }
+}
+
+fn external_bearer_cache_policy(provider: &ModelProviderInfo) -> ExternalBearerCachePolicy {
+    if provider.is_claude_plan() {
+        // The selected Claude source can change while this manager remains alive. Resolve the
+        // helper for every request so a cached bearer can never outlive that persisted choice.
+        ExternalBearerCachePolicy::FreshPerRequest
+    } else {
+        ExternalBearerCachePolicy::Timed
     }
 }
 
@@ -417,6 +431,22 @@ mod tests {
         )
         .await
         .expect("agent identity auth record should include task id")
+    }
+
+    #[test]
+    fn claude_plan_bypasses_external_bearer_cache_for_selection_changes() {
+        let claude_plan = ModelProviderInfo::create_claude_plan_provider();
+        assert_eq!(
+            external_bearer_cache_policy(&claude_plan),
+            ExternalBearerCachePolicy::FreshPerRequest
+        );
+
+        let mut custom_provider = claude_plan;
+        custom_provider.name = "Custom command-auth provider".to_string();
+        assert_eq!(
+            external_bearer_cache_policy(&custom_provider),
+            ExternalBearerCachePolicy::Timed
+        );
     }
 
     fn provider_auth_scope(
