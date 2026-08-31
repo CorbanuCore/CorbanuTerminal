@@ -30,6 +30,7 @@ use super::turn_types::ClaudeBridgeKind;
 use super::turn_types::ClaudeBridgePlan;
 
 pub(crate) const AMBIENT_BRIDGE_UPSTREAM_MAX_ATTEMPTS: usize = 3;
+const ANTHROPIC_OAUTH_BETA: &str = "oauth-2025-04-20";
 pub(crate) async fn run_claude_bridge(plan: ClaudeBridgePlan) -> Result<()> {
     let listener = TcpListener::from_std(plan.listener)
         .context("failed to create async Claude bridge listener")?;
@@ -445,7 +446,12 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
             "anthropic-version",
             request_header_value(&headers, "anthropic-version").unwrap_or("2023-06-01"),
         );
-    if let Some(beta) = request_header_value(&headers, "anthropic-beta") {
+    if proxy_count_tokens {
+        upstream_request = upstream_request.header(
+            "anthropic-beta",
+            anthropic_oauth_beta_header(request_header_value(&headers, "anthropic-beta")),
+        );
+    } else if let Some(beta) = request_header_value(&headers, "anthropic-beta") {
         upstream_request = upstream_request.header("anthropic-beta", beta);
     }
     let response = upstream_request
@@ -473,6 +479,21 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
     )
     .await?;
     Ok(())
+}
+
+fn anthropic_oauth_beta_header(incoming: Option<&str>) -> String {
+    let incoming = incoming.unwrap_or_default().trim();
+    if incoming
+        .split(',')
+        .map(str::trim)
+        .any(|beta| beta.eq_ignore_ascii_case(ANTHROPIC_OAUTH_BETA))
+    {
+        incoming.to_string()
+    } else if incoming.is_empty() {
+        ANTHROPIC_OAUTH_BETA.to_string()
+    } else {
+        format!("{incoming},{ANTHROPIC_OAUTH_BETA}")
+    }
 }
 
 pub(crate) async fn send_ambient_chat_request_with_retry(

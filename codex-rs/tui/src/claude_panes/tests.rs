@@ -1571,7 +1571,7 @@ async fn anthropic_passthrough_bridge_replaces_client_auth_and_forwards_oauth_be
         .expect("connect to bridge");
     client
         .write_all(
-            b"POST /v1/messages/count_tokens HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer local-bridge-capability\r\nAnthropic-Version: 2023-06-01\r\nAnthropic-Beta: oauth-2025-04-20\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+            b"POST /v1/messages/count_tokens HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer local-bridge-capability\r\nAnthropic-Version: 2023-06-01\r\nAnthropic-Beta: prompt-caching-2024-07-31\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
         )
         .await
         .expect("write bridge request");
@@ -1588,7 +1588,9 @@ async fn anthropic_passthrough_bridge_replaces_client_auth_and_forwards_oauth_be
     assert!(upstream_request.contains("authorization: bearer bridge-upstream-secret-not-real"));
     assert!(!upstream_request.contains("local-bridge-capability"));
     assert!(upstream_request.starts_with("post /v1/messages/count_tokens http/1.1"));
-    assert!(upstream_request.contains("anthropic-beta: oauth-2025-04-20"));
+    assert!(
+        upstream_request.contains("anthropic-beta: prompt-caching-2024-07-31,oauth-2025-04-20")
+    );
     assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200 OK"));
 }
 
