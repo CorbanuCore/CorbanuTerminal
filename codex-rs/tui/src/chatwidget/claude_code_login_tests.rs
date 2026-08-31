@@ -167,6 +167,9 @@ async fn claude_cli_owns_token_exchange_and_status_verification() {
     std::fs::write(
         &fake_claude,
         r#"#!/bin/sh
+if [ "$1" = "internal-claude-login-health" ]; then
+  exit 0
+fi
 if [ "$1 $2" = "auth login" ]; then
   printf 'If the browser did not open: https://claude.example/oauth?state=test\n'
   IFS= read -r code
@@ -189,8 +192,12 @@ exit 2
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
     let app_event_tx = AppEventSender::new(event_tx);
 
-    let _input_tx =
-        start_with_executable(app_event_tx, &fake_claude, temp_dir.path().to_path_buf());
+    let _input_tx = start_with_executable(
+        app_event_tx,
+        &fake_claude,
+        Some(&fake_claude),
+        temp_dir.path().to_path_buf(),
+    );
     let input_tx = match event_rx.recv().await {
         Some(AppEvent::ClaudeCodePlanLoginReady {
             verification_url,
@@ -227,7 +234,7 @@ async fn existing_claude_login_is_selected_without_reauthorization() {
     let fake_claude = temp_dir.path().join("claude");
     std::fs::write(
         &fake_claude,
-        "#!/bin/sh\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\"}\\n'\n",
+        "#!/bin/sh\n[ \"$1\" = \"internal-claude-login-health\" ] && exit 0\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\"}\\n'\n",
     )
     .expect("write fake claude");
     let mut permissions = std::fs::metadata(&fake_claude)
@@ -237,15 +244,61 @@ async fn existing_claude_login_is_selected_without_reauthorization() {
     std::fs::set_permissions(&fake_claude, permissions).expect("make executable");
 
     assert!(
-        select_existing_claude_code_login(&fake_claude, temp_dir.path(), Duration::from_secs(1),)
-            .await
-            .expect("select existing login")
+        select_existing_claude_code_login(
+            &fake_claude,
+            Some(&fake_claude),
+            temp_dir.path(),
+            Duration::from_secs(1),
+        )
+        .await
+        .expect("select existing login")
     );
     let selection = Vault::new(temp_dir.path().to_path_buf())
         .load_claude_auth_selection()
         .expect("load selection")
         .expect("selection persisted");
     assert_eq!(selection.source, ClaudeAuthSource::ClaudeCodeLogin);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn unhealthy_platform_record_does_not_replace_the_previous_selection() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let fake_claude = temp_dir.path().join("claude");
+    std::fs::write(
+        &fake_claude,
+        "#!/bin/sh\n[ \"$1\" = \"internal-claude-login-health\" ] && exit 1\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\"}\\n'\n",
+    )
+    .expect("write fake claude");
+    let mut permissions = std::fs::metadata(&fake_claude)
+        .expect("fake claude metadata")
+        .permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&fake_claude, permissions).expect("make executable");
+    let vault = Vault::new(temp_dir.path().to_path_buf());
+    let previous = ClaudeAuthSelection::new(
+        ClaudeAuthSource::ManagedSubscriptionToken,
+        MANAGED_CLAUDE_AUTH_SOURCE_ID,
+    )
+    .expect("previous selection");
+    vault
+        .save_claude_auth_selection(&previous)
+        .expect("save previous selection");
+
+    let error = select_existing_claude_code_login(
+        &fake_claude,
+        Some(&fake_claude),
+        temp_dir.path(),
+        Duration::from_secs(1),
+    )
+    .await
+    .expect_err("unhealthy platform record must fail before persistence");
+
+    assert!(error.contains("needs reauthorization"));
+    assert_eq!(
+        vault.load_claude_auth_selection().expect("load selection"),
+        Some(previous)
+    );
 }
 
 #[tokio::test]

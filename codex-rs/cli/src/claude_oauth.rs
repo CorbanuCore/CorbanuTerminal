@@ -260,6 +260,38 @@ async fn resolve_current_platform_claude_oauth_access_token() -> Result<String> 
     .await
 }
 
+/// Validate the exact platform credential record used by provider resolution without
+/// returning or printing credential material. The TUI calls this before persisting a
+/// compatibility selection so a superficial CLI status cannot commit an unhealthy source.
+pub(crate) async fn verify_current_platform_claude_login_health() -> Result<()> {
+    let config_dir = claude_config_dir()?;
+    verify_claude_login_health(&config_dir, CURRENT_PLATFORM_STORE, /*security*/ None).await
+}
+
+async fn verify_claude_login_health(
+    config_dir: &Path,
+    store: PlatformCredentialStore,
+    security: Option<&Path>,
+) -> Result<()> {
+    let credentials_path = config_dir.join(CLAUDE_CREDENTIALS_FILE);
+    let health = match read_credentials(store, config_dir, &credentials_path, security).await {
+        Ok(credentials) => credentials_health(&credentials),
+        Err(error) => credentials_error_health(&error),
+    };
+    let metadata = ClaudeAuthSourceMetadata {
+        source: ClaudeAuthSource::ClaudeCodeLogin,
+        source_id: store.source_id(config_dir)?,
+        store: store.metadata_store(),
+        health,
+        account_hint: None,
+    };
+    if health == ClaudeAuthHealth::Healthy {
+        Ok(())
+    } else {
+        Err(unhealthy_selected_source_error(&metadata))
+    }
+}
+
 fn claude_config_dir() -> Result<PathBuf> {
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
@@ -649,6 +681,23 @@ mod tests {
         let error = resolve_selected_claude_auth_source(&selection, &[discovered])
             .expect_err("changing credentials-file profiles must fail closed");
         assert!(error.to_string().contains("no longer matches"));
+    }
+
+    #[tokio::test]
+    async fn metadata_only_login_health_rejects_blank_refresh_credentials() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let now_ms = current_time_ms();
+        write_credentials(temp_dir.path(), "live-access", "", now_ms + 120_000);
+
+        let error = verify_claude_login_health(
+            temp_dir.path(),
+            PlatformCredentialStore::CredentialsFile,
+            /*security*/ None,
+        )
+        .await
+        .expect_err("blank refresh token must not be selected");
+
+        assert!(error.to_string().contains("needs reauthorization"));
     }
 
     #[tokio::test]

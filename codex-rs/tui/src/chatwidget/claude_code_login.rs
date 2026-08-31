@@ -43,6 +43,7 @@ use codex_vault::macos_keychain_claude_auth_source_id;
 const CLAUDE_CODE_LOGIN_VIEW_ID: &str = "claude-code-plan-login";
 const CLAUDE_AUTH_METHOD_VIEW_ID: &str = "claude-plan-auth-method";
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const LOGIN_HEALTH_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_LOGIN_LINE_BYTES: usize = 16 * 1024;
 
 pub(crate) enum ClaudeCodeLoginInput {
@@ -183,20 +184,28 @@ pub(crate) fn start(
     app_event_tx: AppEventSender,
     codex_home: std::path::PathBuf,
 ) -> mpsc::UnboundedSender<ClaudeCodeLoginInput> {
-    start_with_executable(app_event_tx, Path::new("claude"), codex_home)
+    start_with_executable(
+        app_event_tx,
+        Path::new("claude"),
+        /*health_executable*/ None,
+        codex_home,
+    )
 }
 
 fn start_with_executable(
     app_event_tx: AppEventSender,
     executable: &Path,
+    health_executable: Option<&Path>,
     codex_home: std::path::PathBuf,
 ) -> mpsc::UnboundedSender<ClaudeCodeLoginInput> {
     let (input_tx, input_rx) = mpsc::unbounded_channel();
     let task_input_tx = input_tx.clone();
     let executable = executable.to_path_buf();
+    let health_executable = health_executable.map(Path::to_path_buf);
     tokio::spawn(async move {
         let result = run_login(
             &executable,
+            health_executable.as_deref(),
             &codex_home,
             app_event_tx.clone(),
             task_input_tx,
@@ -210,6 +219,7 @@ fn start_with_executable(
 
 async fn run_login(
     executable: &Path,
+    health_executable: Option<&Path>,
     codex_home: &Path,
     app_event_tx: AppEventSender,
     input_tx: mpsc::UnboundedSender<ClaudeCodeLoginInput>,
@@ -321,7 +331,7 @@ async fn run_login(
         return Some(Err(format!("Claude Code rejected the login ({status}).")));
     }
 
-    Some(verify_login(executable, codex_home).await)
+    Some(verify_login(executable, health_executable, codex_home).await)
 }
 
 fn spawn_output_reader(
@@ -346,9 +356,14 @@ fn spawn_output_reader(
     });
 }
 
-async fn verify_login(executable: &Path, codex_home: &Path) -> Result<String, String> {
+async fn verify_login(
+    executable: &Path,
+    health_executable: Option<&Path>,
+    codex_home: &Path,
+) -> Result<String, String> {
     match read_status(executable).await {
         Ok(ClaudeCodePlanStatus::SignedIn { .. }) => {
+            verify_current_platform_login_health(health_executable).await?;
             persist_claude_code_login_selection(codex_home).await?;
             Ok("Claude Code login selected. Retry the Claude Plan request or choose a model from /model.".to_string())
         }
@@ -361,11 +376,13 @@ async fn verify_login(executable: &Path, codex_home: &Path) -> Result<String, St
 
 pub(crate) async fn select_existing_claude_code_login(
     executable: &Path,
+    health_executable: Option<&Path>,
     codex_home: &Path,
     status_timeout: Duration,
 ) -> Result<bool, String> {
     match status_with_timeout(executable, status_timeout).await {
         ClaudeCodePlanStatus::SignedIn { .. } => {
+            verify_current_platform_login_health(health_executable).await?;
             persist_claude_code_login_selection(codex_home).await?;
             Ok(true)
         }
@@ -377,6 +394,40 @@ pub(crate) async fn select_existing_claude_code_login(
         | ClaudeCodePlanStatus::SelectionRequired { .. }
         | ClaudeCodePlanStatus::InvalidSelection
         | ClaudeCodePlanStatus::Checking => Ok(false),
+    }
+}
+
+async fn verify_current_platform_login_health(executable: Option<&Path>) -> Result<(), String> {
+    let current_executable;
+    let executable = match executable {
+        Some(executable) => executable,
+        None => {
+            current_executable = std::env::current_exe().map_err(|error| {
+                format!("Could not locate Corbanu to verify Claude Code credentials: {error}")
+            })?;
+            current_executable.as_path()
+        }
+    };
+    let status = timeout(
+        LOGIN_HEALTH_TIMEOUT,
+        Command::new(executable)
+            .arg("internal-claude-login-health")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .status(),
+    )
+    .await
+    .map_err(|_| "Timed out while verifying Claude Code's stored credentials".to_string())?
+    .map_err(|error| format!("Could not verify Claude Code's stored credentials: {error}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(
+            "Claude Code reports a login, but its stored credential needs reauthorization. Run `claude auth login` again; your previous Corbanu method remains selected."
+                .to_string(),
+        )
     }
 }
 

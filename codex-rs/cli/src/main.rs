@@ -147,6 +147,10 @@ enum Subcommand {
     #[clap(hide = true, name = "internal-claude-oauth-token")]
     InternalClaudeOauthToken,
 
+    /// Internal: verify the platform-owned Claude Code login without printing credential data.
+    #[clap(hide = true, name = "internal-claude-login-health")]
+    InternalClaudeLoginHealth,
+
     /// Internal: print one rental endpoint token for command-backed provider authentication.
     #[clap(hide = true, name = "internal-gpu-endpoint-token")]
     InternalGpuEndpointToken { rental_id: String },
@@ -1563,6 +1567,9 @@ async fn cli_main(
         Some(Subcommand::InternalClaudeOauthToken) => {
             run_internal_claude_oauth_token().await?;
         }
+        Some(Subcommand::InternalClaudeLoginHealth) => {
+            claude_oauth::verify_current_platform_claude_login_health().await?;
+        }
         Some(Subcommand::InternalGpuEndpointToken { rental_id }) => {
             run_internal_gpu_endpoint_token(rental_id)?;
         }
@@ -2644,6 +2651,7 @@ fn unsupported_subcommand_name_for_strict_config(
         | Some(Subcommand::Telegram(_))
         | Some(Subcommand::Doctor(_))
         | Some(Subcommand::InternalClaudeOauthToken)
+        | Some(Subcommand::InternalClaudeLoginHealth)
         | Some(Subcommand::InternalGpuEndpointToken { .. })
         | Some(Subcommand::InternalGpuController(_)) => None,
         Some(Subcommand::AppServer(app_server)) if app_server.subcommand.is_none() => None,

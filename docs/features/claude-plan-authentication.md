@@ -59,22 +59,25 @@ view. A successful save replaces the previous Corbanu-managed copy atomically.
 To switch away, first choose **Claude Code login** successfully. You may then
 delete the old managed copy through `/vault` using the label
 `provider/claude-code-oauth-token`. Deletion is local only; it does not revoke a
-token at Anthropic. Generic reveal, export, copy, and programmatic vault access
-to this provider-managed label are blocked, so inspection remains metadata-only.
+token at Anthropic. Generic reveal, export, copy, replace, and programmatic
+vault access to this provider-managed label are blocked, so inspection remains
+metadata-only and replacement always uses the validated transactional flow.
 
 ## Claude Code login compatibility
 
 If Claude Code is already signed in to a Claude subscription, Corbanu verifies
-that status and selects the current platform store without starting another
-login. Otherwise, it starts the normal Claude Code browser login. Authorization
-codes are entered only in a masked view.
+both that status and the exact platform record's refreshability before selecting
+it without starting another login. Otherwise, it starts the normal Claude Code
+browser login. Authorization codes are entered only in a masked view. A status
+response cannot replace the previous Corbanu selection when the authoritative
+record is missing, malformed, or lacks its refresh token or required scopes.
 
 Corbanu follows Claude Code's current platform ownership:
 
 | Platform | Authoritative login store |
 | --- | --- |
 | macOS | Keychain service `Claude Code-credentials`, or `Claude Code-custom-oauth-credentials` for custom OAuth. When `CLAUDE_CONFIG_DIR` is set, Claude Code appends the first eight hex characters of the normalized directory's SHA-256 digest. Corbanu persists that exact service identity. |
-| Linux and Windows | `${CLAUDE_CONFIG_DIR:-~/.claude}/.credentials.json`. |
+| Linux and Windows | `${CLAUDE_CONFIG_DIR:-~/.claude}/.credentials.json`; Corbanu persists a digest of the exact absolute normalized profile path so changing `CLAUDE_CONFIG_DIR` fails closed. |
 
 On macOS, a legacy `.credentials.json` does not override the current Keychain
 record. `CLAUDE_CONFIG_DIR` selects a distinct hashed Keychain service. If that

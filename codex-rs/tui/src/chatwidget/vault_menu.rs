@@ -174,6 +174,13 @@ impl ChatWidget {
     }
 
     pub(crate) fn open_vault_replace_secret(&mut self, label: String) {
+        if label == codex_vault::MANAGED_CLAUDE_TOKEN_LABEL {
+            self.add_error_message(
+                "Replace the managed Claude subscription token from Providers so validation and selection stay transactional."
+                    .to_string(),
+            );
+            return;
+        }
         let tx = self.app_event_tx.clone();
         let submitted_label = label.clone();
         let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
@@ -196,6 +203,17 @@ impl ChatWidget {
         label: String,
         secret: crate::app_event::VaultSecret,
     ) {
+        if label == codex_vault::MANAGED_CLAUDE_TOKEN_LABEL {
+            drop(secret);
+            self.on_vault_credential_replaced(
+                label,
+                Err(
+                    "managed Claude tokens can only be replaced from Providers with dedicated validation"
+                        .to_string(),
+                ),
+            );
+            return;
+        }
         let codex_home = self.config.codex_home.as_path().to_path_buf();
         let auth_store_mode = self.config.cli_auth_credentials_store_mode;
         let keyring_backend_kind = self.config.auth_keyring_backend_kind();
@@ -555,7 +573,6 @@ fn credential_display_name(label: &str, provider: Option<&str>) -> String {
 fn vault_credential_action_items(codex_home: PathBuf, label: String) -> Vec<SelectionItem> {
     let reveal_label = label.clone();
     let copy_label = label.clone();
-    let replace_label = label.clone();
     let delete_label = label.clone();
     let mut items = vec![vault_history_item(
         "Show metadata",
@@ -588,9 +605,8 @@ fn vault_credential_action_items(codex_home: PathBuf, label: String) -> Vec<Sele
             dismiss_on_select: true,
             ..Default::default()
         });
-    }
-    items.extend([
-        SelectionItem {
+        let replace_label = label;
+        items.push(SelectionItem {
             name: "Replace secret".to_string(),
             description: Some("Enter a masked replacement for this credential".to_string()),
             actions: vec![Box::new(move |tx| {
@@ -600,19 +616,19 @@ fn vault_credential_action_items(codex_home: PathBuf, label: String) -> Vec<Sele
             })],
             dismiss_on_select: true,
             ..Default::default()
-        },
-        SelectionItem {
-            name: "Delete credential".to_string(),
-            description: Some("Open a safe confirmation before permanent removal".to_string()),
-            actions: vec![Box::new(move |tx| {
-                tx.send(AppEvent::ConfirmVaultCredentialDelete {
-                    label: delete_label.clone(),
-                });
-            })],
-            dismiss_on_select: true,
-            ..Default::default()
-        },
-    ]);
+        });
+    }
+    items.push(SelectionItem {
+        name: "Delete credential".to_string(),
+        description: Some("Open a safe confirmation before permanent removal".to_string()),
+        actions: vec![Box::new(move |tx| {
+            tx.send(AppEvent::ConfirmVaultCredentialDelete {
+                label: delete_label.clone(),
+            });
+        })],
+        dismiss_on_select: true,
+        ..Default::default()
+    });
     items
 }
 
@@ -778,9 +794,6 @@ mod tests {
             .map(|item| item.name.as_str())
             .collect::<Vec<_>>();
 
-        assert_eq!(
-            names,
-            vec!["Show metadata", "Replace secret", "Delete credential"]
-        );
+        assert_eq!(names, vec!["Show metadata", "Delete credential"]);
     }
 }

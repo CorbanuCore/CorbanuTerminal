@@ -2263,6 +2263,7 @@ impl App {
                     let result =
                         crate::chatwidget::claude_code_login::select_existing_claude_code_login(
                             std::path::Path::new("claude"),
+                            /*health_executable*/ None,
                             codex_home.as_path(),
                             Duration::from_secs(10),
                         )
