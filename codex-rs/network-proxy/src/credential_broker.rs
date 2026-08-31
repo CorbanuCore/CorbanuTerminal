@@ -1,6 +1,11 @@
 mod providers;
 mod resolver;
 
+pub use resolver::IsolatedCredentialDispatchError;
+pub use resolver::IsolatedCredentialDispatcher;
+pub use resolver::IsolatedCredentialReceipt;
+pub use resolver::IsolatedCredentialRoute;
+pub use resolver::IsolatedCredentialUse;
 pub use resolver::ScopedCredentialCallbackError;
 pub use resolver::ScopedCredentialInjectionError;
 pub use resolver::ScopedCredentialResolver;
@@ -29,6 +34,7 @@ struct CredentialBrokerState {
     enabled: bool,
     credentials: Vec<CredentialRecord>,
     scoped_openai: Option<ScopedCredentialRecord>,
+    isolated_openai: Option<IsolatedCredentialRecord>,
 }
 
 struct CredentialRecord {
@@ -43,6 +49,12 @@ struct ScopedCredentialRecord {
     route: ScopedCredentialRoute,
     dummy_value: String,
     used: bool,
+}
+
+#[derive(Clone)]
+struct IsolatedCredentialRecord {
+    route: IsolatedCredentialRoute,
+    dummy_value: String,
 }
 
 impl CredentialBroker {
@@ -72,7 +84,8 @@ impl CredentialBroker {
         );
 
         for provider in providers::credential_providers() {
-            if state.scoped_openai.is_some() && std::ptr::eq(provider, providers::openai_provider())
+            if (state.scoped_openai.is_some() || state.isolated_openai.is_some())
+                && std::ptr::eq(provider, providers::openai_provider())
             {
                 continue;
             }
@@ -96,6 +109,12 @@ impl CredentialBroker {
                 scoped.dummy_value.clone(),
             );
         }
+        if let Some(isolated) = state.isolated_openai.as_ref() {
+            env.insert(
+                resolver::OPENAI_API_KEY_ENV_VAR.to_string(),
+                isolated.dummy_value.clone(),
+            );
+        }
         update_brokered_credentials_marker(&state, env);
     }
 
@@ -107,7 +126,7 @@ impl CredentialBroker {
         if !state.enabled {
             return Err(ScopedCredentialRouteError::BrokerDisabled);
         }
-        if state.scoped_openai.is_some() {
+        if state.scoped_openai.is_some() || state.isolated_openai.is_some() {
             return Err(ScopedCredentialRouteError::AlreadyConfigured);
         }
         state
@@ -119,6 +138,25 @@ impl CredentialBroker {
             dummy_value,
             used: false,
         });
+        Ok(())
+    }
+
+    pub(crate) fn install_isolated_openai_route(
+        &self,
+        route: IsolatedCredentialRoute,
+    ) -> Result<(), ScopedCredentialRouteError> {
+        let mut state = self.write_state();
+        if !state.enabled {
+            return Err(ScopedCredentialRouteError::BrokerDisabled);
+        }
+        if state.scoped_openai.is_some() || state.isolated_openai.is_some() {
+            return Err(ScopedCredentialRouteError::AlreadyConfigured);
+        }
+        state
+            .credentials
+            .retain(|credential| !std::ptr::eq(credential.provider, providers::openai_provider()));
+        let dummy_value = providers::openai_provider().dummy_value(route.capability_id.as_str());
+        state.isolated_openai = Some(IsolatedCredentialRecord { route, dummy_value });
         Ok(())
     }
 
@@ -135,7 +173,8 @@ impl CredentialBroker {
         let normalized_host = normalize_host(host);
         let state = self.read_state();
         state.enabled
-            && (state.scoped_openai.is_some() && normalized_host == resolver::OPENAI_API_HOST
+            && ((state.scoped_openai.is_some() || state.isolated_openai.is_some())
+                && normalized_host == resolver::OPENAI_API_HOST
                 || state
                     .credentials
                     .iter()
@@ -164,6 +203,12 @@ impl CredentialBroker {
                 return scoped.inject(scheme, &normalized_host, port, method, path, headers);
             }
         }
+        if let Some(isolated) = state.isolated_openai.as_ref() {
+            let carries_reference = isolated.matches_reference(headers);
+            if normalized_host == resolver::OPENAI_API_HOST || carries_reference {
+                return Err(ScopedCredentialInjectionError::IsolatedBrokerRequired);
+            }
+        }
 
         let matching_credentials = state
             .credentials
@@ -183,6 +228,24 @@ impl CredentialBroker {
             .provider
             .insert_request_header(headers, header_value);
         Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn dispatch_isolated_openai(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        method: &str,
+        path: &str,
+    ) -> Result<IsolatedCredentialReceipt, IsolatedCredentialDispatchError> {
+        let normalized_host = normalize_host(host);
+        let isolated = self
+            .read_state()
+            .isolated_openai
+            .clone()
+            .ok_or(IsolatedCredentialDispatchError::Unavailable)?;
+        isolated.dispatch(scheme, &normalized_host, port, method, path)
     }
 
     pub(crate) fn inject_request_headers(&self, host: &str, headers: &mut HeaderMap) {
@@ -278,12 +341,52 @@ impl CredentialBrokerState {
                 .scoped_openai
                 .as_ref()
                 .is_some_and(|credential| credential.dummy_value == value)
+            || self
+                .isolated_openai
+                .as_ref()
+                .is_some_and(|credential| credential.dummy_value == value)
     }
 }
 
 impl CredentialRecord {
     fn matches_host(&self, host: &str) -> bool {
         self.host_binding.matches_host(host)
+    }
+}
+
+impl IsolatedCredentialRecord {
+    fn matches_reference(&self, headers: &HeaderMap) -> bool {
+        providers::openai_provider()
+            .request_header(headers)
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value == format!("Bearer {}", self.dummy_value))
+    }
+
+    fn dispatch(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        method: &str,
+        path: &str,
+    ) -> Result<IsolatedCredentialReceipt, IsolatedCredentialDispatchError> {
+        if scheme != "https"
+            || host != resolver::OPENAI_API_HOST
+            || port != resolver::OPENAI_API_PORT
+            || method != "POST"
+            || path != self.route.authority.path.as_str()
+        {
+            return Err(IsolatedCredentialDispatchError::Denied);
+        }
+        self.route.dispatcher.dispatch(&IsolatedCredentialUse {
+            scheme,
+            host,
+            port,
+            method,
+            path,
+            capability_id: &self.route.capability_id,
+            authority: &self.route.authority,
+        })
     }
 }
 

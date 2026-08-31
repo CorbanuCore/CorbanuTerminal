@@ -1,7 +1,18 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
+use std::sync::Arc;
+use std::sync::RwLock;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
+use codex_secret_broker::BackendDispatchError;
+use codex_secret_broker::CancellationFence;
+use codex_secret_broker::CredentialReference as BrokerCredentialReference;
+use codex_secret_broker::OpenAiResponsesOperation;
+use codex_secret_broker::TypedCredentialBackend;
+use codex_secret_broker::TypedOperationReceipt;
 use codex_security_policy::CapabilityId;
 use codex_security_policy::CredentialCapabilityError;
 use codex_security_policy::CredentialCapabilityRequest;
@@ -228,6 +239,172 @@ fn map_capability_error(error: CredentialCapabilityError) -> ScopedCredentialErr
         | CredentialCapabilityError::BoundedText(_)
         | CredentialCapabilityError::Serialization(_) => ScopedCredentialError::InvalidCapability,
     }
+}
+
+const MAX_BROKER_CREDENTIALS: usize = 64;
+
+/// In-broker HTTP adapter. The raw value is borrowed only for this call and
+/// must never be returned, logged, or retained by the implementation.
+pub trait VaultBrokerTransport: Send + Sync + 'static {
+    fn execute_openai_responses(
+        &self,
+        raw_credential: &str,
+        operation: &OpenAiResponsesOperation,
+        cancellation: &CancellationFence,
+    ) -> Result<TypedOperationReceipt, BackendDispatchError>;
+}
+
+pub trait VaultBrokerClock: Send + Sync + 'static {
+    fn now_unix_seconds(&self) -> Result<i64, BackendDispatchError>;
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SystemVaultBrokerClock;
+
+impl VaultBrokerClock for SystemVaultBrokerClock {
+    fn now_unix_seconds(&self) -> Result<i64, BackendDispatchError> {
+        let seconds = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| BackendDispatchError::Failed)?
+            .as_secs();
+        i64::try_from(seconds).map_err(|_| BackendDispatchError::Failed)
+    }
+}
+
+/// A trusted-backend adapter intended to be linked only into the constrained
+/// broker service. Its map is keyed by opaque digest and cannot be enumerated
+/// through the broker protocol.
+pub struct VaultBrokerBackend<T, C = SystemVaultBrokerClock> {
+    vault: Arc<Vault>,
+    credentials: HashMap<BrokerCredentialReference, VaultCredentialRef>,
+    revocations: Arc<RwLock<RevocationState>>,
+    transport: T,
+    clock: C,
+}
+
+impl<T> VaultBrokerBackend<T, SystemVaultBrokerClock>
+where
+    T: VaultBrokerTransport,
+{
+    pub fn new(
+        vault: Arc<Vault>,
+        credentials: Vec<(BrokerCredentialReference, VaultCredentialRef)>,
+        revocations: Arc<RwLock<RevocationState>>,
+        transport: T,
+    ) -> Result<Self, VaultBrokerBackendError> {
+        Self::with_clock(
+            vault,
+            credentials,
+            revocations,
+            transport,
+            SystemVaultBrokerClock,
+        )
+    }
+}
+
+impl<T, C> VaultBrokerBackend<T, C>
+where
+    T: VaultBrokerTransport,
+    C: VaultBrokerClock,
+{
+    pub fn with_clock(
+        vault: Arc<Vault>,
+        credentials: Vec<(BrokerCredentialReference, VaultCredentialRef)>,
+        revocations: Arc<RwLock<RevocationState>>,
+        transport: T,
+        clock: C,
+    ) -> Result<Self, VaultBrokerBackendError> {
+        if credentials.is_empty() || credentials.len() > MAX_BROKER_CREDENTIALS {
+            return Err(VaultBrokerBackendError::InvalidCredentials);
+        }
+        for (reference, credential) in &credentials {
+            if reference.as_str() != credential.capability_id().as_str() {
+                return Err(VaultBrokerBackendError::InvalidCredentials);
+            }
+        }
+        let expected_len = credentials.len();
+        let credentials = credentials.into_iter().collect::<HashMap<_, _>>();
+        if credentials.len() != expected_len {
+            return Err(VaultBrokerBackendError::InvalidCredentials);
+        }
+        Ok(Self {
+            vault,
+            credentials,
+            revocations,
+            transport,
+            clock,
+        })
+    }
+}
+
+impl<T, C> TypedCredentialBackend for VaultBrokerBackend<T, C>
+where
+    T: VaultBrokerTransport,
+    C: VaultBrokerClock,
+{
+    fn execute_openai_responses(
+        &self,
+        reference: &BrokerCredentialReference,
+        operation: &OpenAiResponsesOperation,
+        cancellation: &CancellationFence,
+    ) -> Result<TypedOperationReceipt, BackendDispatchError> {
+        cancellation.ensure_active()?;
+        let credential = self
+            .credentials
+            .get(reference)
+            .ok_or(BackendDispatchError::Failed)?;
+        let now = self.clock.now_unix_seconds()?;
+        let revocations = self
+            .revocations
+            .read()
+            .map_err(|_| BackendDispatchError::Failed)?;
+        let mut transport_result = None;
+        let vault_result =
+            self.vault
+                .with_scoped_credential(credential, now, &revocations, |raw_credential| {
+                    let result = self.transport.execute_openai_responses(
+                        raw_credential,
+                        operation,
+                        cancellation,
+                    );
+                    let callback_result = match &result {
+                        Ok(_) => Ok(()),
+                        Err(BackendDispatchError::Cancelled) => {
+                            Err(ScopedCredentialCallbackError::Cancelled)
+                        }
+                        Err(
+                            BackendDispatchError::Failed | BackendDispatchError::OutcomeUnknown,
+                        ) => Err(ScopedCredentialCallbackError::Failed),
+                    };
+                    transport_result = Some(result);
+                    callback_result
+                });
+        if let Some(result) = transport_result {
+            return result;
+        }
+        match vault_result {
+            Err(ScopedCredentialError::CallbackCancelled) => Err(BackendDispatchError::Cancelled),
+            Ok(())
+            | Err(
+                ScopedCredentialError::InvalidCapability
+                | ScopedCredentialError::LabelMismatch
+                | ScopedCredentialError::ScopeMismatch
+                | ScopedCredentialError::Expired
+                | ScopedCredentialError::Revoked
+                | ScopedCredentialError::NotFound
+                | ScopedCredentialError::CredentialTypeDenied
+                | ScopedCredentialError::Storage
+                | ScopedCredentialError::CallbackFailed
+                | ScopedCredentialError::CallbackPanicked,
+            ) => Err(BackendDispatchError::Failed),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+pub enum VaultBrokerBackendError {
+    #[error("broker credential grants are invalid")]
+    InvalidCredentials,
 }
 
 #[cfg(test)]

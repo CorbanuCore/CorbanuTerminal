@@ -42,3 +42,23 @@ fn credential_authority_revoke_during_use_linearizes_after_the_active_resolution
     })
     .expect("next resolution observes revocation");
 }
+
+#[test]
+fn pf_27_s04_broker_failures_map_without_raw_credential_fallback() {
+    assert_eq!(
+        map_broker_client_error(BrokerClientError::Denied),
+        IsolatedCredentialDispatchError::Denied
+    );
+    assert_eq!(
+        map_broker_client_error(BrokerClientError::Cancelled),
+        IsolatedCredentialDispatchError::Cancelled
+    );
+    assert_eq!(
+        map_broker_client_error(BrokerClientError::OutcomeUnknown),
+        IsolatedCredentialDispatchError::OutcomeUnknown
+    );
+    assert_eq!(
+        map_broker_client_error(BrokerClientError::Unavailable),
+        IsolatedCredentialDispatchError::Unavailable
+    );
+}
