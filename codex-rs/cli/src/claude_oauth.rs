@@ -672,10 +672,20 @@ fn claude_config_dir() -> Result<PathBuf> {
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)
         .ok_or_else(|| anyhow!("HOME is not set; cannot read Claude Code credentials"))?;
-    Ok(std::env::var_os("CLAUDE_CONFIG_DIR")
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home.join(".claude")))
+    claude_config_dir_for_profile(
+        &home,
+        std::env::var_os("CLAUDE_CONFIG_DIR")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from),
+    )
+}
+
+fn claude_config_dir_for_profile(home: &Path, configured: Option<PathBuf>) -> Result<PathBuf> {
+    match configured {
+        Some(config_dir) => std::path::absolute(config_dir)
+            .context("failed to resolve the exact Claude Code configuration profile"),
+        None => Ok(home.join(".claude")),
+    }
 }
 
 async fn resolve_stored_claude_oauth_access_token(
@@ -1211,6 +1221,25 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         let error = resolve_selected_claude_auth_source(&selection, &[selected.clone(), selected])
             .expect_err("duplicate identities must fail as a conflict");
         assert!(error.to_string().contains("ambiguous"));
+    }
+
+    #[test]
+    fn relative_config_override_resolves_the_persisted_platform_source() {
+        let relative = PathBuf::from("target/claude-relative-profile-fixture");
+        let absolute = std::path::absolute(&relative).expect("absolute fixture profile");
+        let persisted_source_id = CURRENT_PLATFORM_STORE
+            .source_id(&absolute)
+            .expect("persisted platform source id");
+        let runtime_config_dir =
+            claude_config_dir_for_profile(Path::new("/unused-home"), Some(relative))
+                .expect("runtime profile");
+
+        assert_eq!(runtime_config_dir, absolute);
+        assert_eq!(
+            platform_store_for_source_id(&runtime_config_dir, &persisted_source_id)
+                .expect("resolve persisted platform source"),
+            CURRENT_PLATFORM_STORE,
+        );
     }
 
     #[test]
