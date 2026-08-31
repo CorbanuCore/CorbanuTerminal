@@ -10,6 +10,7 @@ pub(crate) mod confidentiality;
 mod effective_policy;
 pub(crate) mod ingress;
 mod integration;
+mod protected_runtime;
 pub(crate) mod protected_surface;
 pub(crate) mod recovery;
 pub(crate) mod taint;
@@ -33,3 +34,7 @@ mod integration_tests;
 #[cfg(test)]
 #[path = "authoritative_state_tests.rs"]
 mod authoritative_state_tests;
+
+#[cfg(test)]
+#[path = "protected_runtime_tests.rs"]
+mod protected_runtime_tests;

@@ -63,6 +63,7 @@ codex-rollout = { workspace = true }
 codex-rollout-trace = { workspace = true }
 codex-rmcp-client = { workspace = true }
 codex-sandboxing = { workspace = true }
+codex-security-audit = { workspace = true }
 codex-security-policy = { workspace = true }
 codex-secret-broker = { workspace = true }
 codex-browser-isolation = { workspace = true }
