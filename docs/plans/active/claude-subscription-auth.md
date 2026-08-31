@@ -177,7 +177,7 @@ remain with the integration owner.
 
 | Field | Record |
 | --- | --- |
-| Baseline | Canonical upstream is `https://github.com/openai/codex.git`. This checkout has no upstream remote or verified upstream ancestry, so the exact upstream baseline SHA is **unresolved** and must be resolved before the first implementation sprint becomes `ready`. Fork base is `8ae13e168817445205321bae410740cbc3e919b7`; candidate SHA is pending. |
+| Baseline | Canonical upstream `https://github.com/openai/codex.git` was fetched as `upstream/main` on 2026-08-30. The fetched upstream tip is `b7cd519c767c8fd4bc3581d9bc92fbab37a768c1`; the verified merge-base with fork base `8ae13e168817445205321bae410740cbc3e919b7` is `413492cd6c3a4d4f8dff6f406247ccda5a9d88aa` (`Ignore symbolic slash-tmp permissions on Windows (#36237)`, 2026-07-30). Candidate SHA is pending. |
 | Footprint | Anticipated adapters are the CLI OAuth helper, external bearer auth, provider info, Claude login/model TUI, and their focused tests. Each sprint must replace this anticipation with literal changed files and its single feature owner before readiness. |
 | Boundary | Keep provider credential discovery/resolution behind typed product-owned source and status contracts. TUI initiates human choice and displays metadata; it cannot own raw storage or refresh policy. Upstream external-auth interfaces remain thin adapters. |
 | Compatibility | Preserve provider wire headers, selected account/source, 401 behavior, config persistence, native pane startup, child use, cancellation, restart, and resume. API-key and non-Claude providers are non-applicable and must remain unchanged. |
@@ -320,7 +320,7 @@ due benchmark work is neither added nor waived by this plan.
 | Item | Type | Owner | Needed by | State / decision |
 | --- | --- | --- | --- | --- |
 | Product authority and WIP slot | product | Travis Good | activation | decided 2026-08-30; slot 2 of 2 allocated |
-| Exact upstream Codex baseline | integration | Jim Ricketts | first sprint readiness | **blocked/unresolved** because no upstream remote or verified ancestry is present; resolve without guessing |
+| Exact upstream Codex baseline | integration | Jim Ricketts | first sprint readiness | resolved 2026-08-30: fetched `upstream/main` `b7cd519c767c8fd4bc3581d9bc92fbab37a768c1`; verified fork merge-base `413492cd6c3a4d4f8dff6f406247ccda5a9d88aa` |
 | Current official `claude setup-token` CLI/output contract and supported version floor | external compatibility | Jim Ricketts | CSA-02 readiness | verify against current Anthropic primary documentation and representative runtimes |
 | Secure storage seam and protected-mode composition | architecture/security | Jim Ricketts | CSA-01/CSA-02 readiness | extend existing vault/keyring/broker boundaries; do not create a parallel plaintext store |
 | Long-lived token replacement/revocation semantics | external compatibility | Jim Ricketts | CSA-02/CSA-04 readiness | verify documented behavior; local removal must not be mislabeled as server revocation |
@@ -331,8 +331,8 @@ due benchmark work is neither added nor waived by this plan.
 
 - Release record: `qa/release/<version>/` — target version pending.
 - Benchmark tracker row: `benchmarks/README.md` when due for the target release.
-- Remaining blockers: no implementation sprint; unresolved upstream baseline;
-  unverified CLI/storage contracts; implementation; final automated,
+- Remaining blockers: no implementation sprint; unverified CLI/storage
+  contracts; implementation; final automated,
   cross-platform, true-TUI, live-repository, human, documentation, upstream, and
   release evidence.
 
