@@ -193,11 +193,11 @@ run `python3 docs/sprints/check.py`.
 
 | Feature ID | Plan feature | Current sprint records | State |
 | --- | --- | --- | --- |
-| `CSA-01` | Typed authentication source, selection, health, and persistence contract | Not created | planned; first implementation unit |
-| `CSA-02` | Secure long-lived subscription-token enrollment, storage, validation, replacement, and removal | Not created | planned; depends on CSA-01 |
-| `CSA-03` | Platform-authoritative Claude login adapters and deterministic provider resolution | Not created | planned; depends on CSA-01 |
-| `CSA-04` | Legacy/conflict migration plus failure, recovery, and resume UX | Not created | planned; depends on CSA-02 and CSA-03 |
-| `CSA-05` | Final cross-platform, true-TUI, live-repository, human, documentation, and release qualification | Not created | planned; depends on CSA-04 |
+| `PF-42` (`CSA-01`) | Typed authentication source, selection, health, and persistence contract | [CSA-01 / PF-42-S01](../../sprints/current/claude-subscription-auth/pf-42-s01-auth-source-contract.md) | in progress |
+| `PF-43` (`CSA-02`) | Secure long-lived subscription-token enrollment, storage, validation, replacement, and removal | Not created | planned; depends on CSA-01 |
+| `PF-44` (`CSA-03`) | Platform-authoritative Claude login adapters and deterministic provider resolution | Not created | planned; depends on CSA-01 |
+| `PF-45` (`CSA-04`) | Legacy/conflict migration plus failure, recovery, and resume UX | Not created | planned; depends on CSA-02 and CSA-03 |
+| `PF-46` (`CSA-05`) | Final cross-platform, true-TUI, live-repository, human, documentation, and release qualification | Not created | planned; depends on CSA-04 |
 
 ## Hard dependency graph
 
