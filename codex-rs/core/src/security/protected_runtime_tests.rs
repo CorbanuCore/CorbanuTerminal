@@ -20,6 +20,7 @@ use codex_security_audit::RecoveryBlocker;
 use codex_security_audit::RecoveryReport;
 use codex_security_audit::RecoveryState;
 use codex_security_audit::ReferenceJournal;
+use codex_security_policy::ActionReceipt;
 use codex_security_policy::AuthorizationContext;
 use codex_security_policy::AuthorizationRequest;
 use codex_security_policy::BoundedGrant;
@@ -30,6 +31,8 @@ use codex_security_policy::MandateOutcome;
 use codex_security_policy::PolicyAction;
 use codex_security_policy::PolicyPrincipal;
 use codex_security_policy::PrincipalKind;
+use codex_security_policy::ProtectedActionMandate;
+use codex_security_policy::ProtectedActionPreview;
 use codex_security_policy::ProtectedDispatchStep;
 use codex_security_policy::ProtectedResource;
 use codex_security_policy::ResourceKind;
@@ -457,6 +460,45 @@ fn durable_intent_and_live_fence_precede_the_effect() {
     )
     .expect("runtime");
     let (request, grant) = request_and_grant(&effective);
+    let mut substituted_request = request.clone();
+    substituted_request.context.destination = Some(text("https://other.example.test"));
+    assert!(matches!(
+        runtime.reserve_dispatch(
+            current(&effective, &state, &measured, &recovery),
+            "brokered-https",
+            &mut journal,
+            &substituted_request,
+            ProtectedAuthority::Grant(&grant),
+            text("run-7"),
+            text("substituted-grant-effect"),
+        ),
+        Err(ProtectedRuntimeError::AuthorityRequestMismatch)
+    ));
+
+    let preview = ProtectedActionPreview::new(request.clone(), 30, text("preview-nonce"))
+        .expect("action preview");
+    let mandate = ProtectedActionMandate::approve(
+        &preview,
+        principal(PrincipalKind::Human, "human-runtime-owner"),
+        NOW,
+    )
+    .expect("action mandate");
+    assert!(matches!(
+        runtime.reserve_dispatch(
+            current(&effective, &state, &measured, &recovery),
+            "brokered-https",
+            &mut journal,
+            &substituted_request,
+            ProtectedAuthority::Mandate {
+                mandate: &mandate,
+                preview: &preview,
+            },
+            text("run-7"),
+            text("substituted-mandate-effect"),
+        ),
+        Err(ProtectedRuntimeError::AuthorityRequestMismatch)
+    ));
+
     let mut dispatch = runtime
         .reserve_dispatch(
             current(&effective, &state, &measured, &recovery),
@@ -501,6 +543,55 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         )
         .expect("durable terminal receipt");
     assert_eq!(completion.sequence, 2);
+
+    let mut mandate_dispatch = runtime
+        .reserve_dispatch(
+            current(&effective, &state, &measured, &recovery),
+            "brokered-https",
+            &mut journal,
+            &request,
+            ProtectedAuthority::Mandate {
+                mandate: &mandate,
+                preview: &preview,
+            },
+            text("run-7"),
+            text("effect-2"),
+        )
+        .expect("durable mandate intent");
+    mandate_dispatch
+        .authorize(
+            &runtime,
+            current(&effective, &state, &measured, &recovery),
+            ProtectedAuthority::Mandate {
+                mandate: &mandate,
+                preview: &preview,
+            },
+            ProtectedDispatchStep::Admit,
+            || (),
+        )
+        .expect("admit mandate dispatch");
+    let mandate_permit = mandate_dispatch
+        .record_completed()
+        .expect("terminal mandate fence");
+    let receipt = ActionReceipt::complete(&mandate, &preview, MandateOutcome::Executed, 12)
+        .expect("mandate receipt");
+    let mandate_completion = journal
+        .resolve_dispatch(
+            mandate_permit,
+            EventContext::new(
+                principal(PrincipalKind::Service, "security-audit-producer"),
+                1,
+                RUN_GENERATION,
+            )
+            .expect("event context"),
+            DispatchResolution::Completed {
+                outcome: MandateOutcome::Executed,
+                mandate_receipt: Some(receipt),
+            },
+            12,
+        )
+        .expect("durable mandate receipt");
+    assert_eq!(mandate_completion.sequence, 4);
 }
 
 #[test]

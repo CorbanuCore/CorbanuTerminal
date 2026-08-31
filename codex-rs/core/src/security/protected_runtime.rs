@@ -25,6 +25,7 @@ use codex_security_policy::DispatchFence;
 use codex_security_policy::PolicyPrincipal;
 use codex_security_policy::PrincipalKind;
 use codex_security_policy::ProtectedActionMandate;
+use codex_security_policy::ProtectedActionPreview;
 use codex_security_policy::ProtectedDispatchStep;
 use codex_security_policy::RevocationError;
 use codex_security_policy::RevocationState;
@@ -234,6 +235,7 @@ impl ProtectedRuntime {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn reserve_dispatch(
         &self,
         current: CurrentProtectedRuntime<'_>,
@@ -245,6 +247,7 @@ impl ProtectedRuntime {
         deduplication_key: BoundedText,
     ) -> Result<ProtectedDispatch, ProtectedRuntimeError> {
         self.authorize_route(current, ProtectedRouteKind::Egress, egress_route_id)?;
+        authority.validate_request(request)?;
         let revocations = self.read_revocations()?;
         let (fence, identity) = match authority {
             ProtectedAuthority::Grant(grant) => (
@@ -257,7 +260,7 @@ impl ProtectedRuntime {
                 )?,
                 AuthorityIdentity::from_grant(grant)?,
             ),
-            ProtectedAuthority::Mandate(mandate) => (
+            ProtectedAuthority::Mandate { mandate, .. } => (
                 DispatchFence::queued_for_mandate(
                     run_id.clone(),
                     self.snapshot.generations.revocation,
@@ -340,7 +343,28 @@ impl ProtectedRuntime {
 #[derive(Clone, Copy)]
 pub(crate) enum ProtectedAuthority<'a> {
     Grant(&'a BoundedGrant),
-    Mandate(&'a ProtectedActionMandate),
+    Mandate {
+        mandate: &'a ProtectedActionMandate,
+        preview: &'a ProtectedActionPreview,
+    },
+}
+
+impl ProtectedAuthority<'_> {
+    fn validate_request(self, request: &AuthorizationRequest) -> Result<(), ProtectedRuntimeError> {
+        let matches = match self {
+            Self::Grant(grant) => grant.matches_request(request).unwrap_or(false),
+            Self::Mandate { mandate, preview } => {
+                preview.request == *request
+                    && mandate
+                        .matches_preview(preview, request.context.now_unix_seconds)
+                        .unwrap_or(false)
+            }
+        };
+        if !matches {
+            return Err(ProtectedRuntimeError::AuthorityRequestMismatch);
+        }
+        Ok(())
+    }
 }
 
 pub(crate) struct ProtectedDispatch {
@@ -369,7 +393,7 @@ impl ProtectedDispatch {
                 &revocations,
                 step,
             )?,
-            ProtectedAuthority::Mandate(mandate) => self.fence.authorize_mandate(
+            ProtectedAuthority::Mandate { mandate, .. } => self.fence.authorize_mandate(
                 &self.run_id,
                 now_unix_seconds,
                 mandate,
@@ -470,6 +494,8 @@ pub(crate) enum ProtectedRuntimeError {
     StaleRevocationState,
     #[error("protected runtime binding is stale")]
     StaleRuntimeBinding,
+    #[error("protected authority does not match the exact authorization request")]
+    AuthorityRequestMismatch,
     #[error("protected revocation state lock is poisoned")]
     RevocationStatePoisoned,
     #[error("protected route is already registered")]
