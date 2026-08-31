@@ -28,8 +28,6 @@ use crate::bottom_pane::SelectionItem;
 use crate::bottom_pane::SelectionViewParams;
 use crate::bottom_pane::ViewCompletion;
 use crate::render::renderable::Renderable;
-#[cfg(not(target_os = "macos"))]
-use codex_vault::CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::ClaudeAuthSelection;
 use codex_vault::ClaudeAuthSource;
 use codex_vault::ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID;
@@ -37,6 +35,8 @@ use codex_vault::MANAGED_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::Vault;
 #[cfg(target_os = "macos")]
 use codex_vault::claude_code_macos_keychain_service;
+#[cfg(not(target_os = "macos"))]
+use codex_vault::credentials_file_claude_auth_source_id;
 #[cfg(target_os = "macos")]
 use codex_vault::macos_keychain_claude_auth_source_id;
 
@@ -153,7 +153,19 @@ fn current_platform_login_source_id() -> Result<String, String> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        Ok(CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID.to_string())
+        let home = std::env::var_os("HOME")
+            .map(std::path::PathBuf::from)
+            .ok_or_else(|| {
+                "HOME is not set; cannot identify Claude Code's credentials-file profile"
+                    .to_string()
+            })?;
+        let config_dir = std::env::var_os("CLAUDE_CONFIG_DIR")
+            .filter(|value| !value.is_empty())
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| home.join(".claude"));
+        credentials_file_claude_auth_source_id(&config_dir).map_err(|error| {
+            format!("cannot identify Claude Code's credentials-file profile: {error}")
+        })
     }
 }
 

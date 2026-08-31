@@ -53,6 +53,22 @@ fn macos_keychain_identity_matches_claude_code_profiles() {
 }
 
 #[test]
+fn credentials_file_identity_binds_the_exact_profile_without_exposing_its_path() {
+    let profile_a = std::path::Path::new("/fixture/claude-work");
+    let profile_b = std::path::Path::new("/fixture/claude-personal");
+    let source_a = credentials_file_claude_auth_source_id(profile_a).unwrap();
+    let source_b = credentials_file_claude_auth_source_id(profile_b).unwrap();
+
+    assert_ne!(source_a, source_b);
+    assert!(source_a.starts_with("claude-login:credentials-file:"));
+    assert!(!source_a.contains("claude-work"));
+    assert_eq!(
+        credentials_file_claude_auth_source_id(std::path::Path::new("/fixture/café")).unwrap(),
+        credentials_file_claude_auth_source_id(std::path::Path::new("/fixture/café")).unwrap()
+    );
+}
+
+#[test]
 fn absent_selection_preserves_existing_installations() {
     let (_directory, vault) = test_vault();
     assert_eq!(vault.load_claude_auth_selection().unwrap(), None);

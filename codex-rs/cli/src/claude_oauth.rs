@@ -13,7 +13,6 @@ use std::time::UNIX_EPOCH;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
-use codex_vault::CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::ClaudeAuthHealth;
 use codex_vault::ClaudeAuthResolution;
 use codex_vault::ClaudeAuthSelection;
@@ -25,6 +24,7 @@ use codex_vault::MANAGED_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::ManagedClaudeTokenStatus;
 use codex_vault::Vault;
 use codex_vault::claude_code_macos_keychain_service;
+use codex_vault::credentials_file_claude_auth_source_id;
 use codex_vault::macos_keychain_claude_auth_source_id;
 use codex_vault::resolve_claude_auth_source;
 use serde::Deserialize;
@@ -66,12 +66,13 @@ enum PlatformCredentialStore {
 }
 
 impl PlatformCredentialStore {
-    fn source_id(self, config_dir: &Path) -> String {
+    fn source_id(self, config_dir: &Path) -> Result<String> {
         match self {
-            Self::MacosKeychain => {
-                macos_keychain_claude_auth_source_id(&claude_keychain_service(config_dir))
-            }
-            Self::CredentialsFile => CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID.to_string(),
+            Self::MacosKeychain => Ok(macos_keychain_claude_auth_source_id(
+                &claude_keychain_service(config_dir),
+            )),
+            Self::CredentialsFile => credentials_file_claude_auth_source_id(config_dir)
+                .context("failed to identify Claude Code's credentials-file profile"),
         }
     }
 
@@ -197,7 +198,7 @@ async fn discover_selected_claude_auth_source(
             };
             ClaudeAuthSourceMetadata {
                 source: ClaudeAuthSource::ClaudeCodeLogin,
-                source_id: CURRENT_PLATFORM_STORE.source_id(&config_dir),
+                source_id: CURRENT_PLATFORM_STORE.source_id(&config_dir)?,
                 store: CURRENT_PLATFORM_STORE.metadata_store(),
                 health,
                 account_hint: None,
@@ -623,6 +624,31 @@ mod tests {
         let error = resolve_selected_claude_auth_source(&selection, &[selected.clone(), selected])
             .expect_err("duplicate identities must fail as a conflict");
         assert!(error.to_string().contains("ambiguous"));
+    }
+
+    #[test]
+    fn credentials_file_profile_change_fails_closed_in_production_resolution() {
+        let work_profile = tempfile::tempdir().expect("work profile");
+        let personal_profile = tempfile::tempdir().expect("personal profile");
+        let selected_source_id = PlatformCredentialStore::CredentialsFile
+            .source_id(work_profile.path())
+            .expect("work source id");
+        let selection =
+            ClaudeAuthSelection::new_at(ClaudeAuthSource::ClaudeCodeLogin, selected_source_id, 10)
+                .expect("selection");
+        let discovered = ClaudeAuthSourceMetadata {
+            source: ClaudeAuthSource::ClaudeCodeLogin,
+            source_id: PlatformCredentialStore::CredentialsFile
+                .source_id(personal_profile.path())
+                .expect("personal source id"),
+            store: ClaudeAuthStoreKind::CredentialsFile,
+            health: ClaudeAuthHealth::Healthy,
+            account_hint: None,
+        };
+
+        let error = resolve_selected_claude_auth_source(&selection, &[discovered])
+            .expect_err("changing credentials-file profiles must fail closed");
+        assert!(error.to_string().contains("no longer matches"));
     }
 
     #[tokio::test]

@@ -59,6 +59,18 @@ pub fn macos_keychain_claude_auth_source_id(service: &str) -> String {
     format!("{MACOS_KEYCHAIN_CLAUDE_AUTH_SOURCE_ID}:{service}")
 }
 
+/// Persist the exact credentials-file profile without exposing its filesystem path.
+///
+/// Making relative paths absolute is important because Claude Code resolves a relative
+/// `CLAUDE_CONFIG_DIR` against the process working directory. NFC normalization keeps
+/// equivalent Unicode spellings aligned across persistence and provider resolution.
+pub fn credentials_file_claude_auth_source_id(config_dir: &Path) -> std::io::Result<String> {
+    let absolute = std::path::absolute(config_dir)?;
+    let normalized = absolute.to_string_lossy().nfc().collect::<String>();
+    let digest = format!("{:x}", Sha256::digest(normalized.as_bytes()));
+    Ok(format!("{CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID}:{digest}"))
+}
+
 /// Metadata-only status for the managed long-lived token.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ManagedClaudeTokenStatus {
