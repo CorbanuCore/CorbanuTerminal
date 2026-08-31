@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-44-S01"
 title: "Platform-authoritative Claude authentication resolution"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/claude-subscription-auth.md"
 plan_feature: "PF-44"
 execution_order: 3
@@ -45,22 +45,26 @@ updated: 2026-08-30
 ## Done
 
 - [x] Sprint record created and linked to PF-44.
+- [x] Made macOS Keychain authoritative and Linux/Windows credentials files authoritative, with exact current service/path names.
+- [x] Bound managed, environment, and Claude-login selections to their persisted source ID without fallback; selection-less installs retain the historical env-first behavior.
+- [x] Classified missing, malformed, blank-refresh, stale, and unavailable credential records without emitting credential values.
+- [x] Raised only the Claude provider's outer auth-command budget above its documented refresh and vault-unlock operations.
+- [x] Added platform fixtures proving Keychain/file authority, service names, health, source binding, refresh rotation, and redaction.
 
 ## Remaining
 
-- [ ] Make macOS Keychain authoritative and Linux/Windows credentials files authoritative, with deterministic service/path naming.
-- [ ] Resolve managed, environment, and Claude-login selections exactly; preserve legacy behavior only while no selection exists.
-- [ ] Classify missing, malformed, blank-refresh, and stale records without exposing values.
-- [ ] Add platform fixtures and no-fallback provider tests.
+- [x] None.
 
 ## Verification
 
-- [ ] `cd codex-rs && just fix -p codex-cli && just fmt` precedes final tests.
-- [ ] `cd codex-rs && just test -p codex-cli` passes.
-- [ ] TUI applicability: none in this provider-adapter sprint.
+- [x] `cd codex-rs && just fix -p codex-model-provider-info && just fix -p codex-cli && just fmt` preceded final tests; `git diff --check` passed.
+- [x] `cd codex-rs && just test -p codex-model-provider-info --retries 0` passed 57 of 57 tests.
+- [x] `cd codex-rs && just test -p codex-cli claude_oauth --retries 0` passed 60 of 60 tests across all five CLI binaries.
+- [x] A bounded retry-disabled full CLI run passed 1,438 of 1,443 tests. The two PID-tracker races and two slow entrypoint timeouts passed independently with retries disabled; the unrelated pre-existing `sandbox_fetches_and_enforces_cloud_managed_permission_profile` host-sandbox assertion remained reproducible independently. All 60 auth tests passed within the bounded full run.
+- [x] TUI applicability: none in this provider-adapter sprint.
 
 ## Exit evidence
 
-- [ ] Implementation commit and final-tree tests recorded.
-- [ ] Platform authority behavior and upstream compatibility note recorded in the plan.
-- [ ] Done and Remaining reflect reality; completed record is archived.
+- [x] Implementation commit `9382b0e7c` and final-tree tests are recorded above.
+- [x] Platform authority behavior and upstream compatibility note are recorded in the plan.
+- [x] Done and Remaining reflect reality; completed record is archived.
