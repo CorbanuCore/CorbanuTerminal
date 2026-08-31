@@ -543,26 +543,15 @@ impl Vault {
         }
     }
 
-    /// Resolve the managed token only inside a short trusted callback.
-    pub fn with_managed_claude_subscription_token<T>(
-        &self,
-        use_token: impl FnOnce(&str) -> T,
-    ) -> Result<T, VaultError> {
+    /// Load the managed token into zeroizing owned memory for trusted provider use.
+    pub fn load_managed_claude_subscription_token(&self) -> Result<Zeroizing<String>, VaultError> {
         self.with_storage_lock(|| {
             let token = self
                 .read_secret(MANAGED_CLAUDE_TOKEN_LABEL)?
                 .ok_or_else(|| VaultError::NotFound {
                     label: MANAGED_CLAUDE_TOKEN_LABEL.to_string(),
                 })?;
-            let token = Zeroizing::new(token);
-            let _panic_guard = crate::credential_panic::ScopedCredentialPanicGuard::enter();
-            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                use_token(token.as_str())
-            }));
-            drop(token);
-            outcome.map_err(|_| {
-                VaultError::Storage(anyhow::anyhow!("managed Claude token callback panicked"))
-            })
+            Ok(Zeroizing::new(token))
         })
     }
 

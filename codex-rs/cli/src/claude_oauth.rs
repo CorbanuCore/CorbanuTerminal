@@ -189,7 +189,7 @@ async fn resolve_selected_source_access_token(
     let metadata = resolve_selected_claude_auth_source(selection, &discovered)?;
     match metadata.source {
         ClaudeAuthSource::ManagedSubscriptionToken => vault
-            .with_managed_claude_subscription_token(|token| Zeroizing::new(token.to_owned()))
+            .load_managed_claude_subscription_token()
             .context(
                 "the selected managed Claude subscription token is unavailable; run Claude authentication setup again",
             ),

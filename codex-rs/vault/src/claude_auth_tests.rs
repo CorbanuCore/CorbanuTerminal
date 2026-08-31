@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use codex_keyring_store::tests::MockKeyringStore;
 use pretty_assertions::assert_eq;
+use zeroize::Zeroizing;
 
 use super::*;
 use crate::AddCredential;
-use crate::scoped_credential_callback_active;
 
 fn test_vault() -> (tempfile::TempDir, Vault) {
     let directory = tempfile::tempdir().expect("tempdir");
@@ -86,34 +86,15 @@ fn relative_credentials_file_identity_is_bound_to_the_callers_working_directory(
 }
 
 #[test]
-fn managed_token_callback_activates_the_secret_bearing_panic_guard() {
+fn managed_token_load_returns_zeroizing_owned_memory() {
     let (_directory, vault) = test_vault();
     vault
         .store_managed_claude_subscription_token("fixture-managed-token".to_string())
         .unwrap();
 
-    let guard_was_active = vault
-        .with_managed_claude_subscription_token(|_| scoped_credential_callback_active())
-        .unwrap();
+    let token: Zeroizing<String> = vault.load_managed_claude_subscription_token().unwrap();
 
-    assert!(guard_was_active);
-    assert!(!scoped_credential_callback_active());
-}
-
-#[test]
-fn managed_token_callback_panic_is_contained_without_formatting_its_payload() {
-    let (_directory, vault) = test_vault();
-    vault
-        .store_managed_claude_subscription_token("fixture-managed-token".to_string())
-        .unwrap();
-
-    let error = vault
-        .with_managed_claude_subscription_token(|_| -> () { panic!("managed-token-panic-canary") })
-        .unwrap_err();
-
-    assert!(error.to_string().contains("callback panicked"));
-    assert!(!error.to_string().contains("managed-token-panic-canary"));
-    assert!(!scoped_credential_callback_active());
+    assert_eq!(token.as_str(), "fixture-managed-token");
 }
 
 #[test]
@@ -382,10 +363,8 @@ fn managed_token_round_trip_status_and_replace_are_metadata_only() {
     vault
         .store_managed_claude_subscription_token(second.to_string())
         .unwrap();
-    let resolved = vault
-        .with_managed_claude_subscription_token(ToString::to_string)
-        .unwrap();
-    assert_eq!(resolved, second);
+    let resolved = vault.load_managed_claude_subscription_token().unwrap();
+    assert_eq!(resolved.as_str(), second);
     let encrypted = std::fs::read(directory.path().join("secrets").join("local.age")).unwrap();
     assert!(!String::from_utf8_lossy(&encrypted).contains(first));
     assert!(!String::from_utf8_lossy(&encrypted).contains(second));
@@ -423,10 +402,8 @@ fn generic_vault_writes_cannot_create_or_replace_the_managed_token() {
         ),
         Err(VaultError::ProviderManagedCredential { .. })
     ));
-    let resolved = vault
-        .with_managed_claude_subscription_token(ToString::to_string)
-        .unwrap();
-    assert_eq!(resolved, "synthetic-managed-token");
+    let resolved = vault.load_managed_claude_subscription_token().unwrap();
+    assert_eq!(resolved.as_str(), "synthetic-managed-token");
 }
 
 #[test]
@@ -441,8 +418,9 @@ fn managed_enrollment_commits_token_and_exact_selection_together() {
     assert_eq!(vault.load_claude_auth_selection().unwrap(), Some(selection));
     assert_eq!(
         vault
-            .with_managed_claude_subscription_token(ToString::to_string)
-            .unwrap(),
+            .load_managed_claude_subscription_token()
+            .unwrap()
+            .as_str(),
         "synthetic-enrollment-token"
     );
 }
@@ -490,8 +468,9 @@ fn assert_managed_enrollment_rollback(failure_point: EnrollmentFailurePoint) {
     );
     assert_eq!(
         vault
-            .with_managed_claude_subscription_token(ToString::to_string)
-            .unwrap(),
+            .load_managed_claude_subscription_token()
+            .unwrap()
+            .as_str(),
         "previous-managed-token"
     );
     assert!(!format!("{error:?}").contains("replacement-managed-token"));
