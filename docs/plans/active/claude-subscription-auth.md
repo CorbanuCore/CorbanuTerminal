@@ -17,8 +17,8 @@ product_spec:
   heading: "Shipping MVP — LIVE"
   requirement_excerpt: "Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat."
 implementation_worktrees:
-  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/claude-subscription-auth"
-    branch: "feat/claude-subscription-auth"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/claude-subscription-auth-isolated"
+    branch: "feat/claude-subscription-auth-isolated"
     base_commit: "8ae13e168817445205321bae410740cbc3e919b7"
 ---
 
@@ -153,7 +153,7 @@ exposing the credential or discarding unrelated provider state.
 
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
-| Jim Ricketts | `/Volumes/CorbanuDrive/Corbanu/worktrees/claude-subscription-auth` | `feat/claude-subscription-auth` | `8ae13e168817445205321bae410740cbc3e919b7` | Plan integration and all single-lane implementation; exact per-sprint write scopes remain pending. |
+| Jim Ricketts | `/Volumes/CorbanuDrive/Corbanu/worktrees/claude-subscription-auth-isolated` | `feat/claude-subscription-auth-isolated` | `8ae13e168817445205321bae410740cbc3e919b7` | Plan integration and all single-lane implementation; exact per-sprint write scopes remain pending. |
 
 Parallel implementation is not enabled. `parallel_sprint_limit: 1` requires one
 ready or in-progress sprint at a time, and shared auth/TUI/persistence surfaces
