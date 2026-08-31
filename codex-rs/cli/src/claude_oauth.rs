@@ -29,6 +29,7 @@ use tokio::process::Command;
 
 const CLAUDE_CREDENTIALS_FILE: &str = ".credentials.json";
 const CLAUDE_REFRESH_LOCK_FILE: &str = ".pfterminal-oauth-refresh.lock";
+const CLAUDE_CUSTOM_OAUTH_REFRESH_LOCK_FILE: &str = ".pfterminal-custom-oauth-refresh.lock";
 const MIN_TOKEN_VALIDITY_MS: u64 = 60_000;
 const CLAUDE_REFRESH_TIMEOUT: Duration = Duration::from_secs(30);
 #[cfg(all(target_os = "macos", not(test)))]
@@ -273,7 +274,7 @@ async fn resolve_stored_claude_oauth_access_token(
         .as_ref()
         .and_then(|oauth| oauth.access_token.clone());
 
-    let _refresh_lock = acquire_refresh_lock(config_dir).await?;
+    let _refresh_lock = acquire_refresh_lock(config_dir, store).await?;
 
     // Another PFTerminal process may have refreshed while this process waited.
     let credentials = read_credentials(store, &credentials_path, security).await?;
@@ -492,16 +493,17 @@ fn claude_config_dir_is_default(config_dir: &Path) -> bool {
         .is_some_and(|home| config_dir == home.join(".claude"))
 }
 
-async fn acquire_refresh_lock(config_dir: &Path) -> Result<File> {
-    let lock_path = config_dir.join(CLAUDE_REFRESH_LOCK_FILE);
-    tokio::fs::create_dir_all(config_dir)
-        .await
-        .with_context(|| {
-            format!(
-                "failed to create Claude Code config directory {}",
-                config_dir.display()
-            )
-        })?;
+async fn acquire_refresh_lock(config_dir: &Path, store: PlatformCredentialStore) -> Result<File> {
+    let lock_path = refresh_lock_path(config_dir, store)?;
+    let lock_dir = lock_path
+        .parent()
+        .ok_or_else(|| anyhow!("Claude OAuth refresh lock has no parent directory"))?;
+    tokio::fs::create_dir_all(lock_dir).await.with_context(|| {
+        format!(
+            "failed to create Claude Code config directory {}",
+            lock_dir.display()
+        )
+    })?;
     tokio::task::spawn_blocking(move || -> io::Result<File> {
         let lock_file = OpenOptions::new()
             .read(true)
@@ -515,6 +517,34 @@ async fn acquire_refresh_lock(config_dir: &Path) -> Result<File> {
     .await
     .context("Claude OAuth refresh lock task failed")?
     .context("failed to acquire Claude OAuth refresh lock")
+}
+
+fn refresh_lock_path(config_dir: &Path, store: PlatformCredentialStore) -> Result<PathBuf> {
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .ok_or_else(|| anyhow!("HOME is not set; cannot lock Claude Code credentials"))?;
+    Ok(refresh_lock_path_for_home(
+        config_dir,
+        store,
+        &home,
+        nonempty_env("CLAUDE_CODE_CUSTOM_OAUTH_URL").is_some(),
+    ))
+}
+
+fn refresh_lock_path_for_home(
+    config_dir: &Path,
+    store: PlatformCredentialStore,
+    home: &Path,
+    custom_oauth: bool,
+) -> PathBuf {
+    match store {
+        PlatformCredentialStore::CredentialsFile => config_dir.join(CLAUDE_REFRESH_LOCK_FILE),
+        PlatformCredentialStore::MacosKeychain => home.join(".claude").join(if custom_oauth {
+            CLAUDE_CUSTOM_OAUTH_REFRESH_LOCK_FILE
+        } else {
+            CLAUDE_REFRESH_LOCK_FILE
+        }),
+    }
 }
 
 fn nonempty_env(name: &str) -> Option<String> {
@@ -868,6 +898,52 @@ mod tests {
             .expect_err("legacy source cannot silently fall through");
         assert!(error.to_string().contains("not valid on this platform"));
         assert!(!error.to_string().contains("legacy-store"));
+    }
+
+    #[test]
+    fn refresh_lock_follows_the_authoritative_store_identity() {
+        let home = Path::new("/fixture/home");
+        let config_a = Path::new("/fixture/config-a");
+        let config_b = Path::new("/fixture/config-b");
+
+        assert_ne!(
+            refresh_lock_path_for_home(
+                config_a,
+                PlatformCredentialStore::CredentialsFile,
+                home,
+                false,
+            ),
+            refresh_lock_path_for_home(
+                config_b,
+                PlatformCredentialStore::CredentialsFile,
+                home,
+                false,
+            )
+        );
+        let keychain_lock = refresh_lock_path_for_home(
+            config_a,
+            PlatformCredentialStore::MacosKeychain,
+            home,
+            false,
+        );
+        assert_eq!(
+            keychain_lock,
+            refresh_lock_path_for_home(
+                config_b,
+                PlatformCredentialStore::MacosKeychain,
+                home,
+                false,
+            )
+        );
+        assert_ne!(
+            keychain_lock,
+            refresh_lock_path_for_home(
+                config_b,
+                PlatformCredentialStore::MacosKeychain,
+                home,
+                true,
+            )
+        );
     }
 
     #[cfg(target_os = "macos")]
