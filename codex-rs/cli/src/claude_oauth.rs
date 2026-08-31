@@ -155,33 +155,15 @@ async fn resolve_claude_oauth_access_token_for_selection(
     vault: &Vault,
 ) -> Result<String> {
     if let Some(selection) = selection {
-        let discovered = discover_selected_claude_auth_source(selection, vault).await?;
-        let metadata = resolve_selected_claude_auth_source(selection, &discovered)?;
-        let access_token = match metadata.source {
-            ClaudeAuthSource::ManagedSubscriptionToken => {
-                vault
-                    .with_managed_claude_subscription_token(ToString::to_string)
-                    .context(
-                        "the selected managed Claude subscription token is unavailable; run Claude authentication setup again",
-                    )
-            }
-            ClaudeAuthSource::EnvironmentToken => {
-                nonempty_env("CLAUDE_CODE_OAUTH_TOKEN").ok_or_else(|| {
-                    anyhow!(
-                        "the selected CLAUDE_CODE_OAUTH_TOKEN source is missing or blank; set it again or explicitly choose another Claude authentication method"
-                    )
-                })
-            }
-            ClaudeAuthSource::ClaudeCodeLogin => {
-                resolve_selected_claude_code_login_access_token(&metadata.source_id).await
-            }
-        }?;
         if selection.source == ClaudeAuthSource::ClaudeCodeLogin {
-            // Verify after the selected slot is read/refreshed and immediately before its token is
-            // returned. This keeps external account replacement from winning the wider I/O window.
-            verify_selected_claude_login_authority(selection, /*claude_executable*/ None).await?;
+            return with_verified_claude_login_authority(
+                selection,
+                /*claude_executable*/ None,
+                || resolve_selected_source_access_token(selection, vault),
+            )
+            .await;
         }
-        return Ok(access_token);
+        return resolve_selected_source_access_token(selection, vault).await;
     }
 
     // Existing installations have no persisted selection. Preserve their exact
@@ -191,6 +173,48 @@ async fn resolve_claude_oauth_access_token_for_selection(
     }
 
     resolve_current_platform_claude_oauth_access_token().await
+}
+
+async fn resolve_selected_source_access_token(
+    selection: &ClaudeAuthSelection,
+    vault: &Vault,
+) -> Result<String> {
+    let discovered = discover_selected_claude_auth_source(selection, vault).await?;
+    let metadata = resolve_selected_claude_auth_source(selection, &discovered)?;
+    match metadata.source {
+        ClaudeAuthSource::ManagedSubscriptionToken => vault
+            .with_managed_claude_subscription_token(ToString::to_string)
+            .context(
+                "the selected managed Claude subscription token is unavailable; run Claude authentication setup again",
+            ),
+        ClaudeAuthSource::EnvironmentToken => {
+            nonempty_env("CLAUDE_CODE_OAUTH_TOKEN").ok_or_else(|| {
+                anyhow!(
+                    "the selected CLAUDE_CODE_OAUTH_TOKEN source is missing or blank; set it again or explicitly choose another Claude authentication method"
+                )
+            })
+        }
+        ClaudeAuthSource::ClaudeCodeLogin => {
+            resolve_selected_claude_code_login_access_token(&metadata.source_id).await
+        }
+    }
+}
+
+async fn with_verified_claude_login_authority<T, Resolve, ResolveFuture>(
+    selection: &ClaudeAuthSelection,
+    claude_executable: Option<&Path>,
+    resolve: Resolve,
+) -> Result<T>
+where
+    Resolve: FnOnce() -> ResolveFuture,
+    ResolveFuture: std::future::Future<Output = Result<T>>,
+{
+    // Fail before credential discovery or a refresh can mutate an externally replaced slot.
+    verify_selected_claude_login_authority(selection, claude_executable).await?;
+    let value = resolve().await?;
+    // Recheck immediately before use so a replacement during the wider I/O window also fails.
+    verify_selected_claude_login_authority(selection, claude_executable).await?;
+    Ok(value)
 }
 
 async fn verify_selected_claude_login_authority(
@@ -973,6 +997,39 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         );
         assert!(!error.to_string().contains("fixture@example.invalid"));
         assert!(!error.to_string().contains("other@example.invalid"));
+
+        let refresh_executable = directory.path().join("must-not-refresh");
+        let refresh_marker = directory.path().join("unexpected-refresh-side-effect");
+        std::fs::write(
+            &refresh_executable,
+            format!(
+                "#!/bin/sh\nprintf invoked > '{}'\n",
+                refresh_marker.display()
+            ),
+        )
+        .expect("write forbidden refresh fixture");
+        let mut permissions = std::fs::metadata(&refresh_executable)
+            .expect("forbidden refresh fixture metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&refresh_executable, permissions)
+            .expect("make forbidden refresh fixture executable");
+        let error = with_verified_claude_login_authority(&selection, Some(&drifted), || async {
+            Command::new(&refresh_executable)
+                .status()
+                .await
+                .context("run forbidden refresh fixture")?;
+            Ok("never-returned")
+        })
+        .await
+        .expect_err("authority drift must block refresh before side effects");
+        assert!(
+            error
+                .to_string()
+                .contains("account or subscription changed")
+        );
+        assert!(!refresh_marker.exists());
+
         let error = verify_selected_claude_login_authority(&selection, Some(&incomplete))
             .await
             .expect_err("missing subscription identity must fail closed");
