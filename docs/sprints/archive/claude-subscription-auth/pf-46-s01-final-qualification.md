@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-46-S01"
 title: "Claude subscription authentication final qualification"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/claude-subscription-auth.md"
 plan_feature: "PF-46"
 execution_order: 5
@@ -14,7 +14,7 @@ branch: "feat/claude-subscription-auth-isolated"
 base_commit: "8ae13e168817445205321bae410740cbc3e919b7"
 depends_on: "PF-45-S01"
 created: 2026-08-30
-updated: 2026-08-30
+updated: 2026-08-31
 ---
 
 # CSA-05 / PF-46-S01 — Final qualification
@@ -58,31 +58,36 @@ updated: 2026-08-30
 ## Done
 
 - [x] Sprint record created and linked to PF-46.
+- [x] Finished the user/operator authentication guide and reconciled native-pane
+  credential-boundary language with the behavior actually under Corbanu control.
+- [x] Closed the final bounded-output, missing-environment-source, generic vault
+  custody, stale navigation, and literal-scope review findings.
+- [x] Ran retry-disabled affected tests and the required typed Tmux state-machine
+  suite against the isolated final implementation candidate.
+- [x] Dispositioned structured and Corbanu/Opus 5 Max findings without weakening
+  the runtime executable-binding or custom-provider compatibility contracts.
+- [x] Recorded automated evidence and honest external applicability gaps.
 
 ## Remaining
 
-- [ ] Write and verify the finished user/operator guide and final plan evidence.
-- [ ] Run final formatted-tree focused, platform-fixture, adversarial, and typed
-  tmux tests; scan all retained evidence for secret canaries.
-- [ ] Run the structured branch autoreview against frozen base `8ae13e` and
-  disposition every finding.
-- [ ] Run real Corbanu Terminal Claude Plan / Opus 5.0 Max review in private
-  tmux against the full frozen-base diff; fix and repeat until CLEAN.
-- [ ] Record honest external/human applicability gaps, archive this sprint, and
-  verify the non-force remote branch push.
+None for PF-46's automated delivery scope. Named human/live Anthropic account,
+TensorCash, Isometric Game, physical Linux/Windows release-host, target-release,
+tag, merge, and release-ledger decisions remain open on the active plan.
 
 ## Verification
 
-- [ ] `just fix` and `just fmt` precede final retry-disabled affected tests.
-- [ ] Required typed tmux run uses the candidate binary, trace logs, isolated
+- [x] `just fix -p codex-cli`, `just fix -p codex-tui`, `just fmt`, and
+  `git diff --check` passed around the final retry-disabled affected tests.
+- [x] Required typed tmux run used the candidate binary, trace logs, isolated
   artifacts, real key flows, and a clean canary scan.
-- [ ] Plan and sprint checkers pass on the final tree.
-- [ ] TUI applicability: required; snapshots plus private-tmux key and visible
+- [x] Plan and sprint checkers pass on the final tree.
+- [x] TUI applicability: required; snapshots plus private-tmux key and visible
   checkpoint evidence are recorded.
 
 ## Exit evidence
 
-- [ ] Final implementation and qualification commits recorded.
-- [ ] Final-tree test, documentation, review, and remote evidence linked.
-- [ ] Done and Remaining ledgers reflect reality.
-- [ ] Completed record moved to `docs/sprints/archive/claude-subscription-auth/`.
+- [x] Implementation commits through `34535821c` and the frozen base `8ae13e`
+  are recorded in `qa/claude-subscription-auth/sprints/PF-46-S01/evidence.md`.
+- [x] Final-tree test, documentation, review protocol, and remote push gate are linked.
+- [x] Done and Remaining ledgers reflect reality without claiming external signoff.
+- [x] Completed record moved to `docs/sprints/archive/claude-subscription-auth/`.

@@ -11,7 +11,7 @@ activation_basis: "Travis Good's 2026-08-30 decision to give reliable Claude sub
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-08-30
-updated: 2026-08-30
+updated: 2026-08-31
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Shipping MVP — LIVE"
@@ -211,7 +211,7 @@ run `python3 docs/sprints/check.py`.
 | `PF-43` (`CSA-02`) | Secure long-lived subscription-token enrollment, storage, validation, replacement, and removal | [CSA-02 / PF-43-S01](../../sprints/archive/claude-subscription-auth/pf-43-s01-managed-token-lifecycle.md) | completed and archived |
 | `PF-44` (`CSA-03`) | Platform-authoritative Claude login adapters and deterministic provider resolution | [CSA-03 / PF-44-S01](../../sprints/archive/claude-subscription-auth/pf-44-s01-platform-auth-resolution.md) | completed and archived |
 | `PF-45` (`CSA-04`) | Legacy/conflict migration plus failure, recovery, and resume UX | [CSA-04 / PF-45-S01](../../sprints/archive/claude-subscription-auth/pf-45-s01-auth-choice-and-recovery.md) | completed and archived |
-| `PF-46` (`CSA-05`) | Final cross-platform, true-TUI, live-repository, human, documentation, and release qualification | [CSA-05 / PF-46-S01](../../sprints/current/claude-subscription-auth/pf-46-s01-final-qualification.md) | in progress; depends on CSA-04 |
+| `PF-46` (`CSA-05`) | Final automated, cross-platform-fixture, true-TUI, documentation, and review qualification | [CSA-05 / PF-46-S01](../../sprints/archive/claude-subscription-auth/pf-46-s01-final-qualification.md) | completed and archived; live-account, live-repository, human, and release gates remain plan-level work |
 
 ## Hard dependency graph
 
@@ -276,13 +276,13 @@ Run fix and formatting tools before the final affected tests.
 
 | Check | Final-tree command | Result | Artifact |
 | --- | --- | --- | --- |
-| Plan lifecycle | `python3 docs/plans/check.py` | pending final tree | pending |
-| Sprint lifecycle | `python3 docs/sprints/check.py` | pending first and final sprint | pending |
-| CLI OAuth helper | `just test -p codex-cli -E 'test(/claude_oauth/)'` | pending | pending |
-| External provider auth | `just test -p codex-login` plus affected Core provider-auth integration filter | pending exact sprint allocation | pending |
-| TUI choice/recovery | `just test -p codex-tui claude_code_login -j 1 --retries 0`; `just test -p codex-tui provider_credentials -j 1 --retries 0`; required typed-tmux `tmux_claude_auth` filter | 12/12 snapshots, 9/9 status, 2/2 tmux state-machine flows passed on CSA-04 candidate; exact canary and independent artifact-prefix scans clean | PF-45-S01 verification |
-| Adversarial/redaction | Missing, blank, malformed, conflicting, partial-write, timeout, cancellation, debug-log, history, and telemetry cases | pending | pending |
-| Cross-platform | Repository-approved macOS, Linux, and Windows test commands recorded by CSA-03/CSA-05 | pending | pending |
+| Plan lifecycle | `python3 docs/plans/check.py` | passed on final documentation tree | PF-46 evidence ledger |
+| Sprint lifecycle | `python3 docs/sprints/check.py` | passed before and after PF-46 archive | PF-46 evidence ledger |
+| CLI OAuth helper | `CARGO_INCREMENTAL=0 just test -p codex-cli claude_oauth -j 1 --retries 0` | passed 120/120; missing-source recovery and authority drift included | nextest `63905eed-645a-43e8-bf66-7a5b3a842b6f` |
+| Vault custody | `CARGO_INCREMENTAL=0 just test -p codex-vault claude_auth -j 1 --retries 0` | passed 21/21; managed token stays zeroizing and generic reveal/export paths remain denied | nextest `0e40f330-2ae9-48ac-bebf-f80427224fa7` |
+| TUI choice/recovery | `CARGO_INCREMENTAL=0 just test -p codex-tui claude_code_login -j 1 --retries 0`; required typed-tmux `tmux_claude_auth` filter | focused 22/22 and typed Tmux 2/2 passed; exact canary checks clean | nextest `f3dc0d72-87b5-42ea-807c-78c12f6a0a9b`, `722fccd6-9297-4bc9-8329-2d53b9d41e19` |
+| Adversarial/redaction | Missing, blank, malformed, conflicting, partial-write, timeout, cancellation, oversized output, debug-log, history, and artifact cases | passed affected suites; unterminated login output is bounded before rejection | PF-46 evidence ledger |
+| Cross-platform | Platform-store and profile-identity fixtures in the CLI/vault affected suites | macOS Keychain and Linux/Windows credential-file semantics passed on the macOS qualification host | PF-46 evidence ledger; physical Linux/Windows release hosts remain unclaimed |
 
 ## True-TUI evidence
 
@@ -296,7 +296,7 @@ supporting evidence only.
 | Compatibility alternative | pending | TensorCash disposable worktree | Choose shared Claude login, select exact source, send a real prompt | Source metadata, warning, response | pending | pending |
 | Cancel/failure | pending | Isometric Game disposable worktree | Cancel enrollment; inject unavailable/malformed/blank source | Inert cancel and actionable safe failures | pending | pending |
 | Recovery/resume | pending | Both applicable repositories | Reject selected credential, replace/switch explicitly, restart, resume pane | No fallback drift; exact method and pane recover | pending | pending |
-| Typed state-machine qualification | `codex-rs/target/debug/codex` (`corbanu 0.1.35`, SHA-256 `21d05d33822c42e7e9b9e70ec1f96936bc37f9c045205cff3155fef4fa081816`) | Isolated repository and `CODEX_HOME` fixtures | Text and Enter sent separately; Down, Enter, and Esc sent as typed keys across recommended, compatibility, cancel, setup failure, retry, masked cancel, and restart | Exact selected source remains stable; recommended and compatibility paths both persist only after success; no canary in terminal/home/log/artifact surfaces | passed 2/2, retry-disabled, tmux required | `/Volumes/CorbanuDrive/Corbanu/.codex-work/claude-subscription-auth/tmux-csa04-run-20260830-1` (successful run emitted no failure bundle) |
+| Typed state-machine qualification | `codex-rs/target/debug/corbanu` (`corbanu 0.1.35`, SHA-256 `0b3e6860695731eb3c2daff6c2459728858f2048486104bf312d3a7fa2301719`) | Isolated repository and hostile `CODEX_HOME` fixtures at commit `34535821c` | Text and Enter sent separately; Down, Enter, and Esc sent as typed keys across recommended, compatibility, cancel, setup failure, retry, masked cancel, and restart | Exact selected source remains stable; recommended and compatibility paths persist only after success; harness canary absent from terminal/home/log/artifact surfaces | passed 2/2, retry-disabled, tmux required; compatibility 35.852s, managed 56.770s | nextest `722fccd6-9297-4bc9-8329-2d53b9d41e19`; successful run emitted no failure bundle under `.codex-work/claude-subscription-auth/34535821-final-qualification/tmux` |
 
 ## Live-repository applicability
 
@@ -315,7 +315,7 @@ supporting evidence only.
 
 | Finished-feature doc | Product-spec citation present | Verified candidate |
 | --- | --- | --- |
-| [Reliable Claude Plan authentication](../../features/claude-plan-authentication.md) | yes — **Shipping MVP — LIVE** vault and multi-provider requirements | CSA-05 final candidate pending |
+| [Reliable Claude Plan authentication](../../features/claude-plan-authentication.md) | yes — **Shipping MVP — LIVE** vault and multi-provider requirements | verified on PF-46 automated candidate; live Anthropic account acceptance remains pending |
 
 The finished guide must begin with repeated-login pain, explain both choices in
 plain language, identify subscription eligibility and token limitations, cover
@@ -340,27 +340,27 @@ due benchmark work is neither added nor waived by this plan.
 | Secure storage seam and protected-mode composition | architecture/security | Jim Ricketts | CSA-01/CSA-02 readiness | extend existing vault/keyring/broker boundaries; do not create a parallel plaintext store |
 | Long-lived token replacement/revocation semantics | external compatibility | Jim Ricketts | CSA-02/CSA-04 readiness | verified documented replacement requires a new token and restart; Corbanu local removal is explicitly not server revocation |
 | Exact platform credential naming and `CLAUDE_CONFIG_DIR` behavior | compatibility | Jim Ricketts | CSA-03 readiness | reverified 2026-08-30 against installed Claude Code 2.1.92 bundle SHA-256 `6b0b860206b3723d70619b84dbf3a53a795d703862aa3b01d58e869685c85362`: macOS uses `Claude Code-credentials` (or `Claude Code-custom-oauth-credentials`) and appends `-{sha256(NFC(config_dir))[..8]}` whenever `CLAUDE_CONFIG_DIR` is set; Linux and Windows use `${CLAUDE_CONFIG_DIR:-~/.claude}/.credentials.json`. |
-| Release target and named human tester | release | release owner | CSA-05 | pending |
+| Release target and named human tester | release | release owner | release | pending; not fabricated by PF-46 |
 
 ## Release linkage
 
 - Release record: `qa/release/<version>/` — target version pending.
 - Benchmark tracker row: `benchmarks/README.md` when due for the target release.
-- Remaining blockers: no implementation sprint; unverified CLI/storage
-  contracts; implementation; final automated,
-  cross-platform, true-TUI, live-repository, human, documentation, upstream, and
-  release evidence.
+- Remaining blockers: named human acceptance with a live eligible Anthropic
+  account, TensorCash and Isometric Game live-repository runs, physical
+  Linux/Windows release-host confirmation, target release/tag/merge decision,
+  release ledger, and any due release benchmark entry.
 
 ## Completion
 
 - [x] Product linkage, scope, invariants, and worktree coordinates are current.
 - [x] Every planned implementation unit has one stable plan feature ID and hard dependencies.
-- [ ] Every implementation unit is represented by a valid completed single-feature sprint.
-- [ ] Required final-tree automated and adversarial evidence passes.
-- [ ] macOS, Linux, and Windows credential behavior passes on the final candidate.
+- [x] Every implementation unit is represented by a valid completed single-feature sprint.
+- [x] Required final-tree automated and adversarial evidence passes.
+- [x] macOS Keychain plus Linux/Windows credential-file behavior passes in final-candidate platform fixtures.
 - [ ] True-TUI and both live-repository workflows pass.
-- [ ] No raw credential appears in logs, chat, history, telemetry, artifacts, or ordinary config.
+- [x] Automated canary and custody checks find no raw credential in logs, chat, history, telemetry, artifacts, or ordinary config.
 - [ ] Named human acceptance passes.
-- [ ] Finished documentation matches the accepted candidate.
+- [x] Finished documentation matches the automated candidate.
 - [ ] Upstream baseline/adapter disposition, release record, and due benchmark state are linked.
 - [ ] No hard release gate remains pending.
