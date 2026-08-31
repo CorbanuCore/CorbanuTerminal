@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-43-S01"
 title: "Managed Claude subscription token lifecycle"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/claude-subscription-auth.md"
 plan_feature: "PF-43"
 execution_order: 2
@@ -45,21 +45,23 @@ updated: 2026-08-30
 ## Done
 
 - [x] Sprint record created and linked to PF-43.
+- [x] Added bounded token validation plus encrypted add/replace and metadata-only status.
+- [x] Added a dedicated short provider callback and exact local removal without changing Claude-owned stores.
+- [x] Denied generic reveal, programmatic export, and scoped-capability resolution for the provider-managed token.
+- [x] Proved token values stay out of metadata, errors, debug formatting, and encrypted-state inspection.
 
 ## Remaining
 
-- [ ] Add bounded token validation plus encrypted add/replace and metadata-only status.
-- [ ] Add trusted resolution and local removal without altering Claude-owned stores.
-- [ ] Prove raw tokens stay out of metadata, errors, debug formatting, and encrypted-state inspection.
+- [x] None.
 
 ## Verification
 
-- [ ] `cd codex-rs && just fix -p codex-vault && just fmt` precedes final tests.
-- [ ] `cd codex-rs && just test -p codex-vault` passes.
-- [ ] TUI applicability: none in this lifecycle-only sprint.
+- [x] `cd codex-rs && just fix -p codex-vault && just fmt` preceded final tests.
+- [x] `cd codex-rs && just test -p codex-vault --retries 0` passed 44 of 44 tests.
+- [x] TUI applicability: none in this lifecycle-only sprint.
 
 ## Exit evidence
 
-- [ ] Implementation commit and final-tree tests recorded.
-- [ ] Official setup-token eligibility/lifetime/limitations citation recorded in the plan.
-- [ ] Done and Remaining reflect reality; completed record is archived.
+- [x] Implementation commit `6e4069ea1` and final-tree tests are recorded above.
+- [x] Official setup-token eligibility/lifetime/limitations citation is recorded in the plan.
+- [x] Done and Remaining reflect reality; completed record is archived.
