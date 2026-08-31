@@ -32,13 +32,16 @@ use crate::render::renderable::Renderable;
 use codex_vault::CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::ClaudeAuthSelection;
 use codex_vault::ClaudeAuthSource;
+use codex_vault::ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID;
 #[cfg(target_os = "macos")]
 use codex_vault::MACOS_KEYCHAIN_CLAUDE_AUTH_SOURCE_ID;
+use codex_vault::MANAGED_CLAUDE_AUTH_SOURCE_ID;
 use codex_vault::Vault;
 
 const CLAUDE_CODE_LOGIN_VIEW_ID: &str = "claude-code-plan-login";
 const CLAUDE_AUTH_METHOD_VIEW_ID: &str = "claude-plan-auth-method";
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const SETUP_TOKEN_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const MAX_LOGIN_LINE_BYTES: usize = 16 * 1024;
 
 pub(crate) enum ClaudeCodeLoginInput {
@@ -58,6 +61,7 @@ pub(crate) enum ClaudeCodePlanStatus {
     SelectionRequired {
         existing_source_detected: bool,
     },
+    InvalidSelection,
     SignedIn {
         email: Option<String>,
         subscription: Option<String>,
@@ -85,6 +89,12 @@ pub(crate) async fn current_status_with_timeout(
     let Ok(Ok((selection, managed_stored))) = stored else {
         return ClaudeCodePlanStatus::Error;
     };
+    if selection
+        .as_ref()
+        .is_some_and(|selection| !selection_source_id_is_current(selection))
+    {
+        return ClaudeCodePlanStatus::InvalidSelection;
+    }
     match selection.map(|selection| selection.source) {
         Some(ClaudeAuthSource::ManagedSubscriptionToken) => ClaudeCodePlanStatus::ManagedToken {
             stored: managed_stored,
@@ -108,6 +118,26 @@ pub(crate) async fn current_status_with_timeout(
                     || matches!(login, ClaudeCodePlanStatus::SignedIn { .. }),
             }
         }
+    }
+}
+
+fn selection_source_id_is_current(selection: &ClaudeAuthSelection) -> bool {
+    let expected = match selection.source {
+        ClaudeAuthSource::ManagedSubscriptionToken => MANAGED_CLAUDE_AUTH_SOURCE_ID,
+        ClaudeAuthSource::EnvironmentToken => ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID,
+        ClaudeAuthSource::ClaudeCodeLogin => current_platform_login_source_id(),
+    };
+    selection.source_id == expected
+}
+
+fn current_platform_login_source_id() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        MACOS_KEYCHAIN_CLAUDE_AUTH_SOURCE_ID
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID
     }
 }
 
@@ -302,19 +332,41 @@ async fn verify_login(executable: &Path, codex_home: &Path) -> Result<String, St
 }
 
 pub(crate) async fn run_setup_token(executable: &Path) -> Result<(), String> {
-    let status = Command::new(executable)
+    run_setup_token_with_timeout(executable, SETUP_TOKEN_TIMEOUT).await
+}
+
+async fn run_setup_token_with_timeout(
+    executable: &Path,
+    setup_timeout: Duration,
+) -> Result<(), String> {
+    let mut child = Command::new(executable)
         .arg("setup-token")
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .kill_on_drop(true)
-        .status()
-        .await
+        .spawn()
         .map_err(|error| {
             format!(
                 "Could not start `claude setup-token`: {error}. Install or update Claude Code, then retry."
             )
         })?;
+    let status = match timeout(setup_timeout, child.wait()).await {
+        Ok(Ok(status)) => status,
+        Ok(Err(error)) => {
+            return Err(format!(
+                "`claude setup-token` failed to finish: {error}. Your previous Claude authentication method is unchanged; retry when ready."
+            ));
+        }
+        Err(_) => {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            return Err(
+                "`claude setup-token` timed out before authorization completed. Your previous Claude authentication method is unchanged; retry when ready."
+                    .to_string(),
+            );
+        }
+    };
     if status.success() {
         Ok(())
     } else {
@@ -340,6 +392,7 @@ pub(crate) async fn select_existing_claude_code_login(
         | ClaudeCodePlanStatus::ManagedToken { .. }
         | ClaudeCodePlanStatus::EnvironmentToken { .. }
         | ClaudeCodePlanStatus::SelectionRequired { .. }
+        | ClaudeCodePlanStatus::InvalidSelection
         | ClaudeCodePlanStatus::Checking => Ok(false),
     }
 }
@@ -356,12 +409,11 @@ async fn persist_claude_code_login_selection(codex_home: &Path) -> Result<(), St
 }
 
 fn persist_claude_code_login_selection_blocking(codex_home: &Path) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    let source_id = MACOS_KEYCHAIN_CLAUDE_AUTH_SOURCE_ID;
-    #[cfg(not(target_os = "macos"))]
-    let source_id = CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID;
-    let selection = ClaudeAuthSelection::new(ClaudeAuthSource::ClaudeCodeLogin, source_id)
-        .map_err(|error| format!("Could not select the current Claude Code login: {error}"))?;
+    let selection = ClaudeAuthSelection::new(
+        ClaudeAuthSource::ClaudeCodeLogin,
+        current_platform_login_source_id(),
+    )
+    .map_err(|error| format!("Could not select the current Claude Code login: {error}"))?;
     Vault::new(codex_home.to_path_buf())
         .save_claude_auth_selection(&selection)
         .map_err(|error| {

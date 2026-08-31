@@ -36,6 +36,10 @@ masked entry view and press Enter. Corbanu encrypts it in the existing vault
 and selects it as one transaction. If saving fails, the previous token,
 metadata, and selected method are restored.
 
+If setup is no longer making progress, cancel Claude Code with Ctrl-C. Corbanu
+also bounds the setup process to 15 minutes, terminates it on timeout, and
+returns to source-specific recovery without changing the previous method.
+
 The token is currently intended for Claude model requests, lasts approximately
 one year, and is not an Anthropic API key. It does not add Claude Desktop or
 Claude.ai cloud-only capabilities. Anthropic can change eligibility or lifetime;

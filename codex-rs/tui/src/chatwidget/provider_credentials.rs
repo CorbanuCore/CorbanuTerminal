@@ -469,6 +469,9 @@ fn claude_status_description(status: &ClaudeCodePlanStatus) -> String {
         ClaudeCodePlanStatus::SelectionRequired {
             existing_source_detected: false,
         } => "Choose authentication method".to_string(),
+        ClaudeCodePlanStatus::InvalidSelection => {
+            "Recovery needed · selected method is not valid on this platform".to_string()
+        }
         ClaudeCodePlanStatus::SignedIn {
             email,
             subscription,
@@ -788,6 +791,10 @@ mod tests {
                 existing_source_detected: true,
             }),
             "Choose method · existing credentials detected"
+        );
+        assert_eq!(
+            claude_status_description(&ClaudeCodePlanStatus::InvalidSelection),
+            "Recovery needed · selected method is not valid on this platform"
         );
         assert_eq!(
             claude_status_description(&ClaudeCodePlanStatus::Unavailable),

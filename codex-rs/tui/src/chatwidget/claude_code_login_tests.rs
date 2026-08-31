@@ -269,6 +269,50 @@ async fn setup_token_command_success_and_failure_are_bounded_to_status() {
 
 #[cfg(unix)]
 #[tokio::test]
+async fn setup_token_timeout_kills_the_child_and_preserves_the_previous_method() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let hanging = temp_dir.path().join("claude-hanging");
+    std::fs::write(
+        &hanging,
+        "#!/bin/sh\n[ \"$1\" = setup-token ] || exit 2\nwhile :; do :; done\n",
+    )
+    .expect("hanging setup-token fixture");
+    let mut permissions = std::fs::metadata(&hanging).unwrap().permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&hanging, permissions).unwrap();
+
+    let error = tokio::time::timeout(
+        Duration::from_secs(1),
+        run_setup_token_with_timeout(&hanging, Duration::from_millis(25)),
+    )
+    .await
+    .expect("setup-token timeout must remain bounded")
+    .expect_err("hanging setup-token must fail");
+
+    assert!(error.contains("timed out"));
+    assert!(error.contains("previous Claude authentication method is unchanged"));
+}
+
+#[tokio::test]
+async fn invalid_persisted_source_id_surfaces_recovery_status() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let selection = ClaudeAuthSelection::new(
+        ClaudeAuthSource::ClaudeCodeLogin,
+        "claude-login:copied-from-another-platform",
+    )
+    .expect("syntactically valid selection");
+    Vault::new(temp_dir.path().to_path_buf())
+        .save_claude_auth_selection(&selection)
+        .expect("save selection");
+
+    assert_eq!(
+        current_status_with_timeout(temp_dir.path(), Duration::from_millis(25)).await,
+        ClaudeCodePlanStatus::InvalidSelection
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
 async fn claude_status_timeout_resolves_to_error() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let fake_claude = temp_dir.path().join("claude");
