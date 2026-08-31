@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
@@ -2251,6 +2253,7 @@ fn bridge_redaction_plan(
         artifact_path: dir.path().join("turn-0001.jsonl"),
         audit_path: dir.path().join("turn-0001.audit.json"),
         timeout_ms: None,
+        deferred_claude_plan_auth: None,
         bridge: Some(ClaudeBridgePlan {
             kind: ClaudeBridgeKind::AnthropicPassthrough,
             listener,
@@ -2269,10 +2272,113 @@ fn claude_secret_redactor_redacts_bridge_key() {
     let dir = tempfile::tempdir().expect("tempdir");
     let plan = bridge_redaction_plan(&dir, "true".to_string(), "bridge-secret-for-redaction-test");
 
-    let redacted =
-        ClaudeSecretRedactor::from_plan(&plan).redact("leaked bridge-secret-for-redaction-test");
+    let redacted = ClaudeSecretRedactor::from_plan(&plan, /*additional_secret*/ None)
+        .redact("leaked bridge-secret-for-redaction-test");
 
     assert_eq!(redacted, "leaked [REDACTED_SECRET]");
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn claude_plan_pane_binds_selected_auth_only_at_execution_and_redacts_it() {
+    let (dir, pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
+    let secret = "pane-auth-test-secret-not-real";
+    let helper = dir.path().join("auth-helper");
+    std::fs::write(&helper, format!("#!/bin/sh\nprintf '%s' '{secret}'\n")).expect("write helper");
+    let claude = dir.path().join("claude");
+    std::fs::write(
+        &claude,
+        concat!(
+            "#!/bin/sh\n",
+            "[ \"$CLAUDE_CODE_OAUTH_TOKEN\" = \"pane-auth-test-secret-not-real\" ] || exit 7\n",
+            "printf '{\"type\":\"result\",\"subtype\":\"success\",",
+            "\"session_id\":\"11111111-1111-4111-8111-111111111111\",",
+            "\"result\":\"bound %s\"}\\n' \"$CLAUDE_CODE_OAUTH_TOKEN\"\n",
+        ),
+    )
+    .expect("write claude");
+    for executable in [&helper, &claude] {
+        let mut permissions = std::fs::metadata(executable)
+            .expect("executable metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(executable, permissions).expect("make executable");
+    }
+    let mut plan = build_claude_command_plan(&pane, "hello".to_string(), dir.path()).expect("plan");
+    assert!(!plan.args.iter().any(|arg| arg.contains(secret)));
+    assert!(!plan.env.values().any(|value| value.contains(secret)));
+    assert!(
+        plan.env_remove
+            .iter()
+            .any(|key| key == "CLAUDE_CODE_OAUTH_TOKEN")
+    );
+    for key in [
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_BASE_URL",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_USE_VERTEX",
+        "CLAUDE_CODE_USE_FOUNDRY",
+    ] {
+        assert!(plan.env_remove.iter().any(|removed| removed == key));
+    }
+    let deferred = plan
+        .deferred_claude_plan_auth
+        .as_mut()
+        .expect("deferred selected auth");
+    deferred.helper_executable = helper;
+    plan.executable = claude.to_string_lossy().into_owned();
+    let artifact_path = plan.artifact_path.clone();
+
+    let output = run_claude_command_plan(plan, CancellationToken::new(), /*progress_tx*/ None)
+        .await
+        .expect("turn output");
+    let artifact = std::fs::read_to_string(artifact_path).expect("artifact");
+
+    assert_eq!(output.status, ClaudePaneTurnStatus::Success);
+    assert_eq!(output.text, "bound [REDACTED_SECRET]");
+    assert!(!artifact.contains(secret));
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn unavailable_selected_auth_fails_before_claude_pane_spawn_without_disclosure() {
+    let (dir, pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
+    let secret = "pane-auth-failure-secret-not-real";
+    let helper = dir.path().join("auth-helper-failure");
+    std::fs::write(
+        &helper,
+        format!("#!/bin/sh\nprintf '%s' '{secret}'\nexit 1\n"),
+    )
+    .expect("write helper");
+    let spawn_marker = dir.path().join("claude-started");
+    let claude = dir.path().join("claude-failure");
+    std::fs::write(
+        &claude,
+        format!("#!/bin/sh\ntouch '{}'\n", spawn_marker.display()),
+    )
+    .expect("write claude");
+    for executable in [&helper, &claude] {
+        let mut permissions = std::fs::metadata(executable)
+            .expect("executable metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(executable, permissions).expect("make executable");
+    }
+    let mut plan = build_claude_command_plan(&pane, "hello".to_string(), dir.path()).expect("plan");
+    plan.deferred_claude_plan_auth
+        .as_mut()
+        .expect("deferred selected auth")
+        .helper_executable = helper;
+    plan.executable = claude.to_string_lossy().into_owned();
+
+    let error = run_claude_command_plan(plan, CancellationToken::new(), /*progress_tx*/ None)
+        .await
+        .expect_err("unavailable selected auth must fail before spawn");
+
+    assert!(error.to_string().contains("open Providers to recover"));
+    assert!(!error.to_string().contains(secret));
+    assert!(!spawn_marker.exists());
 }
 
 #[cfg(unix)]
@@ -2655,6 +2761,7 @@ async fn cancelling_running_command_returns_interrupted_output() {
             artifact_path: artifact_path.clone(),
             audit_path: audit_path.clone(),
             timeout_ms: None,
+            deferred_claude_plan_auth: None,
             bridge: None,
         };
     let cancel_token = CancellationToken::new();
@@ -2872,6 +2979,13 @@ fn command_plan_uses_session_id_then_resume_without_secret_in_args() {
     );
     assert!(!first.args.iter().any(|arg| arg == "--tools"));
     assert!(!first.args.iter().any(|arg| arg.contains("secret")));
+    assert!(first.deferred_claude_plan_auth.is_some());
+    assert!(
+        first
+            .env_remove
+            .iter()
+            .any(|key| key == "CLAUDE_CODE_OAUTH_TOKEN")
+    );
 
     pane.claude_session_id = Some("11111111-2222-4333-8444-555555555555".to_string());
     let second =

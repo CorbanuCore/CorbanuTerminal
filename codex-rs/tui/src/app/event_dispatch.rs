@@ -2285,7 +2285,10 @@ impl App {
                         self.chat_widget
                             .open_claude_code_plan_login_pending(input_tx);
                     }
-                    Err(message) => self.chat_widget.add_error_message(message),
+                    Err(message) => {
+                        self.chat_widget.add_error_message(message.clone());
+                        self.chat_widget.open_claude_auth_recovery(message);
+                    }
                 },
             AppEvent::SaveClaudeManagedSubscriptionToken { token } => {
                 let codex_home = self.config.codex_home.clone();

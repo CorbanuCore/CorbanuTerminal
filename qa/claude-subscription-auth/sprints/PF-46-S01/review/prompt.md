@@ -14,6 +14,8 @@ The user-requested product behavior is:
 - The compatibility choice uses Claude Code's ordinary rotating login state.
 - The exact selected source is persisted. Runtime resolution must never
   silently fall back to a different source, identity, account, or billing path.
+  Native Claude Plan panes must bind that same selection at execution without
+  persisting credential material in their plans, settings, artifacts, or audits.
 - Managed tokens use the established encrypted vault with masked entry and
   metadata-only inspection. Raw values must not enter config, chat, rollout,
   logs, snapshots, errors, debug output, test artifacts, or generic vault

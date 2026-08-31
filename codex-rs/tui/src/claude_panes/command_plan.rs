@@ -23,9 +23,19 @@ use super::provider::ClaudeProviderTransport;
 use super::turn_types::ClaudeBridgeKind;
 use super::turn_types::ClaudeBridgePlan;
 use super::turn_types::ClaudeCommandPlan;
+use super::turn_types::DeferredClaudePlanAuth;
 use super::turn_types::DeferredVaultSecret;
 
 const ANTHROPIC_AUTH_ENV_KEYS: [&str; 2] = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
+const CLAUDE_PLAN_ROUTING_ENV_KEYS: [&str; 7] = [
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+    "CLAUDE_CODE_USE_FOUNDRY",
+];
 
 pub(crate) fn reveal_provider_secret(codex_home: &Path, label: &str) -> Result<String> {
     if !allowed_provider_vault_label(label) {
@@ -136,6 +146,17 @@ pub(crate) fn build_claude_command_plan(
 
     let mut env = BTreeMap::new();
     let mut env_remove = Vec::new();
+    let deferred_claude_plan_auth = if matches!(profile.kind, ClaudeProviderProfileKind::ClaudePlan)
+    {
+        env_remove.extend(CLAUDE_PLAN_ROUTING_ENV_KEYS.map(ToString::to_string));
+        Some(DeferredClaudePlanAuth {
+            codex_home: codex_home.to_path_buf(),
+            helper_executable: std::env::current_exe()
+                .context("failed to locate Corbanu for Claude Plan authentication")?,
+        })
+    } else {
+        None
+    };
     if let Some(base_url) = base_url_override.as_deref().or(profile.base_url) {
         env.insert("ANTHROPIC_BASE_URL".to_string(), base_url.to_string());
     }
@@ -245,6 +266,7 @@ pub(crate) fn build_claude_command_plan(
         artifact_path,
         audit_path,
         timeout_ms: None,
+        deferred_claude_plan_auth,
         bridge,
     })
 }

@@ -53,6 +53,12 @@ metadata.
 Claude Plan uses the exact long-lived subscription-token or Claude Code login
 source selected in `/providers`. See
 [Reliable Claude Plan authentication](claude-plan-authentication.md).
+The pane plan stores only a deferred auth descriptor. Immediately before Claude
+starts, Corbanu resolves the selected source through the same trusted helper as
+ordinary Claude Plan requests, removes inherited API-key/cloud-routing
+overrides, and supplies the credential only to that child process. The value is
+not written to pane arguments, settings, artifacts, audits, or persisted pane
+metadata.
 Vault-backed profiles use the credential label associated with that provider.
 
 ## Failure and recovery
