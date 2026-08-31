@@ -4201,6 +4201,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-security-audit"
+version = "0.1.35"
+dependencies = [
+ "codex-security-policy",
+ "codex-utils-absolute-path",
+ "fslock",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "codex-security-policy"
 version = "0.1.35"
 dependencies = [

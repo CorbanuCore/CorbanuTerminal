@@ -296,22 +296,29 @@ impl<S: EventSource + Default + Unpin> Stream for TuiEventStream<S> {
 
         if draw_first {
             if let Poll::Ready(event) = self.poll_draw_event(cx) {
-                return Poll::Ready(event);
+                return ready_after_survival(event);
             }
             if let Poll::Ready(event) = self.poll_crossterm_event(cx) {
-                return Poll::Ready(event);
+                return ready_after_survival(event);
             }
         } else {
             if let Poll::Ready(event) = self.poll_crossterm_event(cx) {
-                return Poll::Ready(event);
+                return ready_after_survival(event);
             }
             if let Poll::Ready(event) = self.poll_draw_event(cx) {
-                return Poll::Ready(event);
+                return ready_after_survival(event);
             }
         }
 
         Poll::Pending
     }
+}
+
+fn ready_after_survival(event: Option<TuiEvent>) -> Poll<Option<TuiEvent>> {
+    if event.is_some() {
+        super::panic_diagnostics::record_tui_survived();
+    }
+    Poll::Ready(event)
 }
 
 #[cfg(test)]

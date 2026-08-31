@@ -96,10 +96,16 @@ machine is not claimed as the weakest supported CPU.
 - Contract/schema: `1` / `1`
 - Manifest SHA-256: `7e8a4850f67052b2b5b2e0d17f5227116f226c65ee25a6945d04ff7a2a1a1fc3`
 - Contract SHA-256: `586acc231f3db2bfc426b14fc6ff51e9f47690333aabe10c86b24045b3261fef`
-- Contract tests SHA-256: `5b62a1bf69460ee014406c414b40f0b872a3ce0c674fbe08170040e42b3aeba1`
+- Contract tests SHA-256: `c1e5460b490e9eb407673b89eb573f8c057262cb07f0b655684514b09754de49`
 - Third full review packet SHA-256: `3813e9783ddbf09fb9e2bdbb16fa9600adeb62b58fcd09385bf6328089bc3389`
 - Final evidence-confirmation packet SHA-256: `9753a4b8046359e0c3e6e385fa86770fde692312f3a8c87e9ffd3a979c34ecca`
 - Integration review packet SHA-256: `5ebbb39bbea56a3cc69549f6239e7346e627584d5b261e4dee556d87c5c1c8f4`
+
+The final-tree contract-test digest includes the downstream PF-35-S01
+model/artifact/threshold mismatch regression appended during round-three
+integration; the PF-34 contract implementation and its existing assertions are
+unchanged. The lane ledger is refreshed so recurring CI seals the combined tree
+rather than the pre-integration test file.
 
 ## Supplemental structured review
 
@@ -159,6 +165,12 @@ artifact hashes are recorded in
   the 15-file ledger, narrative consistency guard, and registered Rust tests
   on Linux, macOS and Windows. Existing repository Bazel CI selects
   `//codex-rs/content-security:all`.
+- The first final-tree recurring run passed Linux and macOS but exposed Git's
+  default CRLF checkout conversion for the `.sha256` ledger on Windows. Root
+  attributes now pin every checksum manifest and the sealed content-security
+  Rust sources plus classifier evidence JSON inputs to LF, matching the fixture
+  byte contract and allowing the ledger and classifier identity checks to
+  consume identical paths and bytes on all three platforms.
 - Exact final-tree commands and outcomes: [integration qualification](integration-qualification.md).
 
 ## Completion

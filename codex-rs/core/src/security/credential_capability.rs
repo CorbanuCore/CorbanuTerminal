@@ -583,6 +583,9 @@ where
         }
 
         let charged = match (metering.outcome, metering.measured) {
+            (CredentialUsageOutcome::Cancelled, None) if stored_reservation.dispatch_authorized => {
+                stored_reservation.reserved
+            }
             (CredentialUsageOutcome::Cancelled, None) => CredentialUsage::new(1, 0, 0, 0),
             (CredentialUsageOutcome::Unknown, None) => stored_reservation.reserved,
             (

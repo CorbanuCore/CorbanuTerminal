@@ -426,15 +426,15 @@ impl App {
                 return;
             }
         };
-        match std::process::Command::new(executable)
+        let mut command = tokio::process::Command::new(executable);
+        command
             .arg("internal-gpu-controller")
             .env("CODEX_HOME", self.config.codex_home.as_path())
             .env(codex_state::SQLITE_HOME_ENV, self.config.sqlite.home())
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-        {
+            .stderr(std::process::Stdio::null());
+        match super::background_child::spawn_with_reaper(&mut command) {
             Ok(_) => {}
             Err(error) => self.chat_widget.add_error_message(format!(
                 "GPU rental state was saved, but the independent controller did not start: {error}. Run `corbanu internal-gpu-controller` before relying on local TTL or spend enforcement."

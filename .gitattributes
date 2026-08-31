@@ -1,3 +1,9 @@
 codex-rs/app-server-protocol/schema/** linguist-generated
 codex-rs/hooks/schema/generated/** linguist-generated
 *.snap -whitespace
+*.sha256 text eol=lf
+codex-rs/content-security/**/*.rs text eol=lf
+qa/security-levels/classifier/*.json text eol=lf
+qa/security-levels/classifier/**/*.json text eol=lf
+qa/security-levels/planning/openclaw-2026-08-28/*.json text eol=lf
+qa/security-levels/planning/openclaw-2026-08-28/**/*.json text eol=lf

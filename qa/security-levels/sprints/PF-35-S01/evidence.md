@@ -17,9 +17,11 @@ weights, signing, or Intel N100 performance.
 - Split contract SHA-256:
   `58e6eaf7a2add997d5194fb9a619c9612e8b9ac3580744dec1e2bc1a2f1a0dcf`.
 - No Cargo, Bazel, lock, workspace-registry or schema-registry edge changed.
-- Integration registration handoff: wire
-  `python3 -m unittest discover -s scripts -p 'test_security_classifier_eval.py'`
-  into recurring CI; `.github/` is outside this sprint's write scope.
+- Integration registration completed: recurring CI now runs
+  `python -m unittest scripts.test_security_classifier_eval` plus the shipped
+  evaluator smoke across Linux, macOS and Windows. `.github/` was outside the
+  implementation lane's literal write scope, so the integration owner made
+  this final-tree change.
 - Active-plan CLI handoff: update the future classifier release-gate row from
   `--manifest … --artifact … --output …` to the preparation/evaluation shape
   `--manifest … --splits … [--predictions … | --blind-aggregate …
@@ -62,6 +64,20 @@ the candidate runtime tree.
 - Raw transcript and trace remain outside Git under
   `/Volumes/CorbanuDrive/Corbanu/.codex-work/classifier-corpus/tmux/`.
 
+## Integration completion
+
+Commit `9ac9fb682f0f1fee967036d4a4888c7c230e06c3` added the PF-35 source and
+evidence paths plus recurring evaluator tests and a shipped-CLI smoke to
+`.github/workflows/security-ingress-contract.yml`. Commit
+`8dbbf6a16565f153cc7143d356d0087fc95444a7` made the smoke invocation explicitly
+portable by calling `python scripts/security_classifier_eval.py` after
+`actions/setup-python`, avoiding reliance on a Unix shebang or executable bit on
+the Windows runner. The workflow matrix covers `ubuntu-24.04`, `macos-15` and
+`windows-2022`. Integration reran all 21 evaluator unit tests, the manifest-only
+smoke, YAML parsing and the plan/sprint governance checks successfully. This
+closes the recurring-CI handoff only; the external qualification blockers below
+remain open.
+
 ## Independent review
 
 Claude Opus 5 Plan at Max reviewed the uncommitted candidate through the exact
@@ -70,8 +86,9 @@ Corbanu binary in a private TMUX PTY, read-only/never, with no delegation. Cycle
 causes: truth-based metrics, Wilson-bound gates and floors, permanently honest
 external hardware/artifact gates, strict allowlisted report schemas,
 manifest-bound development rows, aggregate-only blind input, gate tests, and a
-meaningful Rust identity-mismatch regression. CI wiring is recorded above as an
-integration-owner handoff. The cycle-1 transcript SHA-256 is
+meaningful Rust identity-mismatch regression. CI wiring was an integration-owner
+handoff at that review point and is now completed as recorded above. The cycle-1
+transcript SHA-256 is
 `f85a654cf20f7a1bc6ef706b125967b09f0d4a18f65a1f9eb6a6b0ce0e156555`.
 
 Cycle 2 reduced the result to 0 P0/P1 and 5 P2. Those in-scope findings were
@@ -119,8 +136,9 @@ as declarations rather than leakage proof; per-cohort deduplicated group counts
 are reported; input bytes, JSONL line length and record count have explicit
 bounds; the output must remain outside the repository and its parent directory
 is synced after atomic replacement on supported hosts; and source hashes use
-one opened regular-file snapshot. Recurring CI remains the integration handoff
-above. Cycle-6 transcript SHA-256:
+one opened regular-file snapshot. Recurring CI was still the integration handoff
+at that review point and was completed during final-tree integration. Cycle-6
+transcript SHA-256:
 `074270f8b74174304d4e68de89d07a276f670ff4006b3a027de0a890dd6ae362`.
 Cycle-6 trace SHA-256:
 `1c8aa51cfcdfd72578ed8f65c9629b956290596b1fefa297de8f7b135e8aa781`.
@@ -134,7 +152,8 @@ on the JSONL LF delimiter, normalizing oversized-integer `ValueError`s, forcing
 LF report output, and reconciling prior-report group plus duplicate counts with
 `record_count`. Test-only file helpers continue to delegate to the same
 single-open regular-file snapshot path; recurring CI and sprint-coordinate
-policy remain shared-owner handoffs. Cycle-7 transcript SHA-256:
+policy were shared-owner handoffs at that review point. Recurring CI is now
+completed; the policy history remains recorded. Cycle-7 transcript SHA-256:
 `5a308886aaa75d1e1666fc619646c602368cbe354bd2d392d5adbbafcfd9a7c2`.
 Cycle-7 trace SHA-256:
 `c80f91b2ca856a9cdc18f4440ca8195d0150fbdc6a7c4ff389c5e14233a19f7c`.
@@ -149,8 +168,9 @@ the review-7 remediations, statistical bounds, fail-closed qualification,
 strict schema/provenance chain, explicit resource caps, literal write scope and
 honest external-gate ledger. Eight P3 observations were explicitly
 non-blocking/no-change-requested; the shared active-plan and recurring-CI items
-remain integration handoffs above, and the remaining notes do not weaken the
-preparation contract. This evidence-only sealing edit does not change any
+were integration handoffs at that review point. Recurring CI is now completed as
+recorded above, and the remaining notes do not weaken the preparation contract.
+This evidence-only sealing edit does not change any
 reviewed implementation byte. Cycle-8 transcript SHA-256:
 `7f965811cb88273ca4a15236dc8bae45b543bc0c9a17b5a240014ac6d94866da`.
 Cycle-8 trace SHA-256:

@@ -54,8 +54,8 @@ latency/RSS, model size, signed artifact identity, the actual corpus campaign,
 and private custody remain `external-evidence-required`, so this preparation
 tool cannot claim full qualification from self-reported numbers.
 
-The integration owner must wire `scripts/test_security_classifier_eval.py` into
-recurring CI because `.github/` is outside this sprint's literal write scope.
+The integration owner wired `scripts/test_security_classifier_eval.py` and the
+shipped evaluator smoke into recurring multi-platform CI during integration.
 JSON objects reject duplicate keys, prediction volume and byte line length are
 explicitly bounded, JSONL splits only on LF, and all dynamic operator-facing
 errors escape control characters.
