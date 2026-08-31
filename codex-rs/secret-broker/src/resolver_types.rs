@@ -8,11 +8,13 @@ use std::sync::atomic::Ordering;
 use thiserror::Error;
 
 pub(crate) const MAX_CREDENTIALS_PER_SESSION: usize = 64;
+const RUN_HISTORY_PER_SESSION: usize = 8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BrokerRuntimeConfig {
     pub max_sessions: usize,
     pub max_in_flight: usize,
+    pub max_tracked_runs: usize,
 }
 
 impl BrokerRuntimeConfig {
@@ -24,6 +26,9 @@ impl BrokerRuntimeConfig {
         Ok(Self {
             max_sessions,
             max_in_flight,
+            max_tracked_runs: max_sessions
+                .checked_mul(RUN_HISTORY_PER_SESSION)
+                .ok_or(BrokerDispatchError::InvalidConfig)?,
         })
     }
 }
@@ -117,6 +122,7 @@ pub struct BrokerAuditIntent {
     pub credential_reference: CredentialReference,
     pub operation: &'static str,
     pub destination: &'static str,
+    pub path: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -147,6 +147,9 @@ where
         {
             return Err(BrokerDispatchError::StaleRunGeneration);
         }
+        if !state.runs.contains_key(&run_key) && state.runs.len() >= self.config.max_tracked_runs {
+            return Err(BrokerDispatchError::ResourceExhausted);
+        }
 
         cancel_run_locked(&mut state, &run_key);
         if state.sessions.len() >= self.config.max_sessions {
@@ -387,7 +390,10 @@ fn audit_intent(
     operation: &BrokerOperation,
 ) -> BrokerAuditIntent {
     match operation {
-        BrokerOperation::OpenAiResponses { credential, .. } => BrokerAuditIntent {
+        BrokerOperation::OpenAiResponses {
+            credential,
+            request,
+        } => BrokerAuditIntent {
             controller_instance: binding.controller_instance.clone(),
             session_id: binding.session_id.clone(),
             task_id: binding.task_id.clone(),
@@ -397,6 +403,7 @@ fn audit_intent(
             credential_reference: credential.clone(),
             operation: "openai.responses.create",
             destination: "https://api.openai.com:443",
+            path: request.path().to_string(),
         },
     }
 }

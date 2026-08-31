@@ -161,11 +161,13 @@ impl CredentialBroker {
     }
 
     pub(crate) fn scoped_openai_enabled(&self) -> bool {
-        self.read_state().scoped_openai.is_some()
+        let state = self.read_state();
+        state.scoped_openai.is_some() || state.isolated_openai.is_some()
     }
 
     pub(crate) fn scoped_openai_matches_host(&self, host: &str) -> bool {
-        self.read_state().scoped_openai.is_some()
+        let state = self.read_state();
+        (state.scoped_openai.is_some() || state.isolated_openai.is_some())
             && normalize_host(host) == resolver::OPENAI_API_HOST
     }
 

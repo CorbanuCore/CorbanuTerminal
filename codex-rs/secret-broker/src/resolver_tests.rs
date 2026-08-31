@@ -227,7 +227,9 @@ fn pf_27_s04_pf_27_s01_typed_dispatch_is_audited_before_backend_and_resolved() {
         }
     );
     assert_eq!(backend.calls.load(Ordering::SeqCst), 1);
-    assert_eq!(audit.intents.lock().expect("intents").len(), 1);
+    let intents = audit.intents.lock().expect("intents");
+    assert_eq!(intents.len(), 1);
+    assert_eq!(intents[0].path, "/v1/responses");
     assert_eq!(
         *audit.resolutions.lock().expect("resolutions"),
         vec![BrokerAuditResolution::Completed]
@@ -499,5 +501,56 @@ fn pf_27_s04_pf_27_s01_resource_bounds_fail_without_eviction_or_enumeration() {
             ],
         ),
         Err(BrokerDispatchError::SessionCapacityReached)
+    ));
+}
+
+#[test]
+fn pf_27_s04_pf_27_s01_run_generation_history_is_bounded_without_stale_eviction() {
+    let backend = Arc::new(FakeBackend::default());
+    let audit = Arc::new(FakeAudit::default());
+    let config = BrokerRuntimeConfig::bounded(1, 1).expect("config");
+    let max_tracked_runs = config.max_tracked_runs;
+    let runtime =
+        BrokerRuntime::new(INSTANCE, config, authorization(), backend, audit).expect("runtime");
+
+    for index in 0..max_tracked_runs {
+        let run_binding = BrokerBinding {
+            run_id: format!("run-{index}"),
+            ..binding(1)
+        };
+        let handle = runtime
+            .register_session(
+                run_binding,
+                peer(u32::try_from(index + 1).expect("pid")),
+                BrokerChannelMac::from_secret(KEY),
+                vec![
+                    BrokerCredentialGrant::expiring(
+                        CredentialReference::from_sha256_hex(REFERENCE).expect("reference"),
+                        i64::MAX,
+                    )
+                    .expect("grant"),
+                ],
+            )
+            .expect("bounded run registration");
+        runtime.cancel_session(&handle).expect("cancel session");
+    }
+
+    assert!(matches!(
+        runtime.register_session(
+            BrokerBinding {
+                run_id: "one-run-too-many".to_string(),
+                ..binding(1)
+            },
+            peer(999),
+            BrokerChannelMac::from_secret(KEY),
+            vec![
+                BrokerCredentialGrant::expiring(
+                    CredentialReference::from_sha256_hex(REFERENCE).expect("reference"),
+                    i64::MAX,
+                )
+                .expect("grant")
+            ],
+        ),
+        Err(BrokerDispatchError::ResourceExhausted)
     ));
 }

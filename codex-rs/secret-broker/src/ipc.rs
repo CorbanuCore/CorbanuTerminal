@@ -158,7 +158,8 @@ impl OpenAiResponsesOperation {
     fn validate(&self) -> Result<(), BrokerFrameError> {
         if self.path.len() > MAX_PATH_BYTES
             || !self.path.starts_with("/v1/")
-            || self.path.contains(['\r', '\n', '\0'])
+            || !self.path.bytes().all(|byte| byte.is_ascii_graphic())
+            || self.path.contains('\\')
             || self.path.contains("..")
             || self.path.contains('?')
             || self.path.contains('#')

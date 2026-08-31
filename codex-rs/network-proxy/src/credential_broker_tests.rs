@@ -654,6 +654,9 @@ fn pf_27_s04_isolated_route_never_injects_raw_auth_and_supports_fresh_dispatches
     broker
         .install_isolated_openai_route(route)
         .expect("install route");
+    assert!(broker.scoped_openai_enabled());
+    assert!(broker.scoped_openai_matches_host("API.OPENAI.COM"));
+    assert!(!broker.scoped_openai_matches_host("attacker.example"));
     let mut env = env_map([("OPENAI_API_KEY", "sk-raw-must-not-enter-proxy")]);
     broker.virtualize_child_env(&mut env);
     let dummy = env.get("OPENAI_API_KEY").expect("dummy");

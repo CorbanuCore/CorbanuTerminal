@@ -29,6 +29,7 @@ pub(crate) trait BrokerClientTransport: Send + Sync + 'static {
 struct ClientState {
     next_sequence: u64,
     closed: bool,
+    dispatch_in_flight: bool,
 }
 
 /// One generation-bound broker channel. It contains no raw credential value.
@@ -58,6 +59,7 @@ impl IsolatedBrokerClient {
             state: Mutex::new(ClientState {
                 next_sequence: 1,
                 closed: false,
+                dispatch_in_flight: false,
             }),
         })
     }
@@ -68,30 +70,68 @@ impl IsolatedBrokerClient {
     ) -> Result<TypedOperationReceipt, BrokerClientError> {
         let request = OpenAiResponsesOperation::new(path)
             .map_err(|_| BrokerClientError::UnsupportedOperation)?;
-        let sequence = {
+        let (sequence, next_sequence) = {
             let mut state = self.state.lock().map_err(|_| BrokerClientError::State)?;
             if state.closed {
                 return Err(BrokerClientError::Closed);
             }
+            if state.dispatch_in_flight {
+                return Err(BrokerClientError::Unavailable);
+            }
             let sequence = state.next_sequence;
-            state.next_sequence = state
-                .next_sequence
+            let next_sequence = sequence
                 .checked_add(1)
                 .ok_or(BrokerClientError::SequenceExhausted)?;
-            sequence
+            state.dispatch_in_flight = true;
+            (sequence, next_sequence)
         };
-        let frame = self
-            .channel_mac
-            .sign(
-                self.binding.clone(),
-                sequence,
-                BrokerOperation::OpenAiResponses {
-                    credential: self.credential.clone(),
-                    request,
-                },
-            )
-            .map_err(|_| BrokerClientError::Authentication)?;
-        self.transport.dispatch(&frame).map_err(map_broker_error)
+        let frame = match self.channel_mac.sign(
+            self.binding.clone(),
+            sequence,
+            BrokerOperation::OpenAiResponses {
+                credential: self.credential.clone(),
+                request,
+            },
+        ) {
+            Ok(frame) => frame,
+            Err(_) => {
+                if let Ok(mut state) = self.state.lock() {
+                    state.dispatch_in_flight = false;
+                    state.closed = true;
+                }
+                let _ = self.transport.close(&self.binding);
+                return Err(BrokerClientError::Authentication);
+            }
+        };
+        let dispatch_result = self.transport.dispatch(&frame);
+        let (result, close_transport) = {
+            let mut state = match self.state.lock() {
+                Ok(state) => state,
+                Err(_) => {
+                    let _ = self.transport.close(&self.binding);
+                    return Err(BrokerClientError::State);
+                }
+            };
+            state.dispatch_in_flight = false;
+            match dispatch_result {
+                Ok(receipt) => {
+                    state.next_sequence = next_sequence;
+                    (Ok(receipt), false)
+                }
+                Err(error) => {
+                    // A transport error cannot prove whether the broker consumed
+                    // this sequence. Close the generation-bound channel instead
+                    // of advancing or retrying an ambiguous frame.
+                    let close_transport = !state.closed;
+                    state.closed = true;
+                    (Err(map_broker_error(error)), close_transport)
+                }
+            }
+        };
+        if close_transport {
+            let _ = self.transport.close(&self.binding);
+        }
+        result
     }
 
     pub(crate) fn close(&self) -> Result<(), BrokerClientError> {

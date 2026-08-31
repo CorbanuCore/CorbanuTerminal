@@ -71,6 +71,19 @@ fn pf_27_s04_pf_27_s01_bounds_and_operation_shape_fail_closed() {
         OpenAiResponsesOperation::new("/v1/responses?token=x"),
         Err(BrokerFrameError::UnsupportedOperation)
     );
+    for path in [
+        "/v1/response body",
+        "/v1/response\tbody",
+        "/v1/response\u{7f}body",
+        "/v1/réponses",
+        "/v1/responses\\child",
+    ] {
+        assert_eq!(
+            OpenAiResponsesOperation::new(path),
+            Err(BrokerFrameError::UnsupportedOperation),
+            "path must use bounded visible ASCII origin-form bytes: {path:?}"
+        );
+    }
     assert_eq!(
         CredentialReference::from_sha256_hex("A".repeat(64)),
         Err(BrokerFrameError::InvalidCredentialReference)

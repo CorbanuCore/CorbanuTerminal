@@ -11,6 +11,27 @@ struct TestTransport {
     closes: AtomicUsize,
 }
 
+#[derive(Default)]
+struct UnavailableTransport {
+    dispatches: AtomicUsize,
+    closes: AtomicUsize,
+}
+
+impl BrokerClientTransport for UnavailableTransport {
+    fn dispatch(
+        &self,
+        _frame: &SignedBrokerFrame,
+    ) -> Result<TypedOperationReceipt, BrokerDispatchError> {
+        self.dispatches.fetch_add(1, Ordering::SeqCst);
+        Err(BrokerDispatchError::PlatformUnavailable)
+    }
+
+    fn close(&self, _binding: &BrokerBinding) -> Result<(), BrokerDispatchError> {
+        self.closes.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
 impl BrokerClientTransport for TestTransport {
     fn dispatch(
         &self,
@@ -100,5 +121,28 @@ fn pf_27_s04_client_drop_closes_the_generation_bound_channel() {
         )
         .expect("client");
     }
+    assert_eq!(transport.closes.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn pf_27_s04_client_closes_ambiguous_sequence_after_transport_unavailable() {
+    let transport = Arc::new(UnavailableTransport::default());
+    let client = IsolatedBrokerClient::new(
+        binding(),
+        CredentialReference::from_sha256_hex(REFERENCE).expect("reference"),
+        BrokerChannelMac::from_secret([7; 32]),
+        transport.clone(),
+    )
+    .expect("client");
+
+    assert_eq!(
+        client.dispatch_openai_responses("/v1/responses"),
+        Err(BrokerClientError::Unavailable)
+    );
+    assert_eq!(
+        client.dispatch_openai_responses("/v1/responses"),
+        Err(BrokerClientError::Closed)
+    );
+    assert_eq!(transport.dispatches.load(Ordering::SeqCst), 1);
     assert_eq!(transport.closes.load(Ordering::SeqCst), 1);
 }

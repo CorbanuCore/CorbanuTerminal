@@ -16,6 +16,7 @@ use codex_secret_broker::TypedOperationReceipt;
 use codex_security_policy::CapabilityId;
 use codex_security_policy::CredentialCapabilityError;
 use codex_security_policy::CredentialCapabilityRequest;
+use codex_security_policy::CredentialTransport;
 use codex_security_policy::RevocationState;
 use thiserror::Error;
 use zeroize::Zeroizing;
@@ -67,6 +68,14 @@ impl VaultCredentialRef {
     /// Approved use scope. This is metadata, never credential material.
     pub fn scope(&self) -> &str {
         self.request.credential.scope.as_str()
+    }
+
+    fn authorizes_openai_responses(&self, operation: &OpenAiResponsesOperation) -> bool {
+        self.request.method.as_str() == operation.method()
+            && self.request.destination.transport == CredentialTransport::Https
+            && self.request.destination.host.as_str() == operation.host()
+            && self.request.destination.port == operation.port()
+            && self.request.path.as_str() == operation.path()
     }
 
     fn validate_at(
@@ -353,6 +362,9 @@ where
             .credentials
             .get(reference)
             .ok_or(BackendDispatchError::Failed)?;
+        if !credential.authorizes_openai_responses(operation) {
+            return Err(BackendDispatchError::Failed);
+        }
         let now = self.clock.now_unix_seconds()?;
         let revocations = self
             .revocations
