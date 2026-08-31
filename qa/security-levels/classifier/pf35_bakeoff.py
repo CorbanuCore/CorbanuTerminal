@@ -112,6 +112,12 @@ def loopback_endpoint(value: str) -> str:
     return value
 
 
+def ensure_outside_repository(path: Path) -> None:
+    for parent in (path, *path.parents):
+        if (parent / ".git").exists():
+            raise BakeoffError("output must remain outside a Git repository")
+
+
 def canonical_json(value: Any) -> bytes:
     return json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -294,6 +300,7 @@ async def run(arguments: argparse.Namespace) -> int:
         "requests": rows,
     }
     output = Path(arguments.output).resolve()
+    ensure_outside_repository(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "wb") as destination:

@@ -155,6 +155,12 @@ def loopback_endpoint(value: Any) -> str:
     return value
 
 
+def ensure_outside_repository(path: Path, subject: str) -> None:
+    for parent in (path, *path.parents):
+        if (parent / ".git").exists():
+            raise CampaignError(f"{subject} must remain outside a Git repository")
+
+
 def load_config(path: Path) -> dict[str, Any]:
     try:
         value = strict_json_loads(path.read_text(encoding="utf-8"))
@@ -824,7 +830,9 @@ async def run_generate(arguments: argparse.Namespace) -> int:
     config = load_config(config_path)
     round_id = identifier(arguments.round_id, "round_id")
     output_root = Path(arguments.output_root).resolve()
+    ensure_outside_repository(output_root, "output root")
     output_root.mkdir(parents=True, exist_ok=True)
+    output_root.chmod(0o700)
     exact_hashes, simhashes = load_prior_indexes(output_root)
     round_root = output_root / round_id
     round_root.mkdir(mode=0o700)

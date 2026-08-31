@@ -81,6 +81,13 @@ class CampaignTests(unittest.TestCase):
         with self.assertRaisesRegex(campaign.CampaignError, "loopback"):
             campaign.loopback_endpoint("https://api.example.com/v1/chat/completions")
 
+    def test_output_must_remain_outside_git(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".git").mkdir()
+            with self.assertRaisesRegex(campaign.CampaignError, "outside"):
+                campaign.ensure_outside_repository(root / "private" / "round", "output")
+
     def test_strict_response_and_privacy_rejection(self) -> None:
         plan = campaign.request_plan(self.config(), "pilot-r1", 0)
         records = [

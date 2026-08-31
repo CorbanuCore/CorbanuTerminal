@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -23,6 +24,13 @@ class BakeoffTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(bakeoff.BakeoffError, "loopback"):
             bakeoff.loopback_endpoint("http://example.com/v1/chat/completions")
+
+    def test_output_must_remain_outside_git(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".git").write_text("gitdir: elsewhere")
+            with self.assertRaisesRegex(bakeoff.BakeoffError, "outside"):
+                bakeoff.ensure_outside_repository(root / "private.json")
 
     def test_valid_fixture_output_is_exact(self) -> None:
         content = json.dumps(
