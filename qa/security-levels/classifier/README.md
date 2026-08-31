@@ -61,3 +61,44 @@ explicitly bounded, JSONL splits only on LF, and all dynamic operator-facing
 errors escape control characters.
 Input files are snapshotted from one opened regular file; parsing, byte count
 and SHA-256 all use those identical bytes. Reports are written atomically.
+
+## External synthetic campaign
+
+`generator-candidates-v1.json` pins the candidate repositories, immutable
+revisions, parent provenance, licenses, architectures, quantization formats,
+tokenizers and artifact hashes considered for the external generator. Its
+selection remains pending until the same-host bakeoff evidence is recorded; a
+model-card performance claim is not campaign evidence.
+
+`pf35_bakeoff.py` sends only bounded synthetic defensive research requests to a
+local OpenAI-compatible endpoint. It records refusal, exact JSON-format,
+throughput, latency and request-error aggregates plus response hashes, never
+response content. Run it separately for every candidate and concurrency point;
+keep its output outside Git until reviewed and reduced to safe aggregate
+evidence.
+
+`pf35_campaign.py` creates deterministic balanced request plans and validates
+the returned provisional records. It rejects unexpected schemas, invalid
+label/scope pairs, secret-like material, exact duplicates and cross-group
+near-duplicates. Every disagreement, low-confidence record and `suspicious`
+label enters the human-review queue. High-confidence agreements receive
+deterministic, non-overlapping, per-stratum 1% human and 1% Opus audit samples.
+The tool writes raw/provisional/rejected JSONL only to an operator-supplied
+external directory and appends a verified SHA-256 hash-chained campaign ledger.
+Prior rounds are loaded before deduplication so a new round cannot silently
+repeat an earlier group.
+
+After reviewers return strict-schema JSONL decisions, the `adjudicate`
+subcommand requires a human decision for every mandatory review and human
+sample, an Opus decision for every separate Opus sample, and human resolution
+of every Opus disagreement. It rejects decisions for unselected records and
+inconsistent `accept`/`relabel` actions, writes final accepted and rejected
+rows exclusively, and appends the decision/input/output hashes to the same
+ledger. Reviewer decision rows contain exactly `record_id`, `action`
+(`accept`, `reject`, or `relabel`), nullable `final_label` and
+`final_family_scope`, `reviewer`, `timestamp_utc`, and `reason`.
+
+These tools do not create or process blind rows. The human custodian runs blind
+generation, encryption, grouping and later evaluation in a separate location;
+the training lane receives only the sealed manifest identity, signed overlap
+statement and, during S03, the allowlisted signed aggregate.

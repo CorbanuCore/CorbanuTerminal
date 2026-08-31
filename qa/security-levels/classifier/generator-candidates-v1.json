@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "created": "2026-08-30",
+  "purpose": "PF-35 synthetic English prompt-injection research fixture generation",
+  "commercial_use_required": true,
+  "allowed_spdx": ["Apache-2.0"],
+  "upstream": {
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "license": "Apache-2.0",
+    "license_sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+    "architecture": "Qwen3_5ForConditionalGeneration",
+    "model_type": "qwen3_5",
+    "tokenizer_sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+    "permitted_use": "Apache-2.0 commercial use with notice and license preservation"
+  },
+  "candidates": [
+    {
+      "repository": "preetpatel/Qwen3.8-27B-Uncensored-NVFP4",
+      "revision": "37b5130a2d2a1f7d4456ab3f8d05d0b2a45ea350",
+      "parent_repository": "orcarouter/Qwen3.8-27B-Uncensored",
+      "parent_revision": "404ea47aaa5d8a8b00049c9e9750089aca011ab2",
+      "license": "Apache-2.0",
+      "license_evidence": "Revision metadata and model card inherit the upstream Apache-2.0 license; upstream license digest is pinned above.",
+      "architecture": "Qwen3_5ForConditionalGeneration",
+      "model_type": "qwen3_5",
+      "quantization": "compressed-tensors NVFP4 W4A4, group size 16",
+      "runtime_claim": "vLLM 0.27.1 measured on RTX 5090 Blackwell",
+      "weight_files": [
+        {
+          "path": "model.safetensors",
+          "bytes": 19709883808,
+          "sha256": "bc642c1159ab9b0fcd2fdc65be4fee72fa560cf0570604741db50061ea063277"
+        }
+      ],
+      "tokenizer": {
+        "path": "tokenizer.json",
+        "bytes": 19989325,
+        "sha256": "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523"
+      },
+      "config_sha256": "0d6026f034dcd49bcfda896969fd4ae2a54dbdf92c7e68adeb46587bc27f6801",
+      "advantages": ["Blackwell-native FP4 weights and activations", "smallest single-file candidate", "standard vLLM release validation"],
+      "risks": ["No preserved MTP head", "quantizer card reports a fused-scale rounding caveat", "license file is inherited rather than copied into this revision"]
+    },
+    {
+      "repository": "twolven/Qwen3.8-27B-abliterated-AWQ-MTP",
+      "revision": "c2f5341e7c9a1c55e6d61cfc8e6d0ca897bd7443",
+      "parent_repository": "JonathanColetti/Qwen3.8-27B-Uncensored",
+      "parent_revision": "5bb7aa90f0efef548e87005b1fb7658e522b6b7f",
+      "license": "Apache-2.0",
+      "license_sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+      "architecture": "Qwen3_5ForConditionalGeneration",
+      "model_type": "qwen3_5",
+      "quantization": "compressed-tensors W4A16 asymmetric AWQ, group size 128",
+      "runtime_claim": "vLLM nightly v0.20.2rc1.dev129 measured on two RTX 3090 GPUs",
+      "weight_files": [
+        {
+          "path": "model.safetensors",
+          "bytes": 18698467264,
+          "sha256": "45b0a57904ef1ac9bc6ff3d6dc1c06e7b0ba25c6e1ed1d3b8ca71fbfb8942ac9"
+        },
+        {
+          "path": "model-mtp.safetensors",
+          "bytes": 849400424,
+          "sha256": "90fa0e3eed5a647c035c6df9ecabc416c0f8d573ff84ac12485b085f00a7cdf2"
+        }
+      ],
+      "tokenizer": {
+        "path": "tokenizer.json",
+        "bytes": 19989424,
+        "sha256": "e56427d66f44411c2dec1288b236f6d2c3eeafd611d1d0e2e92ad9301616e1e7"
+      },
+      "config_sha256": "5cac12087df9690ce133dc9d66b9104c818014fea6b788f2f676359ca06635fc",
+      "advantages": ["Preserved MTP speculative head", "small W4 weight footprint", "explicit copied license and parent chain"],
+      "risks": ["Weight-only quantization does not use Blackwell FP4 activations", "published validation used a nightly runtime", "model card warns greedy decoding can repeat"]
+    },
+    {
+      "repository": "johnnyeric/Qwen3.8-27B-Uncensored-NVFP4",
+      "revision": "f216a38e5b51dc6445a6b64f1ca6401d79be2913",
+      "parent_repository": "JonathanColetti/Qwen3.8-27B-Uncensored",
+      "parent_revision": "5bb7aa90f0efef548e87005b1fb7658e522b6b7f",
+      "license": "Apache-2.0",
+      "license_sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+      "architecture": "Qwen3_5ForConditionalGeneration",
+      "model_type": "qwen3_5",
+      "quantization": "mixed NVFP4/FP8 compressed-tensors with BF16 MTP",
+      "runtime_claim": "vLLM 0.27.1 launch recipe with MTP and max-num-seqs 96",
+      "weight_files": [
+        {"path": "model-00001-of-00005.safetensors", "sha256": "10d5fe957e9103fc36431f5df2e1e7e4135ca5459604c48f3d7cd7398fd0c9fb"},
+        {"path": "model-00002-of-00005.safetensors", "sha256": "cab6cf5fd5dc9ff3611ed0f21a64d68350f8a91452b4df6ebac941fbdd9dbb6d"},
+        {"path": "model-00003-of-00005.safetensors", "sha256": "498018cec0b6c11345ef3a8b6bad27db5b8ea0eb094ff3044ea6af937071b2ca"},
+        {"path": "model-00004-of-00005.safetensors", "sha256": "0a1564a82876400dcee2daba23a00d745483a553c0599eba6b2511af98704874"},
+        {"path": "model-00005-of-00005.safetensors", "sha256": "267e60e5ccb2244a2fd5f6cfa8a6a37b1d41230f1eb08a37253924b185a9b5f1"},
+        {"path": "model-extra-00001-of-00001.safetensors", "sha256": "d869b1dfb497f3ca5af94e77417447045c1468716314c224c83ee237ff01293a"}
+      ],
+      "tokenizer": {
+        "path": "tokenizer.json",
+        "bytes": 19989424,
+        "sha256": "f399b3cd12fa270d51457bb749fb30863521e8359b8a27059c71b6c2f7d6dd6c"
+      },
+      "advantages": ["Blackwell NVFP4 plus preserved MTP", "standard vLLM 0.27.1 recipe", "copied Apache-2.0 license"],
+      "risks": ["Larger checkpoint", "repository metadata names official Qwen as the quantization parent while the card names an abliterated parent; exclude unless the provenance discrepancy is resolved"]
+    }
+  ],
+  "selection": {
+    "status": "bakeoff-pending",
+    "accepted_repository": null,
+    "accepted_revision": null,
+    "decision_evidence": null
+  }
+}
