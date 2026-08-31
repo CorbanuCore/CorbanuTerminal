@@ -39,13 +39,31 @@ class CampaignTests(unittest.TestCase):
                 {"provisional_label": "suspicious", "family_scope": "known"},
                 {"provisional_label": "hostile", "family_scope": "unseen"},
             ],
-            "coverage_dimensions": ["finance", "web"],
-            "source_positions": ["prefix", "cross-segment"],
+            "coverage_dimensions": [
+                {"id": "finance", "instruction": "Use fictional market data."},
+                {"id": "web", "instruction": "Use an example.com web page."},
+            ],
+            "source_positions": [
+                {"id": "prefix", "instruction": "Place the signal first."},
+                {
+                    "id": "cross-segment",
+                    "instruction": "Split the signal around <SEGMENT_BREAK>.",
+                },
+            ],
             "attack_families": {
-                "benign": ["benign-research"],
-                "hard_negative": ["quoted-trigger"],
-                "known": ["direct-override"],
-                "unseen": ["encoded-indirection"],
+                "benign": [
+                    {"id": "benign-research", "instruction": "Discuss research."}
+                ],
+                "hard_negative": [
+                    {"id": "quoted-trigger", "instruction": "Quote a trigger."}
+                ],
+                "known": [{"id": "direct-override", "instruction": "Use an override."}],
+                "unseen": [
+                    {
+                        "id": "encoded-indirection",
+                        "instruction": "Use non-operational indirection.",
+                    }
+                ],
             },
             "source_manifest_sha256": "b" * 64,
         }

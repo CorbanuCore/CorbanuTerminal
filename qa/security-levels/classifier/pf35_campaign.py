@@ -121,6 +121,29 @@ def identifier(value: Any, subject: str) -> str:
     return value
 
 
+def instruction_items(value: Any, subject: str) -> list[dict[str, str]]:
+    if not isinstance(value, list) or not value:
+        raise CampaignError(f"{subject} must be non-empty")
+    seen: set[str] = set()
+    for item in value:
+        exact_object(item, frozenset({"id", "instruction"}), subject)
+        item_id = identifier(item["id"], subject)
+        instruction = item["instruction"]
+        if (
+            not isinstance(instruction, str)
+            or not 1 <= len(instruction) <= 1000
+            or any(
+                ord(character) < 0x20 and character not in "\n\t"
+                for character in instruction
+            )
+        ):
+            raise CampaignError(f"invalid {subject} instruction")
+        if item_id in seen:
+            raise CampaignError(f"duplicate {subject} id")
+        seen.add(item_id)
+    return value
+
+
 def utc_timestamp(value: Any, subject: str) -> str:
     if not isinstance(value, str) or not 1 <= len(value) <= 128:
         raise CampaignError(f"invalid {subject}")
@@ -246,21 +269,14 @@ def load_config(path: Path) -> dict[str, Any]:
         if label not in LABEL_SCOPES or scope not in LABEL_SCOPES[label]:
             raise CampaignError("label/scope mix is contradictory")
     for key in ("coverage_dimensions", "source_positions"):
-        values = value[key]
-        if not isinstance(values, list) or not values:
-            raise CampaignError(f"{key} must be non-empty")
-        for item in values:
-            identifier(item, key)
+        instruction_items(value[key], key)
     families = value["attack_families"]
     if not isinstance(families, dict) or frozenset(families) != frozenset(
         {"benign", "hard_negative", "known", "unseen"}
     ):
         raise CampaignError("attack_families must cover all family scopes")
     for scope, values in families.items():
-        if not isinstance(values, list) or not values:
-            raise CampaignError(f"attack_families.{scope} must be non-empty")
-        for item in values:
-            identifier(item, "attack family")
+        instruction_items(values, f"attack_families.{scope}")
     if re.fullmatch(r"[0-9a-f]{64}", value["source_manifest_sha256"]) is None:
         raise CampaignError("invalid source_manifest_sha256")
     return value
@@ -273,24 +289,30 @@ class RequestPlan:
     label: str
     scope: str
     coverage: str
+    coverage_instruction: str
     source_position: str
+    source_position_instruction: str
     attack_family: str
+    attack_family_instruction: str
     group_id: str
 
 
 def request_plan(config: dict[str, Any], round_id: str, index: int) -> RequestPlan:
     mix = config["mix"]
     mix_item = mix[index % len(mix)]
-    coverage = config["coverage_dimensions"][
+    coverage_item = config["coverage_dimensions"][
         (index // len(mix)) % len(config["coverage_dimensions"])
     ]
-    source_position = config["source_positions"][
+    source_position_item = config["source_positions"][
         (index // (len(mix) * len(config["coverage_dimensions"])))
         % len(config["source_positions"])
     ]
     scope = mix_item["family_scope"]
     families = config["attack_families"][scope]
-    attack_family = families[(index // len(mix)) % len(families)]
+    attack_family_item = families[(index // len(mix)) % len(families)]
+    coverage = coverage_item["id"]
+    source_position = source_position_item["id"]
+    attack_family = attack_family_item["id"]
     group_material = canonical_json(
         {
             "campaign_id": config["campaign_id"],
@@ -307,8 +329,11 @@ def request_plan(config: dict[str, Any], round_id: str, index: int) -> RequestPl
         label=mix_item["provisional_label"],
         scope=scope,
         coverage=coverage,
+        coverage_instruction=coverage_item["instruction"],
         source_position=source_position,
+        source_position_instruction=source_position_item["instruction"],
         attack_family=attack_family,
+        attack_family_instruction=attack_family_item["instruction"],
         group_id=f"group-{sha256_bytes(group_material)[:24]}",
     )
 
@@ -318,6 +343,10 @@ def user_prompt(config: dict[str, Any], plan: RequestPlan) -> str:
 one canonical semantic group. Coverage dimension: {plan.coverage}. Source
 position: {plan.source_position}. Attack family: {plan.attack_family}. Required
 provisional label: {plan.label}. Required family scope: {plan.scope}.
+
+Coverage instruction: {plan.coverage_instruction}
+Placement instruction: {plan.source_position_instruction}
+Family instruction: {plan.attack_family_instruction}
 
 Each variant must be materially distinct wording of the same base scenario and
 must be useful for distinguishing prompt injection from benign lookalikes.
