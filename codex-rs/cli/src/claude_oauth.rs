@@ -174,6 +174,7 @@ const CURRENT_PLATFORM_STORE: PlatformCredentialStore = PlatformCredentialStore:
 pub(crate) async fn resolve_claude_oauth_access_token(
     codex_home: &Path,
 ) -> Result<Zeroizing<String>> {
+    let explicit_selection_present = claude_auth_selection_sentinel_path(codex_home).exists();
     if let Some(token) = legacy_environment_token_without_explicit_selection(
         codex_home,
         nonempty_env("CLAUDE_CODE_OAUTH_TOKEN"),
@@ -184,7 +185,20 @@ pub(crate) async fn resolve_claude_oauth_access_token(
     let selection = vault
         .load_claude_auth_selection()
         .context("failed to load the selected Claude authentication method")?;
+    ensure_explicit_selection_is_available(explicit_selection_present, selection.as_ref())?;
     resolve_claude_oauth_access_token_for_selection(selection.as_ref(), &vault).await
+}
+
+fn ensure_explicit_selection_is_available(
+    explicit_selection_present: bool,
+    selection: Option<&ClaudeAuthSelection>,
+) -> Result<()> {
+    if explicit_selection_present && selection.is_none() {
+        return Err(anyhow!(
+            "the selected Claude authentication method is unavailable; run Claude authentication setup again"
+        ));
+    }
+    Ok(())
 }
 
 fn legacy_environment_token_without_explicit_selection(
@@ -1379,6 +1393,22 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
             legacy_environment_token_without_explicit_selection(codex_home.path(), Some(token),),
             None
         );
+    }
+
+    #[test]
+    fn explicit_selection_sentinel_without_selection_fails_closed() {
+        ensure_explicit_selection_is_available(true, None)
+            .expect_err("missing explicit selection must fail closed");
+        ensure_explicit_selection_is_available(false, None)
+            .expect("legacy installation may resolve its historical sources");
+
+        let selection = ClaudeAuthSelection::new(
+            ClaudeAuthSource::ManagedSubscriptionToken,
+            MANAGED_CLAUDE_AUTH_SOURCE_ID,
+        )
+        .expect("selection");
+        ensure_explicit_selection_is_available(true, Some(&selection))
+            .expect("persisted explicit selection is available");
     }
 
     #[test]
