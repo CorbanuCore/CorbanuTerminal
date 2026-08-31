@@ -2422,14 +2422,14 @@ fn bridge_redaction_plan(
 
 #[cfg(unix)]
 #[test]
-fn claude_secret_redactor_redacts_bridge_key() {
+fn claude_secret_redactor_redacts_bridge_credentials() {
     let dir = tempfile::tempdir().expect("tempdir");
     let plan = bridge_redaction_plan(&dir, "true".to_string(), "bridge-secret-for-redaction-test");
 
     let redacted = ClaudeSecretRedactor::from_plan(&plan, /*additional_secret*/ None)
-        .redact("leaked bridge-secret-for-redaction-test");
+        .redact("leaked bridge-secret-for-redaction-test and bridge-test-client-token");
 
-    assert_eq!(redacted, "leaked [REDACTED_SECRET]");
+    assert_eq!(redacted, "leaked [REDACTED_SECRET] and [REDACTED_SECRET]");
 }
 
 #[cfg(unix)]

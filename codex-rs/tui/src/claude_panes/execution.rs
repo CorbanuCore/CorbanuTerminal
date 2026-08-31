@@ -479,8 +479,14 @@ impl ClaudeSecretRedactor {
         let mut secrets = plan
             .bridge
             .as_ref()
-            .and_then(|bridge| bridge.upstream_api_key.as_deref())
             .into_iter()
+            .flat_map(|bridge| {
+                [
+                    Some(bridge.client_auth_token.as_str()),
+                    bridge.upstream_api_key.as_deref(),
+                ]
+            })
+            .flatten()
             .filter(|secret| secret.len() >= MIN_REDACTED_SECRET_LEN)
             .map(|secret| Zeroizing::new(secret.to_string()))
             .collect::<Vec<_>>();
