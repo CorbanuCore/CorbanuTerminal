@@ -44,7 +44,7 @@ use codex_vault::macos_keychain_claude_auth_source_id;
 const CLAUDE_CODE_LOGIN_VIEW_ID: &str = "claude-code-plan-login";
 const CLAUDE_AUTH_METHOD_VIEW_ID: &str = "claude-plan-auth-method";
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const LOGIN_HEALTH_TIMEOUT: Duration = Duration::from_secs(10);
+const LOGIN_HEALTH_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_LOGIN_LINE_BYTES: usize = 16 * 1024;
 const CLAUDE_STATUS_ENV_REMOVE: [&str; 8] = [
     "CLAUDE_CODE_OAUTH_TOKEN",
@@ -92,13 +92,17 @@ pub(crate) async fn current_status_with_timeout(
     codex_home: &Path,
     timeout: Duration,
 ) -> ClaudeCodePlanStatus {
-    current_status_with_executables(
-        codex_home,
+    tokio::time::timeout(
         timeout,
-        Path::new("claude"),
-        /*health_executable*/ None,
+        current_status_with_executables(
+            codex_home,
+            timeout,
+            Path::new("claude"),
+            /*health_executable*/ None,
+        ),
     )
     .await
+    .unwrap_or(ClaudeCodePlanStatus::Error)
 }
 
 async fn current_status_with_executables(
@@ -479,22 +483,68 @@ async fn verify_login(
     health_executable: Option<&Path>,
     codex_home: &Path,
 ) -> Result<String, String> {
-    match read_status(executable).await {
-        Ok(status @ ClaudeCodePlanStatus::SignedIn { .. }) => {
+    verify_login_with_timeout(
+        executable,
+        health_executable,
+        codex_home,
+        LOGIN_HEALTH_TIMEOUT,
+    )
+    .await
+}
+
+async fn verify_login_with_timeout(
+    executable: &Path,
+    health_executable: Option<&Path>,
+    codex_home: &Path,
+    verification_timeout: Duration,
+) -> Result<String, String> {
+    tokio::time::timeout(
+        verification_timeout,
+        verify_login_inner(
+            executable,
+            health_executable,
+            codex_home,
+            verification_timeout,
+        ),
+    )
+    .await
+    .map_err(|_| {
+        "Could not verify Claude Code login before the health check timed out.".to_string()
+    })?
+}
+
+async fn verify_login_inner(
+    executable: &Path,
+    health_executable: Option<&Path>,
+    codex_home: &Path,
+    verification_timeout: Duration,
+) -> Result<String, String> {
+    match status_with_timeout(executable, verification_timeout).await {
+        status @ ClaudeCodePlanStatus::SignedIn { .. } => {
             let authority_id = status_authority_id(&status)?;
             let source_id = verify_current_platform_login_health(
                 health_executable,
-                LOGIN_HEALTH_TIMEOUT,
+                verification_timeout,
                 /*selected_source_id*/ None,
             )
             .await?;
             persist_claude_code_login_selection(codex_home, source_id, authority_id).await?;
             Ok("Claude Code login selected. Retry the Claude Plan request or choose a model from /model.".to_string())
         }
-        Ok(_) => {
+        ClaudeCodePlanStatus::Checking
+        | ClaudeCodePlanStatus::ManagedToken { .. }
+        | ClaudeCodePlanStatus::EnvironmentToken { .. }
+        | ClaudeCodePlanStatus::SelectionRequired { .. }
+        | ClaudeCodePlanStatus::InvalidSelection
+        | ClaudeCodePlanStatus::NeedsReauthorization
+        | ClaudeCodePlanStatus::SignedOut
+        | ClaudeCodePlanStatus::Unavailable => {
             Err("Claude Code is not signed in with a Claude subscription after login.".to_string())
         }
-        Err(err) => Err(format!("Could not verify Claude Code login: {err}")),
+        ClaudeCodePlanStatus::Error => Err(
+            "Could not verify Claude Code login status before the health check timed out."
+                .to_string(),
+        ),
     }
 }
 

@@ -132,6 +132,7 @@ unicode-segmentation = { workspace = true }
 url = { workspace = true }
 urlencoding = { workspace = true }
 which = { workspace = true }
+zeroize = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 codex_windows_sandbox = { package = "codex-windows-sandbox", path = "../windows-sandbox-rs" }

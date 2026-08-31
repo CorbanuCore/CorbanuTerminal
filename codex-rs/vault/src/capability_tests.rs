@@ -29,6 +29,7 @@ use tracing_test::traced_test;
 use super::*;
 use crate::AddCredential;
 use crate::CredentialType;
+use crate::MANAGED_CLAUDE_TOKEN_LABEL;
 
 const LABEL: &str = "provider.openai";
 const SCOPE: &str = "responses.create";
@@ -244,6 +245,31 @@ fn missing_deleted_and_ineligible_credentials_fail_closed() {
             .expect_err("deleted credential"),
         ScopedCredentialError::NotFound
     );
+}
+
+#[test]
+fn managed_claude_token_is_denied_before_the_scoped_callback_runs() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let vault = Vault::new_with_keyring_store(
+        directory.path().to_path_buf(),
+        Arc::new(MockKeyringStore::default()),
+    );
+    vault
+        .store_managed_claude_subscription_token("managed-token-canary".to_string())
+        .expect("store managed token");
+    let revocations = RevocationState::new();
+    let credential = reference(request(MANAGED_CLAUDE_TOKEN_LABEL, SCOPE, &revocations));
+    let mut callback_ran = false;
+
+    let error = vault
+        .with_scoped_credential(&credential, 110, &revocations, |_| {
+            callback_ran = true;
+            Ok(())
+        })
+        .expect_err("managed token must be denied to generic capabilities");
+
+    assert_eq!(error, ScopedCredentialError::CredentialTypeDenied);
+    assert!(!callback_ran);
 }
 
 #[test]

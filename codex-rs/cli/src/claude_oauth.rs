@@ -30,6 +30,7 @@ use codex_vault::macos_keychain_claude_auth_source_id;
 use codex_vault::resolve_claude_auth_source;
 use serde::Deserialize;
 use tokio::process::Command;
+use zeroize::Zeroizing;
 
 const CLAUDE_CREDENTIALS_FILE: &str = ".credentials.json";
 const CLAUDE_REFRESH_LOCK_FILE: &str = ".pfterminal-oauth-refresh.lock";
@@ -143,7 +144,9 @@ const CURRENT_PLATFORM_STORE: PlatformCredentialStore = PlatformCredentialStore:
 #[cfg(not(target_os = "macos"))]
 const CURRENT_PLATFORM_STORE: PlatformCredentialStore = PlatformCredentialStore::CredentialsFile;
 
-pub(crate) async fn resolve_claude_oauth_access_token(codex_home: &Path) -> Result<String> {
+pub(crate) async fn resolve_claude_oauth_access_token(
+    codex_home: &Path,
+) -> Result<Zeroizing<String>> {
     let vault = Vault::new(codex_home.to_path_buf());
     let selection = vault
         .load_claude_auth_selection()
@@ -154,7 +157,7 @@ pub(crate) async fn resolve_claude_oauth_access_token(codex_home: &Path) -> Resu
 async fn resolve_claude_oauth_access_token_for_selection(
     selection: Option<&ClaudeAuthSelection>,
     vault: &Vault,
-) -> Result<String> {
+) -> Result<Zeroizing<String>> {
     if let Some(selection) = selection {
         if selection.source == ClaudeAuthSource::ClaudeCodeLogin {
             return with_verified_claude_login_authority(
@@ -170,29 +173,33 @@ async fn resolve_claude_oauth_access_token_for_selection(
     // Existing installations have no persisted selection. Preserve their exact
     // historical env-first behavior until the user confirms a method.
     if let Some(token) = nonempty_env("CLAUDE_CODE_OAUTH_TOKEN") {
-        return Ok(token);
+        return Ok(Zeroizing::new(token));
     }
 
-    resolve_current_platform_claude_oauth_access_token().await
+    resolve_current_platform_claude_oauth_access_token()
+        .await
+        .map(Zeroizing::new)
 }
 
 async fn resolve_selected_source_access_token(
     selection: &ClaudeAuthSelection,
     vault: &Vault,
-) -> Result<String> {
+) -> Result<Zeroizing<String>> {
     let discovered = discover_selected_claude_auth_source(selection, vault).await?;
     let metadata = resolve_selected_claude_auth_source(selection, &discovered)?;
     match metadata.source {
         ClaudeAuthSource::ManagedSubscriptionToken => vault
-            .with_managed_claude_subscription_token(ToString::to_string)
+            .with_managed_claude_subscription_token(|token| Zeroizing::new(token.to_owned()))
             .context(
                 "the selected managed Claude subscription token is unavailable; run Claude authentication setup again",
             ),
         ClaudeAuthSource::EnvironmentToken => {
-            selected_environment_token(selection)
+            selected_environment_token(selection).map(Zeroizing::new)
         }
         ClaudeAuthSource::ClaudeCodeLogin => {
-            resolve_selected_claude_code_login_access_token(&metadata.source_id).await
+            resolve_selected_claude_code_login_access_token(&metadata.source_id)
+                .await
+                .map(Zeroizing::new)
         }
     }
 }
@@ -967,9 +974,7 @@ fn claude_config_dir_is_default(config_dir: &Path) -> bool {
     {
         return false;
     }
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .is_some_and(|home| config_dir == home.join(".claude"))
+    dirs::home_dir().is_some_and(|home| config_dir == home.join(".claude"))
 }
 
 async fn acquire_refresh_lock(config_dir: &Path, store: PlatformCredentialStore) -> Result<File> {
@@ -1240,6 +1245,20 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
                 .expect("resolve persisted platform source"),
             CURRENT_PLATFORM_STORE,
         );
+    }
+
+    #[test]
+    fn default_profile_identity_uses_the_shared_home_resolver() {
+        let config_dir_overridden = std::env::var_os("CLAUDE_CONFIG_DIR")
+            .filter(|value| !value.is_empty())
+            .is_some();
+        let home = dirs::home_dir().expect("home directory");
+
+        assert_eq!(
+            claude_config_dir_is_default(&home.join(".claude")),
+            !config_dir_overridden
+        );
+        assert!(!claude_config_dir_is_default(&home.join("other-claude")));
     }
 
     #[test]

@@ -290,12 +290,16 @@ exit 2
         ))
         .expect("send authorization code");
 
-    assert!(matches!(
-        event_rx.recv().await,
-        Some(AppEvent::ClaudeCodePlanLoginFinished {
-            result: Some(Ok(message))
-        }) if message.contains("login selected")
-    ));
+    let finished = event_rx.recv().await;
+    assert!(
+        matches!(
+            finished,
+            Some(AppEvent::ClaudeCodePlanLoginFinished {
+                result: Some(Ok(ref message))
+            }) if message.contains("login selected")
+        ),
+        "unexpected login result: {finished:?}"
+    );
     let selection = Vault::new(temp_dir.path().to_path_buf())
         .load_claude_auth_selection()
         .expect("load selection")
@@ -428,7 +432,7 @@ async fn invalid_persisted_source_id_surfaces_recovery_status() {
         .expect("save selection");
 
     assert_eq!(
-        current_status_with_timeout(temp_dir.path(), Duration::from_millis(25)).await,
+        current_status_with_timeout(temp_dir.path(), Duration::from_secs(30)).await,
         ClaudeCodePlanStatus::InvalidSelection
     );
 }
@@ -453,6 +457,66 @@ async fn claude_status_timeout_resolves_to_error() {
     .expect("status check must remain bounded");
 
     assert_eq!(status, ClaudeCodePlanStatus::Error);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn provider_status_timeout_includes_vault_lock_contention() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let secrets_dir = temp_dir.path().join("secrets");
+    std::fs::create_dir_all(&secrets_dir).expect("create secrets dir");
+    let lock_file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(secrets_dir.join(".vault.lock"))
+        .expect("open vault lock");
+    lock_file.lock().expect("hold vault lock");
+
+    let status = tokio::time::timeout(
+        Duration::from_secs(1),
+        current_status_with_timeout(temp_dir.path(), Duration::from_millis(25)),
+    )
+    .await
+    .expect("provider status must remain bounded while vault storage is locked");
+
+    assert_eq!(status, ClaudeCodePlanStatus::Error);
+    drop(lock_file);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn post_login_status_timeout_does_not_persist_a_selection() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let fake_claude = temp_dir.path().join("claude");
+    std::fs::write(&fake_claude, "#!/bin/sh\nsleep 30\n").expect("write hanging fake Claude");
+    let mut permissions = std::fs::metadata(&fake_claude)
+        .expect("fake Claude metadata")
+        .permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&fake_claude, permissions).expect("make fake Claude executable");
+
+    let error = tokio::time::timeout(
+        Duration::from_secs(1),
+        verify_login_with_timeout(
+            &fake_claude,
+            Some(&fake_claude),
+            temp_dir.path(),
+            Duration::from_millis(25),
+        ),
+    )
+    .await
+    .expect("post-login verification must remain bounded")
+    .expect_err("hanging status must fail verification");
+
+    assert!(error.contains("timed out"));
+    assert_eq!(
+        Vault::new(temp_dir.path().to_path_buf())
+            .load_claude_auth_selection()
+            .expect("load selection"),
+        None
+    );
 }
 
 #[cfg(unix)]
