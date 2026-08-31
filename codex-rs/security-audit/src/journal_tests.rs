@@ -1220,6 +1220,20 @@ fn concurrent_writer_lock_blocks_append() {
 
 #[test]
 fn recovery_distinguishes_storage_failure_from_writer_contention() {
+    let mut contended = Fixture::new(JournalConfig::default());
+    contended.append_decision();
+    let mut lock = fslock::LockFile::open(contended.root_path.join(".writer.lock").as_path())
+        .expect("writer lock");
+    assert!(lock.try_lock().expect("acquire writer lock"));
+    let report = contended
+        .restarted_journal()
+        .recover(1, 1, &RevocationState::new());
+    assert_eq!(
+        report.state,
+        RecoveryState::Blocked(RecoveryBlocker::ConcurrentWriter)
+    );
+    drop(lock);
+
     let mut fixture = Fixture::new(JournalConfig::default());
     fixture.append_decision();
     fs::remove_dir_all(fixture.root_path.as_path()).expect("remove journal directory");

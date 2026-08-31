@@ -150,7 +150,7 @@ The foundation was landed in reviewable commits: initial event/storage/journal
 contracts and fixture, identity redaction, recovery/cache hardening, and focused
 review remediations. Journal lifecycle/append (`journal.rs`, 373 lines),
 filesystem publication (`journal_io.rs`, 131 lines), recovery/reconciliation
-(`journal_recovery.rs`, 372 lines), event contracts (`event.rs`, 461 lines),
+(`journal_recovery.rs`, 379 lines), event contracts (`event.rs`, 461 lines),
 and canonical event identities/errors (`event_identity.rs`, 118 lines) are
 cohesive production boundaries below the 500-line target. The former debug-only
 micro-module was folded into the core type. Record-first/root-last ordering
