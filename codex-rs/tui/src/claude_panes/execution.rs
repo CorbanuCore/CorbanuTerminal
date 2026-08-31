@@ -70,6 +70,10 @@ pub(crate) async fn run_claude_command_plan(
     let started_at = Instant::now();
     let started_at_unix_ms = unix_epoch_ms();
     let mut last_progress_elapsed_ms = Some(0);
+    let claude_config_dir_override = plan
+        .deferred_claude_plan_auth
+        .as_ref()
+        .and_then(|deferred| deferred.claude_config_dir_override.clone());
     let claude_plan_token = if let Some(deferred) = plan.deferred_claude_plan_auth.take() {
         let token = tokio::select! {
             _ = cancel_token.cancelled() => {
@@ -147,6 +151,9 @@ pub(crate) async fn run_claude_command_plan(
     }
     for key in &plan.env_remove {
         command.env_remove(key);
+    }
+    if let Some(config_dir) = claude_config_dir_override {
+        command.env("CLAUDE_CONFIG_DIR", config_dir);
     }
     let mut child = command
         .args(&plan.args)
@@ -426,23 +433,25 @@ pub(crate) async fn run_claude_command_plan(
 async fn resolve_deferred_claude_plan_token(
     deferred: DeferredClaudePlanAuth,
 ) -> Result<Zeroizing<String>> {
-    let output = tokio::time::timeout(
-        CLAUDE_PLAN_AUTH_TIMEOUT,
-        Command::new(&deferred.helper_executable)
-            .arg("internal-claude-oauth-token")
-            .env("CORBANU_HOME", &deferred.codex_home)
-            .env("PFTERMINAL_HOME", &deferred.codex_home)
-            .env("CODEX_HOME", &deferred.codex_home)
-            .current_dir(&deferred.cwd)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .kill_on_drop(true)
-            .output(),
-    )
-    .await
-    .map_err(|_| anyhow!("selected Claude Plan authentication timed out"))?
-    .context("failed to start selected Claude Plan authentication helper")?;
+    let mut command = Command::new(&deferred.helper_executable);
+    command
+        .arg("internal-claude-oauth-token")
+        .env("CORBANU_HOME", &deferred.codex_home)
+        .env("PFTERMINAL_HOME", &deferred.codex_home)
+        .env("CODEX_HOME", &deferred.codex_home)
+        .env_remove("CLAUDE_CONFIG_DIR")
+        .current_dir(&deferred.cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    if let Some(config_dir) = deferred.claude_config_dir_override {
+        command.env("CLAUDE_CONFIG_DIR", config_dir);
+    }
+    let output = tokio::time::timeout(CLAUDE_PLAN_AUTH_TIMEOUT, command.output())
+        .await
+        .map_err(|_| anyhow!("selected Claude Plan authentication timed out"))?
+        .context("failed to start selected Claude Plan authentication helper")?;
     let mut stdout = output.stdout;
     if !output.status.success() {
         stdout.zeroize();

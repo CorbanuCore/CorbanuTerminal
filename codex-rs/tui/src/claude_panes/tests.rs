@@ -35,6 +35,7 @@ use super::bridge_translate::anthropic_stream_start_event;
 use super::bridge_translate::anthropic_stream_stop_event;
 use super::bridge_translate::anthropic_tool_use_response;
 use super::bridge_translate::bridge_tool_calls_from_ambient_response;
+use super::command_plan::absolute_claude_config_dir_override_against;
 use super::command_plan::allowed_provider_vault_label;
 use super::command_plan::build_claude_command_plan;
 use super::command_plan::claude_pane_title;
@@ -2434,6 +2435,19 @@ fn claude_secret_redactor_redacts_bridge_credentials() {
     assert_eq!(redacted, "leaked [REDACTED_SECRET] and [REDACTED_SECRET]");
 }
 
+#[test]
+fn relative_claude_config_dir_is_bound_to_the_launch_cwd() {
+    let launch_cwd = PathBuf::from("/launch/cwd");
+    let resolved = absolute_claude_config_dir_override_against(
+        Some(PathBuf::from("profiles/work")),
+        &launch_cwd,
+    )
+    .expect("resolve relative Claude profile")
+    .expect("configured Claude profile");
+
+    assert_eq!(resolved, launch_cwd.join("profiles/work"));
+}
+
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn claude_plan_pane_brokers_selected_auth_without_inheriting_the_token() {
@@ -2442,29 +2456,35 @@ async fn claude_plan_pane_brokers_selected_auth_without_inheriting_the_token() {
     std::fs::create_dir(&pane_cwd).expect("pane cwd");
     pane.cwd = pane_cwd.clone();
     let secret = "pane-auth-secret-canary-not-real";
+    let selected_profile = dir.path().join("selected-claude-profile");
     let helper = dir.path().join("auth-helper");
     let helper_home_log = dir.path().join("auth-helper-home");
     std::fs::write(
         &helper,
         format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$PWD\" \"$CORBANU_HOME\" \"$PFTERMINAL_HOME\" \"$CODEX_HOME\" > '{}'\nprintf '%s' '{secret}'\n",
+            "#!/bin/sh\nprintf '%s\\n' \"$PWD\" \"$CORBANU_HOME\" \"$PFTERMINAL_HOME\" \"$CODEX_HOME\" \"$CLAUDE_CONFIG_DIR\" > '{}'\nprintf '%s' '{secret}'\n",
             helper_home_log.display()
         ),
     )
     .expect("write helper");
     let claude = dir.path().join("claude");
+    let claude_config_log = dir.path().join("claude-config-dir");
     std::fs::write(
         &claude,
-        concat!(
-            "#!/bin/sh\nset -eu\n",
-            "[ -z \"${CLAUDE_CODE_OAUTH_TOKEN+x}\" ] || exit 7\n",
-            "[ -n \"$ANTHROPIC_AUTH_TOKEN\" ] || exit 8\n",
-            "[ \"$ANTHROPIC_AUTH_TOKEN\" != \"pane-auth-secret-canary-not-real\" ] || exit 11\n",
-            "case \"$ANTHROPIC_BASE_URL\" in http://127.0.0.1:*) ;; *) exit 9 ;; esac\n",
-            "env | grep -F 'pane-auth-secret-canary-not-real' >/dev/null && exit 10\n",
-            "printf '{\"type\":\"result\",\"subtype\":\"success\",",
-            "\"session_id\":\"11111111-1111-4111-8111-111111111111\",",
-            "\"result\":\"bound through local bridge\"}\\n'\n",
+        format!(
+            concat!(
+                "#!/bin/sh\nset -eu\n",
+                "[ -z \"${{CLAUDE_CODE_OAUTH_TOKEN+x}}\" ] || exit 7\n",
+                "[ -n \"$ANTHROPIC_AUTH_TOKEN\" ] || exit 8\n",
+                "[ \"$ANTHROPIC_AUTH_TOKEN\" != \"pane-auth-secret-canary-not-real\" ] || exit 11\n",
+                "case \"$ANTHROPIC_BASE_URL\" in http://127.0.0.1:*) ;; *) exit 9 ;; esac\n",
+                "env | grep -F 'pane-auth-secret-canary-not-real' >/dev/null && exit 10\n",
+                "printf '%s' \"$CLAUDE_CONFIG_DIR\" > '{claude_config_log}'\n",
+                "printf '{{\"type\":\"result\",\"subtype\":\"success\",",
+                "\"session_id\":\"11111111-1111-4111-8111-111111111111\",",
+                "\"result\":\"bound through local bridge\"}}\\n'\n",
+            ),
+            claude_config_log = claude_config_log.display(),
         ),
     )
     .expect("write claude");
@@ -2498,6 +2518,7 @@ async fn claude_plan_pane_brokers_selected_auth_without_inheriting_the_token() {
         .as_mut()
         .expect("deferred selected auth");
     deferred.helper_executable = helper;
+    deferred.claude_config_dir_override = Some(selected_profile.clone());
     let bridge = plan.bridge.as_ref().expect("Claude Plan bridge");
     assert!(bridge.upstream_api_key.is_none());
     assert!(bridge.deferred_vault_secret.is_none());
@@ -2520,7 +2541,20 @@ async fn claude_plan_pane_brokers_selected_auth_without_inheriting_the_token() {
         std::fs::canonicalize(&pane_cwd).expect("canonical pane cwd")
     );
     let home = dir.path().to_string_lossy().into_owned();
-    assert_eq!(helper_log.collect::<Vec<_>>(), vec![home.as_str(); 3]);
+    let selected_profile = selected_profile.to_string_lossy().into_owned();
+    assert_eq!(
+        helper_log.collect::<Vec<_>>(),
+        vec![
+            home.as_str(),
+            home.as_str(),
+            home.as_str(),
+            selected_profile.as_str()
+        ]
+    );
+    assert_eq!(
+        std::fs::read_to_string(claude_config_log).expect("Claude config log"),
+        selected_profile
+    );
 }
 
 #[cfg(unix)]

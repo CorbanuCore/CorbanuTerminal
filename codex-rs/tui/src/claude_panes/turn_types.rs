@@ -204,6 +204,7 @@ pub(crate) struct DeferredClaudePlanAuth {
     pub(crate) codex_home: PathBuf,
     pub(crate) helper_executable: PathBuf,
     pub(crate) cwd: PathBuf,
+    pub(crate) claude_config_dir_override: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

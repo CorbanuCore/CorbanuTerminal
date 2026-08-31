@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 use std::net::TcpListener as StdTcpListener;
 use std::path::Path;
+use std::path::PathBuf;
 
 use anyhow::Context;
 use anyhow::Result;
@@ -27,7 +28,7 @@ use super::turn_types::DeferredClaudePlanAuth;
 use super::turn_types::DeferredVaultSecret;
 
 const ANTHROPIC_AUTH_ENV_KEYS: [&str; 2] = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
-const CLAUDE_PLAN_ROUTING_ENV_KEYS: [&str; 11] = [
+const CLAUDE_PLAN_ROUTING_ENV_KEYS: [&str; 12] = [
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_AUTH_TOKEN",
     "ANTHROPIC_BASE_URL",
@@ -39,6 +40,7 @@ const CLAUDE_PLAN_ROUTING_ENV_KEYS: [&str; 11] = [
     "CLAUDE_CODE_USE_BEDROCK",
     "CLAUDE_CODE_USE_VERTEX",
     "CLAUDE_CODE_USE_FOUNDRY",
+    "CLAUDE_CONFIG_DIR",
 ];
 
 pub(crate) fn reveal_provider_secret(codex_home: &Path, label: &str) -> Result<String> {
@@ -191,6 +193,7 @@ pub(crate) fn build_claude_command_plan(
             helper_executable: std::env::current_exe()
                 .context("failed to locate Corbanu for Claude Plan authentication")?,
             cwd: pane.cwd.clone(),
+            claude_config_dir_override: absolute_claude_config_dir_override()?,
         })
     } else {
         None
@@ -307,6 +310,30 @@ pub(crate) fn build_claude_command_plan(
         deferred_claude_plan_auth,
         bridge,
     })
+}
+
+fn absolute_claude_config_dir_override() -> Result<Option<PathBuf>> {
+    let configured = std::env::var_os("CLAUDE_CONFIG_DIR")
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
+    absolute_claude_config_dir_override_against(configured, &std::env::current_dir()?)
+}
+
+pub(crate) fn absolute_claude_config_dir_override_against(
+    configured: Option<PathBuf>,
+    current_dir: &Path,
+) -> Result<Option<PathBuf>> {
+    configured
+        .map(|config_dir| {
+            let path = if config_dir.is_absolute() {
+                config_dir
+            } else {
+                current_dir.join(config_dir)
+            };
+            std::path::absolute(path)
+                .context("failed to resolve the exact Claude Code configuration profile")
+        })
+        .transpose()
 }
 
 pub(crate) fn settings_json_with_base_url(
