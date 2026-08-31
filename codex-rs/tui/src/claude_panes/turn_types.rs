@@ -203,6 +203,7 @@ pub(crate) struct DeferredVaultSecret {
 pub(crate) struct DeferredClaudePlanAuth {
     pub(crate) codex_home: PathBuf,
     pub(crate) helper_executable: PathBuf,
+    pub(crate) cwd: PathBuf,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -433,6 +433,7 @@ async fn resolve_deferred_claude_plan_token(
             .env("CORBANU_HOME", &deferred.codex_home)
             .env("PFTERMINAL_HOME", &deferred.codex_home)
             .env("CODEX_HOME", &deferred.codex_home)
+            .current_dir(&deferred.cwd)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())

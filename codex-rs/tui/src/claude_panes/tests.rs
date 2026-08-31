@@ -2435,14 +2435,17 @@ fn claude_secret_redactor_redacts_bridge_key() {
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn claude_plan_pane_brokers_selected_auth_without_inheriting_the_token() {
-    let (dir, pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
+    let (dir, mut pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
+    let pane_cwd = dir.path().join("pane-cwd");
+    std::fs::create_dir(&pane_cwd).expect("pane cwd");
+    pane.cwd = pane_cwd.clone();
     let secret = "pane-auth-secret-canary-not-real";
     let helper = dir.path().join("auth-helper");
     let helper_home_log = dir.path().join("auth-helper-home");
     std::fs::write(
         &helper,
         format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$CORBANU_HOME\" \"$PFTERMINAL_HOME\" \"$CODEX_HOME\" > '{}'\nprintf '%s' '{secret}'\n",
+            "#!/bin/sh\nprintf '%s\\n' \"$PWD\" \"$CORBANU_HOME\" \"$PFTERMINAL_HOME\" \"$CODEX_HOME\" > '{}'\nprintf '%s' '{secret}'\n",
             helper_home_log.display()
         ),
     )
@@ -2507,10 +2510,15 @@ async fn claude_plan_pane_brokers_selected_auth_without_inheriting_the_token() {
     assert_eq!(output.status, ClaudePaneTurnStatus::Success);
     assert_eq!(output.text, "bound through local bridge");
     assert!(!artifact.contains(secret));
+    let helper_log = std::fs::read_to_string(helper_home_log).expect("helper home log");
+    let mut helper_log = helper_log.lines();
+    let helper_cwd = PathBuf::from(helper_log.next().expect("helper cwd"));
     assert_eq!(
-        std::fs::read_to_string(helper_home_log).expect("helper home log"),
-        format!("{home}\n{home}\n{home}\n", home = dir.path().display())
+        std::fs::canonicalize(helper_cwd).expect("canonical helper cwd"),
+        std::fs::canonicalize(&pane_cwd).expect("canonical pane cwd")
     );
+    let home = dir.path().to_string_lossy().into_owned();
+    assert_eq!(helper_log.collect::<Vec<_>>(), vec![home.as_str(); 3]);
 }
 
 #[cfg(unix)]

@@ -190,6 +190,7 @@ pub(crate) fn build_claude_command_plan(
             codex_home: codex_home.to_path_buf(),
             helper_executable: std::env::current_exe()
                 .context("failed to locate Corbanu for Claude Plan authentication")?,
+            cwd: pane.cwd.clone(),
         })
     } else {
         None
