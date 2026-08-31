@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-45-S01"
 title: "Claude authentication choice, migration, and recovery"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/claude-subscription-auth.md"
 plan_feature: "PF-45"
 execution_order: 4
@@ -59,7 +59,7 @@ updated: 2026-08-30
 
 ## Remaining
 
-- [ ] Commit the typed-tmux harness and evidence, then archive this sprint.
+- None for PF-45.
 
 Final cross-platform/live-repository qualification, documentation, external
 human acceptance, and release decisions belong to PF-46 / CSA-05.
@@ -82,11 +82,11 @@ human acceptance, and release decisions belong to PF-46 / CSA-05.
   scrollback, isolated home/logs, and artifacts; an independent artifact scan
   found no `synthetic-claude-oauth-` marker. A successful run emitted no
   failure artifacts.
-- [ ] Re-run lifecycle checkers after the implementation commit and archive.
+- [x] Lifecycle checkers passed after the implementation commit and archive.
 
 ## Exit evidence
 
-- [x] Implementation commits `0913d38ed` and `446806526` plus the typed-tmux
-  harness commit are recorded on the isolated feature branch.
+- [x] Implementation commits `0913d38ed` and `446806526` plus typed-tmux
+  harness commit `dff693e46` are recorded on the isolated feature branch.
 - [x] Migration/rollback behavior and recovery copy are recorded in the plan.
-- [ ] Done and Remaining reflect reality; completed record is archived.
+- [x] Done and Remaining reflect reality; completed record is archived.
