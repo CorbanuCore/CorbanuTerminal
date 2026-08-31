@@ -67,8 +67,32 @@ pub(crate) async fn run_claude_command_plan(
     cancel_token: CancellationToken,
     progress_tx: Option<AppEventSender>,
 ) -> Result<ClaudePaneTurnOutput> {
+    let started_at = Instant::now();
+    let started_at_unix_ms = unix_epoch_ms();
+    let mut last_progress_elapsed_ms = Some(0);
     let claude_plan_token = if let Some(deferred) = plan.deferred_claude_plan_auth.take() {
-        Some(resolve_deferred_claude_plan_token(deferred).await?)
+        let token = tokio::select! {
+            _ = cancel_token.cancelled() => {
+                let ended_at_unix_ms = unix_epoch_ms();
+                let output = failed_turn_output(
+                    &plan,
+                    elapsed_ms(&started_at),
+                    ClaudePaneTurnStatus::Interrupted,
+                    Some("interrupted_during_auth".to_string()),
+                    "Claude pane turn interrupted before authentication completed.".to_string(),
+                );
+                write_turn_audit(
+                    &plan,
+                    &output,
+                    started_at_unix_ms,
+                    ended_at_unix_ms,
+                    last_progress_elapsed_ms,
+                )?;
+                return Ok(output);
+            }
+            result = resolve_deferred_claude_plan_token(deferred) => result?,
+        };
+        Some(token)
     } else {
         None
     };
@@ -86,9 +110,6 @@ pub(crate) async fn run_claude_command_plan(
         .context("Claude bridge credential task failed")??;
         bridge.upstream_api_key = Some(secret);
     }
-    let started_at = Instant::now();
-    let started_at_unix_ms = unix_epoch_ms();
-    let mut last_progress_elapsed_ms = Some(0);
     emit_claude_progress(
         &progress_tx,
         &plan,

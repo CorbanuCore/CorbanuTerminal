@@ -2383,6 +2383,72 @@ async fn unavailable_selected_auth_fails_before_claude_pane_spawn_without_disclo
 
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cancelling_deferred_auth_kills_helper_and_never_spawns_claude() {
+    let (dir, pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
+    let helper_started = dir.path().join("helper-started");
+    let helper_finished = dir.path().join("helper-finished");
+    let helper = dir.path().join("auth-helper-slow");
+    std::fs::write(
+        &helper,
+        format!(
+            "#!/bin/sh\ntouch '{}'\nsleep 30\ntouch '{}'\nprintf token\n",
+            helper_started.display(),
+            helper_finished.display()
+        ),
+    )
+    .expect("write helper");
+    let claude_started = dir.path().join("claude-started");
+    let claude = dir.path().join("claude-sentinel");
+    std::fs::write(
+        &claude,
+        format!("#!/bin/sh\ntouch '{}'\n", claude_started.display()),
+    )
+    .expect("write claude");
+    for executable in [&helper, &claude] {
+        let mut permissions = std::fs::metadata(executable)
+            .expect("executable metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(executable, permissions).expect("make executable");
+    }
+    let mut plan = build_claude_command_plan(&pane, "hello".to_string(), dir.path()).expect("plan");
+    plan.deferred_claude_plan_auth
+        .as_mut()
+        .expect("deferred selected auth")
+        .helper_executable = helper;
+    plan.executable = claude.to_string_lossy().into_owned();
+    let cancellation = CancellationToken::new();
+    let task_cancellation = cancellation.clone();
+    let turn = tokio::spawn(async move {
+        run_claude_command_plan(plan, task_cancellation, /*progress_tx*/ None).await
+    });
+    for _ in 0..100 {
+        if helper_started.exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(helper_started.exists(), "auth helper did not start");
+
+    cancellation.cancel();
+    let output = tokio::time::timeout(Duration::from_secs(3), turn)
+        .await
+        .expect("cancelled auth returned promptly")
+        .expect("turn task")
+        .expect("turn output");
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    assert_eq!(output.status, ClaudePaneTurnStatus::Interrupted);
+    assert_eq!(
+        output.terminal_reason.as_deref(),
+        Some("interrupted_during_auth")
+    );
+    assert!(!helper_finished.exists());
+    assert!(!claude_started.exists());
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn bridge_secret_is_redacted_from_stdout_artifact_and_output() {
     let dir = tempfile::tempdir().expect("tempdir");
     let secret = "vercel-test-key-for-redaction";
