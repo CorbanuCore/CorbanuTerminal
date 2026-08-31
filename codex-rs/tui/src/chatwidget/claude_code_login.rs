@@ -148,23 +148,22 @@ async fn current_status_with_executables(
                 ..
             },
         ) => {
+            if verify_current_platform_login_health(
+                health_executable,
+                timeout,
+                Some(&selection.source_id),
+            )
+            .await
+            .is_err()
+            {
+                return ClaudeCodePlanStatus::NeedsReauthorization;
+            }
             let status = status_with_timeout(claude_executable, timeout).await;
             match status_authority_id(&status) {
                 Ok(authority_id)
                     if selection.authority_id.as_deref() == Some(authority_id.as_str()) =>
                 {
-                    if verify_current_platform_login_health(
-                        health_executable,
-                        timeout,
-                        Some(&selection.source_id),
-                    )
-                    .await
-                    .is_err()
-                    {
-                        ClaudeCodePlanStatus::NeedsReauthorization
-                    } else {
-                        status
-                    }
+                    status
                 }
                 _ => ClaudeCodePlanStatus::NeedsReauthorization,
             }

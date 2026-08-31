@@ -87,6 +87,9 @@ requires current Claude Code to report its organization and subscription
 identity, so a file-only profile that current Claude Code no longer recognizes
 must be reauthorized with `claude auth login`. `CLAUDE_CONFIG_DIR` selects both
 a distinct hashed Keychain service and a distinct file-profile digest.
+If a Keychain item later appears, becomes unavailable, or cannot be proven
+absent, a persisted legacy-file selection fails closed before Claude status or
+token resolution; Corbanu never verifies the Keychain while reading the file.
 
 After a Claude Code login method is saved, Corbanu binds both the exact store
 and a domain-separated digest of Claude Code's reported organization, email,

@@ -143,6 +143,12 @@ exposing the credential or discarding unrelated provider state.
 - Existing users do not change source until they explicitly confirm migration.
 - A source conflict fails visibly and identifies only source metadata; it never
   guesses which account, organization, or billing context the user intended.
+- On macOS, a persisted legacy `.credentials.json` selection remains usable
+  only while the matching Keychain item is proven absent by the typed
+  `errSecItemNotFound` result. A present, malformed, denied, unavailable, or
+  unverified Keychain item fails closed before Claude status or legacy-file
+  token resolution, so account verification can never attest one store while
+  Corbanu returns another store's credential.
 - A blank or missing rotating refresh token is not represented as recoverable
   without reauthorization or a valid independently managed long-lived token.
 - Legacy migration is reversible until the new source passes validation and the

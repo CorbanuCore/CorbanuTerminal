@@ -262,11 +262,35 @@ async fn verify_selected_claude_login_authority_with_profile(
     config_dir_override: Option<&Path>,
     custom_oauth_url: Option<&std::ffi::OsStr>,
 ) -> Result<()> {
+    let security = claude_test_security_executable();
+    verify_selected_claude_login_authority_with_profile_and_security(
+        selection,
+        claude_executable,
+        config_dir_override,
+        custom_oauth_url,
+        security.as_deref(),
+    )
+    .await
+}
+
+async fn verify_selected_claude_login_authority_with_profile_and_security(
+    selection: &ClaudeAuthSelection,
+    claude_executable: Option<&Path>,
+    config_dir_override: Option<&Path>,
+    custom_oauth_url: Option<&std::ffi::OsStr>,
+    security: Option<&Path>,
+) -> Result<()> {
     let expected = selection.authority_id.as_deref().ok_or_else(|| {
         anyhow!(
             "the selected Claude Code login predates account binding; explicitly choose Claude Code login again"
         )
     })?;
+    let config_dir = match config_dir_override {
+        Some(config_dir) => config_dir.to_path_buf(),
+        None => claude_config_dir()?,
+    };
+    let store = platform_store_for_source_id(&config_dir, &selection.source_id)?;
+    verify_selected_platform_store_is_current(&config_dir, store, security).await?;
     let neutral_cwd = tempfile::tempdir().context("failed to isolate Claude account status")?;
     let executable = claude_executable.unwrap_or_else(|| Path::new("claude"));
     let mut command = Command::new(executable);
@@ -503,12 +527,58 @@ pub(crate) async fn verify_current_platform_claude_login_health(
 ) -> Result<String> {
     let config_dir = claude_config_dir()?;
     let security = claude_test_security_executable();
+    verify_current_platform_claude_login_health_with_profile(
+        &config_dir,
+        selected_source_id,
+        security.as_deref(),
+    )
+    .await
+}
+
+async fn verify_current_platform_claude_login_health_with_profile(
+    config_dir: &Path,
+    selected_source_id: Option<&str>,
+    security: Option<&Path>,
+) -> Result<String> {
     let store = match selected_source_id {
-        Some(source_id) => platform_store_for_source_id(&config_dir, source_id)?,
-        None => preferred_platform_store(&config_dir, security.as_deref()).await?,
+        Some(source_id) => platform_store_for_source_id(config_dir, source_id)?,
+        None => preferred_platform_store(config_dir, security).await?,
     };
-    verify_claude_login_health(&config_dir, store, security.as_deref()).await?;
-    store.source_id(&config_dir)
+    verify_selected_platform_store_is_current(config_dir, store, security).await?;
+    verify_claude_login_health(config_dir, store, security).await?;
+    store.source_id(config_dir)
+}
+
+/// A persisted legacy credentials-file selection is only valid on macOS while
+/// the matching Keychain item is demonstrably absent. Otherwise `claude auth
+/// status` would attest one store while provider resolution reads another.
+async fn verify_selected_platform_store_is_current(
+    config_dir: &Path,
+    store: PlatformCredentialStore,
+    security: Option<&Path>,
+) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    if store == PlatformCredentialStore::CredentialsFile {
+        return match probe_macos_keychain_credential_presence(config_dir, security).await {
+            Ok(MacosKeychainCredentialPresence::Absent) => Ok(()),
+            Ok(MacosKeychainCredentialPresence::Present) => Err(anyhow!(
+                "the selected legacy Claude credentials file is no longer valid because the matching macOS Keychain credential exists; explicitly choose Claude Code login again"
+            )),
+            Err(_) => Err(anyhow!(
+                "could not prove the matching macOS Keychain credential is absent; explicitly choose Claude Code login again"
+            )),
+        };
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (config_dir, store, security);
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MacosKeychainCredentialPresence {
+    Present,
+    Absent,
 }
 
 fn platform_store_for_source_id(
@@ -735,6 +805,49 @@ async fn read_macos_keychain_credentials(
         };
     }
     Ok(output.stdout)
+}
+
+/// Check only whether the selected Keychain item exists. This deliberately
+/// omits `-w` and discards all command output, so legacy-source validation
+/// never materializes Keychain credential bytes.
+#[cfg(target_os = "macos")]
+async fn probe_macos_keychain_credential_presence(
+    config_dir: &Path,
+    security: Option<&Path>,
+) -> Result<MacosKeychainCredentialPresence> {
+    let account = std::env::var("USER")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(whoami::username);
+    let service = claude_keychain_service(config_dir);
+    let executable = security.unwrap_or_else(|| Path::new("/usr/bin/security"));
+    let status = tokio::time::timeout(
+        CLAUDE_KEYCHAIN_TIMEOUT,
+        Command::new(executable)
+            .args([
+                "find-generic-password",
+                "-a",
+                account.as_str(),
+                "-s",
+                service.as_str(),
+            ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .status(),
+    )
+    .await
+    .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "macOS Keychain lookup timed out"))?
+    .with_context(|| format!("failed to start `{}`", executable.display()))?;
+    if status.success() {
+        Ok(MacosKeychainCredentialPresence::Present)
+    } else if status.code() == Some(SECURITY_ERR_SEC_ITEM_NOT_FOUND_EXIT) {
+        Ok(MacosKeychainCredentialPresence::Absent)
+    } else {
+        Err(anyhow!("macOS Keychain lookup failed with status {status}"))
+    }
 }
 
 fn claude_keychain_service(config_dir: &Path) -> String {
@@ -978,9 +1091,12 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
             Some("max"),
         )
         .expect("authority");
+        let config_dir = claude_config_dir().expect("current Claude profile");
+        let source_id = CURRENT_PLATFORM_STORE
+            .source_id(&config_dir)
+            .expect("current platform source id");
         let selection =
-            ClaudeAuthSelection::new_claude_code_login("claude-login:fixture", expected)
-                .expect("selection");
+            ClaudeAuthSelection::new_claude_code_login(source_id, expected).expect("selection");
         let (matching, matching_cwd, custom_oauth_log) = fake_claude_status(
             directory.path(),
             "fixture@example.invalid",
@@ -1592,6 +1708,131 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
 
     #[cfg(target_os = "macos")]
     #[tokio::test]
+    async fn persisted_legacy_file_requires_proven_keychain_absence() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let now_ms = current_time_ms();
+        write_credentials(
+            temp_dir.path(),
+            "legacy-file-access",
+            "legacy-file-refresh",
+            now_ms + 600_000,
+        );
+        let missing_security = fake_security_exit(temp_dir.path(), "missing-security", 44);
+        let source_id = PlatformCredentialStore::CredentialsFile
+            .source_id(temp_dir.path())
+            .expect("legacy source id");
+        verify_current_platform_claude_login_health_with_profile(
+            temp_dir.path(),
+            Some(&source_id),
+            Some(&missing_security),
+        )
+        .await
+        .expect("typed item-not-found permits the selected legacy file");
+
+        let present_security = fake_keychain_security(temp_dir.path(), now_ms + 600_000);
+        let denied_security = fake_security_exit(temp_dir.path(), "denied-security", 7);
+        let unavailable_security = temp_dir.path().join("unavailable-security");
+        for security in [
+            present_security.as_path(),
+            denied_security.as_path(),
+            unavailable_security.as_path(),
+        ] {
+            let error = verify_current_platform_claude_login_health_with_profile(
+                temp_dir.path(),
+                Some(&source_id),
+                Some(security),
+            )
+            .await
+            .expect_err("legacy file must fail closed unless Keychain absence is proven");
+            assert!(!error.to_string().contains("legacy-file-access"));
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn legacy_keychain_presence_probe_never_requests_credential_bytes() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let secret_read_marker = temp_dir.path().join("secret-read-requested");
+        let security = temp_dir.path().join("metadata-only-security");
+        std::fs::write(
+            &security,
+            format!(
+                "#!/bin/sh\nfor argument in \"$@\"; do\n  [ \"$argument\" != \"-w\" ] || {{ touch '{}'; exit 7; }}\ndone\nexit 44\n",
+                secret_read_marker.display(),
+            ),
+        )
+        .expect("write metadata-only security fixture");
+        let mut permissions = std::fs::metadata(&security)
+            .expect("security fixture metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&security, permissions).expect("make security fixture executable");
+
+        assert_eq!(
+            probe_macos_keychain_credential_presence(temp_dir.path(), Some(&security))
+                .await
+                .expect("presence probe"),
+            MacosKeychainCredentialPresence::Absent
+        );
+        assert!(!secret_read_marker.exists());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn present_keychain_blocks_legacy_selection_before_status_invocation() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let now_ms = current_time_ms();
+        write_credentials(
+            temp_dir.path(),
+            "legacy-file-access",
+            "legacy-file-refresh",
+            now_ms + 600_000,
+        );
+        let marker = temp_dir.path().join("status-invoked");
+        let status = temp_dir.path().join("status-claude");
+        std::fs::write(
+            &status,
+            format!(
+                "#!/bin/sh\ntouch '{}'\nprintf '{{\"loggedIn\":true,\"authMethod\":\"claude.ai\",\"email\":\"fixture@example.invalid\",\"orgId\":\"org-fixture\",\"subscriptionType\":\"max\"}}\\n'\n",
+                marker.display()
+            ),
+        )
+        .expect("write status fixture");
+        let mut permissions = std::fs::metadata(&status)
+            .expect("status metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&status, permissions).expect("make status executable");
+        let selection = ClaudeAuthSelection::new_claude_code_login(
+            PlatformCredentialStore::CredentialsFile
+                .source_id(temp_dir.path())
+                .expect("legacy source id"),
+            codex_vault::claude_login_authority_id(
+                "fixture@example.invalid",
+                "org-fixture",
+                Some("max"),
+            )
+            .expect("authority"),
+        )
+        .expect("selection");
+        let security = fake_keychain_security(temp_dir.path(), now_ms + 600_000);
+
+        let error = verify_selected_claude_login_authority_with_profile_and_security(
+            &selection,
+            Some(&status),
+            Some(temp_dir.path()),
+            None,
+            Some(&security),
+        )
+        .await
+        .expect_err("present Keychain must block the legacy selection before status");
+
+        assert!(error.to_string().contains("no longer valid"));
+        assert!(!marker.exists());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
     async fn malformed_or_unavailable_keychain_never_falls_back_to_legacy_file() {
         let temp_dir = tempfile::tempdir().expect("temp dir");
         let now_ms = current_time_ms();
@@ -1710,6 +1951,20 @@ printf '%s\n' '{{"claudeAiOauth":{{"accessToken":"keychain-access","refreshToken
             .permissions();
         permissions.set_mode(0o700);
         std::fs::set_permissions(&executable, permissions).expect("make fake security executable");
+        executable
+    }
+
+    #[cfg(target_os = "macos")]
+    fn fake_security_exit(config_dir: &Path, name: &str, exit_code: i32) -> PathBuf {
+        let executable = config_dir.join(name);
+        std::fs::write(&executable, format!("#!/bin/sh\nexit {exit_code}\n"))
+            .expect("write security fixture");
+        let mut permissions = std::fs::metadata(&executable)
+            .expect("security fixture metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(&executable, permissions)
+            .expect("make security fixture executable");
         executable
     }
 }
