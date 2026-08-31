@@ -502,11 +502,13 @@ impl AuthModeWidget {
                 }
             }
             SignInOption::AnthropicAccount => {
-                self.set_error(/*message*/ None);
-                *self.sign_in_state.write().unwrap() = SignInState::ClaudeAuthMethodChoice {
-                    highlighted: ClaudeAuthMethod::ManagedToken,
-                };
-                self.request_frame.schedule_frame();
+                if self.provider_picker_enabled() {
+                    self.set_error(/*message*/ None);
+                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAuthMethodChoice {
+                        highlighted: ClaudeAuthMethod::ManagedToken,
+                    };
+                    self.request_frame.schedule_frame();
+                }
             }
             SignInOption::ApiKey => {
                 if self.is_api_login_allowed() {
@@ -2178,6 +2180,24 @@ mod tests {
         assert_eq!(widget.configured_provider(), None);
 
         widget.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+        assert!(matches!(
+            &*widget.sign_in_state.read().unwrap(),
+            SignInState::PickMode
+        ));
+        assert_eq!(widget.configured_provider(), None);
+    }
+
+    #[tokio::test]
+    async fn forced_chatgpt_policy_rejects_anthropic_account_dispatch() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.api_key_provider_options = vec![ApiKeyProviderOption {
+            id: codex_model_provider_info::ANTHROPIC_PROVIDER_ID.to_string(),
+            name: "Anthropic".to_string(),
+            env_var: codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR.to_string(),
+        }];
+
+        widget.handle_sign_in_option(SignInOption::AnthropicAccount);
 
         assert!(matches!(
             &*widget.sign_in_state.read().unwrap(),

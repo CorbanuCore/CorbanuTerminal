@@ -4851,6 +4851,7 @@ dependencies = [
  "tracing",
  "tracing-test",
  "unicode-normalization",
+ "uuid",
  "zeroize",
 ]
 

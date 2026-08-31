@@ -28,6 +28,12 @@ use super::turn_types::DeferredClaudePlanAuth;
 use super::turn_types::DeferredVaultSecret;
 
 const ANTHROPIC_AUTH_ENV_KEYS: [&str; 2] = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"];
+const CLAUDE_CREDENTIAL_ENV_KEYS: [&str; 4] = [
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
+    "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
+    "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
+];
 const CLAUDE_PLAN_ROUTING_ENV_KEYS: [&str; 12] = [
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_AUTH_TOKEN",
@@ -184,7 +190,10 @@ pub(crate) fn build_claude_command_plan(
     })?;
 
     let mut env = BTreeMap::new();
-    let mut env_remove = Vec::new();
+    // Claude Code gives its own OAuth variables precedence over provider-specific
+    // apiKeyHelper settings. Never let a subscription credential inherited from
+    // the parent shell escape into any pane, including third-party providers.
+    let mut env_remove = CLAUDE_CREDENTIAL_ENV_KEYS.map(ToString::to_string).to_vec();
     let deferred_claude_plan_auth = if matches!(profile.kind, ClaudeProviderProfileKind::ClaudePlan)
     {
         env_remove.extend(CLAUDE_PLAN_ROUTING_ENV_KEYS.map(ToString::to_string));

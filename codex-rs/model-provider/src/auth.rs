@@ -14,6 +14,7 @@ use codex_login::ExternalBearerCachePolicy;
 use codex_login::auth::AgentIdentityAuth;
 use codex_login::auth::AgentIdentityAuthError;
 use codex_login::auth::AgentIdentityAuthPolicy;
+use codex_login::claude_auth_selection_revision_path;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_protocol::error::CodexErr;
 use codex_protocol::protocol::SessionSource;
@@ -195,20 +196,28 @@ pub(crate) fn auth_manager_for_provider(
     auth_manager: Option<Arc<AuthManager>>,
     provider: &ModelProviderInfo,
 ) -> Option<Arc<AuthManager>> {
+    let cache_policy = external_bearer_cache_policy(auth_manager.as_deref(), provider);
     match provider.auth.clone() {
         Some(config) => Some(AuthManager::external_bearer_only_with_cache_policy(
             config,
-            external_bearer_cache_policy(provider),
+            cache_policy,
         )),
         None => auth_manager,
     }
 }
 
-fn external_bearer_cache_policy(provider: &ModelProviderInfo) -> ExternalBearerCachePolicy {
+fn external_bearer_cache_policy(
+    auth_manager: Option<&AuthManager>,
+    provider: &ModelProviderInfo,
+) -> ExternalBearerCachePolicy {
     if provider.is_claude_plan() {
-        // The selected Claude source can change while this manager remains alive. Resolve the
-        // helper for every request so a cached bearer can never outlive that persisted choice.
-        ExternalBearerCachePolicy::FreshPerRequest
+        // Bind the cache to the persisted source revision. A missing marker is
+        // intentionally uncached for compatibility with legacy installations.
+        auth_manager.map_or(ExternalBearerCachePolicy::FreshPerRequest, |manager| {
+            ExternalBearerCachePolicy::InvalidateOnChange(claude_auth_selection_revision_path(
+                manager.codex_home(),
+            ))
+        })
     } else {
         ExternalBearerCachePolicy::Timed
     }
@@ -434,17 +443,29 @@ mod tests {
     }
 
     #[test]
-    fn claude_plan_bypasses_external_bearer_cache_for_selection_changes() {
+    fn claude_plan_cache_tracks_the_persisted_selection_revision() {
         let claude_plan = ModelProviderInfo::create_claude_plan_provider();
         assert_eq!(
-            external_bearer_cache_policy(&claude_plan),
+            external_bearer_cache_policy(None, &claude_plan),
             ExternalBearerCachePolicy::FreshPerRequest
+        );
+
+        let codex_home = test_codex_home();
+        let auth_manager = AuthManager::from_auth_for_testing_with_home(
+            CodexAuth::from_api_key("test-api-key"),
+            codex_home.clone(),
+        );
+        assert_eq!(
+            external_bearer_cache_policy(Some(auth_manager.as_ref()), &claude_plan),
+            ExternalBearerCachePolicy::InvalidateOnChange(claude_auth_selection_revision_path(
+                &codex_home
+            ))
         );
 
         let mut custom_provider = claude_plan;
         custom_provider.name = "Custom command-auth provider".to_string();
         assert_eq!(
-            external_bearer_cache_policy(&custom_provider),
+            external_bearer_cache_policy(Some(auth_manager.as_ref()), &custom_provider),
             ExternalBearerCachePolicy::Timed
         );
     }

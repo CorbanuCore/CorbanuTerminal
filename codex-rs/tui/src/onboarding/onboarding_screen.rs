@@ -242,6 +242,22 @@ pub(crate) fn provider_api_key_display_name(provider: &ApiKeyProviderOption) -> 
     }
 }
 
+fn initial_sign_in_option(
+    has_multiple_provider_options: bool,
+    forced_login_method: Option<ForcedLoginMethod>,
+) -> SignInOption {
+    if has_multiple_provider_options
+        && !matches!(forced_login_method, Some(ForcedLoginMethod::Chatgpt))
+    {
+        SignInOption::AnthropicAccount
+    } else {
+        match forced_login_method {
+            Some(ForcedLoginMethod::Api) => SignInOption::ApiKey,
+            _ => SignInOption::ChatGpt,
+        }
+    }
+}
+
 impl OnboardingScreen {
     pub(crate) async fn new(
         tui: &mut Tui,
@@ -288,14 +304,8 @@ impl OnboardingScreen {
         )));
         if show_login_screen {
             let has_multiple_provider_options = api_key_provider_options.len() > 1;
-            let highlighted_mode = if has_multiple_provider_options {
-                SignInOption::AnthropicAccount
-            } else {
-                match forced_login_method {
-                    Some(ForcedLoginMethod::Api) => SignInOption::ApiKey,
-                    _ => SignInOption::ChatGpt,
-                }
-            };
+            let highlighted_mode =
+                initial_sign_in_option(has_multiple_provider_options, forced_login_method);
             let initial_sign_in_state = if !has_multiple_provider_options
                 && (matches!(forced_login_method, Some(ForcedLoginMethod::Api))
                     || api_key_env_var.is_some())
@@ -871,14 +881,17 @@ mod tests {
     use super::Step;
     use super::StepState;
     use super::StepStateProvider;
+    use super::initial_sign_in_option;
     use super::persist_selected_trust;
     use super::sort_and_dedupe_provider_api_key_options;
     use super::suppress_quit_while_typing_api_key;
     use super::visible_step_indices;
     use crate::onboarding::auth::ApiKeyProviderOption;
+    use crate::onboarding::auth::SignInOption;
     use crate::onboarding::trust_directory::TrustDirectorySelection;
     use crate::onboarding::trust_directory::TrustDirectoryWidget;
     use crate::tui::FrameRequester;
+    use codex_protocol::config_types::ForcedLoginMethod;
     use crossterm::event::KeyCode;
     use crossterm::event::KeyEvent;
     use crossterm::event::KeyModifiers;
@@ -961,6 +974,17 @@ mod tests {
                 .map(|option| (option.id.as_str(), option.env_var.as_str()))
                 .collect::<Vec<_>>(),
             vec![("ambient", "AMBIENT_API_KEY"), ("zai", "ZAI_API_KEY")]
+        );
+    }
+
+    #[test]
+    fn forced_chatgpt_never_defaults_to_the_hidden_anthropic_option() {
+        assert_eq!(
+            initial_sign_in_option(
+                /*has_multiple_provider_options*/ true,
+                Some(ForcedLoginMethod::Chatgpt),
+            ),
+            SignInOption::ChatGpt
         );
     }
 

@@ -116,6 +116,7 @@ fn selection_round_trips_in_the_encrypted_store() {
 
     assert_eq!(vault.load_claude_auth_selection().unwrap(), Some(selection));
     assert!(directory.path().join("secrets").join("local.age").is_file());
+    assert!(claude_auth_selection_revision_path(directory.path()).is_file());
 }
 
 #[test]
@@ -340,6 +341,19 @@ fn managed_token_round_trip_status_and_replace_are_metadata_only() {
     let stored = vault
         .store_managed_claude_subscription_token(first.to_string())
         .unwrap();
+    assert!(
+        !claude_auth_selection_revision_path(directory.path()).exists(),
+        "selection-less legacy storage must remain uncached"
+    );
+    let selection = ClaudeAuthSelection::new_at(
+        ClaudeAuthSource::ManagedSubscriptionToken,
+        MANAGED_CLAUDE_AUTH_SOURCE_ID,
+        1_777_777_777,
+    )
+    .unwrap();
+    vault.save_claude_auth_selection(&selection).unwrap();
+    let first_revision = std::fs::read(claude_auth_selection_revision_path(directory.path()))
+        .expect("first cache revision");
     assert_eq!(
         vault.managed_claude_subscription_token_status().unwrap(),
         stored
@@ -363,6 +377,9 @@ fn managed_token_round_trip_status_and_replace_are_metadata_only() {
     vault
         .store_managed_claude_subscription_token(second.to_string())
         .unwrap();
+    let second_revision = std::fs::read(claude_auth_selection_revision_path(directory.path()))
+        .expect("replacement cache revision");
+    assert_ne!(first_revision, second_revision);
     let resolved = vault.load_managed_claude_subscription_token().unwrap();
     assert_eq!(resolved.as_str(), second);
     let encrypted = std::fs::read(directory.path().join("secrets").join("local.age")).unwrap();

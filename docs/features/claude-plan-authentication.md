@@ -10,7 +10,14 @@ flow for stable model requests.
 
 ## Choose an authentication method
 
-Run `/providers`, select **Provider: Claude Code Plan**, and choose one method:
+On first run, **Provider: Anthropic Claude Account** is highlighted by default
+when provider-account onboarding is allowed. Selecting it opens the same two
+methods below. Corbanu writes `model_provider = "claude-plan"` only after the
+chosen method succeeds; Esc or a failed enrollment leaves provider selection
+unchanged.
+
+After onboarding, run `/providers`, select **Provider: Claude Code Plan**, and
+choose one method:
 
 | Method | When to use it | What Corbanu stores |
 | --- | --- | --- |
@@ -136,6 +143,9 @@ healthy.
   support transcript.
 - Corbanu's masked entry, encrypted vault, and provider-auth helper are the only
   managed-token path.
+- Command-backed bearer reuse is bound to a non-secret selection revision;
+  changing or replacing the selected source invalidates the cache immediately,
+  while a missing revision marker disables caching.
 - `/providers` and `/vault show` expose metadata only for the managed token.
 - OpenAI account state, Anthropic API keys, Bedrock/Vertex credentials, and
   unrelated vault entries are not changed by this flow.

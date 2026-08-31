@@ -51,8 +51,10 @@ The same route is available from first-run onboarding or `corbanu login`.
 
 Claude Code must be installed for this account route.
 
-1. Run `/providers`.
-2. Select **Provider: Claude Code Plan**.
+1. On first run, select the default **Provider: Anthropic Claude Account** row.
+   On an existing installation, run `/providers` and select **Provider: Claude
+   Code Plan** instead.
+2. Confirm the account route.
 3. Choose **Long-lived subscription token (Recommended)** or **Claude Code
    login**. The first option is selected by default.
 4. Complete the displayed setup. Token and authorization-code entry are masked.
@@ -76,7 +78,7 @@ server.
 | --- | --- | --- |
 | OpenAI Codex Account | Built-in `openai` account route | Sign in with device code from `/providers` or `corbanu login`. |
 | Anthropic | Built-in `anthropic` API route | Add `ANTHROPIC_API_KEY` through `/providers` or the encrypted vault. |
-| Claude Plan | Built-in `claude-plan` account route | Choose the recommended long-lived subscription token or Claude Code login through `/providers`. |
+| Claude Plan | Built-in `claude-plan` account route | Choose the Anthropic Claude account on first run, or use `/providers` later; both offer the recommended long-lived subscription token and Claude Code login. |
 | Ambient | Built-in `ambient` API route | Add `AMBIENT_API_KEY` through `/providers` or the encrypted vault. |
 | Kimi Code | Built-in `kimi-code` API route | Add `KIMI_API_KEY` through `/providers` or the encrypted vault. |
 | Z.AI | Built-in `zai` API route | Add `ZAI_API_KEY` through `/providers` or the encrypted vault. |

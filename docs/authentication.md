@@ -67,7 +67,10 @@ separate from a stock Codex install using `$HOME/.codex`.
 
 ### Claude Plan
 
-Use `/providers` and select:
+On first run, choose **Provider: Anthropic Claude Account** to enter this flow
+directly; that option is the default when provider-account onboarding is
+allowed, and Corbanu persists `claude-plan` only after authentication succeeds.
+For an existing installation, use `/providers` and select:
 
 ```text
 Provider: Claude Code Plan

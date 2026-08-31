@@ -71,5 +71,6 @@ pub use auth::suppress_provider_api_key;
 pub use auth::validate_provider_auth_command;
 pub use auth_env_telemetry::AuthEnvTelemetry;
 pub use auth_env_telemetry::collect_auth_env_telemetry;
+pub use codex_vault::claude_auth_selection_revision_path;
 pub use outbound_proxy::AuthRouteConfig;
 pub use token_data::TokenData;

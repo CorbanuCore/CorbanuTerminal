@@ -2331,6 +2331,11 @@ fn default_agent_identity_authapi_base_url() -> Option<String> {
 }
 
 impl AuthManager {
+    /// Auth storage root used by provider-scoped credential caches.
+    pub fn codex_home(&self) -> &Path {
+        &self.codex_home
+    }
+
     /// Create a new manager loading the initial auth using the provided
     /// preferred auth method. Errors loading auth are swallowed; `auth()` will
     /// simply return `None` in that case so callers can treat it as an

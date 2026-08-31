@@ -18,11 +18,12 @@ pub(crate) struct BearerTokenRefresher {
     state: Arc<ExternalBearerAuthState>,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum ExternalBearerCachePolicy {
     #[default]
     Timed,
     FreshPerRequest,
+    InvalidateOnChange(PathBuf),
 }
 
 impl BearerTokenRefresher {
@@ -42,25 +43,33 @@ impl BearerTokenRefresher {
     async fn resolve(&self) -> io::Result<CodexAuth> {
         let access_token = {
             let mut cached = self.state.cached_token.lock().await;
-            if self.state.cache_policy == ExternalBearerCachePolicy::Timed
+            let revision_before = self.state.cache_revision();
+            if self.state.cache_policy != ExternalBearerCachePolicy::FreshPerRequest
                 && let Some(cached_token) = cached.as_ref()
             {
                 let should_use_cached_token = match self.state.config.refresh_interval() {
                     Some(refresh_interval) => cached_token.fetched_at.elapsed() < refresh_interval,
                     None => true,
                 };
-                if should_use_cached_token {
+                if should_use_cached_token && cached_token.revision == revision_before {
                     return Ok(CodexAuth::from_api_key(cached_token.access_token.as_str()));
                 }
             }
 
-            let access_token =
-                run_provider_auth_command(&self.state.config, /*force_refresh*/ false).await?;
-            if self.state.cache_policy == ExternalBearerCachePolicy::Timed {
+            let (access_token, revision_after) = self
+                .state
+                .run_for_stable_revision(/*force_refresh*/ false, revision_before)
+                .await?;
+            if self.state.cache_policy != ExternalBearerCachePolicy::FreshPerRequest
+                && revision_after.is_some()
+            {
                 *cached = Some(CachedExternalBearerToken {
                     access_token: access_token.clone(),
                     fetched_at: Instant::now(),
+                    revision: revision_after,
                 });
+            } else {
+                *cached = None;
             }
             access_token
         };
@@ -68,14 +77,22 @@ impl BearerTokenRefresher {
     }
 
     async fn refresh(&self, _context: ExternalAuthRefreshContext) -> io::Result<CodexAuth> {
-        let access_token =
-            run_provider_auth_command(&self.state.config, /*force_refresh*/ true).await?;
-        if self.state.cache_policy == ExternalBearerCachePolicy::Timed {
+        let revision_before = self.state.cache_revision();
+        let (access_token, revision_after) = self
+            .state
+            .run_for_stable_revision(/*force_refresh*/ true, revision_before)
+            .await?;
+        if self.state.cache_policy != ExternalBearerCachePolicy::FreshPerRequest
+            && revision_after.is_some()
+        {
             let mut cached = self.state.cached_token.lock().await;
             *cached = Some(CachedExternalBearerToken {
                 access_token: access_token.clone(),
                 fetched_at: Instant::now(),
+                revision: revision_after,
             });
+        } else {
+            *self.state.cached_token.lock().await = None;
         }
         Ok(CodexAuth::from_api_key(access_token.as_str()))
     }
@@ -112,11 +129,45 @@ impl ExternalBearerAuthState {
             cached_token: Mutex::new(None),
         }
     }
+
+    fn cache_revision(&self) -> Option<Vec<u8>> {
+        match &self.cache_policy {
+            ExternalBearerCachePolicy::Timed => Some(Vec::new()),
+            ExternalBearerCachePolicy::FreshPerRequest => None,
+            ExternalBearerCachePolicy::InvalidateOnChange(path) => {
+                let revision = std::fs::read(path).ok()?;
+                (!revision.is_empty() && revision.len() <= 4096).then_some(revision)
+            }
+        }
+    }
+
+    async fn run_for_stable_revision(
+        &self,
+        force_refresh: bool,
+        mut revision_before: Option<Vec<u8>>,
+    ) -> io::Result<(String, Option<Vec<u8>>)> {
+        for _ in 0..3 {
+            let access_token = run_provider_auth_command(&self.config, force_refresh).await?;
+            let revision_after = self.cache_revision();
+            if !matches!(
+                &self.cache_policy,
+                ExternalBearerCachePolicy::InvalidateOnChange(_)
+            ) || revision_before == revision_after
+            {
+                return Ok((access_token, revision_after));
+            }
+            revision_before = revision_after;
+        }
+        Err(io::Error::other(
+            "provider authentication selection changed repeatedly during resolution",
+        ))
+    }
 }
 
 struct CachedExternalBearerToken {
     access_token: String,
     fetched_at: Instant,
+    revision: Option<Vec<u8>>,
 }
 
 async fn run_provider_auth_command(

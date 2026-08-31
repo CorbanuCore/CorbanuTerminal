@@ -1595,6 +1595,65 @@ async fn anthropic_passthrough_bridge_replaces_client_auth_and_forwards_oauth_be
     assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200 OK"));
 }
 
+#[tokio::test]
+async fn anthropic_compatibility_bridge_keeps_authorized_synthetic_token_counts() {
+    let bridge_listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind compatibility bridge");
+    let bridge_addr = bridge_listener.local_addr().expect("bridge address");
+    let bridge = tokio::spawn(async move {
+        for _ in 0..2 {
+            let (stream, _) = bridge_listener.accept().await.expect("accept bridge");
+            handle_anthropic_passthrough_bridge_connection(
+                stream,
+                Arc::new("local-compatibility-capability".to_string()),
+                Arc::new("unused-upstream-secret".to_string()),
+                Arc::new("http://127.0.0.1:1".to_string()),
+                reqwest::Client::new(),
+                /*proxy_count_tokens*/ false,
+            )
+            .await
+            .expect("serve compatibility request");
+        }
+    });
+
+    let mut unauthorized_client = TcpStream::connect(bridge_addr)
+        .await
+        .expect("connect unauthorized client");
+    unauthorized_client
+        .write_all(
+            b"POST /v1/messages/count_tokens HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer wrong-capability\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+        )
+        .await
+        .expect("write unauthorized request");
+    let mut unauthorized_response = Vec::new();
+    unauthorized_client
+        .read_to_end(&mut unauthorized_response)
+        .await
+        .expect("read unauthorized response");
+    assert!(String::from_utf8_lossy(&unauthorized_response).starts_with("HTTP/1.1 401"));
+
+    let mut client = TcpStream::connect(bridge_addr)
+        .await
+        .expect("connect authorized client");
+    client
+        .write_all(
+            b"POST /v1/messages/count_tokens HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer local-compatibility-capability\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+        )
+        .await
+        .expect("write authorized request");
+    let mut response = Vec::new();
+    client
+        .read_to_end(&mut response)
+        .await
+        .expect("read authorized response");
+
+    bridge.await.expect("bridge task");
+    let response = String::from_utf8(response).expect("UTF-8 response");
+    assert!(response.starts_with("HTTP/1.1 200 OK"));
+    assert!(response.contains(r#"{"input_tokens":1}"#));
+}
+
 #[test]
 fn direct_provider_plan_uses_auth_helper_without_secret_env() {
     let (dir, pane) = pane(ClaudeProviderProfileKind::ZaiGlm52);
@@ -1625,6 +1684,17 @@ fn direct_provider_plan_uses_auth_helper_without_secret_env() {
             .iter()
             .any(|key| key == "ANTHROPIC_AUTH_TOKEN")
     );
+    for credential_key in [
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
+        "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
+        "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
+    ] {
+        assert!(
+            plan.env_remove.iter().any(|key| key == credential_key),
+            "direct-provider pane must scrub inherited {credential_key}"
+        );
+    }
     assert_eq!(
         plan.env.get("ANTHROPIC_API_KEY").map(String::as_str),
         Some("")

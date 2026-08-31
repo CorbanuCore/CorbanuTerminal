@@ -7,8 +7,10 @@ use sha2::Digest;
 use sha2::Sha256;
 use std::fmt;
 use std::path::Path;
+use std::path::PathBuf;
 use thiserror::Error;
 use unicode_normalization::UnicodeNormalization;
+use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::CredentialType;
@@ -24,6 +26,77 @@ const CLAUDE_LOGIN_AUTHORITY_PREFIX: &str = "claude-login-authority:sha256:";
 const CLAUDE_ENVIRONMENT_TOKEN_AUTHORITY_PREFIX: &str =
     "claude-environment-token-authority:sha256:";
 const MAX_MANAGED_TOKEN_BYTES: usize = 16 * 1024;
+const CLAUDE_AUTH_SELECTION_REVISION_FILE: &str = ".claude-auth-selection-revision";
+
+/// Non-secret revision marker used to invalidate command-backed bearer caches.
+pub fn claude_auth_selection_revision_path(codex_home: &Path) -> PathBuf {
+    codex_home.join(CLAUDE_AUTH_SELECTION_REVISION_FILE)
+}
+
+struct PreparedClaudeAuthRevision {
+    path: PathBuf,
+    temporary_path: PathBuf,
+}
+
+impl PreparedClaudeAuthRevision {
+    fn new(codex_home: &Path) -> Result<Self, VaultError> {
+        std::fs::create_dir_all(codex_home).map_err(|error| {
+            VaultError::Storage(anyhow::anyhow!(
+                "failed to create Claude auth revision directory: {error}"
+            ))
+        })?;
+        let path = claude_auth_selection_revision_path(codex_home);
+        let temporary_path = codex_home.join(format!(
+            ".claude-auth-selection-revision.{}.tmp",
+            Uuid::new_v4()
+        ));
+        std::fs::write(&temporary_path, Uuid::new_v4().to_string()).map_err(|error| {
+            VaultError::Storage(anyhow::anyhow!(
+                "failed to prepare Claude auth cache revision: {error}"
+            ))
+        })?;
+        Ok(Self {
+            path,
+            temporary_path,
+        })
+    }
+
+    fn commit(mut self) -> Result<(), VaultError> {
+        match std::fs::remove_file(&self.path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                self.invalidate();
+                return Err(VaultError::Storage(anyhow::anyhow!(
+                    "failed to replace Claude auth cache revision: {error}"
+                )));
+            }
+        }
+        if let Err(error) = std::fs::rename(&self.temporary_path, &self.path) {
+            self.invalidate();
+            return Err(VaultError::Storage(anyhow::anyhow!(
+                "failed to publish Claude auth cache revision: {error}"
+            )));
+        }
+        self.temporary_path = PathBuf::new();
+        Ok(())
+    }
+
+    fn invalidate(&self) {
+        let _ = std::fs::remove_file(&self.path);
+        if !self.temporary_path.as_os_str().is_empty() {
+            let _ = std::fs::remove_file(&self.temporary_path);
+        }
+    }
+}
+
+impl Drop for PreparedClaudeAuthRevision {
+    fn drop(&mut self) {
+        if !self.temporary_path.as_os_str().is_empty() {
+            let _ = std::fs::remove_file(&self.temporary_path);
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EnrollmentFailurePoint {
@@ -386,13 +459,21 @@ impl Vault {
         selection
             .validate()
             .map_err(|error| VaultError::Storage(anyhow::anyhow!(error)))?;
-        self.with_storage_lock(|| {
+        let revision = PreparedClaudeAuthRevision::new(&self.codex_home)?;
+        let result = self.with_storage_lock(|| {
             let name = claude_auth_selection_secret_name()?;
             let serialized = serde_json::to_string(selection)
                 .map_err(|error| VaultError::Storage(error.into()))?;
             self.secrets.set(&SecretScope::Global, &name, &serialized)?;
             Ok(())
-        })
+        });
+        match result {
+            Ok(()) => revision.commit(),
+            Err(error) => {
+                revision.invalidate();
+                Err(error)
+            }
+        }
     }
 
     /// Store or replace the managed token without exposing it through metadata.
@@ -402,15 +483,36 @@ impl Vault {
     ) -> Result<ManagedClaudeTokenStatus, ClaudeSubscriptionTokenError> {
         let token = Zeroizing::new(token);
         validate_managed_token(token.as_str())?;
-        self.with_storage_lock(|| {
+        // A missing marker denotes selection-less legacy behavior and must stay
+        // uncached. Generic token storage only invalidates an already-persisted
+        // selection; enrollment below creates the first marker atomically with
+        // that selection.
+        let revision = claude_auth_selection_revision_path(&self.codex_home)
+            .is_file()
+            .then(|| PreparedClaudeAuthRevision::new(&self.codex_home))
+            .transpose()?;
+        let result = self.with_storage_lock(|| {
             let mut index = self.load_index()?;
             let now = Utc::now().timestamp();
             upsert_managed_token_metadata(&mut index, now)?;
             self.write_secret(MANAGED_CLAUDE_TOKEN_LABEL, token.as_str())?;
             self.save_index(&index)?;
             Ok(ManagedClaudeTokenStatus::Stored { updated_at: now })
-        })
-        .map_err(Into::into)
+        });
+        match result {
+            Ok(status) => {
+                if let Some(revision) = revision {
+                    revision.commit()?;
+                }
+                Ok(status)
+            }
+            Err(error) => {
+                if let Some(revision) = revision {
+                    revision.invalidate();
+                }
+                Err(error.into())
+            }
+        }
     }
 
     /// Atomically enroll a managed token and select it for Claude Plan requests.
@@ -445,7 +547,9 @@ impl Vault {
         )
         .map_err(|error| VaultError::Storage(anyhow::anyhow!(error)))?;
 
-        self.with_storage_lock(|| {
+        let revision = PreparedClaudeAuthRevision::new(&self.codex_home)?;
+
+        let result = self.with_storage_lock(|| {
             let selection_name = claude_auth_selection_secret_name()?;
             let previous_index = self.load_index()?;
             let previous_token = self
@@ -526,8 +630,17 @@ impl Vault {
             }
 
             Ok(selection.clone())
-        })
-        .map_err(Into::into)
+        });
+        match result {
+            Ok(selection) => {
+                revision.commit()?;
+                Ok(selection)
+            }
+            Err(error) => {
+                revision.invalidate();
+                Err(error.into())
+            }
+        }
     }
 
     /// Inspect only managed-token metadata.
@@ -557,7 +670,24 @@ impl Vault {
 
     /// Remove only Corbanu's managed copy. This does not claim server-side revocation.
     pub fn remove_managed_claude_subscription_token(&self) -> Result<bool, VaultError> {
-        self.delete(MANAGED_CLAUDE_TOKEN_LABEL)
+        let revision = claude_auth_selection_revision_path(&self.codex_home)
+            .is_file()
+            .then(|| PreparedClaudeAuthRevision::new(&self.codex_home))
+            .transpose()?;
+        match self.delete(MANAGED_CLAUDE_TOKEN_LABEL) {
+            Ok(removed) => {
+                if let Some(revision) = revision {
+                    revision.commit()?;
+                }
+                Ok(removed)
+            }
+            Err(error) => {
+                if let Some(revision) = revision {
+                    revision.invalidate();
+                }
+                Err(error)
+            }
+        }
     }
 }
 
