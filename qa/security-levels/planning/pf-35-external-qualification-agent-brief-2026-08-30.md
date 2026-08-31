@@ -50,9 +50,18 @@ shared `main` checkout and do not infer authority from this brief.
 
 ## Decisions already made
 
-- Generate an English, synthetic-first corpus using pinned Qwen3.5-27B through
-  pinned vLLM on the owner-supplied RTX 6000 Pro host. Stop ComfyUI during the
-  campaign.
+- Generate an English, synthetic-first corpus through pinned vLLM on the
+  owner-supplied RTX 6000 Pro host. Search Hugging Face using the token already
+  provisioned in the terminal and select an exact Qwen 3.8 27B-family repository
+  and immutable revision. An abliterated research derivative is explicitly
+  permitted when the standard checkpoint refuses to create prompt-injection
+  research fixtures. Stop ComfyUI during the campaign.
+- Treat the generator selection as a reproducibility and supply-chain decision:
+  verify its commercial-use license, provenance, architecture, vLLM
+  compatibility, tokenizer, repository owner, immutable revision and hashes.
+  Do not select from name or download count alone. Record a short candidate
+  comparison and replace the preparation manifest's Qwen3.5 placeholder with
+  the exact accepted identity before campaign evidence is accepted.
 - Supplement synthetic data only with commercial-safe sources whose exact
   origin, revision, SHA-256, license, permitted use, attribution and
   transformations are recorded. Allowed baseline licenses are CC0-1.0,
@@ -99,10 +108,19 @@ or gate to make an external result pass.
 
 All corpus, model, build, cache, temporary and review data must live on
 CorbanuDrive or the explicitly authorized external machines, never the Mac's
-main system drive. The local gitignored `AgentCredentials.md` is an index to
-approved test-machine credentials; do not copy credentials from it into Git,
-chat, evidence, prompts or logs. Confirm separately whether the RTX and N100
-hosts are represented there.
+main system drive. The product owner will provide the machine credentials in
+the agent's startup prompt. Treat that message as the authorized secret input:
+use the credentials directly, never quote or summarize them back, never forward
+them to a subagent or reviewer, and never place them in commands whose output is
+captured, Git, evidence, logs, shell history or a new credential file. Validate
+access with a secret-free result and continue; do not pause merely because the
+credentials are absent from `AgentCredentials.md`.
+
+The Hugging Face token is already provisioned in the terminal. Resolve it
+through the existing Hugging Face tooling; do not print it, inspect its raw
+environment value, include it in a URL/command line, persist another copy or
+expose it to model-review context. A secret-free authentication/permission
+check and model metadata search are allowed.
 
 ## Execution stages
 
@@ -110,8 +128,14 @@ hosts are represented there.
 
 - Record secret-free machine facts for the RTX host: GPU, VRAM, OS, driver,
   CUDA, container/runtime and storage paths.
-- Pin the exact Qwen3.5-27B revision, tokenizer, vLLM version, container digest,
-  prompt templates, seeds and sampling settings.
+- Search Hugging Face for compatible Qwen 3.8 27B-family candidates, including
+  abliterated research derivatives. Record repository IDs, immutable revisions,
+  license/provenance, architecture, tokenizer and vLLM compatibility without
+  exposing the Hugging Face token.
+- Run a bounded refusal/format/throughput bakeoff using synthetic prompt-
+  injection research requests only. Select and pin the exact generator,
+  tokenizer, vLLM version, container digest, prompt templates, seeds and
+  sampling settings before the 10,000-acceptance pilot.
 - Establish an append-only campaign ledger containing campaign/round IDs,
   timestamps, operator, prompt/config hashes, source-manifest hash, accepted and
   rejected counts, output hashes and adjudication/audit counts.
@@ -121,9 +145,11 @@ hosts are represented there.
   human blind custodian. Do not create the blind split in a training-visible
   location, even temporarily.
 
-The agent must return a readiness report before bulk generation. Missing RTX,
-custodian, signing or N100 access is a measured blocker, not permission to mock
-the result.
+The startup prompt supplies the machine login material, so the agent should
+attempt the authorized connection rather than request credentials again. Return
+a readiness report before bulk generation. Failed access after using the
+provided credentials, or missing custodian/signing/N100 authority, is a measured
+blocker rather than permission to mock the result.
 
 ### Stage 2 — 10,000-acceptance pilot
 
@@ -275,14 +301,18 @@ them.
 Stop and report rather than proceeding when:
 
 - allocation, branch, worktree, base, owner or literal scope is absent/stale;
-- the RTX, custodian, signing or N100 authority is not confirmed;
+- startup-supplied credentials fail to reach the authorized RTX host, or the
+  custodian, signing or N100 authority is not confirmed;
+- no Qwen 3.8 27B-family candidate has acceptable commercial-use licensing,
+  traceable provenance and pinned vLLM-compatible artifacts;
 - a source lacks provable commercial-safe licensing or immutable revision/hash;
 - blind data becomes visible to training, model-building or review agents;
 - a split/group overlap, contradictory label or record-level blind leak occurs;
 - a required statistical, privacy, model-size, latency or RSS gate fails;
 - a proposed remedy changes a product target, trust boundary or supported CPU;
-- credentials, signing keys, real secrets, protected financial data, blind rows
-  or production weights appear in Git, chat, logs or reviewer context; or
+- credentials are repeated beyond the owner's original startup prompt, or any
+  signing keys, real secrets, protected financial data, blind rows or production
+  weights appear in Git, logs, handoffs or reviewer context; or
 - another active lane needs a shared file outside the allocated write scope.
 
 No classifier result can grant authority. Even a qualified `allow` verdict
