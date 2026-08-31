@@ -11,12 +11,18 @@ activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to rec
 target_release: "TBD — candidate qualified by 2026-10-08"
 deadline: 2026-10-08
 created: 2026-08-23
-updated: 2026-08-30
+updated: 2026-08-31
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-protected-runtime"
+    branch: "feat/p0-security-protected-runtime"
+    base_commit: "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-isolated-broker"
+    branch: "feat/p0-security-isolated-broker"
+    base_commit: "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-classifier-corpus"
     branch: "feat/p0-security-classifier-corpus"
     base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
@@ -520,6 +526,53 @@ PF-22-S02 protected runtime integration and PF-27-S04 isolated credential broker
 are now dependency-complete and may be allocated in parallel. PF-35-S01's
 external qualification is the third independent lane. PF-35-S02 remains gated
 until S01 is honestly completed and archived.
+
+## Round-four rolling allocation — 2026-08-31
+
+The user directed the integration owner to treat PF-35's externally operated
+dataset/qualification campaign as independent of day-to-day engineering
+capacity while preserving its honest `in_progress` evidence state. The formal
+three-sprint limit remains: PF-35-S01, PF-22-S02 and PF-27-S04 occupy the three
+recorded slots. PF-30-S01 receives a read-only preparation handoff now and may
+enter implementation only after PF-22-S02 is integrated and archived, rolling
+into that released slot.
+
+The immutable dispatch base is
+`43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4`.
+
+| Lane | Sprint | Owner | Worktree | Branch | Raw midpoint | Integration reserve |
+| --- | --- | --- | --- | --- | ---: | ---: |
+| Protected runtime | PF-22-S02 | `/root/pf22_protected_runtime` | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-protected-runtime` | `feat/p0-security-protected-runtime` | 5.0 days | 5.0 days |
+| Isolated broker | PF-27-S04 | `/root/pf27_isolated_broker` | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-isolated-broker` | `feat/p0-security-isolated-broker` | 12.0 days | 4.9 days |
+| Source envelope preparation | PF-30-S01 | `/root/pf30_source_envelope` | Unallocated until PF-22 archive | Unallocated until PF-22 archive | 7.0 days | 4.4 days |
+
+PF-22 consumes four cross-lane contracts and owns the first Core/manifest
+convergence. PF-27 consumes the platform/event/capability contracts and requires
+all-OS evidence. PF-30's forecast is provisional until the integrated PF-22
+contract freezes its ingress seam. The reserve values apply the plan formula
+and include one convergence day per implementation handback; reforecast after
+PF-22 and PF-27 scope audits.
+
+PF-22 exclusively owns its recorded effective-policy, protected-runtime, Core
+module/manifest and lock surfaces. PF-27 owns the secret-broker, credential-
+broker, Vault capability, new broker-client/config leaves and its evidence; it
+does not edit `core/src/security/mod.rs`, Core/root manifests or shared locks.
+The integration owner merges and archives PF-22 first, rebases PF-27, then
+registers the PF-27 Core seam and reruns the combined tree. PF-30 does not write
+until that PF-22 archive exists.
+
+PF-27 construction uses the PF-27-S03 platform candidates without claiming
+protected eligibility: Linux dedicated UID/service, macOS launchd/XPC helper,
+and Windows service SID/AppContainer with authenticated named pipe. Final
+platform acceptance remains fail closed and requires measured macOS, Linux and
+Windows evidence. The user will switch tailnets when local final-tree tests and
+Opus remediation are stable; no lane attempts remote qualification earlier.
+
+The checked dispatch packet is
+[`parallel-handoffs-2026-08-31-round-4`](../../../qa/security-levels/planning/parallel-handoffs-2026-08-31-round-4/README.md).
+Every implementation handback requires formatting, affected tests, a supporting
+real TMUX smoke and read-only Claude Opus 5 Max review through Corbanu Terminal.
+PF-26 final true-TUI, live-repository and human acceptance remain separate.
 
 ## Useful code references
 

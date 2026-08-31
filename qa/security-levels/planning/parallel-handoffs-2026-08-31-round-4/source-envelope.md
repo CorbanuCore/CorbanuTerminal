@@ -1,0 +1,42 @@
+# PF-30-S01 typed-source-envelope preparation handoff
+
+This lane is read-only until PF-22-S02 is integrated and archived. Do not edit
+repository files, create an implementation branch or change sprint status before
+the integration owner sends a post-PF-22 allocation follow-up.
+
+## Frozen preparation result
+
+Extend the existing `codex-security-policy` provenance types rather than creating
+a competing model. Attach host-owned source/authority/lineage envelopes at
+trusted ingress and lower them only at provider adapters. External labels,
+quoted human text, forged roles/tokens, Unicode wrappers, tool/MCP/hook output,
+files and child messages cannot mint authority. Authenticated human control
+continues through its separate typed channel.
+
+Permissive must remain byte-compatible. Repeated serialization must be
+deterministic so the envelope does not cause cache-prefix churn. Unknown or new
+provider/tool/ingress variants reject or become conservative untrusted content
+before model admission.
+
+After PF-22 archive, the integration owner will allocate a fresh CorbanuDrive
+worktree and audit the final scope against PF-27. The expected worker-owned
+surfaces are the existing security-policy provenance module/tests, protocol
+provenance re-export/serialization, already-registered Core ingress leaves,
+focused tool/MCP/hook/child/file/provider adapter tests, and
+`qa/security-levels/sprints/PF-30-S01-typed-source-envelope/`. Shared module
+registries, manifests/locks, active plan/index/MkDocs and archive transitions
+remain integration-owner-only.
+
+Do not write into `qa/security-levels/sprints/PF-30-S01/`; it already contains
+superseded browser-isolation evidence and must remain immutable.
+
+## Future proof
+
+Plan named `pf_30_s01` tests for malformed/unknown envelopes, forged role and
+human markers, Unicode/complete-before-clipped markers, synthetic unregistered
+routes, tool/MCP/hook/child/file coverage, Responses/Chat/Anthropic request-body
+capture and deterministic repeat serialization. Run full affected suites,
+PF-21 combined compatibility, a supporting TMUX smoke and TMUX/Corbanu/Claude
+Opus 5 Max review after allocation.
+
+Final macOS/Linux/Windows provider evidence waits for the user's tailnet switch.

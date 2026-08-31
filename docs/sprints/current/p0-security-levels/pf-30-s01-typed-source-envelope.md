@@ -70,7 +70,7 @@ updated: 2026-08-28
 
 ## Exit evidence
 
-- [ ] Implementation commit and final-tree outputs under `qa/security-levels/sprints/PF-30-S01/`.
+- [ ] Implementation commit and final-tree outputs under `qa/security-levels/sprints/PF-30-S01-typed-source-envelope/`; preserve the superseded browser-isolation artifacts already stored under `PF-30-S01/` unchanged.
 - [ ] Acceptance and source-mapping assertions proven; applicable true-TUI keys/checkpoints captured after formatting.
 - [ ] PF-26 final-candidate and both-live-repository requalification remains mandatory; no release-complete claim here.
 - [ ] Done/Remaining reflect reality; completed record moved to the archive and plan/navigation updated.

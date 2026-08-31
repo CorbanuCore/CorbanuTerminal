@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-22-S02"
 title: "Protected runtime integration and upstream seams"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-22"
 execution_order: 27
-owner: "Jim Ricketts"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "/root/pf22_protected_runtime"
+parallel_lane: "protected-runtime"
+write_scope: "codex-rs/core/Cargo.toml, codex-rs/Cargo.lock, codex-rs/core/src/security/effective_policy.rs, codex-rs/core/src/security/effective_policy_tests.rs, codex-rs/core/src/security/protected_runtime.rs, codex-rs/core/src/security/protected_runtime_tests.rs, codex-rs/core/src/security/mod.rs, codex-rs/core/src/agent/control.rs, codex-rs/core/src/agent/control/spawn.rs, codex-rs/core/src/agent/control_tests.rs, qa/security-levels/upstream-seams.json, scripts/security-upstream-seams-check, scripts/security_upstream_seams_check.py, scripts/tests/test_security_upstream_seams.py, qa/security-levels/sprints/PF-22-S02/, docs/sprints/current/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md"
+integration_gate: "The Codex ingress/classifier integration owner audits PF-22-S02 scope and consumed contract versions, runs Core/security-policy/security-audit/seam/compatibility/governance checks on the combined tree, performs TMUX and Opus 5 Max closure, integrates and archives PF-22 before rebasing or registering PF-27's Core broker seam, then releases the sprint slot for PF-30-S01."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-protected-runtime"
+branch: "feat/p0-security-protected-runtime"
+base_commit: "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4"
 depends_on: "PF-22-S01, PF-19-S02, PF-20-S02, PF-21-S02, PF-41-S03"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-31
 ---
 
 # PF-22-S02 — Protected runtime integration and upstream seams
@@ -38,9 +41,9 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Plan active; all dependencies completed and archived.
-- [ ] Assign a named execution owner and exact plan-matching worktree/branch/base; reserve disjoint scopes and integration gate if parallel.
-- [ ] Read root and nearest implementation AGENTS.md; run the sprint checker before readiness.
+- [x] Plan active; all dependencies completed and archived.
+- [x] Assigned a named execution owner and exact plan-matching worktree/branch/base with a disjoint scope and integration gate.
+- [x] Read root and nearest implementation AGENTS.md; run the sprint checker before readiness.
 
 ## Done
 
