@@ -57,6 +57,8 @@ updated: 2026-08-31
   network-proxy isolated exact-host route with no header injection, and the
   in-broker Vault typed backend; compiled and tested them under temporary
   integration-owner registrations that were restored before handback.
+- [x] Remediated the token-authenticated Opus review's one P1, five P2s, and
+  related P3 predicate in `2197f833a`; focused/full regressions pass.
 
 ## Remaining
 
@@ -82,8 +84,8 @@ updated: 2026-08-31
   read-only/never mode with Claude Opus 5 Plan Max selected.
 - [x] Recorded implementation candidate `75bce53ef`, commands, outcomes and
   safe artifact digests; no production credentials or funds were used.
-- [ ] Complete the preserved TMUX/Corbanu/Claude Opus 5 Max review after the
-  current Claude credential blocker is cleared; no clean verdict is claimed.
+- [x] Completed the fresh token-authenticated Opus 5 Max review of `2197f833a`; verdict clean at P0/P1/P2.
+- [ ] Rerun a combined-tree Opus review after integration-owned registrations.
 
 ## Exit evidence
 

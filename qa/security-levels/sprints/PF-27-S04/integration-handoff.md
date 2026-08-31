@@ -67,6 +67,18 @@ registrations in one serialized integration commit:
 These registrations were applied temporarily, formatted, and used for focused
 Core plus full network-proxy/Vault tests, then restored before branch handback.
 
+The remediated leaf adds two integration-visible obligations:
+
+- the PF-41 adapter must durably persist `BrokerAuditIntent.path` together with
+  operation and destination; and
+- `BrokerRuntimeConfig::bounded` derives a fail-closed `max_tracked_runs` bound.
+  Exhaustion requires a fresh broker instance and must never evict a retained
+  generation in a way that re-admits a stale run.
+
+The Core client deliberately closes its generation-bound transport after an
+ambiguous dispatch error. Integration must establish a new authenticated
+session rather than retrying the same frame or reusing the closed client.
+
 Do not activate by merely importing `BrokerRuntime`. The integration owner then
 activates, in this order:
 
