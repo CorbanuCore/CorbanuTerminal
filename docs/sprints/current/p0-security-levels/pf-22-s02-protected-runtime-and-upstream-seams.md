@@ -48,24 +48,28 @@ updated: 2026-08-31
 ## Done
 
 - [x] Follow-up separated from the accepted upstream foundation; no new implementation or qualification claimed.
+- [x] Composed PF-19 dispatch/revocation fences, PF-20 authoritative state and PF-41 durable intent/terminal recovery into one fail-closed protected-runtime contract.
+- [x] Bound configured, creator-required and effective containment plus owner/policy/run/revocation generations, measured readiness, expiry and recovery status without adding an adapter activation path.
+- [x] Added an exact-symbol upstream seam register and mechanical checker; unverified adapter-owned seams remain explicitly pending.
+- [x] Bound grant and mandate authority to the exact durable request/approved preview, with negative cross-request substitution coverage.
+- [x] Recorded focused, affected, compatibility and real-TMUX evidence under `qa/security-levels/sprints/PF-22-S02/`.
 
 ## Remaining
 
-- [ ] Compose PF-19-S02 fences, PF-20-S02 authoritative state and PF-41-S03 event/recovery contracts into effective policy. Preserve accepted explicit-child and auxiliary/Guardian inheritance and underlying stricter policies.
-- [ ] Record configured versus creator-required/effective containment; bind backend/identity/readiness to measured generation and expiry. Missing or stale protected prerequisites block affected work and cannot silently downgrade or weaken a child.
-- [ ] Populate a seam register with exact existing upstream symbols/revision, Corbanu-owned module, named owner, semantic contract, regression command and last tested revision for ingress/egress/child/persistence hooks. Unverified entries remain pending; a filename list alone is insufficient.
-- [ ] Test synthetic new/unregistered ingress and egress, forged policy updates, nested/auxiliary children, stale generation and restart. Unknown routes cannot bypass policy; do not expand accepted grants or expose runtime secrets.
-- [ ] Define and execute the requalification procedure for relevant upstream merges: reviewed hook diffs plus seam, inheritance, persistence and PF-21-S02 independent comparisons. Preserve historical full-suite failures separately from new final-tree results.
+- [ ] Complete the required TMUX/Corbanu/Claude Opus 5 Max read-only review and remediate/rereview any actionable P0/P1/P2 findings.
+- [ ] Have the integration owner rerun combined-tree gates, archive the sprint and update shared plan/navigation ledgers.
 
 ## Verification
 
-- [ ] `cd codex-rs && just fix -p codex-core && just fmt` before final affected tests.
-- [ ] `cd codex-rs && just test -p codex-core effective_policy && just test -p codex-core security_inheritance` plus focused new integration cases.
-- [ ] `python3 scripts/security-upstream-seams-check --manifest qa/security-levels/upstream-seams.json` and `python3 -m unittest discover -s scripts/tests -p 'test_security_upstream_seams.py'`; missing hook/owner/commit/command/evidence must fail.
-- [ ] TUI applicability: no new UI here; PF-24/PF-25/PF-26 retain transition, stop and resume proof.
+- [x] `cd codex-rs && just fix -p codex-core && just fmt` before final affected tests.
+- [x] `cd codex-rs && just test -p codex-core effective_policy && just test -p codex-core security_inheritance` plus focused new integration cases.
+- [x] `python3 scripts/security-upstream-seams-check --manifest qa/security-levels/upstream-seams.json` and `python3 -m unittest discover -s scripts/tests -p 'test_security_upstream_seams.py'`; missing hook/owner/commit/command/evidence must fail.
+- [x] TUI applicability: no new UI here; PF-24/PF-25/PF-26 retain transition, stop and resume proof. A supporting post-remediation TMUX smoke passed.
+- [ ] Run the required read-only Claude Opus 5 Max review through Corbanu Terminal in TMUX after provider authentication is restored.
 
 ## Exit evidence
 
-- [ ] Record implementation commit, changed paths, contract version and exact final-tree commands/results under `qa/security-levels/sprints/PF-22-S02/`.
-- [ ] Preserve S01 archive/evidence unchanged; do not relabel historical passes as proof of these new cases.
-- [ ] Record consumer integration handoff; complete all ledgers before archive and update plan/navigation.
+- [x] Record implementation/remediation commits, changed paths, contract versions and exact final-tree commands/results under `qa/security-levels/sprints/PF-22-S02/`.
+- [x] Preserve S01 archive/evidence unchanged; do not relabel historical passes as proof of these new cases.
+- [x] Record the consumer integration handoff and pending adapter owners in evidence.
+- [ ] Complete the Opus review, integration-owner combined-tree matrix and all shared ledgers before archive and plan/navigation updates.
