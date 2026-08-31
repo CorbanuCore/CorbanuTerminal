@@ -1421,15 +1421,16 @@ async fn run_ratatui_app(
     tooltips::announcement::prewarm(initial_config.http_client_factory());
 
     install_panic_hook();
+    tui::configure_panic_diagnostics(initial_config.log_dir.clone());
     let mut initialized_terminal = tui::init()?;
     initialized_terminal.terminal.clear()?;
 
+    let mut terminal_restore_guard = initialized_terminal.restore_guard;
     let mut tui = Tui::new(
         initialized_terminal.terminal,
         initialized_terminal.enhanced_keys_supported,
         initialized_terminal.stderr_guard,
     );
-    let mut terminal_restore_guard = TerminalRestoreGuard::new();
 
     #[cfg(not(debug_assertions))]
     {
@@ -1946,38 +1947,6 @@ fn restore() {
         eprintln!(
             "failed to restore terminal. Run `reset` or restart your terminal to recover: {err}"
         );
-    }
-}
-
-struct TerminalRestoreGuard {
-    active: bool,
-}
-
-impl TerminalRestoreGuard {
-    fn new() -> Self {
-        Self { active: true }
-    }
-
-    #[cfg_attr(debug_assertions, allow(dead_code))]
-    fn restore(&mut self) -> color_eyre::Result<()> {
-        if self.active {
-            crate::tui::restore_after_exit()?;
-            self.active = false;
-        }
-        Ok(())
-    }
-
-    fn restore_silently(&mut self) {
-        if self.active {
-            restore();
-            self.active = false;
-        }
-    }
-}
-
-impl Drop for TerminalRestoreGuard {
-    fn drop(&mut self) {
-        self.restore_silently();
     }
 }
 

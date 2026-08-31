@@ -219,6 +219,7 @@ mod agent_status_feed;
 mod app_server_event_targets;
 mod app_server_events;
 pub(crate) mod app_server_requests;
+mod background_child;
 mod background_requests;
 mod config_persistence;
 mod event_dispatch;
