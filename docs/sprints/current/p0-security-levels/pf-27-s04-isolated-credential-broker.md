@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-27-S04"
 title: "Isolated credential broker process"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 28
-owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+owner: "/root/pf27_isolated_broker"
+parallel_lane: "isolated-broker"
+write_scope: "codex-rs/secret-broker/, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/core/src/security/broker_client.rs, codex-rs/core/src/security/broker_client_tests.rs, codex-rs/core/src/config/network_proxy_credential.rs, codex-rs/core/src/config/network_proxy_credential_tests.rs, codex-rs/vault/src/capability.rs, codex-rs/vault/src/capability_tests.rs, qa/security-levels/sprints/PF-27-S04/, docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md"
+integration_gate: "After PF-22-S02 is integrated and archived, the Codex ingress/classifier integration owner rebases PF-27-S04, audits the literal scope, serializes Core module/Cargo/Bazel/lock registration, reruns secret-broker/network-proxy/Vault/Core/platform/governance suites, completes TMUX and Opus 5 Max closure, and pauses before final Linux/Windows qualification until the user confirms the tailnet switch."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-isolated-broker"
+branch: "feat/p0-security-isolated-broker"
+base_commit: "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4"
 depends_on: "PF-27-S01, PF-13-S04, PF-27-S03, PF-41-S03"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-31
 ---
 
 # PF-27-S04 — Isolated credential broker process
@@ -39,9 +42,9 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] All dependencies in front matter are completed and archived; plan remains active.
-- [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
-- [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
+- [x] All dependencies in front matter are completed and archived; plan remains active.
+- [x] Read root and nearest implementation-path AGENTS.md; verified exact plan/worktree coordinates.
+- [x] Accepted the PF-27-S03 Linux service, macOS launchd/XPC and Windows service/AppContainer candidates for construction; protected eligibility and sprint completion remain blocked until measured all-OS qualification passes.
 
 ## Done
 
