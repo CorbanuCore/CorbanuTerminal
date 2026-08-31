@@ -3,7 +3,10 @@
 use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
+use thiserror::Error;
+use zeroize::Zeroizing;
 
+use crate::CredentialType;
 use crate::Vault;
 use crate::VaultError;
 use codex_secrets::SecretName;
@@ -12,6 +15,28 @@ use codex_secrets::SecretScope;
 const CLAUDE_AUTH_SELECTION_SECRET_NAME: &str = "CLAUDE_AUTH_SELECTION";
 const CLAUDE_AUTH_SELECTION_VERSION: u32 = 1;
 const MAX_SOURCE_ID_BYTES: usize = 256;
+const MAX_MANAGED_TOKEN_BYTES: usize = 16 * 1024;
+
+/// Stable encrypted-vault label for Corbanu's managed Claude subscription token.
+pub const MANAGED_CLAUDE_TOKEN_LABEL: &str = "provider/claude-code-oauth-token";
+
+/// Metadata-only status for the managed long-lived token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ManagedClaudeTokenStatus {
+    Missing,
+    Stored { updated_at: i64 },
+}
+
+/// Secret-free failures from the managed token lifecycle.
+#[derive(Debug, Error)]
+pub enum ClaudeSubscriptionTokenError {
+    #[error("Claude subscription token is empty")]
+    Empty,
+    #[error("Claude subscription token must be one bounded line")]
+    InvalidFormat,
+    #[error(transparent)]
+    Vault(#[from] VaultError),
+}
 
 /// A credential source the user can explicitly select for Claude Plan requests.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -200,6 +225,98 @@ impl Vault {
             Ok(self.secrets.delete(&SecretScope::Global, &name)?)
         })
     }
+
+    /// Store or replace the managed token without exposing it through metadata.
+    pub fn store_managed_claude_subscription_token(
+        &self,
+        token: String,
+    ) -> Result<ManagedClaudeTokenStatus, ClaudeSubscriptionTokenError> {
+        let token = Zeroizing::new(token);
+        validate_managed_token(token.as_str())?;
+        self.with_storage_lock(|| {
+            let mut index = self.load_index()?;
+            let now = Utc::now().timestamp();
+            if let Some(metadata) = index.credentials.get_mut(MANAGED_CLAUDE_TOKEN_LABEL) {
+                metadata.credential_type = CredentialType::BearerToken;
+                metadata.provider = Some("claude-plan".to_string());
+                metadata.notes = Some("Managed long-lived Claude subscription token".to_string());
+                metadata.revocation_notes = Some(
+                    "Local removal does not revoke the token; generate a replacement with `claude setup-token`"
+                        .to_string(),
+                );
+                metadata.updated_at = now;
+            } else {
+                let label = crate::normalize_label(MANAGED_CLAUDE_TOKEN_LABEL)?;
+                let metadata = crate::VaultCredentialMeta {
+                    label: label.clone(),
+                    credential_type: CredentialType::BearerToken,
+                    provider: Some("claude-plan".to_string()),
+                    notes: Some("Managed long-lived Claude subscription token".to_string()),
+                    revocation_notes: Some(
+                        "Local removal does not revoke the token; generate a replacement with `claude setup-token`"
+                            .to_string(),
+                    ),
+                    created_at: now,
+                    updated_at: now,
+                    storage_backend: crate::StorageBackend::EncryptedSecrets,
+                };
+                index.credentials.insert(label, metadata);
+            }
+            self.write_secret(MANAGED_CLAUDE_TOKEN_LABEL, token.as_str())?;
+            self.save_index(&index)?;
+            Ok(ManagedClaudeTokenStatus::Stored { updated_at: now })
+        })
+        .map_err(Into::into)
+    }
+
+    /// Inspect only managed-token metadata.
+    pub fn managed_claude_subscription_token_status(
+        &self,
+    ) -> Result<ManagedClaudeTokenStatus, VaultError> {
+        match self.show(MANAGED_CLAUDE_TOKEN_LABEL) {
+            Ok(metadata) => Ok(ManagedClaudeTokenStatus::Stored {
+                updated_at: metadata.updated_at,
+            }),
+            Err(VaultError::NotFound { .. }) => Ok(ManagedClaudeTokenStatus::Missing),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Resolve the managed token only inside a short trusted callback.
+    pub fn with_managed_claude_subscription_token<T>(
+        &self,
+        use_token: impl FnOnce(&str) -> T,
+    ) -> Result<T, VaultError> {
+        self.with_storage_lock(|| {
+            let token = self
+                .read_secret(MANAGED_CLAUDE_TOKEN_LABEL)?
+                .ok_or_else(|| VaultError::NotFound {
+                    label: MANAGED_CLAUDE_TOKEN_LABEL.to_string(),
+                })?;
+            let token = Zeroizing::new(token);
+            Ok(use_token(token.as_str()))
+        })
+    }
+
+    /// Remove only Corbanu's managed copy. This does not claim server-side revocation.
+    pub fn remove_managed_claude_subscription_token(&self) -> Result<bool, VaultError> {
+        self.delete(MANAGED_CLAUDE_TOKEN_LABEL)
+    }
+}
+
+fn validate_managed_token(token: &str) -> Result<(), ClaudeSubscriptionTokenError> {
+    let trimmed = token.trim();
+    if trimmed.is_empty() {
+        return Err(ClaudeSubscriptionTokenError::Empty);
+    }
+    if trimmed != token
+        || token.len() > MAX_MANAGED_TOKEN_BYTES
+        || token.chars().any(char::is_whitespace)
+        || token.chars().any(char::is_control)
+    {
+        return Err(ClaudeSubscriptionTokenError::InvalidFormat);
+    }
+    Ok(())
 }
 
 fn claude_auth_selection_secret_name() -> Result<SecretName, VaultError> {

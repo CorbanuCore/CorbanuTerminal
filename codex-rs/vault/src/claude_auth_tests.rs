@@ -187,3 +187,89 @@ fn invalid_source_ids_are_rejected() {
         );
     }
 }
+
+#[test]
+fn managed_token_round_trip_status_and_replace_are_metadata_only() {
+    let (directory, vault) = test_vault();
+    let first = "synthetic-oauth-token-first";
+    let second = "synthetic-oauth-token-second";
+
+    assert_eq!(
+        vault.managed_claude_subscription_token_status().unwrap(),
+        ManagedClaudeTokenStatus::Missing
+    );
+    let stored = vault
+        .store_managed_claude_subscription_token(first.to_string())
+        .unwrap();
+    assert_eq!(
+        vault.managed_claude_subscription_token_status().unwrap(),
+        stored
+    );
+    let metadata = vault.show(MANAGED_CLAUDE_TOKEN_LABEL).unwrap();
+    let metadata_json = serde_json::to_string(&metadata).unwrap();
+    assert!(!metadata_json.contains(first));
+    assert!(!format!("{metadata:?}").contains(first));
+    assert!(matches!(
+        vault.reveal(MANAGED_CLAUDE_TOKEN_LABEL),
+        Err(VaultError::ProviderManagedCredential { .. })
+    ));
+    assert!(matches!(
+        vault.reveal_for_programmatic_use(
+            MANAGED_CLAUDE_TOKEN_LABEL,
+            codex_security_policy::SecurityLevel::Permissive,
+        ),
+        Err(VaultError::ProviderManagedCredential { .. })
+    ));
+
+    vault
+        .store_managed_claude_subscription_token(second.to_string())
+        .unwrap();
+    let resolved = vault
+        .with_managed_claude_subscription_token(ToString::to_string)
+        .unwrap();
+    assert_eq!(resolved, second);
+    let encrypted = std::fs::read(directory.path().join("secrets").join("local.age")).unwrap();
+    assert!(!String::from_utf8_lossy(&encrypted).contains(first));
+    assert!(!String::from_utf8_lossy(&encrypted).contains(second));
+}
+
+#[test]
+fn invalid_managed_tokens_fail_without_echoing_input() {
+    let (_directory, vault) = test_vault();
+    for token in ["", " leading", "two lines\nsecret"] {
+        let error = vault
+            .store_managed_claude_subscription_token(token.to_string())
+            .unwrap_err();
+        if !token.is_empty() {
+            assert!(!error.to_string().contains(token));
+            assert!(!format!("{error:?}").contains(token));
+        }
+    }
+}
+
+#[test]
+fn managed_token_removal_preserves_unrelated_credentials() {
+    let (_directory, vault) = test_vault();
+    vault
+        .add(crate::AddCredential {
+            label: "provider/unrelated".to_string(),
+            credential_type: crate::CredentialType::ApiKey,
+            provider: Some("unrelated".to_string()),
+            notes: None,
+            revocation_notes: None,
+            secret: "unrelated-secret".to_string(),
+        })
+        .unwrap();
+    vault
+        .store_managed_claude_subscription_token("synthetic-token".to_string())
+        .unwrap();
+
+    assert!(vault.remove_managed_claude_subscription_token().unwrap());
+    let labels = vault
+        .list()
+        .unwrap()
+        .into_iter()
+        .map(|metadata| metadata.label)
+        .collect::<Vec<_>>();
+    assert_eq!(labels, vec!["provider/unrelated"]);
+}

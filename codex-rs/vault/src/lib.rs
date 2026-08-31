@@ -64,6 +64,9 @@ pub use claude_auth::ClaudeAuthSelection;
 pub use claude_auth::ClaudeAuthSource;
 pub use claude_auth::ClaudeAuthSourceMetadata;
 pub use claude_auth::ClaudeAuthStoreKind;
+pub use claude_auth::ClaudeSubscriptionTokenError;
+pub use claude_auth::MANAGED_CLAUDE_TOKEN_LABEL;
+pub use claude_auth::ManagedClaudeTokenStatus;
 pub use claude_auth::resolve_claude_auth_source;
 pub use credential_panic::scoped_credential_callback_active;
 
@@ -99,6 +102,9 @@ pub enum VaultError {
     /// The raw secret value was empty.
     #[error("secret value must not be empty")]
     EmptySecret,
+    /// A provider-managed credential is available only to its scoped integration.
+    #[error("credential labeled {label:?} can only be used by its provider integration")]
+    ProviderManagedCredential { label: String },
     /// The credential is intentionally excluded from generic automation.
     #[error(
         "credential labeled {label:?} has type {credential_type}, which cannot be used by vault auth-helper"
@@ -476,6 +482,9 @@ impl Vault {
     /// explicit user action (`/vault credential reveal` / `/vault credential export`).
     pub fn reveal(&self, label: &str) -> Result<String, VaultError> {
         let normalized = normalize_label(label)?;
+        if normalized == MANAGED_CLAUDE_TOKEN_LABEL {
+            return Err(VaultError::ProviderManagedCredential { label: normalized });
+        }
         self.with_storage_lock(|| {
             // Validate the label exists in the index before attempting decryption.
             let index = self.load_index()?;
@@ -503,6 +512,9 @@ impl Vault {
             });
         }
         let normalized = normalize_label(label)?;
+        if normalized == MANAGED_CLAUDE_TOKEN_LABEL {
+            return Err(VaultError::ProviderManagedCredential { label: normalized });
+        }
         self.with_storage_lock(|| {
             let index = self.load_index()?;
             let meta = index

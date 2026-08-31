@@ -194,7 +194,7 @@ run `python3 docs/sprints/check.py`.
 | Feature ID | Plan feature | Current sprint records | State |
 | --- | --- | --- | --- |
 | `PF-42` (`CSA-01`) | Typed authentication source, selection, health, and persistence contract | [CSA-01 / PF-42-S01](../../sprints/archive/claude-subscription-auth/pf-42-s01-auth-source-contract.md) | completed and archived |
-| `PF-43` (`CSA-02`) | Secure long-lived subscription-token enrollment, storage, validation, replacement, and removal | Not created | planned; depends on CSA-01 |
+| `PF-43` (`CSA-02`) | Secure long-lived subscription-token enrollment, storage, validation, replacement, and removal | [CSA-02 / PF-43-S01](../../sprints/current/claude-subscription-auth/pf-43-s01-managed-token-lifecycle.md) | in progress; depends on PF-42-S01 |
 | `PF-44` (`CSA-03`) | Platform-authoritative Claude login adapters and deterministic provider resolution | Not created | planned; depends on CSA-01 |
 | `PF-45` (`CSA-04`) | Legacy/conflict migration plus failure, recovery, and resume UX | Not created | planned; depends on CSA-02 and CSA-03 |
 | `PF-46` (`CSA-05`) | Final cross-platform, true-TUI, live-repository, human, documentation, and release qualification | Not created | planned; depends on CSA-04 |
@@ -321,9 +321,9 @@ due benchmark work is neither added nor waived by this plan.
 | --- | --- | --- | --- | --- |
 | Product authority and WIP slot | product | Travis Good | activation | decided 2026-08-30; slot 2 of 2 allocated |
 | Exact upstream Codex baseline | integration | Jim Ricketts | first sprint readiness | resolved 2026-08-30: fetched `upstream/main` `b7cd519c767c8fd4bc3581d9bc92fbab37a768c1`; verified fork merge-base `413492cd6c3a4d4f8dff6f406247ccda5a9d88aa` |
-| Current official `claude setup-token` CLI/output contract and supported version floor | external compatibility | Jim Ricketts | CSA-02 readiness | verify against current Anthropic primary documentation and representative runtimes |
+| Current official `claude setup-token` CLI/output contract and supported version floor | external compatibility | Jim Ricketts | CSA-02 readiness | verified 2026-08-30 against `https://code.claude.com/docs/en/authentication`: one-year, model-request-only token for Pro, Max, Team, or Enterprise; command prints but does not save it. Local Claude Code 2.1.92 advertises `setup-token`. |
 | Secure storage seam and protected-mode composition | architecture/security | Jim Ricketts | CSA-01/CSA-02 readiness | extend existing vault/keyring/broker boundaries; do not create a parallel plaintext store |
-| Long-lived token replacement/revocation semantics | external compatibility | Jim Ricketts | CSA-02/CSA-04 readiness | verify documented behavior; local removal must not be mislabeled as server revocation |
+| Long-lived token replacement/revocation semantics | external compatibility | Jim Ricketts | CSA-02/CSA-04 readiness | verified documented replacement requires a new token and restart; Corbanu local removal is explicitly not server revocation |
 | Exact platform credential naming and `CLAUDE_CONFIG_DIR` behavior | compatibility | Jim Ricketts | CSA-03 readiness | verify macOS/Linux/Windows fixtures and current Claude versions |
 | Release target and named human tester | release | release owner | CSA-05 | pending |
 
