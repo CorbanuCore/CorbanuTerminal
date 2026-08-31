@@ -103,7 +103,7 @@ nav:
               - "Foundation follow-ups":
                   - "PF-22-S02 — Protected runtime integration and upstream seams": sprints/current/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md
               - "PF-13 — Credential boundary":
-                  - "PF-13-S06 — Credential usage reservations": sprints/current/p0-security-levels/pf-13-s06-credential-usage-reservations.md
+                  - "PF-13-S06 — Credential usage reservations": sprints/archive/p0-security-levels/pf-13-s06-credential-usage-reservations.md
                   - "PF-13-S07 — Integrated credential qualification": sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md
               - "Protected-surface enforcement":
                   - "PF-23-S01 — Moderate enforcement": sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md
@@ -171,7 +171,7 @@ nav:
               - "Inspector and audit":
                   - "PF-41-S01 — Effective security inspector and degradation state": sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md
                   - "PF-41-S02 — Tamper-evident audit and safe support export": sprints/current/p0-security-levels/pf-41-s02-tamper-evident-security-audit.md
-                  - "PF-41-S03: Durable security event and recovery foundation": sprints/current/p0-security-levels/pf-41-s03-durable-security-event-foundation.md
+                  - "PF-41-S03: Durable security event and recovery foundation": sprints/archive/p0-security-levels/pf-41-s03-durable-security-event-foundation.md
               - "Qualification and release evidence":
                   - "PF-26-S04 — Final automated qualification": sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md
                   - "PF-26-S02 — True-TUI and live repos": sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md
