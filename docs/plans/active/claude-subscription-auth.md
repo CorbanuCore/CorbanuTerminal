@@ -100,7 +100,9 @@ exposing the credential or discarding unrelated provider state.
 ### In
 
 - A concise Claude Plan authentication-method choice with the long-lived
-  subscription token recommended for new enrollment.
+  subscription token recommended for new enrollment, reachable directly from
+  first-run provider onboarding as an Anthropic account rather than only from
+  the later `/providers` command.
 - A verified `claude setup-token` handoff that never renders the resulting token
   in chat, ordinary TUI history, logs, crash reports, or command previews.
 - Secure Corbanu-managed storage and runtime resolution of the selected
@@ -212,6 +214,7 @@ run `python3 docs/sprints/check.py`.
 | `PF-44` (`CSA-03`) | Platform-authoritative Claude login adapters and deterministic provider resolution | [CSA-03 / PF-44-S01](../../sprints/archive/claude-subscription-auth/pf-44-s01-platform-auth-resolution.md) | completed and archived |
 | `PF-45` (`CSA-04`) | Legacy/conflict migration plus failure, recovery, and resume UX | [CSA-04 / PF-45-S01](../../sprints/archive/claude-subscription-auth/pf-45-s01-auth-choice-and-recovery.md) | completed and archived |
 | `PF-46` (`CSA-05`) | Final automated, cross-platform-fixture, true-TUI, documentation, and review qualification | [CSA-05 / PF-46-S01](../../sprints/archive/claude-subscription-auth/pf-46-s01-final-qualification.md) | completed and archived; live-account, live-repository, human, and release gates remain plan-level work |
+| `PF-47` (`CSA-06`) | First-run Anthropic-account onboarding integrated with the existing explicit Claude authentication choice | [CSA-06 / PF-47-S01](../../sprints/current/claude-subscription-auth/pf-47-s01-first-run-anthropic-account.md) | in progress; corrects the startup integration gap found during human acceptance |
 
 ## Hard dependency graph
 
@@ -223,6 +226,7 @@ CSA-01 typed source/selection contract
 CSA-02 + CSA-03
   └── CSA-04 migration and recovery UX
         └── CSA-05 final qualification
+              └── CSA-06 first-run Anthropic-account onboarding
 ```
 
 No dependent sprint may become executable before every prerequisite is
@@ -233,6 +237,7 @@ completed and archived.
 | Flow | Starting state | User action | Expected visible result | Pass criterion |
 | --- | --- | --- | --- | --- |
 | Recommended success | No Claude Plan method selected | Choose **Stable subscription token — Recommended**, complete authorization, then select a Claude Plan model | Corbanu reports the managed method healthy and the model request succeeds without displaying the token | Token is stored only in an approved secret backend; restart and a real request succeed |
+| First-run account enrollment | Fresh Corbanu profile with no provider configured | Choose **Anthropic Claude Account**, then choose the recommended stable token or Claude Code login | Onboarding enters the same Claude authentication flow used by `/providers`, persists `claude-plan` only after a successful choice, and does not require an Anthropic API key | Both account methods, cancel, and restart are proven from the startup screen; API-key enrollment remains a separate explicit option |
 | Compatibility success | Healthy platform Claude login | Choose **Use my Claude Code login** | Corbanu reports the platform source and account metadata, then completes a real request | No Corbanu-managed duplicate is created and the selected source persists |
 | Existing-user preservation | Existing installation using shared Claude login | Decline the migration offer | Existing source remains selected and usable; prompt can be reopened later | No persistent auth or credential mutation occurs |
 | Cancel | Enrollment or migration browser/code flow open | Cancel or press Esc | Flow closes with current source unchanged | Child process exits and no token, partial selection, or store entry remains |
@@ -257,6 +262,9 @@ completed and archived.
    success, cancel, failure, recovery, and resume behavior.
 5. Complete CSA-05 only on the formatted final tree with cross-platform,
    live-repository, true-TUI, human, documentation, upstream, and release proof.
+6. Correct the human-acceptance onboarding gap in CSA-06 by routing first-run
+   Anthropic-account selection into the already-qualified Claude auth choice,
+   then repeat focused, typed-Tmux, and final review qualification.
 
 ## Requirement-to-evidence traceability
 
@@ -269,6 +277,7 @@ completed and archived.
 | Reversible legacy migration | CSA-04 | Current/legacy matrix, injected partial failure, cancel, retry, and cleanup proof |
 | Cross-platform support | CSA-03 / CSA-05 | macOS Keychain plus Linux/Windows file evidence on final candidate |
 | User-visible recovery | CSA-04 / CSA-05 | True-TUI missing-token, revoked-token, replacement, and resumed-request flows |
+| First-run Anthropic account | CSA-06 | Onboarding state/snapshot tests plus typed-Tmux recommended, compatibility, cancel, persistence, and restart flows |
 
 ## Automated evidence
 

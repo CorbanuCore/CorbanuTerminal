@@ -46,6 +46,10 @@ use std::sync::RwLock;
 use uuid::Uuid;
 
 use crate::LoginStatus;
+use crate::app_event::AppEvent;
+use crate::app_event::ClaudeSubscriptionTokenSecret;
+use crate::app_event_sender::AppEventSender;
+use crate::chatwidget::claude_code_login::ClaudeCodeLoginInput;
 use crate::key_hint::KeyBinding;
 use crate::key_hint::KeyBindingListExt;
 use crate::motion::MotionMode;
@@ -91,14 +95,40 @@ pub(crate) enum SignInState {
     ApiKeyConfigured {
         provider: Option<String>,
     },
+    ClaudeAuthMethodChoice {
+        highlighted: ClaudeAuthMethod,
+    },
+    ClaudeManagedTokenEntry(ApiKeyInputState),
+    ClaudeManagedTokenSaving,
+    ClaudeCodeLoginChecking,
+    ClaudeCodeLoginPending {
+        input_tx: tokio::sync::mpsc::UnboundedSender<ClaudeCodeLoginInput>,
+    },
+    ClaudeCodeLoginReady {
+        verification_url: String,
+        input_tx: tokio::sync::mpsc::UnboundedSender<ClaudeCodeLoginInput>,
+    },
+    ClaudeCodeLoginCodeEntry {
+        input_tx: tokio::sync::mpsc::UnboundedSender<ClaudeCodeLoginInput>,
+        value: String,
+    },
+    ClaudeAccountConfigured,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SignInOption {
     ChatGpt,
     DeviceCode,
+    AnthropicAccount,
     ApiKey,
     ProviderApiKey(usize),
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum ClaudeAuthMethod {
+    #[default]
+    ManagedToken,
+    ClaudeCodeLogin,
 }
 
 const API_KEY_DISABLED_MESSAGE: &str = "API key login is disabled.";
@@ -219,6 +249,9 @@ impl KeyboardHandler for AuthModeWidget {
         if self.handle_api_key_entry_key_event(&key_event) {
             return;
         }
+        if self.handle_claude_auth_key_event(&key_event) {
+            return;
+        }
 
         if keys::MOVE_UP.is_pressed(key_event) {
             self.move_highlight(/*delta*/ -1);
@@ -260,7 +293,9 @@ impl KeyboardHandler for AuthModeWidget {
     }
 
     fn handle_paste(&mut self, pasted: String) {
-        let _ = self.handle_api_key_entry_paste(pasted);
+        if !self.handle_claude_auth_paste(&pasted) {
+            let _ = self.handle_api_key_entry_paste(pasted);
+        }
     }
 }
 
@@ -288,6 +323,8 @@ pub(crate) struct AuthModeWidget {
     pub api_key_provider_options: Vec<ApiKeyProviderOption>,
     pub animations_enabled: bool,
     pub animations_suppressed: Cell<bool>,
+    pub codex_home: std::path::PathBuf,
+    pub claude_event_tx: AppEventSender,
 }
 
 impl AuthModeWidget {
@@ -298,7 +335,11 @@ impl AuthModeWidget {
     pub(crate) fn should_suppress_animations(&self) -> bool {
         matches!(
             &*self.sign_in_state.read().unwrap(),
-            SignInState::ChatGptContinueInBrowser(_) | SignInState::ChatGptDeviceCode(_)
+            SignInState::ChatGptContinueInBrowser(_)
+                | SignInState::ChatGptDeviceCode(_)
+                | SignInState::ClaudeManagedTokenEntry(_)
+                | SignInState::ClaudeCodeLoginReady { .. }
+                | SignInState::ClaudeCodeLoginCodeEntry { .. }
         )
     }
 
@@ -320,6 +361,11 @@ impl AuthModeWidget {
                     });
                 }
             }
+            SignInState::ClaudeCodeLoginPending { input_tx }
+            | SignInState::ClaudeCodeLoginReady { input_tx, .. }
+            | SignInState::ClaudeCodeLoginCodeEntry { input_tx, .. } => {
+                let _ = input_tx.send(ClaudeCodeLoginInput::Cancel);
+            }
             _ => return,
         }
         *sign_in_state = SignInState::PickMode;
@@ -338,16 +384,25 @@ impl AuthModeWidget {
 
     /// Returns whether the auth flow is currently in API-key entry mode.
     pub(crate) fn is_api_key_entry_active(&self) -> bool {
-        self.sign_in_state
-            .read()
-            .is_ok_and(|guard| matches!(&*guard, SignInState::ApiKeyEntry(_)))
+        self.sign_in_state.read().is_ok_and(|guard| {
+            matches!(
+                &*guard,
+                SignInState::ApiKeyEntry(_)
+                    | SignInState::ClaudeManagedTokenEntry(_)
+                    | SignInState::ClaudeCodeLoginCodeEntry { .. }
+            )
+        })
     }
 
     /// Returns whether the API-key entry field currently contains any text.
     pub(crate) fn api_key_entry_has_text(&self) -> bool {
-        self.sign_in_state.read().is_ok_and(
-            |guard| matches!(&*guard, SignInState::ApiKeyEntry(state) if !state.value.is_empty()),
-        )
+        self.sign_in_state.read().is_ok_and(|guard| match &*guard {
+            SignInState::ApiKeyEntry(state) | SignInState::ClaudeManagedTokenEntry(state) => {
+                !state.value.is_empty()
+            }
+            SignInState::ClaudeCodeLoginCodeEntry { value, .. } => !value.is_empty(),
+            _ => false,
+        })
     }
 
     fn confirm_binding(&self) -> KeyBinding {
@@ -376,7 +431,7 @@ impl AuthModeWidget {
 
     fn displayed_sign_in_options(&self) -> Vec<SignInOption> {
         if self.provider_picker_enabled() {
-            let mut options = vec![SignInOption::DeviceCode];
+            let mut options = vec![SignInOption::DeviceCode, SignInOption::AnthropicAccount];
             options
                 .extend((0..self.api_key_provider_options.len()).map(SignInOption::ProviderApiKey));
             return options;
@@ -445,6 +500,13 @@ impl AuthModeWidget {
                 if self.is_device_code_login_allowed() {
                     self.start_device_code_login();
                 }
+            }
+            SignInOption::AnthropicAccount => {
+                self.set_error(/*message*/ None);
+                *self.sign_in_state.write().unwrap() = SignInState::ClaudeAuthMethodChoice {
+                    highlighted: ClaudeAuthMethod::ManagedToken,
+                };
+                self.request_frame.schedule_frame();
             }
             SignInOption::ApiKey => {
                 if self.is_api_login_allowed() {
@@ -592,6 +654,14 @@ impl AuthModeWidget {
                     };
                     option_lines.extend(create_mode_item(idx, option, text, description));
                 }
+                SignInOption::AnthropicAccount => {
+                    option_lines.extend(create_mode_item(
+                        idx,
+                        option,
+                        "Provider: Anthropic Claude Account",
+                        "Use Claude subscription access; long-lived token recommended or Claude Code login",
+                    ));
+                }
                 SignInOption::ApiKey => {
                     let text = if self.provider_api_key_required() {
                         format!("Provide your {} API key", self.api_key_provider_label())
@@ -723,6 +793,157 @@ impl AuthModeWidget {
         // Wrap cyan+underlined URL cells with OSC 8 so the terminal treats
         // the entire region as a single clickable hyperlink.
         if let Some(url) = &auth_url {
+            mark_url_hyperlink(buf, area, url);
+        }
+    }
+
+    fn render_claude_method_choice(
+        &self,
+        area: Rect,
+        buf: &mut Buffer,
+        highlighted: ClaudeAuthMethod,
+    ) {
+        let option = |selected: bool, label: &str, description: &str| {
+            let marker = if selected { ">" } else { " " };
+            vec![
+                if selected {
+                    format!("{marker} {label}").cyan().into()
+                } else {
+                    format!("{marker} {label}").into()
+                },
+                format!("    {description}").dim().into(),
+                "".into(),
+            ]
+        };
+        let mut lines: Vec<Line> = vec![
+            "  Choose Anthropic account authentication".bold().into(),
+            "".into(),
+        ];
+        lines.extend(option(
+            highlighted == ClaudeAuthMethod::ManagedToken,
+            "Long-lived subscription token (Recommended)",
+            "Run `claude setup-token`, then store its approximately one-year token securely",
+        ));
+        lines.extend(option(
+            highlighted == ClaudeAuthMethod::ClaudeCodeLogin,
+            "Claude Code login",
+            "Use Claude Code's rotating login state; reauthorization may be needed more often",
+        ));
+        lines.push(Line::from(vec![
+            "  Use ↑/↓ to choose · Press ".dim(),
+            self.confirm_binding().into(),
+            " to continue · Press ".dim(),
+            self.cancel_binding().into(),
+            " to go back".dim(),
+        ]));
+        if let Some(error) = self.error_message() {
+            lines.push("".into());
+            lines.push(error.red().into());
+        }
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .render(area, buf);
+    }
+
+    fn render_claude_secret_entry(
+        &self,
+        area: Rect,
+        buf: &mut Buffer,
+        value: &str,
+        authorization_code: bool,
+    ) {
+        let (title, guidance, field) = if authorization_code {
+            (
+                "Claude Code Plan login",
+                "Paste the one-time authorization code from the browser.",
+                "Authorization code",
+            )
+        } else {
+            (
+                "Save Claude subscription token",
+                "In a separate private terminal, run `claude setup-token`, then paste the token here. Corbanu never adds it to chat.",
+                "Long-lived token",
+            )
+        };
+        let [intro_area, input_area, footer_area] = Layout::vertical([
+            Constraint::Min(4),
+            Constraint::Length(3),
+            Constraint::Min(3),
+        ])
+        .areas(area);
+        Paragraph::new(vec![
+            format!("> {title}").bold().into(),
+            "".into(),
+            guidance.into(),
+        ])
+        .wrap(Wrap { trim: false })
+        .render(intro_area, buf);
+        let content: Line = if value.is_empty() {
+            format!("Paste {field}").dim().into()
+        } else {
+            masked_api_key(value).into()
+        };
+        Paragraph::new(content)
+            .block(
+                Block::default()
+                    .title(field)
+                    .borders(Borders::ALL)
+                    .border_type(BorderType::Rounded)
+                    .border_style(Style::default().fg(Color::Cyan)),
+            )
+            .render(input_area, buf);
+        let mut footer = vec![
+            Line::from(vec![
+                "  Press ".dim(),
+                self.confirm_binding().into(),
+                " to continue".dim(),
+            ]),
+            Line::from(vec![
+                "  Press ".dim(),
+                self.cancel_binding().into(),
+                " to go back".dim(),
+            ]),
+        ];
+        if let Some(error) = self.error_message() {
+            footer.push(error.red().into());
+        }
+        Paragraph::new(footer)
+            .wrap(Wrap { trim: false })
+            .render(footer_area, buf);
+    }
+
+    fn render_claude_code_login(
+        &self,
+        area: Rect,
+        buf: &mut Buffer,
+        verification_url: Option<&str>,
+    ) {
+        let mut lines: Vec<Line> = vec!["  Claude Code Plan".bold().into(), "".into()];
+        if let Some(url) = verification_url {
+            lines.push("  Sign in with your Claude subscription in the browser:".into());
+            lines.push("".into());
+            lines.push(Line::from(vec!["  ".into(), url.cyan().underlined()]));
+            lines.push("".into());
+            lines.push(Line::from(vec![
+                "  Press ".dim(),
+                self.confirm_binding().into(),
+                " to paste the one-time code, or ".dim(),
+                self.cancel_binding().into(),
+                " to cancel".dim(),
+            ]));
+        } else {
+            lines.push("  Starting Claude Code login...".dim().into());
+            lines.push("".into());
+            lines.push(Line::from(vec![
+                "  Press ".dim(),
+                self.cancel_binding().into(),
+                " to cancel".dim(),
+            ]));
+        }
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .render(area, buf);
+        if let Some(url) = verification_url {
             mark_url_hyperlink(buf, area, url);
         }
     }
@@ -899,6 +1120,261 @@ impl AuthModeWidget {
         Paragraph::new(footer_lines)
             .wrap(Wrap { trim: false })
             .render(footer_area, buf);
+    }
+
+    fn handle_claude_auth_key_event(&mut self, key_event: &KeyEvent) -> bool {
+        let state = self.sign_in_state.read().unwrap().clone();
+        match state {
+            SignInState::ClaudeAuthMethodChoice { highlighted } => {
+                let next = if keys::MOVE_UP.is_pressed(*key_event)
+                    || keys::MOVE_DOWN.is_pressed(*key_event)
+                {
+                    Some(match highlighted {
+                        ClaudeAuthMethod::ManagedToken => ClaudeAuthMethod::ClaudeCodeLogin,
+                        ClaudeAuthMethod::ClaudeCodeLogin => ClaudeAuthMethod::ManagedToken,
+                    })
+                } else {
+                    None
+                };
+                if let Some(highlighted) = next {
+                    *self.sign_in_state.write().unwrap() =
+                        SignInState::ClaudeAuthMethodChoice { highlighted };
+                } else if keys::CONFIRM.is_pressed(*key_event) {
+                    match highlighted {
+                        ClaudeAuthMethod::ManagedToken => {
+                            *self.sign_in_state.write().unwrap() =
+                                SignInState::ClaudeManagedTokenEntry(ApiKeyInputState::default());
+                        }
+                        ClaudeAuthMethod::ClaudeCodeLogin => {
+                            self.start_claude_code_login_selection();
+                        }
+                    }
+                } else if keys::CANCEL.is_pressed(*key_event) {
+                    *self.sign_in_state.write().unwrap() = SignInState::PickMode;
+                }
+                self.request_frame.schedule_frame();
+                true
+            }
+            SignInState::ClaudeManagedTokenEntry(mut input) => {
+                if keys::CANCEL.is_pressed(*key_event) {
+                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAuthMethodChoice {
+                        highlighted: ClaudeAuthMethod::ManagedToken,
+                    };
+                } else if keys::CONFIRM.is_pressed(*key_event) {
+                    let token = input.value.trim().to_string();
+                    if token.is_empty() {
+                        self.set_error(Some("Subscription token cannot be empty".to_string()));
+                    } else {
+                        self.save_claude_managed_token(token);
+                    }
+                } else {
+                    match key_event.code {
+                        KeyCode::Backspace => {
+                            input.value.pop();
+                        }
+                        KeyCode::Char(character)
+                            if key_event.kind == KeyEventKind::Press
+                                && !key_event.modifiers.intersects(
+                                    KeyModifiers::SUPER | KeyModifiers::CONTROL | KeyModifiers::ALT,
+                                ) =>
+                        {
+                            input.value.push(character);
+                        }
+                        _ => return true,
+                    }
+                    self.set_error(/*message*/ None);
+                    *self.sign_in_state.write().unwrap() =
+                        SignInState::ClaudeManagedTokenEntry(input);
+                }
+                self.request_frame.schedule_frame();
+                true
+            }
+            SignInState::ClaudeCodeLoginPending { input_tx } => {
+                if keys::CANCEL.is_pressed(*key_event) {
+                    let _ = input_tx.send(ClaudeCodeLoginInput::Cancel);
+                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAuthMethodChoice {
+                        highlighted: ClaudeAuthMethod::ClaudeCodeLogin,
+                    };
+                }
+                self.request_frame.schedule_frame();
+                true
+            }
+            SignInState::ClaudeCodeLoginReady { input_tx, .. } => {
+                if keys::CANCEL.is_pressed(*key_event) {
+                    let _ = input_tx.send(ClaudeCodeLoginInput::Cancel);
+                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAuthMethodChoice {
+                        highlighted: ClaudeAuthMethod::ClaudeCodeLogin,
+                    };
+                } else if keys::CONFIRM.is_pressed(*key_event) {
+                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeCodeLoginCodeEntry {
+                        input_tx,
+                        value: String::new(),
+                    };
+                }
+                self.request_frame.schedule_frame();
+                true
+            }
+            SignInState::ClaudeCodeLoginCodeEntry {
+                input_tx,
+                mut value,
+            } => {
+                if keys::CANCEL.is_pressed(*key_event) {
+                    let _ = input_tx.send(ClaudeCodeLoginInput::Cancel);
+                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAuthMethodChoice {
+                        highlighted: ClaudeAuthMethod::ClaudeCodeLogin,
+                    };
+                } else if keys::CONFIRM.is_pressed(*key_event) {
+                    let code = value.trim().to_string();
+                    if code.is_empty() {
+                        self.set_error(Some("Authorization code cannot be empty".to_string()));
+                    } else {
+                        let _ = input_tx.send(ClaudeCodeLoginInput::AuthorizationCode(code));
+                        *self.sign_in_state.write().unwrap() =
+                            SignInState::ClaudeCodeLoginPending { input_tx };
+                    }
+                } else {
+                    match key_event.code {
+                        KeyCode::Backspace => {
+                            value.pop();
+                        }
+                        KeyCode::Char(character)
+                            if key_event.kind == KeyEventKind::Press
+                                && !key_event.modifiers.intersects(
+                                    KeyModifiers::SUPER | KeyModifiers::CONTROL | KeyModifiers::ALT,
+                                ) =>
+                        {
+                            value.push(character);
+                        }
+                        _ => return true,
+                    }
+                    self.set_error(/*message*/ None);
+                    *self.sign_in_state.write().unwrap() =
+                        SignInState::ClaudeCodeLoginCodeEntry { input_tx, value };
+                }
+                self.request_frame.schedule_frame();
+                true
+            }
+            SignInState::ClaudeManagedTokenSaving | SignInState::ClaudeCodeLoginChecking => true,
+            _ => false,
+        }
+    }
+
+    fn handle_claude_auth_paste(&mut self, pasted: &str) -> bool {
+        let pasted = pasted.trim();
+        if pasted.is_empty() {
+            return false;
+        }
+        let mut state = self.sign_in_state.write().unwrap();
+        match &mut *state {
+            SignInState::ClaudeManagedTokenEntry(input) => input.value.push_str(pasted),
+            SignInState::ClaudeCodeLoginCodeEntry { value, .. } => value.push_str(pasted),
+            _ => return false,
+        }
+        drop(state);
+        self.set_error(/*message*/ None);
+        self.request_frame.schedule_frame();
+        true
+    }
+
+    fn save_claude_managed_token(&mut self, token: String) {
+        *self.sign_in_state.write().unwrap() = SignInState::ClaudeManagedTokenSaving;
+        let codex_home = self.codex_home.clone();
+        let tx = self.claude_event_tx.clone();
+        tokio::spawn(async move {
+            let result = crate::chatwidget::claude_code_login::enroll_managed_subscription_token(
+                codex_home,
+                ClaudeSubscriptionTokenSecret::new(token),
+            )
+            .await;
+            tx.send(AppEvent::ClaudeManagedSubscriptionTokenSaved { result });
+        });
+    }
+
+    fn start_claude_code_login_selection(&mut self) {
+        *self.sign_in_state.write().unwrap() = SignInState::ClaudeCodeLoginChecking;
+        let codex_home = self.codex_home.clone();
+        let tx = self.claude_event_tx.clone();
+        tokio::spawn(async move {
+            let result = crate::chatwidget::claude_code_login::select_existing_claude_code_login(
+                std::path::Path::new("claude"),
+                /*health_executable*/ None,
+                codex_home.as_path(),
+                std::time::Duration::from_secs(10),
+            )
+            .await;
+            tx.send(AppEvent::ClaudeCodePlanLoginSelectionChecked { result });
+        });
+    }
+
+    pub(crate) fn handle_claude_event(&mut self, event: AppEvent) {
+        match event {
+            AppEvent::ClaudeManagedSubscriptionTokenSaved { result } => match result {
+                Ok(_) => {
+                    self.set_error(/*message*/ None);
+                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAccountConfigured;
+                }
+                Err(error) => {
+                    self.set_error(Some(error));
+                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAuthMethodChoice {
+                        highlighted: ClaudeAuthMethod::ManagedToken,
+                    };
+                }
+            },
+            AppEvent::ClaudeCodePlanLoginSelectionChecked { result } => match result {
+                Ok(true) => {
+                    self.set_error(/*message*/ None);
+                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAccountConfigured;
+                }
+                Ok(false) => {
+                    let input_tx = crate::chatwidget::claude_code_login::start(
+                        self.claude_event_tx.clone(),
+                        self.codex_home.clone(),
+                    );
+                    *self.sign_in_state.write().unwrap() =
+                        SignInState::ClaudeCodeLoginPending { input_tx };
+                }
+                Err(error) => {
+                    self.set_error(Some(error));
+                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAuthMethodChoice {
+                        highlighted: ClaudeAuthMethod::ClaudeCodeLogin,
+                    };
+                }
+            },
+            AppEvent::ClaudeCodePlanLoginReady {
+                verification_url,
+                input_tx,
+            } => {
+                *self.sign_in_state.write().unwrap() = SignInState::ClaudeCodeLoginReady {
+                    verification_url,
+                    input_tx,
+                };
+            }
+            AppEvent::OpenClaudeCodePlanLoginCodeEntry { input_tx } => {
+                *self.sign_in_state.write().unwrap() = SignInState::ClaudeCodeLoginCodeEntry {
+                    input_tx,
+                    value: String::new(),
+                };
+            }
+            AppEvent::ClaudeCodePlanLoginFinished { result } => match result {
+                Some(Ok(_)) => {
+                    self.set_error(/*message*/ None);
+                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAccountConfigured;
+                }
+                Some(Err(error)) => {
+                    self.set_error(Some(error));
+                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAuthMethodChoice {
+                        highlighted: ClaudeAuthMethod::ClaudeCodeLogin,
+                    };
+                }
+                None => {
+                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAuthMethodChoice {
+                        highlighted: ClaudeAuthMethod::ClaudeCodeLogin,
+                    };
+                }
+            },
+            _ => return,
+        }
+        self.request_frame.schedule_frame();
     }
 
     fn handle_api_key_entry_key_event(&mut self, key_event: &KeyEvent) -> bool {
@@ -1202,9 +1678,12 @@ impl AuthModeWidget {
             .unwrap_or(LoginStatus::NotAuthenticated);
     }
 
-    pub(crate) fn configured_provider_api_key(&self) -> Option<String> {
+    pub(crate) fn configured_provider(&self) -> Option<String> {
         match &*self.sign_in_state.read().unwrap() {
             SignInState::ApiKeyConfigured { provider } => provider.clone(),
+            SignInState::ClaudeAccountConfigured => {
+                Some(codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID.to_string())
+            }
             _ => None,
         }
     }
@@ -1219,10 +1698,17 @@ impl StepStateProvider for AuthModeWidget {
             | SignInState::ApiKeySaving
             | SignInState::ChatGptContinueInBrowser(_)
             | SignInState::ChatGptDeviceCode(_)
-            | SignInState::ChatGptSuccessMessage => StepState::InProgress,
-            SignInState::ChatGptSuccess | SignInState::ApiKeyConfigured { .. } => {
-                StepState::Complete
-            }
+            | SignInState::ChatGptSuccessMessage
+            | SignInState::ClaudeAuthMethodChoice { .. }
+            | SignInState::ClaudeManagedTokenEntry(_)
+            | SignInState::ClaudeManagedTokenSaving
+            | SignInState::ClaudeCodeLoginChecking
+            | SignInState::ClaudeCodeLoginPending { .. }
+            | SignInState::ClaudeCodeLoginReady { .. }
+            | SignInState::ClaudeCodeLoginCodeEntry { .. } => StepState::InProgress,
+            SignInState::ChatGptSuccess
+            | SignInState::ApiKeyConfigured { .. }
+            | SignInState::ClaudeAccountConfigured => StepState::Complete,
         }
     }
 }
@@ -1254,6 +1740,39 @@ impl WidgetRef for AuthModeWidget {
             }
             SignInState::ApiKeyConfigured { .. } => {
                 self.render_api_key_configured(area, buf);
+            }
+            SignInState::ClaudeAuthMethodChoice { highlighted } => {
+                self.render_claude_method_choice(area, buf, *highlighted);
+            }
+            SignInState::ClaudeManagedTokenEntry(state) => {
+                self.render_claude_secret_entry(
+                    area,
+                    buf,
+                    &state.value,
+                    /*authorization_code*/ false,
+                );
+            }
+            SignInState::ClaudeManagedTokenSaving => {
+                Paragraph::new("  Saving the Claude subscription token securely…")
+                    .render(area, buf);
+            }
+            SignInState::ClaudeCodeLoginChecking => {
+                Paragraph::new("  Checking the current Claude Code login…").render(area, buf);
+            }
+            SignInState::ClaudeCodeLoginPending { .. } => {
+                self.render_claude_code_login(area, buf, /*verification_url*/ None);
+            }
+            SignInState::ClaudeCodeLoginReady {
+                verification_url, ..
+            } => {
+                self.render_claude_code_login(area, buf, Some(verification_url));
+            }
+            SignInState::ClaudeCodeLoginCodeEntry { value, .. } => {
+                self.render_claude_secret_entry(area, buf, value, /*authorization_code*/ true);
+            }
+            SignInState::ClaudeAccountConfigured => {
+                Paragraph::new("✓ Anthropic Claude account configured".fg(Color::Green))
+                    .render(area, buf);
             }
         }
     }
@@ -1344,6 +1863,7 @@ mod tests {
         })
         .await
         .unwrap();
+        let (claude_event_tx, _claude_event_rx) = tokio::sync::mpsc::unbounded_channel();
         let widget = AuthModeWidget {
             request_frame: FrameRequester::test_dummy(),
             highlighted_mode: SignInOption::ChatGpt,
@@ -1358,6 +1878,8 @@ mod tests {
             api_key_provider_options: Vec::new(),
             animations_enabled: true,
             animations_suppressed: std::cell::Cell::new(false),
+            codex_home: codex_home_path,
+            claude_event_tx: AppEventSender::new(claude_event_tx),
         };
         (widget, codex_home)
     }
@@ -1410,6 +1932,7 @@ mod tests {
             widget.displayed_sign_in_options(),
             vec![
                 SignInOption::DeviceCode,
+                SignInOption::AnthropicAccount,
                 SignInOption::ProviderApiKey(0),
                 SignInOption::ProviderApiKey(1),
                 SignInOption::ProviderApiKey(2),
@@ -1418,13 +1941,17 @@ mod tests {
             ]
         );
 
-        let area = Rect::new(0, 0, 80, 20);
+        let area = Rect::new(0, 0, 80, 24);
         let mut buf = Buffer::empty(area);
         widget.render_pick_mode(area, &mut buf);
         let rendered = buffer_text(&buf, area);
 
         assert!(
             rendered.contains("Provider: OpenAI Codex Account"),
+            "rendered:\n{rendered}"
+        );
+        assert!(
+            rendered.contains("Provider: Anthropic Claude Account"),
             "rendered:\n{rendered}"
         );
         assert!(
@@ -1510,7 +2037,7 @@ mod tests {
         let rendered = buffer_text(&buf, area);
 
         assert!(
-            rendered.contains("> 10. Provider: DeepSeek API Key"),
+            rendered.contains("> 11. Provider: DeepSeek API Key"),
             "highlighted provider must stay visible:\n{rendered}"
         );
         assert!(
@@ -1625,9 +2152,81 @@ mod tests {
         };
 
         assert_eq!(
-            widget.configured_provider_api_key().as_deref(),
+            widget.configured_provider().as_deref(),
             Some(codex_model_provider_info::OPENROUTER_PROVIDER_ID)
         );
+    }
+
+    #[tokio::test]
+    async fn anthropic_account_opens_recommended_method_choice_and_cancel_is_inert() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.forced_login_method = None;
+        widget.api_key_provider_options = vec![ApiKeyProviderOption {
+            id: codex_model_provider_info::ANTHROPIC_PROVIDER_ID.to_string(),
+            name: "Anthropic".to_string(),
+            env_var: codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR.to_string(),
+        }];
+
+        widget.handle_sign_in_option(SignInOption::AnthropicAccount);
+
+        assert!(matches!(
+            &*widget.sign_in_state.read().unwrap(),
+            SignInState::ClaudeAuthMethodChoice {
+                highlighted: ClaudeAuthMethod::ManagedToken
+            }
+        ));
+        assert_eq!(widget.configured_provider(), None);
+
+        widget.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+
+        assert!(matches!(
+            &*widget.sign_in_state.read().unwrap(),
+            SignInState::PickMode
+        ));
+        assert_eq!(widget.configured_provider(), None);
+    }
+
+    #[tokio::test]
+    async fn anthropic_account_method_choice_snapshot() {
+        let (widget, _tmp) = widget_forced_chatgpt().await;
+        let area = Rect::new(0, 0, 88, 16);
+        let mut buf = Buffer::empty(area);
+
+        widget.render_claude_method_choice(area, &mut buf, ClaudeAuthMethod::ManagedToken);
+
+        let visible = buffer_text(&buf, area)
+            .lines()
+            .map(str::trim_end)
+            .collect::<Vec<_>>()
+            .join("\n");
+        insta::assert_snapshot!(visible, @r###"
+  Choose Anthropic account authentication
+
+> Long-lived subscription token (Recommended)
+    Run `claude setup-token`, then store its approximately one-year token securely
+
+  Claude Code login
+    Use Claude Code's rotating login state; reauthorization may be needed more often
+
+  Use ↑/↓ to choose · Press enter to continue · Press esc to go back
+"###);
+    }
+
+    #[tokio::test]
+    async fn claude_auth_success_returns_plan_provider_only_after_success() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        *widget.sign_in_state.write().unwrap() = SignInState::ClaudeManagedTokenSaving;
+        assert_eq!(widget.configured_provider(), None);
+
+        widget.handle_claude_event(AppEvent::ClaudeManagedSubscriptionTokenSaved {
+            result: Ok("saved".to_string()),
+        });
+
+        assert_eq!(
+            widget.configured_provider().as_deref(),
+            Some(codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID)
+        );
+        assert_eq!(widget.get_step_state(), StepState::Complete);
     }
 
     #[tokio::test]

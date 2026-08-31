@@ -2340,27 +2340,11 @@ impl App {
                 let codex_home = self.config.codex_home.clone();
                 let tx = self.app_event_tx.clone();
                 tokio::spawn(async move {
-                    let result = tokio::task::spawn_blocking(move || {
-                        codex_vault::Vault::new(codex_home.to_path_buf())
-                            .enroll_managed_claude_subscription_token(token.into_inner())
-                    })
-                    .await
-                    .map_err(|error| {
-                        format!(
-                            "Claude subscription token setup could not finish: {error}. No fallback was attempted; inspect Providers and retry."
-                        )
-                    })
-                    .and_then(|result| {
-                        result.map_err(|error| {
-                            format!(
-                                "Claude subscription token was not saved: {error}. No fallback was attempted; inspect Providers and retry."
-                            )
-                        })
-                    })
-                    .map(|_| {
-                        "Long-lived Claude subscription token saved and selected. Retry the interrupted request or choose a Claude Plan model from /model."
-                            .to_string()
-                    });
+                    let result = crate::chatwidget::claude_code_login::enroll_managed_subscription_token(
+                        codex_home.to_path_buf(),
+                        token,
+                    )
+                    .await;
                     tx.send(AppEvent::ClaudeManagedSubscriptionTokenSaved { result });
                 });
             }

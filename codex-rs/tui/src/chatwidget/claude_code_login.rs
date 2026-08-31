@@ -65,6 +65,37 @@ pub(crate) enum ClaudeCodeLoginInput {
     Cancel,
 }
 
+fn remove_line_breaks(mut token: String) -> String {
+    token.retain(|character| !matches!(character, '\r' | '\n'));
+    token
+}
+
+pub(crate) async fn enroll_managed_subscription_token(
+    codex_home: std::path::PathBuf,
+    token: ClaudeSubscriptionTokenSecret,
+) -> Result<String, String> {
+    let token = remove_line_breaks(token.into_inner());
+    tokio::task::spawn_blocking(move || {
+        Vault::new(codex_home)
+            .enroll_managed_claude_subscription_token(token)
+    })
+    .await
+    .map_err(|error| {
+        format!(
+            "Claude subscription token setup could not finish: {error}. No fallback was attempted; inspect Providers and retry."
+        )
+    })?
+    .map_err(|error| {
+        format!(
+            "Claude subscription token was not saved: {error}. No fallback was attempted; inspect Providers and retry."
+        )
+    })?;
+    Ok(
+        "Long-lived Claude subscription token saved and selected. Retry the interrupted request or choose a Claude Plan model from /model."
+            .to_string(),
+    )
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum PlatformLoginHealthCheckError {
     NeedsReauthorization(String),

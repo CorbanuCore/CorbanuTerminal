@@ -8,6 +8,18 @@ use std::os::unix::fs::PermissionsExt;
 
 use super::*;
 
+#[test]
+fn managed_token_normalization_removes_only_pasted_line_breaks() {
+    assert_eq!(
+        remove_line_breaks("fixture-token\r\ncontinued\nvalue".to_string()),
+        "fixture-tokencontinuedvalue"
+    );
+    assert_eq!(
+        remove_line_breaks("fixture token\tvalue".to_string()),
+        "fixture token\tvalue"
+    );
+}
+
 #[tokio::test]
 async fn login_output_reader_bounds_unterminated_lines_before_allocation() {
     let oversized = vec![b'x'; MAX_LOGIN_LINE_BYTES * 4];

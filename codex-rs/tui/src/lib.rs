@@ -1546,9 +1546,11 @@ async fn run_ratatui_app(
         {
             trust_decision_was_made = onboarding_result.directory_trust_persisted;
         }
-        if let Some(provider) = onboarding_result.configured_provider_api_key.as_deref() {
+        if let Some(provider) = onboarding_result.configured_provider.as_deref() {
             let Some(app_server_session) = app_server.as_ref() else {
-                unreachable!("app server should exist when onboarding stores a provider key");
+                unreachable!(
+                    "app server should exist when onboarding persists a provider selection"
+                );
             };
             config_update::write_config_batch(
                 app_server_session.request_handle(),

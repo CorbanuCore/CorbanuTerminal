@@ -24,6 +24,77 @@ use crate::support::tmux::TmuxServer;
 const READY_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[test]
+fn tmux_first_run_anthropic_account_selects_claude_login_after_success() -> Result<()> {
+    if !TmuxServer::should_run("first-run Anthropic account onboarding")? {
+        return Ok(());
+    }
+
+    let repo_root = codex_utils_cargo_bin::repo_root()?;
+    let codex = codex_binary(&repo_root)?;
+    let codex_home = tempdir()?;
+    let log_dir = codex_home.path().join("log");
+    fs::create_dir_all(&log_dir)?;
+    write_test_config(codex_home.path(), &repo_root)?;
+    fs::remove_file(codex_home.path().join("auth.json"))?;
+    let fake = FakeClaude::new()?;
+    let login_fixture = CompatibilityLoginFixture::new()?;
+    login_fixture.verify_hidden_health_command(&codex)?;
+
+    let tmux = TmuxServer::start("tmux_claude_auth_first_run")?;
+    tmux.register_artifact("config.toml", codex_home.path().join("config.toml"));
+    tmux.register_artifact("codex-tui.log", log_dir.join("codex-tui.log"));
+    let session = tmux.new_session(session_spec(
+        "codex-claude-auth-first-run",
+        &codex,
+        &repo_root,
+        codex_home.path(),
+        &log_dir,
+        &fake,
+        Some(&login_fixture),
+        /*provide_openai_fixture*/ false,
+    ))?;
+    let pane = session.primary_pane();
+    pane.wait_stable_contains("Provider: Anthropic Claude Account", READY_TIMEOUT)?;
+
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Long-lived subscription token (Recommended)", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Down)?;
+    pane.wait_stable_contains("> Claude Code login", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_until(
+        "first-run Claude provider persistence",
+        Duration::from_secs(45),
+        |_| {
+            fs::read_to_string(codex_home.path().join("config.toml"))
+                .is_ok_and(|config| config.contains("model_provider = \"claude-plan\""))
+        },
+    )?;
+
+    open_providers(pane)?;
+    pane.wait_stable_contains("Provider: Claude Code Plan", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Escape)?;
+    let viewport = pane.capture_viewport()?;
+    let scrollback = pane.capture_scrollback_tail(2_000)?;
+    exit_tui(pane)?;
+    session.wait_for_exit(READY_TIMEOUT)?;
+
+    let config = fs::read_to_string(codex_home.path().join("config.toml"))?;
+    ensure!(
+        config.contains("model_provider = \"claude-plan\""),
+        "successful first-run Claude auth did not select claude-plan"
+    );
+    let selection = codex_vault::Vault::new(codex_home.path().to_path_buf())
+        .load_claude_auth_selection()?
+        .context("first-run Claude login selection was not persisted")?;
+    ensure!(
+        selection.source == codex_vault::ClaudeAuthSource::ClaudeCodeLogin,
+        "first-run flow selected an unexpected Claude source"
+    );
+    ensure!(!viewport.is_empty() && !scrollback.is_empty());
+    Ok(())
+}
+
+#[test]
 fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Result<()> {
     if !TmuxServer::should_run("Claude managed-auth state machine")? {
         return Ok(());
@@ -49,6 +120,7 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
         &log_dir,
         &fake,
         None,
+        /*provide_openai_fixture*/ true,
     ))?;
     let pane = session.primary_pane();
     pane.wait_stable_contains("Corbanu Terminal", READY_TIMEOUT)?;
@@ -102,6 +174,7 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
         &log_dir,
         &fake,
         None,
+        /*provide_openai_fixture*/ true,
     ))?;
     let resumed_pane = resumed.primary_pane();
     resumed_pane.wait_stable_contains("Corbanu Terminal", READY_TIMEOUT)?;
@@ -166,6 +239,7 @@ fn tmux_claude_auth_compatibility_selects_existing_login() -> Result<()> {
         &log_dir,
         &fake,
         Some(&login_fixture),
+        /*provide_openai_fixture*/ true,
     ))?;
     let pane = session.primary_pane();
     pane.wait_stable_contains("Corbanu Terminal", READY_TIMEOUT)?;
@@ -241,21 +315,26 @@ fn session_spec(
     log_dir: &Path,
     fake: &FakeClaude,
     login_fixture: Option<&CompatibilityLoginFixture>,
+    provide_openai_fixture: bool,
 ) -> SessionSpec {
     let mut command = CommandSpec::new(codex.to_path_buf())
         .env("CORBANU_HOME", codex_home)
         .env("PFTERMINAL_HOME", codex_home)
         .env("CODEX_HOME", codex_home)
-        .env("OPENAI_API_KEY", "tmux-claude-auth-openai-fixture")
         .env("PATH", fake.path())
         .env("RUST_LOG", "trace")
         .arg("-c")
         .arg(format!("log_dir=\"{}\"", log_dir.display()))
         .arg("-c")
         .arg("analytics.enabled=false")
+        .arg("-c")
+        .arg("tui.animations=false")
         .arg("--no-alt-screen")
         .arg("-C")
         .arg(repo_root);
+    if provide_openai_fixture {
+        command = command.env("OPENAI_API_KEY", "tmux-claude-auth-openai-fixture");
+    }
     if let Some(login_fixture) = login_fixture {
         command = login_fixture.apply_to(command);
     }

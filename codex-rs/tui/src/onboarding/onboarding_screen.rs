@@ -49,6 +49,8 @@ use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_protocol::config_types::ForcedLoginMethod;
 
 use crate::LoginStatus;
+use crate::app_event::AppEvent;
+use crate::app_event_sender::AppEventSender;
 use crate::app_server_session::AppServerSession;
 use crate::config_update::format_config_error;
 use crate::config_update::write_trusted_project;
@@ -112,7 +114,7 @@ pub(crate) struct OnboardingScreenArgs {
 pub(crate) struct OnboardingResult {
     pub directory_trust_persisted: bool,
     pub should_exit: bool,
-    pub configured_provider_api_key: Option<String>,
+    pub configured_provider: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -241,7 +243,11 @@ pub(crate) fn provider_api_key_display_name(provider: &ApiKeyProviderOption) -> 
 }
 
 impl OnboardingScreen {
-    pub(crate) async fn new(tui: &mut Tui, args: OnboardingScreenArgs) -> Self {
+    pub(crate) async fn new(
+        tui: &mut Tui,
+        args: OnboardingScreenArgs,
+        claude_event_tx: AppEventSender,
+    ) -> Self {
         let OnboardingScreenArgs {
             show_trust_screen,
             show_login_screen,
@@ -250,6 +256,7 @@ impl OnboardingScreen {
             config,
         } = args;
         let cwd = config.cwd.to_path_buf();
+        let codex_home = config.codex_home.to_path_buf();
         let forced_login_method = config.forced_login_method;
         let mut api_key_provider_id = config.model_provider_id.clone();
         let mut api_key_provider_name = config.model_provider.name.clone();
@@ -282,7 +289,7 @@ impl OnboardingScreen {
         if show_login_screen {
             let has_multiple_provider_options = api_key_provider_options.len() > 1;
             let highlighted_mode = if has_multiple_provider_options {
-                SignInOption::ProviderApiKey(selected_provider_index.unwrap_or(0))
+                SignInOption::AnthropicAccount
             } else {
                 match forced_login_method {
                     Some(ForcedLoginMethod::Api) => SignInOption::ApiKey,
@@ -312,6 +319,8 @@ impl OnboardingScreen {
                     api_key_provider_options,
                     animations_enabled: config.animations,
                     animations_suppressed: std::cell::Cell::new(false),
+                    codex_home,
+                    claude_event_tx,
                 }));
             } else {
                 tracing::warn!("skipping onboarding login step without app-server request handle");
@@ -409,10 +418,10 @@ impl OnboardingScreen {
         self.should_exit
     }
 
-    fn configured_provider_api_key(&self) -> Option<String> {
+    fn configured_provider(&self) -> Option<String> {
         self.steps.iter().find_map(|step| {
             if let Step::Auth(widget) = step {
-                return widget.configured_provider_api_key();
+                return widget.configured_provider();
             }
             None
         })
@@ -446,6 +455,12 @@ impl OnboardingScreen {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn handle_claude_event(&mut self, event: AppEvent) {
+        if let Some(widget) = self.auth_widget_mut() {
+            widget.handle_claude_event(event);
         }
     }
 
@@ -694,7 +709,9 @@ pub(crate) async fn run_onboarding_app(
     use tokio_stream::StreamExt;
 
     let app_server_request_handle = args.app_server_request_handle.clone();
-    let mut onboarding_screen = OnboardingScreen::new(tui, args).await;
+    let (claude_event_tx, mut claude_event_rx) = tokio::sync::mpsc::unbounded_channel();
+    let mut onboarding_screen =
+        OnboardingScreen::new(tui, args, AppEventSender::new(claude_event_tx)).await;
     let mut directory_trust_persisted = false;
     // One-time guard to fully clear the screen after ChatGPT login success message is shown
     let mut did_full_clear_after_success = false;
@@ -781,6 +798,11 @@ pub(crate) async fn run_onboarding_app(
                     }
                 }
             }
+            event = claude_event_rx.recv() => {
+                if let Some(event) = event {
+                    onboarding_screen.handle_claude_event(event);
+                }
+            }
         }
     }
     // `TuiEventStream` shares the broker-owned crossterm source. The onboarding stream can leave
@@ -791,7 +813,7 @@ pub(crate) async fn run_onboarding_app(
     Ok(OnboardingResult {
         directory_trust_persisted,
         should_exit: onboarding_screen.should_exit(),
-        configured_provider_api_key: onboarding_screen.configured_provider_api_key(),
+        configured_provider: onboarding_screen.configured_provider(),
     })
 }
 
