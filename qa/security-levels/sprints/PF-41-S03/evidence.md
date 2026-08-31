@@ -289,10 +289,18 @@ Transcript:
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/review/opus-ninth-review-findings.txt`,
 SHA-256 `3375f2b80b3b23f6dd004fca1af31376565833172d5f17e3d8e15874d40c69ab`.
 
-The final post-remediation read-only Claude Opus 5 Plan Max review is recorded
-here after it completes. Prompt and Enter are sent as separate TMUX operations;
-the raw transcript remains outside Git and only its SHA-256 digest enters this
-evidence.
+The final focused post-remediation review used real TMUX session
+`pf27-opus5-g1-review` with Corbanu Terminal, exact model
+`claude-opus-5-plan` at `max`, and read-only permissions. It reviewed immutable
+candidate `648891090d8607f25c6ae7d8c05725c7fa3b7c24`, independently
+recomputed the final test and smoke hashes, rechecked the ninth-review fixes and
+all earlier security remediations, and returned the exact standalone verdict
+`NO FINDINGS`. Prompt text and Enter were sent as separate TMUX operations.
+Transcript:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/review/opus-final-no-findings.txt`,
+SHA-256 `ac124981ef91f2699bf1a8b51f423bb3bcc3feab138be18d0bcf2671d464a9e3`.
+This final evidence-only seal is the sole successor to the reviewed candidate;
+it changes no implementation, tests, fixtures or test artifacts.
 
 ## Consumer and integration handoff
 

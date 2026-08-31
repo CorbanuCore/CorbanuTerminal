@@ -64,10 +64,11 @@ updated: 2026-08-30
 - [x] Fault tests cover before-write failure, post-sync crash, post-publish ambiguity and a real protected-root timeout, including immediate emergency fencing with unavailable audit storage. Transport acknowledgement loss is outside the in-process journal and uses the stable duplicate-retry contract.
 - [x] TUI applicability remains indirect for this unregistered foundation; the exact candidate passed the round-three TMUX/Corbanu `/status` and clean-exit smoke with trace logging.
 - [x] Contract fixture asserts `runtime_activation: false` with empty producer and consumer registrations; the lane changes no existing runtime route or profile.
-- [ ] Complete the fresh final read-only Claude Opus 5 Plan Max review in the TMUX/Corbanu harness; all nine earlier review rounds are remediated and retested.
+- [x] Completed the final read-only Claude Opus 5 Plan Max review in the TMUX/Corbanu harness; all nine earlier review rounds are remediated and retested, and the final exact verdict is `NO FINDINGS`.
+- [ ] Integration owner registers the shared Cargo/Bazel/lock surfaces and reruns the combined-tree security-audit, consumed PF-19/PF-20 and repository Bazel validation before archive.
 
 ## Exit evidence
 
-- [ ] Record the clean independent review and final-tree digests under `qa/security-levels/sprints/PF-41-S03/`; exact-candidate TMUX smoke is complete.
+- [x] Recorded the clean independent review and final-tree digests under `qa/security-levels/sprints/PF-41-S03/`; exact-candidate TMUX smoke is complete.
 - [ ] Consumers depend on this completed foundation; final PF-41-S02 and PF-26 revalidate combined-tree audit/recovery rather than accepting fake producer fixtures.
 - [ ] Record integration handoff and scope audit; complete all ledgers before archive and update plan/navigation.
