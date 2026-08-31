@@ -5,6 +5,8 @@
 - Dispatch base: `9d08b15fa94676c1383ee1605b77e7cc7218dcc4`.
 - Allocation commit: `e0c23fe95165636d621dae8c16a5366c4f7250ac`.
 - Final implementation candidate: `e0725a3f97e52588ab2189c636630b4e3fe0a8b3`.
+- Final verification candidate: `e2cc83c3a2aac5e2410ddac2a29ac6591eb53285`
+  (test/evidence-only over the implementation candidate).
 - Contract versions: security-audit event schema v1, integrity checkpoint v1,
   journal record v1 and consumer fixture v1.
 - Activation posture: fixture-only and fail closed. No producer, consumer,
@@ -98,16 +100,17 @@ crate source through the isolated manifest at
 | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | PASS; active 1/2, current 61, archived 94 |
 | `git diff --check` | PASS |
 
-Exact-commit final artifacts for `e0725a3f97e52588ab2189c636630b4e3fe0a8b3`:
+Exact-commit final artifacts for verification candidate
+`e2cc83c3a2aac5e2410ddac2a29ac6591eb53285`:
 
-- Rust test log: `test-rust-final-6.log`, SHA-256
-  `3bf7ab813ab26fd4ba8715c0b5b459256b164fd1827db5afcefedfe013030ac3`.
-- full-workspace-lint Clippy log: `clippy-final-6.log`, SHA-256
-  `ff680f02c593ed4938d0069621175080cc2381b4d360f5e972ad6744518b8dfa`.
-- fixture log: `test-fixture-final-6.log`, SHA-256
+- Rust test log: `test-rust-final-7.log`, SHA-256
+  `14282dd55ac671c4b401147b9c604460900815304165d5a3a56649e546897b46`.
+- full-workspace-lint Clippy log: `clippy-final-7.log`, SHA-256
+  `7830ef634d97e76d8092addd7dd33b99875f03984cee666dbf7ddc3df0882b49`.
+- fixture log: `test-fixture-final-7.log`, SHA-256
   `c80a081792c1328f46d1f385824d459d636bcb7a3b834976c060563bf2cef3fb`.
-- governance test log: `test-governance-final-6.log`, SHA-256
-  `726a0624b7b6223cdb3a8772c9b60b8e39c953f36bad4b64be143102b9b3bf6a`.
+- governance test log: `test-governance-final-7.log`, SHA-256
+  `6088abc864f7d56c5fe6b87bf1e29d29d2b5316cd06831624ef6f758ff86d337`.
 - isolated manifest with the exact root Clippy deny set: `harness/Cargo.toml`,
   SHA-256
   `b1de95677cf4f772334b66a7be5d07b0de7146643034ef31f901bccc941066e9`.
@@ -272,6 +275,19 @@ failures as writer contention or interrupted writes. Implementation candidate
 focused regressions for both storage paths. Transcript:
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/review/opus-eighth-review-findings.txt`,
 SHA-256 `400fadf5b9c0dc77369dc2b24cb34dbb5fb24e78ecb4b4acc9ac09b53aebab3b`.
+
+A ninth fresh read-only review in the same real TMUX/Corbanu harness used exact
+model `claude-opus-5-plan` at `max` and reviewed immutable evidence candidate
+`aaee116ff2ab300f7a5ae2e644ff7098688dcc4e`. It independently reverified
+every earlier remediation and found two low-severity evidence gaps: recovery's
+preserved real-lock-contention branch lacked a direct regression despite the
+coverage claim, and the recorded `journal_recovery.rs` line count was stale.
+Verification candidate `e2cc83c3a2aac5e2410ddac2a29ac6591eb53285`
+adds the held-writer-lock recovery assertion and corrects the module count to
+379 lines; no production code changed after the exact implementation smoke.
+Transcript:
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/durable-events/review/opus-ninth-review-findings.txt`,
+SHA-256 `3375f2b80b3b23f6dd004fca1af31376565833172d5f17e3d8e15874d40c69ab`.
 
 The final post-remediation read-only Claude Opus 5 Plan Max review is recorded
 here after it completes. Prompt and Enter are sent as separate TMUX operations;
