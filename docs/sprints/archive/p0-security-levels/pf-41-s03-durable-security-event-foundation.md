@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-41-S03"
 title: "Durable security event and recovery foundation"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-41"
 execution_order: 25
@@ -56,7 +56,7 @@ updated: 2026-08-30
 
 ## Remaining
 
-- [ ] Integration owner audits the literal scope, registers the crate and shared dependencies on the combined tree, reruns consumed PF-19/PF-20 and security-audit suites, updates shared navigation/plan evidence and archives the sprint without activating a consumer.
+- [x] Integration owner audited the literal scope, registered the crate and shared dependencies on the combined tree, reran consumed PF-19/PF-20 and security-audit suites, updated shared navigation/plan evidence, and archived the sprint without activating a consumer.
 
 ## Verification
 
@@ -65,10 +65,10 @@ updated: 2026-08-30
 - [x] TUI applicability remains indirect for this unregistered foundation; the exact candidate passed the round-three TMUX/Corbanu `/status` and clean-exit smoke with trace logging.
 - [x] Contract fixture asserts `runtime_activation: false` with empty producer and consumer registrations; the lane changes no existing runtime route or profile.
 - [x] Completed the final read-only Claude Opus 5 Plan Max review in the TMUX/Corbanu harness; all nine earlier review rounds are remediated and retested, and the final exact verdict is `NO FINDINGS`.
-- [ ] Integration owner registers the shared Cargo/Bazel/lock surfaces and reruns the combined-tree security-audit, consumed PF-19/PF-20 and repository Bazel validation before archive.
+- [x] Integration owner registered the shared Cargo/Bazel/lock surfaces and reran the combined-tree security-audit, consumed PF-19/PF-20 and repository Bazel validation before archive.
 
 ## Exit evidence
 
 - [x] Recorded the clean independent review and final-tree digests under `qa/security-levels/sprints/PF-41-S03/`; exact-candidate TMUX smoke is complete.
-- [ ] Consumers depend on this completed foundation; final PF-41-S02 and PF-26 revalidate combined-tree audit/recovery rather than accepting fake producer fixtures.
-- [ ] Record integration handoff and scope audit; complete all ledgers before archive and update plan/navigation.
+- [x] Consumers depend on this completed foundation; final PF-41-S02 and PF-26 must revalidate combined-tree audit/recovery rather than accepting fake producer fixtures.
+- [x] Recorded integration handoff and scope audit; completed all ledgers before archive and updated plan/navigation.

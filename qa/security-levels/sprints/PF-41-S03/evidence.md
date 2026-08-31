@@ -323,3 +323,27 @@ procedure that matches `CommitUnknown.event_id` before calling
 `reconcile_ambiguous_commit`, and provide real adapter evidence. PF-41-S02 and
 PF-26 retain joined inspection/export and final
 end-to-end chain qualification. This fixture cannot activate any consumer.
+
+## Integration completion
+
+The integration owner merged the clean lane at
+`c30ee50dceb4e4a34df87b9114fcec1ccb866f92`, registered `security-audit`,
+`codex-security-audit` and `fslock` in the root workspace, regenerated
+`Cargo.lock`, refreshed Bazel's module dependency resolution, and completed the
+shared gates from an external-drive-only build root. `MODULE.bazel.lock` was
+already sufficient and remained byte-identical under update/error validation.
+The final integration-only registration/archive diff is contained by this
+evidence record's commit.
+
+- `cargo test -p codex-security-audit`: 43 unit/fault and one public integration
+  test passed; all-target Clippy with `-D warnings` passed.
+- Bazel lock error-mode validation passed. Explicit Bazel targets
+  `//codex-rs/security-audit:security-audit-unit-tests` and
+  `//codex-rs/security-audit:security-audit-consumer_contract-test` both passed.
+- Consumed PF-19/PF-20 regression gates passed: security-policy 47/47,
+  configuration 229/229, Core `config::` 487/487, and Core `security::` 50/50.
+- No producer, consumer, runtime route or protected profile was registered.
+  PF-20 and later consumers retain every live-adapter obligation above.
+
+Build, cache and temporary state was confined to
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/round3-integration/`.
