@@ -1,17 +1,17 @@
 ---
 sprint_id: "PF-54-S01"
 title: "Provider management and eligibility"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-54"
 execution_order: 13
 owner: "GPT-5.6 Sol high implementation agent"
-parallel_lane: "UNALLOCATED"
-write_scope: "UNALLOCATED"
-integration_gate: "UNALLOCATED"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+parallel_lane: "provider-auth-serial"
+write_scope: "codex-rs/provider-auth/src/lib.rs; codex-rs/provider-auth/src/management.rs; codex-rs/provider-auth/src/management_tests.rs; codex-rs/tui/src/lib.rs; codex-rs/tui/src/provider_status_host.rs; codex-rs/tui/src/provider_management_host.rs; codex-rs/tui/src/provider_management_host_tests.rs; codex-rs/tui/src/chatwidget.rs; codex-rs/tui/src/chatwidget/slash_dispatch.rs; codex-rs/tui/src/chatwidget/provider_credentials.rs; codex-rs/tui/src/chatwidget/provider_manager.rs; codex-rs/tui/src/chatwidget/snapshots/; codex-rs/tui/src/slash_command.rs; codex-rs/tui/src/app.rs; codex-rs/tui/src/app/provider_management.rs; codex-rs/tui/src/app/event_dispatch.rs; codex-rs/tui/src/app/test_support.rs; codex-rs/tui/src/app/tests.rs; codex-rs/tui/src/app_event.rs; codex-rs/tui/tests/suite/provider_management.rs; codex-rs/tui/tests/suite/mod.rs; docs/sprints/current/unified-provider-auth/pf-54-s01-provider-management.md"
+integration_gate: "PF-54 only: replace the static /providers menu with the PF-48/PF-49 shared catalog and status host; reuse PF-50–PF-52 typed setup and recovery adapters; persist explicit eligibility without credential deletion; require a user-selected usable model/provider replacement before current-provider deactivation; keep cancellation and stale completion inert; accurately describe externally and environment-managed credential removal; preserve explicit inactivity through recovery; and prove restart persistence. Excludes PF-55 startup/model-picker convergence and heuristic removal, all credential deletion, PF-56 final documentation/release work, and provider wire-protocol or credential-custody changes."
+worktree: "/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0"
+branch: "feat/unified-provider-auth"
+base_commit: "f7356a94e032234022a462d65b576a7de2854859"
 depends_on: "PF-53-S01"
 created: 2026-09-01
 updated: 2026-09-01
@@ -38,14 +38,16 @@ updated: 2026-09-01
 
 ## Preconditions
 
-- [ ] Plan is active.
-- [ ] PF-53-S01 is completed and archived.
-- [ ] Exact serial allocation matches the plan.
-- [ ] Credential removal and eligibility mutations are distinct typed effects.
+- [x] Plan is active.
+- [x] PF-53-S01 is completed and archived.
+- [x] Exact serial allocation matches the plan.
+- [x] Credential removal and eligibility mutations are distinct typed effects.
 
 ## Done
 
 - [x] Draft sprint record created and linked to PF-54.
+- [x] Allocated serially to the GPT-5.6 Sol high implementation owner in the plan worktree.
+- [x] Froze eligibility recovery, replacement, cancellation, and credential-retention policy before implementation.
 
 ## Remaining
 
