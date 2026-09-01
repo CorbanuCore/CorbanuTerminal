@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-55-S01"
 title: "Expose Fable 5.1 through Claude Plan"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/claude-subscription-auth.md"
 plan_feature: "PF-55"
 execution_order: 7
@@ -53,24 +53,21 @@ updated: 2026-09-01
 
 ## Remaining
 
-- [ ] Run final formatting and focused affected tests.
-- [ ] Review and accept the Claude Plan picker snapshot.
-- [ ] Record final candidate commit and release evidence.
-- [ ] Move this completed sprint to the archive.
+- None.
 
 ## Verification
 
-- [ ] Format: `just fmt`.
-- [ ] Provider routing: `just test -p codex-model-provider-info`.
-- [ ] Static catalogs: `just test -p codex-model-provider` and `just test -p codex-models-manager`.
-- [ ] Request mapping: focused `codex-core` client test.
-- [ ] Picker: focused `codex-tui` model-picker test and reviewed snapshot.
-- [ ] TUI applicability: required; exact Fable 5.1 row must render under Claude Plan.
+- [x] Format: `just fmt`.
+- [x] Provider routing: `just test -p codex-model-provider-info`.
+- [x] Static catalogs: `just test -p codex-model-provider` and `just test -p codex-models-manager`.
+- [x] Request mapping: focused `codex-core` client test.
+- [x] Picker: focused `codex-tui` model-picker test and reviewed snapshot.
+- [x] TUI applicability: exact Fable 5.1 row renders under Claude Plan in the reviewed picker snapshot.
 
 ## Exit evidence
 
-- [ ] Implementation commit recorded.
-- [ ] Final-tree test output summarized in `qa/release/0.1.37/RELEASE-CANDIDATE.md`.
-- [ ] Release scope audit confirms no GLM 5.3 worktree changes or unrelated security implementation are included.
-- [ ] `Done` and `Remaining` ledgers reflect reality.
-- [ ] Completed record moved to `docs/sprints/archive/claude-subscription-auth/`.
+- [x] Implementation commit: `b419118975`.
+- [x] Final-tree test output summarized in `qa/release/0.1.37/RELEASE-CANDIDATE.md`.
+- [x] Release scope audit confirms no GLM 5.3 worktree changes or unrelated security implementation are included.
+- [x] `Done` and `Remaining` ledgers reflect reality.
+- [x] Completed record moved to `docs/sprints/archive/claude-subscription-auth/`.

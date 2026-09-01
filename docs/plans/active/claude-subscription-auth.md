@@ -221,7 +221,7 @@ run `python3 docs/sprints/check.py`.
 | `PF-45` (`CSA-04`) | Legacy/conflict migration plus failure, recovery, and resume UX | [CSA-04 / PF-45-S01](../../sprints/archive/claude-subscription-auth/pf-45-s01-auth-choice-and-recovery.md) | completed and archived |
 | `PF-46` (`CSA-05`) | Final automated, cross-platform-fixture, true-TUI, documentation, and review qualification | [CSA-05 / PF-46-S01](../../sprints/archive/claude-subscription-auth/pf-46-s01-final-qualification.md) | completed and archived; live-account, live-repository, human, and release gates remain plan-level work |
 | `PF-47` (`CSA-06`) | First-run Anthropic-account onboarding integrated with the existing explicit Claude authentication choice | [CSA-06 / PF-47-S01](../../sprints/archive/claude-subscription-auth/pf-47-s01-first-run-anthropic-account.md) | completed and archived; startup account choice, cancel safety, persistence, restart, and typed-Tmux qualification passed |
-| `PF-55` (`CSA-07`) | Fable 5.1 catalog availability and exact Claude Plan upstream routing | [CSA-07 / PF-55-S01](../../sprints/current/claude-subscription-auth/pf-55-s01-fable-5-1.md) | in progress for 0.1.37 |
+| `PF-55` (`CSA-07`) | Fable 5.1 catalog availability and exact Claude Plan upstream routing | [CSA-07 / PF-55-S01](../../sprints/archive/claude-subscription-auth/pf-55-s01-fable-5-1.md) | completed for 0.1.37 |
 
 ## Hard dependency graph
 
