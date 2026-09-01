@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-53-S01"
 title: "Multi-provider onboarding"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-53"
 execution_order: 12
@@ -61,7 +61,7 @@ updated: 2026-09-01
 
 ## Remaining
 
-- [ ] Implementation commit, sprint archival, and archival commit remain primary-owned.
+- [x] Primary reviewed and integrated the final tree in implementation commit `30b595034b`; this completed record is archived with no implementation item remaining.
 
 ## Verification
 
@@ -75,7 +75,7 @@ updated: 2026-09-01
 - [x] Full serial zero-retry TMUX matrix passed 9/9 in 537.22s: four harness-safety tests and all five required product journeys.
 - [x] Governance passed with `python3 docs/plans/check.py` (2/2 active) and `python3 docs/sprints/check.py` (62 current/108 archived before PF-53 archival).
 - [x] The broad 3,889-test TUI library run reached unrelated advanced-reasoning coverage, then aborted on the pre-existing `fork_current_session_preserves_conversation_ultra` stack overflow; no PF-53 test failed before the abort.
-- [ ] Record the primary-owned implementation commit before moving this evidence ledger to the archive.
+- [x] Primary-owned implementation commit `30b595034b` records the exact tested tree before archival.
 
 ## Exit evidence
 
@@ -85,4 +85,4 @@ updated: 2026-09-01
 - [x] Encrypted-vault save regression was reproduced and fixed by selected-provider-only metadata resolution.
 - [x] Final success artifacts are `pf53-configure-many-restart-request`, `pf53-deferred-fallback-cancel`, `pf53-fresh-wallet-plan-success`, `pf53-locked-wallet-failure-retry`, and `pf53-only-plan-return`; each records the exact final binary hash plus viewport, scrollback, isolated config/log, and canary checks.
 - [x] Primary review confirmed literal write scope, secret-free typed events/snapshots, targeted provider reconciliation, active-by-default eligibility, first-success/current-provider invariants, and no PF-54 deactivation behavior.
-- [ ] Implementation commit and completed archived record are primary-owned.
+- [x] Implementation commit `30b595034b` is recorded and this completed ledger is archived.
