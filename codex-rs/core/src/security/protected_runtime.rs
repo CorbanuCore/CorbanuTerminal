@@ -45,7 +45,7 @@ use uuid::Uuid;
 
 use super::effective_policy::EffectivePolicySnapshot;
 
-pub(crate) const PROTECTED_RUNTIME_CONTRACT_VERSION: u32 = 4;
+pub(crate) const PROTECTED_RUNTIME_CONTRACT_VERSION: u32 = 5;
 const MAX_READINESS_WINDOW_SECONDS: i64 = 300;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -323,7 +323,8 @@ impl ProtectedRuntime {
             receiptless_never_admitted_completion,
             run_id,
             fence,
-            permit,
+            permit: Some(permit),
+            pending_resolution: None,
         })
     }
 
@@ -438,7 +439,8 @@ pub(crate) struct ProtectedDispatch {
     receiptless_never_admitted_completion: bool,
     run_id: BoundedText,
     fence: DispatchFence,
-    permit: DispatchPermit,
+    permit: Option<DispatchPermit>,
+    pending_resolution: Option<DispatchResolution>,
 }
 
 impl ProtectedDispatch {
@@ -479,34 +481,60 @@ impl ProtectedDispatch {
     }
 
     pub(crate) fn resolve(
-        mut self,
+        &mut self,
         runtime: &ProtectedRuntime,
         journal: &mut ReferenceJournal,
         resolution: DispatchResolution,
         occurred_at_unix_seconds: i64,
     ) -> Result<AppendAcknowledgement, ProtectedRuntimeError> {
         runtime.validate_instance(self.runtime_instance_id)?;
-        let phase = self.fence.phase();
-        let terminal_transition = match &resolution {
-            DispatchResolution::Completed { .. } => self.fence.record_completed(),
-            DispatchResolution::Unknown { .. } => self.fence.record_unknown_financial_outcome(),
-        };
-        if let Err(error) = terminal_transition
-            && !never_admitted_resolution_is_safe(
-                phase,
-                self.receiptless_never_admitted_completion,
-                &resolution,
-                &error,
-            )
-        {
-            return Err(error.into());
+        let permit = self
+            .permit
+            .as_ref()
+            .ok_or(ProtectedRuntimeError::DispatchResolutionUnavailable)?;
+        if let Some(pending_resolution) = &self.pending_resolution {
+            if pending_resolution != &resolution {
+                return Err(ProtectedRuntimeError::DispatchResolutionRetryMismatch);
+            }
+        } else {
+            let phase = self.fence.phase();
+            let terminal_transition = match &resolution {
+                DispatchResolution::Completed { .. } => self.fence.record_completed(),
+                DispatchResolution::Unknown { .. } => self.fence.record_unknown_financial_outcome(),
+            };
+            if let Err(error) = terminal_transition
+                && !never_admitted_resolution_is_safe(
+                    phase,
+                    self.receiptless_never_admitted_completion,
+                    &resolution,
+                    &error,
+                )
+            {
+                return Err(error.into());
+            }
+            self.pending_resolution = Some(resolution.clone());
         }
-        Ok(journal.resolve_dispatch(
-            self.permit,
+
+        let result = journal.resolve_dispatch(
+            permit,
             runtime.event_context()?,
             resolution,
             occurred_at_unix_seconds,
-        )?)
+        );
+        match result {
+            Ok(acknowledgement) => {
+                self.permit.take();
+                self.pending_resolution = None;
+                Ok(acknowledgement)
+            }
+            Err(error) => {
+                if matches!(error, JournalError::CommitUnknown { .. }) {
+                    self.permit.take();
+                    self.pending_resolution = None;
+                }
+                Err(error.into())
+            }
+        }
     }
 }
 
@@ -650,6 +678,10 @@ pub(crate) enum ProtectedRuntimeError {
     StaleRuntimeBinding,
     #[error("protected dispatch belongs to a different runtime instance")]
     RuntimeInstanceMismatch,
+    #[error("protected dispatch resolution is already durable or commit-ambiguous")]
+    DispatchResolutionUnavailable,
+    #[error("protected dispatch retry changed the terminal resolution")]
+    DispatchResolutionRetryMismatch,
     #[error("protected authority does not match the exact authorization request")]
     AuthorityRequestMismatch,
     #[error("authorization request does not match the protected runtime actor binding")]

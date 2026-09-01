@@ -176,7 +176,7 @@ impl ReferenceJournal {
 
     pub fn resolve_dispatch(
         &mut self,
-        permit: DispatchPermit,
+        permit: &DispatchPermit,
         current_context: EventContext,
         resolution: DispatchResolution,
         occurred_at_unix_seconds: i64,
@@ -190,9 +190,9 @@ impl ReferenceJournal {
         validate_resolution(&permit.authority, &resolution)?;
         let event = SecurityEvent::dispatch_resolution(
             current_context,
-            permit.intent_event_id,
-            permit.action_id,
-            permit.reservation_id,
+            permit.intent_event_id.clone(),
+            permit.action_id.clone(),
+            permit.reservation_id.clone(),
             resolution,
             occurred_at_unix_seconds,
         )?;

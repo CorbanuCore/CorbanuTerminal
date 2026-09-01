@@ -195,8 +195,10 @@ pub enum EventChainError {
 ///
 /// This is not authority. Consumers must still validate the live PF-16–20
 /// request, grant or mandate, revocation state and dispatch fence immediately
-/// before the effect. The value is deliberately non-`Clone` and is consumed by
-/// [`crate::ReferenceJournal::resolve_dispatch`].
+/// before the effect. The value is deliberately non-`Clone`. Resolution
+/// borrows it so a caller can preserve the exact permit across an error proven
+/// not to have committed. The journal remains the exactly-once authority: a
+/// durable terminal event prevents reuse from resolving the reservation again.
 #[derive(Debug)]
 pub struct DispatchPermit {
     pub(crate) context: EventContext,

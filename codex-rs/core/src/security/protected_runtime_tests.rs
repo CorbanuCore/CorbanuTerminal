@@ -205,7 +205,7 @@ fn protected_runtime_binds_configured_creator_and_effective_levels() {
     assert_eq!(
         runtime.snapshot(),
         &super::protected_runtime::ProtectedRuntimeSnapshot {
-            contract_version: 4,
+            contract_version: 5,
             configured_level: SecurityLevel::Moderate,
             creator_required_level: SecurityLevel::Aggressive,
             effective_level: SecurityLevel::Aggressive,
@@ -752,18 +752,37 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         fence_is_held,
         "the revocation read guard must span the effect"
     );
-    let completion = dispatch
-        .resolve(
+    let executed_resolution = DispatchResolution::Completed {
+        outcome: MandateOutcome::Executed,
+        mandate_receipt: None,
+    };
+    assert!(matches!(
+        dispatch.resolve(&runtime, &mut journal, executed_resolution.clone(), 9,),
+        Err(ProtectedRuntimeError::Journal(
+            codex_security_audit::JournalError::EventChain(
+                codex_security_audit::EventChainError::TimestampRegression
+            )
+        ))
+    ));
+    assert!(matches!(
+        dispatch.resolve(
             &runtime,
             &mut journal,
-            DispatchResolution::Completed {
-                outcome: MandateOutcome::Executed,
-                mandate_receipt: None,
+            DispatchResolution::Unknown {
+                reason: UnknownOutcomeReason::PersistenceUncertain,
             },
             12,
-        )
-        .expect("durable terminal receipt");
+        ),
+        Err(ProtectedRuntimeError::DispatchResolutionRetryMismatch)
+    ));
+    let completion = dispatch
+        .resolve(&runtime, &mut journal, executed_resolution.clone(), 12)
+        .expect("retry the exact executed resolution after pre-commit validation failure");
     assert_eq!(completion.sequence, 2);
+    assert!(matches!(
+        dispatch.resolve(&runtime, &mut journal, executed_resolution, 12),
+        Err(ProtectedRuntimeError::DispatchResolutionUnavailable)
+    ));
 
     let mut unknown_dispatch = runtime
         .reserve_dispatch(
@@ -1021,7 +1040,7 @@ fn durable_intent_and_live_fence_precede_the_effect() {
             18,
         )
         .expect("cancel collision grant");
-    let collision_mandate_dispatch = runtime
+    let mut collision_mandate_dispatch = runtime
         .reserve_dispatch(
             current_at(&effective, &state, &measured, &recovery, 18),
             "brokered-https",

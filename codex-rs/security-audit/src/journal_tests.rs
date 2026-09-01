@@ -323,7 +323,7 @@ fn mandate_intent_precedes_completed_receipt() {
     let completion = fixture
         .journal
         .resolve_dispatch(
-            permit,
+            &permit,
             fixture.context(),
             DispatchResolution::Completed {
                 outcome: MandateOutcome::Executed,
@@ -336,6 +336,106 @@ fn mandate_intent_precedes_completed_receipt() {
     assert_eq!(intent_ack.sequence, 1);
     assert_eq!(completion.sequence, 2);
     healthy_recovery(&mut fixture);
+}
+
+#[test]
+fn resolution_permit_survives_a_proven_precommit_failure() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    let request = request();
+    let (permit, _) = fixture
+        .journal
+        .reserve_dispatch(
+            fixture.context(),
+            None,
+            &request,
+            AuthorityIdentity::Grant {
+                grant_id: text("grant-1"),
+            },
+            text("dispatch-1"),
+            12,
+        )
+        .expect("durable intent");
+    let resolution = DispatchResolution::Completed {
+        outcome: MandateOutcome::Executed,
+        mandate_receipt: None,
+    };
+    fixture
+        .journal
+        .inject_once(FaultPoint::BeforeRecordWrite, InjectedFault::DiskFull);
+    assert!(matches!(
+        fixture
+            .journal
+            .resolve_dispatch(&permit, fixture.context(), resolution.clone(), 13),
+        Err(JournalError::StorageUnavailable)
+    ));
+    let report = fixture.journal.recover(1, 1, &RevocationState::new());
+    assert_eq!(report.state, RecoveryState::ReconciliationRequired);
+    assert_eq!(report.pending_dispatches.len(), 1);
+
+    let acknowledgement = fixture
+        .journal
+        .resolve_dispatch(&permit, fixture.context(), resolution.clone(), 13)
+        .expect("the same permit can retry a resolution proven not committed");
+    assert_eq!(acknowledgement.sequence, 2);
+    let duplicate = fixture
+        .journal
+        .resolve_dispatch(&permit, fixture.context(), resolution, 13)
+        .expect("the journal idempotently acknowledges the same durable resolution");
+    assert!(duplicate.duplicate);
+    assert!(matches!(
+        fixture.journal.resolve_dispatch(
+            &permit,
+            fixture.context(),
+            DispatchResolution::Unknown {
+                reason: crate::UnknownOutcomeReason::PersistenceUncertain,
+            },
+            14,
+        ),
+        Err(JournalError::EventChain(EventChainError::AlreadyResolved))
+    ));
+}
+
+#[test]
+fn ambiguous_resolution_commit_blocks_permit_reuse() {
+    let mut fixture = Fixture::new(JournalConfig::default());
+    let request = request();
+    let (permit, _) = fixture
+        .journal
+        .reserve_dispatch(
+            fixture.context(),
+            None,
+            &request,
+            AuthorityIdentity::Grant {
+                grant_id: text("grant-1"),
+            },
+            text("dispatch-1"),
+            12,
+        )
+        .expect("durable intent");
+    let resolution = DispatchResolution::Completed {
+        outcome: MandateOutcome::Executed,
+        mandate_receipt: None,
+    };
+    fixture
+        .journal
+        .inject_once(FaultPoint::AfterRecordRename, InjectedFault::Crash);
+    assert!(matches!(
+        fixture
+            .journal
+            .resolve_dispatch(&permit, fixture.context(), resolution.clone(), 13),
+        Err(JournalError::CommitUnknown { .. })
+    ));
+    assert!(matches!(
+        fixture
+            .journal
+            .resolve_dispatch(&permit, fixture.context(), resolution, 13),
+        Err(JournalError::RecoveryRequired)
+    ));
+    let report = fixture.journal.recover(1, 1, &RevocationState::new());
+    assert_eq!(
+        report.state,
+        RecoveryState::Blocked(RecoveryBlocker::RecordsAheadOfIntegrityRoot)
+    );
 }
 
 #[test]
@@ -359,7 +459,7 @@ fn unknown_receipt_is_terminal_and_never_auto_replayed() {
     fixture
         .journal
         .resolve_dispatch(
-            permit,
+            &permit,
             fixture.context(),
             DispatchResolution::Unknown {
                 reason: crate::UnknownOutcomeReason::SettlementUncertain,
@@ -456,7 +556,7 @@ fn append_surfaces_precise_chain_invariant_errors() {
         .expect("durable intent");
     assert!(matches!(
         fixture.journal.resolve_dispatch(
-            permit,
+            &permit,
             fixture.context_at(1, 2),
             DispatchResolution::Unknown {
                 reason: crate::UnknownOutcomeReason::TransportLost,
@@ -779,7 +879,7 @@ fn duplicate_dispatch_is_generation_independent() {
     fixture
         .journal
         .resolve_dispatch(
-            permit,
+            &permit,
             fixture.context_at(2, 2),
             DispatchResolution::Unknown {
                 reason: crate::UnknownOutcomeReason::SettlementUncertain,
@@ -1602,7 +1702,7 @@ fn resolution_uses_live_generation_after_policy_advances() {
     fixture
         .journal
         .resolve_dispatch(
-            permit,
+            &permit,
             generation_two,
             DispatchResolution::Unknown {
                 reason: crate::UnknownOutcomeReason::TransportLost,
