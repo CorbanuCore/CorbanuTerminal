@@ -56,11 +56,12 @@ updated: 2026-08-31
 - [x] Remediated the first Opus rereview: preview-stable mandate replay, conservative never-admitted closure, internally derived event context, immutable/monotonic readiness, actor/request binding, available recovery-checkpoint binding and correct Rust char-literal lexing.
 - [x] Remediated the next Opus pass: domain-separated grant/mandate deduplication, opaque per-runtime dispatch identity, and an explicit conservative Unknown-only mandate closure where durable admission proof does not exist.
 - [x] Remediated the final-pass retry finding under integration-owner-authorized audit scope: journal resolution borrows the non-clone permit, Core retains one exact pending outcome only across known non-ambiguous errors, and commit-unknown disables direct retry.
+- [x] Remediated the ship-pass lifecycle finding: authorization now requires a live permit and no pending resolution before any validation, fence transition or effect, with negative coverage for every successful terminal path and retry-pending state.
 - [x] Recorded focused, affected, compatibility and real-TMUX evidence under `qa/security-levels/sprints/PF-22-S02/`.
 
 ## Remaining
 
-- [ ] Complete the final TMUX/Corbanu/Claude Opus 5 Max read-only rereview of the four-times-remediated candidate and resolve any actionable P0/P1/P2 findings.
+- [ ] Complete the final TMUX/Corbanu/Claude Opus 5 Max read-only rereview of the five-times-remediated candidate and resolve any actionable P0/P1/P2 findings.
 - [ ] At the PF-23/PF-24 consumer boundary, bind runtime readiness and journal recovery to one authenticated live run-generation source and prove a mismatch fails closed.
 - [ ] Scope a future cross-crate durable-admission or non-forgeable fence-to-audit proof before supporting receiptless never-admitted mandate Denied/Cancelled outcomes; PF-22 only claims conservative Unknown.
 - [ ] Have the integration owner rerun combined-tree gates, archive the sprint and update shared plan/navigation ledgers.
@@ -75,7 +76,8 @@ updated: 2026-08-31
 - [x] Rerun Opus 5 Max on the first P1/P2-remediated candidate; it returned no P0, two P1 and five P2 findings, all remediated and dispositioned in evidence.
 - [x] Rerun Opus 5 Max on the second remediated candidate; it returned no P0/P1 and three P2 findings, with two safely remediated and one narrowed to an explicit future contract dependency.
 - [x] Rerun Opus 5 Max on the third remediated candidate; it verified all prior fixes and returned one P2 retry-safety finding, remediated under the authorized audit scope.
-- [ ] Run the final Opus 5 Max review on the four-times-remediated candidate.
+- [x] Rerun Opus 5 Max on the fourth remediated candidate; it verified retry safety and returned one P2 effect-after-terminal lifecycle finding, now remediated.
+- [ ] Run the final focused Opus 5 Max review on the five-times-remediated candidate.
 
 ## Exit evidence
 
