@@ -209,7 +209,7 @@ user work and integrate rather than revert concurrent changes.
 | `PF-45` | Claude auth choice and recovery | [PF-45-S01](../../sprints/archive/claude-subscription-auth/pf-45-s01-auth-choice-and-recovery.md) | completed; evidence preserved |
 | `PF-46` | Claude automated qualification | [PF-46-S01](../../sprints/archive/claude-subscription-auth/pf-46-s01-final-qualification.md) | completed; open plan-level gates carried forward |
 | `PF-47` | First-run Anthropic account entry | [PF-47-S01](../../sprints/archive/claude-subscription-auth/pf-47-s01-first-run-anthropic-account.md) | completed; merged in `f7356a94e0` |
-| `PF-48` | Typed provider catalog and capability contract | [PF-48-S01](../../sprints/current/unified-provider-auth/pf-48-s01-provider-catalog-contract.md) | in progress |
+| `PF-48` | Typed provider catalog and capability contract | [PF-48-S01](../../sprints/archive/unified-provider-auth/pf-48-s01-provider-catalog-contract.md) | completed at `7936d83859` |
 | `PF-49` | Shared metadata status and persisted eligibility | [PF-49-S01](../../sprints/current/unified-provider-auth/pf-49-s01-status-and-eligibility.md) | draft |
 | `PF-50` | Renderer-independent API-key authentication controller | [PF-50-S01](../../sprints/current/unified-provider-auth/pf-50-s01-api-key-flow-controller.md) | draft |
 | `PF-51` | OpenAI account adapter on the shared controller | [PF-51-S01](../../sprints/current/unified-provider-auth/pf-51-s01-openai-account-adapter.md) | draft |

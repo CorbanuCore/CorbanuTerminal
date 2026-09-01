@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-48-S01"
 title: "Provider catalog contract"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-48"
 execution_order: 7
@@ -55,7 +55,7 @@ updated: 2026-09-01
 
 ## Remaining
 
-- [ ] Record the implementation commit and archive the primary-accepted sprint.
+- [x] Recorded implementation commit `7936d83859dc5f192c7966d071058a7c23410c4f` and archived the primary-accepted sprint.
 
 ## Verification
 
@@ -63,15 +63,15 @@ updated: 2026-09-01
 - [x] Integration test: `CARGO_INCREMENTAL=0 just test -p codex-model-provider-info -j 1 --retries 0` — 58 passed, 0 skipped, exit 0; `cargo check -p codex-tui` — exit 0 in 1m53s with one pre-existing `unused_mut` warning in `tui/src/chatwidget/claude_code_login.rs:280`.
 - [x] TUI applicability resolved: no renderer change; later host sprints own true-TMUX proof.
 - [x] Primary integration acceptance: pass 1 found a built-in-shape coverage gap; the focused regression closes it and passes.
-- [ ] Post-commit verification: rerun governance checks against the recorded implementation commit before archival.
+- [x] Post-commit verification: governance checks passed against recorded implementation commit `7936d83859dc5f192c7966d071058a7c23410c4f` before archival.
 
 ## Exit evidence
 
-- [ ] Implementation commit pending; frozen catalog contract is accepted and recorded below.
+- [x] Implementation commit `7936d83859dc5f192c7966d071058a7c23410c4f`; frozen catalog contract is accepted and recorded below.
 - [x] Final-tree test commands and exact summaries are recorded below.
 - [x] Primary integration review pass 1 found one test-coverage gap; it is addressed without consuming an additional formal review pass.
 - [x] `Done` and `Remaining` reflect reality.
-- [ ] Completed record moved to `docs/sprints/archive/unified-provider-auth/`.
+- [x] Completed record moved to `docs/sprints/archive/unified-provider-auth/`.
 
 ## Frozen catalog contract
 
