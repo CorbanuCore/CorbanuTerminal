@@ -22,6 +22,8 @@ use tokio::process::Command;
 use tokio::time::MissedTickBehavior;
 use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
+use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 use crate::app_event::AppEvent;
 use crate::app_event_sender::AppEventSender;
@@ -44,9 +46,11 @@ use super::progress::usage_status_from_summary;
 use super::turn_types::ClaudeCommandPlan;
 use super::turn_types::ClaudePaneTurnAudit;
 use super::turn_types::ClaudePaneTurnOutput;
+use super::turn_types::DeferredClaudePlanAuth;
 use super::turn_types::PreparedClaudePaneTurn;
 
 const CLAUDE_PANE_PROGRESS_HEARTBEAT: Duration = Duration::from_secs(30);
+const CLAUDE_PLAN_AUTH_TIMEOUT: Duration = Duration::from_secs(60);
 const CLAUDE_SECRET_REDACTION: &str = "[REDACTED_SECRET]";
 const MIN_REDACTED_SECRET_LEN: usize = 8;
 pub(crate) async fn run_prepared_claude_turn(
@@ -63,6 +67,50 @@ pub(crate) async fn run_claude_command_plan(
     cancel_token: CancellationToken,
     progress_tx: Option<AppEventSender>,
 ) -> Result<ClaudePaneTurnOutput> {
+    let started_at = Instant::now();
+    let started_at_unix_ms = unix_epoch_ms();
+    let mut last_progress_elapsed_ms = Some(0);
+    let claude_config_dir_override = plan
+        .deferred_claude_plan_auth
+        .as_ref()
+        .and_then(|deferred| deferred.claude_config_dir_override.clone());
+    let claude_plan_token = if let Some(deferred) = plan.deferred_claude_plan_auth.take() {
+        let token = tokio::select! {
+            _ = cancel_token.cancelled() => {
+                let ended_at_unix_ms = unix_epoch_ms();
+                let output = failed_turn_output(
+                    &plan,
+                    elapsed_ms(&started_at),
+                    ClaudePaneTurnStatus::Interrupted,
+                    Some("interrupted_during_auth".to_string()),
+                    "Claude pane turn interrupted before authentication completed.".to_string(),
+                );
+                write_turn_audit(
+                    &plan,
+                    &output,
+                    started_at_unix_ms,
+                    ended_at_unix_ms,
+                    last_progress_elapsed_ms,
+                )?;
+                return Ok(output);
+            }
+            result = resolve_deferred_claude_plan_token(deferred) => result?,
+        };
+        Some(token)
+    } else {
+        None
+    };
+    if let Some(token) = claude_plan_token.as_deref() {
+        let bridge = plan.bridge.as_mut().ok_or_else(|| {
+            anyhow!("Claude Plan credential broker is missing its loopback bridge")
+        })?;
+        if bridge.upstream_api_key.is_some() || bridge.deferred_vault_secret.is_some() {
+            return Err(anyhow!(
+                "Claude Plan credential broker has conflicting credential sources"
+            ));
+        }
+        bridge.upstream_api_key = Some(token.to_string());
+    }
     if let Some(bridge) = plan.bridge.as_mut()
         && bridge.upstream_api_key.is_none()
     {
@@ -77,9 +125,6 @@ pub(crate) async fn run_claude_command_plan(
         .context("Claude bridge credential task failed")??;
         bridge.upstream_api_key = Some(secret);
     }
-    let started_at = Instant::now();
-    let started_at_unix_ms = unix_epoch_ms();
-    let mut last_progress_elapsed_ms = Some(0);
     emit_claude_progress(
         &progress_tx,
         &plan,
@@ -93,7 +138,7 @@ pub(crate) async fn run_claude_command_plan(
             plan.audit_path.display()
         )),
     );
-    let redactor = ClaudeSecretRedactor::from_plan(&plan);
+    let redactor = ClaudeSecretRedactor::from_plan(&plan, /*additional_secret*/ None);
     let bridge_handle = plan
         .bridge
         .take()
@@ -106,6 +151,9 @@ pub(crate) async fn run_claude_command_plan(
     }
     for key in &plan.env_remove {
         command.env_remove(key);
+    }
+    if let Some(config_dir) = claude_config_dir_override {
+        command.env("CLAUDE_CONFIG_DIR", config_dir);
     }
     let mut child = command
         .args(&plan.args)
@@ -382,28 +430,85 @@ pub(crate) async fn run_claude_command_plan(
     Ok(output)
 }
 
+async fn resolve_deferred_claude_plan_token(
+    deferred: DeferredClaudePlanAuth,
+) -> Result<Zeroizing<String>> {
+    let mut command = Command::new(&deferred.helper_executable);
+    command
+        .arg("internal-claude-oauth-token")
+        .env("CORBANU_HOME", &deferred.codex_home)
+        .env("PFTERMINAL_HOME", &deferred.codex_home)
+        .env("CODEX_HOME", &deferred.codex_home)
+        .env_remove("CLAUDE_CONFIG_DIR")
+        .current_dir(&deferred.cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    if let Some(config_dir) = deferred.claude_config_dir_override {
+        command.env("CLAUDE_CONFIG_DIR", config_dir);
+    }
+    let output = tokio::time::timeout(CLAUDE_PLAN_AUTH_TIMEOUT, command.output())
+        .await
+        .map_err(|_| anyhow!("selected Claude Plan authentication timed out"))?
+        .context("failed to start selected Claude Plan authentication helper")?;
+    let mut stdout = output.stdout;
+    if !output.status.success() {
+        stdout.zeroize();
+        return Err(anyhow!(
+            "selected Claude Plan authentication is unavailable; open Providers to recover"
+        ));
+    }
+    let token = match std::str::from_utf8(&stdout) {
+        Ok(token) if !token.trim().is_empty() => Zeroizing::new(token.to_string()),
+        Ok(_) => {
+            stdout.zeroize();
+            return Err(anyhow!(
+                "selected Claude Plan authentication returned no credential; open Providers to recover"
+            ));
+        }
+        Err(_) => {
+            stdout.zeroize();
+            return Err(anyhow!(
+                "selected Claude Plan authentication returned an invalid credential"
+            ));
+        }
+    };
+    stdout.zeroize();
+    Ok(token)
+}
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ClaudeSecretRedactor {
-    secrets: Vec<String>,
+    secrets: Vec<Zeroizing<String>>,
 }
 
 impl ClaudeSecretRedactor {
-    pub(crate) fn from_plan(plan: &ClaudeCommandPlan) -> Self {
-        let secrets = plan
+    pub(crate) fn from_plan(plan: &ClaudeCommandPlan, additional_secret: Option<&str>) -> Self {
+        let mut secrets = plan
             .bridge
             .as_ref()
-            .and_then(|bridge| bridge.upstream_api_key.as_deref())
             .into_iter()
+            .flat_map(|bridge| {
+                [
+                    Some(bridge.client_auth_token.as_str()),
+                    bridge.upstream_api_key.as_deref(),
+                ]
+            })
+            .flatten()
             .filter(|secret| secret.len() >= MIN_REDACTED_SECRET_LEN)
-            .map(ToString::to_string)
-            .collect();
+            .map(|secret| Zeroizing::new(secret.to_string()))
+            .collect::<Vec<_>>();
+        if let Some(secret) = additional_secret.filter(|secret| !secret.is_empty()) {
+            secrets.push(Zeroizing::new(secret.to_string()));
+        }
         Self { secrets }
     }
 
     pub(crate) fn redact(&self, text: &str) -> String {
         let mut redacted = text.to_string();
         for secret in &self.secrets {
-            redacted = redacted.replace(secret, CLAUDE_SECRET_REDACTION);
+            redacted = redacted.replace(secret.as_str(), CLAUDE_SECRET_REDACTION);
         }
         redacted
     }

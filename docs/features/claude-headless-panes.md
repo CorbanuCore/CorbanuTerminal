@@ -50,9 +50,19 @@ the provider's native login mechanism. Raw provider keys must not be inserted
 into prompts, visible chat history, pane transcripts, or model-readable
 metadata.
 
-Claude Plan uses Claude Code's own account authentication, managed from the
-same `/providers` feature as OpenAI Codex Account. See
-[`/providers`, account login, and `/model`](model-providers.md#account-backed-provider-login).
+Claude Plan uses the exact long-lived subscription-token or Claude Code login
+source selected in `/providers`. See
+[Reliable Claude Plan authentication](claude-plan-authentication.md).
+The pane plan stores only a deferred auth descriptor. Immediately before Claude
+starts, Corbanu resolves the selected source through the same trusted helper as
+ordinary Claude Plan requests, removes inherited API-key/cloud-routing
+overrides, and supplies the credential only to that child process. The value is
+not written to pane arguments, settings, artifacts, audits, or persisted pane
+metadata.
+For the Claude Plan profile, Corbanu also writes Anthropic's official API endpoint
+to the generated per-pane settings passed with `--settings`. The command still
+enables Claude Code's project setting source for normal repository behavior;
+setting precedence remains controlled by Claude Code.
 Vault-backed profiles use the credential label associated with that provider.
 
 ## Failure and recovery

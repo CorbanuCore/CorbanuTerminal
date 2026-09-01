@@ -88,7 +88,7 @@ owner must compare actual diffs to scope and record final combined-tree evidence
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
 | [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [57 current sprints](current/p0-security-levels/index.md), 19 completed archives | PF-19-S02, PF-20-S02, and PF-21-S02 are allocated ready across three disjoint round-two lanes; PF-13-S07 retains final composed qualification |
-| [Corbanu API balance and keys](../plans/active/corbanu-api-balance.md) | Active | [PF-34-S02](current/corbanu-api-balance/pf-34-s02-wallet-ui.md) | Wallet UI in progress |
+| [Reliable Claude subscription authentication](../plans/active/claude-subscription-auth.md) | Active | [0 current sprints](current/claude-subscription-auth/index.md), 6 completed archives | PF-47-S01 completed first-run Anthropic-account onboarding; named human/live-account, live-repository, physical release-host, and release gates remain open on the plan |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
 | [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | Historical 72-sprint decomposition remains cancelled; every record maps into the active P0 plan's current work |
 

@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
@@ -11,6 +13,10 @@ use serde_json::Value;
 use serde_json::json;
 use sha2::Digest;
 use sha2::Sha256;
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
+use tokio::net::TcpListener;
+use tokio::net::TcpStream;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -20,6 +26,8 @@ use crate::spawn_orchestration::SpawnRole;
 
 use super::app_integration::new_pane_items;
 use super::bridge::ambient_retry_after_delay;
+use super::bridge::find_header_end;
+use super::bridge::handle_anthropic_passthrough_bridge_connection;
 use super::bridge_translate::ambient_chat_messages_from_claude_request;
 use super::bridge_translate::ambient_chat_tools_from_claude_request;
 use super::bridge_translate::anthropic_stream_error_event;
@@ -27,6 +35,7 @@ use super::bridge_translate::anthropic_stream_start_event;
 use super::bridge_translate::anthropic_stream_stop_event;
 use super::bridge_translate::anthropic_tool_use_response;
 use super::bridge_translate::bridge_tool_calls_from_ambient_response;
+use super::command_plan::absolute_claude_config_dir_override_against;
 use super::command_plan::allowed_provider_vault_label;
 use super::command_plan::build_claude_command_plan;
 use super::command_plan::claude_pane_title;
@@ -107,6 +116,38 @@ fn pane(profile: ClaudeProviderProfileKind) -> (tempfile::TempDir, ClaudePane) {
             next_turn_index: 1,
         },
     )
+}
+
+async fn read_http_request(stream: &mut TcpStream) -> Vec<u8> {
+    let mut request = Vec::new();
+    let mut chunk = [0_u8; 4096];
+    let mut expected_len = None;
+    loop {
+        let read = stream.read(&mut chunk).await.expect("read HTTP request");
+        if read == 0 {
+            break;
+        }
+        request.extend_from_slice(&chunk[..read]);
+        if expected_len.is_none()
+            && let Some(header_end) = find_header_end(&request)
+        {
+            let headers = String::from_utf8_lossy(&request[..header_end]);
+            let content_length = headers
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().ok())
+                        .flatten()
+                })
+                .unwrap_or(0);
+            expected_len = Some(header_end + 4 + content_length);
+        }
+        if expected_len.is_some_and(|expected_len| request.len() >= expected_len) {
+            break;
+        }
+    }
+    request
 }
 
 #[test]
@@ -1440,6 +1481,180 @@ fn settings_json_uses_helper_without_secret_material() {
 }
 
 #[test]
+fn claude_plan_generated_settings_route_through_the_local_credential_bridge() {
+    let (dir, pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
+    let plan = build_claude_command_plan(&pane, "hello".to_string(), dir.path())
+        .expect("Claude Plan command");
+    let settings: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(plan.artifact_path.with_file_name("settings.json"))
+            .expect("generated settings"),
+    )
+    .expect("parse generated settings");
+
+    assert!(
+        settings
+            .pointer("/env/ANTHROPIC_BASE_URL")
+            .and_then(Value::as_str)
+            .is_some_and(|base_url| base_url.starts_with("http://127.0.0.1:"))
+    );
+    assert_eq!(settings.pointer("/apiKeyHelper"), None);
+    let bridge = plan.bridge.as_ref().expect("Claude Plan bridge");
+    assert_eq!(bridge.kind, ClaudeBridgeKind::AnthropicOauthPassthrough);
+    assert_eq!(bridge.upstream_base_url, "https://api.anthropic.com");
+    assert!(bridge.upstream_api_key.is_none());
+    assert!(bridge.deferred_vault_secret.is_none());
+    let client_auth_token = plan
+        .env
+        .get("ANTHROPIC_AUTH_TOKEN")
+        .expect("per-turn bridge credential");
+    assert_eq!(client_auth_token, &bridge.client_auth_token);
+    assert!(Uuid::parse_str(client_auth_token).is_ok());
+}
+
+#[tokio::test]
+async fn anthropic_passthrough_bridge_replaces_client_auth_and_forwards_oauth_beta() {
+    let upstream_listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind fake Anthropic upstream");
+    let upstream_addr = upstream_listener
+        .local_addr()
+        .expect("fake upstream address");
+    let upstream = tokio::spawn(async move {
+        let (mut stream, _) = upstream_listener.accept().await.expect("accept upstream");
+        let request = read_http_request(&mut stream).await;
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+            )
+            .await
+            .expect("write fake upstream response");
+        request
+    });
+
+    let bridge_listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind credential bridge");
+    let bridge_addr = bridge_listener.local_addr().expect("bridge address");
+    let bridge = tokio::spawn(async move {
+        for _ in 0..2 {
+            let (stream, _) = bridge_listener.accept().await.expect("accept bridge");
+            handle_anthropic_passthrough_bridge_connection(
+                stream,
+                Arc::new("local-bridge-capability".to_string()),
+                Arc::new("bridge-upstream-secret-not-real".to_string()),
+                Arc::new(format!("http://{upstream_addr}")),
+                reqwest::Client::new(),
+                /*proxy_count_tokens*/ true,
+            )
+            .await
+            .expect("proxy request");
+        }
+    });
+
+    let mut unauthorized_client = TcpStream::connect(bridge_addr)
+        .await
+        .expect("connect unauthorized client");
+    unauthorized_client
+        .write_all(
+            b"POST /v1/messages/count_tokens HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer wrong-capability\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+        )
+        .await
+        .expect("write unauthorized request");
+    let mut unauthorized_response = Vec::new();
+    unauthorized_client
+        .read_to_end(&mut unauthorized_response)
+        .await
+        .expect("read unauthorized response");
+    assert!(String::from_utf8_lossy(&unauthorized_response).starts_with("HTTP/1.1 401"));
+
+    let mut client = TcpStream::connect(bridge_addr)
+        .await
+        .expect("connect to bridge");
+    client
+        .write_all(
+            b"POST /v1/messages/count_tokens HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer local-bridge-capability\r\nAnthropic-Version: 2023-06-01\r\nAnthropic-Beta: prompt-caching-2024-07-31\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+        )
+        .await
+        .expect("write bridge request");
+    let mut response = Vec::new();
+    client
+        .read_to_end(&mut response)
+        .await
+        .expect("read bridge response");
+
+    bridge.await.expect("bridge task");
+    let upstream_request = upstream.await.expect("upstream task");
+    let upstream_request = String::from_utf8(upstream_request).expect("UTF-8 upstream request");
+    let upstream_request = upstream_request.to_ascii_lowercase();
+    assert!(upstream_request.contains("authorization: bearer bridge-upstream-secret-not-real"));
+    assert!(!upstream_request.contains("local-bridge-capability"));
+    assert!(upstream_request.starts_with("post /v1/messages/count_tokens http/1.1"));
+    assert!(
+        upstream_request.contains("anthropic-beta: prompt-caching-2024-07-31,oauth-2025-04-20")
+    );
+    assert!(String::from_utf8_lossy(&response).starts_with("HTTP/1.1 200 OK"));
+}
+
+#[tokio::test]
+async fn anthropic_compatibility_bridge_keeps_authorized_synthetic_token_counts() {
+    let bridge_listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind compatibility bridge");
+    let bridge_addr = bridge_listener.local_addr().expect("bridge address");
+    let bridge = tokio::spawn(async move {
+        for _ in 0..2 {
+            let (stream, _) = bridge_listener.accept().await.expect("accept bridge");
+            handle_anthropic_passthrough_bridge_connection(
+                stream,
+                Arc::new("local-compatibility-capability".to_string()),
+                Arc::new("unused-upstream-secret".to_string()),
+                Arc::new("http://127.0.0.1:1".to_string()),
+                reqwest::Client::new(),
+                /*proxy_count_tokens*/ false,
+            )
+            .await
+            .expect("serve compatibility request");
+        }
+    });
+
+    let mut unauthorized_client = TcpStream::connect(bridge_addr)
+        .await
+        .expect("connect unauthorized client");
+    unauthorized_client
+        .write_all(
+            b"POST /v1/messages/count_tokens HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer wrong-capability\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+        )
+        .await
+        .expect("write unauthorized request");
+    let mut unauthorized_response = Vec::new();
+    unauthorized_client
+        .read_to_end(&mut unauthorized_response)
+        .await
+        .expect("read unauthorized response");
+    assert!(String::from_utf8_lossy(&unauthorized_response).starts_with("HTTP/1.1 401"));
+
+    let mut client = TcpStream::connect(bridge_addr)
+        .await
+        .expect("connect authorized client");
+    client
+        .write_all(
+            b"POST /v1/messages/count_tokens HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer local-compatibility-capability\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+        )
+        .await
+        .expect("write authorized request");
+    let mut response = Vec::new();
+    client
+        .read_to_end(&mut response)
+        .await
+        .expect("read authorized response");
+
+    bridge.await.expect("bridge task");
+    let response = String::from_utf8(response).expect("UTF-8 response");
+    assert!(response.starts_with("HTTP/1.1 200 OK"));
+    assert!(response.contains(r#"{"input_tokens":1}"#));
+}
+
+#[test]
 fn direct_provider_plan_uses_auth_helper_without_secret_env() {
     let (dir, pane) = pane(ClaudeProviderProfileKind::ZaiGlm52);
     codex_vault::Vault::new(dir.path().to_path_buf())
@@ -1469,6 +1684,17 @@ fn direct_provider_plan_uses_auth_helper_without_secret_env() {
             .iter()
             .any(|key| key == "ANTHROPIC_AUTH_TOKEN")
     );
+    for credential_key in [
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR",
+        "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
+        "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
+    ] {
+        assert!(
+            plan.env_remove.iter().any(|key| key == credential_key),
+            "direct-provider pane must scrub inherited {credential_key}"
+        );
+    }
     assert_eq!(
         plan.env.get("ANTHROPIC_API_KEY").map(String::as_str),
         Some("")
@@ -2117,10 +2343,12 @@ fn vercel_fast_command_plan_uses_count_tokens_passthrough_bridge() {
             .map(|secret| secret.label.as_str()),
         Some("provider/ai_gateway_api_key")
     );
-    assert_eq!(
-        plan.env.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str),
-        Some("pfterminal-local-bridge")
-    );
+    let client_auth_token = plan
+        .env
+        .get("ANTHROPIC_AUTH_TOKEN")
+        .expect("per-turn bridge credential");
+    assert_eq!(client_auth_token, &bridge.client_auth_token);
+    assert!(Uuid::parse_str(client_auth_token).is_ok());
     assert!(
         plan.env_remove
             .iter()
@@ -2251,10 +2479,12 @@ fn bridge_redaction_plan(
         artifact_path: dir.path().join("turn-0001.jsonl"),
         audit_path: dir.path().join("turn-0001.audit.json"),
         timeout_ms: None,
+        deferred_claude_plan_auth: None,
         bridge: Some(ClaudeBridgePlan {
             kind: ClaudeBridgeKind::AnthropicPassthrough,
             listener,
             bind_addr,
+            client_auth_token: "bridge-test-client-token".to_string(),
             upstream_base_url: "https://example.invalid".to_string(),
             upstream_api_key: Some(secret.to_string()),
             deferred_vault_secret: None,
@@ -2265,14 +2495,243 @@ fn bridge_redaction_plan(
 
 #[cfg(unix)]
 #[test]
-fn claude_secret_redactor_redacts_bridge_key() {
+fn claude_secret_redactor_redacts_bridge_credentials() {
     let dir = tempfile::tempdir().expect("tempdir");
     let plan = bridge_redaction_plan(&dir, "true".to_string(), "bridge-secret-for-redaction-test");
 
-    let redacted =
-        ClaudeSecretRedactor::from_plan(&plan).redact("leaked bridge-secret-for-redaction-test");
+    let redacted = ClaudeSecretRedactor::from_plan(&plan, /*additional_secret*/ None)
+        .redact("leaked bridge-secret-for-redaction-test and bridge-test-client-token");
 
-    assert_eq!(redacted, "leaked [REDACTED_SECRET]");
+    assert_eq!(redacted, "leaked [REDACTED_SECRET] and [REDACTED_SECRET]");
+}
+
+#[test]
+fn relative_claude_config_dir_is_bound_to_the_launch_cwd() {
+    let launch_cwd = PathBuf::from("/launch/cwd");
+    let resolved = absolute_claude_config_dir_override_against(
+        Some(PathBuf::from("profiles/work")),
+        &launch_cwd,
+    )
+    .expect("resolve relative Claude profile")
+    .expect("configured Claude profile");
+
+    assert_eq!(resolved, launch_cwd.join("profiles/work"));
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn claude_plan_pane_brokers_selected_auth_without_inheriting_the_token() {
+    let (dir, mut pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
+    let pane_cwd = dir.path().join("pane-cwd");
+    std::fs::create_dir(&pane_cwd).expect("pane cwd");
+    pane.cwd = pane_cwd.clone();
+    let secret = "pane-auth-secret-canary-not-real";
+    let selected_profile = dir.path().join("selected-claude-profile");
+    let helper = dir.path().join("auth-helper");
+    let helper_home_log = dir.path().join("auth-helper-home");
+    std::fs::write(
+        &helper,
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$PWD\" \"$CORBANU_HOME\" \"$PFTERMINAL_HOME\" \"$CODEX_HOME\" \"$CLAUDE_CONFIG_DIR\" > '{}'\nprintf '%s' '{secret}'\n",
+            helper_home_log.display()
+        ),
+    )
+    .expect("write helper");
+    let claude = dir.path().join("claude");
+    let claude_config_log = dir.path().join("claude-config-dir");
+    std::fs::write(
+        &claude,
+        format!(
+            concat!(
+                "#!/bin/sh\nset -eu\n",
+                "[ -z \"${{CLAUDE_CODE_OAUTH_TOKEN+x}}\" ] || exit 7\n",
+                "[ -n \"$ANTHROPIC_AUTH_TOKEN\" ] || exit 8\n",
+                "[ \"$ANTHROPIC_AUTH_TOKEN\" != \"pane-auth-secret-canary-not-real\" ] || exit 11\n",
+                "case \"$ANTHROPIC_BASE_URL\" in http://127.0.0.1:*) ;; *) exit 9 ;; esac\n",
+                "env | grep -F 'pane-auth-secret-canary-not-real' >/dev/null && exit 10\n",
+                "printf '%s' \"$CLAUDE_CONFIG_DIR\" > '{claude_config_log}'\n",
+                "printf '{{\"type\":\"result\",\"subtype\":\"success\",",
+                "\"session_id\":\"11111111-1111-4111-8111-111111111111\",",
+                "\"result\":\"bound through local bridge\"}}\\n'\n",
+            ),
+            claude_config_log = claude_config_log.display(),
+        ),
+    )
+    .expect("write claude");
+    for executable in [&helper, &claude] {
+        let mut permissions = std::fs::metadata(executable)
+            .expect("executable metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(executable, permissions).expect("make executable");
+    }
+    let mut plan = build_claude_command_plan(&pane, "hello".to_string(), dir.path()).expect("plan");
+    assert!(!plan.args.iter().any(|arg| arg.contains(secret)));
+    assert!(!plan.env.values().any(|value| value.contains(secret)));
+    assert!(
+        plan.env_remove
+            .iter()
+            .any(|key| key == "CLAUDE_CODE_OAUTH_TOKEN")
+    );
+    for key in [
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_BASE_URL",
+        "CLAUDE_CODE_USE_BEDROCK",
+        "CLAUDE_CODE_USE_VERTEX",
+        "CLAUDE_CODE_USE_FOUNDRY",
+    ] {
+        assert!(plan.env_remove.iter().any(|removed| removed == key));
+    }
+    let deferred = plan
+        .deferred_claude_plan_auth
+        .as_mut()
+        .expect("deferred selected auth");
+    deferred.helper_executable = helper;
+    deferred.claude_config_dir_override = Some(selected_profile.clone());
+    let bridge = plan.bridge.as_ref().expect("Claude Plan bridge");
+    assert!(bridge.upstream_api_key.is_none());
+    assert!(bridge.deferred_vault_secret.is_none());
+    plan.executable = claude.to_string_lossy().into_owned();
+    let artifact_path = plan.artifact_path.clone();
+
+    let output = run_claude_command_plan(plan, CancellationToken::new(), /*progress_tx*/ None)
+        .await
+        .expect("turn output");
+    let artifact = std::fs::read_to_string(artifact_path).expect("artifact");
+
+    assert_eq!(output.status, ClaudePaneTurnStatus::Success);
+    assert_eq!(output.text, "bound through local bridge");
+    assert!(!artifact.contains(secret));
+    let helper_log = std::fs::read_to_string(helper_home_log).expect("helper home log");
+    let mut helper_log = helper_log.lines();
+    let helper_cwd = PathBuf::from(helper_log.next().expect("helper cwd"));
+    assert_eq!(
+        std::fs::canonicalize(helper_cwd).expect("canonical helper cwd"),
+        std::fs::canonicalize(&pane_cwd).expect("canonical pane cwd")
+    );
+    let home = dir.path().to_string_lossy().into_owned();
+    let selected_profile = selected_profile.to_string_lossy().into_owned();
+    assert_eq!(
+        helper_log.collect::<Vec<_>>(),
+        vec![
+            home.as_str(),
+            home.as_str(),
+            home.as_str(),
+            selected_profile.as_str()
+        ]
+    );
+    assert_eq!(
+        std::fs::read_to_string(claude_config_log).expect("Claude config log"),
+        selected_profile
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn unavailable_selected_auth_fails_before_claude_pane_spawn_without_disclosure() {
+    let (dir, pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
+    let secret = "pane-auth-failure-secret-not-real";
+    let helper = dir.path().join("auth-helper-failure");
+    std::fs::write(
+        &helper,
+        format!("#!/bin/sh\nprintf '%s' '{secret}'\nexit 1\n"),
+    )
+    .expect("write helper");
+    let spawn_marker = dir.path().join("claude-started");
+    let claude = dir.path().join("claude-failure");
+    std::fs::write(
+        &claude,
+        format!("#!/bin/sh\ntouch '{}'\n", spawn_marker.display()),
+    )
+    .expect("write claude");
+    for executable in [&helper, &claude] {
+        let mut permissions = std::fs::metadata(executable)
+            .expect("executable metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(executable, permissions).expect("make executable");
+    }
+    let mut plan = build_claude_command_plan(&pane, "hello".to_string(), dir.path()).expect("plan");
+    plan.deferred_claude_plan_auth
+        .as_mut()
+        .expect("deferred selected auth")
+        .helper_executable = helper;
+    plan.executable = claude.to_string_lossy().into_owned();
+
+    let error = run_claude_command_plan(plan, CancellationToken::new(), /*progress_tx*/ None)
+        .await
+        .expect_err("unavailable selected auth must fail before spawn");
+
+    assert!(error.to_string().contains("open Providers to recover"));
+    assert!(!error.to_string().contains(secret));
+    assert!(!spawn_marker.exists());
+}
+
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn cancelling_deferred_auth_kills_helper_and_never_spawns_claude() {
+    let (dir, pane) = pane(ClaudeProviderProfileKind::ClaudePlan);
+    let helper_started = dir.path().join("helper-started");
+    let helper_finished = dir.path().join("helper-finished");
+    let helper = dir.path().join("auth-helper-slow");
+    std::fs::write(
+        &helper,
+        format!(
+            "#!/bin/sh\ntouch '{}'\nsleep 30\ntouch '{}'\nprintf token\n",
+            helper_started.display(),
+            helper_finished.display()
+        ),
+    )
+    .expect("write helper");
+    let claude_started = dir.path().join("claude-started");
+    let claude = dir.path().join("claude-sentinel");
+    std::fs::write(
+        &claude,
+        format!("#!/bin/sh\ntouch '{}'\n", claude_started.display()),
+    )
+    .expect("write claude");
+    for executable in [&helper, &claude] {
+        let mut permissions = std::fs::metadata(executable)
+            .expect("executable metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(executable, permissions).expect("make executable");
+    }
+    let mut plan = build_claude_command_plan(&pane, "hello".to_string(), dir.path()).expect("plan");
+    plan.deferred_claude_plan_auth
+        .as_mut()
+        .expect("deferred selected auth")
+        .helper_executable = helper;
+    plan.executable = claude.to_string_lossy().into_owned();
+    let cancellation = CancellationToken::new();
+    let task_cancellation = cancellation.clone();
+    let turn = tokio::spawn(async move {
+        run_claude_command_plan(plan, task_cancellation, /*progress_tx*/ None).await
+    });
+    for _ in 0..100 {
+        if helper_started.exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(helper_started.exists(), "auth helper did not start");
+
+    cancellation.cancel();
+    let output = tokio::time::timeout(Duration::from_secs(3), turn)
+        .await
+        .expect("cancelled auth returned promptly")
+        .expect("turn task")
+        .expect("turn output");
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    assert_eq!(output.status, ClaudePaneTurnStatus::Interrupted);
+    assert_eq!(
+        output.terminal_reason.as_deref(),
+        Some("interrupted_during_auth")
+    );
+    assert!(!helper_finished.exists());
+    assert!(!claude_started.exists());
 }
 
 #[cfg(unix)]
@@ -2655,6 +3114,7 @@ async fn cancelling_running_command_returns_interrupted_output() {
             artifact_path: artifact_path.clone(),
             audit_path: audit_path.clone(),
             timeout_ms: None,
+            deferred_claude_plan_auth: None,
             bridge: None,
         };
     let cancel_token = CancellationToken::new();
@@ -2872,6 +3332,13 @@ fn command_plan_uses_session_id_then_resume_without_secret_in_args() {
     );
     assert!(!first.args.iter().any(|arg| arg == "--tools"));
     assert!(!first.args.iter().any(|arg| arg.contains("secret")));
+    assert!(first.deferred_claude_plan_auth.is_some());
+    assert!(
+        first
+            .env_remove
+            .iter()
+            .any(|key| key == "CLAUDE_CODE_OAUTH_TOKEN")
+    );
 
     pane.claude_session_id = Some("11111111-2222-4333-8444-555555555555".to_string());
     let second =

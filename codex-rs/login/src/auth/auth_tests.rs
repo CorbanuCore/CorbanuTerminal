@@ -1084,6 +1084,117 @@ async fn external_bearer_only_auth_manager_uses_cached_provider_token() {
 }
 
 #[tokio::test]
+async fn fresh_per_request_external_bearer_never_reuses_the_previous_token() {
+    let script = ProviderAuthScript::new(&["first-source-token", "second-source-token"]).unwrap();
+    let manager = AuthManager::external_bearer_only_with_cache_policy(
+        script.auth_config(),
+        ExternalBearerCachePolicy::FreshPerRequest,
+    );
+
+    let first = manager
+        .auth()
+        .await
+        .and_then(|auth| auth.api_key().map(str::to_string));
+    let second = manager
+        .auth()
+        .await
+        .and_then(|auth| auth.api_key().map(str::to_string));
+
+    assert_eq!(first.as_deref(), Some("first-source-token"));
+    assert_eq!(second.as_deref(), Some("second-source-token"));
+}
+
+#[tokio::test]
+async fn revision_tracked_external_bearer_reuses_until_selection_changes() {
+    let script = ProviderAuthScript::new(&["first-source-token", "second-source-token"]).unwrap();
+    let revision_dir = tempdir().unwrap();
+    let revision_path = revision_dir.path().join("selection-revision");
+    std::fs::write(&revision_path, "revision-1").unwrap();
+    let manager = AuthManager::external_bearer_only_with_cache_policy(
+        script.auth_config(),
+        ExternalBearerCachePolicy::InvalidateOnChange(revision_path.clone()),
+    );
+
+    let first = manager
+        .auth()
+        .await
+        .and_then(|auth| auth.api_key().map(str::to_string));
+    let cached = manager
+        .auth()
+        .await
+        .and_then(|auth| auth.api_key().map(str::to_string));
+    std::fs::write(&revision_path, "revision-2").unwrap();
+    let replacement = manager
+        .auth()
+        .await
+        .and_then(|auth| auth.api_key().map(str::to_string));
+    let replacement_cached = manager
+        .auth()
+        .await
+        .and_then(|auth| auth.api_key().map(str::to_string));
+
+    assert_eq!(first.as_deref(), Some("first-source-token"));
+    assert_eq!(cached.as_deref(), Some("first-source-token"));
+    assert_eq!(replacement.as_deref(), Some("second-source-token"));
+    assert_eq!(replacement_cached.as_deref(), Some("second-source-token"));
+}
+
+#[tokio::test]
+async fn revision_tracked_external_bearer_falls_back_to_uncached_when_marker_is_missing() {
+    let script = ProviderAuthScript::new(&["first-source-token", "second-source-token"]).unwrap();
+    let revision_dir = tempdir().unwrap();
+    let manager = AuthManager::external_bearer_only_with_cache_policy(
+        script.auth_config(),
+        ExternalBearerCachePolicy::InvalidateOnChange(
+            revision_dir.path().join("missing-selection-revision"),
+        ),
+    );
+
+    let first = manager
+        .auth()
+        .await
+        .and_then(|auth| auth.api_key().map(str::to_string));
+    let second = manager
+        .auth()
+        .await
+        .and_then(|auth| auth.api_key().map(str::to_string));
+
+    assert_eq!(first.as_deref(), Some("first-source-token"));
+    assert_eq!(second.as_deref(), Some("second-source-token"));
+}
+
+#[tokio::test]
+async fn fresh_per_request_external_bearer_does_not_retain_a_refreshed_token() {
+    let script = ProviderAuthScript::new(&[
+        "first-source-token",
+        "refreshed-source-token",
+        "replacement-source-token",
+    ])
+    .unwrap();
+    let manager = AuthManager::external_bearer_only_with_cache_policy(
+        script.auth_config(),
+        ExternalBearerCachePolicy::FreshPerRequest,
+    );
+    let mut recovery = manager.unauthorized_recovery();
+
+    let first = manager
+        .auth()
+        .await
+        .and_then(|auth| auth.api_key().map(str::to_string));
+    recovery
+        .next()
+        .await
+        .expect("external refresh should succeed");
+    let replacement = manager
+        .auth()
+        .await
+        .and_then(|auth| auth.api_key().map(str::to_string));
+
+    assert_eq!(first.as_deref(), Some("first-source-token"));
+    assert_eq!(replacement.as_deref(), Some("replacement-source-token"));
+}
+
+#[tokio::test]
 async fn external_bearer_only_auth_manager_disables_auto_refresh_when_interval_is_zero() {
     let script = ProviderAuthScript::new(&["provider-token", "next-token"]).unwrap();
     let mut auth_config = script.auth_config();

@@ -52,11 +52,33 @@ use thiserror::Error;
 use zeroize::Zeroizing;
 
 mod capability;
+mod claude_auth;
 mod credential_panic;
 
 pub use capability::ScopedCredentialCallbackError;
 pub use capability::ScopedCredentialError;
 pub use capability::VaultCredentialRef;
+pub use claude_auth::CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID;
+pub use claude_auth::ClaudeAuthHealth;
+pub use claude_auth::ClaudeAuthResolution;
+pub use claude_auth::ClaudeAuthSelection;
+pub use claude_auth::ClaudeAuthSource;
+pub use claude_auth::ClaudeAuthSourceMetadata;
+pub use claude_auth::ClaudeAuthStoreKind;
+pub use claude_auth::ClaudeSubscriptionTokenError;
+pub use claude_auth::ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID;
+pub use claude_auth::MACOS_KEYCHAIN_CLAUDE_AUTH_SOURCE_ID;
+pub use claude_auth::MANAGED_CLAUDE_AUTH_SOURCE_ID;
+pub use claude_auth::MANAGED_CLAUDE_TOKEN_LABEL;
+pub use claude_auth::ManagedClaudeTokenStatus;
+pub use claude_auth::claude_auth_selection_revision_path;
+pub use claude_auth::claude_auth_selection_sentinel_path;
+pub use claude_auth::claude_code_macos_keychain_service;
+pub use claude_auth::claude_environment_token_authority_id;
+pub use claude_auth::claude_login_authority_id;
+pub use claude_auth::credentials_file_claude_auth_source_id;
+pub use claude_auth::macos_keychain_claude_auth_source_id;
+pub use claude_auth::resolve_claude_auth_source;
 pub use credential_panic::scoped_credential_callback_active;
 
 #[cfg(test)]
@@ -91,6 +113,9 @@ pub enum VaultError {
     /// The raw secret value was empty.
     #[error("secret value must not be empty")]
     EmptySecret,
+    /// A provider-managed credential is available only to its scoped integration.
+    #[error("credential labeled {label:?} can only be used by its provider integration")]
+    ProviderManagedCredential { label: String },
     /// The credential is intentionally excluded from generic automation.
     #[error(
         "credential labeled {label:?} has type {credential_type}, which cannot be used by vault auth-helper"
@@ -334,6 +359,9 @@ impl Vault {
         } = entry;
         let label = normalize_label(&entry_label)?;
         let secret = Zeroizing::new(secret);
+        if label == MANAGED_CLAUDE_TOKEN_LABEL {
+            return Err(VaultError::ProviderManagedCredential { label });
+        }
         if secret.trim().is_empty() {
             return Err(VaultError::EmptySecret);
         }
@@ -373,6 +401,10 @@ impl Vault {
         revocation_notes: Option<Option<String>>,
     ) -> Result<VaultCredentialMeta, VaultError> {
         let label = normalize_label(label)?;
+        if label == MANAGED_CLAUDE_TOKEN_LABEL {
+            drop(secret.map(Zeroizing::new));
+            return Err(VaultError::ProviderManagedCredential { label });
+        }
         self.with_storage_lock(|| {
             let mut index = self.load_index()?;
             let meta = index
@@ -408,13 +440,20 @@ impl Vault {
     /// Delete a credential and its secret. Returns `true` if anything was removed.
     pub fn delete(&self, label: &str) -> Result<bool, VaultError> {
         let normalized = normalize_label(label)?;
+        if normalized == MANAGED_CLAUDE_TOKEN_LABEL {
+            return self.remove_managed_claude_subscription_token();
+        }
+        self.delete_normalized(&normalized)
+    }
+
+    fn delete_normalized(&self, normalized: &str) -> Result<bool, VaultError> {
         self.with_storage_lock(|| {
             let mut index = self.load_index()?;
-            let removed_meta = index.credentials.remove(&normalized).is_some();
+            let removed_meta = index.credentials.remove(normalized).is_some();
             if removed_meta {
                 self.save_index(&index)?;
             }
-            let removed_secret = self.delete_secret(&normalized)?;
+            let removed_secret = self.delete_secret(normalized)?;
             Ok(removed_meta || removed_secret)
         })
     }
@@ -425,6 +464,14 @@ impl Vault {
             .iter()
             .map(|label| normalize_label(label))
             .collect::<Result<Vec<_>, _>>()?;
+        if normalized
+            .iter()
+            .any(|label| label == MANAGED_CLAUDE_TOKEN_LABEL)
+        {
+            return Err(VaultError::ProviderManagedCredential {
+                label: MANAGED_CLAUDE_TOKEN_LABEL.to_string(),
+            });
+        }
         self.with_storage_lock(|| {
             let mut index = self.load_index()?;
             let mut secret_entries = Vec::with_capacity(normalized.len());
@@ -468,6 +515,9 @@ impl Vault {
     /// explicit user action (`/vault credential reveal` / `/vault credential export`).
     pub fn reveal(&self, label: &str) -> Result<String, VaultError> {
         let normalized = normalize_label(label)?;
+        if normalized == MANAGED_CLAUDE_TOKEN_LABEL {
+            return Err(VaultError::ProviderManagedCredential { label: normalized });
+        }
         self.with_storage_lock(|| {
             // Validate the label exists in the index before attempting decryption.
             let index = self.load_index()?;
@@ -495,6 +545,9 @@ impl Vault {
             });
         }
         let normalized = normalize_label(label)?;
+        if normalized == MANAGED_CLAUDE_TOKEN_LABEL {
+            return Err(VaultError::ProviderManagedCredential { label: normalized });
+        }
         self.with_storage_lock(|| {
             let index = self.load_index()?;
             let meta = index

@@ -30,6 +30,7 @@ use super::turn_types::ClaudeBridgeKind;
 use super::turn_types::ClaudeBridgePlan;
 
 pub(crate) const AMBIENT_BRIDGE_UPSTREAM_MAX_ATTEMPTS: usize = 3;
+const ANTHROPIC_OAUTH_BETA: &str = "oauth-2025-04-20";
 pub(crate) async fn run_claude_bridge(plan: ClaudeBridgePlan) -> Result<()> {
     let listener = TcpListener::from_std(plan.listener)
         .context("failed to create async Claude bridge listener")?;
@@ -37,6 +38,7 @@ pub(crate) async fn run_claude_bridge(plan: ClaudeBridgePlan) -> Result<()> {
         plan.upstream_api_key
             .context("Claude bridge provider credential was not resolved")?,
     );
+    let client_auth_token = Arc::new(plan.client_auth_token);
     let upstream_base_url = Arc::new(plan.upstream_base_url);
     let upstream_model = Arc::new(plan.upstream_model);
     let kind = plan.kind;
@@ -44,20 +46,41 @@ pub(crate) async fn run_claude_bridge(plan: ClaudeBridgePlan) -> Result<()> {
     loop {
         let (stream, _) = listener.accept().await?;
         let api_key = api_key.clone();
+        let client_auth_token = client_auth_token.clone();
         let upstream_base_url = upstream_base_url.clone();
         let upstream_model = upstream_model.clone();
         let http = http.clone();
         tokio::spawn(async move {
             let result = match kind {
                 ClaudeBridgeKind::AmbientChat => {
-                    handle_ambient_bridge_connection(stream, api_key, upstream_model, http).await
+                    handle_ambient_bridge_connection(
+                        stream,
+                        client_auth_token,
+                        api_key,
+                        upstream_model,
+                        http,
+                    )
+                    .await
                 }
                 ClaudeBridgeKind::AnthropicPassthrough => {
                     handle_anthropic_passthrough_bridge_connection(
                         stream,
+                        client_auth_token,
                         api_key,
                         upstream_base_url,
                         http,
+                        /*proxy_count_tokens*/ false,
+                    )
+                    .await
+                }
+                ClaudeBridgeKind::AnthropicOauthPassthrough => {
+                    handle_anthropic_passthrough_bridge_connection(
+                        stream,
+                        client_auth_token,
+                        api_key,
+                        upstream_base_url,
+                        http,
+                        /*proxy_count_tokens*/ true,
                     )
                     .await
                 }
@@ -71,6 +94,7 @@ pub(crate) async fn run_claude_bridge(plan: ClaudeBridgePlan) -> Result<()> {
 
 pub(crate) async fn handle_ambient_bridge_connection(
     mut stream: tokio::net::TcpStream,
+    client_auth_token: Arc<String>,
     api_key: Arc<String>,
     upstream_model: Arc<String>,
     http: reqwest::Client,
@@ -92,6 +116,17 @@ pub(crate) async fn handle_ambient_bridge_connection(
     };
 
     let headers = String::from_utf8_lossy(&buffer[..header_end]);
+    if !bridge_client_is_authorized(&headers, client_auth_token.as_str()) {
+        write_json_status_response(
+            &mut stream,
+            /*status*/ 401,
+            serde_json::json!({
+                "error": { "type": "authentication_error", "message": "invalid bridge credential" }
+            }),
+        )
+        .await?;
+        return Ok(());
+    }
     let request_line = headers.lines().next().unwrap_or_default().to_string();
     let content_length = headers
         .lines()
@@ -325,9 +360,11 @@ pub(crate) async fn handle_ambient_bridge_connection(
 
 pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
     mut stream: tokio::net::TcpStream,
+    client_auth_token: Arc<String>,
     api_key: Arc<String>,
     upstream_base_url: Arc<String>,
     http: reqwest::Client,
+    proxy_count_tokens: bool,
 ) -> Result<()> {
     let mut buffer = Vec::new();
     let mut temp = [0_u8; 4096];
@@ -347,7 +384,18 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
         }
     };
 
-    let headers = String::from_utf8_lossy(&buffer[..header_end]);
+    let headers = String::from_utf8_lossy(&buffer[..header_end]).into_owned();
+    if !bridge_client_is_authorized(&headers, client_auth_token.as_str()) {
+        write_json_status_response(
+            &mut stream,
+            /*status*/ 401,
+            serde_json::json!({
+                "error": { "type": "authentication_error", "message": "invalid bridge credential" }
+            }),
+        )
+        .await?;
+        return Ok(());
+    }
     let request_line = headers.lines().next().unwrap_or_default().to_string();
     let content_length = headers
         .lines()
@@ -369,7 +417,7 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
     }
     let body = &buffer[body_start..buffer.len().min(body_start + content_length)];
 
-    if request_line.contains("/v1/messages/count_tokens") {
+    if !proxy_count_tokens && request_line.contains("/v1/messages/count_tokens") {
         write_json_response(&mut stream, serde_json::json!({ "input_tokens": 1 })).await?;
         return Ok(());
     }
@@ -390,11 +438,23 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
         upstream_base_url.trim_end_matches('/'),
         upstream_path
     );
-    let response = http
+    let mut upstream_request = http
         .post(upstream_url)
         .bearer_auth(api_key.as_str())
         .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .header("anthropic-version", "2023-06-01")
+        .header(
+            "anthropic-version",
+            request_header_value(&headers, "anthropic-version").unwrap_or("2023-06-01"),
+        );
+    if proxy_count_tokens {
+        upstream_request = upstream_request.header(
+            "anthropic-beta",
+            anthropic_oauth_beta_header(request_header_value(&headers, "anthropic-beta")),
+        );
+    } else if let Some(beta) = request_header_value(&headers, "anthropic-beta") {
+        upstream_request = upstream_request.header("anthropic-beta", beta);
+    }
+    let response = upstream_request
         .body(body.to_vec())
         .send()
         .await
@@ -419,6 +479,21 @@ pub(crate) async fn handle_anthropic_passthrough_bridge_connection(
     )
     .await?;
     Ok(())
+}
+
+fn anthropic_oauth_beta_header(incoming: Option<&str>) -> String {
+    let incoming = incoming.unwrap_or_default().trim();
+    if incoming
+        .split(',')
+        .map(str::trim)
+        .any(|beta| beta.eq_ignore_ascii_case(ANTHROPIC_OAUTH_BETA))
+    {
+        incoming.to_string()
+    } else if incoming.is_empty() {
+        ANTHROPIC_OAUTH_BETA.to_string()
+    } else {
+        format!("{incoming},{ANTHROPIC_OAUTH_BETA}")
+    }
 }
 
 pub(crate) async fn send_ambient_chat_request_with_retry(
@@ -547,4 +622,40 @@ pub(crate) fn request_target_from_request_line(request_line: &str) -> Option<&st
     let mut parts = request_line.split_whitespace();
     let _method = parts.next()?;
     parts.next()
+}
+
+fn request_header_value<'a>(headers: &'a str, expected_name: &str) -> Option<&'a str> {
+    headers.lines().skip(1).find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case(expected_name)
+            .then_some(value.trim())
+            .filter(|value| !value.is_empty())
+    })
+}
+
+fn bridge_client_is_authorized(headers: &str, expected_token: &str) -> bool {
+    let Some(value) = request_header_value(headers, "authorization") else {
+        return false;
+    };
+    let mut parts = value.split_whitespace();
+    let Some(scheme) = parts.next() else {
+        return false;
+    };
+    let Some(token) = parts.next() else {
+        return false;
+    };
+    scheme.eq_ignore_ascii_case("bearer")
+        && parts.next().is_none()
+        && constant_time_equal(token.as_bytes(), expected_token.as_bytes())
+}
+
+fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {
+    let max_len = left.len().max(right.len());
+    let mut difference = left.len() ^ right.len();
+    for index in 0..max_len {
+        let left_byte = left.get(index).copied().unwrap_or(0);
+        let right_byte = right.get(index).copied().unwrap_or(0);
+        difference |= usize::from(left_byte ^ right_byte);
+    }
+    difference == 0
 }

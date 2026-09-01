@@ -67,20 +67,27 @@ separate from a stock Codex install using `$HOME/.codex`.
 
 ### Claude Plan
 
-Use `/providers` and select:
+On first run, choose **Provider: Anthropic Claude Account** to enter this flow
+directly; that option is the default when provider-account onboarding is
+allowed, and Corbanu persists `claude-plan` only after authentication succeeds.
+For an existing installation, use `/providers` and select:
 
 ```text
 Provider: Claude Code Plan
 ```
 
-Corbanu Terminal starts Claude Code's subscription login, presents the browser
-URL, and opens masked entry for the one-time authorization code. It verifies
-the resulting Claude Code account before reporting the route as signed in.
-Claude Code must be installed; this route does not use an Anthropic API key or
-the generic credential vault.
+Corbanu Terminal presents an explicit choice. The recommended option runs
+`claude setup-token`, then stores the approximately one-year subscription token
+through masked entry in the encrypted vault. The compatibility option selects
+Claude Code's normal rotating platform login. A successful choice persists;
+Corbanu never silently falls back to another source, account, or billing path.
+Claude Code must be installed, and neither option uses an Anthropic API key.
 
 OpenAI and Claude account state have separate owners and lifecycles. Signing in
 or out of one does not authenticate or erase the other.
+
+See [Reliable Claude Plan authentication](features/claude-plan-authentication.md)
+for eligibility, platform-store precedence, replacement, and recovery.
 
 ## Provider Keys
 

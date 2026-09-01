@@ -138,6 +138,7 @@ mod hooks_rpc;
 mod ide_context;
 mod inline_visualization;
 pub(crate) mod insert_history;
+mod internal_cli_helper;
 pub use insert_history::insert_history_lines;
 mod key_hint;
 mod keymap;
@@ -1546,9 +1547,11 @@ async fn run_ratatui_app(
         {
             trust_decision_was_made = onboarding_result.directory_trust_persisted;
         }
-        if let Some(provider) = onboarding_result.configured_provider_api_key.as_deref() {
+        if let Some(provider) = onboarding_result.configured_provider.as_deref() {
             let Some(app_server_session) = app_server.as_ref() else {
-                unreachable!("app server should exist when onboarding stores a provider key");
+                unreachable!(
+                    "app server should exist when onboarding persists a provider selection"
+                );
             };
             config_update::write_config_batch(
                 app_server_session.request_handle(),

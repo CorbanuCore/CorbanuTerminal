@@ -40,13 +40,17 @@ impl TerminalSize {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TmuxKey {
+    Down,
     Enter,
+    Escape,
 }
 
 impl TmuxKey {
     fn name(self) -> &'static str {
         match self {
+            Self::Down => "Down",
             Self::Enter => "Enter",
+            Self::Escape => "Escape",
         }
     }
 }
@@ -182,7 +186,7 @@ impl TmuxServer {
             .register_attachment(label, path.as_ref().to_path_buf());
     }
 
-    pub(super) fn artifact_dir(&self) -> PathBuf {
+    pub(crate) fn artifact_dir(&self) -> PathBuf {
         self.artifacts.directory().to_path_buf()
     }
 
@@ -355,6 +359,38 @@ impl TmuxPane<'_> {
             Some(self.id.as_str()),
         )?;
         Ok(())
+    }
+
+    /// Send a secret-bearing literal without recording its value in the
+    /// command log or failure reason. The pane still receives real key input.
+    pub(crate) fn send_secret_literal(&self, text: &str) -> Result<()> {
+        self.server.artifacts.record_input(format!(
+            "secret literal bytes={} value=<redacted>",
+            text.len()
+        ));
+        self.server
+            .artifacts
+            .record_command("tmux send-keys -l <redacted secret literal>".to_string());
+        let output = self
+            .server
+            .command()
+            .arg("send-keys")
+            .arg("-t")
+            .arg(&self.id)
+            .arg("-l")
+            .arg("--")
+            .arg(text)
+            .output()
+            .context("failed to send redacted secret literal through tmux")?;
+        if output.status.success() {
+            return Ok(());
+        }
+        let reason = format!(
+            "tmux could not send a redacted secret literal: status={:?}",
+            output.status.code()
+        );
+        let artifact = self.server.emit_failure(&reason, Some(self.id.as_str()));
+        anyhow::bail!("{reason}; artifacts: {}", artifact.display());
     }
 
     pub(crate) fn send_key(&self, key: TmuxKey) -> Result<()> {

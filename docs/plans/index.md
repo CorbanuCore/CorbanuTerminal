@@ -28,7 +28,7 @@ The machine source of truth is the front matter in each lifecycle directory.
 | Slot | Initiative | Priority | Deadline | Owner |
 | ---: | --- | --- | --- | --- |
 | 1 of 2 | [P0 `/security` levels](active/p0-security-levels.md) | P0 | 2026-10-08 | Jim Ricketts |
-| 2 of 2 | [Corbanu API balance and keys](active/corbanu-api-balance.md) | P1 | TBD | Alex Good |
+| 2 of 2 | [Reliable Claude subscription authentication](active/claude-subscription-auth.md) | P1 | TBD | Jim Ricketts |
 
 Run `python3 docs/plans/check.py` to validate lifecycle placement, required active
 metadata, and the two-plan limit. CI runs the same check.
