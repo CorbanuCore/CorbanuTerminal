@@ -205,7 +205,7 @@ fn protected_runtime_binds_configured_creator_and_effective_levels() {
     assert_eq!(
         runtime.snapshot(),
         &super::protected_runtime::ProtectedRuntimeSnapshot {
-            contract_version: 5,
+            contract_version: 6,
             configured_level: SecurityLevel::Moderate,
             creator_required_level: SecurityLevel::Aggressive,
             effective_level: SecurityLevel::Aggressive,
@@ -765,6 +765,16 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         ))
     ));
     assert!(matches!(
+        dispatch.authorize(
+            &runtime,
+            current_at(&effective, &state, &measured, &recovery, 12),
+            ProtectedAuthority::Grant(&grant),
+            ProtectedDispatchStep::Admit,
+            || panic!("retry-pending dispatch must not repeat the effect"),
+        ),
+        Err(ProtectedRuntimeError::DispatchEffectUnavailable)
+    ));
+    assert!(matches!(
         dispatch.resolve(
             &runtime,
             &mut journal,
@@ -779,6 +789,16 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         .resolve(&runtime, &mut journal, executed_resolution.clone(), 12)
         .expect("retry the exact executed resolution after pre-commit validation failure");
     assert_eq!(completion.sequence, 2);
+    assert!(matches!(
+        dispatch.authorize(
+            &runtime,
+            current_at(&effective, &state, &measured, &recovery, 12),
+            ProtectedAuthority::Grant(&grant),
+            ProtectedDispatchStep::Admit,
+            || panic!("resolved dispatch must not repeat the effect"),
+        ),
+        Err(ProtectedRuntimeError::DispatchEffectUnavailable)
+    ));
     assert!(matches!(
         dispatch.resolve(&runtime, &mut journal, executed_resolution, 12),
         Err(ProtectedRuntimeError::DispatchResolutionUnavailable)
@@ -815,6 +835,16 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         )
         .expect("durable unknown receipt");
     assert_eq!(unknown_completion.sequence, 4);
+    assert!(matches!(
+        unknown_dispatch.authorize(
+            &runtime,
+            current_at(&effective, &state, &measured, &recovery, 12),
+            ProtectedAuthority::Grant(&grant),
+            ProtectedDispatchStep::Admit,
+            || panic!("unknown terminal dispatch must not repeat the effect"),
+        ),
+        Err(ProtectedRuntimeError::DispatchEffectUnavailable)
+    ));
 
     let mut mandate_dispatch = runtime
         .reserve_dispatch(
@@ -856,6 +886,19 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         )
         .expect("durable mandate receipt");
     assert_eq!(mandate_completion.sequence, 6);
+    assert!(matches!(
+        mandate_dispatch.authorize(
+            &runtime,
+            current_at(&effective, &state, &measured, &recovery, 12),
+            ProtectedAuthority::Mandate {
+                mandate: &mandate,
+                preview: &preview,
+            },
+            ProtectedDispatchStep::Admit,
+            || panic!("completed mandate must not repeat the effect"),
+        ),
+        Err(ProtectedRuntimeError::DispatchEffectUnavailable)
+    ));
 
     assert!(matches!(
         runtime.reserve_dispatch(
@@ -944,6 +987,16 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         )
         .expect("durable cancellation before admission");
     assert_eq!(cancelled.sequence, 8);
+    assert!(matches!(
+        never_admitted.authorize(
+            &runtime,
+            current_at(&effective, &state, &measured, &recovery, 15),
+            ProtectedAuthority::Grant(&expires_before_admission),
+            ProtectedDispatchStep::Admit,
+            || panic!("cancelled never-admitted grant must not perform an effect"),
+        ),
+        Err(ProtectedRuntimeError::DispatchEffectUnavailable)
+    ));
 
     let expiring_preview =
         ProtectedActionPreview::new(request.clone(), 17, text("expiring-mandate-preview"))
@@ -994,6 +1047,19 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         )
         .expect("expired mandate closes conservatively as unknown");
     assert_eq!(conservative_unknown.sequence, 10);
+    assert!(matches!(
+        never_admitted_mandate.authorize(
+            &runtime,
+            current_at(&effective, &state, &measured, &recovery, 18),
+            ProtectedAuthority::Mandate {
+                mandate: &expiring_mandate,
+                preview: &expiring_preview,
+            },
+            ProtectedDispatchStep::Admit,
+            || panic!("unknown never-admitted mandate must not perform an effect"),
+        ),
+        Err(ProtectedRuntimeError::DispatchEffectUnavailable)
+    ));
 
     let collision_preview =
         ProtectedActionPreview::new(request.clone(), 19, text("dedup-domain-preview"))
@@ -1040,6 +1106,16 @@ fn durable_intent_and_live_fence_precede_the_effect() {
             18,
         )
         .expect("cancel collision grant");
+    assert!(matches!(
+        collision_grant.authorize(
+            &runtime,
+            current_at(&effective, &state, &measured, &recovery, 18),
+            ProtectedAuthority::Grant(&grant),
+            ProtectedDispatchStep::Admit,
+            || panic!("cancelled grant must not repeat the effect"),
+        ),
+        Err(ProtectedRuntimeError::DispatchEffectUnavailable)
+    ));
     let mut collision_mandate_dispatch = runtime
         .reserve_dispatch(
             current_at(&effective, &state, &measured, &recovery, 18),
@@ -1065,6 +1141,19 @@ fn durable_intent_and_live_fence_precede_the_effect() {
         )
         .expect("close domain-separation mandate intent");
     assert_eq!(collision_receipt.sequence, 14);
+    assert!(matches!(
+        collision_mandate_dispatch.authorize(
+            &runtime,
+            current_at(&effective, &state, &measured, &recovery, 18),
+            ProtectedAuthority::Mandate {
+                mandate: &collision_mandate,
+                preview: &collision_preview,
+            },
+            ProtectedDispatchStep::Admit,
+            || panic!("never-admitted unknown mandate must not perform an effect"),
+        ),
+        Err(ProtectedRuntimeError::DispatchEffectUnavailable)
+    ));
 
     let mut wrong_runtime_resolution = runtime
         .reserve_dispatch(

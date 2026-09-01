@@ -45,7 +45,7 @@ use uuid::Uuid;
 
 use super::effective_policy::EffectivePolicySnapshot;
 
-pub(crate) const PROTECTED_RUNTIME_CONTRACT_VERSION: u32 = 5;
+pub(crate) const PROTECTED_RUNTIME_CONTRACT_VERSION: u32 = 6;
 const MAX_READINESS_WINDOW_SECONDS: i64 = 300;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -457,6 +457,9 @@ impl ProtectedDispatch {
         step: ProtectedDispatchStep,
         effect: impl FnOnce() -> T,
     ) -> Result<T, ProtectedRuntimeError> {
+        if self.permit.is_none() || self.pending_resolution.is_some() {
+            return Err(ProtectedRuntimeError::DispatchEffectUnavailable);
+        }
         runtime.validate_instance(self.runtime_instance_id)?;
         let now_unix_seconds = current.now_unix_seconds;
         runtime.validate_current(current)?;
@@ -680,6 +683,8 @@ pub(crate) enum ProtectedRuntimeError {
     RuntimeInstanceMismatch,
     #[error("protected dispatch resolution is already durable or commit-ambiguous")]
     DispatchResolutionUnavailable,
+    #[error("protected dispatch cannot perform an effect after resolution starts")]
+    DispatchEffectUnavailable,
     #[error("protected dispatch retry changed the terminal resolution")]
     DispatchResolutionRetryMismatch,
     #[error("protected authority does not match the exact authorization request")]
