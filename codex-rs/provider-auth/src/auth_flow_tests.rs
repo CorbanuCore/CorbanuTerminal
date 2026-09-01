@@ -485,7 +485,9 @@ fn target() -> ApiKeyAuthTarget {
     ApiKeyAuthTarget {
         provider_id: ProviderCatalogId("custom".into()),
         runtime_provider_id: ProviderRuntimeId("custom".into()),
-        env_key: "CUSTOM_KEY".into(),
+        storage: ApiKeyStorage::EnvironmentVariable {
+            env_key: "CUSTOM_KEY".into(),
+        },
     }
 }
 

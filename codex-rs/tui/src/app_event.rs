@@ -245,6 +245,11 @@ impl WalletSecret {
     pub(crate) fn new(value: String) -> Self {
         Self(value)
     }
+
+    pub(crate) fn expose(&self) -> &str {
+        &self.0
+    }
+
     pub(crate) fn into_inner(mut self) -> String {
         std::mem::take(&mut self.0)
     }
@@ -312,6 +317,13 @@ pub(crate) enum WalletUnlockContinuation {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DeferredWalletPreflight {
+    Missing,
+    Locked,
+    Unlocked,
+}
+
 #[derive(Debug)]
 pub(crate) struct WalletPlanProvisionedResult {
     pub(crate) plan_id: String,
@@ -323,6 +335,38 @@ pub(crate) struct WalletPlanProvisionedResult {
 pub(crate) enum WalletPlanProvisioningOperation {
     Purchase,
     Recovery,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WalletPlanReceiptSelectionPolicy {
+    SelectProviderOnSuccess,
+    PreserveCurrentProvider,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct WalletPlanPersistenceAttemptId(u64);
+
+impl WalletPlanPersistenceAttemptId {
+    pub(crate) fn new(value: u64) -> Self {
+        Self(value)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum WalletPlanCredentialPersistenceError {
+    StoreFailed,
+    WorkerUnavailable,
+}
+
+impl fmt::Display for WalletPlanCredentialPersistenceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::StoreFailed => f.write_str("the credential could not be stored"),
+            Self::WorkerUnavailable => {
+                f.write_str("the credential storage worker stopped unexpectedly")
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -1459,6 +1503,30 @@ pub(crate) enum AppEvent {
         display_name: String,
         api_key: ProviderApiKeySecret,
     },
+    OpenSharedProviderSetup,
+    ProviderAccountMetadataResolved {
+        metadata: crate::provider_status_host::ProviderAccountMetadata,
+    },
+    SharedProviderSetupBegin {
+        provider_id: codex_provider_auth::ProviderCatalogId,
+        capability: codex_provider_auth::ProviderSetupCapability,
+    },
+    SharedProviderSetupQueueCorbanu(bool),
+    SaveSharedProviderApiKey {
+        target: codex_provider_auth::ApiKeyAuthTarget,
+        api_key: ProviderApiKeySecret,
+    },
+    SharedProviderApiKeyFinished {
+        target: codex_provider_auth::ApiKeyAuthTarget,
+        result: Result<codex_provider_auth::ProviderStatusSnapshot, String>,
+    },
+    SharedProviderSetupDone,
+    SharedProviderSetupCancelled,
+    ProviderAccountLoginCompleted {
+        login_id: Option<String>,
+        success: bool,
+    },
+    SharedProviderAuthAction(codex_provider_auth::ProviderAuthAction),
 
     OpenTelegram,
     OpenTelegramTokenEntry,
@@ -1648,6 +1716,13 @@ pub(crate) enum AppEvent {
     OpenWalletPlans {
         mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode,
     },
+    BeginDeferredCorbanuPlan {
+        deferred: crate::onboarding::provider_setup::DeferredProviderSetup,
+    },
+    DeferredWalletPreflightFinished {
+        deferred: crate::onboarding::provider_setup::DeferredProviderSetup,
+        result: Result<DeferredWalletPreflight, String>,
+    },
     WalletPlansReady {
         mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode,
         result: Result<crate::chatwidget::wallet_menu::WalletPlanCatalog, String>,
@@ -1661,8 +1736,26 @@ pub(crate) enum AppEvent {
     WalletPlanProvisioned {
         operation: WalletPlanProvisioningOperation,
         result: Result<WalletPlanProvisionedResult, String>,
+        deferred_setup: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    },
+    WalletPlanCredentialPersistenceFinished {
+        attempt_id: WalletPlanPersistenceAttemptId,
+        operation: WalletPlanProvisioningOperation,
+        plan_id: String,
+        purchase: Option<WalletPlanPurchaseSummary>,
+        deferred_setup: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+        api_key: Option<WalletSecret>,
+        result: Result<(), WalletPlanCredentialPersistenceError>,
+    },
+    DeferredCorbanuPlanCancelled {
+        deferred: crate::onboarding::provider_setup::DeferredProviderSetup,
+    },
+    DeferredCorbanuPlanConfigured {
+        deferred: crate::onboarding::provider_setup::DeferredProviderSetup,
     },
     WalletPlanReceiptReady {
+        attempt_id: WalletPlanPersistenceAttemptId,
+        selection_policy: WalletPlanReceiptSelectionPolicy,
         receipt: crate::chatwidget::wallet_receipt::WalletPlanReceipt,
     },
     OpenWalletPlanReceipt {

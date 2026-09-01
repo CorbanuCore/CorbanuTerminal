@@ -1,5 +1,6 @@
 use super::*;
 use crate::app_event::WalletPlanPurchaseSummary;
+use crate::app_event::WalletPlanReceiptSelectionPolicy;
 use crate::chatwidget::wallet_http::gateway_client;
 use crate::chatwidget::wallet_menu::WalletPlanStatus;
 use crate::chatwidget::wallet_menu::title_case_plan;
@@ -9,6 +10,7 @@ use codex_wallet_daemon::WalletDaemonClient;
 use zeroize::Zeroizing;
 
 pub(super) const WALLET_PLAN_RECEIPT_VIEW_ID: &str = "wallet-plan-receipt";
+const RECEIPT_BALANCE_ENRICHMENT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 #[derive(Debug, Clone)]
 pub(crate) struct WalletPlanReceipt {
@@ -66,6 +68,7 @@ pub(super) async fn reconcile_plan_receipt(
             );
         }
     };
+    tracing::debug!("received authoritative Corbanu Plan account response");
     let (status, reconciliation_error) = match account {
         Ok(response) if response.status().is_success() => {
             match response.json::<WalletPlanStatus>().await {
@@ -88,28 +91,36 @@ pub(super) async fn reconcile_plan_receipt(
             Some(format!("account confirmation was unavailable: {error}")),
         ),
     };
-    let balances = match WalletDaemonClient::new(home).status().await {
-        Ok(daemon) => {
-            let (rpc, network) = match daemon.network.as_deref() {
-                Some("devnet") => (
-                    "https://api.devnet.solana.com",
-                    codex_wallet::Network::Devnet,
-                ),
-                _ => (
-                    "https://api.mainnet-beta.solana.com",
-                    codex_wallet::Network::Mainnet,
-                ),
-            };
-            match daemon.address.as_deref() {
-                Some(address) => match BalanceClient::new(rpc, network) {
-                    Ok(client) => client.balances(address).await.ok(),
-                    Err(_) => None,
-                },
-                None => None,
+    let balances =
+        optional_enrichment_with_timeout(RECEIPT_BALANCE_ENRICHMENT_TIMEOUT, async move {
+            match WalletDaemonClient::new(home).status().await {
+                Ok(daemon) => {
+                    let (rpc, network) = match daemon.network.as_deref() {
+                        Some("devnet") => (
+                            "https://api.devnet.solana.com",
+                            codex_wallet::Network::Devnet,
+                        ),
+                        _ => (
+                            "https://api.mainnet-beta.solana.com",
+                            codex_wallet::Network::Mainnet,
+                        ),
+                    };
+                    match daemon.address.as_deref() {
+                        Some(address) => match BalanceClient::new(rpc, network) {
+                            Ok(client) => client.balances(address).await.ok(),
+                            Err(_) => None,
+                        },
+                        None => None,
+                    }
+                }
+                Err(_) => None,
             }
-        }
-        Err(_) => None,
-    };
+        })
+        .await;
+    tracing::debug!(
+        balance_enrichment_present = balances.is_some(),
+        "finished optional Corbanu Plan receipt enrichment"
+    );
     receipt_from_status(
         status.as_ref(),
         balances,
@@ -122,6 +133,15 @@ pub(super) async fn reconcile_plan_receipt(
             credential_error,
         },
     )
+}
+
+async fn optional_enrichment_with_timeout<T>(
+    duration: std::time::Duration,
+    enrichment: impl std::future::Future<Output = Option<T>>,
+) -> Option<T> {
+    tokio::time::timeout(duration, enrichment)
+        .await
+        .unwrap_or_default()
 }
 
 fn receipt_from_status(
@@ -204,11 +224,22 @@ pub(super) fn latest_plan_receipt(
 }
 
 impl ChatWidget {
-    pub(crate) fn on_wallet_plan_receipt_ready(&mut self, receipt: WalletPlanReceipt) {
-        for view in ["wallet-plan-confirm", "wallet-plans", "wallet-menu"] {
-            self.bottom_pane.dismiss_view_by_id(view);
+    pub(crate) fn on_wallet_plan_receipt_ready(
+        &mut self,
+        receipt: WalletPlanReceipt,
+        selection_policy: WalletPlanReceiptSelectionPolicy,
+    ) {
+        for view in [
+            WALLET_PLAN_RECEIPT_VIEW_ID,
+            "wallet-plan-confirm",
+            "wallet-plans",
+            "wallet-menu",
+        ] {
+            while self.bottom_pane.dismiss_view_by_id(view) {}
         }
-        if receipt.credential_error.is_none() {
+        if receipt.credential_error.is_none()
+            && selection_policy == WalletPlanReceiptSelectionPolicy::SelectProviderOnSuccess
+        {
             self.select_pfterminal_plan_provider();
         }
         self.add_info_message(receipt_history_message(&receipt), /*hint*/ None);
@@ -362,6 +393,94 @@ mod tests {
                 &history,
             ]
             .join("\n")
+        );
+    }
+
+    #[tokio::test]
+    async fn optional_balance_enrichment_cannot_delay_authoritative_receipt() {
+        let enrichment = std::future::pending::<Option<WalletBalances>>();
+
+        let balances =
+            optional_enrichment_with_timeout(std::time::Duration::from_millis(1), enrichment).await;
+
+        assert_eq!(balances, None);
+    }
+
+    #[tokio::test]
+    async fn deferred_fallback_receipt_preserves_current_provider_but_wallet_purchase_selects() {
+        let (mut chat, _sender, mut events, _ops) =
+            crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+        while events.try_recv().is_ok() {}
+        let receipt = WalletPlanReceipt {
+            plan_id: "starter".to_string(),
+            price_usdc: Some("1".to_string()),
+            transaction: Some("settlement".to_string()),
+            starts_at: None,
+            ends_at: None,
+            active_plan_id: Some("starter".to_string()),
+            active_ends_at: None,
+            remaining_usdc_atomic: None,
+            reconciliation_error: None,
+            credential_error: None,
+        };
+
+        chat.on_wallet_plan_receipt_ready(
+            receipt.clone(),
+            WalletPlanReceiptSelectionPolicy::PreserveCurrentProvider,
+        );
+
+        assert_eq!(
+            chat.bottom_pane.active_view_id(),
+            Some(WALLET_PLAN_RECEIPT_VIEW_ID)
+        );
+        assert!(
+            !std::iter::from_fn(|| events.try_recv().ok()).any(|event| matches!(
+                event,
+                AppEvent::UpdateModelSelection { .. } | AppEvent::PersistModelSelection { .. }
+            )),
+            "deferred fallback reconciliation must not select the Plan provider"
+        );
+
+        chat.on_wallet_plan_receipt_ready(
+            receipt,
+            WalletPlanReceiptSelectionPolicy::SelectProviderOnSuccess,
+        );
+        assert!(
+            std::iter::from_fn(|| events.try_recv().ok())
+                .any(|event| matches!(event, AppEvent::UpdateModelSelection { .. }))
+        );
+    }
+
+    #[tokio::test]
+    async fn reconciled_receipt_replaces_provisional_receipt_without_stale_stack() {
+        let (mut chat, _sender, _events, _ops) =
+            crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+        let receipt = WalletPlanReceipt {
+            plan_id: "starter".to_string(),
+            price_usdc: Some("1".to_string()),
+            transaction: Some("settlement".to_string()),
+            starts_at: None,
+            ends_at: None,
+            active_plan_id: Some("starter".to_string()),
+            active_ends_at: None,
+            remaining_usdc_atomic: None,
+            reconciliation_error: None,
+            credential_error: None,
+        };
+        chat.open_wallet_plan_receipt(receipt.clone());
+
+        chat.on_wallet_plan_receipt_ready(
+            receipt,
+            WalletPlanReceiptSelectionPolicy::PreserveCurrentProvider,
+        );
+        chat.close_wallet_plan_receipt();
+
+        assert_eq!(chat.bottom_pane.active_view_id(), Some("wallet-menu"));
+        assert!(
+            !chat
+                .bottom_pane
+                .dismiss_view_by_id(WALLET_PLAN_RECEIPT_VIEW_ID),
+            "the provisional receipt must not remain below the reconciled receipt"
         );
     }
 

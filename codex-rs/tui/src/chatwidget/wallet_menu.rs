@@ -1,12 +1,16 @@
 use super::*;
 use crate::app_event::WalletCreatedResult;
 use crate::app_event::WalletPersistenceOperation;
+use crate::app_event::WalletPlanCredentialPersistenceError;
+use crate::app_event::WalletPlanPersistenceAttemptId;
 use crate::app_event::WalletPlanProvisionedResult;
 use crate::app_event::WalletPlanProvisioningOperation;
 use crate::app_event::WalletPlanPurchaseSummary;
+use crate::app_event::WalletPlanReceiptSelectionPolicy;
 use crate::app_event::WalletSecret;
 use crate::chatwidget::wallet_http::gateway_client;
 use crate::chatwidget::wallet_http::gateway_origin;
+use crate::chatwidget::wallet_receipt::WalletPlanReceipt;
 use crate::chatwidget::wallet_receipt::latest_plan_receipt;
 use crate::chatwidget::wallet_receipt::reconcile_plan_receipt;
 use crate::chatwidget::wallet_render::WalletTextStyle;
@@ -27,6 +31,8 @@ use zeroize::Zeroizing;
 
 pub(super) const WALLET_MENU_VIEW_ID: &str = "wallet-menu";
 const WALLET_PLANS_VIEW_ID: &str = "wallet-plans";
+const WALLET_PLAN_CONFIRM_VIEW_ID: &str = "wallet-plan-confirm";
+const SHARED_PROVIDER_SETUP_VIEW_ID: &str = "shared-provider-setup";
 pub(super) const WALLET_DISCONNECT_PLAN_VIEW_ID: &str = "wallet-disconnect-plan";
 pub(super) const WALLET_REMOVE_VIEW_ID: &str = "wallet-remove";
 
@@ -40,11 +46,16 @@ pub(crate) struct WalletPlanChoice {
     pub(crate) monthly_token_limit: u64,
     #[serde(skip)]
     pub(crate) scheduled_start: Option<String>,
+    #[serde(skip)]
+    pub(crate) deferred_setup: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WalletPlanPurchaseMode {
     New,
+    Onboarding {
+        deferred: crate::onboarding::provider_setup::DeferredProviderSetup,
+    },
     Upgrade {
         current_plan_id: String,
         starts_at: String,
@@ -144,6 +155,256 @@ pub(crate) struct WalletUsageWindow {
 }
 
 impl ChatWidget {
+    pub(crate) fn has_wallet_signing_capability(&self) -> bool {
+        self.wallet_capability.is_some()
+    }
+
+    pub(crate) fn open_shared_provider_setup(
+        &mut self,
+        host: &crate::provider_status_host::ProviderStatusHost,
+        queued_corbanu: bool,
+        can_finish: bool,
+    ) {
+        let statuses = host.resolve();
+        let mut items = Vec::new();
+        for entry in host.catalog().entries() {
+            let status = statuses.get(entry.id.as_str());
+            for capability in entry.setup_capabilities.iter() {
+                let provider_id = entry.id.clone();
+                let selected = capability.clone();
+                let method = shared_provider_method_label(capability);
+                let mut item = SelectionItem {
+                    name: format!("{} — {method}", entry.display_name),
+                    description: Some(shared_provider_status_description(status)),
+                    search_value: Some(format!("{} {method}", entry.display_name)),
+                    ..Default::default()
+                };
+                match capability {
+                    codex_provider_auth::ProviderSetupCapability::OpenAiAccount
+                    | codex_provider_auth::ProviderSetupCapability::ApiKey { .. }
+                    | codex_provider_auth::ProviderSetupCapability::ClaudeAccount => {
+                        item.actions.push(Box::new(move |tx| {
+                            tx.send(AppEvent::SharedProviderSetupBegin {
+                                provider_id: provider_id.clone(),
+                                capability: selected.clone(),
+                            });
+                        }));
+                    }
+                    codex_provider_auth::ProviderSetupCapability::CorbanuPlan => {
+                        item.name = if queued_corbanu {
+                            format!("{} — queued after Done", entry.display_name)
+                        } else {
+                            format!("{} — queue after Done", entry.display_name)
+                        };
+                        item.actions.push(Box::new(move |tx| {
+                            tx.send(AppEvent::SharedProviderSetupQueueCorbanu(!queued_corbanu));
+                        }));
+                    }
+                    codex_provider_auth::ProviderSetupCapability::Local { .. }
+                    | codex_provider_auth::ProviderSetupCapability::CommandAuth { .. }
+                    | codex_provider_auth::ProviderSetupCapability::StatusOnly { .. } => {
+                        item.is_disabled = true;
+                    }
+                }
+                items.push(item);
+            }
+        }
+        items.push(SelectionItem {
+            name: "Done".to_string(),
+            description: Some(if can_finish {
+                "Finish provider setup".to_string()
+            } else {
+                "Configure a usable provider or queue Corbanu Plan".to_string()
+            }),
+            is_disabled: !can_finish,
+            actions: vec![Box::new(|tx| tx.send(AppEvent::SharedProviderSetupDone))],
+            ..Default::default()
+        });
+        let mut header = ColumnRenderable::new();
+        header.push(Line::from("Set up providers".bold()));
+        header.push(Line::from(
+            "Configure more than one provider, then choose Done.".dim(),
+        ));
+        self.show_selection_view(SelectionViewParams {
+            view_id: Some(SHARED_PROVIDER_SETUP_VIEW_ID),
+            header: Box::new(header),
+            items,
+            is_searchable: true,
+            search_placeholder: Some("Search providers".to_string()),
+            footer_hint: Some(standard_popup_hint_line()),
+            on_cancel: Some(Box::new(|tx| {
+                tx.send(AppEvent::SharedProviderSetupCancelled);
+            })),
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn open_shared_provider_api_key(
+        &mut self,
+        target: codex_provider_auth::ApiKeyAuthTarget,
+        display_name: String,
+    ) {
+        let tx = self.app_event_tx.clone();
+        let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
+            format!("provider:{}", target.provider_id),
+            format!("Add {display_name}"),
+            "API key — masked".to_string(),
+            "Stored through the selected provider credential backend".to_string(),
+            Box::new(move |_label, secret| {
+                tx.send(AppEvent::SaveSharedProviderApiKey {
+                    target: target.clone(),
+                    api_key: crate::app_event::ProviderApiKeySecret::new(secret),
+                });
+            }),
+        );
+        self.bottom_pane.show_view(Box::new(view));
+    }
+
+    pub(crate) fn open_shared_openai_challenge(
+        &mut self,
+        challenge: codex_provider_auth::OpenAiAccountChallenge,
+    ) {
+        let mut header = ColumnRenderable::new();
+        header.push(Line::from("OpenAI account login".bold()));
+        if let Some((verification_url, user_code)) = challenge.device_code_values() {
+            header.push(Line::from(format!("Open: {verification_url}")));
+            header.push(Line::from(format!("Code: {user_code}").cyan().bold()));
+        } else if let Some(auth_url) = challenge.browser_auth_url() {
+            header.push(Line::from(format!("Open: {auth_url}")));
+        }
+        self.show_selection_view(SelectionViewParams {
+            header: Box::new(header),
+            items: vec![SelectionItem {
+                name: "Cancel login".to_string(),
+                actions: vec![Box::new(|tx| {
+                    tx.send(AppEvent::SharedProviderAuthAction(
+                        codex_provider_auth::OpenAiAccountAction::Cancel.into(),
+                    ))
+                })],
+                ..Default::default()
+            }],
+            on_cancel: Some(Box::new(|tx| {
+                tx.send(AppEvent::SharedProviderAuthAction(
+                    codex_provider_auth::OpenAiAccountAction::Cancel.into(),
+                ));
+            })),
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn open_shared_account_pending(
+        &mut self,
+        kind: crate::provider_account_auth_host::ProviderAccountCancelKind,
+    ) {
+        let cancel_action = move || kind.action();
+        self.show_selection_view(SelectionViewParams {
+            title: Some("Starting account authentication".to_string()),
+            items: vec![SelectionItem {
+                name: "Cancel".to_string(),
+                actions: vec![Box::new(move |tx| {
+                    tx.send(AppEvent::SharedProviderAuthAction(cancel_action()))
+                })],
+                ..Default::default()
+            }],
+            on_cancel: Some(Box::new(move |tx| {
+                let action = kind.action();
+                tx.send(AppEvent::SharedProviderAuthAction(action));
+            })),
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn open_shared_claude_method_choice(&mut self) {
+        use codex_provider_auth::claude_account_flow::ClaudeAccountAction;
+        use codex_provider_auth::claude_account_flow::ClaudeAccountMethod;
+        let method_item = |name: &str, method| SelectionItem {
+            name: name.to_string(),
+            actions: vec![Box::new(move |tx: &AppEventSender| {
+                tx.send(AppEvent::SharedProviderAuthAction(
+                    ClaudeAccountAction::ChooseMethod(method).into(),
+                ));
+                if method == ClaudeAccountMethod::ClaudeCodeLogin {
+                    tx.send(AppEvent::SharedProviderAuthAction(
+                        ClaudeAccountAction::Submit.into(),
+                    ));
+                }
+            })],
+            ..Default::default()
+        };
+        self.show_selection_view(SelectionViewParams {
+            title: Some("Claude account method".to_string()),
+            items: vec![
+                method_item(
+                    "Managed subscription token",
+                    ClaudeAccountMethod::ManagedToken,
+                ),
+                method_item("Claude Code login", ClaudeAccountMethod::ClaudeCodeLogin),
+            ],
+            on_cancel: Some(Box::new(|tx| {
+                tx.send(AppEvent::SharedProviderAuthAction(
+                    ClaudeAccountAction::Cancel.into(),
+                ));
+            })),
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn open_shared_claude_managed_token_entry(&mut self) {
+        use codex_provider_auth::claude_account_flow::ClaudeAccountAction;
+        let tx = self.app_event_tx.clone();
+        let cancel_tx = self.app_event_tx.clone();
+        let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret_with_cancel(
+            "claude-managed-token".into(),
+            "Claude managed subscription token".into(),
+            "Token — masked".into(),
+            "Paste the long-lived subscription token".into(),
+            Box::new(move |_, secret| {
+                tx.send(AppEvent::SharedProviderAuthAction(
+                    ClaudeAccountAction::SetManagedToken(
+                        codex_provider_auth::claude_account_flow::ClaudeManagedTokenSecret::new(secret),
+                    ).into(),
+                ));
+                tx.send(AppEvent::SharedProviderAuthAction(
+                    ClaudeAccountAction::Submit.into(),
+                ));
+            }),
+            Box::new(move || {
+                cancel_tx.send(AppEvent::SharedProviderAuthAction(
+                    ClaudeAccountAction::Cancel.into(),
+                ));
+            }),
+        );
+        self.bottom_pane.show_view(Box::new(view));
+    }
+
+    pub(crate) fn open_shared_claude_challenge(
+        &mut self,
+        challenge: codex_provider_auth::claude_account_flow::ClaudeCodeChallenge,
+    ) {
+        use codex_provider_auth::claude_account_flow::ClaudeAccountAction;
+        let tx = self.app_event_tx.clone();
+        let cancel_tx = self.app_event_tx.clone();
+        let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret_with_cancel(
+            "claude-authorization-code".into(),
+            "Claude Code authorization".into(),
+            format!("Open {}", challenge.verification_url()),
+            "Paste the authorization code — masked".into(),
+            Box::new(move |_, secret| {
+                tx.send(AppEvent::SharedProviderAuthAction(
+                    ClaudeAccountAction::SubmitAuthorizationCode(
+                        codex_provider_auth::claude_account_flow::ClaudeAuthorizationCodeSecret::new(secret),
+                    ).into(),
+                ));
+            }),
+            Box::new(move || {
+                cancel_tx.send(AppEvent::SharedProviderAuthAction(
+                    ClaudeAccountAction::Cancel.into(),
+                ));
+            }),
+        );
+        self.bottom_pane.show_view(Box::new(view));
+    }
+
     pub(crate) fn open_wallet_menu(&mut self) {
         let params = wallet_params(/*result*/ None, self.wallet_capability.is_some());
         if !self
@@ -291,38 +552,65 @@ impl ChatWidget {
     }
 
     pub(crate) fn open_wallet_create(&mut self) {
+        self.open_wallet_create_for_deferred(/*deferred*/ None);
+    }
+
+    pub(crate) fn open_deferred_wallet_create(
+        &mut self,
+        deferred: crate::onboarding::provider_setup::DeferredProviderSetup,
+    ) {
+        self.open_wallet_create_for_deferred(Some(deferred));
+    }
+
+    fn open_wallet_create_for_deferred(
+        &mut self,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    ) {
         let home = self.config.codex_home.as_path().to_path_buf();
         let tx = self.app_event_tx.clone();
-        let view =
+        let cancel_tx = self.app_event_tx.clone();
+        let cancelled = deferred;
+        let submit = Box::new(move |_label: String, mut passcode: String| {
+            tokio::spawn(async move {
+                let result = tokio::task::spawn_blocking(move || {
+                    let result = Wallet::new(home).create(&passcode, Network::Mainnet);
+                    passcode.zeroize();
+                    result
+                        .map(|created| WalletCreatedResult {
+                            address: created.manifest.address,
+                            recovery: WalletSecret::new(created.recovery_material.to_string()),
+                        })
+                        .map_err(|error| error.to_string())
+                })
+                .await
+                .map_err(|error| format!("wallet task failed: {error}"))
+                .and_then(|value| value);
+                tx.send(AppEvent::WalletCreateFinished {
+                    operation: WalletPersistenceOperation::Create,
+                    result,
+                });
+            });
+        });
+        let view = if let Some(deferred) = cancelled {
+            crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_confirmed_secret_with_cancel(
+                "wallet-passcode".to_string(),
+                "Create Solana wallet".to_string(),
+                "Wallet passcode — masked".to_string(),
+                "Passcode (6+ characters; use 12+ for portable recovery)".to_string(),
+                submit,
+                Box::new(move || {
+                    cancel_tx.send(AppEvent::DeferredCorbanuPlanCancelled { deferred });
+                }),
+            )
+        } else {
             crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_confirmed_secret(
                 "wallet-passcode".to_string(),
                 "Create Solana wallet".to_string(),
                 "Wallet passcode — masked".to_string(),
                 "Passcode (6+ characters; use 12+ for portable recovery)".to_string(),
-                Box::new(move |_label, mut passcode| {
-                    tokio::spawn(async move {
-                        let result = tokio::task::spawn_blocking(move || {
-                            let result = Wallet::new(home).create(&passcode, Network::Mainnet);
-                            passcode.zeroize();
-                            result
-                                .map(|created| WalletCreatedResult {
-                                    address: created.manifest.address,
-                                    recovery: WalletSecret::new(
-                                        created.recovery_material.to_string(),
-                                    ),
-                                })
-                                .map_err(|error| error.to_string())
-                        })
-                        .await
-                        .map_err(|error| format!("wallet task failed: {error}"))
-                        .and_then(|value| value);
-                        tx.send(AppEvent::WalletCreateFinished {
-                            operation: WalletPersistenceOperation::Create,
-                            result,
-                        });
-                    });
-                }),
-            );
+                submit,
+            )
+        };
         self.bottom_pane.show_view(Box::new(view));
     }
 
@@ -407,6 +695,92 @@ impl ChatWidget {
                 wallet_persistence_action_label(operation)
             )),
         }
+    }
+
+    pub(crate) fn on_deferred_wallet_create_finished(
+        &mut self,
+        operation: WalletPersistenceOperation,
+        result: Result<WalletCreatedResult, String>,
+        deferred: crate::onboarding::provider_setup::DeferredProviderSetup,
+    ) {
+        match result {
+            Ok(created) => {
+                self.add_info_message(
+                    wallet_persistence_success_message(operation, &created.address),
+                    /*hint*/ None,
+                );
+                let tx = self.app_event_tx.clone();
+                let cancel_tx = self.app_event_tx.clone();
+                let next = deferred.clone();
+                let cancelled = deferred;
+                self.bottom_pane.show_view(Box::new(
+                    crate::bottom_pane::wallet_recovery::WalletRecoveryView::new(
+                        created.address,
+                        created.recovery.into_inner(),
+                    )
+                    .with_confirmation(Box::new(move || {
+                        tx.send(AppEvent::OpenWalletUnlock {
+                            policy: codex_wallet_daemon::UnlockPolicy::Timed {
+                                duration_seconds: 300,
+                            },
+                            continuation: crate::app_event::WalletUnlockContinuation::OpenPlans {
+                                mode: WalletPlanPurchaseMode::Onboarding { deferred: next },
+                            },
+                        });
+                    }))
+                    .with_cancellation(Box::new(move || {
+                        cancel_tx.send(AppEvent::DeferredCorbanuPlanCancelled {
+                            deferred: cancelled,
+                        });
+                    })),
+                ));
+                self.refresh_wallet_status();
+            }
+            Err(error) => {
+                self.add_error_message(format!(
+                    "{} failed: {error}",
+                    wallet_persistence_action_label(operation)
+                ));
+                self.show_deferred_wallet_preflight_retry(deferred);
+            }
+        }
+    }
+
+    pub(crate) fn show_deferred_wallet_preflight_retry(
+        &mut self,
+        deferred: crate::onboarding::provider_setup::DeferredProviderSetup,
+    ) {
+        let retry = deferred.clone();
+        let cancel = deferred.clone();
+        self.show_selection_view(SelectionViewParams {
+            title: Some("Continue Corbanu Plan setup".to_string()),
+            items: vec![
+                SelectionItem {
+                    name: "Retry wallet setup".to_string(),
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::BeginDeferredCorbanuPlan {
+                            deferred: retry.clone(),
+                        })
+                    })],
+                    ..Default::default()
+                },
+                SelectionItem {
+                    name: "Cancel".to_string(),
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::DeferredCorbanuPlanCancelled {
+                            deferred: cancel.clone(),
+                        })
+                    })],
+                    ..Default::default()
+                },
+            ],
+            on_cancel: Some(Box::new(move |tx| {
+                tx.send(AppEvent::DeferredCorbanuPlanCancelled {
+                    deferred: deferred.clone(),
+                });
+            })),
+            ..Default::default()
+        });
     }
 
     pub(crate) fn open_wallet_recovery_backup(&mut self) {
@@ -500,7 +874,7 @@ impl ChatWidget {
     pub(crate) fn open_wallet_plans(&mut self, mode: WalletPlanPurchaseMode) {
         let mut header = ColumnRenderable::new();
         header.push(Line::from("Corbanu Plans".bold()));
-        self.show_selection_view(SelectionViewParams {
+        let mut params = SelectionViewParams {
             view_id: Some(WALLET_PLANS_VIEW_ID),
             header: Box::new(header),
             items: vec![SelectionItem {
@@ -510,7 +884,16 @@ impl ChatWidget {
             }],
             footer_hint: Some(standard_popup_hint_line()),
             ..Default::default()
-        });
+        };
+        if let WalletPlanPurchaseMode::Onboarding { deferred } = &mode {
+            let deferred = deferred.clone();
+            params.on_cancel = Some(Box::new(move |tx: &AppEventSender| {
+                tx.send(AppEvent::DeferredCorbanuPlanCancelled {
+                    deferred: deferred.clone(),
+                });
+            }));
+        }
+        self.show_selection_view(params);
         let tx = self.app_event_tx.clone();
         tokio::spawn(async move {
             let result = async {
@@ -543,7 +926,7 @@ impl ChatWidget {
             Ok(catalog) => {
                 let mut header = ColumnRenderable::new();
                 match &mode {
-                    WalletPlanPurchaseMode::New => {
+                    WalletPlanPurchaseMode::New | WalletPlanPurchaseMode::Onboarding { .. } => {
                         header.push(Line::from("Corbanu Plans".bold()));
                         header.push(Line::from(
                             "One month, paid once in Solana USDC. No recurring wallet charge."
@@ -572,7 +955,9 @@ impl ChatWidget {
                 }
                 let payment = catalog.payment;
                 let plans = match &mode {
-                    WalletPlanPurchaseMode::New => catalog.plans,
+                    WalletPlanPurchaseMode::New | WalletPlanPurchaseMode::Onboarding { .. } => {
+                        catalog.plans
+                    }
                     WalletPlanPurchaseMode::Upgrade {
                         current_plan_id, ..
                     } => higher_tiers_from_catalog(catalog.plans, current_plan_id),
@@ -582,6 +967,13 @@ impl ChatWidget {
                     .into_iter()
                     .map(|plan| {
                         let mut selected = plan.clone();
+                        selected.deferred_setup = match &mode {
+                            WalletPlanPurchaseMode::Onboarding { deferred } => {
+                                Some(deferred.clone())
+                            }
+                            WalletPlanPurchaseMode::New
+                            | WalletPlanPurchaseMode::Upgrade { .. } => None,
+                        };
                         if let WalletPlanPurchaseMode::Upgrade { starts_at, .. } = &mode {
                             selected.scheduled_start = Some(starts_at.clone());
                         }
@@ -631,24 +1023,59 @@ impl ChatWidget {
                         ..Default::default()
                     });
                 }
+                let deferred = match &mode {
+                    WalletPlanPurchaseMode::Onboarding { deferred } => Some(deferred.clone()),
+                    WalletPlanPurchaseMode::New | WalletPlanPurchaseMode::Upgrade { .. } => None,
+                };
                 self.bottom_pane.replace_selection_view_if_present(
                     WALLET_PLANS_VIEW_ID,
-                    SelectionViewParams {
-                        view_id: Some(WALLET_PLANS_VIEW_ID),
-                        header: Box::new(header),
-                        items,
-                        footer_hint: Some(standard_popup_hint_line()),
-                        ..Default::default()
-                    },
+                    plan_params_with_cancel(
+                        SelectionViewParams {
+                            view_id: Some(WALLET_PLANS_VIEW_ID),
+                            header: Box::new(header),
+                            items,
+                            footer_hint: Some(standard_popup_hint_line()),
+                            ..Default::default()
+                        },
+                        deferred,
+                    ),
                 );
                 self.wallet_payment_config = Some(payment);
             }
-            Err(error) => self.add_error_message(format!("Could not load plans: {error}")),
+            Err(error) => {
+                self.add_error_message(format!("Could not load plans: {error}"));
+                let retry_mode = mode.clone();
+                let deferred = match &mode {
+                    WalletPlanPurchaseMode::Onboarding { deferred } => Some(deferred.clone()),
+                    WalletPlanPurchaseMode::New | WalletPlanPurchaseMode::Upgrade { .. } => None,
+                };
+                self.bottom_pane.replace_selection_view_if_present(
+                    WALLET_PLANS_VIEW_ID,
+                    plan_params_with_cancel(
+                        SelectionViewParams {
+                            view_id: Some(WALLET_PLANS_VIEW_ID),
+                            items: vec![SelectionItem {
+                                name: "Retry loading plans".to_string(),
+                                actions: vec![Box::new(move |tx| {
+                                    tx.send(AppEvent::OpenWalletPlans {
+                                        mode: retry_mode.clone(),
+                                    })
+                                })],
+                                ..Default::default()
+                            }],
+                            footer_hint: Some(standard_popup_hint_line()),
+                            ..Default::default()
+                        },
+                        deferred,
+                    ),
+                );
+            }
         }
     }
 
     pub(crate) fn confirm_wallet_plan_purchase(&mut self, plan: WalletPlanChoice) {
         let selected = plan.clone();
+        let cancel_deferred = plan.deferred_setup.clone();
         let amount_atomic = plan.amount_atomic.parse::<u64>().ok();
         let remaining_usdc = self.wallet_balances.and_then(|balance| {
             amount_atomic
@@ -706,39 +1133,52 @@ impl ChatWidget {
                 balance.sol_lamports as f64 / 1_000_000_000.0,
             )));
         }
-        self.show_selection_view(SelectionViewParams {
-            view_id: Some("wallet-plan-confirm"),
-            header: Box::new(header),
-            items: vec![
-                SelectionItem {
-                    name: "Cancel".to_string(),
-                    description: Some("Return without signing or sending USDC".to_string()),
-                    dismiss_on_select: true,
-                    ..Default::default()
-                },
-                SelectionItem {
-                    name: format!("Pay {} USDC", plan.price_usdc),
-                    description: Some(
-                        "Sign the exact x402 USDC transfer and activate the provider".to_string(),
-                    ),
-                    is_disabled: remaining_usdc.is_none_or(|(_, remaining)| remaining.is_none()),
-                    actions: vec![Box::new(move |tx| {
-                        tx.send(AppEvent::WalletPlanPurchaseRequested {
-                            plan: selected.clone(),
-                        })
-                    })],
-                    dismiss_on_select: true,
-                    ..Default::default()
-                },
-            ],
-            initial_selected_idx: Some(0),
-            allow_number_shortcuts: false,
-            footer_hint: Some(standard_popup_hint_line()),
-            ..Default::default()
-        });
+        self.show_selection_view(plan_params_with_cancel(
+            SelectionViewParams {
+                view_id: Some(WALLET_PLAN_CONFIRM_VIEW_ID),
+                header: Box::new(header),
+                items: vec![
+                    SelectionItem {
+                        name: "Cancel".to_string(),
+                        description: Some("Return without signing or sending USDC".to_string()),
+                        dismiss_on_select: true,
+                        actions: cancel_deferred.map_or_else(Vec::new, |deferred| {
+                            vec![Box::new(move |tx: &AppEventSender| {
+                                tx.send(AppEvent::DeferredCorbanuPlanCancelled {
+                                    deferred: deferred.clone(),
+                                });
+                            }) as SelectionAction]
+                        }),
+                        ..Default::default()
+                    },
+                    SelectionItem {
+                        name: format!("Pay {} USDC", plan.price_usdc),
+                        description: Some(
+                            "Sign the exact x402 USDC transfer and activate the provider"
+                                .to_string(),
+                        ),
+                        is_disabled: remaining_usdc
+                            .is_none_or(|(_, remaining)| remaining.is_none()),
+                        actions: vec![Box::new(move |tx| {
+                            tx.send(AppEvent::WalletPlanPurchaseRequested {
+                                plan: selected.clone(),
+                            })
+                        })],
+                        dismiss_on_select: true,
+                        ..Default::default()
+                    },
+                ],
+                initial_selected_idx: Some(0),
+                allow_number_shortcuts: false,
+                footer_hint: Some(standard_popup_hint_line()),
+                ..Default::default()
+            },
+            plan.deferred_setup,
+        ));
     }
 
     pub(crate) fn purchase_wallet_plan(&mut self, plan: WalletPlanChoice) {
+        let deferred_setup = plan.deferred_setup.clone();
         let Some(capability) = wallet_capability_for_request(self.wallet_capability.as_ref())
         else {
             self.add_error_message(
@@ -791,65 +1231,206 @@ impl ChatWidget {
             tx.send(AppEvent::WalletPlanProvisioned {
                 operation: WalletPlanProvisioningOperation::Purchase,
                 result,
+                deferred_setup,
             });
         });
+    }
+
+    pub(crate) fn dismiss_deferred_wallet_plan_views(&mut self) {
+        for view_id in [
+            crate::chatwidget::wallet_receipt::WALLET_PLAN_RECEIPT_VIEW_ID,
+            WALLET_PLAN_CONFIRM_VIEW_ID,
+            WALLET_PLANS_VIEW_ID,
+            WALLET_MENU_VIEW_ID,
+        ] {
+            while self.bottom_pane.dismiss_view_by_id(view_id) {}
+        }
+    }
+
+    fn present_provisional_plan_receipt(&mut self, receipt: WalletPlanReceipt) {
+        for view_id in [
+            WALLET_PLAN_CONFIRM_VIEW_ID,
+            WALLET_PLANS_VIEW_ID,
+            WALLET_MENU_VIEW_ID,
+        ] {
+            while self.bottom_pane.dismiss_view_by_id(view_id) {}
+        }
+        self.open_wallet_plan_receipt(receipt);
+    }
+
+    fn begin_wallet_plan_persistence_attempt(&mut self) -> WalletPlanPersistenceAttemptId {
+        self.next_wallet_plan_persistence_attempt =
+            self.next_wallet_plan_persistence_attempt.wrapping_add(1);
+        if self.next_wallet_plan_persistence_attempt == 0 {
+            self.next_wallet_plan_persistence_attempt = 1;
+        }
+        let attempt_id =
+            WalletPlanPersistenceAttemptId::new(self.next_wallet_plan_persistence_attempt);
+        self.current_wallet_plan_persistence_attempt = Some(attempt_id);
+        attempt_id
+    }
+
+    fn is_current_wallet_plan_persistence_attempt(
+        &self,
+        attempt_id: WalletPlanPersistenceAttemptId,
+    ) -> bool {
+        self.current_wallet_plan_persistence_attempt == Some(attempt_id)
     }
 
     pub(crate) fn on_wallet_plan_provisioned(
         &mut self,
         operation: WalletPlanProvisioningOperation,
         result: Result<WalletPlanProvisionedResult, String>,
+        deferred_setup: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     ) {
-        match result {
-            Ok(provisioned) => {
-                let mut api_key = provisioned.api_key.into_inner();
-                let stored = codex_login::login_with_provider_api_key(
-                    &self.config.codex_home,
+        let provisioned = match result {
+            Ok(provisioned) => provisioned,
+            Err(error) => {
+                self.add_error_message(wallet_plan_provisioning_error(operation, &error));
+                return;
+            }
+        };
+        let attempt_id = self.begin_wallet_plan_persistence_attempt();
+        if let Some(purchase) = provisioned.purchase.as_ref() {
+            self.add_info_message(
+                "Payment settled. Verifying the plan schedule and preparing its receipt…"
+                    .to_string(),
+                /*hint*/ None,
+            );
+            self.present_provisional_plan_receipt(provisional_plan_receipt(
+                &provisioned.plan_id,
+                purchase,
+                /*credential_error*/ None,
+            ));
+        }
+
+        let home = self.config.codex_home.as_path().to_path_buf();
+        let store_mode = self.config.cli_auth_credentials_store_mode;
+        let keyring_backend = self.config.auth_keyring_backend_kind();
+        let tx = self.app_event_tx.clone();
+        let plan_id = provisioned.plan_id;
+        let purchase = provisioned.purchase;
+        let api_key = provisioned.api_key;
+        tokio::spawn(async move {
+            let persisted = tokio::task::spawn_blocking(move || {
+                let result = codex_login::login_with_provider_api_key(
+                    &home,
                     PFTERMINAL_PLAN_API_KEY_ENV_VAR,
-                    &api_key,
-                    self.config.cli_auth_credentials_store_mode,
-                    self.config.auth_keyring_backend_kind(),
-                );
-                if let Some(purchase) = provisioned.purchase {
-                    let credential_error = stored.err().map(|error| error.to_string());
+                    api_key.expose(),
+                    store_mode,
+                    keyring_backend,
+                )
+                .map_err(|_| WalletPlanCredentialPersistenceError::StoreFailed);
+                (api_key, result)
+            })
+            .await;
+            let (api_key, result) = match persisted {
+                Ok((api_key, result)) => (Some(api_key), result),
+                Err(_) => (
+                    None,
+                    Err(WalletPlanCredentialPersistenceError::WorkerUnavailable),
+                ),
+            };
+            tx.send(AppEvent::WalletPlanCredentialPersistenceFinished {
+                attempt_id,
+                operation,
+                plan_id,
+                purchase,
+                deferred_setup,
+                api_key,
+                result,
+            });
+        });
+    }
+
+    pub(crate) fn on_wallet_plan_credential_persistence_finished(
+        &mut self,
+        attempt_id: WalletPlanPersistenceAttemptId,
+        operation: WalletPlanProvisioningOperation,
+        plan_id: String,
+        purchase: Option<WalletPlanPurchaseSummary>,
+        deferred_setup: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+        api_key: Option<WalletSecret>,
+        result: Result<(), WalletPlanCredentialPersistenceError>,
+    ) {
+        if !self.is_current_wallet_plan_persistence_attempt(attempt_id) {
+            return;
+        }
+        let purchase = match (operation, purchase) {
+            (WalletPlanProvisioningOperation::Purchase, Some(purchase)) => Some(purchase),
+            (WalletPlanProvisioningOperation::Recovery, None) => None,
+            _ => return,
+        };
+        let selection_policy = if deferred_setup.is_some() {
+            WalletPlanReceiptSelectionPolicy::PreserveCurrentProvider
+        } else {
+            WalletPlanReceiptSelectionPolicy::SelectProviderOnSuccess
+        };
+        if result.is_ok()
+            && let Some(deferred) = deferred_setup
+        {
+            self.app_event_tx
+                .send(AppEvent::DeferredCorbanuPlanConfigured { deferred });
+        }
+        if let Some(purchase) = purchase {
+            let credential_error = result.err().map(|error| error.to_string());
+            let Some(api_key) = api_key else {
+                self.present_provisional_plan_receipt(provisional_plan_receipt(
+                    &plan_id,
+                    &purchase,
+                    credential_error,
+                ));
+                return;
+            };
+            let home = self.config.codex_home.as_path().to_path_buf();
+            let tx = self.app_event_tx.clone();
+            tokio::spawn(async move {
+                let receipt = reconcile_plan_receipt(
+                    home,
+                    Zeroizing::new(api_key.into_inner()),
+                    plan_id,
+                    purchase,
+                    credential_error,
+                )
+                .await;
+                tracing::debug!(?attempt_id, "dispatching reconciled Corbanu Plan receipt");
+                tx.send(AppEvent::WalletPlanReceiptReady {
+                    attempt_id,
+                    selection_policy,
+                    receipt,
+                });
+            });
+        } else {
+            match result {
+                Ok(()) => {
                     self.add_info_message(
-                        "Payment settled. Verifying the plan schedule and preparing its receipt…"
-                            .to_string(),
+                        "Corbanu Plan access recovered. Credential stored securely.".to_string(),
                         /*hint*/ None,
                     );
-                    let home = self.config.codex_home.as_path().to_path_buf();
-                    let tx = self.app_event_tx.clone();
-                    let plan_id = provisioned.plan_id;
-                    tokio::spawn(async move {
-                        let receipt = reconcile_plan_receipt(
-                            home,
-                            Zeroizing::new(api_key),
-                            plan_id,
-                            purchase,
-                            credential_error,
-                        )
-                        .await;
-                        tx.send(AppEvent::WalletPlanReceiptReady { receipt });
-                    });
-                } else {
-                    api_key.zeroize();
-                    match stored {
-                        Ok(()) => {
-                            self.add_info_message(
-                                "Corbanu Plan access recovered. Credential stored securely."
-                                    .to_string(),
-                                /*hint*/ None,
-                            );
-                            self.select_pfterminal_plan_provider();
-                            self.open_wallet_menu();
-                        }
-                        Err(error) => self.add_error_message(format!(
-                            "Plan access was recovered, but storing its API key failed: {error}"
-                        )),
-                    }
+                    self.select_pfterminal_plan_provider();
+                    self.open_wallet_menu();
                 }
+                Err(error) => self.add_error_message(format!(
+                    "Plan access was recovered, but storing its API key failed: {error}"
+                )),
             }
-            Err(error) => self.add_error_message(wallet_plan_provisioning_error(operation, &error)),
+        }
+    }
+
+    pub(crate) fn on_wallet_plan_receipt_reconciled(
+        &mut self,
+        attempt_id: WalletPlanPersistenceAttemptId,
+        selection_policy: WalletPlanReceiptSelectionPolicy,
+        receipt: WalletPlanReceipt,
+    ) {
+        let current = self.is_current_wallet_plan_persistence_attempt(attempt_id);
+        tracing::debug!(
+            ?attempt_id,
+            current,
+            "received reconciled Corbanu Plan receipt"
+        );
+        if current {
+            self.on_wallet_plan_receipt_ready(receipt, selection_policy);
         }
     }
 
@@ -892,6 +1473,7 @@ impl ChatWidget {
                     tx.send(AppEvent::WalletPlanProvisioned {
                         operation: WalletPlanProvisioningOperation::Recovery,
                         result,
+                        deferred_setup: None,
                     });
                 });
             }),
@@ -915,6 +1497,7 @@ impl ChatWidget {
             tx.send(AppEvent::WalletPlanProvisioned {
                 operation: WalletPlanProvisioningOperation::Recovery,
                 result,
+                deferred_setup: None,
             });
         });
     }
@@ -929,6 +1512,136 @@ impl ChatWidget {
             provider: Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
             effort: None,
         });
+    }
+
+    pub(crate) fn on_deferred_corbanu_plan_configured(
+        &mut self,
+        deferred: &crate::onboarding::provider_setup::DeferredProviderSetup,
+    ) -> Result<(), DeferredPlanActivationError> {
+        let host = crate::provider_status_host::ProviderStatusHost::from_config(
+            &self.config,
+            crate::provider_status_host::ProviderAccountMetadata {
+                corbanu: codex_provider_auth::CorbanuPlanMetadata::Configured {
+                    source: codex_provider_auth::CorbanuCredentialSource::Managed,
+                    availability: codex_provider_auth::ConfiguredAvailability::Ready,
+                },
+                ..Default::default()
+            },
+        );
+        if !host.activate(codex_model_provider_info::CORBANU_PLAN_PROVIDER_ID) {
+            self.add_error_message(
+                "Corbanu Plan was stored, but activation could not be persisted.".to_string(),
+            );
+            self.show_deferred_plan_activation_retry(deferred.clone());
+            return Err(DeferredPlanActivationError::Persistence);
+        }
+        let reconciled = host
+            .resolve_provider(codex_model_provider_info::CORBANU_PLAN_PROVIDER_ID)
+            .is_some_and(|status| {
+                status.configuration == codex_provider_auth::ProviderConfigurationState::Configured
+                    && status.eligibility == codex_provider_auth::ProviderEligibilityState::Active
+                    && status.availability == codex_provider_auth::ProviderAvailabilityState::Ready
+            });
+        if !reconciled {
+            self.add_error_message(
+                "Corbanu Plan was stored, but status reconciliation is still incomplete."
+                    .to_string(),
+            );
+            self.show_deferred_plan_activation_retry(deferred.clone());
+            return Err(DeferredPlanActivationError::StatusNotReady);
+        }
+        if !deferred.has_usable_fallback() {
+            self.select_pfterminal_plan_provider();
+        }
+        Ok(())
+    }
+
+    fn show_deferred_plan_activation_retry(
+        &mut self,
+        deferred: crate::onboarding::provider_setup::DeferredProviderSetup,
+    ) {
+        let retry = deferred.clone();
+        let cancel = deferred.clone();
+        self.show_selection_view(SelectionViewParams {
+            title: Some("Finish Corbanu Plan setup".to_string()),
+            items: vec![
+                SelectionItem {
+                    name: "Retry activation".to_string(),
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::DeferredCorbanuPlanConfigured {
+                            deferred: retry.clone(),
+                        })
+                    })],
+                    ..Default::default()
+                },
+                SelectionItem {
+                    name: "Cancel".to_string(),
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::DeferredCorbanuPlanCancelled {
+                            deferred: cancel.clone(),
+                        })
+                    })],
+                    ..Default::default()
+                },
+            ],
+            on_cancel: Some(Box::new(move |tx| {
+                tx.send(AppEvent::DeferredCorbanuPlanCancelled {
+                    deferred: deferred.clone(),
+                });
+            })),
+            ..Default::default()
+        });
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DeferredPlanActivationError {
+    Persistence,
+    StatusNotReady,
+}
+
+fn shared_provider_method_label(
+    capability: &codex_provider_auth::ProviderSetupCapability,
+) -> &'static str {
+    match capability {
+        codex_provider_auth::ProviderSetupCapability::OpenAiAccount => "account",
+        codex_provider_auth::ProviderSetupCapability::ApiKey { .. } => "API key",
+        codex_provider_auth::ProviderSetupCapability::ClaudeAccount => "account",
+        codex_provider_auth::ProviderSetupCapability::CorbanuPlan => "Plan",
+        codex_provider_auth::ProviderSetupCapability::Local { .. } => "local runtime",
+        codex_provider_auth::ProviderSetupCapability::CommandAuth { .. } => "external command",
+        codex_provider_auth::ProviderSetupCapability::StatusOnly { .. } => "status only",
+    }
+}
+
+fn shared_provider_status_description(
+    status: Option<&codex_provider_auth::ProviderStatusSnapshot>,
+) -> String {
+    let Some(status) = status else {
+        return "Status unavailable".to_string();
+    };
+    use codex_provider_auth::ProviderAvailabilityState as Availability;
+    use codex_provider_auth::ProviderConfigurationState as Configuration;
+    use codex_provider_auth::ProviderEligibilityState as Eligibility;
+    match (
+        status.configuration,
+        status.eligibility,
+        status.availability,
+    ) {
+        (Configuration::Configured, Eligibility::Active, Availability::Ready) => {
+            "Configured · active · ready".to_string()
+        }
+        (Configuration::Configured, Eligibility::Inactive, _) => {
+            "Configured · inactive".to_string()
+        }
+        (Configuration::Configured, Eligibility::Active, _) => {
+            "Configured · active · unavailable".to_string()
+        }
+        (Configuration::RecoveryRequired, _, _) => "Recovery required".to_string(),
+        (Configuration::NotConfigured, _, _) => "Not configured".to_string(),
+        (Configuration::Checking, _, _) => "Checking".to_string(),
+        (Configuration::Unavailable, _, _) => "Status unavailable".to_string(),
+        (Configuration::Configured, _, _) => "Configured · status unavailable".to_string(),
     }
 }
 
@@ -979,6 +1692,20 @@ fn wallet_persistence_success_message(
     format!(
         "{verb} Solana wallet {address}. The recovery material is shown only in the secure view."
     )
+}
+
+fn plan_params_with_cancel(
+    mut params: SelectionViewParams,
+    deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+) -> SelectionViewParams {
+    if let Some(deferred) = deferred {
+        params.on_cancel = Some(Box::new(move |tx: &AppEventSender| {
+            tx.send(AppEvent::DeferredCorbanuPlanCancelled {
+                deferred: deferred.clone(),
+            });
+        }));
+    }
+    params
 }
 
 fn wallet_params(
@@ -1230,7 +1957,9 @@ fn wallet_items(
         if let Some(mode) = upgrade_mode {
             let starts_at = match &mode {
                 WalletPlanPurchaseMode::Upgrade { starts_at, .. } => starts_at.clone(),
-                WalletPlanPurchaseMode::New => unreachable!(),
+                WalletPlanPurchaseMode::New | WalletPlanPurchaseMode::Onboarding { .. } => {
+                    unreachable!()
+                }
             };
             items.push(item(
                 "Upgrade Corbanu Plan",
@@ -1362,6 +2091,25 @@ fn push_wallet_line(header: &mut ColumnRenderable, text: &str, dimmed: bool) {
     push_wallet_text(header, text, style);
 }
 
+fn provisional_plan_receipt(
+    plan_id: &str,
+    purchase: &WalletPlanPurchaseSummary,
+    credential_error: Option<String>,
+) -> WalletPlanReceipt {
+    WalletPlanReceipt {
+        plan_id: plan_id.to_string(),
+        price_usdc: Some(purchase.price_usdc.clone()),
+        transaction: purchase.transaction.clone(),
+        starts_at: purchase.scheduled_start.clone(),
+        ends_at: None,
+        active_plan_id: None,
+        active_ends_at: None,
+        remaining_usdc_atomic: None,
+        reconciliation_error: None,
+        credential_error,
+    }
+}
+
 fn wallet_capability_for_request(
     capability: Option<&Zeroizing<String>>,
 ) -> Option<Zeroizing<String>> {
@@ -1444,6 +2192,253 @@ mod tests {
         );
         assert!(message.contains("Plan purchase failed"));
         assert!(message.contains("payment may have settled"));
+    }
+
+    #[test]
+    fn provisional_receipt_freezes_authoritative_settlement_without_inventing_schedule() {
+        let receipt = provisional_plan_receipt(
+            "starter",
+            &WalletPlanPurchaseSummary {
+                price_usdc: "1.00".to_string(),
+                scheduled_start: None,
+                transaction: Some("settlement-signature".to_string()),
+            },
+            Some("credential storage unavailable".to_string()),
+        );
+
+        assert_eq!(receipt.plan_id, "starter");
+        assert_eq!(receipt.price_usdc.as_deref(), Some("1.00"));
+        assert_eq!(receipt.transaction.as_deref(), Some("settlement-signature"));
+        assert_eq!(receipt.starts_at, None);
+        assert_eq!(receipt.ends_at, None);
+        assert_eq!(receipt.active_plan_id, None);
+        assert_eq!(receipt.active_ends_at, None);
+        assert_eq!(receipt.remaining_usdc_atomic, None);
+        assert_eq!(receipt.reconciliation_error, None);
+        assert_eq!(
+            receipt.credential_error.as_deref(),
+            Some("credential storage unavailable")
+        );
+    }
+
+    #[tokio::test]
+    async fn provisional_receipt_replaces_duplicate_purchase_view_stack() {
+        let (mut chat, _rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+        for view_id in [
+            WALLET_MENU_VIEW_ID,
+            WALLET_PLANS_VIEW_ID,
+            WALLET_PLANS_VIEW_ID,
+            WALLET_PLAN_CONFIRM_VIEW_ID,
+        ] {
+            chat.show_selection_view(SelectionViewParams {
+                view_id: Some(view_id),
+                ..Default::default()
+            });
+        }
+
+        chat.present_provisional_plan_receipt(provisional_plan_receipt(
+            "starter",
+            &WalletPlanPurchaseSummary {
+                price_usdc: "1.00".to_string(),
+                scheduled_start: None,
+                transaction: Some("settlement-signature".to_string()),
+            },
+            None,
+        ));
+
+        assert_eq!(
+            chat.bottom_pane.active_view_id(),
+            Some(crate::chatwidget::wallet_receipt::WALLET_PLAN_RECEIPT_VIEW_ID)
+        );
+        assert!(
+            chat.bottom_pane
+                .dismiss_view_by_id(crate::chatwidget::wallet_receipt::WALLET_PLAN_RECEIPT_VIEW_ID)
+        );
+        assert_eq!(chat.bottom_pane.active_view_id(), None);
+    }
+
+    #[tokio::test]
+    async fn deferred_cancellation_removes_every_wallet_plan_view() {
+        let (mut chat, _rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+        for view_id in [
+            WALLET_MENU_VIEW_ID,
+            WALLET_PLANS_VIEW_ID,
+            WALLET_PLANS_VIEW_ID,
+            WALLET_PLAN_CONFIRM_VIEW_ID,
+        ] {
+            chat.show_selection_view(SelectionViewParams {
+                view_id: Some(view_id),
+                ..Default::default()
+            });
+        }
+
+        chat.dismiss_deferred_wallet_plan_views();
+
+        assert_eq!(chat.bottom_pane.active_view_id(), None);
+    }
+
+    #[tokio::test]
+    async fn provisioned_purchase_presents_receipt_before_persistence_completion() {
+        let (mut chat, mut rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+        let credential_home = tempfile::tempdir().expect("temporary credential home");
+        let credential_home_root = credential_home.path().to_path_buf();
+        let credential_home_path = credential_home.path().join("not-a-directory");
+        std::fs::write(&credential_home_path, b"fixture").expect("create blocked credential home");
+        chat.config.codex_home =
+            codex_utils_absolute_path::AbsolutePathBuf::try_from(credential_home_path)
+                .expect("absolute credential home");
+        chat.config.cli_auth_credentials_store_mode =
+            codex_config::types::AuthCredentialsStoreMode::File;
+        let secret_canary = "pf53-persistence-secret-canary";
+
+        chat.on_wallet_plan_provisioned(
+            WalletPlanProvisioningOperation::Purchase,
+            Ok(WalletPlanProvisionedResult {
+                plan_id: "starter".to_string(),
+                api_key: WalletSecret::new(secret_canary.to_string()),
+                purchase: Some(WalletPlanPurchaseSummary {
+                    price_usdc: "1.00".to_string(),
+                    scheduled_start: None,
+                    transaction: Some("settlement-signature".to_string()),
+                }),
+            }),
+            None,
+        );
+
+        let pending_attempt = chat
+            .current_wallet_plan_persistence_attempt
+            .expect("persistence attempt must be registered synchronously");
+        assert_eq!(
+            chat.bottom_pane.active_view_id(),
+            Some(crate::chatwidget::wallet_receipt::WALLET_PLAN_RECEIPT_VIEW_ID)
+        );
+
+        let completion = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let event = rx.recv().await.expect("persistence completion event");
+                if matches!(
+                    event,
+                    AppEvent::WalletPlanCredentialPersistenceFinished { .. }
+                ) {
+                    break event;
+                }
+            }
+        })
+        .await
+        .expect("credential persistence completed");
+        assert!(
+            !format!("{completion:?}").contains(secret_canary),
+            "completion Debug output must redact the API key"
+        );
+        let AppEvent::WalletPlanCredentialPersistenceFinished {
+            attempt_id,
+            api_key,
+            result,
+            ..
+        } = completion
+        else {
+            unreachable!("filtered to persistence completion")
+        };
+        assert_eq!(attempt_id, pending_attempt);
+        assert_eq!(
+            result,
+            Err(WalletPlanCredentialPersistenceError::StoreFailed)
+        );
+        drop(api_key);
+        drop(chat);
+        drop(credential_home);
+        assert!(
+            !credential_home_root.exists(),
+            "temporary credential storage containing the canary must be removed"
+        );
+    }
+
+    #[tokio::test]
+    async fn stale_plan_persistence_and_receipt_completions_are_inert() {
+        let (mut chat, mut rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+        while rx.try_recv().is_ok() {}
+        const MARKER_VIEW_ID: &str = "wallet-plan-persistence-test-marker";
+        chat.show_selection_view(SelectionViewParams {
+            view_id: Some(MARKER_VIEW_ID),
+            ..Default::default()
+        });
+        let stale_attempt = chat.begin_wallet_plan_persistence_attempt();
+        let current_attempt = chat.begin_wallet_plan_persistence_attempt();
+
+        chat.on_wallet_plan_credential_persistence_finished(
+            stale_attempt,
+            WalletPlanProvisioningOperation::Recovery,
+            "existing".to_string(),
+            None,
+            None,
+            Some(WalletSecret::new("stale-recovery-key".to_string())),
+            Ok(()),
+        );
+        chat.on_wallet_plan_receipt_reconciled(
+            stale_attempt,
+            WalletPlanReceiptSelectionPolicy::SelectProviderOnSuccess,
+            provisional_plan_receipt(
+                "stale-plan",
+                &WalletPlanPurchaseSummary {
+                    price_usdc: "99".to_string(),
+                    scheduled_start: None,
+                    transaction: Some("stale-transaction".to_string()),
+                },
+                None,
+            ),
+        );
+
+        assert_eq!(chat.bottom_pane.active_view_id(), Some(MARKER_VIEW_ID));
+        assert_eq!(
+            chat.current_wallet_plan_persistence_attempt,
+            Some(current_attempt)
+        );
+        assert!(
+            rx.try_recv().is_err(),
+            "stale persistence must not emit provider activation events"
+        );
+
+        chat.on_wallet_plan_credential_persistence_finished(
+            current_attempt,
+            WalletPlanProvisioningOperation::Recovery,
+            "existing".to_string(),
+            None,
+            None,
+            Some(WalletSecret::new("current-recovery-key".to_string())),
+            Ok(()),
+        );
+        assert_eq!(chat.bottom_pane.active_view_id(), Some(WALLET_MENU_VIEW_ID));
+        assert!(
+            std::iter::from_fn(|| rx.try_recv().ok()).any(|event| matches!(
+                event,
+                AppEvent::UpdateModelSelection {
+                    provider: Some(provider),
+                    ..
+                } if provider == PFTERMINAL_PLAN_PROVIDER_ID
+            ))
+        );
+
+        chat.on_wallet_plan_receipt_reconciled(
+            current_attempt,
+            WalletPlanReceiptSelectionPolicy::SelectProviderOnSuccess,
+            provisional_plan_receipt(
+                "current-plan",
+                &WalletPlanPurchaseSummary {
+                    price_usdc: "1".to_string(),
+                    scheduled_start: None,
+                    transaction: Some("current-transaction".to_string()),
+                },
+                None,
+            ),
+        );
+        assert_eq!(
+            chat.bottom_pane.active_view_id(),
+            Some(crate::chatwidget::wallet_receipt::WALLET_PLAN_RECEIPT_VIEW_ID)
+        );
     }
 
     fn overview(locked: bool) -> WalletOverview {
@@ -1756,6 +2751,7 @@ mod tests {
                 weekly_token_limit: 1,
                 monthly_token_limit: 1,
                 scheduled_start: None,
+                deferred_setup: None,
             })
             .collect();
         assert_eq!(

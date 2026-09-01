@@ -162,6 +162,8 @@ impl ChatWidget {
             clipboard_lease: None,
             wallet_capability: None,
             wallet_status_generation: 0,
+            next_wallet_plan_persistence_attempt: 0,
+            current_wallet_plan_persistence_attempt: None,
             telegram_discovery_generation: 0,
             wallet_payment_config: None,
             wallet_balances: None,

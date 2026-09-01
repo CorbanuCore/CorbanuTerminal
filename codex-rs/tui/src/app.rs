@@ -705,6 +705,15 @@ pub(crate) struct App {
     workspace_command_runner: Option<WorkspaceCommandRunner>,
     /// Config is stored here so we can recreate ChatWidgets as needed.
     pub(crate) config: Config,
+    pub(crate) active_deferred_provider_setup:
+        Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    pub(crate) shared_provider_setup_session:
+        Option<crate::onboarding::provider_setup::ProviderSetupSession>,
+    pub(crate) shared_provider_status_host: Option<crate::provider_status_host::ProviderStatusHost>,
+    pub(crate) shared_provider_account_auth_host:
+        Option<crate::provider_account_auth_host::ProviderAccountAuthHost>,
+    pub(crate) pending_wallet_create_deferred:
+        Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     launch_cwd: PathBuf,
     pub(crate) state_db: Option<StateDbHandle>,
     cli_kv_overrides: Vec<(String, TomlValue)>,
@@ -1093,6 +1102,7 @@ impl App {
         startup_elapsed_before_app: Duration,
         startup_bootstrap: Option<AppServerBootstrap>,
         startup_hooks_browser: Option<HooksListEntry>,
+        deferred_provider_setup: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     ) -> Result<AppExitInfo> {
         let startup_started_at = Instant::now();
         let (app_event_tx, mut app_event_rx) = unbounded_channel();
@@ -1529,6 +1539,11 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
             chat_widget,
             workspace_command_runner: Some(workspace_command_runner),
             config,
+            active_deferred_provider_setup: deferred_provider_setup.clone(),
+            shared_provider_setup_session: None,
+            shared_provider_status_host: None,
+            shared_provider_account_auth_host: None,
+            pending_wallet_create_deferred: None,
             launch_cwd,
             state_db,
             cli_kv_overrides,
@@ -1632,6 +1647,10 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
             pending_plugin_enabled_writes: HashMap::new(),
             pending_hook_enabled_writes: HashMap::new(),
         };
+        if let Some(deferred) = deferred_provider_setup {
+            app.app_event_tx
+                .send(AppEvent::BeginDeferredCorbanuPlan { deferred });
+        }
         for thread_id in restored_codex_user_pane_ids {
             app.upsert_agent_picker_thread(
                 thread_id, /*agent_nickname*/ None, /*agent_role*/ None,

@@ -13,13 +13,25 @@ use crate::*;
 #[test]
 fn target_derivation_covers_builtin_custom_shared_and_unsupported_entries() {
     let builtins = ProviderCatalog::from_runtime_providers(&built_in_model_providers(None));
+    let deepseek = builtins.get(DEEPSEEK_PROVIDER_ID).unwrap();
+    let deepseek_api_key = deepseek.setup_capabilities.iter().next().unwrap();
     assert_eq!(
-        ApiKeyAuthTarget::from_catalog_entry(builtins.get(DEEPSEEK_PROVIDER_ID).unwrap()),
+        ApiKeyAuthTarget::from_catalog_capability(deepseek, deepseek_api_key),
         Ok(target(DEEPSEEK_PROVIDER_ID, DEEPSEEK_API_KEY_ENV_VAR))
     );
+    let openai = builtins.get(OPENAI_PROVIDER_ID).unwrap();
+    let openai_api_key = openai
+        .setup_capabilities
+        .iter()
+        .find(|capability| matches!(capability, ProviderSetupCapability::ApiKey { .. }))
+        .unwrap();
     assert_eq!(
-        ApiKeyAuthTarget::from_catalog_entry(builtins.get(OPENAI_PROVIDER_ID).unwrap()),
-        Err(ApiKeyTargetError::UnsupportedCapability)
+        ApiKeyAuthTarget::from_catalog_capability(openai, openai_api_key),
+        Ok(ApiKeyAuthTarget {
+            provider_id: ProviderCatalogId(OPENAI_PROVIDER_ID.into()),
+            runtime_provider_id: ProviderRuntimeId(OPENAI_PROVIDER_ID.into()),
+            storage: ApiKeyStorage::OpenAiAuth,
+        })
     );
     let catalog = ProviderCatalog::from_runtime_providers(&HashMap::from([
         ("z-wire".into(), custom("Shared", "SHARED_KEY")),
@@ -30,7 +42,12 @@ fn target_derivation_covers_builtin_custom_shared_and_unsupported_entries() {
         catalog
             .entries()
             .iter()
-            .map(ApiKeyAuthTarget::from_catalog_entry)
+            .map(|entry| {
+                ApiKeyAuthTarget::from_catalog_capability(
+                    entry,
+                    entry.setup_capabilities.iter().next().unwrap(),
+                )
+            })
             .collect::<Result<Vec<_>, _>>(),
         Ok(vec![
             target("a-wire", "SHARED_KEY"),
@@ -89,6 +106,8 @@ fn target(id: &str, env_key: &str) -> ApiKeyAuthTarget {
     ApiKeyAuthTarget {
         provider_id: ProviderCatalogId(id.into()),
         runtime_provider_id: ProviderRuntimeId(id.into()),
-        env_key: env_key.into(),
+        storage: ApiKeyStorage::EnvironmentVariable {
+            env_key: env_key.into(),
+        },
     }
 }

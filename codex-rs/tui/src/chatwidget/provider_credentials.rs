@@ -274,6 +274,15 @@ impl ChatWidget {
         let Some(login_id) = notification.login_id else {
             return;
         };
+        self.on_codex_account_login_result(login_id, notification.success, notification.error);
+    }
+
+    pub(crate) fn on_codex_account_login_result(
+        &mut self,
+        login_id: String,
+        success: bool,
+        failure_message: Option<String>,
+    ) {
         if self.pending_provider_codex_login_id.as_deref() != Some(login_id.as_str()) {
             return;
         }
@@ -281,16 +290,16 @@ impl ChatWidget {
         self.bottom_pane
             .dismiss_view_by_id(CODEX_ACCOUNT_DEVICE_LOGIN_VIEW_ID);
 
-        if notification.success {
+        if success {
             self.add_info_message(
                 "OpenAI Codex account login complete.".to_string(),
                 /*hint*/ None,
             );
         } else {
-            let message = notification
-                .error
-                .unwrap_or_else(|| "OpenAI Codex account login did not complete.".to_string());
-            self.add_error_message(message);
+            self.add_error_message(
+                failure_message
+                    .unwrap_or_else(|| "OpenAI Codex account login did not complete.".to_string()),
+            );
         }
     }
 }

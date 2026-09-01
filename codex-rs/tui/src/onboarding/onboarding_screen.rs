@@ -29,23 +29,14 @@ use ratatui::widgets::Clear;
 use ratatui::widgets::WidgetRef;
 
 use codex_model_provider_info::AMBIENT_API_KEY_ENV_VAR;
-use codex_model_provider_info::AMBIENT_PROVIDER_ID;
 use codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR;
-use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_API_KEY_ENV_VAR;
-use codex_model_provider_info::BASETEN_PROVIDER_ID;
 use codex_model_provider_info::DEEPSEEK_API_KEY_ENV_VAR;
-use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_API_KEY_ENV_VAR;
-use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::META_API_KEY_ENV_VAR;
-use codex_model_provider_info::META_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_API_KEY_ENV_VAR;
-use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_API_KEY_ENV_VAR;
-use codex_model_provider_info::VERCEL_PROVIDER_ID;
 use codex_model_provider_info::ZAI_API_KEY_ENV_VAR;
-use codex_model_provider_info::ZAI_PROVIDER_ID;
 use codex_protocol::config_types::ForcedLoginMethod;
 
 use crate::LoginStatus;
@@ -61,15 +52,20 @@ use crate::onboarding::auth::ApiKeyProviderOption;
 use crate::onboarding::auth::AuthModeWidget;
 use crate::onboarding::auth::SignInOption;
 use crate::onboarding::auth::SignInState;
+use crate::onboarding::auth::catalog_sign_in_options;
 use crate::onboarding::keys;
+use crate::onboarding::provider_setup::DeferredProviderSetup;
+use crate::onboarding::provider_setup::ProviderSetupSession;
 use crate::onboarding::trust_directory::TrustDirectorySelection;
 use crate::onboarding::trust_directory::TrustDirectoryWidget;
 use crate::onboarding::welcome::WelcomeWidget;
+use crate::provider_auth_effect_executor::ProviderAuthEffectExecutor;
+use crate::provider_status_host::ProviderAccountMetadata;
+use crate::provider_status_host::ProviderStatusHost;
 use crate::tui::FrameRequester;
 use crate::tui::Tui;
 use crate::tui::TuiEvent;
 use color_eyre::eyre::Result;
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::RwLock;
 
@@ -101,6 +97,10 @@ pub(crate) struct OnboardingScreen {
     steps: Vec<Step>,
     is_done: bool,
     should_exit: bool,
+    provider_auth_controller: codex_provider_auth::ProviderAuthController,
+    provider_auth_executor: Option<ProviderAuthEffectExecutor>,
+    provider_auth_action_rx:
+        tokio::sync::mpsc::UnboundedReceiver<codex_provider_auth::ProviderAuthAction>,
 }
 
 pub(crate) struct OnboardingScreenArgs {
@@ -115,6 +115,7 @@ pub(crate) struct OnboardingResult {
     pub directory_trust_persisted: bool,
     pub should_exit: bool,
     pub configured_provider: Option<String>,
+    pub deferred_provider_setup: Option<DeferredProviderSetup>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -125,110 +126,36 @@ struct ApiKeyEntryContext {
     has_text: bool,
 }
 
-const OPENROUTER_PROVIDER_NAME: &str = "OpenRouter";
-const META_PROVIDER_NAME: &str = "Meta";
-const BASETEN_PROVIDER_NAME: &str = "Baseten";
-const DEEPSEEK_PROVIDER_NAME: &str = "DeepSeek";
-const KIMI_CODE_PROVIDER_NAME: &str = "Kimi Code";
-const VERCEL_PROVIDER_NAME: &str = "Vercel";
-
-const RECOMMENDED_PROVIDER_API_KEY_OPTIONS: &[(&str, &str, &str)] = &[
-    (
-        ANTHROPIC_PROVIDER_ID,
-        "Anthropic",
-        ANTHROPIC_API_KEY_ENV_VAR,
-    ),
-    (AMBIENT_PROVIDER_ID, "Ambient", AMBIENT_API_KEY_ENV_VAR),
-    (
-        KIMI_CODE_PROVIDER_ID,
-        KIMI_CODE_PROVIDER_NAME,
-        KIMI_CODE_API_KEY_ENV_VAR,
-    ),
-    (ZAI_PROVIDER_ID, "Z.AI", ZAI_API_KEY_ENV_VAR),
-    (
-        DEEPSEEK_PROVIDER_ID,
-        DEEPSEEK_PROVIDER_NAME,
-        DEEPSEEK_API_KEY_ENV_VAR,
-    ),
-    (
-        OPENROUTER_PROVIDER_ID,
-        OPENROUTER_PROVIDER_NAME,
-        OPENROUTER_API_KEY_ENV_VAR,
-    ),
-    (META_PROVIDER_ID, META_PROVIDER_NAME, META_API_KEY_ENV_VAR),
-    (
-        BASETEN_PROVIDER_ID,
-        BASETEN_PROVIDER_NAME,
-        BASETEN_API_KEY_ENV_VAR,
-    ),
-    (
-        VERCEL_PROVIDER_ID,
-        VERCEL_PROVIDER_NAME,
-        VERCEL_API_KEY_ENV_VAR,
-    ),
-];
-
-fn provider_api_key_options(config: &Config) -> Vec<ApiKeyProviderOption> {
-    let mut options: Vec<ApiKeyProviderOption> = config
-        .model_providers
+fn provider_api_key_options(host: &ProviderStatusHost) -> Vec<ApiKeyProviderOption> {
+    host.catalog()
+        .entries()
         .iter()
-        .filter_map(|(id, provider)| {
-            if provider.requires_openai_auth {
-                return None;
-            }
-            Some(ApiKeyProviderOption {
-                id: id.clone(),
-                name: provider.name.clone(),
-                env_var: provider.env_key.clone()?,
+        .flat_map(|entry| {
+            entry.setup_capabilities.iter().filter_map(|capability| {
+                let codex_provider_auth::ProviderSetupCapability::ApiKey { .. } = capability else {
+                    return None;
+                };
+                let target = codex_provider_auth::ApiKeyAuthTarget::from_catalog_capability(
+                    entry, capability,
+                )
+                .ok()?;
+                Some(ApiKeyProviderOption {
+                    target,
+                    capability: capability.clone(),
+                    name: entry.display_name.clone(),
+                })
             })
         })
-        .collect();
-
-    for (id, name, env_var) in RECOMMENDED_PROVIDER_API_KEY_OPTIONS {
-        if options.iter().any(|option| option.env_var == *env_var) {
-            continue;
-        }
-        options.push(ApiKeyProviderOption {
-            id: (*id).to_string(),
-            name: (*name).to_string(),
-            env_var: (*env_var).to_string(),
-        });
-    }
-
-    sort_and_dedupe_provider_api_key_options(&mut options);
-
-    options
-}
-
-fn sort_and_dedupe_provider_api_key_options(options: &mut Vec<ApiKeyProviderOption>) {
-    options.sort_by(|a, b| {
-        provider_api_key_sort_rank(&a.id)
-            .cmp(&provider_api_key_sort_rank(&b.id))
-            .then_with(|| a.name.cmp(&b.name))
-            .then_with(|| a.id.cmp(&b.id))
-    });
-
-    let mut seen_env_keys = HashSet::new();
-    options.retain(|option| seen_env_keys.insert(option.env_var.clone()));
-}
-
-fn provider_api_key_sort_rank(provider_id: &str) -> usize {
-    match provider_id {
-        ANTHROPIC_PROVIDER_ID => 0,
-        AMBIENT_PROVIDER_ID => 1,
-        KIMI_CODE_PROVIDER_ID => 2,
-        ZAI_PROVIDER_ID => 3,
-        DEEPSEEK_PROVIDER_ID => 4,
-        OPENROUTER_PROVIDER_ID => 5,
-        META_PROVIDER_ID => 6,
-        BASETEN_PROVIDER_ID => 7,
-        VERCEL_PROVIDER_ID => 8,
-        _ => 9,
-    }
+        .collect()
 }
 
 pub(crate) fn provider_api_key_display_name(provider: &ApiKeyProviderOption) -> String {
-    match provider.env_var.as_str() {
+    let codex_provider_auth::ApiKeyStorage::EnvironmentVariable { env_key } =
+        &provider.target.storage
+    else {
+        return "Provider: OpenAI API Key".to_string();
+    };
+    match env_key.as_str() {
         ANTHROPIC_API_KEY_ENV_VAR => "Provider: Anthropic API Key".to_string(),
         AMBIENT_API_KEY_ENV_VAR => "Provider: Ambient API Key".to_string(),
         KIMI_CODE_API_KEY_ENV_VAR => "Provider: Kimi Code API Key".to_string(),
@@ -238,26 +165,21 @@ pub(crate) fn provider_api_key_display_name(provider: &ApiKeyProviderOption) -> 
         META_API_KEY_ENV_VAR => "Provider: Meta API Key".to_string(),
         BASETEN_API_KEY_ENV_VAR => "Provider: Baseten API Key".to_string(),
         VERCEL_API_KEY_ENV_VAR => "Provider: Vercel API Key".to_string(),
-        _ => format!("Provider: {} {}", provider.name, provider.env_var),
+        _ => format!("Provider: {} {}", provider.name, env_key),
     }
 }
 
 fn initial_sign_in_option(
-    has_multiple_provider_options: bool,
+    catalog_options: &[SignInOption],
     forced_login_method: Option<ForcedLoginMethod>,
 ) -> SignInOption {
-    if has_multiple_provider_options
-        && !matches!(
-            forced_login_method,
-            Some(ForcedLoginMethod::Chatgpt) | Some(ForcedLoginMethod::Api)
-        )
-    {
-        SignInOption::AnthropicAccount
-    } else {
-        match forced_login_method {
-            Some(ForcedLoginMethod::Api) => SignInOption::ApiKey,
-            _ => SignInOption::ChatGpt,
-        }
+    match forced_login_method {
+        Some(ForcedLoginMethod::Api) => SignInOption::ApiKey,
+        Some(ForcedLoginMethod::Chatgpt) => SignInOption::ChatGpt,
+        None => catalog_options
+            .first()
+            .copied()
+            .unwrap_or(SignInOption::ChatGpt),
     }
 }
 
@@ -275,29 +197,59 @@ impl OnboardingScreen {
             config,
         } = args;
         let cwd = config.cwd.to_path_buf();
+        let provider_status_host = ProviderStatusHost::from_config(
+            &config,
+            ProviderAccountMetadata {
+                openai: openai_metadata(login_status),
+                claude: codex_provider_auth::ClaudeCredentialMetadata::Checking,
+                ..ProviderAccountMetadata::default()
+            },
+        );
+        let provider_setup_session = Arc::new(RwLock::new(ProviderSetupSession::from_statuses(
+            provider_status_host.resolve().entries(),
+        )));
+        let (provider_auth_action_tx, provider_auth_action_rx) =
+            tokio::sync::mpsc::unbounded_channel();
+        let discovery_config = config.clone();
+        let discovery_tx = claude_event_tx.clone();
+        tokio::spawn(async move {
+            let metadata = ProviderAccountMetadata::discover(&discovery_config).await;
+            discovery_tx.send(AppEvent::ProviderAccountMetadataResolved { metadata });
+        });
+        let provider_auth_executor = app_server_request_handle.clone().map(|request_handle| {
+            ProviderAuthEffectExecutor::new(
+                request_handle,
+                provider_auth_action_tx.clone(),
+                provider_status_host.clone(),
+            )
+        });
         let codex_home = config.codex_home.to_path_buf();
         let forced_login_method = config.forced_login_method;
         let mut api_key_provider_id = config.model_provider_id.clone();
         let mut api_key_provider_name = config.model_provider.name.clone();
         let mut api_key_env_var = config.model_provider.env_key.clone();
-        let api_key_provider_options = provider_api_key_options(&config);
+        let api_key_provider_options = provider_api_key_options(&provider_status_host);
         let selected_provider_index = if api_key_provider_options.is_empty() {
             None
         } else {
             Some(
                 api_key_provider_options
                     .iter()
-                    .position(|provider| provider.id == api_key_provider_id)
+                    .position(|provider| {
+                        provider.target.provider_id.as_str() == api_key_provider_id
+                    })
                     .unwrap_or(0),
             )
         };
-        if let Some(index) = selected_provider_index
+        let selected_api_key_option = selected_provider_index
+            .and_then(|index| api_key_provider_options.get(index))
+            .cloned();
+        if let Some(provider) = selected_api_key_option.as_ref()
             && (api_key_env_var.is_none() || config.model_provider.requires_openai_auth)
-            && let Some(provider) = api_key_provider_options.get(index)
         {
-            api_key_provider_id = provider.id.clone();
+            api_key_provider_id = provider.target.provider_id.as_str().to_string();
             api_key_provider_name = provider.name.clone();
-            api_key_env_var = Some(provider.env_var.clone());
+            api_key_env_var = provider.environment_variable().map(str::to_string);
         }
         let mut steps: Vec<Step> = Vec::new();
         steps.push(Step::Welcome(WelcomeWidget::new(
@@ -306,17 +258,18 @@ impl OnboardingScreen {
             config.animations,
         )));
         if show_login_screen {
-            let has_multiple_provider_options = api_key_provider_options.len() > 1;
-            let highlighted_mode =
-                initial_sign_in_option(has_multiple_provider_options, forced_login_method);
-            let initial_sign_in_state = if !has_multiple_provider_options
-                && (matches!(forced_login_method, Some(ForcedLoginMethod::Api))
-                    || api_key_env_var.is_some())
-            {
-                SignInState::ApiKeyEntry(ApiKeyInputState::from_env(api_key_env_var.as_deref()))
-            } else {
-                SignInState::PickMode
-            };
+            let catalog_options =
+                catalog_sign_in_options(&provider_status_host, &api_key_provider_options);
+            let has_multiple_provider_options = catalog_options.len() > 1;
+            let highlighted_mode = initial_sign_in_option(&catalog_options, forced_login_method);
+            let initial_sign_in_state =
+                if matches!(forced_login_method, Some(ForcedLoginMethod::Api))
+                    || (!has_multiple_provider_options && api_key_env_var.is_some())
+                {
+                    SignInState::ApiKeyEntry(ApiKeyInputState::from_env(api_key_env_var.as_deref()))
+                } else {
+                    SignInState::PickMode
+                };
             if let Some(app_server_request_handle) = app_server_request_handle {
                 steps.push(Step::Auth(AuthModeWidget {
                     request_frame: tui.frame_requester(),
@@ -330,10 +283,14 @@ impl OnboardingScreen {
                     api_key_provider_name,
                     api_key_env_var,
                     api_key_provider_options,
+                    selected_api_key_option,
                     animations_enabled: config.animations,
                     animations_suppressed: std::cell::Cell::new(false),
                     codex_home,
                     claude_event_tx,
+                    provider_setup_session,
+                    provider_status_host,
+                    provider_auth_action_tx,
                 }));
             } else {
                 tracing::warn!("skipping onboarding login step without app-server request handle");
@@ -365,6 +322,9 @@ impl OnboardingScreen {
             steps,
             is_done: false,
             should_exit: false,
+            provider_auth_controller: codex_provider_auth::ProviderAuthController::default(),
+            provider_auth_executor,
+            provider_auth_action_rx,
         }
     }
 
@@ -440,6 +400,13 @@ impl OnboardingScreen {
         })
     }
 
+    fn deferred_provider_setup(&self) -> Option<DeferredProviderSetup> {
+        self.steps.iter().find_map(|step| match step {
+            Step::Auth(widget) => widget.deferred_provider_setup(),
+            Step::Welcome(_) | Step::TrustDirectory(_) => None,
+        })
+    }
+
     fn cancel_auth_if_active(&self) {
         for step in &self.steps {
             if let Step::Auth(widget) = step {
@@ -474,6 +441,29 @@ impl OnboardingScreen {
     fn handle_claude_event(&mut self, event: AppEvent) {
         if let Some(widget) = self.auth_widget_mut() {
             widget.handle_claude_event(event);
+        }
+    }
+
+    fn handle_provider_auth_action(&mut self, action: codex_provider_auth::ProviderAuthAction) {
+        let transition = self.provider_auth_controller.dispatch(action);
+        if let Some(widget) = self.auth_widget_mut() {
+            widget.on_provider_auth_snapshot(&transition.snapshot);
+        }
+        for effect in transition.effects {
+            match effect {
+                codex_provider_auth::ProviderAuthEffect::Complete(
+                    codex_provider_auth::ProviderAuthCompletion::Configured { target, .. },
+                ) => {
+                    if let Some(widget) = self.auth_widget_mut() {
+                        widget.on_api_key_configured(target.provider_id.as_str());
+                    }
+                }
+                effect => {
+                    if let Some(executor) = &self.provider_auth_executor {
+                        let _ = executor.execute(effect);
+                    }
+                }
+            }
         }
     }
 
@@ -816,6 +806,11 @@ pub(crate) async fn run_onboarding_app(
                     onboarding_screen.handle_claude_event(event);
                 }
             }
+            action = onboarding_screen.provider_auth_action_rx.recv() => {
+                if let Some(action) = action {
+                    onboarding_screen.handle_provider_auth_action(action);
+                }
+            }
         }
     }
     // `TuiEventStream` shares the broker-owned crossterm source. The onboarding stream can leave
@@ -827,7 +822,25 @@ pub(crate) async fn run_onboarding_app(
         directory_trust_persisted,
         should_exit: onboarding_screen.should_exit(),
         configured_provider: onboarding_screen.configured_provider(),
+        deferred_provider_setup: onboarding_screen.deferred_provider_setup(),
     })
+}
+
+fn openai_metadata(login_status: LoginStatus) -> codex_login::OpenAiAuthMetadata {
+    match login_status {
+        LoginStatus::NotAuthenticated => codex_login::OpenAiAuthMetadata::Missing,
+        LoginStatus::AuthMode(mode) if mode.has_chatgpt_account() => {
+            codex_login::OpenAiAuthMetadata::Account
+        }
+        LoginStatus::AuthMode(codex_protocol::auth::AuthMode::ApiKey) => {
+            codex_login::OpenAiAuthMetadata::ApiKey
+        }
+        LoginStatus::AuthMode(codex_protocol::auth::AuthMode::Headers)
+        | LoginStatus::AuthMode(codex_protocol::auth::AuthMode::AgentIdentity) => {
+            codex_login::OpenAiAuthMetadata::ExternallyManaged
+        }
+        LoginStatus::AuthMode(_) => codex_login::OpenAiAuthMetadata::Unsupported,
+    }
 }
 
 async fn persist_selected_trust(
@@ -886,13 +899,14 @@ mod tests {
     use super::StepStateProvider;
     use super::initial_sign_in_option;
     use super::persist_selected_trust;
-    use super::sort_and_dedupe_provider_api_key_options;
+    use super::provider_api_key_options;
     use super::suppress_quit_while_typing_api_key;
     use super::visible_step_indices;
-    use crate::onboarding::auth::ApiKeyProviderOption;
     use crate::onboarding::auth::SignInOption;
+    use crate::onboarding::auth::catalog_sign_in_options;
     use crate::onboarding::trust_directory::TrustDirectorySelection;
     use crate::onboarding::trust_directory::TrustDirectoryWidget;
+    use crate::provider_status_host::ProviderStatusHost;
     use crate::tui::FrameRequester;
     use codex_protocol::config_types::ForcedLoginMethod;
     use crossterm::event::KeyCode;
@@ -950,41 +964,10 @@ mod tests {
     }
 
     #[test]
-    fn provider_api_key_options_dedupe_duplicate_env_keys() {
-        let mut options = vec![
-            ApiKeyProviderOption {
-                id: "ambientproxy".to_string(),
-                name: "Ambient Proxy".to_string(),
-                env_var: "AMBIENT_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "ambient".to_string(),
-                name: "Ambient".to_string(),
-                env_var: "AMBIENT_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "zai".to_string(),
-                name: "Z.AI".to_string(),
-                env_var: "ZAI_API_KEY".to_string(),
-            },
-        ];
-
-        sort_and_dedupe_provider_api_key_options(&mut options);
-
-        assert_eq!(
-            options
-                .iter()
-                .map(|option| (option.id.as_str(), option.env_var.as_str()))
-                .collect::<Vec<_>>(),
-            vec![("ambient", "AMBIENT_API_KEY"), ("zai", "ZAI_API_KEY")]
-        );
-    }
-
-    #[test]
     fn forced_chatgpt_never_defaults_to_the_hidden_anthropic_option() {
         assert_eq!(
             initial_sign_in_option(
-                /*has_multiple_provider_options*/ true,
+                &[SignInOption::AnthropicAccount],
                 Some(ForcedLoginMethod::Chatgpt),
             ),
             SignInOption::ChatGpt
@@ -995,49 +978,78 @@ mod tests {
     fn forced_api_key_never_defaults_to_the_hidden_anthropic_option() {
         assert_eq!(
             initial_sign_in_option(
-                /*has_multiple_provider_options*/ true,
+                &[SignInOption::AnthropicAccount],
                 Some(ForcedLoginMethod::Api),
             ),
             SignInOption::ApiKey
         );
     }
 
-    #[test]
-    fn provider_api_key_options_rank_and_label_deepseek_as_a_first_class_provider() {
-        let mut options = vec![
-            ApiKeyProviderOption {
-                id: codex_model_provider_info::OPENROUTER_PROVIDER_ID.to_string(),
-                name: "OpenRouter".to_string(),
-                env_var: codex_model_provider_info::OPENROUTER_API_KEY_ENV_VAR.to_string(),
+    #[tokio::test]
+    async fn catalog_surface_keeps_openai_alternatives_corbanu_deferred_and_custom_typed() {
+        let home = tempfile::tempdir().unwrap();
+        let mut config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .build()
+            .await
+            .unwrap();
+        config.model_providers.insert(
+            "pf53-custom".to_string(),
+            codex_model_provider_info::ModelProviderInfo {
+                name: "PF53 Custom".to_string(),
+                env_key: Some("PF53_CUSTOM_API_KEY".to_string()),
+                ..Default::default()
             },
-            ApiKeyProviderOption {
-                id: codex_model_provider_info::DEEPSEEK_PROVIDER_ID.to_string(),
-                name: "DeepSeek".to_string(),
-                env_var: codex_model_provider_info::DEEPSEEK_API_KEY_ENV_VAR.to_string(),
-            },
-            ApiKeyProviderOption {
-                id: codex_model_provider_info::ZAI_PROVIDER_ID.to_string(),
-                name: "Z.AI".to_string(),
-                env_var: codex_model_provider_info::ZAI_API_KEY_ENV_VAR.to_string(),
-            },
-        ];
+        );
+        let host = ProviderStatusHost::from_config(
+            &config,
+            crate::provider_status_host::ProviderAccountMetadata::default(),
+        );
+        let api_options = provider_api_key_options(&host);
+        let visible = catalog_sign_in_options(&host, &api_options);
 
-        sort_and_dedupe_provider_api_key_options(&mut options);
-
+        assert!(matches!(visible.first(), Some(SignInOption::DeviceCode)));
+        let Some(SignInOption::ProviderApiKey(openai_index)) = visible.get(1) else {
+            panic!("OpenAI API key must immediately follow the account capability: {visible:?}");
+        };
         assert_eq!(
-            options
-                .iter()
-                .map(|option| option.id.as_str())
-                .collect::<Vec<_>>(),
-            vec![
-                codex_model_provider_info::ZAI_PROVIDER_ID,
-                codex_model_provider_info::DEEPSEEK_PROVIDER_ID,
-                codex_model_provider_info::OPENROUTER_PROVIDER_ID,
-            ]
+            api_options[*openai_index].target.provider_id.as_str(),
+            codex_model_provider_info::OPENAI_PROVIDER_ID
         );
         assert_eq!(
-            super::provider_api_key_display_name(&options[1]),
-            "Provider: DeepSeek API Key"
+            api_options[*openai_index].target.storage,
+            codex_provider_auth::ApiKeyStorage::OpenAiAuth
+        );
+        assert_eq!(
+            visible
+                .iter()
+                .filter(|option| matches!(option, SignInOption::CorbanuPlan))
+                .count(),
+            1
+        );
+        assert!(!api_options.iter().any(|option| {
+            option.target.provider_id.as_str()
+                == codex_model_provider_info::CORBANU_PLAN_PROVIDER_ID
+        }));
+
+        let custom = api_options
+            .iter()
+            .find(|option| option.target.provider_id.as_str() == "pf53-custom")
+            .expect("custom catalog API-key option");
+        assert_eq!(custom.target.runtime_provider_id.as_str(), "pf53-custom");
+        assert_eq!(
+            custom.target.storage,
+            codex_provider_auth::ApiKeyStorage::EnvironmentVariable {
+                env_key: "PF53_CUSTOM_API_KEY".to_string(),
+            }
+        );
+        assert_eq!(
+            custom.capability,
+            codex_provider_auth::ProviderSetupCapability::ApiKey {
+                storage: codex_provider_auth::ApiKeyStorage::EnvironmentVariable {
+                    env_key: "PF53_CUSTOM_API_KEY".to_string(),
+                },
+            }
         );
     }
 
@@ -1081,6 +1093,8 @@ mod tests {
 
     #[tokio::test]
     async fn trust_persistence_failure_keeps_trust_step_in_progress() {
+        let (_provider_auth_action_tx, provider_auth_action_rx) =
+            tokio::sync::mpsc::unbounded_channel();
         let mut onboarding_screen = OnboardingScreen {
             request_frame: FrameRequester::test_dummy(),
             steps: vec![Step::TrustDirectory(TrustDirectoryWidget {
@@ -1094,6 +1108,9 @@ mod tests {
             })],
             is_done: false,
             should_exit: false,
+            provider_auth_controller: codex_provider_auth::ProviderAuthController::default(),
+            provider_auth_executor: None,
+            provider_auth_action_rx,
         };
 
         let persisted =

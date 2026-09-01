@@ -429,7 +429,7 @@ mod turn_lifecycle;
 mod turn_runtime;
 use self::turn_lifecycle::TurnLifecycleState;
 #[allow(dead_code)] // Hidden typed host adapter; PF-53/PF-54 own renderer adoption.
-mod claude_auth_adapter;
+pub(crate) mod claude_auth_adapter;
 pub(crate) mod claude_code_login;
 mod pfterminal_plan_status;
 pub(crate) mod provider_credentials;
@@ -612,6 +612,9 @@ pub(crate) struct ChatWidget {
     clipboard_lease: Option<crate::clipboard_copy::ClipboardLease>,
     wallet_capability: Option<zeroize::Zeroizing<String>>,
     wallet_status_generation: u64,
+    next_wallet_plan_persistence_attempt: u64,
+    current_wallet_plan_persistence_attempt:
+        Option<crate::app_event::WalletPlanPersistenceAttemptId>,
     telegram_discovery_generation: u64,
     wallet_payment_config: Option<crate::chatwidget::wallet_menu::WalletPaymentConfig>,
     wallet_balances: Option<codex_wallet::WalletBalances>,

@@ -21,6 +21,10 @@ impl ApiKeySecret {
     pub fn expose_secret(&self) -> &str {
         self.0.as_str()
     }
+
+    pub fn into_string(mut self) -> String {
+        std::mem::take(&mut *self.0)
+    }
 }
 
 impl fmt::Debug for ApiKeySecret {
@@ -33,6 +37,7 @@ impl fmt::Debug for ApiKeySecret {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApiKeyTargetError {
     UnsupportedCapability,
+    CapabilityNotOffered,
     MissingRuntimeProvider,
 }
 
@@ -41,29 +46,24 @@ pub enum ApiKeyTargetError {
 pub struct ApiKeyAuthTarget {
     pub provider_id: ProviderCatalogId,
     pub runtime_provider_id: ProviderRuntimeId,
-    pub env_key: String,
+    pub storage: ApiKeyStorage,
 }
 
 impl ApiKeyAuthTarget {
-    pub fn from_catalog_entry(entry: &ProviderCatalogEntry) -> Result<Self, ApiKeyTargetError> {
-        let env_key = entry
+    pub fn from_catalog_capability(
+        entry: &ProviderCatalogEntry,
+        capability: &ProviderSetupCapability,
+    ) -> Result<Self, ApiKeyTargetError> {
+        let ProviderSetupCapability::ApiKey { storage } = capability else {
+            return Err(ApiKeyTargetError::UnsupportedCapability);
+        };
+        if !entry
             .setup_capabilities
             .iter()
-            .find_map(|capability| match capability {
-                ProviderSetupCapability::ApiKey {
-                    storage: ApiKeyStorage::EnvironmentVariable { env_key },
-                } => Some(env_key.clone()),
-                ProviderSetupCapability::OpenAiAccount
-                | ProviderSetupCapability::ApiKey {
-                    storage: ApiKeyStorage::OpenAiAuth,
-                }
-                | ProviderSetupCapability::ClaudeAccount
-                | ProviderSetupCapability::CorbanuPlan
-                | ProviderSetupCapability::Local { .. }
-                | ProviderSetupCapability::CommandAuth { .. }
-                | ProviderSetupCapability::StatusOnly { .. } => None,
-            })
-            .ok_or(ApiKeyTargetError::UnsupportedCapability)?;
+            .any(|offered| offered == capability)
+        {
+            return Err(ApiKeyTargetError::CapabilityNotOffered);
+        }
         let runtime_provider_id = entry
             .runtime_provider_ids
             .first()
@@ -72,7 +72,7 @@ impl ApiKeyAuthTarget {
         Ok(Self {
             provider_id: entry.id.clone(),
             runtime_provider_id,
-            env_key,
+            storage: storage.clone(),
         })
     }
 }

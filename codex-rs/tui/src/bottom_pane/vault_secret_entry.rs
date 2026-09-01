@@ -182,6 +182,20 @@ impl VaultSecretEntryView {
         }
     }
 
+    /// Build a confirmed masked entry that reports cancellation to its owning flow.
+    pub(crate) fn new_confirmed_secret_with_cancel(
+        label: String,
+        title: String,
+        status: String,
+        secret_prompt: String,
+        on_submit: VaultSecretSubmitted,
+        on_cancel: VaultSecretCancelled,
+    ) -> Self {
+        let mut view = Self::new_confirmed_secret(label, title, status, secret_prompt, on_submit);
+        view.on_cancel = Some(on_cancel);
+        view
+    }
+
     fn handle_key_event_at(&mut self, key_event: KeyEvent, now: Instant) {
         match key_event {
             KeyEvent {
@@ -506,3 +520,31 @@ fn gutter() -> Span<'static> {
 #[cfg(test)]
 #[path = "vault_secret_entry_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod confirmed_cancel_tests {
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::Ordering;
+
+    use super::*;
+
+    #[test]
+    fn confirmed_secret_cancel_invokes_correlated_callback() {
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let observed = Arc::clone(&cancelled);
+        let mut view = VaultSecretEntryView::new_confirmed_secret_with_cancel(
+            "label".into(),
+            "title".into(),
+            "status".into(),
+            "prompt".into(),
+            Box::new(|_, _| {}),
+            Box::new(move || observed.store(true, Ordering::SeqCst)),
+        );
+
+        view.cancel();
+
+        assert!(cancelled.load(Ordering::SeqCst));
+        assert_eq!(view.completion, Some(ViewCompletion::Cancelled));
+    }
+}

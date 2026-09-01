@@ -21,6 +21,21 @@ use codex_protocol::protocol::AgentMessageKind;
 use std::collections::HashSet;
 
 const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
+
+fn refresh_shared_provider_session_if_idle(
+    session: Option<&mut crate::onboarding::provider_setup::ProviderSetupSession>,
+    resolve: impl FnOnce() -> Vec<codex_provider_auth::ProviderStatusSnapshot>,
+) -> bool {
+    let Some(session) = session else {
+        return false;
+    };
+    if !session.can_refresh_statuses() {
+        return false;
+    }
+    let statuses = resolve();
+    session.refresh_from_statuses(&statuses)
+}
+
 const RESERVED_PANE_DISPLAY_NAMES: &[&str] = &[
     MAIN_PANE_TITLE,
     LEGACY_MAIN_PANE_TITLE,
@@ -252,7 +267,7 @@ impl App {
         {
             self.rename_claude_pane_display_name(pane_id, name);
             return;
-        }
+        };
 
         let Some(thread_id) = self.current_displayed_thread_id() else {
             self.chat_widget
@@ -475,6 +490,259 @@ impl App {
                 ))
             });
         self.chat_widget.set_gpu_spend_status(status);
+    }
+
+    fn render_shared_provider_setup(&mut self) {
+        let (Some(host), Some(session)) = (
+            self.shared_provider_status_host.as_ref(),
+            self.shared_provider_setup_session.as_ref(),
+        ) else {
+            return;
+        };
+        self.chat_widget.open_shared_provider_setup(
+            host,
+            session.snapshot().queued_corbanu,
+            session.can_finish(),
+        );
+    }
+
+    fn finish_shared_provider_api_key(
+        &mut self,
+        target: codex_provider_auth::ApiKeyAuthTarget,
+        status: Option<codex_provider_auth::ProviderStatusSnapshot>,
+    ) {
+        let Some(session) = self.shared_provider_setup_session.as_mut() else {
+            return;
+        };
+        let Some(persisted_status) = status.filter(|status| {
+            status.id == target.provider_id
+                && status.configuration
+                    == codex_provider_auth::ProviderConfigurationState::Configured
+        }) else {
+            session.dispatch(crate::onboarding::provider_setup::ProviderSetupAction::AuthFailed);
+            self.chat_widget
+                .add_error_message("Provider credential could not be stored.".to_string());
+            return;
+        };
+        let runtime_provider_id = target.runtime_provider_id.clone();
+        let transition = session.dispatch(
+            crate::onboarding::provider_setup::ProviderSetupAction::AuthConfigured {
+                provider_id: target.provider_id.clone(),
+                runtime_provider_id: runtime_provider_id.clone(),
+            },
+        );
+        if !transition.applied {
+            return;
+        }
+        let Some(host) = self.shared_provider_status_host.as_ref() else {
+            return;
+        };
+        if !host.activate(target.provider_id.as_str()) {
+            session.dispatch(crate::onboarding::provider_setup::ProviderSetupAction::AuthFailed);
+            self.chat_widget
+                .add_error_message("Provider activation could not be persisted.".to_string());
+            return;
+        }
+        let status = host.resolve_target(&target);
+        let usable = persisted_status.availability
+            == codex_provider_auth::ProviderAvailabilityState::Ready
+            && status.configuration == codex_provider_auth::ProviderConfigurationState::Configured
+            && status.eligibility == codex_provider_auth::ProviderEligibilityState::Active
+            && status.availability == codex_provider_auth::ProviderAvailabilityState::Ready;
+        let resolved = session.dispatch(
+            crate::onboarding::provider_setup::ProviderSetupAction::ActivationResolved {
+                provider_id: target.provider_id,
+                runtime_provider_id,
+                usable,
+            },
+        );
+        for effect in resolved.effects {
+            if let crate::onboarding::provider_setup::ProviderSetupEffect::PersistInitialSelection(
+                runtime,
+            ) = effect
+            {
+                let Some(model) = codex_model_provider_info::resolve_model_for_provider(
+                    self.config.model.clone(),
+                    runtime.as_str(),
+                ) else {
+                    self.chat_widget.add_error_message(
+                        "No compatible model is available for the configured provider.".to_string(),
+                    );
+                    continue;
+                };
+                self.app_event_tx.send(AppEvent::UpdateModelSelection {
+                    model: model.clone(),
+                    provider: Some(runtime.to_string()),
+                });
+                self.app_event_tx.send(AppEvent::PersistModelSelection {
+                    model,
+                    provider: Some(runtime.to_string()),
+                    effort: None,
+                });
+            }
+        }
+        if !usable {
+            self.chat_widget.add_error_message(
+                "Provider is configured and active, but is not currently usable.".to_string(),
+            );
+        }
+    }
+
+    fn finish_or_defer_shared_provider_setup(&mut self) {
+        let Some(session) = self.shared_provider_setup_session.as_mut() else {
+            return;
+        };
+        let transition =
+            session.dispatch(crate::onboarding::provider_setup::ProviderSetupAction::Done);
+        if !transition.applied {
+            self.render_shared_provider_setup();
+            return;
+        }
+        for effect in transition.effects {
+            match effect {
+                crate::onboarding::provider_setup::ProviderSetupEffect::BeginDeferred(deferred) => {
+                    self.active_deferred_provider_setup = Some(deferred.clone());
+                    self.app_event_tx
+                        .send(AppEvent::BeginDeferredCorbanuPlan { deferred });
+                }
+                crate::onboarding::provider_setup::ProviderSetupEffect::Finish => {
+                    self.shared_provider_setup_session = None;
+                    self.shared_provider_status_host = None;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn handle_shared_provider_auth_action(
+        &mut self,
+        action: codex_provider_auth::ProviderAuthAction,
+    ) {
+        let Some(host) = self.shared_provider_account_auth_host.as_mut() else {
+            return;
+        };
+        let presentations = host.dispatch(action);
+        for presentation in presentations {
+            match presentation {
+                crate::provider_account_auth_host::ProviderAccountPresentation::Pending(kind) => {
+                    self.chat_widget.open_shared_account_pending(kind);
+                }
+                crate::provider_account_auth_host::ProviderAccountPresentation::OpenAiChallenge {
+                    challenge,
+                } => self.chat_widget.open_shared_openai_challenge(challenge),
+                crate::provider_account_auth_host::ProviderAccountPresentation::ClaudeMethodChoice => {
+                    self.chat_widget.open_shared_claude_method_choice();
+                }
+                crate::provider_account_auth_host::ProviderAccountPresentation::ClaudeManagedTokenEntry => {
+                    self.chat_widget.open_shared_claude_managed_token_entry();
+                }
+                crate::provider_account_auth_host::ProviderAccountPresentation::ClaudeChallenge {
+                    challenge,
+                } => self.chat_widget.open_shared_claude_challenge(challenge),
+                crate::provider_account_auth_host::ProviderAccountPresentation::Completion(
+                    completion,
+                ) => self.apply_shared_account_completion(completion),
+                crate::provider_account_auth_host::ProviderAccountPresentation::Failed => {
+                    if let Some(session) = self.shared_provider_setup_session.as_mut() {
+                        session.dispatch(
+                            crate::onboarding::provider_setup::ProviderSetupAction::AuthFailed,
+                        );
+                    }
+                    self.render_shared_provider_setup();
+                }
+            }
+        }
+    }
+
+    fn apply_shared_account_completion(
+        &mut self,
+        completion: codex_provider_auth::ProviderAuthCompletion,
+    ) {
+        let (provider_id, runtime_provider_id, status) = match completion {
+            codex_provider_auth::ProviderAuthCompletion::OpenAiAccount(
+                codex_provider_auth::OpenAiAccountCompletion::Configured { target, status },
+            ) => (target.provider_id, target.runtime_provider_id, Some(status)),
+            codex_provider_auth::ProviderAuthCompletion::ClaudeAccount(
+                codex_provider_auth::claude_account_flow::ClaudeAccountCompletion::Configured {
+                    target,
+                    status,
+                },
+            ) => (target.provider_id, target.runtime_provider_id, Some(status)),
+            codex_provider_auth::ProviderAuthCompletion::OpenAiAccount(
+                codex_provider_auth::OpenAiAccountCompletion::Cancelled { .. },
+            )
+            | codex_provider_auth::ProviderAuthCompletion::ClaudeAccount(
+                codex_provider_auth::claude_account_flow::ClaudeAccountCompletion::Cancelled {
+                    ..
+                },
+            ) => {
+                if let Some(session) = self.shared_provider_setup_session.as_mut() {
+                    session.dispatch(
+                        crate::onboarding::provider_setup::ProviderSetupAction::AuthCancelled,
+                    );
+                }
+                self.render_shared_provider_setup();
+                return;
+            }
+            _ => return,
+        };
+        let Some(status) = status.filter(|status| {
+            status.id == provider_id
+                && status.configuration
+                    == codex_provider_auth::ProviderConfigurationState::Configured
+        }) else {
+            return;
+        };
+        let Some(session) = self.shared_provider_setup_session.as_mut() else {
+            return;
+        };
+        let configured = session.dispatch(
+            crate::onboarding::provider_setup::ProviderSetupAction::AuthConfigured {
+                provider_id: provider_id.clone(),
+                runtime_provider_id: runtime_provider_id.clone(),
+            },
+        );
+        let Some(host) = self.shared_provider_status_host.as_ref() else {
+            return;
+        };
+        if !configured.applied || !host.activate(provider_id.as_str()) {
+            session.dispatch(crate::onboarding::provider_setup::ProviderSetupAction::AuthFailed);
+            return;
+        }
+        let active = host.resolve_provider(provider_id.as_str());
+        let usable = status.availability == codex_provider_auth::ProviderAvailabilityState::Ready
+            && active.as_ref().is_some_and(|status| {
+                status.eligibility == codex_provider_auth::ProviderEligibilityState::Active
+                    && status.availability == codex_provider_auth::ProviderAvailabilityState::Ready
+            });
+        let resolved = session.dispatch(
+            crate::onboarding::provider_setup::ProviderSetupAction::ActivationResolved {
+                provider_id,
+                runtime_provider_id,
+                usable,
+            },
+        );
+        for effect in resolved.effects {
+            if let crate::onboarding::provider_setup::ProviderSetupEffect::PersistInitialSelection(
+                runtime,
+            ) = effect
+                && let Some(model) = codex_model_provider_info::resolve_model_for_provider(
+                    self.config.model.clone(),
+                    runtime.as_str(),
+                )
+            {
+                self.app_event_tx.send(AppEvent::UpdateModelSelection {
+                    model: model.clone(),
+                    provider: Some(runtime.to_string()),
+                });
+                self.app_event_tx.send(AppEvent::PersistModelSelection {
+                    model,
+                    provider: Some(runtime.to_string()),
+                    effort: None,
+                });
+            }
+        }
+        self.render_shared_provider_setup();
     }
 
     pub(super) async fn handle_event(
@@ -2052,6 +2320,192 @@ impl App {
                     }
                 });
             }
+            AppEvent::OpenSharedProviderSetup => {
+                let host = crate::provider_status_host::ProviderStatusHost::from_config(
+                    &self.config,
+                    crate::provider_status_host::ProviderAccountMetadata {
+                        claude: codex_provider_auth::ClaudeCredentialMetadata::Checking,
+                        ..Default::default()
+                    },
+                );
+                let session = crate::onboarding::provider_setup::ProviderSetupSession::from_statuses(
+                    host.resolve().entries(),
+                );
+                self.shared_provider_status_host = Some(host);
+                self.shared_provider_setup_session = Some(session);
+                self.shared_provider_account_auth_host = Some(
+                    crate::provider_account_auth_host::ProviderAccountAuthHost::new(
+                        app_server.request_handle(),
+                        self.app_event_tx.clone(),
+                        self.shared_provider_status_host
+                            .as_ref()
+                            .expect("shared provider status host")
+                            .clone(),
+                        self.config.clone(),
+                    ),
+                );
+                self.render_shared_provider_setup();
+                let config = self.config.clone();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let metadata =
+                        crate::provider_status_host::ProviderAccountMetadata::discover(&config)
+                            .await;
+                    tx.send(AppEvent::ProviderAccountMetadataResolved { metadata });
+                });
+            }
+            AppEvent::ProviderAccountMetadataResolved { metadata } => {
+                let refreshed = if let Some(host) = self.shared_provider_status_host.as_ref() {
+                    host.update_account_metadata(metadata);
+                    refresh_shared_provider_session_if_idle(
+                        self.shared_provider_setup_session.as_mut(),
+                        || host.resolve().entries().to_vec(),
+                    )
+                } else {
+                    false
+                };
+                if refreshed {
+                    self.render_shared_provider_setup();
+                }
+            }
+            AppEvent::SharedProviderSetupBegin {
+                provider_id,
+                capability,
+            } => {
+                let Some(host) = self.shared_provider_status_host.as_ref() else {
+                    return Ok(AppRunControl::Continue);
+                };
+                let Some(entry) = host.catalog().get(provider_id.as_str()) else {
+                    return Ok(AppRunControl::Continue);
+                };
+                let Some(session) = self.shared_provider_setup_session.as_mut() else {
+                    return Ok(AppRunControl::Continue);
+                };
+                if !session
+                    .dispatch(crate::onboarding::provider_setup::ProviderSetupAction::Begin {
+                        provider_id: provider_id.clone(),
+                    })
+                    .applied
+                {
+                    return Ok(AppRunControl::Continue);
+                }
+                match capability {
+                    codex_provider_auth::ProviderSetupCapability::ApiKey { .. } => {
+                        match codex_provider_auth::ApiKeyAuthTarget::from_catalog_capability(
+                            entry,
+                            &capability,
+                        ) {
+                            Ok(target) => self.chat_widget.open_shared_provider_api_key(
+                                target,
+                                entry.display_name.clone(),
+                            ),
+                            Err(_) => {
+                                session.dispatch(
+                                    crate::onboarding::provider_setup::ProviderSetupAction::AuthFailed,
+                                );
+                                self.render_shared_provider_setup();
+                            }
+                        }
+                    }
+                    codex_provider_auth::ProviderSetupCapability::OpenAiAccount => {
+                        let Ok(target) = codex_provider_auth::OpenAiAccountTarget::from_catalog_entry(entry) else {
+                            return Ok(AppRunControl::Continue);
+                        };
+                        let status = host.resolve_provider(provider_id.as_str());
+                        if let Some(status) = status {
+                            self.app_event_tx.send(AppEvent::SharedProviderAuthAction(
+                                codex_provider_auth::OpenAiAccountAction::Start(
+                                    codex_provider_auth::OpenAiAccountFlowStart {
+                                        target,
+                                        method: codex_provider_auth::OpenAiAccountMethod::DeviceCode,
+                                        context: codex_provider_auth::OpenAiAccountLoginContext::ProviderEnrollment,
+                                        status,
+                                    },
+                                ).into(),
+                            ));
+                        }
+                    }
+                    codex_provider_auth::ProviderSetupCapability::ClaudeAccount => {
+                        let Ok(target) = codex_provider_auth::claude_account_flow::ClaudeAccountTarget::from_catalog_entry(entry) else {
+                            return Ok(AppRunControl::Continue);
+                        };
+                        if let Some(status) = host.resolve_provider(provider_id.as_str()) {
+                            self.app_event_tx.send(AppEvent::SharedProviderAuthAction(
+                                codex_provider_auth::claude_account_flow::ClaudeAccountAction::Start(
+                                    codex_provider_auth::claude_account_flow::ClaudeAccountFlowStart {
+                                        target,
+                                        intent: codex_provider_auth::claude_account_flow::ClaudeAccountIntent::Add,
+                                        status,
+                                    },
+                                ).into(),
+                            ));
+                        }
+                    }
+                    _ => {
+                        session.dispatch(
+                            crate::onboarding::provider_setup::ProviderSetupAction::AuthFailed,
+                        );
+                        self.render_shared_provider_setup();
+                    }
+                }
+            }
+            AppEvent::SharedProviderSetupQueueCorbanu(queued) => {
+                if let Some(session) = self.shared_provider_setup_session.as_mut() {
+                    session.dispatch(
+                        crate::onboarding::provider_setup::ProviderSetupAction::QueueCorbanu(queued),
+                    );
+                    self.render_shared_provider_setup();
+                }
+            }
+            AppEvent::SaveSharedProviderApiKey {
+                target,
+                api_key,
+            } => {
+                let request_handle = app_server.request_handle();
+                let tx = self.app_event_tx.clone();
+                let Some(host) = self.shared_provider_status_host.clone() else {
+                    return Ok(AppRunControl::Continue);
+                };
+                let completed_target = target.clone();
+                tokio::spawn(async move {
+                    let result = crate::provider_auth_effect_executor::ProviderAuthEffectExecutor::persist_api_key(
+                        request_handle,
+                        host,
+                        target,
+                        codex_provider_auth::ApiKeySecret::new(api_key.into_inner()),
+                    )
+                    .await
+                    .map_err(|error| format!("{error:?}"));
+                    tx.send(AppEvent::SharedProviderApiKeyFinished {
+                        target: completed_target,
+                        result,
+                    });
+                });
+            }
+            AppEvent::SharedProviderApiKeyFinished { target, result } => {
+                self.finish_shared_provider_api_key(target, result.ok());
+                self.render_shared_provider_setup();
+            }
+            AppEvent::SharedProviderSetupDone => {
+                self.finish_or_defer_shared_provider_setup();
+            }
+            AppEvent::SharedProviderSetupCancelled => {
+                let can_finish = self
+                    .shared_provider_setup_session
+                    .as_ref()
+                    .is_some_and(super::super::onboarding::provider_setup::ProviderSetupSession::can_finish);
+                if can_finish {
+                    self.finish_or_defer_shared_provider_setup();
+                } else {
+                    self.chat_widget.add_error_message(
+                        "Configure a usable provider before leaving provider setup.".to_string(),
+                    );
+                    self.render_shared_provider_setup();
+                }
+            }
+            AppEvent::SharedProviderAuthAction(action) => {
+                self.handle_shared_provider_auth_action(action);
+            }
             AppEvent::OpenTelegram => {
                 self.chat_widget.open_telegram_menu();
             }
@@ -2392,6 +2846,18 @@ impl App {
                 self.chat_widget
                     .on_codex_account_device_login_failed(message);
             }
+            AppEvent::ProviderAccountLoginCompleted { login_id, success } => {
+                if let Some(login_id) = login_id {
+                    if let Some(host) = self.shared_provider_account_auth_host.as_ref() {
+                        host.openai_login_completed(login_id.clone(), success);
+                    }
+                    self.chat_widget.on_codex_account_login_result(
+                        login_id,
+                        success,
+                        /*failure_message*/ None,
+                    );
+                }
+            }
             AppEvent::CancelCodexAccountDeviceLogin { login_id } => {
                 self.chat_widget.add_info_message(
                     "OpenAI Codex account login canceled.".to_string(),
@@ -2493,8 +2959,13 @@ impl App {
                 self.chat_widget.on_wallet_status_ready(generation, result);
             }
             AppEvent::WalletCreateFinished { operation, result } => {
-                self.chat_widget
-                    .on_wallet_create_finished(operation, result);
+                if let Some(deferred) = self.pending_wallet_create_deferred.take() {
+                    self.chat_widget
+                        .on_deferred_wallet_create_finished(operation, result, deferred);
+                } else {
+                    self.chat_widget
+                        .on_wallet_create_finished(operation, result);
+                }
             }
             AppEvent::WalletUnlockFinished {
                 policy,
@@ -2507,6 +2978,67 @@ impl App {
             AppEvent::OpenWalletPlans { mode } => {
                 self.chat_widget.open_wallet_plans(mode);
             }
+            AppEvent::BeginDeferredCorbanuPlan { deferred } => {
+                if self.active_deferred_provider_setup.as_ref() != Some(&deferred) {
+                    return Ok(AppRunControl::Continue);
+                }
+                if self.chat_widget.has_wallet_signing_capability() {
+                    self.app_event_tx.send(AppEvent::OpenWalletPlans {
+                        mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode::Onboarding {
+                            deferred,
+                        },
+                    });
+                } else {
+                    let home = self.config.codex_home.to_path_buf();
+                    let tx = self.app_event_tx.clone();
+                    tokio::spawn(async move {
+                        let result = codex_wallet_daemon::WalletDaemonClient::new(home)
+                            .status()
+                            .await
+                            .map(|status| {
+                                if !status.wallet_exists {
+                                    crate::app_event::DeferredWalletPreflight::Missing
+                                } else if status.locked {
+                                    crate::app_event::DeferredWalletPreflight::Locked
+                                } else {
+                                    crate::app_event::DeferredWalletPreflight::Unlocked
+                                }
+                            })
+                            .map_err(|error| error.to_string());
+                        tx.send(AppEvent::DeferredWalletPreflightFinished { deferred, result });
+                    });
+                }
+            }
+            AppEvent::DeferredWalletPreflightFinished { deferred, result } => {
+                if self.active_deferred_provider_setup.as_ref() != Some(&deferred) {
+                    return Ok(AppRunControl::Continue);
+                }
+                match result {
+                    Ok(crate::app_event::DeferredWalletPreflight::Missing) => {
+                        self.pending_wallet_create_deferred = Some(deferred.clone());
+                        self.chat_widget.open_deferred_wallet_create(deferred);
+                    }
+                    Ok(crate::app_event::DeferredWalletPreflight::Locked)
+                    | Ok(crate::app_event::DeferredWalletPreflight::Unlocked) => {
+                        self.app_event_tx.send(AppEvent::OpenWalletUnlock {
+                            policy: codex_wallet_daemon::UnlockPolicy::Timed {
+                                duration_seconds: 300,
+                            },
+                            continuation: crate::app_event::WalletUnlockContinuation::OpenPlans {
+                                mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode::Onboarding {
+                                    deferred,
+                                },
+                            },
+                        });
+                    }
+                    Err(error) => {
+                        self.chat_widget.add_error_message(format!(
+                            "Wallet status could not be checked: {error}"
+                        ));
+                        self.chat_widget.show_deferred_wallet_preflight_retry(deferred);
+                    }
+                }
+            }
             AppEvent::WalletPlansReady { mode, result } => {
                 self.chat_widget.on_wallet_plans_ready(mode, result);
             }
@@ -2516,12 +3048,86 @@ impl App {
             AppEvent::WalletPlanPurchaseRequested { plan } => {
                 self.chat_widget.purchase_wallet_plan(plan);
             }
-            AppEvent::WalletPlanProvisioned { operation, result } => {
+            AppEvent::WalletPlanProvisioned {
+                operation,
+                result,
+                deferred_setup,
+            } => {
                 self.chat_widget
-                    .on_wallet_plan_provisioned(operation, result);
+                    .on_wallet_plan_provisioned(operation, result, deferred_setup);
             }
-            AppEvent::WalletPlanReceiptReady { receipt } => {
-                self.chat_widget.on_wallet_plan_receipt_ready(receipt);
+            AppEvent::WalletPlanCredentialPersistenceFinished {
+                attempt_id,
+                operation,
+                plan_id,
+                purchase,
+                deferred_setup,
+                api_key,
+                result,
+            } => {
+                self.chat_widget
+                    .on_wallet_plan_credential_persistence_finished(
+                        attempt_id,
+                        operation,
+                        plan_id,
+                        purchase,
+                        deferred_setup,
+                        api_key,
+                        result,
+                    );
+            }
+            AppEvent::DeferredCorbanuPlanCancelled { deferred } => {
+                if self.active_deferred_provider_setup.as_ref() == Some(&deferred) {
+                    self.chat_widget.dismiss_deferred_wallet_plan_views();
+                    self.pending_wallet_create_deferred = None;
+                    self.active_deferred_provider_setup = None;
+                    if let Some(session) = self.shared_provider_setup_session.as_mut() {
+                        session.dispatch(
+                            crate::onboarding::provider_setup::ProviderSetupAction::DeferredPlanCancelled {
+                                continuation_id: deferred.continuation_id(),
+                            },
+                        );
+                        if deferred.has_usable_fallback() {
+                            self.shared_provider_setup_session = None;
+                            self.shared_provider_status_host = None;
+                        } else {
+                            self.render_shared_provider_setup();
+                        }
+                    } else if !deferred.has_usable_fallback() {
+                        self.app_event_tx.send(AppEvent::OpenSharedProviderSetup);
+                    }
+                }
+            }
+            AppEvent::DeferredCorbanuPlanConfigured { deferred } => {
+                if self.active_deferred_provider_setup.as_ref() == Some(&deferred)
+                    && self
+                        .chat_widget
+                        .on_deferred_corbanu_plan_configured(&deferred)
+                        .is_ok()
+                    {
+                        if let Some(session) = self.shared_provider_setup_session.as_mut() {
+                            session.dispatch(
+                                crate::onboarding::provider_setup::ProviderSetupAction::DeferredPlanConfigured {
+                                    continuation_id: deferred.continuation_id(),
+                                },
+                            );
+                        }
+                        self.active_deferred_provider_setup = None;
+                        self.shared_provider_setup_session = None;
+                        self.shared_provider_status_host = None;
+                        self.shared_provider_account_auth_host = None;
+                    }
+            }
+            AppEvent::WalletPlanReceiptReady {
+                attempt_id,
+                selection_policy,
+                receipt,
+            } => {
+                self.chat_widget.on_wallet_plan_receipt_reconciled(
+                    attempt_id,
+                    selection_policy,
+                    receipt,
+                );
             }
             AppEvent::OpenWalletPlanReceipt { receipt } => {
                 self.chat_widget.open_wallet_plan_receipt(receipt);
@@ -5228,7 +5834,42 @@ impl App {
 
 #[cfg(test)]
 mod gpu_notification_tests {
+    use std::collections::HashMap;
+
+    use codex_model_provider_info::ModelProviderInfo;
+    use codex_provider_auth::ProviderCatalog;
+
     use super::failed_gpu_notification;
+    use super::refresh_shared_provider_session_if_idle;
+    use crate::onboarding::provider_setup::ProviderSetupAction;
+    use crate::onboarding::provider_setup::ProviderSetupSession;
+
+    #[test]
+    fn late_metadata_during_authentication_does_not_resolve_or_present_the_list() {
+        let catalog = ProviderCatalog::from_runtime_providers(&HashMap::from([(
+            "late-provider".to_string(),
+            ModelProviderInfo {
+                name: "Late Provider".to_string(),
+                env_key: Some("LATE_PROVIDER_KEY".to_string()),
+                ..Default::default()
+            },
+        )]));
+        let provider_id = catalog.entries()[0].id.clone();
+        let mut session = ProviderSetupSession::from_statuses(&[]);
+        session.dispatch(ProviderSetupAction::Begin { provider_id });
+        let mut resolved = false;
+
+        let refreshed = refresh_shared_provider_session_if_idle(Some(&mut session), || {
+            resolved = true;
+            Vec::new()
+        });
+
+        assert!(!refreshed);
+        assert!(
+            !resolved,
+            "in-flight metadata must not trigger a full status resolve"
+        );
+    }
 
     #[test]
     fn failed_rental_notification_includes_actionable_provider_reason() {

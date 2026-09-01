@@ -165,6 +165,9 @@ mod orchestrate;
 mod oss_selection;
 mod pager_overlay;
 mod permission_compat;
+mod provider_account_auth_host;
+mod provider_auth_effect_executor;
+mod provider_status_host;
 pub(crate) mod public_widgets;
 mod render;
 mod resize_reflow_cap;
@@ -1511,6 +1514,7 @@ async fn run_ratatui_app(
     let should_show_onboarding =
         should_show_onboarding(login_status, &initial_config, should_show_trust_screen_flag);
 
+    let mut deferred_provider_setup = None;
     let config = if should_show_onboarding {
         let show_login_screen = should_show_login_screen(login_status, &initial_config);
         let onboarding_result = run_onboarding_app(
@@ -1531,6 +1535,7 @@ async fn run_ratatui_app(
             &mut tui,
         )
         .await?;
+        deferred_provider_setup = onboarding_result.deferred_provider_setup.clone();
         if onboarding_result.should_exit {
             shutdown_app_server_if_present(app_server.take()).await;
             terminal_restore_guard.restore_silently();
@@ -1931,6 +1936,7 @@ async fn run_ratatui_app(
         startup_elapsed_before_app,
         startup_bootstrap,
         startup_hooks_browser,
+        deferred_provider_setup,
     )
     .await;
 

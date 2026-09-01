@@ -23,6 +23,7 @@ pub(crate) struct WalletRecoveryView {
     recovery: String,
     completion: Option<ViewCompletion>,
     on_confirm: Option<Box<dyn FnOnce()>>,
+    on_cancel: Option<Box<dyn FnOnce()>>,
 }
 
 impl WalletRecoveryView {
@@ -32,6 +33,7 @@ impl WalletRecoveryView {
             recovery,
             completion: None,
             on_confirm: None,
+            on_cancel: None,
         }
     }
 
@@ -40,15 +42,24 @@ impl WalletRecoveryView {
         self
     }
 
+    pub(crate) fn with_cancellation(mut self, on_cancel: Box<dyn FnOnce()>) -> Self {
+        self.on_cancel = Some(on_cancel);
+        self
+    }
+
     fn close(&mut self, accepted: bool) {
         self.recovery.zeroize();
         if accepted {
+            self.on_cancel = None;
             if let Some(on_confirm) = self.on_confirm.take() {
                 on_confirm();
             }
             self.completion = Some(ViewCompletion::Accepted);
         } else {
             self.on_confirm = None;
+            if let Some(on_cancel) = self.on_cancel.take() {
+                on_cancel();
+            }
             self.completion = Some(ViewCompletion::Cancelled);
         }
     }
@@ -147,6 +158,19 @@ mod tests {
 
         assert!(!confirmed.get());
         assert!(view.recovery.chars().all(|character| character == '\0'));
+        assert_eq!(view.completion(), Some(ViewCompletion::Cancelled));
+    }
+
+    #[test]
+    fn escape_reports_cancellation_to_owning_flow() {
+        let cancelled = Rc::new(Cell::new(false));
+        let callback_state = Rc::clone(&cancelled);
+        let mut view = WalletRecoveryView::new("address".into(), "recovery".into())
+            .with_cancellation(Box::new(move || callback_state.set(true)));
+
+        view.handle_key_event(KeyEvent::from(KeyCode::Esc));
+
+        assert!(cancelled.get());
         assert_eq!(view.completion(), Some(ViewCompletion::Cancelled));
     }
 }

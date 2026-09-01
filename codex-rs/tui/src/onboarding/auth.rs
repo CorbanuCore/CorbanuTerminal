@@ -17,6 +17,8 @@ use codex_app_server_protocol::LoginAccountParams;
 use codex_app_server_protocol::LoginAccountResponse;
 use codex_login::OPENAI_API_KEY_ENV_VAR;
 use codex_login::read_openai_api_key_from_env;
+use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_protocol::auth::AuthMode;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
@@ -57,10 +59,26 @@ use crate::motion::shimmer_text;
 use crate::onboarding::keys;
 use crate::onboarding::onboarding_screen::KeyboardHandler;
 use crate::onboarding::onboarding_screen::StepStateProvider;
+use crate::onboarding::provider_setup::DeferredProviderSetup;
+use crate::onboarding::provider_setup::ProviderSetupAction;
+use crate::onboarding::provider_setup::ProviderSetupPhase;
+use crate::onboarding::provider_setup::ProviderSetupSession;
+use crate::provider_status_host::ProviderStatusHost;
 use crate::terminal_hyperlinks::HyperlinkLine;
 use crate::terminal_hyperlinks::mark_buffer_hyperlinks;
 use crate::terminal_hyperlinks::visible_lines;
 use crate::tui::FrameRequester;
+use codex_provider_auth::ApiKeyAuthTarget;
+use codex_provider_auth::ApiKeyFlowIntent;
+use codex_provider_auth::ApiKeyFlowStart;
+use codex_provider_auth::ApiKeySecret;
+use codex_provider_auth::ManagedApiKeyMetadata;
+use codex_provider_auth::ProviderAuthAction;
+use codex_provider_auth::ProviderAuthFlowSnapshot;
+use codex_provider_auth::ProviderAvailabilityState;
+use codex_provider_auth::ProviderConfigurationState;
+use codex_provider_auth::ProviderEligibilityState;
+use codex_provider_auth::ProviderSetupCapability;
 
 /// Marks buffer cells that have cyan+underlined style as an OSC 8 hyperlink.
 ///
@@ -112,7 +130,10 @@ pub(crate) enum SignInState {
         input_tx: tokio::sync::mpsc::UnboundedSender<ClaudeCodeLoginInput>,
         value: String,
     },
-    ClaudeAccountConfigured,
+    ClaudeAccountConfigured {
+        source: codex_provider_auth::ClaudeCredentialSource,
+    },
+    Complete,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -122,6 +143,15 @@ pub(crate) enum SignInOption {
     AnthropicAccount,
     ApiKey,
     ProviderApiKey(usize),
+    CorbanuPlan,
+    Done,
+}
+
+#[derive(Clone, Copy)]
+enum ConfiguredProviderMethod {
+    OpenAiAccount,
+    ApiKey,
+    Claude(codex_provider_auth::ClaudeCredentialSource),
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -280,7 +310,22 @@ impl KeyboardHandler for AuthModeWidget {
                     self.handle_sign_in_option(self.highlighted_mode);
                 }
                 SignInState::ChatGptSuccessMessage => {
-                    *self.sign_in_state.write().unwrap() = SignInState::ChatGptSuccess;
+                    self.record_configured(
+                        OPENAI_PROVIDER_ID,
+                        ConfiguredProviderMethod::OpenAiAccount,
+                    );
+                }
+                SignInState::ApiKeyConfigured { provider } => {
+                    self.record_configured(
+                        provider.as_deref().unwrap_or(OPENAI_PROVIDER_ID),
+                        ConfiguredProviderMethod::ApiKey,
+                    );
+                }
+                SignInState::ClaudeAccountConfigured { source } => {
+                    self.record_configured(
+                        CLAUDE_PLAN_PROVIDER_ID,
+                        ConfiguredProviderMethod::Claude(source),
+                    );
                 }
                 _ => {}
             }
@@ -299,12 +344,51 @@ impl KeyboardHandler for AuthModeWidget {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(dead_code)]
 pub(crate) struct ApiKeyProviderOption {
-    pub id: String,
+    pub target: ApiKeyAuthTarget,
+    pub capability: ProviderSetupCapability,
     pub name: String,
-    pub env_var: String,
+}
+
+impl ApiKeyProviderOption {
+    pub(crate) fn environment_variable(&self) -> Option<&str> {
+        match &self.target.storage {
+            codex_provider_auth::ApiKeyStorage::OpenAiAuth => None,
+            codex_provider_auth::ApiKeyStorage::EnvironmentVariable { env_key } => Some(env_key),
+        }
+    }
+}
+
+pub(crate) fn catalog_sign_in_options(
+    host: &ProviderStatusHost,
+    api_key_options: &[ApiKeyProviderOption],
+) -> Vec<SignInOption> {
+    let mut options = Vec::new();
+    for entry in host.catalog().entries() {
+        for capability in entry.setup_capabilities.iter() {
+            let option = match capability {
+                ProviderSetupCapability::OpenAiAccount => Some(SignInOption::DeviceCode),
+                ProviderSetupCapability::ClaudeAccount => Some(SignInOption::AnthropicAccount),
+                ProviderSetupCapability::CorbanuPlan => Some(SignInOption::CorbanuPlan),
+                ProviderSetupCapability::ApiKey { .. } => api_key_options
+                    .iter()
+                    .position(|candidate| {
+                        candidate.target.provider_id == entry.id
+                            && candidate.capability == *capability
+                    })
+                    .map(SignInOption::ProviderApiKey),
+                ProviderSetupCapability::Local { .. }
+                | ProviderSetupCapability::CommandAuth { .. }
+                | ProviderSetupCapability::StatusOnly { .. } => None,
+            };
+            if let Some(option) = option {
+                options.push(option);
+            }
+        }
+    }
+    options
 }
 
 #[derive(Clone)]
@@ -321,10 +405,14 @@ pub(crate) struct AuthModeWidget {
     pub api_key_provider_name: String,
     pub api_key_env_var: Option<String>,
     pub api_key_provider_options: Vec<ApiKeyProviderOption>,
+    pub selected_api_key_option: Option<ApiKeyProviderOption>,
     pub animations_enabled: bool,
     pub animations_suppressed: Cell<bool>,
     pub codex_home: std::path::PathBuf,
     pub claude_event_tx: AppEventSender,
+    pub provider_setup_session: Arc<RwLock<ProviderSetupSession>>,
+    pub provider_status_host: ProviderStatusHost,
+    pub provider_auth_action_tx: tokio::sync::mpsc::UnboundedSender<ProviderAuthAction>,
 }
 
 impl AuthModeWidget {
@@ -370,6 +458,10 @@ impl AuthModeWidget {
         }
         *sign_in_state = SignInState::PickMode;
         drop(sign_in_state);
+        self.provider_setup_session
+            .write()
+            .unwrap()
+            .dispatch(ProviderSetupAction::AuthCancelled);
         self.set_error(/*message*/ None);
         self.request_frame.schedule_frame();
     }
@@ -418,7 +510,9 @@ impl AuthModeWidget {
     }
 
     fn provider_picker_enabled(&self) -> bool {
-        !self.api_key_provider_options.is_empty() && self.is_api_login_allowed()
+        self.forced_login_method.is_none()
+            && !catalog_sign_in_options(&self.provider_status_host, &self.api_key_provider_options)
+                .is_empty()
     }
 
     fn is_chatgpt_login_allowed(&self) -> bool {
@@ -431,9 +525,9 @@ impl AuthModeWidget {
 
     fn displayed_sign_in_options(&self) -> Vec<SignInOption> {
         if self.provider_picker_enabled() {
-            let mut options = vec![SignInOption::DeviceCode, SignInOption::AnthropicAccount];
-            options
-                .extend((0..self.api_key_provider_options.len()).map(SignInOption::ProviderApiKey));
+            let mut options =
+                catalog_sign_in_options(&self.provider_status_host, &self.api_key_provider_options);
+            options.push(SignInOption::Done);
             return options;
         }
 
@@ -493,16 +587,19 @@ impl AuthModeWidget {
         match option {
             SignInOption::ChatGpt => {
                 if self.is_chatgpt_login_allowed() {
+                    self.begin_provider(OPENAI_PROVIDER_ID);
                     self.start_chatgpt_login();
                 }
             }
             SignInOption::DeviceCode => {
                 if self.is_device_code_login_allowed() {
+                    self.begin_provider(OPENAI_PROVIDER_ID);
                     self.start_device_code_login();
                 }
             }
             SignInOption::AnthropicAccount => {
                 if self.provider_picker_enabled() {
+                    self.begin_provider(CLAUDE_PLAN_PROVIDER_ID);
                     self.set_error(/*message*/ None);
                     *self.sign_in_state.write().unwrap() = SignInState::ClaudeAuthMethodChoice {
                         highlighted: ClaudeAuthMethod::ManagedToken,
@@ -512,6 +609,7 @@ impl AuthModeWidget {
             }
             SignInOption::ApiKey => {
                 if self.is_api_login_allowed() {
+                    self.begin_provider(OPENAI_PROVIDER_ID);
                     self.start_api_key_entry();
                 } else {
                     self.disallow_api_login();
@@ -519,9 +617,162 @@ impl AuthModeWidget {
             }
             SignInOption::ProviderApiKey(index) => {
                 if self.select_provider_api_key_option(index) {
+                    self.begin_provider(&self.api_key_provider_id.clone());
                     self.start_api_key_entry();
                 }
             }
+            SignInOption::CorbanuPlan => {
+                let queued = !self
+                    .provider_setup_session
+                    .read()
+                    .unwrap()
+                    .snapshot()
+                    .queued_corbanu;
+                self.provider_setup_session
+                    .write()
+                    .unwrap()
+                    .dispatch(ProviderSetupAction::QueueCorbanu(queued));
+                self.request_frame.schedule_frame();
+            }
+            SignInOption::Done => {
+                let transition = self
+                    .provider_setup_session
+                    .write()
+                    .unwrap()
+                    .dispatch(ProviderSetupAction::Done);
+                if transition.applied {
+                    *self.sign_in_state.write().unwrap() = SignInState::Complete;
+                } else {
+                    self.set_error(Some(
+                        "Configure a usable provider or queue Corbanu Plan before Done."
+                            .to_string(),
+                    ));
+                }
+                self.request_frame.schedule_frame();
+            }
+        }
+    }
+
+    fn begin_provider(&self, provider_id: &str) {
+        let Some(entry) = self.provider_status_host.catalog().get(provider_id) else {
+            return;
+        };
+        self.provider_setup_session
+            .write()
+            .unwrap()
+            .dispatch(ProviderSetupAction::Begin {
+                provider_id: entry.id.clone(),
+            });
+    }
+
+    fn record_configured(&self, provider_id: &str, method: ConfiguredProviderMethod) {
+        let Some(entry) = self.provider_status_host.catalog().get(provider_id) else {
+            self.set_error(Some(format!(
+                "Configured provider `{provider_id}` is not in the catalog"
+            )));
+            return;
+        };
+        let Some(runtime_provider_id) = entry.runtime_provider_ids.first().cloned() else {
+            self.set_error(Some(format!(
+                "Configured provider `{provider_id}` has no runtime"
+            )));
+            return;
+        };
+        let provider_id = entry.id.clone();
+        match method {
+            ConfiguredProviderMethod::OpenAiAccount => {
+                self.provider_status_host.mark_openai_account()
+            }
+            ConfiguredProviderMethod::ApiKey => {}
+            ConfiguredProviderMethod::Claude(source) => {
+                self.provider_status_host.mark_claude_configured(source)
+            }
+        }
+        let transition = self.provider_setup_session.write().unwrap().dispatch(
+            ProviderSetupAction::AuthConfigured {
+                provider_id,
+                runtime_provider_id: runtime_provider_id.clone(),
+            },
+        );
+        for effect in transition.effects {
+            match effect {
+                crate::onboarding::provider_setup::ProviderSetupEffect::Activate(id) => {
+                    if !self.provider_status_host.activate(id.as_str()) {
+                        self.fail_provider_attempt("Provider activation could not be persisted.");
+                        return;
+                    }
+                    let Some(status) = self.provider_status_host.resolve_provider(id.as_str())
+                    else {
+                        self.fail_provider_attempt("Provider status could not be reconciled.");
+                        return;
+                    };
+                    if status.configuration != ProviderConfigurationState::Configured
+                        || status.eligibility != ProviderEligibilityState::Active
+                    {
+                        self.fail_provider_attempt(
+                            "Provider activation did not reconcile to configured and active.",
+                        );
+                        return;
+                    }
+                    let usable = status.availability == ProviderAvailabilityState::Ready;
+                    let resolved = self.provider_setup_session.write().unwrap().dispatch(
+                        ProviderSetupAction::ActivationResolved {
+                            provider_id: id,
+                            runtime_provider_id: runtime_provider_id.clone(),
+                            usable,
+                        },
+                    );
+                    for resolved_effect in resolved.effects {
+                        if let crate::onboarding::provider_setup::ProviderSetupEffect::PersistInitialSelection(runtime) = resolved_effect {
+                            debug_assert_eq!(runtime, runtime_provider_id);
+                        }
+                    }
+                    if !usable {
+                        self.set_error(Some(
+                            "Provider is configured and active, but is not currently usable."
+                                .to_string(),
+                        ));
+                    }
+                }
+                crate::onboarding::provider_setup::ProviderSetupEffect::PersistInitialSelection(
+                    _,
+                ) => {
+                    unreachable!("selection follows activation resolution")
+                }
+                crate::onboarding::provider_setup::ProviderSetupEffect::BeginDeferred(_)
+                | crate::onboarding::provider_setup::ProviderSetupEffect::Finish
+                | crate::onboarding::provider_setup::ProviderSetupEffect::ReturnToProviderList => {}
+            }
+        }
+        self.set_error(None);
+        if self.provider_picker_enabled() {
+            *self.sign_in_state.write().unwrap() = SignInState::PickMode;
+        } else {
+            let done = self
+                .provider_setup_session
+                .write()
+                .unwrap()
+                .dispatch(ProviderSetupAction::Done);
+            *self.sign_in_state.write().unwrap() = if done.applied {
+                SignInState::Complete
+            } else {
+                SignInState::PickMode
+            };
+        }
+        self.request_frame.schedule_frame();
+    }
+
+    fn provider_status_description(&self, provider_id: &str, fallback: &str) -> String {
+        let session = self.provider_setup_session.read().unwrap();
+        let Some(entry) = self.provider_status_host.catalog().get(provider_id) else {
+            return fallback.to_string();
+        };
+        if session.snapshot().usable.contains(&entry.id) {
+            "Configured · active · ready".to_string()
+        } else if session.snapshot().configured.contains(&entry.id) {
+            "Configured · unavailable".to_string()
+        } else {
+            fallback.to_string()
         }
     }
 
@@ -547,9 +798,10 @@ impl AuthModeWidget {
         let Some(option) = self.api_key_provider_options.get(index).cloned() else {
             return false;
         };
-        self.api_key_provider_id = option.id;
-        self.api_key_provider_name = option.name;
-        self.api_key_env_var = Some(option.env_var);
+        self.api_key_provider_id = option.target.provider_id.as_str().to_string();
+        self.api_key_env_var = option.environment_variable().map(str::to_string);
+        self.api_key_provider_name = option.name.clone();
+        self.selected_api_key_option = Some(option);
         self.set_error(/*message*/ None);
         true
     }
@@ -654,14 +906,20 @@ impl AuthModeWidget {
                     } else {
                         ("Sign in with Device Code", device_code_description)
                     };
-                    option_lines.extend(create_mode_item(idx, option, text, description));
+                    let description =
+                        self.provider_status_description(OPENAI_PROVIDER_ID, description);
+                    option_lines.extend(create_mode_item(idx, option, text, &description));
                 }
                 SignInOption::AnthropicAccount => {
+                    let description = self.provider_status_description(
+                        CLAUDE_PLAN_PROVIDER_ID,
+                        "Use Claude subscription access; long-lived token recommended or Claude Code login",
+                    );
                     option_lines.extend(create_mode_item(
                         idx,
                         option,
                         "Provider: Anthropic Claude Account",
-                        "Use Claude subscription access; long-lived token recommended or Claude Code login",
+                        &description,
                     ));
                 }
                 SignInOption::ApiKey => {
@@ -679,13 +937,54 @@ impl AuthModeWidget {
                 }
                 SignInOption::ProviderApiKey(provider_index) => {
                     if let Some(provider) = self.api_key_provider_options.get(provider_index) {
-                        let description = format!("Use a key stored as {}", provider.env_var);
+                        let storage_description = match &provider.target.storage {
+                            codex_provider_auth::ApiKeyStorage::OpenAiAuth => {
+                                "Use the OpenAI auth store".to_string()
+                            }
+                            codex_provider_auth::ApiKeyStorage::EnvironmentVariable { env_key } => {
+                                format!("Use a key stored as {env_key}")
+                            }
+                        };
+                        let description = self.provider_status_description(
+                            provider.target.provider_id.as_str(),
+                            &storage_description,
+                        );
                         let text =
                             crate::onboarding::onboarding_screen::provider_api_key_display_name(
                                 provider,
                             );
                         option_lines.extend(create_mode_item(idx, option, &text, &description));
                     }
+                }
+                SignInOption::CorbanuPlan => {
+                    let queued = self
+                        .provider_setup_session
+                        .read()
+                        .unwrap()
+                        .snapshot()
+                        .queued_corbanu;
+                    option_lines.extend(create_mode_item(
+                        idx,
+                        option,
+                        if queued {
+                            "Corbanu Plan (queued)"
+                        } else {
+                            "Corbanu Plan"
+                        },
+                        "Queue protected wallet setup; it runs after Done",
+                    ));
+                }
+                SignInOption::Done => {
+                    option_lines.extend(create_mode_item(
+                        idx,
+                        option,
+                        "Done",
+                        if self.provider_setup_session.read().unwrap().can_finish() {
+                            "Finish provider setup"
+                        } else {
+                            "Configure a usable provider or queue Corbanu Plan first"
+                        },
+                    ));
                 }
             }
             option_lines.push("".into());
@@ -1312,10 +1611,26 @@ impl AuthModeWidget {
 
     pub(crate) fn handle_claude_event(&mut self, event: AppEvent) {
         match event {
+            AppEvent::ProviderAccountMetadataResolved { metadata } => {
+                self.provider_status_host.update_account_metadata(metadata);
+                let can_refresh = self
+                    .provider_setup_session
+                    .read()
+                    .unwrap()
+                    .can_refresh_statuses();
+                if can_refresh {
+                    self.provider_setup_session
+                        .write()
+                        .unwrap()
+                        .refresh_from_statuses(self.provider_status_host.resolve().entries());
+                }
+            }
             AppEvent::ClaudeManagedSubscriptionTokenSaved { result } => match result {
                 Ok(_) => {
                     self.set_error(/*message*/ None);
-                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAccountConfigured;
+                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAccountConfigured {
+                        source: codex_provider_auth::ClaudeCredentialSource::Managed,
+                    };
                 }
                 Err(error) => {
                     self.set_error(Some(error));
@@ -1327,7 +1642,9 @@ impl AuthModeWidget {
             AppEvent::ClaudeCodePlanLoginSelectionChecked { result } => match result {
                 Ok(true) => {
                     self.set_error(/*message*/ None);
-                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAccountConfigured;
+                    *self.sign_in_state.write().unwrap() = SignInState::ClaudeAccountConfigured {
+                        source: codex_provider_auth::ClaudeCredentialSource::ClaudeCodeLogin,
+                    };
                 }
                 Ok(false) => {
                     let input_tx = crate::chatwidget::claude_code_login::start(
@@ -1372,7 +1689,11 @@ impl AuthModeWidget {
                 match result {
                     Some(Ok(_)) => {
                         self.set_error(/*message*/ None);
-                        *self.sign_in_state.write().unwrap() = SignInState::ClaudeAccountConfigured;
+                        *self.sign_in_state.write().unwrap() =
+                            SignInState::ClaudeAccountConfigured {
+                                source:
+                                    codex_provider_auth::ClaudeCredentialSource::ClaudeCodeLogin,
+                            };
                     }
                     Some(Err(error)) => {
                         self.set_error(Some(error));
@@ -1403,6 +1724,10 @@ impl AuthModeWidget {
             if let SignInState::ApiKeyEntry(state) = &mut *guard {
                 if keys::CANCEL.is_pressed(*key_event) {
                     *guard = SignInState::PickMode;
+                    self.provider_setup_session
+                        .write()
+                        .unwrap()
+                        .dispatch(ProviderSetupAction::AuthCancelled);
                     self.set_error(/*message*/ None);
                     should_request_frame = true;
                 } else if keys::CONFIRM.is_pressed(*key_event) {
@@ -1519,10 +1844,6 @@ impl AuthModeWidget {
             return;
         }
         self.set_error(/*message*/ None);
-        let provider = self
-            .api_key_env_var
-            .as_ref()
-            .map(|_| self.api_key_provider_id.clone());
         {
             let mut state = self.sign_in_state.write().unwrap();
             if matches!(&*state, SignInState::ApiKeySaving) {
@@ -1530,50 +1851,70 @@ impl AuthModeWidget {
             }
             *state = SignInState::ApiKeySaving;
         }
-        let request_handle = self.app_server_request_handle.clone();
-        let sign_in_state = self.sign_in_state.clone();
-        let error = self.error.clone();
-        let request_frame = self.request_frame.clone();
-        tokio::spawn(async move {
-            let params = match provider.as_ref() {
-                Some(provider) => LoginAccountParams::ProviderApiKey {
-                    provider: provider.clone(),
-                    api_key: api_key.clone(),
-                },
-                None => LoginAccountParams::ApiKey {
-                    api_key: api_key.clone(),
-                },
-            };
-            match request_handle
-                .request_typed::<LoginAccountResponse>(ClientRequest::LoginAccount {
-                    request_id: onboarding_request_id(),
-                    params,
-                })
-                .await
-            {
-                Ok(LoginAccountResponse::ApiKey {}) => {
-                    *error.write().unwrap() = None;
-                    *sign_in_state.write().unwrap() = SignInState::ApiKeyConfigured { provider };
-                }
-                Ok(other) => {
-                    *error.write().unwrap() = Some(format!(
-                        "Unexpected account/login/start response: {other:?}"
-                    ));
-                    *sign_in_state.write().unwrap() = SignInState::ApiKeyEntry(ApiKeyInputState {
-                        value: api_key,
-                        prepopulated_env_var: None,
-                    });
-                }
-                Err(err) => {
-                    *error.write().unwrap() = Some(format!("Failed to save API key: {err}"));
-                    *sign_in_state.write().unwrap() = SignInState::ApiKeyEntry(ApiKeyInputState {
-                        value: api_key,
-                        prepopulated_env_var: None,
-                    });
-                }
-            }
-            request_frame.schedule_frame();
-        });
+        let Some(option) = self.selected_api_key_option.as_ref() else {
+            self.fail_provider_attempt("Provider API-key selection is no longer available.");
+            return;
+        };
+        let Some(entry) = self
+            .provider_status_host
+            .catalog()
+            .get(option.target.provider_id.as_str())
+        else {
+            self.fail_provider_attempt("Provider is missing from the shared catalog.");
+            return;
+        };
+        if !entry
+            .setup_capabilities
+            .iter()
+            .any(|capability| capability == &option.capability)
+        {
+            self.fail_provider_attempt("Provider API-key capability changed.");
+            return;
+        }
+        let target = option.target.clone();
+        let metadata = self.provider_status_host.api_key_metadata(&target);
+        let intent = if matches!(metadata.managed, ManagedApiKeyMetadata::Stored { .. }) {
+            ApiKeyFlowIntent::Replace
+        } else {
+            ApiKeyFlowIntent::Add
+        };
+        for action in [
+            ProviderAuthAction::StartApiKey(ApiKeyFlowStart {
+                target,
+                intent,
+                metadata,
+            }),
+            ProviderAuthAction::SetApiKey(ApiKeySecret::new(api_key)),
+            ProviderAuthAction::Submit,
+        ] {
+            let _ = self.provider_auth_action_tx.send(action);
+        }
+        self.request_frame.schedule_frame();
+    }
+
+    pub(crate) fn on_api_key_configured(&self, provider_id: &str) {
+        *self.sign_in_state.write().unwrap() = SignInState::ApiKeyConfigured {
+            provider: Some(provider_id.to_string()),
+        };
+        self.request_frame.schedule_frame();
+    }
+
+    pub(crate) fn on_provider_auth_snapshot(&self, snapshot: &ProviderAuthFlowSnapshot) {
+        if matches!(
+            snapshot,
+            ProviderAuthFlowSnapshot::Blocked { .. } | ProviderAuthFlowSnapshot::Failed { .. }
+        ) {
+            self.fail_provider_attempt("API-key setup did not complete.");
+        }
+    }
+
+    fn fail_provider_attempt(&self, message: &str) {
+        self.provider_setup_session
+            .write()
+            .unwrap()
+            .dispatch(ProviderSetupAction::AuthFailed);
+        self.set_error(Some(message.to_string()));
+        *self.sign_in_state.write().unwrap() = SignInState::PickMode;
         self.request_frame.schedule_frame();
     }
 
@@ -1696,11 +2037,18 @@ impl AuthModeWidget {
     }
 
     pub(crate) fn configured_provider(&self) -> Option<String> {
-        match &*self.sign_in_state.read().unwrap() {
-            SignInState::ApiKeyConfigured { provider } => provider.clone(),
-            SignInState::ClaudeAccountConfigured => {
-                Some(codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID.to_string())
-            }
+        self.provider_setup_session
+            .read()
+            .unwrap()
+            .snapshot()
+            .first_fresh_runtime
+            .as_ref()
+            .map(ToString::to_string)
+    }
+
+    pub(crate) fn deferred_provider_setup(&self) -> Option<DeferredProviderSetup> {
+        match &self.provider_setup_session.read().unwrap().snapshot().phase {
+            ProviderSetupPhase::Deferred(deferred) => Some(deferred.clone()),
             _ => None,
         }
     }
@@ -1725,7 +2073,8 @@ impl StepStateProvider for AuthModeWidget {
             | SignInState::ClaudeCodeLoginCodeEntry { .. } => StepState::InProgress,
             SignInState::ChatGptSuccess
             | SignInState::ApiKeyConfigured { .. }
-            | SignInState::ClaudeAccountConfigured => StepState::Complete,
+            | SignInState::ClaudeAccountConfigured { .. } => StepState::InProgress,
+            SignInState::Complete => StepState::Complete,
         }
     }
 }
@@ -1787,10 +2136,11 @@ impl WidgetRef for AuthModeWidget {
             SignInState::ClaudeCodeLoginCodeEntry { value, .. } => {
                 self.render_claude_secret_entry(area, buf, value, /*authorization_code*/ true);
             }
-            SignInState::ClaudeAccountConfigured => {
+            SignInState::ClaudeAccountConfigured { .. } => {
                 Paragraph::new("✓ Anthropic Claude account configured".fg(Color::Green))
                     .render(area, buf);
             }
+            SignInState::Complete => {}
         }
     }
 }
@@ -1845,10 +2195,19 @@ mod tests {
             .build()
             .await
             .unwrap();
+        let provider_status_host = ProviderStatusHost::from_config(
+            &config,
+            crate::provider_status_host::ProviderAccountMetadata::default(),
+        );
+        let provider_setup_session = Arc::new(RwLock::new(ProviderSetupSession::from_statuses(
+            provider_status_host.resolve().entries(),
+        )));
+        let (provider_auth_action_tx, _provider_auth_action_rx) =
+            tokio::sync::mpsc::unbounded_channel();
         let auth_route_config = config.auth_route_config();
         let client = InProcessAppServerClient::start(InProcessClientStartArgs {
             arg0_paths: Arg0DispatchPaths::default(),
-            config: Arc::new(config),
+            config: Arc::new(config.clone()),
             cli_overrides: Vec::new(),
             loader_overrides: Default::default(),
             strict_config: false,
@@ -1893,10 +2252,14 @@ mod tests {
             api_key_provider_name: "OpenAI".to_string(),
             api_key_env_var: None,
             api_key_provider_options: Vec::new(),
+            selected_api_key_option: None,
             animations_enabled: true,
             animations_suppressed: std::cell::Cell::new(false),
             codex_home: codex_home_path,
             claude_event_tx: AppEventSender::new(claude_event_tx),
+            provider_setup_session,
+            provider_status_host,
+            provider_auth_action_tx,
         };
         (widget, codex_home)
     }
@@ -1912,59 +2275,79 @@ mod tests {
         out
     }
 
+    fn api_key_option(id: &str, name: &str, env_key: &str) -> ApiKeyProviderOption {
+        let catalog = codex_provider_auth::ProviderCatalog::from_runtime_providers(
+            &std::collections::HashMap::from([(
+                id.to_string(),
+                codex_model_provider_info::ModelProviderInfo {
+                    name: name.to_string(),
+                    env_key: Some(env_key.to_string()),
+                    ..Default::default()
+                },
+            )]),
+        );
+        let entry = catalog.entries().first().expect("catalog entry");
+        let capability = entry
+            .setup_capabilities
+            .iter()
+            .find(|capability| matches!(capability, ProviderSetupCapability::ApiKey { .. }))
+            .expect("API-key capability")
+            .clone();
+        ApiKeyProviderOption {
+            target: ApiKeyAuthTarget::from_catalog_capability(entry, &capability)
+                .expect("API-key target"),
+            capability,
+            name: name.to_string(),
+        }
+    }
+
     #[tokio::test]
     async fn provider_key_picker_shows_codex_account_and_provider_keys() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
-        widget.forced_login_method = Some(ForcedLoginMethod::Api);
+        widget.forced_login_method = None;
         widget.highlighted_mode = SignInOption::ProviderApiKey(0);
         widget.api_key_provider_options = vec![
-            ApiKeyProviderOption {
-                id: "ambient".to_string(),
-                name: "Ambient".to_string(),
-                env_var: "AMBIENT_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "zai".to_string(),
-                name: "Z.AI".to_string(),
-                env_var: "ZAI_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "openrouter".to_string(),
-                name: "OpenRouter".to_string(),
-                env_var: "OPENROUTER_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "baseten".to_string(),
-                name: "Baseten".to_string(),
-                env_var: "BASETEN_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "vercel".to_string(),
-                name: "Vercel".to_string(),
-                env_var: "AI_GATEWAY_API_KEY".to_string(),
-            },
+            api_key_option("openai", "OpenAI", "OPENAI_API_KEY"),
+            api_key_option("ambient", "Ambient", "AMBIENT_API_KEY"),
+            api_key_option("zai", "Z.AI", "ZAI_API_KEY"),
+            api_key_option("openrouter", "OpenRouter", "OPENROUTER_API_KEY"),
+            api_key_option("baseten", "Baseten", "BASETEN_API_KEY"),
+            api_key_option("vercel", "Vercel", "AI_GATEWAY_API_KEY"),
         ];
 
         assert_eq!(
             widget.displayed_sign_in_options(),
             vec![
                 SignInOption::DeviceCode,
-                SignInOption::AnthropicAccount,
                 SignInOption::ProviderApiKey(0),
+                SignInOption::AnthropicAccount,
+                SignInOption::CorbanuPlan,
                 SignInOption::ProviderApiKey(1),
                 SignInOption::ProviderApiKey(2),
                 SignInOption::ProviderApiKey(3),
-                SignInOption::ProviderApiKey(4)
+                SignInOption::ProviderApiKey(4),
+                SignInOption::ProviderApiKey(5),
+                SignInOption::Done,
             ]
         );
 
-        let area = Rect::new(0, 0, 80, 24);
+        let area = Rect::new(0, 0, 80, 32);
         let mut buf = Buffer::empty(area);
         widget.render_pick_mode(area, &mut buf);
         let rendered = buffer_text(&buf, area);
+        let visible = rendered
+            .lines()
+            .map(str::trim_end)
+            .collect::<Vec<_>>()
+            .join("\n");
+        insta::assert_snapshot!("multi_provider_picker", visible);
 
         assert!(
             rendered.contains("Provider: OpenAI Codex Account"),
+            "rendered:\n{rendered}"
+        );
+        assert!(
+            rendered.contains("Provider: OpenAI API Key"),
             "rendered:\n{rendered}"
         );
         assert!(
@@ -1998,53 +2381,17 @@ mod tests {
     #[tokio::test]
     async fn provider_key_picker_scrolls_to_the_highlighted_provider_in_a_short_terminal() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
-        widget.forced_login_method = Some(ForcedLoginMethod::Api);
+        widget.forced_login_method = None;
         widget.api_key_provider_options = vec![
-            ApiKeyProviderOption {
-                id: "anthropic".to_string(),
-                name: "Anthropic".to_string(),
-                env_var: "ANTHROPIC_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "ambient".to_string(),
-                name: "Ambient".to_string(),
-                env_var: "AMBIENT_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "kimi-code".to_string(),
-                name: "Kimi Code".to_string(),
-                env_var: "KIMI_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "zai".to_string(),
-                name: "Z.AI".to_string(),
-                env_var: "ZAI_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "openrouter".to_string(),
-                name: "OpenRouter".to_string(),
-                env_var: "OPENROUTER_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "meta".to_string(),
-                name: "Meta".to_string(),
-                env_var: "MODEL_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "baseten".to_string(),
-                name: "Baseten".to_string(),
-                env_var: "BASETEN_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "vercel".to_string(),
-                name: "Vercel".to_string(),
-                env_var: "AI_GATEWAY_API_KEY".to_string(),
-            },
-            ApiKeyProviderOption {
-                id: "deepseek".to_string(),
-                name: "DeepSeek".to_string(),
-                env_var: "DEEPSEEK_API_KEY".to_string(),
-            },
+            api_key_option("anthropic", "Anthropic", "ANTHROPIC_API_KEY"),
+            api_key_option("ambient", "Ambient", "AMBIENT_API_KEY"),
+            api_key_option("kimi-code", "Kimi Code", "KIMI_API_KEY"),
+            api_key_option("zai", "Z.AI", "ZAI_API_KEY"),
+            api_key_option("openrouter", "OpenRouter", "OPENROUTER_API_KEY"),
+            api_key_option("meta", "Meta", "MODEL_API_KEY"),
+            api_key_option("baseten", "Baseten", "BASETEN_API_KEY"),
+            api_key_option("vercel", "Vercel", "AI_GATEWAY_API_KEY"),
+            api_key_option("deepseek", "DeepSeek", "DEEPSEEK_API_KEY"),
         ];
         widget.highlighted_mode = SignInOption::ProviderApiKey(8);
 
@@ -2054,7 +2401,7 @@ mod tests {
         let rendered = buffer_text(&buf, area);
 
         assert!(
-            rendered.contains("> 11. Provider: DeepSeek API Key"),
+            rendered.contains("Provider: DeepSeek API Key"),
             "highlighted provider must stay visible:\n{rendered}"
         );
         assert!(
@@ -2064,21 +2411,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn provider_key_picker_device_code_selection_starts_login() {
+    async fn forced_api_policy_rejects_device_code_selection() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
         widget.forced_login_method = Some(ForcedLoginMethod::Api);
         widget.highlighted_mode = SignInOption::DeviceCode;
-        widget.api_key_provider_options = vec![ApiKeyProviderOption {
-            id: "zai".to_string(),
-            name: "Z.AI".to_string(),
-            env_var: "ZAI_API_KEY".to_string(),
-        }];
+        widget.api_key_provider_options = vec![api_key_option("zai", "Z.AI", "ZAI_API_KEY")];
 
         widget.handle_sign_in_option(SignInOption::DeviceCode);
 
         assert!(matches!(
             &*widget.sign_in_state.read().unwrap(),
-            SignInState::ChatGptDeviceCode(state) if state.login_id().is_none()
+            SignInState::PickMode
         ));
     }
 
@@ -2146,9 +2489,9 @@ mod tests {
     async fn provider_api_key_save_is_single_flight() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
         widget.forced_login_method = None;
-        widget.api_key_provider_id = "deepseek".to_string();
-        widget.api_key_provider_name = "DeepSeek".to_string();
-        widget.api_key_env_var = Some("DEEPSEEK_API_KEY".to_string());
+        widget.api_key_provider_options =
+            vec![api_key_option("deepseek", "DeepSeek", "DEEPSEEK_API_KEY")];
+        assert!(widget.select_provider_api_key_option(0));
         *widget.sign_in_state.write().unwrap() =
             SignInState::ApiKeyEntry(ApiKeyInputState::default());
 
@@ -2178,11 +2521,11 @@ mod tests {
     async fn anthropic_account_opens_recommended_method_choice_and_cancel_is_inert() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
         widget.forced_login_method = None;
-        widget.api_key_provider_options = vec![ApiKeyProviderOption {
-            id: codex_model_provider_info::ANTHROPIC_PROVIDER_ID.to_string(),
-            name: "Anthropic".to_string(),
-            env_var: codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR.to_string(),
-        }];
+        widget.api_key_provider_options = vec![api_key_option(
+            codex_model_provider_info::ANTHROPIC_PROVIDER_ID,
+            "Anthropic",
+            codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR,
+        )];
 
         widget.handle_sign_in_option(SignInOption::AnthropicAccount);
 
@@ -2206,11 +2549,11 @@ mod tests {
     #[tokio::test]
     async fn forced_chatgpt_policy_rejects_anthropic_account_dispatch() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
-        widget.api_key_provider_options = vec![ApiKeyProviderOption {
-            id: codex_model_provider_info::ANTHROPIC_PROVIDER_ID.to_string(),
-            name: "Anthropic".to_string(),
-            env_var: codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR.to_string(),
-        }];
+        widget.api_key_provider_options = vec![api_key_option(
+            codex_model_provider_info::ANTHROPIC_PROVIDER_ID,
+            "Anthropic",
+            codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR,
+        )];
 
         widget.handle_sign_in_option(SignInOption::AnthropicAccount);
 

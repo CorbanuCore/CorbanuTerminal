@@ -4,6 +4,8 @@ mod claude_auth;
 #[cfg(unix)]
 mod focus_palette;
 #[cfg(unix)]
+mod multi_provider_onboarding;
+#[cfg(unix)]
 mod output_text_stream;
 mod resize_reflow;
 #[cfg(unix)]

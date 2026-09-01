@@ -226,8 +226,14 @@ impl ChatWidget {
             | ServerNotification::ThreadRealtimeTranscriptDelta(_)
             | ServerNotification::ThreadRealtimeTranscriptDone(_)
             | ServerNotification::WindowsWorldWritableWarning(_)
-            | ServerNotification::WindowsSandboxSetupCompleted(_)
-            | ServerNotification::AccountLoginCompleted(_) => {}
+            | ServerNotification::WindowsSandboxSetupCompleted(_) => {}
+            ServerNotification::AccountLoginCompleted(notification) => {
+                self.app_event_tx
+                    .send(AppEvent::ProviderAccountLoginCompleted {
+                        login_id: notification.login_id,
+                        success: notification.success,
+                    });
+            }
             ServerNotification::ContextCompacted(_) => {}
         }
     }
