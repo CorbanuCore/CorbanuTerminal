@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-50-S01"
 title: "Shared API-key flow controller"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-50"
 execution_order: 9
@@ -60,7 +60,7 @@ updated: 2026-09-01
 
 ## Remaining
 
-- [ ] Record the primary-accepted implementation commit and archive the sprint; renderer adoption remains PF-53/PF-54.
+- [x] Recorded primary-accepted implementation commit `6f90e89792d544453a45fe1c9444215476c8e8f3` and archived the sprint; renderer adoption remains PF-53/PF-54.
 
 ## Verification
 
@@ -73,12 +73,12 @@ updated: 2026-09-01
 - [x] `python3 docs/sprints/check.py`, `python3 docs/plans/check.py`, `python3 scripts/check_portable_skills.py`, and `git diff --check` — passed (`current 65/archived 105`, `active 2/2`, 25 portable skill files match, clean diff whitespace).
 - [x] TUI applicability resolved: the minimal typed fake-host harness proves effect translation; full PTY flows and renderer adoption remain PF-53/PF-54.
 - [x] Primary integration audit accepted the corrected settlement/reconciliation ordering, replacement proof boundary, redaction, custom-provider generality, and final 28-test contract suite.
-- [ ] Post-commit verification: rerun governance checks against the recorded implementation commit before archival.
+- [x] Post-commit verification: governance checks passed against implementation commit `6f90e89792d544453a45fe1c9444215476c8e8f3` before archival.
 
 ## Exit evidence
 
-- [ ] Implementation commit pending; primary integration accepted controller protocol version 1 as recorded above and in `PROVIDER_AUTH_FLOW_PROTOCOL_VERSION`.
+- [x] Implementation commit `6f90e89792d544453a45fe1c9444215476c8e8f3`; primary integration accepted controller protocol version 1 as recorded above and in `PROVIDER_AUTH_FLOW_PROTOCOL_VERSION`.
 - [x] Final-tree test commands and the redaction canary covering enclosing action/transition/effect values are recorded above.
 - [x] Deep-equality tests freeze pre-submit cancellation, post-submit rejection, direct timeout-to-stored reconciliation, timeout-to-definite-failure retry, timeout-to-not-configured then late-stored recovery, stale settlement rejection, no duplicate persistence, transient reconciling metadata remaining non-retryable, and configured-after-timeout completing Add while Replace waits for late stored settlement plus fresh status.
 - [x] `Done` and `Remaining` reflect the implementation tree awaiting primary audit.
-- [ ] Completed record archived.
+- [x] Completed record archived under `docs/sprints/archive/unified-provider-auth/`.
