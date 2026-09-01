@@ -1,17 +1,17 @@
 ---
 sprint_id: "PF-51-S01"
 title: "OpenAI account auth adapter"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-51"
 execution_order: 10
 owner: "GPT-5.6 Sol high implementation agent"
-parallel_lane: "UNALLOCATED"
-write_scope: "UNALLOCATED"
-integration_gate: "UNALLOCATED"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+parallel_lane: "provider-auth-serial"
+write_scope: "MODULE.bazel.lock; codex-rs/Cargo.lock; codex-rs/app-server-client/Cargo.toml; codex-rs/app-server-client/BUILD.bazel; codex-rs/app-server-client/src/lib.rs; codex-rs/app-server-client/src/provider_auth.rs; codex-rs/app-server-client/src/provider_auth_tests.rs; codex-rs/provider-auth/src/lib.rs; codex-rs/provider-auth/src/auth_flow.rs; codex-rs/provider-auth/src/openai_account_flow.rs; codex-rs/provider-auth/src/openai_account_controller.rs; codex-rs/provider-auth/src/openai_account_flow_tests.rs; docs/sprints/current/unified-provider-auth/pf-51-s01-openai-account-adapter.md"
+integration_gate: "PF-51 OpenAI account controller and thin app-server-client adapter only; no app-server protocol, login, TUI host, onboarding, provider-management, or API-key behavior changes"
+worktree: "/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0"
+branch: "feat/unified-provider-auth"
+base_commit: "f7356a94e032234022a462d65b576a7de2854859"
 depends_on: "PF-50-S01"
 created: 2026-09-01
 updated: 2026-09-01
@@ -26,45 +26,59 @@ updated: 2026-09-01
 
 ## Plan linkage
 
-- Plan: [Unified provider onboarding and management](../../../plans/active/unified-provider-auth.md).
-- Feature: `PF-51`.
-- Acceptance advanced: both hosts share OpenAI login, cancel, completion, and recovery semantics.
+- Active plan feature: `PF-51`; acceptance is shared host login semantics.
 
 ## Code boundaries
 
-- Existing: `onboarding/auth.rs` browser/device login and app-server notifications.
-- Planned: thin app-server login effect adapter and renderer-neutral status mapping.
-- Tests: request correlation, cancellation, stale notifications, device/browser success, and restart.
+- Provider-auth controller plus thin app-server-client adapter and tests only.
 
 ## Preconditions
 
-- [ ] Plan is active.
-- [ ] PF-50-S01 is completed and archived.
-- [ ] Exact serial allocation matches the plan.
-- [ ] Existing app-server request/cancel semantics are preserved.
+- [x] Plan is active.
+- [x] PF-50-S01 is completed and archived.
+- [x] Exact serial allocation matches the plan.
+- [x] Existing app-server request/cancel semantics are preserved.
 
 ## Done
 
 - [x] Draft sprint record created and linked to PF-51.
+- [x] Added typed OpenAI actions/effects, secret-free snapshots, completion,
+      recovery, and a thin app-server-client adapter without protocol changes.
+- [x] Preserved browser/device login and device-only forced enrollment.
+- [x] Added dual correlation, cancellation, stale rejection, PF-49 status
+      settlement, restart recovery, redaction, and audit-race regressions.
 
 ## Remaining
 
-- [ ] Map OpenAI browser and device login into shared typed actions/effects.
-- [ ] Correlate request IDs and ignore stale completion after cancel or replacement.
-- [ ] Produce metadata-only configured/recovery status through PF-49.
-- [ ] Preserve forced-login and existing-account compatibility.
-- [ ] Add generalized tests across browser, device-code, cancel, timeout, error, and restart cases.
+- [ ] Commit the accepted implementation, rerun post-commit governance, and archive PF-51.
 
 ## Verification
 
-- [ ] Focused test: provider-auth OpenAI adapter and app-server login tests.
-- [ ] Integration test: affected codex-login/app-server-client/TUI state tests.
-- [ ] TUI applicability resolved: typed event harness passes; visual PTY proof remains with host sprints.
+- [ ] Post-commit plan/sprint validators and clean-tree check pass.
+
+## Implementation and audit evidence
+
+- Exact mappings are `Chatgpt`, `ChatgptDeviceCode`, and device-only
+  `OpenaiProviderDeviceCode`; forced browser enrollment is typed-rejected.
+- API-key status never satisfies account setup. Late cancellation, wrong
+  login-bearing variants, transport uncertainty, and non-account settlement
+  terminate through typed cancel/failure/recovery paths without orphaned login.
+- Challenges are zeroizing, non-serializable, non-cloneable, and Debug-redacted;
+  arbitrary server error text is discarded.
+- Final production sizes after formatting: `openai_account_controller.rs` 489
+  lines, `openai_account_flow.rs` 494 lines, and app-server-client
+  `provider_auth.rs` 195 lines.
+- Provider-auth passed 40/40; adapter 8/8; protocol filters 5/5 and 1/1; forced
+  device app-server integration 1/1 (`ddafa2de-88bf-4c2a-be74-93009c91f47d`);
+  TUI check passed. Fix/fmt/Bazel/governance/diff/canary checks passed.
+- Changed paths are the scoped Cargo lock/manifest, app-server-client
+  lib/adapter/tests, provider-auth lib/shared controller/OpenAI modules/tests,
+  and this ledger. Bazel lock and BUILD required no diff.
 
 ## Exit evidence
 
 - [ ] Implementation commit and app-server adapter contract recorded.
-- [ ] Final-tree tests linked.
-- [ ] Cancel/stale notification evidence recorded.
-- [ ] `Done` and `Remaining` reflect reality.
+- [x] Final-tree tests linked.
+- [x] Cancel/stale notification evidence recorded.
+- [x] `Done` and `Remaining` reflect pre-commit reality.
 - [ ] Completed record archived.

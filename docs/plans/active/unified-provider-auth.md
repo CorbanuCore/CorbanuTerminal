@@ -212,7 +212,7 @@ user work and integrate rather than revert concurrent changes.
 | `PF-48` | Typed provider catalog and capability contract | [PF-48-S01](../../sprints/archive/unified-provider-auth/pf-48-s01-provider-catalog-contract.md) | completed at `7936d83859` |
 | `PF-49` | Shared metadata status and persisted eligibility | [PF-49-S01](../../sprints/archive/unified-provider-auth/pf-49-s01-status-and-eligibility.md) | completed at `5fcde1c1d9` |
 | `PF-50` | Renderer-independent API-key authentication controller | [PF-50-S01](../../sprints/archive/unified-provider-auth/pf-50-s01-api-key-flow-controller.md) | completed at `6f90e89792` |
-| `PF-51` | OpenAI account adapter on the shared controller | [PF-51-S01](../../sprints/current/unified-provider-auth/pf-51-s01-openai-account-adapter.md) | draft |
+| `PF-51` | OpenAI account adapter on the shared controller | [PF-51-S01](../../sprints/current/unified-provider-auth/pf-51-s01-openai-account-adapter.md) | in progress |
 | `PF-52` | Claude subscription adapter on the shared controller | [PF-52-S01](../../sprints/current/unified-provider-auth/pf-52-s01-claude-auth-adapter.md) | draft |
 | `PF-53` | Multi-provider onboarding and deferred Corbanu Plan flow | [PF-53-S01](../../sprints/current/unified-provider-auth/pf-53-s01-multi-provider-onboarding.md) | draft |
 | `PF-54` | Unified `/providers` management and eligibility controls | [PF-54-S01](../../sprints/current/unified-provider-auth/pf-54-s01-provider-management.md) | draft |
@@ -259,7 +259,9 @@ predecessor is completed and archived.
 3. Build the renderer-independent typed controller and API-key adapter in PF-50.
 4. Adapt OpenAI account login in PF-51 and the merged Claude flow in PF-52.
 5. Replace onboarding's single-provider completion with the multi-provider and
-   deferred Corbanu workflow in PF-53.
+   deferred Corbanu workflow in PF-53. Its shared host effect executor also maps
+   OpenAI `ApiKeyStorage::OpenAiAuth` into the existing app-server API-key
+   persistence request; PF-54 reuses that executor.
 6. Rebuild `/providers` as a manager host with eligibility and safe replacement
    controls in PF-54.
 7. Remove startup/catalog/status heuristics and converge custom-provider/current

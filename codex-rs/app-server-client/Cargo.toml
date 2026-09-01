@@ -21,6 +21,7 @@ codex-core = { workspace = true }
 codex-exec-server = { workspace = true }
 codex-feedback = { workspace = true }
 codex-protocol = { workspace = true }
+codex-provider-auth = { workspace = true }
 codex-uds = { workspace = true }
 codex-utils-absolute-path = { workspace = true }
 codex-utils-rustls-provider = { workspace = true }
@@ -34,6 +35,7 @@ tracing = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
+codex-model-provider-info = { workspace = true }
 pretty_assertions = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

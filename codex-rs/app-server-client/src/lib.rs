@@ -17,6 +17,7 @@
 //! deltas before forwarding them to UI surfaces.
 
 mod path;
+mod provider_auth;
 mod remote;
 
 use std::error::Error;
@@ -67,6 +68,8 @@ use toml::Value as TomlValue;
 use tracing::warn;
 
 pub use crate::path::AppServerPath;
+pub use crate::provider_auth::OpenAiAccountAdapterError;
+pub use crate::provider_auth::OpenAiAccountAppServerAdapter;
 pub use crate::remote::RemoteAppServerClient;
 pub use crate::remote::RemoteAppServerConnectArgs;
 pub use crate::remote::RemoteAppServerEndpoint;

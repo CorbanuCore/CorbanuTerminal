@@ -50,6 +50,9 @@ updated: 2026-09-01
 ## Remaining
 
 - [ ] Render the shared catalog/status and return to it after every provider attempt.
+- [ ] Execute shared API-key effects generically, including mapping OpenAI
+      `ApiKeyStorage::OpenAiAuth` to the existing app-server API-key request;
+      expose the same executor for PF-54 reuse.
 - [ ] Add **Done** and enforce a usable-provider or queued-Plan completion condition.
 - [ ] Queue Corbanu without configuring it; run Plan flow only after **Done**.
 - [ ] On Plan success activate Corbanu without overriding an existing current provider.

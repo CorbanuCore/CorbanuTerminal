@@ -6,6 +6,10 @@ use crate::ApiKeyFlowIntent;
 use crate::ApiKeyFlowStart;
 use crate::ApiKeySecret;
 use crate::EnvironmentCredentialMetadata;
+use crate::OpenAiAccountAction;
+use crate::OpenAiAccountCompletion;
+use crate::OpenAiAccountEffect;
+use crate::OpenAiAccountSnapshot;
 use crate::ProviderConfigurationState;
 use crate::ProviderStatusSnapshot;
 
@@ -39,6 +43,7 @@ pub enum ProviderAuthRejectionReason {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderAuthFlowSnapshot {
     Idle,
+    OpenAiAccount(OpenAiAccountSnapshot),
     Entering {
         flow: ApiKeyFlowContext,
         has_input: bool,
@@ -81,6 +86,7 @@ pub enum ApiKeyPersistenceResult {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ProviderAuthAction {
+    OpenAiAccount(OpenAiAccountAction),
     StartApiKey(ApiKeyFlowStart),
     SetApiKey(ApiKeySecret),
     Submit,
@@ -101,6 +107,7 @@ pub enum ProviderAuthAction {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderAuthCompletion {
+    OpenAiAccount(OpenAiAccountCompletion),
     Configured {
         target: ApiKeyAuthTarget,
         status: ProviderStatusSnapshot,
@@ -112,6 +119,7 @@ pub enum ProviderAuthCompletion {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ProviderAuthEffect {
+    OpenAiAccount(OpenAiAccountEffect),
     PersistApiKey {
         attempt_id: ProviderAuthAttemptId,
         target: ApiKeyAuthTarget,
@@ -142,12 +150,12 @@ pub struct ProviderAuthTransition {
     pub disposition: ProviderAuthDisposition,
 }
 
-type Reduction = (Vec<ProviderAuthEffect>, ProviderAuthDisposition);
+pub(crate) type Reduction = (Vec<ProviderAuthEffect>, ProviderAuthDisposition);
 
 pub struct ProviderAuthController {
-    snapshot: ProviderAuthFlowSnapshot,
+    pub(crate) snapshot: ProviderAuthFlowSnapshot,
     input: Option<ApiKeySecret>,
-    next_attempt_id: u64,
+    pub(crate) next_attempt_id: u64,
 }
 
 impl Default for ProviderAuthController {
@@ -167,6 +175,7 @@ impl ProviderAuthController {
 
     pub fn dispatch(&mut self, action: ProviderAuthAction) -> ProviderAuthTransition {
         let (effects, disposition) = match action {
+            ProviderAuthAction::OpenAiAccount(action) => self.openai_account(action),
             ProviderAuthAction::StartApiKey(start) => self.start(start),
             ProviderAuthAction::SetApiKey(secret) => self.set_input(secret),
             ProviderAuthAction::Submit => self.submit(),
@@ -188,7 +197,7 @@ impl ProviderAuthController {
     }
 
     fn start(&mut self, start: ApiKeyFlowStart) -> Reduction {
-        if active(&self.snapshot).is_some() {
+        if commit_in_progress(&self.snapshot) {
             return rejected(ProviderAuthRejectionReason::CommitInProgress);
         }
         let ApiKeyFlowStart {
@@ -241,12 +250,10 @@ impl ProviderAuthController {
             self.fail(flow, ProviderAuthFailureReason::EmptyCredential);
             return applied();
         };
-        let Some(next_attempt_id) = self.next_attempt_id.checked_add(1) else {
+        let Some(attempt_id) = self.allocate_attempt() else {
             self.fail(flow, ProviderAuthFailureReason::AttemptIdExhausted);
             return applied();
         };
-        let attempt_id = ProviderAuthAttemptId(self.next_attempt_id);
-        self.next_attempt_id = next_attempt_id;
         self.snapshot = ProviderAuthFlowSnapshot::Settling {
             flow: flow.clone(),
             attempt_id,
@@ -412,6 +419,17 @@ impl ProviderAuthController {
     fn fail(&mut self, flow: ApiKeyFlowContext, reason: ProviderAuthFailureReason) {
         self.snapshot = ProviderAuthFlowSnapshot::Failed { flow, reason };
     }
+
+    pub(crate) fn clear_api_key_input(&mut self) {
+        self.input = None;
+    }
+
+    pub(crate) fn allocate_attempt(&mut self) -> Option<ProviderAuthAttemptId> {
+        let next_attempt_id = self.next_attempt_id.checked_add(1)?;
+        let attempt_id = ProviderAuthAttemptId(self.next_attempt_id);
+        self.next_attempt_id = next_attempt_id;
+        Some(attempt_id)
+    }
 }
 
 fn active(
@@ -428,11 +446,16 @@ fn active(
 }
 
 fn rejected_for(snapshot: &ProviderAuthFlowSnapshot) -> Reduction {
-    rejected(if active(snapshot).is_some() {
+    rejected(if commit_in_progress(snapshot) {
         ProviderAuthRejectionReason::CommitInProgress
     } else {
         ProviderAuthRejectionReason::InvalidState
     })
+}
+
+pub(crate) fn commit_in_progress(snapshot: &ProviderAuthFlowSnapshot) -> bool {
+    active(snapshot).is_some()
+        || matches!(snapshot, ProviderAuthFlowSnapshot::OpenAiAccount(state) if state.is_in_flight())
 }
 
 fn applied() -> Reduction {
