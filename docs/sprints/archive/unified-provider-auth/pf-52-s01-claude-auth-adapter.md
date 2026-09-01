@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-52-S01"
 title: "Claude auth adapter"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-52"
 execution_order: 11
@@ -58,8 +58,8 @@ updated: 2026-09-01
 
 ## Remaining
 
-- [ ] Primary reviews/integrates the final tree, records the implementation commit,
-      marks the sprint completed, and archives it; no implementation item remains.
+- [x] Primary reviewed and integrated the final tree in implementation commit
+      `a723374834`; this completed record is archived with no implementation item remaining.
 
 ## Verification
 
@@ -73,7 +73,8 @@ updated: 2026-09-01
       portable skills 25; production canary scan returned no matches.
 - [x] Final production lines stay below 500: auth_flow 494, lib 491, Claude flow
       423, controller 484, settlement 421, TUI adapter 285.
-- [ ] Primary confirms the recorded final-tree evidence after integration.
+- [x] Primary reran the final provider-auth 49/49 and TUI adapter 5/5 suites
+      on the integrated tree and confirmed the recorded evidence.
 
 ## Exit evidence
 
@@ -83,4 +84,4 @@ updated: 2026-09-01
 - [x] PF-42–PF-47 compatibility is covered by the vault/login/CLI suites above;
       no historical evidence was invalidated.
 - [x] `Done` and `Remaining` reflect the primary-review-ready tree.
-- [ ] Implementation commit and archived completed record remain primary-owned.
+- [x] Implementation commit `a723374834` is recorded and this completed record is archived.
