@@ -14,6 +14,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::app_command::AppCommand;
+use crate::internal_cli_helper::internal_cli_helper_executable;
 use crate::spawn_orchestration::SpawnRole;
 
 use super::pane::ClaudeCommandMode;
@@ -199,7 +200,7 @@ pub(crate) fn build_claude_command_plan(
         env_remove.extend(CLAUDE_PLAN_ROUTING_ENV_KEYS.map(ToString::to_string));
         Some(DeferredClaudePlanAuth {
             codex_home: codex_home.to_path_buf(),
-            helper_executable: std::env::current_exe()
+            helper_executable: internal_cli_helper_executable()
                 .context("failed to locate Corbanu for Claude Plan authentication")?,
             cwd: pane.cwd.clone(),
             claude_config_dir_override: absolute_claude_config_dir_override()?,

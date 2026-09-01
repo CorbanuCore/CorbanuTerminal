@@ -28,6 +28,7 @@ use crate::bottom_pane::CancellationEvent;
 use crate::bottom_pane::SelectionItem;
 use crate::bottom_pane::SelectionViewParams;
 use crate::bottom_pane::ViewCompletion;
+use crate::internal_cli_helper::internal_cli_helper_executable;
 use crate::render::renderable::Renderable;
 use codex_vault::ClaudeAuthSelection;
 use codex_vault::ClaudeAuthSource;
@@ -671,16 +672,16 @@ async fn verify_current_platform_login_health(
     health_timeout: Duration,
     selected_source_id: Option<&str>,
 ) -> Result<String, PlatformLoginHealthCheckError> {
-    let current_executable;
+    let resolved_executable;
     let executable = match executable {
         Some(executable) => executable,
         None => {
-            current_executable = std::env::current_exe().map_err(|error| {
+            resolved_executable = internal_cli_helper_executable().map_err(|error| {
                 PlatformLoginHealthCheckError::Undetermined(format!(
                     "Could not locate Corbanu to verify Claude Code credentials: {error}"
                 ))
             })?;
-            current_executable.as_path()
+            resolved_executable.as_path()
         }
     };
     let mut command = Command::new(executable);

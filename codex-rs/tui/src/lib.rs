@@ -138,6 +138,7 @@ mod hooks_rpc;
 mod ide_context;
 mod inline_visualization;
 pub(crate) mod insert_history;
+mod internal_cli_helper;
 pub use insert_history::insert_history_lines;
 mod key_hint;
 mod keymap;
