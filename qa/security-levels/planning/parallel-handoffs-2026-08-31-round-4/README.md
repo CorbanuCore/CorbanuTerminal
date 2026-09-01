@@ -6,14 +6,14 @@ Integration owner: Codex ingress/classifier lane.
 
 PF-35 external qualification continues independently and is not modified by
 this packet. It still occupies one formal active-sprint slot. PF-22-S02 and
-PF-27-S04 start now; PF-30-S01 remains draft/read-only until PF-22 is integrated
-and archived, then rolls into the released slot.
+PF-27-S04 started in parallel. PF-22-S02 is now integrated and archived, and
+PF-30-S01 has rolled into the released slot from base `b457249aa`.
 
 | Lane | Sprint | Owner | Handoff |
 | --- | --- | --- | --- |
-| protected-runtime | PF-22-S02 | `/root/pf22_protected_runtime` | [Protected runtime](protected-runtime.md) |
+| protected-runtime — completed | PF-22-S02 | `/root/pf22_protected_runtime` | [Protected runtime](protected-runtime.md) |
 | isolated-broker | PF-27-S04 | `/root/pf27_isolated_broker` | [Isolated broker](isolated-broker.md) |
-| source-envelope preparation | PF-30-S01 | `/root/pf30_source_envelope` | [Typed source envelope](source-envelope.md) |
+| source-envelope | PF-30-S01 | `/root/pf30_source_envelope` | [Typed source envelope](source-envelope.md) |
 
 All build, cache, temporary, review and TMUX output belongs beneath
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/<lane>/`. The shared checkout's
@@ -49,4 +49,3 @@ front matter explicitly assigns one of those paths.
 - Do not attempt final Windows or Linux qualification until the integration
   owner confirms the user has switched tailnets. Local macOS construction and
   deterministic tests continue meanwhile.
-

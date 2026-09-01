@@ -1,17 +1,20 @@
 ---
 sprint_id: "PF-30-S01"
 title: "Typed source envelope and trusted ingress"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-30"
 execution_order: 37
-owner: "Jim Ricketts"
-worktree: "/Users/travisgood/Documents/ChatGPT/corbanu-security-levels"
-branch: "feat/p0-security-levels"
-base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
+owner: "/root/pf30_source_envelope"
+parallel_lane: "source-envelope"
+write_scope: "codex-rs/security-policy/src/provenance.rs, codex-rs/security-policy/src/provenance_tests.rs, codex-rs/protocol/src/provenance.rs, codex-rs/core/src/security/ingress/, codex-rs/core/src/mcp_tool_call.rs, codex-rs/core/src/mcp_tool_call_tests.rs, codex-rs/core/src/hook_runtime.rs, codex-rs/core/src/hook_runtime_tests.rs, codex-rs/core/src/client.rs, codex-rs/core/src/client_tests.rs, codex-rs/core/src/tools/router.rs, codex-rs/core/src/tools/router_tests.rs, codex-rs/core/src/agent/control/spawn.rs, codex-rs/core/src/agent/control_tests.rs, qa/security-levels/sprints/PF-30-S01-typed-source-envelope/, docs/sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md"
+integration_gate: "The round-four integration owner audits the literal PF-30 diff against PF-27 and the independent Claude-auth lane, alone registers shared protocol/Core modules and Cargo/Bazel/lock/schema edges, reruns PF-21 compatibility and all affected suites on the combined tree, completes a real-TMUX smoke and read-only Corbanu/Claude Opus 5 Max closure, and archives only after deterministic cache-stable provider serialization is proven."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-source-envelope"
+branch: "feat/p0-security-source-envelope"
+base_commit: "b457249aa29c912cb2d5404f0939e8b2386f4e5e"
 depends_on: "PF-22-S02"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-08-31
 ---
 
 # PF-30-S01 — Typed source envelope and trusted ingress
@@ -39,9 +42,9 @@ updated: 2026-08-28
 
 ## Preconditions
 
-- [ ] Active plan; PF-22-S02 completed and archived.
-- [ ] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
-- [ ] Confirm source pins, declared crate/module paths, and backend/API availability; unresolved security prerequisites block readiness.
+- [x] Active plan; PF-22-S02 completed and archived at the exact recorded base.
+- [x] Exact CorbanuDrive worktree/branch/base and a PF-27-disjoint worker scope are allocated; shared registrations remain integration-owner-only.
+- [ ] Read root and nearest implementation-path AGENTS.md; confirm source pins, provider request paths and fail-closed backend/API availability before code changes.
 
 ## Done
 
@@ -65,7 +68,7 @@ updated: 2026-08-28
 - [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
 - [ ] Focused: `cd codex-rs && just test -p codex-protocol pf_30_s01 && just test -p codex-core pf_30_s01`; confirm tests actually ran.
 - [ ] Integration: full affected crate suites via `just test -p <affected-crate>`; update Bazel locks when manifests change.
-- [ ] TUI applicability: none; integration flows are re-run by PF-26-S02
+- [ ] TUI applicability: no feature UI; run the required supporting real-TMUX `/status`/clean-exit smoke, while PF-26-S02 retains final interaction qualification.
 - [ ] Record candidate/commit, commands, expected/actual outcomes and safe artifact digests; no production credentials or funds.
 
 ## Exit evidence

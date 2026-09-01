@@ -1,8 +1,11 @@
 # PF-30-S01 typed-source-envelope preparation handoff
 
-This lane is read-only until PF-22-S02 is integrated and archived. Do not edit
-repository files, create an implementation branch or change sprint status before
-the integration owner sends a post-PF-22 allocation follow-up.
+PF-22-S02 is integrated and archived. This lane is allocated to
+`/root/pf30_source_envelope` at
+`/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-source-envelope` on
+`feat/p0-security-source-envelope`, base `b457249aa29c912cb2d5404f0939e8b2386f4e5e`.
+Stay inside the recorded sprint write scope; shared registrations remain with
+the integration owner.
 
 ## Frozen preparation result
 
@@ -18,8 +21,8 @@ deterministic so the envelope does not cause cache-prefix churn. Unknown or new
 provider/tool/ingress variants reject or become conservative untrusted content
 before model admission.
 
-After PF-22 archive, the integration owner will allocate a fresh CorbanuDrive
-worktree and audit the final scope against PF-27. The expected worker-owned
+The integration owner allocated a fresh CorbanuDrive worktree and audited the
+declared scope against PF-27. The expected worker-owned
 surfaces are the existing security-policy provenance module/tests, protocol
 provenance re-export/serialization, already-registered Core ingress leaves,
 focused tool/MCP/hook/child/file/provider adapter tests, and

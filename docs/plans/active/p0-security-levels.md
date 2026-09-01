@@ -23,6 +23,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-isolated-broker"
     branch: "feat/p0-security-isolated-broker"
     base_commit: "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-source-envelope"
+    branch: "feat/p0-security-source-envelope"
+    base_commit: "b457249aa29c912cb2d5404f0939e8b2386f4e5e"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-classifier-corpus"
     branch: "feat/p0-security-classifier-corpus"
     base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
@@ -415,6 +418,7 @@ update; it cannot silently change Permissive or an accepted security level.
 | Codex revocation/fence lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-revocation-fence` | `feat/p0-security-revocation-fence` | `5521b681fff0ecb50b17c10bc1dd1356cbecc1b6` | Completed PF-19-S02 candidate `cc48f367999346bbae0c31b23f9105f229638f0d`; merged at `bff3fe02f` with exports at `1f03913ea` |
 | Codex authoritative-state lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-authoritative-state` | `feat/p0-security-authoritative-state` | `5521b681fff0ecb50b17c10bc1dd1356cbecc1b6` | Completed PF-20-S02 candidate `cba62fbc9`; merged at `628c63b3c`, activation still blocked |
 | Codex compatibility/drift lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-compatibility-drift` | `feat/p0-security-compatibility-drift` | `5521b681fff0ecb50b17c10bc1dd1356cbecc1b6` | Completed PF-21-S02 candidate `2555147527c47bd08a2ac9b8e98d706de7432a76`; merged at `c02568c71` and qualified 36/36 |
+| Codex source-envelope lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-source-envelope` | `feat/p0-security-source-envelope` | `b457249aa29c912cb2d5404f0939e8b2386f4e5e` | PF-30-S01 typed source envelope, trusted ingress leaves, deterministic provider serialization, focused tests and lane evidence; shared registrations remain integration-owner-only |
 
 The PF-34-S04 creation coordinate remains the immutable base recorded above.
 After allocation, the lane rebased onto `main` at
@@ -524,8 +528,9 @@ corpus campaign or weakest-supported N100 performance result is claimed.
 
 PF-22-S02 protected runtime integration is completed and archived after clean
 combined-tree gates. PF-27-S04 isolated credential broker is ready for its
-serialized integration, and the released slot may now be allocated to
-PF-30-S01. PF-35-S01's external qualification remains independent. PF-35-S02
+serialized integration, and the released slot is now allocated to PF-30-S01
+from post-archive base `b457249aa29c912cb2d5404f0939e8b2386f4e5e`.
+PF-35-S01's external qualification remains independent. PF-35-S02
 stays gated until S01 is honestly completed and archived.
 
 ## Round-four rolling allocation — 2026-08-31
@@ -534,9 +539,9 @@ The user directed the integration owner to treat PF-35's externally operated
 dataset/qualification campaign as independent of day-to-day engineering
 capacity while preserving its honest `in_progress` evidence state. The formal
 three-sprint limit remains. PF-35-S01 and PF-27-S04 occupy two recorded slots;
-PF-22-S02 has released the third after integration and archive. PF-30-S01's
-read-only preparation is complete and it may now receive an exact allocation
-in that released slot.
+PF-22-S02 released the third after integration and archive. PF-30-S01's
+read-only preparation is complete and its exact CorbanuDrive allocation now
+occupies that released slot.
 
 The immutable dispatch base is
 `43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4`.
@@ -545,7 +550,7 @@ The immutable dispatch base is
 | --- | --- | --- | --- | --- | ---: | ---: |
 | Protected runtime — completed | PF-22-S02 | `/root/pf22_protected_runtime` | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-protected-runtime` | `feat/p0-security-protected-runtime` | 5.0 days | 5.0 days |
 | Isolated broker | PF-27-S04 | `/root/pf27_isolated_broker` | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-isolated-broker` | `feat/p0-security-isolated-broker` | 12.0 days | 4.9 days |
-| Source envelope preparation | PF-30-S01 | `/root/pf30_source_envelope` | Unallocated until PF-22 archive | Unallocated until PF-22 archive | 7.0 days | 4.4 days |
+| Source envelope | PF-30-S01 | `/root/pf30_source_envelope` | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-source-envelope` | `feat/p0-security-source-envelope` | 7.0 days | 4.4 days |
 
 PF-22 consumes four cross-lane contracts and owns the first Core/manifest
 convergence. PF-27 consumes the platform/event/capability contracts and requires
@@ -560,7 +565,8 @@ broker, Vault capability, new broker-client/config leaves and its evidence; it
 does not edit `core/src/security/mod.rs`, Core/root manifests or shared locks.
 The integration owner merged and archived PF-22 first. PF-27 is next rebased
 and receives its serialized Core/Vault/network-proxy registrations before the
-combined-tree rerun. PF-30 may write only after its fresh post-archive allocation.
+combined-tree rerun. PF-30 now writes only within its exact post-archive scope;
+shared module, manifest, lock, navigation and archive surfaces remain serialized.
 
 PF-27 construction uses the PF-27-S03 platform candidates without claiming
 protected eligibility: Linux dedicated UID/service, macOS launchd/XPC helper,
@@ -627,7 +633,7 @@ document original scope, not new passes.
 | `PF-27` | Shared contracts, isolated credential broker and secretless launch | [S01](../../sprints/archive/p0-security-levels/pf-27-s01-shared-security-contracts.md), [S02](../../sprints/current/p0-security-levels/pf-27-s02-secretless-agent-launch.md), [S03](../../sprints/archive/p0-security-levels/pf-27-s03-platform-containment-contract.md), [S04](../../sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md) | S01/S03 completed; S02/S04 draft |
 | `PF-28` | Central output and reflected-secret protection | [S01](../../sprints/current/p0-security-levels/pf-28-s01-central-secret-output-gate.md), [S02](../../sprints/current/p0-security-levels/pf-28-s02-reflected-secret-response-scrubbing.md) | draft |
 | `PF-29` | Protected-mode inventory and human migration | [S01](../../sprints/current/p0-security-levels/pf-29-s01-protected-mode-inventory.md), [S02](../../sprints/current/p0-security-levels/pf-29-s02-human-secret-migration.md) | draft |
-| `PF-30` | Durable provenance and post-taint authority | [S01](../../sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md), [S02](../../sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md), [S03](../../sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) | draft |
+| `PF-30` | Durable provenance and post-taint authority | [S01](../../sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md), [S02](../../sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md), [S03](../../sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md) | S01 in progress; S02/S03 draft |
 | `PF-31` | Isolated retrieval and download promotion | [S01](../../sprints/current/p0-security-levels/pf-31-s01-pinned-retriever-isolation.md), [S02](../../sprints/current/p0-security-levels/pf-31-s02-bounded-fetch-no-fallback.md), [S03](../../sprints/current/p0-security-levels/pf-31-s03-download-quarantine-promotion.md), [S04 completed](../../sprints/archive/p0-security-levels/pf-31-s04-retriever-artifact-preparation.md) | draft |
 | `PF-32` | Screened web facade and search providers | [S01](../../sprints/current/p0-security-levels/pf-32-s01-web-facade-and-registry.md), [S02](../../sprints/current/p0-security-levels/pf-32-s02-existing-search-and-native-bypass.md), [S03](../../sprints/current/p0-security-levels/pf-32-s03-exa-search-adapter.md), [S04](../../sprints/current/p0-security-levels/pf-32-s04-brave-search-adapter.md), [S05](../../sprints/current/p0-security-levels/pf-32-s05-searxng-search-adapter.md), [S06](../../sprints/current/p0-security-levels/pf-32-s06-privacy-routing-and-failover.md) | draft |
 | `PF-33` | Destination validation and connection enforcement | [S01](../../sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md), [S02](../../sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md), [S03 completed](../../sprints/archive/p0-security-levels/pf-33-s03-destination-policy-contract.md) | S03 completed; S01/S02 draft |
