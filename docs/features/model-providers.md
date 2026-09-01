@@ -35,7 +35,7 @@ Corbanu Terminal feature.
 | Account route | What `/providers` shows | Authentication owner |
 | --- | --- | --- |
 | OpenAI Codex Account | Sign-in status, email, and plan when available | Corbanu Terminal's inherited Codex account manager |
-| Claude Plan | Claude Code installation and subscription sign-in status | Claude Code's native Claude account authentication |
+| Claude Plan | Explicit managed-token or Claude Code login source and health | Corbanu's encrypted managed-token path or Claude Code's platform-owned login, exactly as selected |
 
 ### OpenAI Codex Account
 
@@ -51,17 +51,21 @@ The same route is available from first-run onboarding or `corbanu login`.
 
 Claude Code must be installed for this account route.
 
-1. Run `/providers`.
-2. Select **Provider: Claude Code Plan**.
-3. Open the displayed browser URL and sign in with the Claude subscription.
-4. Press Enter in Corbanu Terminal and paste the one-time authorization code
-   into the masked entry view.
-5. Wait for Corbanu Terminal to verify the Claude Code account status.
+1. On first run, select the default **Provider: Anthropic Claude Account** row.
+   On an existing installation, run `/providers` and select **Provider: Claude
+   Code Plan** instead.
+2. Confirm the account route.
+3. Choose **Long-lived subscription token (Recommended)** or **Claude Code
+   login**. The first option is selected by default.
+4. Complete the displayed setup. Token and authorization-code entry are masked.
+5. Wait for Corbanu Terminal to report the exact method as selected.
 6. Run `/model` and select a Claude Plan model.
 
-The one-time authorization code is handled by masked entry. It is not an API key
-and is not placed in chat. OpenAI and Claude account state remain independent;
-signing in to one route does not authenticate the other.
+Corbanu never falls back between the two methods after a choice is persisted.
+OpenAI and Claude account state remain independent; signing in to one route
+does not authenticate the other. See
+[Reliable Claude Plan authentication](claude-plan-authentication.md) for token
+eligibility, platform stores, replacement, and recovery.
 
 ## Included providers
 
@@ -74,7 +78,7 @@ server.
 | --- | --- | --- |
 | OpenAI Codex Account | Built-in `openai` account route | Sign in with device code from `/providers` or `corbanu login`. |
 | Anthropic | Built-in `anthropic` API route | Add `ANTHROPIC_API_KEY` through `/providers` or the encrypted vault. |
-| Claude Plan | Built-in `claude-plan` account route | Use the Claude Code account login surfaced by `/providers`. |
+| Claude Plan | Built-in `claude-plan` account route | Choose the Anthropic Claude account on first run, or use `/providers` later; both offer the recommended long-lived subscription token and Claude Code login. |
 | Ambient | Built-in `ambient` API route | Add `AMBIENT_API_KEY` through `/providers` or the encrypted vault. |
 | Kimi Code | Built-in `kimi-code` API route | Add `KIMI_API_KEY` through `/providers` or the encrypted vault. |
 | Z.AI | Built-in `zai` API route | Add `ZAI_API_KEY` through `/providers` or the encrypted vault. |

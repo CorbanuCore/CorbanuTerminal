@@ -150,6 +150,9 @@ impl Vault {
     fn read_scoped_secret(&self, label: &str) -> Result<Zeroizing<String>, ScopedCredentialError> {
         let normalized =
             super::normalize_label(label).map_err(|_| ScopedCredentialError::InvalidCapability)?;
+        if normalized == crate::MANAGED_CLAUDE_TOKEN_LABEL {
+            return Err(ScopedCredentialError::CredentialTypeDenied);
+        }
         self.with_storage_lock(|| {
             let index = self.load_index()?;
             let metadata =
@@ -188,7 +191,8 @@ fn validate_binding(request: &CredentialCapabilityRequest) -> Result<(), ScopedC
 fn map_vault_error(error: VaultError) -> ScopedCredentialError {
     match error {
         VaultError::NotFound { .. } => ScopedCredentialError::NotFound,
-        VaultError::ProgrammaticUseDenied { .. }
+        VaultError::ProviderManagedCredential { .. }
+        | VaultError::ProgrammaticUseDenied { .. }
         | VaultError::ProgrammaticUseSecurityLevelDenied { .. } => {
             ScopedCredentialError::CredentialTypeDenied
         }

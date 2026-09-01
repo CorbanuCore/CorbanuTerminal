@@ -82,6 +82,7 @@ pub(crate) struct ClaudeCommandPlan {
     pub(crate) artifact_path: PathBuf,
     pub(crate) audit_path: PathBuf,
     pub(crate) timeout_ms: Option<u64>,
+    pub(crate) deferred_claude_plan_auth: Option<DeferredClaudePlanAuth>,
     pub(crate) bridge: Option<ClaudeBridgePlan>,
 }
 
@@ -185,6 +186,7 @@ pub(crate) struct ClaudeBridgePlan {
     pub(crate) kind: ClaudeBridgeKind,
     pub(crate) listener: StdTcpListener,
     pub(crate) bind_addr: SocketAddr,
+    pub(crate) client_auth_token: String,
     pub(crate) upstream_base_url: String,
     pub(crate) upstream_api_key: Option<String>,
     pub(crate) deferred_vault_secret: Option<DeferredVaultSecret>,
@@ -197,10 +199,19 @@ pub(crate) struct DeferredVaultSecret {
     pub(crate) label: String,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct DeferredClaudePlanAuth {
+    pub(crate) codex_home: PathBuf,
+    pub(crate) helper_executable: PathBuf,
+    pub(crate) cwd: PathBuf,
+    pub(crate) claude_config_dir_override: Option<PathBuf>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ClaudeBridgeKind {
     AmbientChat,
     AnthropicPassthrough,
+    AnthropicOauthPassthrough,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -228,6 +239,10 @@ impl std::fmt::Debug for ClaudeCommandPlan {
             .field("artifact_path", &self.artifact_path)
             .field("audit_path", &self.audit_path)
             .field("timeout_ms", &self.timeout_ms)
+            .field(
+                "deferred_claude_plan_auth",
+                &self.deferred_claude_plan_auth.is_some(),
+            )
             .field(
                 "bridge_addr",
                 &self.bridge.as_ref().map(|bridge| bridge.bind_addr),

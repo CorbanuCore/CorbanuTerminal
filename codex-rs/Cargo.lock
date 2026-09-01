@@ -2528,6 +2528,7 @@ dependencies = [
  "whoami 1.6.1",
  "windows-sys 0.52.0",
  "wiremock",
+ "zeroize",
  "zstd",
 ]
 
@@ -4850,6 +4851,8 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "tracing-test",
+ "unicode-normalization",
+ "uuid",
  "zeroize",
 ]
 

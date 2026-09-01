@@ -1,5 +1,7 @@
 // Aggregates all former standalone integration tests as modules.
 #[cfg(unix)]
+mod claude_auth;
+#[cfg(unix)]
 mod focus_palette;
 #[cfg(unix)]
 mod output_text_stream;

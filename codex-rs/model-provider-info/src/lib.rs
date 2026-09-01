@@ -47,21 +47,25 @@ const MAX_STREAM_MAX_RETRIES: u64 = 100;
 /// Hard cap for user-configured `request_max_retries`.
 const MAX_REQUEST_MAX_RETRIES: u64 = 100;
 
-fn provider_auth_timeout_ms() -> NonZeroU64 {
-    match NonZeroU64::new(5_000) {
+fn claude_provider_auth_timeout_ms() -> NonZeroU64 {
+    // Claude Code refresh may itself take up to 30 seconds, and the managed
+    // source must unlock the encrypted vault before emitting its token. Keep
+    // only Claude's outer provider boundary above both inner operations.
+    match NonZeroU64::new(60_000) {
         Some(timeout_ms) => timeout_ms,
-        None => panic!("provider auth timeout must be non-zero"),
+        None => panic!("Claude provider auth timeout must be non-zero"),
     }
 }
 
-fn root_absolute_path() -> AbsolutePathBuf {
-    let current_dir = AbsolutePathBuf::current_dir().unwrap_or_else(|err| {
-        panic!("current directory must resolve to determine provider auth cwd: {err}")
-    });
-    current_dir
-        .ancestors()
-        .last()
-        .unwrap_or_else(|| panic!("current directory must have a filesystem root"))
+fn claude_provider_auth_cwd() -> AbsolutePathBuf {
+    // Claude Code resolves a relative CLAUDE_CONFIG_DIR against the caller's
+    // working directory. Keep the provider helper on that same directory so
+    // its credentials-file identity cannot drift from the profile selected by
+    // the TUI. The command remains a bare installed executable resolved via
+    // PATH, never a project-relative program.
+    AbsolutePathBuf::current_dir().unwrap_or_else(|err| {
+        panic!("current directory must resolve to determine Claude provider auth cwd: {err}")
+    })
 }
 
 const OPENAI_PROVIDER_NAME: &str = "OpenAI";
@@ -1046,9 +1050,13 @@ impl ModelProviderInfo {
             auth: Some(ModelProviderAuthInfo {
                 command: CORBANU_PROVIDER_AUTH_COMMAND.to_string(),
                 args: vec!["internal-claude-oauth-token".to_string()],
-                timeout_ms: provider_auth_timeout_ms(),
-                refresh_interval_ms: 60_000,
-                cwd: root_absolute_path(),
+                timeout_ms: claude_provider_auth_timeout_ms(),
+                // The selected Claude source has its own revision marker and
+                // 401 recovery path. Proactive reruns add no freshness while
+                // making long tool-driven turns contend with unrelated vault
+                // readers for the same encrypted store.
+                refresh_interval_ms: 0,
+                cwd: claude_provider_auth_cwd(),
             }),
             aws: None,
             wire_api: WireApi::Anthropic,

@@ -2250,10 +2250,107 @@ impl App {
                 });
             }
             AppEvent::OpenClaudeCodePlanLogin => {
-                let input_tx =
-                    crate::chatwidget::claude_code_login::start(self.app_event_tx.clone());
+                self.chat_widget.open_claude_auth_method_choice();
+            }
+            AppEvent::RunClaudeSetupToken => {
+                self.chat_widget.open_claude_subscription_token_entry();
+                tui.frame_requester().schedule_frame();
+            }
+            AppEvent::UseClaudeCodePlanLogin => {
+                let codex_home = self.config.codex_home.clone();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result =
+                        crate::chatwidget::claude_code_login::select_existing_claude_code_login(
+                            std::path::Path::new("claude"),
+                            /*health_executable*/ None,
+                            codex_home.as_path(),
+                            Duration::from_secs(10),
+                        )
+                        .await;
+                    tx.send(AppEvent::ClaudeCodePlanLoginSelectionChecked { result });
+                });
+            }
+            AppEvent::UseLegacyClaudeEnvironmentToken => {
+                let codex_home = self.config.codex_home.clone();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || {
+                        let token = std::env::var("CLAUDE_CODE_OAUTH_TOKEN")
+                            .ok()
+                            .filter(|value| !value.trim().is_empty())
+                            .ok_or_else(|| {
+                                "CLAUDE_CODE_OAUTH_TOKEN is missing or blank; the current method was not changed."
+                                    .to_string()
+                            })?;
+                        let selection = codex_vault::ClaudeAuthSelection::new_environment_token(
+                            &token,
+                        )
+                        .map_err(|error| {
+                            format!("Could not identify CLAUDE_CODE_OAUTH_TOKEN: {error}")
+                        })?;
+                        codex_vault::Vault::new(codex_home.to_path_buf())
+                            .save_claude_auth_selection(&selection)
+                            .map_err(|error| {
+                                format!(
+                                    "Could not select CLAUDE_CODE_OAUTH_TOKEN: {error}. The current method was not changed."
+                                )
+                            })?;
+                        Ok(
+                            "Legacy CLAUDE_CODE_OAUTH_TOKEN selected. Retry the Claude Plan request or choose a model from /model."
+                                .to_string(),
+                        )
+                    })
+                    .await
+                    .unwrap_or_else(|error| {
+                        Err(format!(
+                            "Could not select CLAUDE_CODE_OAUTH_TOKEN: {error}. The current method was not changed."
+                        ))
+                    });
+                    tx.send(AppEvent::LegacyClaudeEnvironmentTokenSelected { result });
+                });
+            }
+            AppEvent::LegacyClaudeEnvironmentTokenSelected { result } => match result {
+                Ok(message) => self.chat_widget.add_info_message(message, /*hint*/ None),
+                Err(message) => {
+                    self.chat_widget.add_error_message(message.clone());
+                    self.chat_widget.open_claude_auth_recovery(message);
+                }
+            },
+            AppEvent::ClaudeCodePlanLoginSelectionChecked { result } => match result {
+                    Ok(true) => self.chat_widget.add_info_message(
+                        "Existing Claude Code login selected. Retry the Claude Plan request or choose a model from /model."
+                            .to_string(),
+                        /*hint*/ None,
+                    ),
+                    Ok(false) => {
+                        let input_tx = crate::chatwidget::claude_code_login::start(
+                            self.app_event_tx.clone(),
+                            self.config.codex_home.to_path_buf(),
+                        );
+                        self.chat_widget
+                            .open_claude_code_plan_login_pending(input_tx);
+                    }
+                    Err(message) => {
+                        self.chat_widget.add_error_message(message.clone());
+                        self.chat_widget.open_claude_auth_recovery(message);
+                    }
+                },
+            AppEvent::SaveClaudeManagedSubscriptionToken { token } => {
+                let codex_home = self.config.codex_home.clone();
+                let tx = self.app_event_tx.clone();
+                tokio::spawn(async move {
+                    let result = crate::chatwidget::claude_code_login::enroll_managed_subscription_token(
+                        codex_home.to_path_buf(),
+                        token,
+                    )
+                    .await;
+                    tx.send(AppEvent::ClaudeManagedSubscriptionTokenSaved { result });
+                });
+            }
+            AppEvent::ClaudeManagedSubscriptionTokenSaved { result } => {
                 self.chat_widget
-                    .open_claude_code_plan_login_pending(input_tx);
+                    .on_claude_managed_subscription_token_saved(result);
             }
             AppEvent::ClaudeCodePlanLoginReady {
                 verification_url,

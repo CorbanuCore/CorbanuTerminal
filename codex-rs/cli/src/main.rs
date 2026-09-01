@@ -147,6 +147,14 @@ enum Subcommand {
     #[clap(hide = true, name = "internal-claude-oauth-token")]
     InternalClaudeOauthToken,
 
+    /// Internal: verify the platform-owned Claude Code login without printing credential data.
+    #[clap(hide = true, name = "internal-claude-login-health")]
+    InternalClaudeLoginHealth {
+        /// Exact metadata-only source identity to verify; omitted selects the healthy platform profile.
+        #[arg(long)]
+        source_id: Option<String>,
+    },
+
     /// Internal: print one rental endpoint token for command-backed provider authentication.
     #[clap(hide = true, name = "internal-gpu-endpoint-token")]
     InternalGpuEndpointToken { rental_id: String },
@@ -1563,6 +1571,12 @@ async fn cli_main(
         Some(Subcommand::InternalClaudeOauthToken) => {
             run_internal_claude_oauth_token().await?;
         }
+        Some(Subcommand::InternalClaudeLoginHealth { source_id }) => {
+            let source_id =
+                claude_oauth::verify_current_platform_claude_login_health(source_id.as_deref())
+                    .await?;
+            println!("{source_id}");
+        }
         Some(Subcommand::InternalGpuEndpointToken { rental_id }) => {
             run_internal_gpu_endpoint_token(rental_id)?;
         }
@@ -2349,7 +2363,8 @@ async fn run_vault_command(command: VaultCommand) -> anyhow::Result<()> {
 }
 
 async fn run_internal_claude_oauth_token() -> anyhow::Result<()> {
-    let access_token = claude_oauth::resolve_claude_oauth_access_token().await?;
+    let codex_home = find_codex_home()?;
+    let access_token = claude_oauth::resolve_claude_oauth_access_token(&codex_home).await?;
     std::io::stdout().write_all(access_token.as_bytes())?;
     Ok(())
 }
@@ -2643,6 +2658,7 @@ fn unsupported_subcommand_name_for_strict_config(
         | Some(Subcommand::Telegram(_))
         | Some(Subcommand::Doctor(_))
         | Some(Subcommand::InternalClaudeOauthToken)
+        | Some(Subcommand::InternalClaudeLoginHealth { .. })
         | Some(Subcommand::InternalGpuEndpointToken { .. })
         | Some(Subcommand::InternalGpuController(_)) => None,
         Some(Subcommand::AppServer(app_server)) if app_server.subcommand.is_none() => None,
