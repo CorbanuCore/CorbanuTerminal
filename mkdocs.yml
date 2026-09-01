@@ -179,7 +179,6 @@ nav:
                   - "PF-26-S03 — Human acceptance and docs": sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md
           - Current Provider Auth Work:
               - Overview: sprints/current/unified-provider-auth/index.md
-              - "PF-49-S01 — Provider status and eligibility": sprints/current/unified-provider-auth/pf-49-s01-status-and-eligibility.md
               - "PF-50-S01 — Shared API-key flow controller": sprints/current/unified-provider-auth/pf-50-s01-api-key-flow-controller.md
               - "PF-51-S01 — OpenAI account auth adapter": sprints/current/unified-provider-auth/pf-51-s01-openai-account-adapter.md
               - "PF-52-S01 — Claude auth adapter": sprints/current/unified-provider-auth/pf-52-s01-claude-auth-adapter.md

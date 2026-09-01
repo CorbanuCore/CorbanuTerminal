@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-49-S01"
 title: "Provider status and eligibility"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-49"
 execution_order: 8
@@ -56,7 +56,7 @@ updated: 2026-09-01
 
 ## Remaining
 
-- [ ] Record the primary-accepted implementation commit and archive the sprint.
+- [x] Recorded primary-accepted implementation commit `5fcde1c1d9e6703d8618b23572abe69e44ada96d` and archived the sprint.
 
 ## Verification
 
@@ -69,15 +69,15 @@ updated: 2026-09-01
 - [x] Unrestricted full `codex-model-provider` rerun passed all 73 tests with 0 skipped, including both affected provider-key precedence/refresh tests.
 - [x] TUI applicability resolved: snapshots remain hidden for later host sprints, typed fixtures are recorded, and `cargo check -p codex-tui` passed in 57.96s with one unrelated pre-existing `unused_mut` warning at `tui/src/chatwidget/claude_code_login.rs:280`.
 - [x] Final governance passed: `python3 docs/plans/check.py` reported active 2/2 with 0 available slots, `python3 docs/sprints/check.py` reported 66 current and 104 archived, and final `git diff --check` exited 0.
-- [ ] Post-commit verification: rerun governance checks against the recorded implementation commit before archival.
+- [x] Post-commit verification: governance checks passed against implementation commit `5fcde1c1d9e6703d8618b23572abe69e44ada96d` before archival.
 
 ## Exit evidence
 
-- [ ] Implementation commit pending; the primary integration audit accepted the corrected precedence contract, metadata boundaries, durability, redaction, dependency direction, and final evidence.
+- [x] Implementation commit `5fcde1c1d9e6703d8618b23572abe69e44ada96d`; the primary integration audit accepted the corrected precedence contract, metadata boundaries, durability, redaction, dependency direction, and final evidence.
 - [x] State schema recorded: `ProviderMetadataSnapshot` feeds an ordered `ProviderStatusCatalog` with per-method state plus aggregate configuration, eligibility, current selection, and availability; eligibility v1 serializes only sorted stable inactive identities.
 - [x] PF-49 implementation paths recorded: `codex-rs/Cargo.lock`; `codex-rs/login/src/lib.rs`; `codex-rs/login/src/auth/{manager.rs,provider_key_vault.rs,auth_tests.rs}`; `codex-rs/provider-auth/{Cargo.toml,src/lib.rs,src/eligibility.rs,src/eligibility_tests.rs,src/status.rs,src/status_contract.rs,src/status_tests.rs}`; and this sprint ledger. `MODULE.bazel.lock` was authorized but unchanged.
 - [x] Migration, restart, malformed/future-version, unknown-identity, permission, precedence, and redaction fixtures are exercised by the 17-test provider-auth suite.
 - [x] No raw credential or arbitrary upstream error appears in debug, error, snapshot, or serialized eligibility artifacts.
 - [x] Change-size audit recorded: before the required final precedence regression, the five new PF-49 modules were approximately 1,435 lines including approximately 507 test lines; the final tree is 1,482 lines including 558 test lines. Production remains split coherently into `eligibility.rs` (245), `status.rs` (373), and `status_contract.rs` (306), each under 400 lines. Further mechanical commit splitting would leave the hidden renderer-independent contract temporarily unexported or testless, so PF-49 remains one coherent sprint.
 - [x] `Done` and `Remaining` reflect the primary-review-ready tree and environmental rerun requirement.
-- [ ] Completed record archived.
+- [x] Completed record archived under `docs/sprints/archive/unified-provider-auth/`.
