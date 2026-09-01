@@ -577,6 +577,7 @@ mod tests {
     use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
     use codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR;
     use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
+    use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
     use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
     use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
     use codex_model_provider_info::ModelProviderAwsAuthInfo;
@@ -835,13 +836,15 @@ mod tests {
                 .all(|model| model.slug != "claude-opus-4-8-plan"),
             "deprecated Claude Opus 4.8 Plan should not remain in the static catalog"
         );
-        assert!(
-            catalog
-                .models
-                .iter()
-                .any(|model| model.slug == CLAUDE_FABLE_5_PLAN_MODEL),
-            "Claude Fable Plan should be available in the static Claude Plan catalog"
-        );
+        for model in [CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_FABLE_5_1_PLAN_MODEL] {
+            assert!(
+                catalog
+                    .models
+                    .iter()
+                    .any(|candidate| candidate.slug == model),
+                "{model} should be available in the static Claude Plan catalog"
+            );
+        }
     }
 
     #[tokio::test]

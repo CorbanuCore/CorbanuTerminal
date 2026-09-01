@@ -8,10 +8,10 @@ parallel_sprint_limit: 1
 integration_owner: "Jim Ricketts"
 activation_authority: "Travis Good — final product authority"
 activation_basis: "Travis Good's 2026-08-30 decision to give reliable Claude subscription authentication its own plan and branch, with the long-lived subscription token as the recommended default and current credential detection plus legacy migration repaired."
-target_release: "TBD"
+target_release: "0.1.37"
 deadline: "TBD"
 created: 2026-08-30
-updated: 2026-08-31
+updated: 2026-09-01
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Shipping MVP — LIVE"
@@ -20,6 +20,9 @@ implementation_worktrees:
   - path: "/Users/Neo/.codex/worktrees/claude-subscription-auth-recovered"
     branch: "feat/claude-subscription-auth-recovered"
     base_commit: "9ec532ed144ff041cae32592414e9e21873df6fe"
+  - path: "/home/pfrpc/repos/CorbanuTerminal-0.1.37"
+    branch: "release/0.1.37"
+    base_commit: "c428cb1021e9287a5e7b6b5a5b4a7094713fbf51"
 ---
 
 # Reliable Claude subscription authentication
@@ -37,7 +40,7 @@ Plan lifecycle: `docs/plans/index.md`
 | Product authority | Travis Good — final product authority |
 | Authoritative decision | On 2026-08-30, make reliable Claude subscription authentication a separate plan and branch; recommend a long-lived subscription token while retaining an explicit Claude Code login compatibility choice and repairing current/legacy credential management. |
 | Delivery owner | Jim Ricketts |
-| Target release | TBD |
+| Target release | 0.1.37 |
 | Deadline | TBD |
 
 This activation allocates a plan and branch only. It does not create an
@@ -118,6 +121,8 @@ exposing the credential or discarding unrelated provider state.
   cancel is inert and no legacy credential is deleted automatically.
 - Deterministic provider-auth source selection across startup, refresh, 401,
   restart, resume, child agents, and native Claude panes.
+- Claude Fable 5.1 availability through the persisted Claude Plan credential,
+  with exact picker-to-provider and Plan-to-upstream model mapping.
 - Focused unit/integration coverage, cross-platform qualification, true-TUI
   success/failure/recovery/resume proof, shipped guidance, and human acceptance.
 
@@ -170,6 +175,7 @@ exposing the credential or discarding unrelated provider state.
 | Owner | Worktree | Branch | Base commit | Scope |
 | --- | --- | --- | --- | --- |
 | Jim Ricketts | `/Users/Neo/.codex/worktrees/claude-subscription-auth-recovered` | `feat/claude-subscription-auth-recovered` | `9ec532ed144ff041cae32592414e9e21873df6fe` | Recovered final integration lane based on the then-current remote `main`; exact per-sprint write scopes remain authoritative. |
+| Release owner | `/home/pfrpc/repos/CorbanuTerminal-0.1.37` | `release/0.1.37` | `c428cb1021e9287a5e7b6b5a5b4a7094713fbf51` | Fable 5.1 Claude Plan catalog, provider routing, picker proof, and release integration. |
 
 Parallel implementation is not enabled. `parallel_sprint_limit: 1` requires one
 ready or in-progress sprint at a time, and shared auth/TUI/persistence surfaces
@@ -215,6 +221,7 @@ run `python3 docs/sprints/check.py`.
 | `PF-45` (`CSA-04`) | Legacy/conflict migration plus failure, recovery, and resume UX | [CSA-04 / PF-45-S01](../../sprints/archive/claude-subscription-auth/pf-45-s01-auth-choice-and-recovery.md) | completed and archived |
 | `PF-46` (`CSA-05`) | Final automated, cross-platform-fixture, true-TUI, documentation, and review qualification | [CSA-05 / PF-46-S01](../../sprints/archive/claude-subscription-auth/pf-46-s01-final-qualification.md) | completed and archived; live-account, live-repository, human, and release gates remain plan-level work |
 | `PF-47` (`CSA-06`) | First-run Anthropic-account onboarding integrated with the existing explicit Claude authentication choice | [CSA-06 / PF-47-S01](../../sprints/archive/claude-subscription-auth/pf-47-s01-first-run-anthropic-account.md) | completed and archived; startup account choice, cancel safety, persistence, restart, and typed-Tmux qualification passed |
+| `PF-55` (`CSA-07`) | Fable 5.1 catalog availability and exact Claude Plan upstream routing | [CSA-07 / PF-55-S01](../../sprints/current/claude-subscription-auth/pf-55-s01-fable-5-1.md) | in progress for 0.1.37 |
 
 ## Hard dependency graph
 
@@ -265,6 +272,8 @@ completed and archived.
 6. Correct the human-acceptance onboarding gap in CSA-06 by routing first-run
    Anthropic-account selection into the already-qualified Claude auth choice,
    then repeat focused, typed-Tmux, and final review qualification.
+7. Add Fable 5.1 as a Claude Plan catalog model in CSA-07, preserving Fable 5,
+   exact persisted-provider selection, and the upstream `claude-fable-5-1` slug.
 
 ## Requirement-to-evidence traceability
 
@@ -278,6 +287,7 @@ completed and archived.
 | Cross-platform support | CSA-03 / CSA-05 | macOS Keychain plus Linux/Windows file evidence on final candidate |
 | User-visible recovery | CSA-04 / CSA-05 | True-TUI missing-token, revoked-token, replacement, and resumed-request flows |
 | First-run Anthropic account | CSA-06 | Onboarding state/snapshot tests plus typed-Tmux recommended, compatibility, cancel, persistence, and restart flows |
+| Fable 5.1 availability | CSA-07 | Provider resolution, upstream-wire mapping, bundled catalog, static provider catalog, semantic picker assertions, and reviewed picker snapshot |
 
 ## Automated evidence
 
@@ -354,7 +364,7 @@ due benchmark work is neither added nor waived by this plan.
 
 ## Release linkage
 
-- Release record: `qa/release/<version>/` — target version pending.
+- Release record: `qa/release/0.1.37/RELEASE-CANDIDATE.md`.
 - Benchmark tracker row: `benchmarks/README.md` when due for the target release.
 - Remaining blockers: named human acceptance with a live eligible Anthropic
   account, TensorCash and Isometric Game live-repository runs, physical

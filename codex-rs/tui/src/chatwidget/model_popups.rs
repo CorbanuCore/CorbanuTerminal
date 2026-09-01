@@ -21,6 +21,8 @@ use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
 #[cfg(test)]
+use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
+#[cfg(test)]
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL;
@@ -1445,10 +1447,12 @@ mod tests {
             ChatWidget::model_provider_for_selection(CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL).as_deref(),
             Some(CLAUDE_PLAN_PROVIDER_ID)
         );
-        assert_eq!(
-            ChatWidget::model_provider_for_selection(CLAUDE_FABLE_5_PLAN_MODEL).as_deref(),
-            Some(CLAUDE_PLAN_PROVIDER_ID)
-        );
+        for model in [CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_FABLE_5_1_PLAN_MODEL] {
+            assert_eq!(
+                ChatWidget::model_provider_for_selection(model).as_deref(),
+                Some(CLAUDE_PLAN_PROVIDER_ID)
+            );
+        }
         assert_eq!(
             ChatWidget::model_provider_for_selection(ANTHROPIC_DEFAULT_MODEL).as_deref(),
             Some(CLAUDE_PLAN_PROVIDER_ID)
@@ -1679,10 +1683,11 @@ mod tests {
             CLAUDE_PLAN_MODEL,
             /*show_in_picker*/ true
         )));
-        assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
-            CLAUDE_FABLE_5_PLAN_MODEL,
-            /*show_in_picker*/ true
-        )));
+        for model in [CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_FABLE_5_1_PLAN_MODEL] {
+            assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
+                model, /*show_in_picker*/ true
+            )));
+        }
         assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
             DEEPSEEK_DEFAULT_MODEL,
             /*show_in_picker*/ true

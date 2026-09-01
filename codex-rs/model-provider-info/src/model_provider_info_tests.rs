@@ -603,6 +603,7 @@ fn test_create_anthropic_provider() {
     );
     assert_eq!(ANTHROPIC_DEFAULT_MODEL, "claude-opus-5");
     assert_eq!(CLAUDE_FABLE_5_MODEL, "claude-fable-5");
+    assert_eq!(CLAUDE_FABLE_5_1_MODEL, "claude-fable-5-1");
 }
 
 #[test]
@@ -650,6 +651,8 @@ fn test_create_claude_plan_provider() {
     assert_eq!(CLAUDE_PLAN_UPSTREAM_MODEL, ANTHROPIC_DEFAULT_MODEL);
     assert_eq!(CLAUDE_FABLE_5_PLAN_MODEL, "claude-fable-5-plan");
     assert_eq!(CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL, CLAUDE_FABLE_5_MODEL);
+    assert_eq!(CLAUDE_FABLE_5_1_PLAN_MODEL, "claude-fable-5-1-plan");
+    assert_eq!(CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL, CLAUDE_FABLE_5_1_MODEL);
 }
 
 #[test]
@@ -1490,8 +1493,10 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         ("glm-5.3", ZAI_PROVIDER_ID),
         (CLAUDE_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
+        (CLAUDE_FABLE_5_1_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (ANTHROPIC_DEFAULT_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_MODEL, CLAUDE_PLAN_PROVIDER_ID),
+        (CLAUDE_FABLE_5_1_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (OPENROUTER_GROK_4_6_MODEL, OPENROUTER_PROVIDER_ID),
         ("x-ai/grok-4.5", OPENROUTER_PROVIDER_ID),
         ("moonshotai/kimi-k3", OPENROUTER_PROVIDER_ID),
@@ -1523,6 +1528,34 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
     }
     assert_eq!(canonical_catalog_provider(""), None);
     assert_eq!(canonical_catalog_provider("private/custom-model"), None);
+}
+
+#[test]
+fn fable_plan_versions_resolve_to_their_exact_upstream_models() {
+    for (upstream_model, plan_model) in [
+        (CLAUDE_FABLE_5_MODEL, CLAUDE_FABLE_5_PLAN_MODEL),
+        (CLAUDE_FABLE_5_1_MODEL, CLAUDE_FABLE_5_1_PLAN_MODEL),
+    ] {
+        assert_eq!(
+            resolve_model_for_provider(Some(upstream_model.to_string()), CLAUDE_PLAN_PROVIDER_ID)
+                .as_deref(),
+            Some(plan_model)
+        );
+        assert_eq!(
+            resolve_model_for_provider(Some(plan_model.to_string()), CLAUDE_PLAN_PROVIDER_ID)
+                .as_deref(),
+            Some(plan_model)
+        );
+        assert_eq!(
+            corrected_catalog_provider(plan_model, AMBIENT_PROVIDER_ID),
+            Some(CLAUDE_PLAN_PROVIDER_ID)
+        );
+        assert_eq!(
+            resolve_model_for_provider(Some(upstream_model.to_string()), ANTHROPIC_PROVIDER_ID)
+                .as_deref(),
+            Some(upstream_model)
+        );
+    }
 }
 
 #[test]

@@ -1505,6 +1505,7 @@ fn bundled_models_json_tracks_verified_image_capabilities() {
         "google/gemini-3.5-flash",
         "claude-opus-5-plan",
         "claude-fable-5-plan",
+        "claude-fable-5-1-plan",
         "claude-opus-5",
         "claude-fable-5",
     ] {
@@ -1527,13 +1528,14 @@ fn bundled_models_json_tracks_verified_image_capabilities() {
 
 #[test]
 fn bundled_claude_5_models_have_provider_reported_output_limits() {
-    // Verified against Anthropic's authenticated `/v1/models/{model_id}` responses on 2026-08-01.
+    // Fable 5.1 keeps the existing Fable family request ceiling on the Claude Plan wire.
     let response = crate::bundled_models_response()
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
 
     for (slug, max_output_tokens) in [
         ("claude-opus-5-plan", 128_000),
         ("claude-fable-5-plan", 128_000),
+        ("claude-fable-5-1-plan", 128_000),
         ("claude-opus-5", 128_000),
         ("claude-fable-5", 128_000),
     ] {
@@ -2267,37 +2269,47 @@ fn bundled_models_json_contains_openrouter_models() {
         "deprecated Claude Opus 4.8 variants must not appear in the bundled catalog"
     );
 
-    let claude_fable_plan = response
-        .models
-        .iter()
-        .find(|model| model.slug == "claude-fable-5-plan")
-        .expect("bundled models.json should include Claude Fable 5 Plan");
-
-    assert_eq!(claude_fable_plan.display_name, "Claude Fable 5 Plan");
-    assert_eq!(
-        claude_fable_plan.description.as_deref(),
-        Some("Claude Fable 5 through Claude Code subscription auth in Corbanu Terminal.")
-    );
-    assert_eq!(claude_fable_plan.context_window, Some(1_000_000));
-    assert_eq!(
-        claude_fable_plan.default_reasoning_level,
-        Some(ReasoningEffort::High)
-    );
-    assert_eq!(
-        claude_fable_plan
-            .supported_reasoning_levels
+    for (slug, display_name, description) in [
+        (
+            "claude-fable-5-plan",
+            "Claude Fable 5 Plan",
+            "Claude Fable 5 through Claude Code subscription auth in Corbanu Terminal.",
+        ),
+        (
+            "claude-fable-5-1-plan",
+            "Claude Fable 5.1 Plan",
+            "Claude Fable 5.1 through Claude Code subscription auth in Corbanu Terminal.",
+        ),
+    ] {
+        let claude_fable_plan = response
+            .models
             .iter()
-            .map(|level| level.effort.clone())
-            .collect::<Vec<_>>(),
-        vec![
-            ReasoningEffort::Low,
-            ReasoningEffort::Medium,
-            ReasoningEffort::High,
-            ReasoningEffort::XHigh,
-            ReasoningEffort::Max,
-        ]
-    );
-    assert_eq!(claude_fable_plan.visibility, ModelVisibility::List);
+            .find(|model| model.slug == slug)
+            .unwrap_or_else(|| panic!("bundled models.json should include {display_name}"));
+
+        assert_eq!(claude_fable_plan.display_name, display_name);
+        assert_eq!(claude_fable_plan.description.as_deref(), Some(description));
+        assert_eq!(claude_fable_plan.context_window, Some(1_000_000));
+        assert_eq!(
+            claude_fable_plan.default_reasoning_level,
+            Some(ReasoningEffort::High)
+        );
+        assert_eq!(
+            claude_fable_plan
+                .supported_reasoning_levels
+                .iter()
+                .map(|level| level.effort.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                ReasoningEffort::Low,
+                ReasoningEffort::Medium,
+                ReasoningEffort::High,
+                ReasoningEffort::XHigh,
+                ReasoningEffort::Max,
+            ]
+        );
+        assert_eq!(claude_fable_plan.visibility, ModelVisibility::List);
+    }
 
     let claude_fable = response
         .models

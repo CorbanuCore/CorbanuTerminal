@@ -18,6 +18,7 @@ use codex_model_provider_info::AMBIENT_KIMI_K2_7_CODE_MODEL;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
 use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
+use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
@@ -3885,9 +3886,11 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     assert!(
         claude_plan_popup.contains("[Claude Plan]")
             && claude_plan_popup.contains(CLAUDE_PLAN_MODEL)
-            && claude_plan_popup.contains(CLAUDE_FABLE_5_PLAN_MODEL),
+            && claude_plan_popup.contains(CLAUDE_FABLE_5_PLAN_MODEL)
+            && claude_plan_popup.contains(CLAUDE_FABLE_5_1_PLAN_MODEL),
         "expected Claude Code models in the Claude Plan tab:\n{claude_plan_popup}"
     );
+    insta::assert_snapshot!("claude_plan_model_picker_fable_versions", claude_plan_popup);
     assert!(
         !claude_plan_popup.contains("claude-opus-4-8-plan"),
         "deprecated Claude Opus 4.8 Plan must not appear in the picker:\n{claude_plan_popup}"

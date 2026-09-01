@@ -84,6 +84,7 @@ pub const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1";
 pub const ANTHROPIC_DEFAULT_MODEL: &str = "claude-opus-5";
 pub const ANTHROPIC_LEGACY_OPUS_4_8_MODEL: &str = "claude-opus-4-8";
 pub const CLAUDE_FABLE_5_MODEL: &str = "claude-fable-5";
+pub const CLAUDE_FABLE_5_1_MODEL: &str = "claude-fable-5-1";
 pub const ANTHROPIC_API_KEY_ENV_VAR: &str = "ANTHROPIC_API_KEY";
 const CLAUDE_PLAN_PROVIDER_NAME: &str = "Claude Plan";
 pub const CLAUDE_PLAN_PROVIDER_ID: &str = "claude-plan";
@@ -92,6 +93,8 @@ pub const CLAUDE_PLAN_UPSTREAM_MODEL: &str = ANTHROPIC_DEFAULT_MODEL;
 pub const CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL: &str = "claude-opus-4-8-plan";
 pub const CLAUDE_FABLE_5_PLAN_MODEL: &str = "claude-fable-5-plan";
 pub const CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL: &str = CLAUDE_FABLE_5_MODEL;
+pub const CLAUDE_FABLE_5_1_PLAN_MODEL: &str = "claude-fable-5-1-plan";
+pub const CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL: &str = CLAUDE_FABLE_5_1_MODEL;
 const AMBIENT_PROVIDER_NAME: &str = "Ambient";
 pub const AMBIENT_PROVIDER_ID: &str = "ambient";
 pub const AMBIENT_BASE_URL: &str = "https://api.ambient.xyz/v1";
@@ -318,11 +321,17 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     }
     if matches!(
         model,
-        CLAUDE_PLAN_MODEL | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL | CLAUDE_FABLE_5_PLAN_MODEL
+        CLAUDE_PLAN_MODEL
+            | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
+            | CLAUDE_FABLE_5_PLAN_MODEL
+            | CLAUDE_FABLE_5_1_PLAN_MODEL
     ) {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
-    if model == ANTHROPIC_DEFAULT_MODEL || model == CLAUDE_FABLE_5_MODEL {
+    if matches!(
+        model,
+        ANTHROPIC_DEFAULT_MODEL | CLAUDE_FABLE_5_MODEL | CLAUDE_FABLE_5_1_MODEL
+    ) {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
     if model == META_DEFAULT_MODEL {
@@ -506,7 +515,8 @@ pub fn resolve_model_for_provider(
                 if model.trim().starts_with("claude-")
                     && model.trim() != CLAUDE_PLAN_MODEL
                     && model.trim() != CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
-                    && model.trim() != CLAUDE_FABLE_5_PLAN_MODEL =>
+                    && model.trim() != CLAUDE_FABLE_5_PLAN_MODEL
+                    && model.trim() != CLAUDE_FABLE_5_1_PLAN_MODEL =>
             {
                 Some(model)
             }
@@ -522,12 +532,16 @@ pub fn resolve_model_for_provider(
             Some(model) if model.trim() == CLAUDE_FABLE_5_MODEL => {
                 Some(CLAUDE_FABLE_5_PLAN_MODEL.to_string())
             }
+            Some(model) if model.trim() == CLAUDE_FABLE_5_1_MODEL => {
+                Some(CLAUDE_FABLE_5_1_PLAN_MODEL.to_string())
+            }
             Some(model)
                 if matches!(
                     model.trim(),
                     CLAUDE_PLAN_MODEL
                         | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
                         | CLAUDE_FABLE_5_PLAN_MODEL
+                        | CLAUDE_FABLE_5_1_PLAN_MODEL
                 ) =>
             {
                 Some(model)

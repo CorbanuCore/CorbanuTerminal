@@ -32,6 +32,8 @@ use codex_model_provider::create_model_provider;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
 use codex_model_provider_info::CHATGPT_CODEX_BASE_URL;
+use codex_model_provider_info::CLAUDE_FABLE_5_1_MODEL;
+use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
@@ -558,6 +560,17 @@ fn anthropic_api_request_repairs_tool_result_after_trailing_assistant_text() {
             ],
         }))
     );
+}
+
+#[test]
+fn claude_plan_fable_versions_use_exact_upstream_slugs() {
+    for (plan_model, upstream_model) in [
+        (CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_FABLE_5_MODEL),
+        (CLAUDE_FABLE_5_1_PLAN_MODEL, CLAUDE_FABLE_5_1_MODEL),
+    ] {
+        assert_eq!(super::anthropic_upstream_model(plan_model), upstream_model);
+        assert!(super::is_claude_plan_model_slug(plan_model));
+    }
 }
 
 #[test]

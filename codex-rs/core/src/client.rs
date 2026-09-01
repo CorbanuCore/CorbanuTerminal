@@ -158,6 +158,8 @@ use codex_model_provider::create_model_provider;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::AMBIENT_LEGACY_GLM_5_2_FP8_MODEL;
 use codex_model_provider_info::ANTHROPIC_LEGACY_OPUS_4_8_MODEL;
+use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
+use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL;
@@ -4458,6 +4460,7 @@ fn anthropic_upstream_model(model: &str) -> &str {
         CLAUDE_PLAN_MODEL => CLAUDE_PLAN_UPSTREAM_MODEL,
         CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL => ANTHROPIC_LEGACY_OPUS_4_8_MODEL,
         CLAUDE_FABLE_5_PLAN_MODEL => CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL,
+        CLAUDE_FABLE_5_1_PLAN_MODEL => CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL,
         _ => model,
     }
 }
@@ -4465,7 +4468,10 @@ fn anthropic_upstream_model(model: &str) -> &str {
 fn is_claude_plan_model_slug(model: &str) -> bool {
     matches!(
         model.trim(),
-        CLAUDE_PLAN_MODEL | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL | CLAUDE_FABLE_5_PLAN_MODEL
+        CLAUDE_PLAN_MODEL
+            | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
+            | CLAUDE_FABLE_5_PLAN_MODEL
+            | CLAUDE_FABLE_5_1_PLAN_MODEL
     )
 }
 
