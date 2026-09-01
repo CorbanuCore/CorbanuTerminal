@@ -86,6 +86,32 @@ pub enum CodexAuth {
     BedrockApiKey(BedrockApiKeyAuth),
 }
 
+/// Metadata-only location of a stored provider API key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderApiKeyStorageSource {
+    EncryptedVault,
+    LegacyPlaintext,
+}
+
+/// Metadata-only state of a provider API key in Corbanu-managed storage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderApiKeyStorageMetadata {
+    Stored { source: ProviderApiKeyStorageSource },
+    Missing,
+    Suppressed,
+}
+
+/// Metadata-only state of the primary OpenAI authentication boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenAiAuthMetadata {
+    Missing,
+    Account,
+    ApiKey,
+    ExternallyManaged,
+    RecoveryRequired,
+    Unsupported,
+}
+
 /// Policy for resolving Agent Identity auth from a broader Codex auth snapshot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentIdentityAuthPolicy {
@@ -1251,6 +1277,17 @@ pub fn provider_api_key_from_auth_storage(
     legacy_provider_key(codex_home, provider_key_id)
 }
 
+/// Inspect provider-key storage without revealing or decrypting the credential.
+pub fn provider_api_key_metadata_from_auth_storage(
+    codex_home: &Path,
+    provider_key_id: &str,
+) -> std::io::Result<ProviderApiKeyStorageMetadata> {
+    if legacy_provider_key_is_deleted(codex_home, provider_key_id)? {
+        return Ok(ProviderApiKeyStorageMetadata::Suppressed);
+    }
+    super::provider_key_vault::provider_key_metadata(codex_home, provider_key_id)
+}
+
 /// Read a provider key from the legacy plaintext `provider_auth.json` store only.
 pub(super) fn legacy_provider_key(
     codex_home: &Path,
@@ -1262,6 +1299,16 @@ pub(super) fn legacy_provider_key(
         .map(String::as_str)
         .filter(|value| !value.trim().is_empty())
         .map(str::to_string))
+}
+
+pub(super) fn legacy_provider_key_is_present(
+    codex_home: &Path,
+    provider_key_id: &str,
+) -> std::io::Result<bool> {
+    Ok(load_provider_auth(codex_home)?
+        .api_keys
+        .get(provider_key_id)
+        .is_some_and(|value| !value.trim().is_empty()))
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -3028,6 +3075,24 @@ impl AuthManager {
     /// Returns the effective backend auth mode for the current authentication.
     pub fn auth_mode(&self) -> Option<AuthMode> {
         self.auth_cached().as_ref().map(CodexAuth::auth_mode)
+    }
+
+    /// Inspect the primary OpenAI auth boundary without returning credential material.
+    pub fn openai_auth_metadata(&self) -> OpenAiAuthMetadata {
+        let Some(auth) = self.auth_cached() else {
+            return OpenAiAuthMetadata::Missing;
+        };
+        if self.refresh_failure_for_auth(&auth).is_some() {
+            return OpenAiAuthMetadata::RecoveryRequired;
+        }
+        match auth.api_auth_mode() {
+            AuthMode::Chatgpt | AuthMode::ChatgptAuthTokens | AuthMode::PersonalAccessToken => {
+                OpenAiAuthMetadata::Account
+            }
+            AuthMode::ApiKey => OpenAiAuthMetadata::ApiKey,
+            AuthMode::Headers | AuthMode::AgentIdentity => OpenAiAuthMetadata::ExternallyManaged,
+            AuthMode::BedrockApiKey => OpenAiAuthMetadata::Unsupported,
+        }
     }
 
     pub fn provider_api_key(&self, provider_key_id: &str) -> std::io::Result<Option<String>> {

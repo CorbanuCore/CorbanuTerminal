@@ -4038,8 +4038,13 @@ dependencies = [
 name = "codex-provider-auth"
 version = "0.1.35"
 dependencies = [
+ "codex-login",
  "codex-model-provider-info",
+ "codex-vault",
  "pretty_assertions",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

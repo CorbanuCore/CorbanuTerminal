@@ -4,6 +4,43 @@
 //! This crate derives user-facing setup identities from the resolved runtime
 //! provider map and never creates a second transport registry.
 
+mod eligibility;
+mod status;
+mod status_contract;
+
+pub use eligibility::ProviderActivationPolicy;
+pub use eligibility::ProviderEligibility;
+pub use eligibility::ProviderEligibilityError;
+pub use eligibility::ProviderEligibilityId;
+pub use eligibility::ProviderEligibilityStore;
+pub use status::ProviderStatusResolver;
+pub use status_contract::ApiKeyCredentialMetadata;
+pub use status_contract::ClaudeCredentialMetadata;
+pub use status_contract::ClaudeCredentialSource;
+pub use status_contract::CommandAuthMetadata;
+pub use status_contract::ConfiguredAvailability;
+pub use status_contract::CorbanuCredentialSource;
+pub use status_contract::CorbanuPlanMetadata;
+pub use status_contract::CredentialControl;
+pub use status_contract::CurrentProviderSelection;
+pub use status_contract::EnvironmentCredentialMetadata;
+pub use status_contract::LocalProviderMetadata;
+pub use status_contract::ManagedApiKeyMetadata;
+pub use status_contract::ProviderAvailabilityState;
+pub use status_contract::ProviderConfigurationState;
+pub use status_contract::ProviderCredentialSource;
+pub use status_contract::ProviderCurrentState;
+pub use status_contract::ProviderEligibilitySnapshot;
+pub use status_contract::ProviderEligibilityState;
+pub use status_contract::ProviderMetadata;
+pub use status_contract::ProviderMetadataSnapshot;
+pub use status_contract::ProviderMethodState;
+pub use status_contract::ProviderMethodStatus;
+pub use status_contract::ProviderRecoveryReason;
+pub use status_contract::ProviderStatusCatalog;
+pub use status_contract::ProviderStatusSnapshot;
+pub use status_contract::ProviderUnavailableReason;
+
 use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
 use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;

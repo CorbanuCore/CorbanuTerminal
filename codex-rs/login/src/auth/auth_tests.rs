@@ -2637,6 +2637,58 @@ async fn provider_api_key_login_is_provider_scoped_and_not_primary_auth() {
 }
 
 #[test]
+fn provider_api_key_metadata_reports_legacy_missing_and_suppressed_without_secret() {
+    let codex_home = tempdir().expect("tempdir");
+    super::legacy_save_provider_key(codex_home.path(), "CUSTOM_API_KEY", "secret-canary")
+        .expect("seed legacy provider key");
+
+    assert_eq!(
+        super::provider_api_key_metadata_from_auth_storage(codex_home.path(), "CUSTOM_API_KEY")
+            .expect("inspect legacy provider key"),
+        ProviderApiKeyStorageMetadata::Stored {
+            source: ProviderApiKeyStorageSource::LegacyPlaintext,
+        }
+    );
+    assert_eq!(
+        super::provider_api_key_metadata_from_auth_storage(codex_home.path(), "MISSING_API_KEY")
+            .expect("inspect missing provider key"),
+        ProviderApiKeyStorageMetadata::Missing
+    );
+
+    super::suppress_provider_api_key(codex_home.path(), "CUSTOM_API_KEY")
+        .expect("suppress provider key");
+    let metadata =
+        super::provider_api_key_metadata_from_auth_storage(codex_home.path(), "CUSTOM_API_KEY")
+            .expect("inspect suppressed provider key");
+    assert_eq!(metadata, ProviderApiKeyStorageMetadata::Suppressed);
+    assert!(!format!("{metadata:?}").contains("secret-canary"));
+}
+
+#[test]
+fn openai_auth_metadata_distinguishes_account_api_key_and_unsupported_auth() {
+    let account =
+        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let api_key = AuthManager::from_auth_for_testing(CodexAuth::from_api_key("secret-canary"));
+    let bedrock = AuthManager::from_auth_for_testing(CodexAuth::BedrockApiKey(BedrockApiKeyAuth {
+        api_key: "bedrock-secret".to_string(),
+        region: "us-east-1".to_string(),
+    }));
+
+    assert_eq!(
+        [
+            account.openai_auth_metadata(),
+            api_key.openai_auth_metadata(),
+            bedrock.openai_auth_metadata(),
+        ],
+        [
+            OpenAiAuthMetadata::Account,
+            OpenAiAuthMetadata::ApiKey,
+            OpenAiAuthMetadata::Unsupported,
+        ]
+    );
+}
+
+#[test]
 fn deleting_one_provider_api_key_preserves_other_legacy_credentials() {
     let codex_home = tempdir().expect("tempdir");
     for (provider, key) in [

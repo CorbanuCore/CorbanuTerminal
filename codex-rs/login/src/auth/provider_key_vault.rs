@@ -30,6 +30,9 @@ use codex_vault::Vault;
 use codex_vault::VaultError;
 use codex_vault::VaultKeyStorage;
 
+use super::manager::ProviderApiKeyStorageMetadata;
+use super::manager::ProviderApiKeyStorageSource;
+
 /// Prefix used for provider-key vault labels so they are namespaced apart from user-added
 /// credentials.
 pub(crate) const PROVIDER_LABEL_PREFIX: &str = "provider/";
@@ -46,6 +49,35 @@ pub(crate) fn read_provider_key(
         return super::manager::legacy_provider_key(codex_home, provider_key_id);
     }
     read_provider_key_with_vault(codex_home, provider_key_id, vault)
+}
+
+pub(crate) fn provider_key_metadata(
+    codex_home: &Path,
+    provider_key_id: &str,
+) -> std::io::Result<ProviderApiKeyStorageMetadata> {
+    let vault = Vault::new(codex_home.to_path_buf());
+    if vault.key_storage() != VaultKeyStorage::NotInitialized {
+        match vault.exists(&provider_label(provider_key_id)) {
+            Ok(true) => {
+                return Ok(ProviderApiKeyStorageMetadata::Stored {
+                    source: ProviderApiKeyStorageSource::EncryptedVault,
+                });
+            }
+            Ok(false) => {}
+            Err(err) => tracing::warn!(
+                ?err,
+                provider_key_id,
+                "provider key vault metadata unavailable; checking legacy provider storage"
+            ),
+        }
+    }
+    if super::manager::legacy_provider_key_is_present(codex_home, provider_key_id)? {
+        Ok(ProviderApiKeyStorageMetadata::Stored {
+            source: ProviderApiKeyStorageSource::LegacyPlaintext,
+        })
+    } else {
+        Ok(ProviderApiKeyStorageMetadata::Missing)
+    }
 }
 
 #[cfg(test)]
