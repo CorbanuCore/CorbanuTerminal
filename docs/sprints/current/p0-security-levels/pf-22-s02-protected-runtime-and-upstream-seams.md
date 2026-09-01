@@ -7,7 +7,7 @@ plan_feature: "PF-22"
 execution_order: 27
 owner: "/root/pf22_protected_runtime"
 parallel_lane: "protected-runtime"
-write_scope: "codex-rs/core/Cargo.toml, codex-rs/Cargo.lock, codex-rs/core/src/security/effective_policy.rs, codex-rs/core/src/security/effective_policy_tests.rs, codex-rs/core/src/security/protected_runtime.rs, codex-rs/core/src/security/protected_runtime_tests.rs, codex-rs/core/src/security/mod.rs, codex-rs/core/src/agent/control.rs, codex-rs/core/src/agent/control/spawn.rs, codex-rs/core/src/agent/control_tests.rs, qa/security-levels/upstream-seams.json, scripts/security-upstream-seams-check, scripts/security_upstream_seams_check.py, scripts/tests/test_security_upstream_seams.py, qa/security-levels/sprints/PF-22-S02/, docs/sprints/current/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md"
+write_scope: "codex-rs/core/Cargo.toml, codex-rs/Cargo.lock, codex-rs/core/src/security/effective_policy.rs, codex-rs/core/src/security/effective_policy_tests.rs, codex-rs/core/src/security/protected_runtime.rs, codex-rs/core/src/security/protected_runtime_tests.rs, codex-rs/core/src/security/mod.rs, codex-rs/core/src/agent/control.rs, codex-rs/core/src/agent/control/spawn.rs, codex-rs/core/src/agent/control_tests.rs, codex-rs/security-audit/src/journal.rs, codex-rs/security-audit/src/journal_types.rs, codex-rs/security-audit/src/journal_tests.rs, codex-rs/security-audit/tests/consumer_contract.rs, qa/security-levels/upstream-seams.json, scripts/security-upstream-seams-check, scripts/security_upstream_seams_check.py, scripts/tests/test_security_upstream_seams.py, qa/security-levels/sprints/PF-22-S02/, docs/sprints/current/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md"
 integration_gate: "The Codex ingress/classifier integration owner audits PF-22-S02 scope and consumed contract versions, runs Core/security-policy/security-audit/seam/compatibility/governance checks on the combined tree, performs TMUX and Opus 5 Max closure, integrates and archives PF-22 before rebasing or registering PF-27's Core broker seam, then releases the sprint slot for PF-30-S01."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-protected-runtime"
 branch: "feat/p0-security-protected-runtime"
@@ -52,14 +52,15 @@ updated: 2026-08-31
 - [x] Bound configured, creator-required and effective containment plus owner/policy/run/revocation generations, measured readiness, expiry and recovery status without adding an adapter activation path.
 - [x] Added an exact-symbol upstream seam register and mechanical checker; unverified adapter-owned seams remain explicitly pending.
 - [x] Bound grant and mandate authority to the exact durable request/approved preview, with negative cross-request substitution coverage.
-- [x] Remediated the first Opus review: trusted live dispatch time, durable mandate one-shot enforcement, bounded readiness, re-derived effective containment, consuming dispatch resolution and exact repository-contained seam evidence.
+- [x] Remediated the first Opus review: trusted live dispatch time, durable mandate one-shot enforcement, bounded readiness, re-derived effective containment, explicit dispatch resolution and exact repository-contained seam evidence.
 - [x] Remediated the first Opus rereview: preview-stable mandate replay, conservative never-admitted closure, internally derived event context, immutable/monotonic readiness, actor/request binding, available recovery-checkpoint binding and correct Rust char-literal lexing.
 - [x] Remediated the next Opus pass: domain-separated grant/mandate deduplication, opaque per-runtime dispatch identity, and an explicit conservative Unknown-only mandate closure where durable admission proof does not exist.
+- [x] Remediated the final-pass retry finding under integration-owner-authorized audit scope: journal resolution borrows the non-clone permit, Core retains one exact pending outcome only across known non-ambiguous errors, and commit-unknown disables direct retry.
 - [x] Recorded focused, affected, compatibility and real-TMUX evidence under `qa/security-levels/sprints/PF-22-S02/`.
 
 ## Remaining
 
-- [ ] Complete the final TMUX/Corbanu/Claude Opus 5 Max read-only rereview of the three-times-remediated candidate and resolve any actionable P0/P1/P2 findings.
+- [ ] Complete the final TMUX/Corbanu/Claude Opus 5 Max read-only rereview of the four-times-remediated candidate and resolve any actionable P0/P1/P2 findings.
 - [ ] At the PF-23/PF-24 consumer boundary, bind runtime readiness and journal recovery to one authenticated live run-generation source and prove a mismatch fails closed.
 - [ ] Scope a future cross-crate durable-admission or non-forgeable fence-to-audit proof before supporting receiptless never-admitted mandate Denied/Cancelled outcomes; PF-22 only claims conservative Unknown.
 - [ ] Have the integration owner rerun combined-tree gates, archive the sprint and update shared plan/navigation ledgers.
@@ -73,7 +74,8 @@ updated: 2026-08-31
 - [x] Run the first required read-only Claude Opus 5 Max review through Corbanu Terminal in TMUX; it returned no P0, two P1 and six P2 findings, all dispositioned in evidence.
 - [x] Rerun Opus 5 Max on the first P1/P2-remediated candidate; it returned no P0, two P1 and five P2 findings, all remediated and dispositioned in evidence.
 - [x] Rerun Opus 5 Max on the second remediated candidate; it returned no P0/P1 and three P2 findings, with two safely remediated and one narrowed to an explicit future contract dependency.
-- [ ] Run the final Opus 5 Max review on the three-times-remediated candidate.
+- [x] Rerun Opus 5 Max on the third remediated candidate; it verified all prior fixes and returned one P2 retry-safety finding, remediated under the authorized audit scope.
+- [ ] Run the final Opus 5 Max review on the four-times-remediated candidate.
 
 ## Exit evidence
 

@@ -1,8 +1,8 @@
 # PF-22-S02 evidence
 
 PF-22-S02 remains `in_progress`. The implementation, request-binding fix, and
-three Claude Opus 5 Max remediation cycles are committed. A final clean Opus
-rereview of the third remediated candidate and the integration-owner
+four Claude Opus 5 Max remediation cycles are committed. A final clean Opus
+rereview of the fourth remediated candidate and the integration-owner
 combined-tree/archive work remain open.
 
 ## Candidate identity and contracts
@@ -20,14 +20,16 @@ combined-tree/archive work remain open.
   `545456f07c48157c4a0d91fc6a981ab8e0561636`.
 - Opus final-pass P2 remediation:
   `24a51cddb53f60a5ce6dad80c3806d96f2946c2f`.
-- Protected runtime contract: `PROTECTED_RUNTIME_CONTRACT_VERSION = 4`.
-- Upstream seam register contract: `PF-22-S02-v4`; pinned inherited upstream
+- Opus final-pass retry remediation:
+  `d658c1d22ce69c26c63fe06d69797163d7bdfd3b`.
+- Protected runtime contract: `PROTECTED_RUNTIME_CONTRACT_VERSION = 5`.
+- Upstream seam register contract: `PF-22-S02-v5`; pinned inherited upstream
   revision: `413492cd6c3a4d4f8dff6f406247ccda5a9d88aa`.
 - Pre-Opus-remediation compatibility candidate: `corbanu 0.1.35`, SHA-256
   `4f945cf64ab9d05a9a66035951807300828ea85806e92721528040dd45b52f97`.
 
-The implementation is deliberately cohesive: 680 production lines define one
-fail-closed state machine and 1,110 focused test lines provide its mechanical
+The implementation is deliberately cohesive: 712 production lines define one
+fail-closed state machine and 1,129 focused test lines provide its mechanical
 proof. The checker is a separate 400-line governance boundary with 126 lines
 of focused tests. Splitting the state transition/fence/journal composition
 across modules would weaken reviewability without reducing the security
@@ -42,6 +44,10 @@ security contract plus its mechanical proof, not unrelated feature work.
 - `codex-rs/core/src/security/mod.rs`
 - `codex-rs/core/src/security/protected_runtime.rs`
 - `codex-rs/core/src/security/protected_runtime_tests.rs`
+- `codex-rs/security-audit/src/journal.rs`
+- `codex-rs/security-audit/src/journal_types.rs`
+- `codex-rs/security-audit/src/journal_tests.rs`
+- `codex-rs/security-audit/tests/consumer_contract.rs`
 - `qa/security-levels/upstream-seams.json`
 - `scripts/security-upstream-seams-check`
 - `scripts/security_upstream_seams_check.py`
@@ -76,9 +82,10 @@ in-scope findings:
   the effect and checking again afterward cannot undo a side effect that raced
   a revocation, so the reviewer's suggested change would weaken that consumed
   contract.
-- `ProtectedDispatch` is `must_use`; the adapter consumes it through one
-  terminal `resolve` operation, which updates both fence and durable journal.
-  Event context is exposed to the in-crate adapter. A `Drop` implementation
+- `ProtectedDispatch` is `must_use`; its one exact terminal resolution updates
+  both fence and durable journal, retaining the permit only when a journal
+  attempt is known non-ambiguous. Event context is exposed to the in-crate
+  adapter. A `Drop` implementation
   deliberately does not fabricate a terminal result: an unresolved durable
   intent is the correct crash/unknown state and is already surfaced by
   recovery.
@@ -146,6 +153,25 @@ fixes and narrows the third claim:
   marker or non-forgeable `DispatchFence`-to-audit proof is a separately
   scoped future contract dependency, not a completed PF-22 capability.
 
+The next final pass verified all three fixes above and reported no P0/P1 plus
+one P2 retry-safety finding. The integration owner explicitly expanded scope
+to the smallest security-audit API/test surface, and commit
+`d658c1d22ce69c26c63fe06d69797163d7bdfd3b` remediates it:
+
+- `ReferenceJournal::resolve_dispatch` borrows the deliberately non-clone
+  `DispatchPermit`. The journal remains exactly-once authority: the identical
+  durable resolution is acknowledged idempotently and a conflicting terminal
+  resolution is rejected.
+- `ProtectedDispatch` retains that permit and the exact terminal outcome across
+  validation or pre-commit errors. A retry cannot change Completed to Unknown;
+  the permit is removed only after an acknowledgement or immediately when the
+  journal reports `CommitUnknown`.
+- A pre-write disk-full fault proves the same permit can recover and persist
+  Completed; a timestamp-regression case proves an already Executed effect can
+  correct its event time without losing the exact outcome. An after-rename
+  `CommitUnknown` fault proves direct reuse stays blocked and recovery reports
+  records ahead of the integrity root.
+
 ## Final-tree local verification
 
 All build, cache, temporary, log, compatibility, and TMUX artifacts were kept
@@ -168,8 +194,10 @@ under `/Volumes/CorbanuDrive/Corbanu/.codex-work/pf22-protected-runtime/`.
   3,449 skipped.
 - `cd codex-rs && just test -p codex-security-policy revocation`: 10 passed, 37
   skipped.
-- `cd codex-rs && just test -p codex-security-audit`: 44 passed, 0 skipped; one
+- `cd codex-rs && just test -p codex-security-audit`: 46 passed, 0 skipped; one
   test was reported leaky by nextest, not failed.
+- `cd codex-rs && cargo clippy -p codex-security-audit --tests --no-deps`:
+  passed without findings.
 - `python3 scripts/security-upstream-seams-check --manifest
   qa/security-levels/upstream-seams.json`: passed.
 - `python3 -m unittest discover -s scripts/tests -p
@@ -260,6 +288,31 @@ Final-pass-remediation affected-test log SHA-256 values:
 - `plan-check-final-pass1-remediation.txt`:
   `9386e473c028f912d1685f25a88db8d21e57b8a9ad0929b07fcca3262ecbc8fb`
 
+Final-pass2 retry-remediation log SHA-256 values:
+
+- `protected-runtime-final-pass2-remediation.txt`:
+  `cba2b2d13f73b2eb0f0f5fb687a4cb28f2c4b7ccd081068deda90e8f2ca7adce`
+- `effective-policy-final-pass2-remediation.txt`:
+  `5bc735fc6deccd2a4fa250157424bfde72d0b546b6f65c7a4b2bbfcccace58f5`
+- `security-inheritance-final-pass2-remediation.txt`:
+  `21bd5b7b5a8b82dc7b1eb8ce2387254b1af84b454955619fb2ab4ce7aedb09cf`
+- `authoritative-state-final-pass2-remediation.txt`:
+  `16387e4ae49d702417afc70051b042a79339212879c44628104afd9bde035251`
+- `revocation-final-pass2-remediation.txt`:
+  `6936b96fb0c17caea94bf5eb307752c44fc6a67fd940c016d492007e8c4912ca`
+- `security-audit-final-pass2-remediation.txt`:
+  `1db940c10de0f455c26345c062f3240fd9ca0400e2ca5111f829970d232c7749`
+- `security-audit-clippy-final-pass2-remediation.txt`:
+  `ff9ae9661b24673ef02fe519a388a9e3ea4f7e967780806c1f9bfb0c33a6623d`
+- `seam-check-final-pass2-remediation.txt`:
+  `ad96a6c7d905ea21201b901f2f82ecf57117629ce349442422c88baec872a49b`
+- `seam-unit-final-pass2-remediation.txt`:
+  `476742bad03e4ebf8c91d1954977b739c050adc4b73b40f108032adb52fc549f`
+- `sprint-check-final-pass2-remediation.txt`:
+  `6b3b45c8eeb1144c261838f505ab6cbcf0f7e78800b5c3bad3077afe794e3fa3`
+- `plan-check-final-pass2-remediation.txt`:
+  `9386e473c028f912d1685f25a88db8d21e57b8a9ad0929b07fcca3262ecbc8fb`
+
 ## PF-21 compatibility comparison
 
 The pre-remediation implementation commit `85837f64b` passed all 36 cases, but
@@ -286,9 +339,9 @@ dirty. Final report:
 `/Volumes/CorbanuDrive/Corbanu/.codex-work/pf22-protected-runtime/compat-run-final/compatibility-report.json`,
 SHA-256 `b5609927b183fe22c046ac714946f1bfefd7dba6d26c8d6847534ff18031e673`.
 
-Because all three Opus remediation cycles change protected dispatch behavior,
+Because all four Opus remediation cycles change protected dispatch behavior,
 this clean comparison remains useful regression evidence but does not close
-compatibility for `24a51cddb`; the integration owner must rerun the 36-case
+compatibility for `d658c1d22`; the integration owner must rerun the 36-case
 comparison on the combined candidate.
 
 ## TMUX evidence
@@ -363,13 +416,29 @@ read-only configuration:
   `24a51cddb`; the unsafe generic audit relaxation is rejected and replaced by
   the conservative Unknown proof and explicit future dependency above.
 
-A final Opus 5 Max rereview of `24a51cddb` plus this evidence closeout remains
+The integration owner then reviewed complete range
+`7fca549f7..c22905769`, focusing on `24a51cddb`, in the same read-only
+configuration:
+
+- Prompt:
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/claude-auth-review-runtime/pf22-final-review-pass2-prompt.md`,
+  SHA-256 `3ef04ad0060555e01bda741963b39a4b15bbb57dca59c658d98bab3e2d7148b7`.
+- Transcript:
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/claude-auth-review-runtime/pf22-opus5-max-final-pass2.txt`,
+  17,051 bytes, SHA-256
+  `21a54f2bdab3319c6182df28d265459fca2a3dd01179823271c59a9ec646b995`.
+- Exact-pattern token-leak check: false.
+- Verdict: no P0/P1 and one P2. It verified all prior fixes and identified the
+  lost-permit retry gap now fixed in `d658c1d22` under the explicitly expanded
+  audit scope.
+
+A final Opus 5 Max rereview of `d658c1d22` plus this evidence closeout remains
 mandatory. PF-22 does not claim clean review closure until that transcript has
 no actionable P0/P1/P2 findings.
 
 ## Upstream seam register
 
-The v4 register pins repository-contained paths, exact definitions, one tested
+The v5 register pins repository-contained paths, exact definitions, one tested
 revision, owners, semantic contracts, regression commands and verified
 Markdown evidence anchors. Child inheritance is verified.
 Ingress, egress, and the trusted human persistence adapter remain explicitly
@@ -378,7 +447,7 @@ adapters.
 
 ## Remaining gates and consumer handoff
 
-- Complete the final Claude Opus 5 Max read-only rereview of the three-times-remediated candidate
+- Complete the final Claude Opus 5 Max read-only rereview of the four-times-remediated candidate
   and resolve any remaining actionable P0/P1/P2 finding.
 - Define in a future explicitly scoped cross-crate contract a durable admission
   marker or non-forgeable fence-to-audit proof before allowing receiptless
