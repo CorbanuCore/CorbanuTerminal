@@ -61,7 +61,6 @@ updated: 2026-08-31
 
 ## Remaining
 
-- [ ] Complete the final TMUX/Corbanu/Claude Opus 5 Max read-only rereview of the five-times-remediated candidate and resolve any actionable P0/P1/P2 findings.
 - [ ] At the PF-23/PF-24 consumer boundary, bind runtime readiness and journal recovery to one authenticated live run-generation source and prove a mismatch fails closed.
 - [ ] Scope a future cross-crate durable-admission or non-forgeable fence-to-audit proof before supporting receiptless never-admitted mandate Denied/Cancelled outcomes; PF-22 only claims conservative Unknown.
 - [ ] Have the integration owner rerun combined-tree gates, archive the sprint and update shared plan/navigation ledgers.
@@ -77,11 +76,12 @@ updated: 2026-08-31
 - [x] Rerun Opus 5 Max on the second remediated candidate; it returned no P0/P1 and three P2 findings, with two safely remediated and one narrowed to an explicit future contract dependency.
 - [x] Rerun Opus 5 Max on the third remediated candidate; it verified all prior fixes and returned one P2 retry-safety finding, remediated under the authorized audit scope.
 - [x] Rerun Opus 5 Max on the fourth remediated candidate; it verified retry safety and returned one P2 effect-after-terminal lifecycle finding, now remediated.
-- [ ] Run the final focused Opus 5 Max review on the five-times-remediated candidate.
+- [x] Run the final focused Opus 5 Max review on the five-times-remediated candidate; verdict: `NO ACTIONABLE P0/P1/P2 FINDINGS`.
+- [ ] Rerun the compatibility and affected matrix after PF-23/PF-24 authenticated adapter provenance is present on the combined integration tree.
 
 ## Exit evidence
 
 - [x] Record implementation/remediation commits, changed paths, contract versions and exact final-tree commands/results under `qa/security-levels/sprints/PF-22-S02/`.
 - [x] Preserve S01 archive/evidence unchanged; do not relabel historical passes as proof of these new cases.
 - [x] Record the consumer integration handoff and pending adapter owners in evidence.
-- [ ] Complete the final Opus rereview, authenticated run-generation adapter proof, integration-owner combined-tree matrix and all shared ledgers before archive and plan/navigation updates.
+- [ ] Complete the authenticated run-generation adapter proof, integration-owner combined-tree matrix and all shared ledgers before archive and plan/navigation updates.

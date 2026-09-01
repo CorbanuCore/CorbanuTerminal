@@ -1,9 +1,9 @@
 # PF-22-S02 evidence
 
 PF-22-S02 remains `in_progress`. The implementation, request-binding fix, and
-five Claude Opus 5 Max remediation cycles are committed. A final clean Opus
-rereview of the fifth remediated candidate and the integration-owner
-combined-tree/archive work remain open.
+five Claude Opus 5 Max remediation cycles are committed, and the final focused
+Opus rereview is clean. Integration-owner combined-tree compatibility,
+authenticated adapter provenance, and archive work remain open.
 
 ## Candidate identity and contracts
 
@@ -483,9 +483,31 @@ configuration:
 - Verdict: no P0/P1 and one P2. It verified the retry fixes and identified the
   effect-after-terminal lifecycle gap now fixed in `15ed4d95a`.
 
-A final focused Opus 5 Max rereview of `15ed4d95a` plus this evidence closeout
-remains mandatory. PF-22 does not claim clean review closure until that
-transcript has no actionable P0/P1/P2 findings.
+The integration owner completed the final focused review of complete range
+`7fca549f7..cac3a6cd4`, focusing on `15ed4d95a`, in the same read-only
+TMUX/Corbanu/Claude Opus 5 Max configuration:
+
+- TMUX session `pf22-terminal-review`, socket `pf22-terminal-opus` (shut down
+  after transcript capture).
+- Prompt:
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/claude-auth-review-runtime/pf22-terminal-lifecycle-review-prompt.md`,
+  SHA-256 `7e091158474d8de01c272cea991e691e50bcf564fcbdaa1974a1d6e264570d7b`.
+- Transcript:
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/claude-auth-review-runtime/pf22-opus5-max-terminal-clean.txt`,
+  15,228 bytes, SHA-256
+  `95022f525ae3cd64b434f16aaf27effaa1121edb43c1bedb936544b894d03a9b`.
+- Exact-pattern token-leak check: false.
+- Verdict: **`NO ACTIONABLE P0/P1/P2 FINDINGS`**. The reviewer verified every
+  retry-pending, acknowledged, never-admitted, and commit-unknown lifecycle
+  state blocks effects while exact non-ambiguous resolution retry remains
+  available.
+
+Residual reviewer notes were non-findings: combined-tree tests remain the
+integration owner's gate; a Core-layer fault injection for commit-unknown is
+optional because audit-layer fault coverage and the shared `permit.take()`
+path already prove fail closure; invalid first resolution shape remains a safe
+reconciliation wedge rather than a bypass and may receive separate future UX
+design.
 
 ## Upstream seam register
 
@@ -498,8 +520,6 @@ adapters.
 
 ## Remaining gates and consumer handoff
 
-- Complete the final Claude Opus 5 Max read-only rereview of the five-times-remediated candidate
-  and resolve any remaining actionable P0/P1/P2 finding.
 - Define in a future explicitly scoped cross-crate contract a durable admission
   marker or non-forgeable fence-to-audit proof before allowing receiptless
   mandate Denied/Cancelled closure; PF-22 only proves conservative Unknown.
