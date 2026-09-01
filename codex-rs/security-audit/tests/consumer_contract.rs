@@ -108,7 +108,7 @@ fn public_consumer_contract_requires_intent_then_terminal_receipt() {
         .expect("durable intent");
     let receipt = journal
         .resolve_dispatch(
-            permit,
+            &permit,
             context,
             DispatchResolution::Unknown {
                 reason: UnknownOutcomeReason::TransportLost,

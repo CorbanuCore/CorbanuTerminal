@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "contract_version": "PF-22-S02-v6",
+  "upstream_revision": "413492cd6c3a4d4f8dff6f406247ccda5a9d88aa",
+  "last_tested_revision": "15ed4d95a55d4c815c043b40a1809e56aab6ad7f",
+  "requalification_commands": [
+    "python3 scripts/security-upstream-seams-check --manifest qa/security-levels/upstream-seams.json",
+    "cd codex-rs && just test -p codex-core protected_runtime",
+    "cd codex-rs && just test -p codex-core effective_policy",
+    "cd codex-rs && just test -p codex-core security_inheritance",
+    "cd codex-rs && just test -p codex-core authoritative_state",
+    "cd codex-rs && just test -p codex-security-policy revocation",
+    "cd codex-rs && just test -p codex-security-audit",
+    "python3 scripts/security-level-compat --candidate target/debug/codex --upstream af5a4e39b590e7517120fd935ccfac8cbf7cf131 --manifest qa/security-levels/compatibility/manifest-v2.json --control qa/security-levels/compatibility/upstream-control-v2.json --out-dir qa/security-levels/compatibility/runs/PF-22-S02"
+  ],
+  "seams": [
+    {
+      "id": "protected-tool-ingress",
+      "category": "ingress",
+      "status": "pending",
+      "upstream_path": "codex-rs/core/src/tools/router.rs",
+      "upstream_symbol": "ToolRouter::build_tool_call",
+      "upstream_revision": "413492cd6c3a4d4f8dff6f406247ccda5a9d88aa",
+      "corbanu_path": "codex-rs/core/src/security/protected_runtime.rs",
+      "corbanu_symbol": "ProtectedRuntime::authorize_route",
+      "owner": "PF-23 ingress adapter owner",
+      "semantic_contract": "Every protected model or external tool input is classified into a registered ingress route before protected dispatch; unknown routes fail closed and input data does not create authority.",
+      "regression_command": "cd codex-rs && just test -p codex-core unregistered_ingress_and_egress_fail_closed",
+      "last_tested_revision": "15ed4d95a55d4c815c043b40a1809e56aab6ad7f",
+      "evidence": "qa/security-levels/sprints/PF-22-S02/evidence.md#upstream-seam-register",
+      "blocker": "PF-22 supplies the closed-world contract only; the hook-owning PF-23 sprint must connect this upstream symbol and convert the entry to verified."
+    },
+    {
+      "id": "protected-tool-egress",
+      "category": "egress",
+      "status": "pending",
+      "upstream_path": "codex-rs/core/src/tools/registry.rs",
+      "upstream_symbol": "ToolRegistry::dispatch_any_with_terminal_outcome",
+      "upstream_revision": "413492cd6c3a4d4f8dff6f406247ccda5a9d88aa",
+      "corbanu_path": "codex-rs/core/src/security/protected_runtime.rs",
+      "corbanu_symbol": "ProtectedDispatch::authorize",
+      "owner": "PF-23 egress adapter owner",
+      "semantic_contract": "A protected side effect requires a registered egress route, a generation-bound PF-19 fence, and a durable PF-41 intent before the effect starts; the live revocation read fence spans the effect.",
+      "regression_command": "cd codex-rs && just test -p codex-core durable_intent_and_live_fence_precede_the_effect",
+      "last_tested_revision": "15ed4d95a55d4c815c043b40a1809e56aab6ad7f",
+      "evidence": "qa/security-levels/sprints/PF-22-S02/evidence.md#upstream-seam-register",
+      "blocker": "PF-22 does not own tool dispatch adapters; PF-23 must connect the dispatch hook without bypassing existing approvals."
+    },
+    {
+      "id": "spawned-agent-inheritance",
+      "category": "child",
+      "status": "verified",
+      "upstream_path": "codex-rs/core/src/agent/control.rs",
+      "upstream_symbol": "AgentControl::prepare_thread_spawn",
+      "upstream_revision": "413492cd6c3a4d4f8dff6f406247ccda5a9d88aa",
+      "corbanu_path": "codex-rs/core/src/security/effective_policy.rs",
+      "corbanu_symbol": "EffectivePolicyView::inherit_child",
+      "owner": "PF-22",
+      "semantic_contract": "Every explicit, nested, or auxiliary child receives an immutable actor binding whose creator-required containment is at least as strict as the parent and any stricter child configuration.",
+      "regression_command": "cd codex-rs && just test -p codex-core security_inheritance",
+      "last_tested_revision": "15ed4d95a55d4c815c043b40a1809e56aab6ad7f",
+      "evidence": "qa/security-levels/sprints/PF-22-S02/evidence.md#upstream-seam-register",
+      "blocker": null
+    },
+    {
+      "id": "authoritative-state-persistence",
+      "category": "persistence",
+      "status": "pending",
+      "upstream_path": "codex-rs/config/src/config_toml.rs",
+      "upstream_symbol": "ConfigToml",
+      "upstream_revision": "413492cd6c3a4d4f8dff6f406247ccda5a9d88aa",
+      "corbanu_path": "codex-rs/core/src/security/authoritative_state.rs",
+      "corbanu_symbol": "AuthoritativeStateStore::load",
+      "owner": "PF-24 trusted-controller owner",
+      "semantic_contract": "Human configuration is only a request input; protected state becomes effective after controller-owned authenticated persistence, anchored generation checks, and fail-closed restart recovery.",
+      "regression_command": "cd codex-rs && just test -p codex-core authoritative_state",
+      "last_tested_revision": "15ed4d95a55d4c815c043b40a1809e56aab6ad7f",
+      "evidence": "qa/security-levels/sprints/PF-22-S02/evidence.md#upstream-seam-register",
+      "blocker": "PF-20 provides authenticated persistence and PF-22 consumes it; PF-24 must connect the human update adapter before this upstream seam can be verified."
+    }
+  ]
+}

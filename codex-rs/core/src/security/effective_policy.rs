@@ -120,11 +120,13 @@ pub(crate) struct EffectivePolicySnapshot {
     pub(crate) runtime_nonce: [u8; 16],
     pub(crate) epoch: u64,
     pub(crate) requested_level: SecurityLevel,
+    pub(crate) creator_required_level: SecurityLevel,
     pub(crate) level: SecurityLevel,
     pub(crate) actor_chain: ActorChain,
     pub(crate) session_id: BoundedText,
     pub(crate) task_id: BoundedText,
     pub(crate) revocation_generation: u64,
+    pub(crate) authority_kill_switch_active: bool,
     pub(crate) kill_switch_active: bool,
 }
 
@@ -400,11 +402,13 @@ fn snapshot(
         runtime_nonce: state.runtime_nonce,
         epoch: state.epoch,
         requested_level: state.persisted.settings.level,
+        creator_required_level: binding.minimum_level,
         level: state.persisted.settings.level.max(binding.minimum_level),
         actor_chain: binding.actor_chain.clone(),
         session_id: binding.session_id.clone(),
         task_id: binding.task_id.clone(),
         revocation_generation: state.persisted.revocations.generation,
+        authority_kill_switch_active: state.persisted.revocations.kill_switch_active,
         kill_switch_active: binding.force_deny || state.persisted.revocations.kill_switch_active,
     }
 }
