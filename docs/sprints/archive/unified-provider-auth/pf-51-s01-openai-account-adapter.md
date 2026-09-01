@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-51-S01"
 title: "OpenAI account auth adapter"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-51"
 execution_order: 10
@@ -50,11 +50,11 @@ updated: 2026-09-01
 
 ## Remaining
 
-- [ ] Commit the accepted implementation, rerun post-commit governance, and archive PF-51.
+- [x] Committed accepted implementation `13dcc188fb`, reran post-commit governance, and archived PF-51.
 
 ## Verification
 
-- [ ] Post-commit plan/sprint validators and clean-tree check pass.
+- [x] Post-commit plan/sprint validators and clean-tree check passed.
 
 ## Implementation and audit evidence
 
@@ -77,8 +77,8 @@ updated: 2026-09-01
 
 ## Exit evidence
 
-- [ ] Implementation commit and app-server adapter contract recorded.
+- [x] Implementation commit `13dcc188fb`; app-server adapter contract recorded.
 - [x] Final-tree tests linked.
 - [x] Cancel/stale notification evidence recorded.
 - [x] `Done` and `Remaining` reflect pre-commit reality.
-- [ ] Completed record archived.
+- [x] Completed record archived under `docs/sprints/archive/unified-provider-auth/`.
