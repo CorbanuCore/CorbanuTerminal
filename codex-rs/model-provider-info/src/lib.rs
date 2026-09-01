@@ -643,6 +643,19 @@ impl Default for ProviderRuntimePolicy {
     }
 }
 
+/// Credential source declared by one runtime model-provider definition.
+///
+/// Catalog and status consumers use this typed view instead of independently
+/// interpreting the provider's authentication fields.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModelProviderCredentialSource<'a> {
+    OpenAiAuth,
+    EnvironmentApiKey { env_key: &'a str },
+    Command,
+    Aws,
+    None,
+}
+
 /// Serializable representation of a provider definition.
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
@@ -729,6 +742,21 @@ pub struct ModelProviderAwsAuthInfo {
 }
 
 impl ModelProviderInfo {
+    /// Return the provider's validated credential-source classification.
+    pub fn credential_source(&self) -> ModelProviderCredentialSource<'_> {
+        if self.requires_openai_auth {
+            ModelProviderCredentialSource::OpenAiAuth
+        } else if let Some(env_key) = self.env_key.as_deref() {
+            ModelProviderCredentialSource::EnvironmentApiKey { env_key }
+        } else if self.auth.is_some() {
+            ModelProviderCredentialSource::Command
+        } else if self.aws.is_some() {
+            ModelProviderCredentialSource::Aws
+        } else {
+            ModelProviderCredentialSource::None
+        }
+    }
+
     pub fn validate(&self) -> std::result::Result<(), String> {
         if self.runtime_policy.request_body_max_bytes == 0 {
             return Err("runtime_policy.request_body_max_bytes must be greater than zero".into());

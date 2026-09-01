@@ -4035,6 +4035,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-provider-auth"
+version = "0.1.35"
+dependencies = [
+ "codex-model-provider-info",
+ "pretty_assertions",
+]
+
+[[package]]
 name = "codex-response-debug-context"
 version = "0.1.35"
 dependencies = [

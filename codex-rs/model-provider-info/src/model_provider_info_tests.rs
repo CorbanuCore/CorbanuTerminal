@@ -680,6 +680,36 @@ fn test_built_in_model_providers_include_amazon_bedrock() {
 }
 
 #[test]
+fn credential_source_classifies_adjacent_runtime_auth_shapes() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+
+    assert_eq!(
+        [
+            OPENAI_PROVIDER_ID,
+            ANTHROPIC_PROVIDER_ID,
+            CLAUDE_PLAN_PROVIDER_ID,
+            AMAZON_BEDROCK_PROVIDER_ID,
+            OLLAMA_OSS_PROVIDER_ID,
+        ]
+        .map(|provider_id| {
+            providers
+                .get(provider_id)
+                .expect("built-in provider")
+                .credential_source()
+        }),
+        [
+            ModelProviderCredentialSource::OpenAiAuth,
+            ModelProviderCredentialSource::EnvironmentApiKey {
+                env_key: ANTHROPIC_API_KEY_ENV_VAR,
+            },
+            ModelProviderCredentialSource::Command,
+            ModelProviderCredentialSource::Aws,
+            ModelProviderCredentialSource::None,
+        ]
+    );
+}
+
+#[test]
 fn test_built_in_model_providers_include_ambient() {
     let providers = built_in_model_providers(/*openai_base_url*/ None);
 

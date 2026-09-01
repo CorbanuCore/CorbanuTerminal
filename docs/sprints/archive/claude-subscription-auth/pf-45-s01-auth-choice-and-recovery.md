@@ -2,7 +2,7 @@
 sprint_id: "PF-45-S01"
 title: "Claude authentication choice, migration, and recovery"
 status: completed
-plan_file: "docs/plans/active/claude-subscription-auth.md"
+plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-45"
 execution_order: 4
 owner: "Jim Ricketts"
@@ -27,7 +27,7 @@ updated: 2026-08-30
 
 ## Plan linkage
 
-- Plan: [Reliable Claude subscription authentication](../../../plans/active/claude-subscription-auth.md).
+- Plan: [Reliable Claude subscription authentication](../../../plans/active/unified-provider-auth.md).
 - Feature: `PF-45` (plan alias `CSA-04`).
 - Acceptance advanced: the user explicitly chooses the persisted source and never experiences silent identity or billing-path fallback.
 

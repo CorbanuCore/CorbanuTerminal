@@ -83,6 +83,7 @@ members = [
     "network-proxy",
     "ollama",
     "process-hardening",
+    "provider-auth",
     "product-brand",
     "protocol",
     "prompts",
@@ -230,6 +231,7 @@ codex-mcp = { path = "codex-mcp" }
 codex-mcp-extension = { path = "ext/mcp" }
 codex-mcp-server = { path = "mcp-server" }
 codex-model-provider-info = { path = "model-provider-info" }
+codex-provider-auth = { path = "provider-auth" }
 codex-models-manager = { path = "models-manager" }
 codex-network-proxy = { path = "network-proxy" }
 codex-browser-isolation = { path = "browser-isolation" }

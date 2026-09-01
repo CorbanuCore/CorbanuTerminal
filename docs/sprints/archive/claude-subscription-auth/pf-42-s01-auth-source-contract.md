@@ -2,7 +2,7 @@
 sprint_id: "PF-42-S01"
 title: "Claude authentication source contract"
 status: completed
-plan_file: "docs/plans/active/claude-subscription-auth.md"
+plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-42"
 execution_order: 1
 owner: "Jim Ricketts"
@@ -26,7 +26,7 @@ updated: 2026-08-30
 
 ## Plan linkage
 
-- Plan: [Reliable Claude subscription authentication](../../../plans/active/claude-subscription-auth.md).
+- Plan: [Reliable Claude subscription authentication](../../../plans/active/unified-provider-auth.md).
 - Feature: `PF-42` (plan alias `CSA-01`).
 - Acceptance advanced: persist an explicit source choice and fail visibly instead of silently changing identity or billing path.
 

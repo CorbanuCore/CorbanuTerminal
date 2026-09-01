@@ -2,7 +2,7 @@
 sprint_id: "PF-44-S01"
 title: "Platform-authoritative Claude authentication resolution"
 status: completed
-plan_file: "docs/plans/active/claude-subscription-auth.md"
+plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-44"
 execution_order: 3
 owner: "Jim Ricketts"
@@ -26,7 +26,7 @@ updated: 2026-08-30
 
 ## Plan linkage
 
-- Plan: [Reliable Claude subscription authentication](../../../plans/active/claude-subscription-auth.md).
+- Plan: [Reliable Claude subscription authentication](../../../plans/active/unified-provider-auth.md).
 - Feature: `PF-44` (plan alias `CSA-03`).
 - Acceptance advanced: a persisted source controls every request without silent fallback or account/billing-path changes.
 

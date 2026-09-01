@@ -2,7 +2,7 @@
 sprint_id: "PF-43-S01"
 title: "Managed Claude subscription token lifecycle"
 status: completed
-plan_file: "docs/plans/active/claude-subscription-auth.md"
+plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-43"
 execution_order: 2
 owner: "Jim Ricketts"
@@ -26,7 +26,7 @@ updated: 2026-08-30
 
 ## Plan linkage
 
-- Plan: [Reliable Claude subscription authentication](../../../plans/active/claude-subscription-auth.md).
+- Plan: [Reliable Claude subscription authentication](../../../plans/active/unified-provider-auth.md).
 - Feature: `PF-43` (plan alias `CSA-02`).
 - Acceptance advanced: store the recommended method only in an approved secret backend and inspect metadata without revealing it.
 

@@ -177,6 +177,17 @@ nav:
                   - "PF-26-S04 — Final automated qualification": sprints/current/p0-security-levels/pf-26-s04-final-automated-qualification.md
                   - "PF-26-S02 — True-TUI and live repos": sprints/current/p0-security-levels/pf-26-s02-true-tui-and-live-repository-qualification.md
                   - "PF-26-S03 — Human acceptance and docs": sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md
+          - Current Provider Auth Work:
+              - Overview: sprints/current/unified-provider-auth/index.md
+              - "PF-48-S01 — Provider catalog contract": sprints/current/unified-provider-auth/pf-48-s01-provider-catalog-contract.md
+              - "PF-49-S01 — Provider status and eligibility": sprints/current/unified-provider-auth/pf-49-s01-status-and-eligibility.md
+              - "PF-50-S01 — Shared API-key flow controller": sprints/current/unified-provider-auth/pf-50-s01-api-key-flow-controller.md
+              - "PF-51-S01 — OpenAI account auth adapter": sprints/current/unified-provider-auth/pf-51-s01-openai-account-adapter.md
+              - "PF-52-S01 — Claude auth adapter": sprints/current/unified-provider-auth/pf-52-s01-claude-auth-adapter.md
+              - "PF-53-S01 — Multi-provider onboarding": sprints/current/unified-provider-auth/pf-53-s01-multi-provider-onboarding.md
+              - "PF-54-S01 — Provider management and eligibility": sprints/current/unified-provider-auth/pf-54-s01-provider-management.md
+              - "PF-55-S01 — Startup and custom-provider convergence": sprints/current/unified-provider-auth/pf-55-s01-startup-provider-convergence.md
+              - "PF-56-S01 — Unified provider final qualification": sprints/current/unified-provider-auth/pf-56-s01-final-qualification.md
           - Current Autoreview Work:
               - Overview: sprints/current/arbitrary-model-autoreview/index.md
               - "PF-14 — Arbitrary-model Autoreview":
@@ -193,6 +204,7 @@ nav:
           - Upstream Integration Contract: plans/upstream-integration.md
           - Active Plans: plans/active/index.md
           - P0 Security Levels: plans/active/p0-security-levels.md
+          - Unified Provider Onboarding: plans/active/unified-provider-auth.md
           - Security Source Reconciliation: plans/security-source-reconciliation.md
           - OpenClaw Source Review: plans/openclaw-source-review-2026-08-28.md
           - Architecture refinements: plans/security-architecture-refinements-2026-08-28.md

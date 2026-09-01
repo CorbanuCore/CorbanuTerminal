@@ -2,7 +2,7 @@
 sprint_id: "PF-47-S01"
 title: "First-run Anthropic-account onboarding"
 status: completed
-plan_file: "docs/plans/active/claude-subscription-auth.md"
+plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-47"
 execution_order: 6
 owner: "Jim Ricketts"
@@ -28,7 +28,7 @@ updated: 2026-08-31
 
 ## Plan linkage
 
-- Plan: [Reliable Claude subscription authentication](../../../plans/active/claude-subscription-auth.md).
+- Plan: [Reliable Claude subscription authentication](../../../plans/active/unified-provider-auth.md).
 - Feature: `PF-47` (plan alias `CSA-06`).
 - Acceptance advanced: a fresh user can enroll an eligible personal, Team, or
   Enterprise Anthropic account without first navigating to `/providers`.
@@ -82,4 +82,3 @@ updated: 2026-08-31
   no additional review was required.
 - [x] `Done` and `Remaining` ledgers reflect reality.
 - [x] Completed record moved to `docs/sprints/archive/claude-subscription-auth/`.
-

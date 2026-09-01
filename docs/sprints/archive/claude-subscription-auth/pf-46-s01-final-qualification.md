@@ -2,7 +2,7 @@
 sprint_id: "PF-46-S01"
 title: "Claude subscription authentication final qualification"
 status: completed
-plan_file: "docs/plans/active/claude-subscription-auth.md"
+plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-46"
 execution_order: 5
 owner: "Jim Ricketts"
@@ -28,7 +28,7 @@ updated: 2026-08-31
 
 ## Plan linkage
 
-- Plan: [Reliable Claude subscription authentication](../../../plans/active/claude-subscription-auth.md).
+- Plan: [Reliable Claude subscription authentication](../../../plans/active/unified-provider-auth.md).
 - Feature: `PF-46` (plan alias `CSA-05`).
 - Acceptance advanced: a review-clean branch can be evaluated without exposing
   a credential or silently changing source, account, or billing path.
