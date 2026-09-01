@@ -101,7 +101,7 @@ nav:
           - Current Security Work:
               - Overview: sprints/current/p0-security-levels/index.md
               - "Foundation follow-ups":
-                  - "PF-22-S02 — Protected runtime integration and upstream seams": sprints/current/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md
+                  - "PF-22-S02 — Protected runtime integration and upstream seams": sprints/archive/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md
               - "PF-13 — Credential boundary":
                   - "PF-13-S06 — Credential usage reservations": sprints/archive/p0-security-levels/pf-13-s06-credential-usage-reservations.md
                   - "PF-13-S07 — Integrated credential qualification": sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md

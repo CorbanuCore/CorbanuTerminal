@@ -1,9 +1,10 @@
 # PF-22-S02 evidence
 
-PF-22-S02 remains `in_progress`. The implementation, request-binding fix, and
-five Claude Opus 5 Max remediation cycles are committed, and the final focused
-Opus rereview is clean. Integration-owner combined-tree compatibility,
-authenticated adapter provenance, and archive work remain open.
+PF-22-S02 is completed and archived. The implementation, request-binding fix,
+five Claude Opus 5 Max remediation cycles, integration-owner combined-tree
+matrix, 36-case compatibility run and exact-binary TMUX smoke are complete.
+Authenticated PF-23/PF-24 adapter provenance remains an explicit downstream
+consumer obligation rather than a PF-22 claim.
 
 ## Candidate identity and contracts
 
@@ -24,6 +25,10 @@ authenticated adapter provenance, and archive work remain open.
   `d658c1d22ce69c26c63fe06d69797163d7bdfd3b`.
 - Opus ship-pass lifecycle remediation:
   `15ed4d95a55d4c815c043b40a1809e56aab6ad7f`.
+- Clean-review evidence closure:
+  `9e9b07cc36972072e99fa1c61961a4f82a0eb9bd`.
+- Integration merge:
+  `d74b2f77e6dc712ce8d89572594ceddac908365e`.
 - Protected runtime contract: `PROTECTED_RUNTIME_CONTRACT_VERSION = 6`.
 - Upstream seam register contract: `PF-22-S02-v6`; pinned inherited upstream
   revision: `413492cd6c3a4d4f8dff6f406247ccda5a9d88aa`.
@@ -349,6 +354,31 @@ Ship-pass lifecycle-remediation affected-test log SHA-256 values:
 - `plan-check-ship-pass-remediation.txt`:
   `9386e473c028f912d1685f25a88db8d21e57b8a9ad0929b07fcca3262ecbc8fb`
 
+### Combined-tree integration verification
+
+The integration owner reran the exact merged tree with a fresh drive-local
+Cargo home/target/temp/cache. Protected runtime passed 6/6, effective policy
+7/7, security inheritance 3/3, authoritative state 15/15, revocation 10/10,
+and security audit 46/46 (one nextest leak warning, zero failures). Audit
+Clippy, the Corbanu binary build, the upstream-seam checker, its 10 unit tests,
+both governance checkers and `git diff --check` all passed.
+
+Key integration-log SHA-256 values:
+
+- `protected-runtime.txt`: `29c38277ee65e6f7aac9104f03c1a45d848c640c4bc60ae50b060d66b9949c99`
+- `effective-policy.txt`: `58214372e7ccd38ea36a1d4d61567bebd735df4bda9f1b20fb7833b50c75e87a`
+- `security-inheritance.txt`: `64ce56a434ec8cf0918c0e9f1fb494edebb66ccb67b23d00e7d8b679e50dda10`
+- `authoritative-state.txt`: `e34d8d0b8fa55709173508b8edfb9206a19ec63e0f3d8d84f852c56d88b40004`
+- `revocation.txt`: `56bd4278db3ea2dfda1501d0f6e78fb7f027fb866aa0b639c09dcff18a371a85`
+- `security-audit.txt`: `ba20dbbf8db284bb2cd3dd642d8e117e90757255230f8a2ff1247e9f660c359f`
+- `security-audit-clippy.txt`: `238977841d95c6a6109edb41511c2221a14f6e03ab515b208abd557da535afdf`
+- `corbanu-build.txt`: `3e6adb90b5a324cb73e44bc47ab2217a061de0120b9c20983fc4e7153ec3f14d`
+
+These logs are under
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-round4/logs/`. The
+integration-owner closeout consumed less than one of the five reserved days;
+that is a reserve accounting fact, not a calendar-duration promise.
+
 ## PF-21 compatibility comparison
 
 The pre-remediation implementation commit `85837f64b` passed all 36 cases, but
@@ -380,6 +410,16 @@ this clean comparison remains useful regression evidence but does not close
 compatibility for `15ed4d95a`; the integration owner must rerun the 36-case
 comparison on the combined candidate.
 
+The integration owner reran that comparison on merge commit
+`d74b2f77e6dc712ce8d89572594ceddac908365e`. It passed all 36 controls: nine
+baseline, nine upstream, nine candidate, four protected and five immutable
+probes, with zero failures, an empty dirty-path list and no cleanup warnings.
+The exact candidate was `corbanu 0.1.35`, SHA-256
+`34b605a8707e61bd1db80b974c426bb1fd4713a2301587a06f040be3fe9a14c2`.
+The final report is
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-round4/compat-run/compatibility-report.json`,
+SHA-256 `5638711b553764ce3be5ce59165944fa6b445676739e938129b75bcbabcb20e9`.
+
 ## TMUX evidence
 
 The exact pre-Opus-remediation compatibility-built binary was launched in a real 200x60 TMUX
@@ -395,6 +435,18 @@ readiness. Literal `/exit` closed the session cleanly.
 - Trace log:
   `/Volumes/CorbanuDrive/Corbanu/.codex-work/pf22-protected-runtime/tmux-smoke-compat-candidate/logs/codex-tui.log`,
   SHA-256 `270c2f6af98ca6f969ca102e4396c7045da89f16d8e337534dc3c369c0731e19`.
+
+The exact merged compatibility binary then passed the final 200x60 private
+TMUX smoke in session `pf22-integration-smoke`: literal `/status` showed
+`corbanu 0.1.35`, the integration worktree and `Read Only (never)`; literal
+`/exit` ended the session and private server with no leak.
+
+- Pane capture:
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-round4/tmux-smoke/status-pane.txt`,
+  SHA-256 `2b65a87be93edb37b37e149e2a8fcb626d7a1310ed4670c4f051a55525b1ff10`.
+- Trace log:
+  `/Volumes/CorbanuDrive/Corbanu/.codex-work/p0-security-round4/tmux-smoke/logs/codex-tui.log`,
+  SHA-256 `3a7752cf4914b2b0bdacb435841fab4efc1668c6ba1062be28b49a626ffca005`.
 
 ## Review status
 
@@ -518,7 +570,7 @@ Ingress, egress, and the trusted human persistence adapter remain explicitly
 pending for their hook-owning PF-23/PF-24 sprints; PF-22 does not claim those
 adapters.
 
-## Remaining gates and consumer handoff
+## Archived consumer handoff
 
 - Define in a future explicitly scoped cross-crate contract a durable admission
   marker or non-forgeable fence-to-audit proof before allowing receiptless
@@ -526,14 +578,13 @@ adapters.
 - PF-23/PF-24 must bind the runtime and journal-recovery expected run
   generation to one authenticated live-session source and add a combined-tree
   mismatch test; PF-22 cannot prove that root from `RecoveryReport` alone.
-- Integration owner reruns the affected/seam/compatibility/governance matrix on
-  the combined tree and records the integration reserve actually consumed.
 - PF-23 connects and verifies ingress and egress adapters; PF-24 connects and
   verifies the trusted human update/persistence adapter.
 - Windows/Linux qualification was intentionally not run and remains outside
   this lane until the user changes tailnets and the integration owner directs
   it.
-- Integration owner archives PF-22-S02 and updates shared plan/navigation
-  ledgers only after all gates close.
+- Integration-owner affected, seam, governance, compatibility and TMUX gates
+  closed on the combined tree before PF-22-S02 was archived. All build, cache,
+  temporary and evidence artifacts remained on CorbanuDrive.
 
 Historical PF-22-S01 archive and evidence remain unchanged.

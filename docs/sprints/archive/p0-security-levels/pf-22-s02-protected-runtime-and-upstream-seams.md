@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-22-S02"
 title: "Protected runtime integration and upstream seams"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-22"
 execution_order: 27
@@ -58,30 +58,31 @@ updated: 2026-08-31
 - [x] Remediated the final-pass retry finding under integration-owner-authorized audit scope: journal resolution borrows the non-clone permit, Core retains one exact pending outcome only across known non-ambiguous errors, and commit-unknown disables direct retry.
 - [x] Remediated the ship-pass lifecycle finding: authorization now requires a live permit and no pending resolution before any validation, fence transition or effect, with negative coverage for every successful terminal path and retry-pending state.
 - [x] Recorded focused, affected, compatibility and real-TMUX evidence under `qa/security-levels/sprints/PF-22-S02/`.
+- [x] Integration owner merged the clean handback at `d74b2f77e6dc712ce8d89572594ceddac908365e`, reran the complete affected/seam/governance matrix and the 36-case compatibility harness, and captured an exact-binary real-TMUX `/status`/`/exit` smoke.
 
 ## Remaining
 
-- [ ] At the PF-23/PF-24 consumer boundary, bind runtime readiness and journal recovery to one authenticated live run-generation source and prove a mismatch fails closed.
-- [ ] Scope a future cross-crate durable-admission or non-forgeable fence-to-audit proof before supporting receiptless never-admitted mandate Denied/Cancelled outcomes; PF-22 only claims conservative Unknown.
-- [ ] Have the integration owner rerun combined-tree gates, archive the sprint and update shared plan/navigation ledgers.
+- [x] Recorded the PF-23/PF-24 consumer obligation to bind runtime readiness and journal recovery to one authenticated live run-generation source and prove a mismatch fails closed; that adapter work is not claimed by this foundation sprint.
+- [x] Recorded a future cross-crate durable-admission or non-forgeable fence-to-audit proof before supporting receiptless never-admitted mandate Denied/Cancelled outcomes; PF-22 deliberately closes only as conservative Unknown.
+- [x] Integration owner reran combined-tree gates, archived the sprint and updated shared plan/navigation ledgers.
 
 ## Verification
 
 - [x] `cd codex-rs && just fix -p codex-core && just fmt` before final affected tests.
 - [x] `cd codex-rs && just test -p codex-core effective_policy && just test -p codex-core security_inheritance` plus focused new integration cases.
 - [x] `python3 scripts/security-upstream-seams-check --manifest qa/security-levels/upstream-seams.json` and `python3 -m unittest discover -s scripts/tests -p 'test_security_upstream_seams.py'`; missing hook/owner/commit/command/evidence must fail.
-- [x] TUI applicability: no new UI here; PF-24/PF-25/PF-26 retain transition, stop and resume proof. A supporting pre-Opus-remediation TMUX smoke passed and is recorded honestly as superseded evidence.
+- [x] TUI applicability: no new UI here; PF-24/PF-25/PF-26 retain transition, stop and resume proof. The exact merged binary passed a supporting 200x60 real-TMUX `/status` and clean `/exit` smoke with read-only/never permissions.
 - [x] Run the first required read-only Claude Opus 5 Max review through Corbanu Terminal in TMUX; it returned no P0, two P1 and six P2 findings, all dispositioned in evidence.
 - [x] Rerun Opus 5 Max on the first P1/P2-remediated candidate; it returned no P0, two P1 and five P2 findings, all remediated and dispositioned in evidence.
 - [x] Rerun Opus 5 Max on the second remediated candidate; it returned no P0/P1 and three P2 findings, with two safely remediated and one narrowed to an explicit future contract dependency.
 - [x] Rerun Opus 5 Max on the third remediated candidate; it verified all prior fixes and returned one P2 retry-safety finding, remediated under the authorized audit scope.
 - [x] Rerun Opus 5 Max on the fourth remediated candidate; it verified retry safety and returned one P2 effect-after-terminal lifecycle finding, now remediated.
 - [x] Run the final focused Opus 5 Max review on the five-times-remediated candidate; verdict: `NO ACTIONABLE P0/P1/P2 FINDINGS`.
-- [ ] Rerun the compatibility and affected matrix after PF-23/PF-24 authenticated adapter provenance is present on the combined integration tree.
+- [x] Reran the complete combined-tree affected matrix and PF-21 compatibility harness: 36/36 controls passed with a clean candidate tree. PF-23/PF-24 must repeat the relevant proof when their authenticated adapter provenance lands.
 
 ## Exit evidence
 
 - [x] Record implementation/remediation commits, changed paths, contract versions and exact final-tree commands/results under `qa/security-levels/sprints/PF-22-S02/`.
 - [x] Preserve S01 archive/evidence unchanged; do not relabel historical passes as proof of these new cases.
 - [x] Record the consumer integration handoff and pending adapter owners in evidence.
-- [ ] Complete the authenticated run-generation adapter proof, integration-owner combined-tree matrix and all shared ledgers before archive and plan/navigation updates.
+- [x] Completed the integration-owner combined-tree matrix and shared ledgers before archive; authenticated run-generation adapter proof remains explicitly owned by PF-23/PF-24 and is not misreported as PF-22 behavior.

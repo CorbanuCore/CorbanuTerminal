@@ -522,27 +522,28 @@ manifest/evaluator foundation and recurring CI coverage, but remains
 `in_progress`: no private blind result, production signature, complete synthetic
 corpus campaign or weakest-supported N100 performance result is claimed.
 
-PF-22-S02 protected runtime integration and PF-27-S04 isolated credential broker
-are now dependency-complete and may be allocated in parallel. PF-35-S01's
-external qualification is the third independent lane. PF-35-S02 remains gated
-until S01 is honestly completed and archived.
+PF-22-S02 protected runtime integration is completed and archived after clean
+combined-tree gates. PF-27-S04 isolated credential broker is ready for its
+serialized integration, and the released slot may now be allocated to
+PF-30-S01. PF-35-S01's external qualification remains independent. PF-35-S02
+stays gated until S01 is honestly completed and archived.
 
 ## Round-four rolling allocation — 2026-08-31
 
 The user directed the integration owner to treat PF-35's externally operated
 dataset/qualification campaign as independent of day-to-day engineering
 capacity while preserving its honest `in_progress` evidence state. The formal
-three-sprint limit remains: PF-35-S01, PF-22-S02 and PF-27-S04 occupy the three
-recorded slots. PF-30-S01 receives a read-only preparation handoff now and may
-enter implementation only after PF-22-S02 is integrated and archived, rolling
-into that released slot.
+three-sprint limit remains. PF-35-S01 and PF-27-S04 occupy two recorded slots;
+PF-22-S02 has released the third after integration and archive. PF-30-S01's
+read-only preparation is complete and it may now receive an exact allocation
+in that released slot.
 
 The immutable dispatch base is
 `43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4`.
 
 | Lane | Sprint | Owner | Worktree | Branch | Raw midpoint | Integration reserve |
 | --- | --- | --- | --- | --- | ---: | ---: |
-| Protected runtime | PF-22-S02 | `/root/pf22_protected_runtime` | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-protected-runtime` | `feat/p0-security-protected-runtime` | 5.0 days | 5.0 days |
+| Protected runtime — completed | PF-22-S02 | `/root/pf22_protected_runtime` | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-protected-runtime` | `feat/p0-security-protected-runtime` | 5.0 days | 5.0 days |
 | Isolated broker | PF-27-S04 | `/root/pf27_isolated_broker` | `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-isolated-broker` | `feat/p0-security-isolated-broker` | 12.0 days | 4.9 days |
 | Source envelope preparation | PF-30-S01 | `/root/pf30_source_envelope` | Unallocated until PF-22 archive | Unallocated until PF-22 archive | 7.0 days | 4.4 days |
 
@@ -557,9 +558,9 @@ PF-22 exclusively owns its recorded effective-policy, protected-runtime, Core
 module/manifest and lock surfaces. PF-27 owns the secret-broker, credential-
 broker, Vault capability, new broker-client/config leaves and its evidence; it
 does not edit `core/src/security/mod.rs`, Core/root manifests or shared locks.
-The integration owner merges and archives PF-22 first, rebases PF-27, then
-registers the PF-27 Core seam and reruns the combined tree. PF-30 does not write
-until that PF-22 archive exists.
+The integration owner merged and archived PF-22 first. PF-27 is next rebased
+and receives its serialized Core/Vault/network-proxy registrations before the
+combined-tree rerun. PF-30 may write only after its fresh post-archive allocation.
 
 PF-27 construction uses the PF-27-S03 platform candidates without claiming
 protected eligibility: Linux dedicated UID/service, macOS launchd/XPC helper,
@@ -617,7 +618,7 @@ document original scope, not new passes.
 | `PF-19` | Revocation and invalidation contract | [PF-19-S01](../../sprints/archive/p0-security-levels/pf-19-s01-revocation-contract.md), [PF-19-S02](../../sprints/archive/p0-security-levels/pf-19-s02-dispatch-revocation-fence.md) | S01/S02 completed and archived |
 | `PF-20` | Versioned security persistence | [PF-20-S01](../../sprints/archive/p0-security-levels/pf-20-s01-versioned-security-persistence.md), [PF-20-S02](../../sprints/archive/p0-security-levels/pf-20-s02-protected-authoritative-state.md) | S01/S02 completed and archived; protected activation blocked |
 | `PF-21` | Frozen Permissive compatibility | [PF-21-S01](../../sprints/archive/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md), [PF-21-S02](../../sprints/archive/p0-security-levels/pf-21-s02-expanded-compatibility-and-upstream-drift.md) | S01/S02 completed and archived |
-| `PF-22` | Effective runtime policy and agent inheritance | [PF-22-S01](../../sprints/archive/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md), [PF-22-S02](../../sprints/current/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md) | S01 completed; S02 follow-up draft |
+| `PF-22` | Effective runtime policy and agent inheritance | [PF-22-S01](../../sprints/archive/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md), [PF-22-S02](../../sprints/archive/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md) | S01/S02 completed and archived; PF-23/PF-24 retain authenticated adapter provenance |
 | `PF-13` | Vault-backed exact-host credential boundary | [S01](../../sprints/archive/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md), [S02](../../sprints/archive/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/archive/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/archive/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/archive/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md), [S06](../../sprints/archive/p0-security-levels/pf-13-s06-credential-usage-reservations.md), [S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md) | S01–S06 completed; S07 draft |
 | `PF-23` | Moderate/Aggressive protected-surface enforcement | [S01](../../sprints/current/p0-security-levels/pf-23-s01-moderate-ingress-and-disclosure-enforcement.md), [S02](../../sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md), [S03](../../sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md) | draft |
 | `PF-24` | `/security` profile selection and transition TUI | [S01](../../sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md), [S02](../../sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md) | draft |
