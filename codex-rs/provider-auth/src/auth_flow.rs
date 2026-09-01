@@ -12,6 +12,11 @@ use crate::OpenAiAccountEffect;
 use crate::OpenAiAccountSnapshot;
 use crate::ProviderConfigurationState;
 use crate::ProviderStatusSnapshot;
+use crate::claude_account_flow::ClaudeAccountAction;
+use crate::claude_account_flow::ClaudeAccountCompletion;
+use crate::claude_account_flow::ClaudeAccountEffect;
+use crate::claude_account_flow::ClaudeAccountSnapshot;
+use crate::claude_account_flow::ClaudeManagedTokenSecret;
 
 pub const PROVIDER_AUTH_FLOW_PROTOCOL_VERSION: u16 = 1;
 pub const API_KEY_AUTH_TIMEOUT: Duration = Duration::from_secs(120);
@@ -44,6 +49,7 @@ pub enum ProviderAuthRejectionReason {
 pub enum ProviderAuthFlowSnapshot {
     Idle,
     OpenAiAccount(OpenAiAccountSnapshot),
+    ClaudeAccount(ClaudeAccountSnapshot),
     Entering {
         flow: ApiKeyFlowContext,
         has_input: bool,
@@ -87,6 +93,7 @@ pub enum ApiKeyPersistenceResult {
 #[derive(Debug, PartialEq, Eq)]
 pub enum ProviderAuthAction {
     OpenAiAccount(OpenAiAccountAction),
+    ClaudeAccount(ClaudeAccountAction),
     StartApiKey(ApiKeyFlowStart),
     SetApiKey(ApiKeySecret),
     Submit,
@@ -108,6 +115,7 @@ pub enum ProviderAuthAction {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderAuthCompletion {
     OpenAiAccount(OpenAiAccountCompletion),
+    ClaudeAccount(ClaudeAccountCompletion),
     Configured {
         target: ApiKeyAuthTarget,
         status: ProviderStatusSnapshot,
@@ -120,6 +128,7 @@ pub enum ProviderAuthCompletion {
 #[derive(Debug, PartialEq, Eq)]
 pub enum ProviderAuthEffect {
     OpenAiAccount(OpenAiAccountEffect),
+    ClaudeAccount(ClaudeAccountEffect),
     PersistApiKey {
         attempt_id: ProviderAuthAttemptId,
         target: ApiKeyAuthTarget,
@@ -155,7 +164,9 @@ pub(crate) type Reduction = (Vec<ProviderAuthEffect>, ProviderAuthDisposition);
 pub struct ProviderAuthController {
     pub(crate) snapshot: ProviderAuthFlowSnapshot,
     input: Option<ApiKeySecret>,
+    pub(crate) claude_input: Option<ClaudeManagedTokenSecret>,
     pub(crate) next_attempt_id: u64,
+    pub(crate) next_claude_process_id: u64,
 }
 
 impl Default for ProviderAuthController {
@@ -163,7 +174,9 @@ impl Default for ProviderAuthController {
         Self {
             snapshot: ProviderAuthFlowSnapshot::Idle,
             input: None,
+            claude_input: None,
             next_attempt_id: 1,
+            next_claude_process_id: 1,
         }
     }
 }
@@ -176,6 +189,7 @@ impl ProviderAuthController {
     pub fn dispatch(&mut self, action: ProviderAuthAction) -> ProviderAuthTransition {
         let (effects, disposition) = match action {
             ProviderAuthAction::OpenAiAccount(action) => self.openai_account(action),
+            ProviderAuthAction::ClaudeAccount(action) => self.claude_account(action),
             ProviderAuthAction::StartApiKey(start) => self.start(start),
             ProviderAuthAction::SetApiKey(secret) => self.set_input(secret),
             ProviderAuthAction::Submit => self.submit(),
@@ -424,6 +438,10 @@ impl ProviderAuthController {
         self.input = None;
     }
 
+    pub(crate) fn clear_claude_input(&mut self) {
+        self.claude_input = None;
+    }
+
     pub(crate) fn allocate_attempt(&mut self) -> Option<ProviderAuthAttemptId> {
         let next_attempt_id = self.next_attempt_id.checked_add(1)?;
         let attempt_id = ProviderAuthAttemptId(self.next_attempt_id);
@@ -456,6 +474,7 @@ fn rejected_for(snapshot: &ProviderAuthFlowSnapshot) -> Reduction {
 pub(crate) fn commit_in_progress(snapshot: &ProviderAuthFlowSnapshot) -> bool {
     active(snapshot).is_some()
         || matches!(snapshot, ProviderAuthFlowSnapshot::OpenAiAccount(state) if state.is_in_flight())
+        || matches!(snapshot, ProviderAuthFlowSnapshot::ClaudeAccount(state) if state.is_in_flight())
 }
 
 fn applied() -> Reduction {

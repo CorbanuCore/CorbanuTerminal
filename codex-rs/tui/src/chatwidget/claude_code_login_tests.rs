@@ -331,7 +331,7 @@ exit 2
     };
     input_tx
         .send(ClaudeCodeLoginInput::AuthorizationCode(
-            "one-time-code".to_string(),
+            zeroize::Zeroizing::new("one-time-code".to_string()),
         ))
         .expect("send authorization code");
 
@@ -397,7 +397,7 @@ exit 2
     };
     input_tx
         .send(ClaudeCodeLoginInput::AuthorizationCode(
-            "one-time-code".to_string(),
+            zeroize::Zeroizing::new("one-time-code".to_string()),
         ))
         .expect("send authorization code");
     tokio::time::timeout(Duration::from_secs(2), async {
@@ -692,13 +692,17 @@ async fn post_login_status_timeout_does_not_persist_a_selection() {
             Some(&fake_claude),
             temp_dir.path(),
             Duration::from_millis(25),
+            /*expected_identity*/ None,
         ),
     )
     .await
     .expect("post-login verification must remain bounded")
     .expect_err("hanging status must fail verification");
 
-    assert!(error.contains("timed out"));
+    assert!(matches!(
+        error,
+        ClaudeCodeLoginBackendError::Other(message) if message.contains("timed out")
+    ));
     assert_eq!(
         Vault::new(temp_dir.path().to_path_buf())
             .load_claude_auth_selection()
@@ -732,5 +736,157 @@ async fn claude_status_preserves_custom_oauth_profile_identity() {
         .await
         .expect("status"),
         ClaudeCodePlanStatus::SignedIn { .. }
+    ));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn selected_source_mismatch_is_typed_as_identity_conflict() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let health = temp_dir.path().join("health");
+    std::fs::write(
+        &health,
+        "#!/bin/sh\nprintf '%s\\n' 'claude-login:credentials-file:actual'\n",
+    )
+    .expect("write health fixture");
+    let mut permissions = std::fs::metadata(&health)
+        .expect("health fixture metadata")
+        .permissions();
+    permissions.set_mode(0o700);
+    std::fs::set_permissions(&health, permissions).expect("make health fixture executable");
+
+    assert!(matches!(
+        verify_current_platform_login_health(
+            Some(&health),
+            Duration::from_secs(1),
+            Some("claude-login:credentials-file:expected"),
+        )
+        .await,
+        Err(PlatformLoginHealthCheckError::IdentityMismatch(_))
+    ));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn preserve_selected_source_change_is_identity_conflict_without_persistence() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let fake_claude = temp_dir.path().join("claude");
+    std::fs::write(
+        &fake_claude,
+        "#!/bin/sh\n[ \"$1 $2 $3\" = \"auth status --json\" ] || exit 2\nprintf '{\"loggedIn\":true,\"authMethod\":\"claude.ai\",\"email\":\"fixture@example.invalid\",\"orgId\":\"org-fixture\",\"subscriptionType\":\"max\"}\\n'\n",
+    )
+    .expect("write Claude fixture");
+    let current_source = current_platform_login_source_id().expect("current source");
+    let health = temp_dir.path().join("health");
+    std::fs::write(
+        &health,
+        format!("#!/bin/sh\nprintf '%s\\n' '{current_source}'\n"),
+    )
+    .expect("write health fixture");
+    for executable in [&fake_claude, &health] {
+        let mut permissions = std::fs::metadata(executable)
+            .expect("fixture metadata")
+            .permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(executable, permissions).expect("make fixture executable");
+    }
+
+    let authority_id =
+        claude_login_authority_id("fixture@example.invalid", Some("org-fixture"), Some("max"))
+            .expect("authority");
+    let expected = ExpectedClaudeCodeIdentity {
+        source_id: "claude-login:credentials-file:previous".to_string(),
+        authority_id: authority_id.clone(),
+    };
+    let prior =
+        ClaudeAuthSelection::new_claude_code_login(expected.source_id.clone(), authority_id)
+            .expect("prior selection");
+    let vault = Vault::new(temp_dir.path().to_path_buf());
+    vault
+        .save_claude_auth_selection(&prior)
+        .expect("save prior selection");
+
+    assert!(matches!(
+        verify_login_with_timeout(
+            &fake_claude,
+            Some(&health),
+            temp_dir.path(),
+            Duration::from_secs(1),
+            Some(&expected),
+        )
+        .await,
+        Err(ClaudeCodeLoginBackendError::IdentityConflict)
+    ));
+    assert_eq!(
+        vault
+            .load_claude_auth_selection()
+            .expect("load prior selection"),
+        Some(prior)
+    );
+}
+
+#[test]
+fn bound_reauthorization_refuses_a_concurrent_selection_change() {
+    let temp_dir = tempfile::tempdir().expect("temp dir");
+    let vault = Vault::new(temp_dir.path().to_path_buf());
+    let expected = ExpectedClaudeCodeIdentity {
+        source_id: "claude-login:credentials-file:expected".to_string(),
+        authority_id: claude_login_authority_id(
+            "expected@example.invalid",
+            Some("org-expected"),
+            Some("max"),
+        )
+        .expect("expected authority"),
+    };
+    let selected = ClaudeAuthSelection::new_claude_code_login(
+        expected.source_id.clone(),
+        expected.authority_id.clone(),
+    )
+    .expect("expected selection");
+    vault
+        .save_claude_auth_selection(&selected)
+        .expect("save expected selection");
+
+    let concurrent = ClaudeAuthSelection::new_claude_code_login(
+        "claude-login:credentials-file:concurrent",
+        claude_login_authority_id(
+            "concurrent@example.invalid",
+            Some("org-concurrent"),
+            Some("team"),
+        )
+        .expect("concurrent authority"),
+    )
+    .expect("concurrent selection");
+    vault
+        .save_claude_auth_selection(&concurrent)
+        .expect("save concurrent selection");
+
+    let result = persist_claude_code_login_selection_blocking(
+        temp_dir.path(),
+        expected.source_id.clone(),
+        expected.authority_id.clone(),
+        Some(&expected),
+    );
+    assert!(matches!(
+        result,
+        Err(ClaudeCodeLoginBackendError::IdentityConflict)
+    ));
+    assert_eq!(
+        vault
+            .load_claude_auth_selection()
+            .expect("load preserved selection"),
+        Some(concurrent)
+    );
+}
+
+#[tokio::test]
+async fn typed_managed_enrollment_preserves_invalid_classification() {
+    assert!(matches!(
+        enroll_managed_subscription_token_typed(
+            tempfile::tempdir().expect("temp dir").path().to_path_buf(),
+            ClaudeSubscriptionTokenSecret::new("\r\n".to_string()),
+        )
+        .await,
+        Err(ClaudeManagedEnrollmentError::Invalid(_))
     ));
 }

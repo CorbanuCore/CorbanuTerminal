@@ -2,6 +2,7 @@
 
 use std::path::Path;
 use std::process::Stdio;
+use std::sync::Arc;
 
 use crossterm::event::KeyCode;
 use ratatui::buffer::Buffer;
@@ -18,6 +19,7 @@ use tokio::process::Command;
 use tokio::sync::mpsc;
 use tokio::time::Duration;
 use tokio::time::timeout;
+use zeroize::Zeroizing;
 
 use super::ChatWidget;
 use crate::app_event::AppEvent;
@@ -30,6 +32,7 @@ use crate::bottom_pane::SelectionViewParams;
 use crate::bottom_pane::ViewCompletion;
 use crate::internal_cli_helper::internal_cli_helper_executable;
 use crate::render::renderable::Renderable;
+use codex_provider_auth::claude_account_flow::ClaudeCodeIdentityPolicy;
 use codex_vault::ClaudeAuthSelection;
 use codex_vault::ClaudeAuthSource;
 use codex_vault::ENVIRONMENT_CLAUDE_AUTH_SOURCE_ID;
@@ -62,8 +65,56 @@ const CLAUDE_STATUS_ENV_REMOVE: [&str; 8] = [
 // Claude Code needs it to inspect the same custom-OAuth login/Keychain slot Corbanu selected.
 
 pub(crate) enum ClaudeCodeLoginInput {
-    AuthorizationCode(String),
+    AuthorizationCode(Zeroizing<String>),
     Cancel,
+}
+
+pub(crate) enum ClaudeCodeLoginBackendEvent {
+    Ready {
+        verification_url: String,
+        input_tx: mpsc::UnboundedSender<ClaudeCodeLoginInput>,
+    },
+    Finished {
+        result: ClaudeCodeLoginBackendResult,
+    },
+}
+
+pub(crate) type ClaudeCodeLoginBackendResult = Option<Result<String, ClaudeCodeLoginBackendError>>;
+
+pub(crate) enum ClaudeCodeLoginBackendError {
+    IdentityConflict,
+    TimedOut,
+    Other(String),
+}
+
+pub(crate) enum ClaudeManagedEnrollmentError {
+    Invalid(String),
+    StorageUnavailable(String),
+}
+
+impl ClaudeCodeLoginBackendError {
+    fn into_message(self) -> String {
+        match self {
+            Self::IdentityConflict => {
+                "Claude Code returned a different selected account; the previous Corbanu selection was preserved."
+                    .to_string()
+            }
+            Self::TimedOut => "Claude Code login timed out after 15 minutes.".to_string(),
+            Self::Other(message) => message,
+        }
+    }
+}
+
+impl From<String> for ClaudeCodeLoginBackendError {
+    fn from(message: String) -> Self {
+        Self::Other(message)
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct ExpectedClaudeCodeIdentity {
+    source_id: String,
+    authority_id: String,
 }
 
 fn remove_line_breaks(mut token: String) -> String {
@@ -75,40 +126,57 @@ pub(crate) async fn enroll_managed_subscription_token(
     codex_home: std::path::PathBuf,
     token: ClaudeSubscriptionTokenSecret,
 ) -> Result<String, String> {
-    let token = remove_line_breaks(token.into_inner());
-    tokio::task::spawn_blocking(move || {
-        Vault::new(codex_home)
-            .enroll_managed_claude_subscription_token(token)
-    })
-    .await
-    .map_err(|error| {
-        format!(
-            "Claude subscription token setup could not finish: {error}. No fallback was attempted; inspect Providers and retry."
-        )
-    })?
-    .map_err(|error| {
-        format!(
-            "Claude subscription token was not saved: {error}. No fallback was attempted; inspect Providers and retry."
-        )
-    })?;
+    enroll_managed_subscription_token_typed(codex_home, token)
+        .await
+        .map_err(|error| match error {
+            ClaudeManagedEnrollmentError::Invalid(message) => {
+                format!("Claude subscription token was rejected: {message}. No fallback was attempted; inspect Providers and retry.")
+            }
+            ClaudeManagedEnrollmentError::StorageUnavailable(message) => {
+                format!("Claude subscription token was not saved: {message}. No fallback was attempted; inspect Providers and retry.")
+            }
+        })?;
     Ok(
         "Long-lived Claude subscription token saved and selected. Retry the interrupted request or choose a Claude Plan model from /model."
             .to_string(),
     )
 }
 
+pub(crate) async fn enroll_managed_subscription_token_typed(
+    codex_home: std::path::PathBuf,
+    token: ClaudeSubscriptionTokenSecret,
+) -> Result<(), ClaudeManagedEnrollmentError> {
+    let token = remove_line_breaks(token.into_inner());
+    tokio::task::spawn_blocking(move || {
+        Vault::new(codex_home).enroll_managed_claude_subscription_token(token)
+    })
+    .await
+    .map_err(|error| ClaudeManagedEnrollmentError::StorageUnavailable(error.to_string()))?
+    .map(|_| ())
+    .map_err(|error| match error {
+        codex_vault::ClaudeSubscriptionTokenError::Empty
+        | codex_vault::ClaudeSubscriptionTokenError::InvalidFormat => {
+            ClaudeManagedEnrollmentError::Invalid(error.to_string())
+        }
+        codex_vault::ClaudeSubscriptionTokenError::Vault(_) => {
+            ClaudeManagedEnrollmentError::StorageUnavailable(error.to_string())
+        }
+    })
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum PlatformLoginHealthCheckError {
     NeedsReauthorization(String),
+    IdentityMismatch(String),
     Undetermined(String),
 }
 
 impl std::fmt::Display for PlatformLoginHealthCheckError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NeedsReauthorization(message) | Self::Undetermined(message) => {
-                formatter.write_str(message)
-            }
+            Self::NeedsReauthorization(message)
+            | Self::IdentityMismatch(message)
+            | Self::Undetermined(message) => formatter.write_str(message),
         }
     }
 }
@@ -212,6 +280,9 @@ async fn current_status_with_executables(
                 Err(PlatformLoginHealthCheckError::NeedsReauthorization(_)) => {
                     return ClaudeCodePlanStatus::NeedsReauthorization;
                 }
+                Err(PlatformLoginHealthCheckError::IdentityMismatch(_)) => {
+                    return ClaudeCodePlanStatus::NeedsReauthorization;
+                }
                 Err(PlatformLoginHealthCheckError::Undetermined(_)) => {
                     return ClaudeCodePlanStatus::Error;
                 }
@@ -277,6 +348,7 @@ fn selection_source_id_is_current(selection: &ClaudeAuthSelection) -> bool {
 }
 
 fn accepted_platform_login_source_ids() -> Result<Vec<String>, String> {
+    #[allow(unused_mut)] // macOS also accepts the legacy credentials-file identity.
     let mut source_ids = vec![current_platform_login_source_id()?];
     #[cfg(target_os = "macos")]
     {
@@ -380,6 +452,52 @@ fn start_with_executable(
     health_executable: Option<&Path>,
     codex_home: std::path::PathBuf,
 ) -> mpsc::UnboundedSender<ClaudeCodeLoginInput> {
+    let callback = Arc::new(move |event| match event {
+        ClaudeCodeLoginBackendEvent::Ready {
+            verification_url,
+            input_tx,
+        } => app_event_tx.send(AppEvent::ClaudeCodePlanLoginReady {
+            verification_url,
+            input_tx,
+        }),
+        ClaudeCodeLoginBackendEvent::Finished { result } => {
+            app_event_tx.send(AppEvent::ClaudeCodePlanLoginFinished {
+                result: result
+                    .map(|result| result.map_err(ClaudeCodeLoginBackendError::into_message)),
+            });
+        }
+    });
+    start_with_callback_and_executable(
+        executable,
+        health_executable,
+        codex_home,
+        ClaudeCodeIdentityPolicy::AllowExplicitChange,
+        callback,
+    )
+}
+
+#[allow(dead_code)] // Consumed by the hidden PF-52 adapter before PF-53/PF-54 host adoption.
+pub(crate) fn start_with_callback(
+    codex_home: std::path::PathBuf,
+    identity_policy: ClaudeCodeIdentityPolicy,
+    callback: Arc<dyn Fn(ClaudeCodeLoginBackendEvent) + Send + Sync>,
+) -> mpsc::UnboundedSender<ClaudeCodeLoginInput> {
+    start_with_callback_and_executable(
+        Path::new("claude"),
+        /*health_executable*/ None,
+        codex_home,
+        identity_policy,
+        callback,
+    )
+}
+
+fn start_with_callback_and_executable(
+    executable: &Path,
+    health_executable: Option<&Path>,
+    codex_home: std::path::PathBuf,
+    identity_policy: ClaudeCodeIdentityPolicy,
+    callback: Arc<dyn Fn(ClaudeCodeLoginBackendEvent) + Send + Sync>,
+) -> mpsc::UnboundedSender<ClaudeCodeLoginInput> {
     let (input_tx, input_rx) = mpsc::unbounded_channel();
     let task_input_tx = input_tx.clone();
     let executable = executable.to_path_buf();
@@ -389,24 +507,67 @@ fn start_with_executable(
             &executable,
             health_executable.as_deref(),
             &codex_home,
-            app_event_tx.clone(),
+            identity_policy,
+            callback.clone(),
             task_input_tx,
             input_rx,
         )
         .await;
-        app_event_tx.send(AppEvent::ClaudeCodePlanLoginFinished { result });
+        callback(ClaudeCodeLoginBackendEvent::Finished { result });
     });
     input_tx
+}
+
+async fn load_expected_claude_code_identity(
+    codex_home: &Path,
+    identity_policy: ClaudeCodeIdentityPolicy,
+) -> Result<Option<ExpectedClaudeCodeIdentity>, ClaudeCodeLoginBackendError> {
+    if identity_policy == ClaudeCodeIdentityPolicy::AllowExplicitChange {
+        return Ok(None);
+    }
+    let codex_home = codex_home.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let selection = Vault::new(codex_home)
+            .load_claude_auth_selection()
+            .map_err(|error| {
+                ClaudeCodeLoginBackendError::Other(format!(
+                    "Could not load the selected Claude Code login: {error}"
+                ))
+            })?
+            .ok_or(ClaudeCodeLoginBackendError::IdentityConflict)?;
+        if selection.source != ClaudeAuthSource::ClaudeCodeLogin {
+            return Err(ClaudeCodeLoginBackendError::IdentityConflict);
+        }
+        let authority_id = selection
+            .authority_id
+            .ok_or(ClaudeCodeLoginBackendError::IdentityConflict)?;
+        Ok(Some(ExpectedClaudeCodeIdentity {
+            source_id: selection.source_id,
+            authority_id,
+        }))
+    })
+    .await
+    .map_err(|error| {
+        ClaudeCodeLoginBackendError::Other(format!(
+            "Could not prepare Claude Code reauthorization: {error}"
+        ))
+    })?
 }
 
 async fn run_login(
     executable: &Path,
     health_executable: Option<&Path>,
     codex_home: &Path,
-    app_event_tx: AppEventSender,
+    identity_policy: ClaudeCodeIdentityPolicy,
+    callback: Arc<dyn Fn(ClaudeCodeLoginBackendEvent) + Send + Sync>,
     input_tx: mpsc::UnboundedSender<ClaudeCodeLoginInput>,
     mut input_rx: mpsc::UnboundedReceiver<ClaudeCodeLoginInput>,
-) -> Option<Result<String, String>> {
+) -> ClaudeCodeLoginBackendResult {
+    let expected_identity =
+        match load_expected_claude_code_identity(codex_home, identity_policy).await {
+            Ok(expected) => expected,
+            Err(error) => return Some(Err(error)),
+        };
     let mut child = match Command::new(executable)
         .args(["auth", "login", "--claudeai"])
         .stdin(Stdio::piped())
@@ -419,19 +580,20 @@ async fn run_login(
         Err(err) => {
             return Some(Err(format!(
                 "Could not start `claude auth login --claudeai`: {err}. Install Claude Code and try again."
-            )));
+            )
+            .into()));
         }
     };
 
     let Some(stdout) = child.stdout.take() else {
-        return Some(Err(
-            "Claude Code login did not provide an output stream.".to_string()
-        ));
+        return Some(Err("Claude Code login did not provide an output stream."
+            .to_string()
+            .into()));
     };
     let Some(mut stdin) = child.stdin.take() else {
-        return Some(Err(
-            "Claude Code login did not provide an input stream.".to_string()
-        ));
+        return Some(Err("Claude Code login did not provide an input stream."
+            .to_string()
+            .into()));
     };
     let (output_tx, mut output_rx) = mpsc::unbounded_channel();
     spawn_output_reader(stdout, output_tx.clone());
@@ -459,13 +621,16 @@ async fn run_login(
                     status
                         .map(|status| format!(" ({status})"))
                         .unwrap_or_default()
-                )));
+                )
+                .into()));
             }
             Some(line) => {
                 if line.len() > MAX_LOGIN_LINE_BYTES {
                     let _ = child.kill().await;
                     return Some(Err(
-                        "Claude Code login returned an unexpectedly large browser URL.".to_string(),
+                        "Claude Code login returned an unexpectedly large browser URL."
+                            .to_string()
+                            .into(),
                     ));
                 }
                 if let Some(url) = extract_https_url(&line) {
@@ -476,7 +641,7 @@ async fn run_login(
     };
 
     drop(output_rx);
-    app_event_tx.send(AppEvent::ClaudeCodePlanLoginReady {
+    callback(ClaudeCodeLoginBackendEvent::Ready {
         verification_url,
         input_tx,
     });
@@ -488,14 +653,17 @@ async fn run_login(
             return None;
         }
     };
-    if let Err(err) = stdin
-        .write_all(format!("{authorization_code}\n").as_bytes())
-        .await
-    {
+    let submit_result = async {
+        stdin.write_all(authorization_code.as_bytes()).await?;
+        stdin.write_all(b"\n").await
+    }
+    .await;
+    if let Err(err) = submit_result {
         let _ = child.kill().await;
         return Some(Err(format!(
             "Could not submit the authorization code to Claude Code: {err}"
-        )));
+        )
+        .into()));
     }
     drop(stdin);
 
@@ -515,7 +683,9 @@ async fn run_login(
     {
         Ok(Some(Ok(status))) => status,
         Ok(Some(Err(err))) => {
-            return Some(Err(format!("Claude Code login failed to finish: {err}")));
+            return Some(Err(
+                format!("Claude Code login failed to finish: {err}").into()
+            ));
         }
         Ok(None) => {
             let _ = child.kill().await;
@@ -523,16 +693,21 @@ async fn run_login(
         }
         Err(_) => {
             let _ = child.kill().await;
-            return Some(Err(
-                "Claude Code login timed out after 15 minutes.".to_string()
-            ));
+            return Some(Err(ClaudeCodeLoginBackendError::TimedOut));
         }
     };
     if !status.success() {
-        return Some(Err(format!("Claude Code rejected the login ({status}).")));
+        return Some(Err(
+            format!("Claude Code rejected the login ({status}).").into()
+        ));
     }
 
-    let verification = verify_login(executable, health_executable, codex_home);
+    let verification = verify_login(
+        executable,
+        health_executable,
+        codex_home,
+        expected_identity.as_ref(),
+    );
     tokio::pin!(verification);
     loop {
         tokio::select! {
@@ -599,12 +774,14 @@ async fn verify_login(
     executable: &Path,
     health_executable: Option<&Path>,
     codex_home: &Path,
-) -> Result<String, String> {
+    expected_identity: Option<&ExpectedClaudeCodeIdentity>,
+) -> Result<String, ClaudeCodeLoginBackendError> {
     verify_login_with_timeout(
         executable,
         health_executable,
         codex_home,
         LOGIN_HEALTH_TIMEOUT,
+        expected_identity,
     )
     .await
 }
@@ -614,7 +791,8 @@ async fn verify_login_with_timeout(
     health_executable: Option<&Path>,
     codex_home: &Path,
     verification_timeout: Duration,
-) -> Result<String, String> {
+    expected_identity: Option<&ExpectedClaudeCodeIdentity>,
+) -> Result<String, ClaudeCodeLoginBackendError> {
     tokio::time::timeout(
         verification_timeout,
         verify_login_inner(
@@ -622,11 +800,14 @@ async fn verify_login_with_timeout(
             health_executable,
             codex_home,
             verification_timeout,
+            expected_identity,
         ),
     )
     .await
     .map_err(|_| {
-        "Could not verify Claude Code login before the health check timed out.".to_string()
+        ClaudeCodeLoginBackendError::Other(
+            "Could not verify Claude Code login before the health check timed out.".to_string(),
+        )
     })?
 }
 
@@ -635,18 +816,31 @@ async fn verify_login_inner(
     health_executable: Option<&Path>,
     codex_home: &Path,
     verification_timeout: Duration,
-) -> Result<String, String> {
+    expected_identity: Option<&ExpectedClaudeCodeIdentity>,
+) -> Result<String, ClaudeCodeLoginBackendError> {
     match status_with_timeout(executable, verification_timeout).await {
         status @ ClaudeCodePlanStatus::SignedIn { .. } => {
-            let authority_id = status_authority_id(&status)?;
+            let authority_id =
+                status_authority_id(&status).map_err(ClaudeCodeLoginBackendError::from)?;
             let source_id = verify_current_platform_login_health(
                 health_executable,
                 verification_timeout,
                 /*selected_source_id*/ None,
             )
             .await
-            .map_err(|error| error.to_string())?;
-            persist_claude_code_login_selection(codex_home, source_id, authority_id).await?;
+            .map_err(|error| ClaudeCodeLoginBackendError::Other(error.to_string()))?;
+            if expected_identity.is_some_and(|expected| {
+                expected.source_id != source_id || expected.authority_id != authority_id
+            }) {
+                return Err(ClaudeCodeLoginBackendError::IdentityConflict);
+            }
+            persist_claude_code_login_selection(
+                codex_home,
+                source_id,
+                authority_id,
+                expected_identity,
+            )
+            .await?;
             Ok("Claude Code login selected. Retry the Claude Plan request or choose a model from /model.".to_string())
         }
         ClaudeCodePlanStatus::Checking
@@ -656,13 +850,13 @@ async fn verify_login_inner(
         | ClaudeCodePlanStatus::InvalidSelection
         | ClaudeCodePlanStatus::NeedsReauthorization
         | ClaudeCodePlanStatus::SignedOut
-        | ClaudeCodePlanStatus::Unavailable => {
-            Err("Claude Code is not signed in with a Claude subscription after login.".to_string())
-        }
-        ClaudeCodePlanStatus::Error => Err(
+        | ClaudeCodePlanStatus::Unavailable => Err(ClaudeCodeLoginBackendError::Other(
+            "Claude Code is not signed in with a Claude subscription after login.".to_string(),
+        )),
+        ClaudeCodePlanStatus::Error => Err(ClaudeCodeLoginBackendError::Other(
             "Could not verify Claude Code login status before the health check timed out."
                 .to_string(),
-        ),
+        )),
     }
 }
 
@@ -682,7 +876,14 @@ pub(crate) async fn select_existing_claude_code_login(
             )
             .await
             .map_err(|error| error.to_string())?;
-            persist_claude_code_login_selection(codex_home, source_id, authority_id).await?;
+            persist_claude_code_login_selection(
+                codex_home,
+                source_id,
+                authority_id,
+                /*expected_identity*/ None,
+            )
+            .await
+            .map_err(ClaudeCodeLoginBackendError::into_message)?;
             Ok(true)
         }
         ClaudeCodePlanStatus::SignedOut
@@ -755,9 +956,13 @@ async fn verify_current_platform_login_health(
         .to_string();
     let accepted = accepted_platform_login_source_ids()
         .map_err(PlatformLoginHealthCheckError::Undetermined)?;
-    if !accepted.contains(&source_id)
-        || selected_source_id.is_some_and(|selected| selected != source_id)
-    {
+    if selected_source_id.is_some_and(|selected| selected != source_id) {
+        return Err(PlatformLoginHealthCheckError::IdentityMismatch(
+            "Claude credential verification returned a different platform profile; the previous method remains selected."
+                .to_string(),
+        ));
+    }
+    if !accepted.contains(&source_id) {
         return Err(PlatformLoginHealthCheckError::NeedsReauthorization(
             "Claude credential verification returned a different platform profile; the previous method remains selected."
                 .to_string(),
@@ -766,20 +971,56 @@ async fn verify_current_platform_login_health(
     Ok(source_id)
 }
 
+pub(crate) async fn selected_claude_recovery_source(
+    codex_home: std::path::PathBuf,
+) -> codex_provider_auth::claude_account_flow::ClaudeUnauthorizedRecoverySource {
+    tokio::task::spawn_blocking(move || {
+        Vault::new(codex_home)
+            .load_claude_auth_selection()
+            .ok()
+            .flatten()
+            .map(|selection| match selection.source {
+                ClaudeAuthSource::ManagedSubscriptionToken => {
+                    codex_provider_auth::claude_account_flow::ClaudeUnauthorizedRecoverySource::ManagedToken
+                }
+                ClaudeAuthSource::EnvironmentToken => {
+                    codex_provider_auth::claude_account_flow::ClaudeUnauthorizedRecoverySource::Environment
+                }
+                ClaudeAuthSource::ClaudeCodeLogin => {
+                    codex_provider_auth::claude_account_flow::ClaudeUnauthorizedRecoverySource::ClaudeCodeLogin
+                }
+            })
+            .unwrap_or(
+                codex_provider_auth::claude_account_flow::ClaudeUnauthorizedRecoverySource::Unknown,
+            )
+    })
+    .await
+    .unwrap_or(
+        codex_provider_auth::claude_account_flow::ClaudeUnauthorizedRecoverySource::Unknown,
+    )
+}
+
 async fn persist_claude_code_login_selection(
     codex_home: &Path,
     source_id: String,
     authority_id: String,
-) -> Result<(), String> {
+    expected_identity: Option<&ExpectedClaudeCodeIdentity>,
+) -> Result<(), ClaudeCodeLoginBackendError> {
     let codex_home = codex_home.to_path_buf();
+    let expected_identity = expected_identity.cloned();
     tokio::task::spawn_blocking(move || {
-        persist_claude_code_login_selection_blocking(&codex_home, source_id, authority_id)
+        persist_claude_code_login_selection_blocking(
+            &codex_home,
+            source_id,
+            authority_id,
+            expected_identity.as_ref(),
+        )
     })
         .await
         .map_err(|error| {
-            format!(
+            ClaudeCodeLoginBackendError::Other(format!(
                 "Claude Code login succeeded, but Corbanu could not finish selecting it: {error}. Your previous method remains selected; retry from Providers."
-            )
+            ))
         })?
 }
 
@@ -787,15 +1028,36 @@ fn persist_claude_code_login_selection_blocking(
     codex_home: &Path,
     source_id: String,
     authority_id: String,
-) -> Result<(), String> {
-    let selection = ClaudeAuthSelection::new_claude_code_login(source_id, authority_id)
-        .map_err(|error| format!("Could not select the current Claude Code login: {error}"))?;
-    Vault::new(codex_home.to_path_buf())
+    expected_identity: Option<&ExpectedClaudeCodeIdentity>,
+) -> Result<(), ClaudeCodeLoginBackendError> {
+    let vault = Vault::new(codex_home.to_path_buf());
+    if let Some(expected) = expected_identity {
+        let current = vault.load_claude_auth_selection().map_err(|error| {
+            ClaudeCodeLoginBackendError::Other(format!(
+                "Could not recheck the selected Claude Code login: {error}"
+            ))
+        })?;
+        let still_selected = current.as_ref().is_some_and(|selection| {
+            selection.source == ClaudeAuthSource::ClaudeCodeLogin
+                && selection.source_id == expected.source_id
+                && selection.authority_id.as_deref() == Some(expected.authority_id.as_str())
+        });
+        if !still_selected {
+            return Err(ClaudeCodeLoginBackendError::IdentityConflict);
+        }
+    }
+    let selection =
+        ClaudeAuthSelection::new_claude_code_login(source_id, authority_id).map_err(|error| {
+            ClaudeCodeLoginBackendError::Other(format!(
+                "Could not select the current Claude Code login: {error}"
+            ))
+        })?;
+    vault
         .save_claude_auth_selection(&selection)
         .map_err(|error| {
-            format!(
+            ClaudeCodeLoginBackendError::Other(format!(
                 "Claude Code login succeeded, but Corbanu could not select it: {error}. Your previous method remains selected; retry from Providers."
-            )
+            ))
         })
 }
 
@@ -1066,7 +1328,9 @@ impl ChatWidget {
             "Authorization code — masked".to_string(),
             "Paste the one-time code from the browser".to_string(),
             Box::new(move |_label, code| {
-                let _ = submit_tx.send(ClaudeCodeLoginInput::AuthorizationCode(code));
+                let _ = submit_tx.send(ClaudeCodeLoginInput::AuthorizationCode(
+                    Zeroizing::new(code),
+                ));
             }),
             Box::new(move || {
                 let _ = cancel_tx.send(ClaudeCodeLoginInput::Cancel);

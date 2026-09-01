@@ -4519,6 +4519,7 @@ dependencies = [
  "codex-plugin",
  "codex-product-brand",
  "codex-protocol",
+ "codex-provider-auth",
  "codex-rollout",
  "codex-sandboxing",
  "codex-shell-command",

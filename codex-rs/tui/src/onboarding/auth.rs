@@ -1230,7 +1230,9 @@ impl AuthModeWidget {
                     if code.is_empty() {
                         self.set_error(Some("Authorization code cannot be empty".to_string()));
                     } else {
-                        let _ = input_tx.send(ClaudeCodeLoginInput::AuthorizationCode(code));
+                        let _ = input_tx.send(ClaudeCodeLoginInput::AuthorizationCode(
+                            zeroize::Zeroizing::new(code),
+                        ));
                         *self.sign_in_state.write().unwrap() =
                             SignInState::ClaudeCodeLoginPending { input_tx };
                     }

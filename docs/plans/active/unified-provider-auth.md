@@ -213,7 +213,7 @@ user work and integrate rather than revert concurrent changes.
 | `PF-49` | Shared metadata status and persisted eligibility | [PF-49-S01](../../sprints/archive/unified-provider-auth/pf-49-s01-status-and-eligibility.md) | completed at `5fcde1c1d9` |
 | `PF-50` | Renderer-independent API-key authentication controller | [PF-50-S01](../../sprints/archive/unified-provider-auth/pf-50-s01-api-key-flow-controller.md) | completed at `6f90e89792` |
 | `PF-51` | OpenAI account adapter on the shared controller | [PF-51-S01](../../sprints/archive/unified-provider-auth/pf-51-s01-openai-account-adapter.md) | completed at `13dcc188fb` |
-| `PF-52` | Claude subscription adapter on the shared controller | [PF-52-S01](../../sprints/current/unified-provider-auth/pf-52-s01-claude-auth-adapter.md) | draft |
+| `PF-52` | Claude subscription adapter on the shared controller | [PF-52-S01](../../sprints/current/unified-provider-auth/pf-52-s01-claude-auth-adapter.md) | in progress |
 | `PF-53` | Multi-provider onboarding and deferred Corbanu Plan flow | [PF-53-S01](../../sprints/current/unified-provider-auth/pf-53-s01-multi-provider-onboarding.md) | draft |
 | `PF-54` | Unified `/providers` management and eligibility controls | [PF-54-S01](../../sprints/current/unified-provider-auth/pf-54-s01-provider-management.md) | draft |
 | `PF-55` | Startup, current-model, and custom-provider convergence | [PF-55-S01](../../sprints/current/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | draft |

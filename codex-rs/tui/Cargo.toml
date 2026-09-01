@@ -53,6 +53,7 @@ codex-model-provider-info = { workspace = true }
 codex-models-manager = { workspace = true }
 codex-otel = { workspace = true }
 codex-plugin = { workspace = true }
+codex-provider-auth = { workspace = true }
 codex-protocol = { workspace = true }
 codex-product-brand = { workspace = true }
 codex-rollout = { workspace = true }
