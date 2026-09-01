@@ -2,14 +2,14 @@
 
 The active [unified provider onboarding and management plan](../../../plans/active/unified-provider-auth.md)
 allows one serial sprint. PF-42 through PF-47 are the merged Claude-auth
-foundation. PF-48 and PF-49 are completed and archived; PF-50 remains draft
-until explicitly allocated.
+foundation. PF-48 and PF-49 are completed and archived; PF-50 now owns the
+serial implementation lane.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
 | 7 | [PF-48-S01](../../archive/unified-provider-auth/pf-48-s01-provider-catalog-contract.md) | Typed provider catalog and capability contract | completed | PF-47-S01 |
 | 8 | [PF-49-S01](../../archive/unified-provider-auth/pf-49-s01-status-and-eligibility.md) | Shared metadata status and eligibility persistence | completed | PF-48-S01 |
-| 9 | [PF-50-S01](pf-50-s01-api-key-flow-controller.md) | Shared typed controller and API-key adapter | draft | PF-49-S01 |
+| 9 | [PF-50-S01](pf-50-s01-api-key-flow-controller.md) | Shared typed controller and API-key adapter | in progress | PF-49-S01 |
 | 10 | [PF-51-S01](pf-51-s01-openai-account-adapter.md) | OpenAI account adapter | draft | PF-50-S01 |
 | 11 | [PF-52-S01](pf-52-s01-claude-auth-adapter.md) | Merged Claude backend adapter | draft | PF-51-S01 |
 | 12 | [PF-53-S01](pf-53-s01-multi-provider-onboarding.md) | Configure-many onboarding and deferred Corbanu | draft | PF-52-S01 |

@@ -4,10 +4,32 @@
 //! This crate derives user-facing setup identities from the resolved runtime
 //! provider map and never creates a second transport registry.
 
+mod api_key_flow;
+mod auth_flow;
 mod eligibility;
 mod status;
 mod status_contract;
 
+pub use api_key_flow::ApiKeyAuthTarget;
+pub use api_key_flow::ApiKeyFlowContext;
+pub use api_key_flow::ApiKeyFlowIntent;
+pub use api_key_flow::ApiKeyFlowStart;
+pub use api_key_flow::ApiKeySecret;
+pub use api_key_flow::ApiKeyTargetError;
+pub use auth_flow::API_KEY_AUTH_TIMEOUT;
+pub use auth_flow::ApiKeyPersistenceResult;
+pub use auth_flow::PROVIDER_AUTH_FLOW_PROTOCOL_VERSION;
+pub use auth_flow::ProviderAuthAction;
+pub use auth_flow::ProviderAuthAttemptId;
+pub use auth_flow::ProviderAuthBlockedReason;
+pub use auth_flow::ProviderAuthCompletion;
+pub use auth_flow::ProviderAuthController;
+pub use auth_flow::ProviderAuthDisposition;
+pub use auth_flow::ProviderAuthEffect;
+pub use auth_flow::ProviderAuthFailureReason;
+pub use auth_flow::ProviderAuthFlowSnapshot;
+pub use auth_flow::ProviderAuthRejectionReason;
+pub use auth_flow::ProviderAuthTransition;
 pub use eligibility::ProviderActivationPolicy;
 pub use eligibility::ProviderEligibility;
 pub use eligibility::ProviderEligibilityError;
