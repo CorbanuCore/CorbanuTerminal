@@ -88,6 +88,7 @@ owner must compare actual diffs to scope and record final combined-tree evidence
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
 | [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [52 current sprints](current/p0-security-levels/index.md), 24 completed archives | Round-three PF-13-S06/PF-41-S03 are completed and archived; PF-22-S02 and PF-27-S04 are dependency-complete, while PF-35-S01 continues external qualification |
+| [Corbanu Plan large-image requests](../plans/active/corbanu-plan-large-image-requests.md) | Active | [0 current sprints](current/corbanu-plan-large-image-requests/index.md), 2 completed archives | PF-42-S01 landed locally as private commit `35698c4d`; PF-43-S01 completed as an uncommitted public final-tree handoff. Deployment and live acceptance remain. |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
 | [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | Historical 72-sprint decomposition remains cancelled; every record maps into the active P0 plan's current work |
 

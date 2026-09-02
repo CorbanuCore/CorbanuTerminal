@@ -25,6 +25,8 @@ use super::tmux_process::wait_for_exit as wait_for_process_exit;
 static NEXT_SERVER_ID: AtomicU64 = AtomicU64::new(1);
 static NEXT_SESSION_ID: AtomicU64 = AtomicU64::new(1);
 const STABLE_CAPTURE_INTERVAL: Duration = Duration::from_millis(100);
+const BRACKETED_PASTE_START: &str = "\u{1b}[200~";
+const BRACKETED_PASTE_END: &str = "\u{1b}[201~";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct TerminalSize {
@@ -201,6 +203,15 @@ impl TmuxServer {
         pane_id: Option<&str>,
     ) -> Result<Output> {
         let rendered = render_command(command);
+        self.checked_output_with_rendered(command, pane_id, rendered)
+    }
+
+    fn checked_output_with_rendered(
+        &self,
+        command: &mut Command,
+        pane_id: Option<&str>,
+        rendered: String,
+    ) -> Result<Output> {
         self.artifacts.record_command(rendered.clone());
         let output = command
             .output()
@@ -340,21 +351,7 @@ pub(crate) struct TmuxPane<'a> {
 
 impl TmuxPane<'_> {
     pub(crate) fn send_literal(&self, text: &str) -> Result<()> {
-        self.server
-            .artifacts
-            .record_input(format!("literal bytes={}", text.len()));
-        let mut command = self.server.command();
-        self.server.checked_output(
-            command
-                .arg("send-keys")
-                .arg("-t")
-                .arg(&self.id)
-                .arg("-l")
-                .arg("--")
-                .arg(text),
-            Some(self.id.as_str()),
-        )?;
-        Ok(())
+        self.send_text_input(text, text, "literal")
     }
 
     pub(crate) fn send_key(&self, key: TmuxKey) -> Result<()> {
@@ -370,6 +367,37 @@ impl TmuxPane<'_> {
                 .arg(key.name()),
             Some(self.id.as_str()),
         )?;
+        Ok(())
+    }
+
+    pub(crate) fn send_paste(&self, text: &str) -> Result<()> {
+        anyhow::ensure!(
+            !text.contains('\u{1b}'),
+            "paste input must not contain an escape character"
+        );
+        let payload = format!("{BRACKETED_PASTE_START}{text}{BRACKETED_PASTE_END}");
+        self.send_text_input(&payload, text, "paste")
+    }
+
+    fn send_text_input(&self, payload: &str, source: &str, kind: &str) -> Result<()> {
+        self.server
+            .artifacts
+            .record_input(format!("{kind} bytes={}", source.len()));
+        let mut command = self.server.command();
+        command
+            .arg("send-keys")
+            .arg("-t")
+            .arg(&self.id)
+            .arg("-l")
+            .arg("--");
+        let rendered = format!(
+            "{} <{kind} bytes={}>",
+            render_command(&command),
+            source.len()
+        );
+        command.arg(payload);
+        self.server
+            .checked_output_with_rendered(&mut command, Some(self.id.as_str()), rendered)?;
         Ok(())
     }
 

@@ -2,6 +2,8 @@
 #[cfg(unix)]
 mod focus_palette;
 #[cfg(unix)]
+mod large_image;
+#[cfg(unix)]
 mod output_text_stream;
 mod resize_reflow;
 #[cfg(unix)]

@@ -69,6 +69,59 @@ fn literal_text_is_distinct_from_named_enter_key() -> Result<()> {
 }
 
 #[test]
+fn paste_input_emits_expected_bracketed_paste_bytes() -> Result<()> {
+    let Some(server) = server_or_skip("paste_input_emits_expected_bracketed_paste_bytes")? else {
+        return Ok(());
+    };
+    let session = server.new_session(SessionSpec::new(
+        "paste-input",
+        TerminalSize::new(/*columns*/ 80, /*rows*/ 8),
+        command_for_shell(
+            "stty raw -echo; printf 'READY\r\n'; dd bs=1 count=21 2>/dev/null | od -An -tx1; sleep 30",
+        ),
+    ))?;
+    let pane = session.primary_pane();
+
+    pane.wait_stable_contains("READY", Duration::from_secs(/*secs*/ 3))?;
+    pane.send_paste("image.png")?;
+    // The true-TUI large-image test is the end-to-end gate that crossterm emits
+    // one paste event; this unit test pins the exact bytes delivered to the PTY.
+    let expected = "1b 5b 32 30 30 7e 69 6d 61 67 65 2e 70 6e 67 1b 5b 32 30 31 7e";
+    pane.wait_stable_until(
+        "one bracketed paste byte sequence",
+        Duration::from_secs(/*secs*/ 3),
+        |capture| {
+            capture
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .contains(expected)
+        },
+    )?;
+    Ok(())
+}
+
+#[test]
+fn paste_input_rejects_embedded_escape_character() -> Result<()> {
+    let Some(server) = server_or_skip("paste_input_rejects_embedded_escape_character")? else {
+        return Ok(());
+    };
+    let session = server.new_session(SessionSpec::new(
+        "paste-input-escape",
+        TerminalSize::new(/*columns*/ 40, /*rows*/ 8),
+        command_for_shell("sleep 30"),
+    ))?;
+
+    let error = session
+        .primary_pane()
+        .send_paste("before\u{1b}[201~after")
+        .expect_err("embedded paste terminator must be rejected")
+        .to_string();
+    assert!(error.contains("must not contain an escape character"));
+    Ok(())
+}
+
+#[test]
 fn viewport_and_scrollback_are_captured_separately() -> Result<()> {
     let Some(server) = server_or_skip("viewport_and_scrollback")? else {
         return Ok(());

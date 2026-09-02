@@ -109,8 +109,9 @@ A typical scenario follows this order:
 6. Set `RUST_LOG=trace` and pass `-c log_dir="<isolated-dir>"` for interactive
    qualification.
 7. Wait for a semantic ready marker before sending input.
-8. Send literal text with `send_literal`, wait until it is visibly settled, and
-   send Enter separately with `send_key(TmuxKey::Enter)`.
+8. Send literal text with `send_literal`, or an explicit terminal paste event
+   with `send_paste`; wait until it is visibly settled, and send Enter
+   separately with `send_key(TmuxKey::Enter)`.
 9. Use bounded stable waits for visible checkpoints. Do not substitute fixed
    sleeps for readiness checks.
 10. Capture the viewport or bounded scrollback when the assertion needs it.
@@ -161,11 +162,19 @@ Literal text and named keys are intentionally different APIs:
 ```rust
 pane.send_literal("Enter")?;       // types five characters
 pane.send_key(TmuxKey::Enter)?;    // sends the Enter key
+pane.send_paste("/tmp/image.png")?; // writes one bracketed-paste byte sequence
 ```
 
 Never combine test text and Enter into one tmux command. Wait until the literal
 text appears before sending the key; this avoids the race where Enter reaches
 the application before the complete command.
+
+Use `send_paste` when the workflow depends on paste semantics rather than raw
+characters, including image-path attachment. It writes one bracketed-paste
+byte sequence without reading from or mutating the developer's system
+clipboard; the target application remains the end-to-end authority for whether
+that becomes one paste event. Paste text containing an escape character is
+rejected because it could terminate bracketed-paste mode early.
 
 Use `capture_viewport` for the currently rendered terminal and
 `capture_scrollback_tail(lines)` when the assertion needs prior output. Keep
@@ -199,7 +208,9 @@ The bundle can contain:
 
 Registered attachments are capped at 2 MiB. The command recorder redacts
 environment assignments whose names contain `API_KEY`, `TOKEN`, `SECRET`,
-`PASSWORD`, or `CREDENTIAL`.
+`PASSWORD`, or `CREDENTIAL`. Literal and paste payloads are recorded only as
+their input kind and byte length; their contents are omitted from
+`command-log.txt` and `input-events.txt`.
 
 Read `reason.txt` first, then compare `input-events.txt` with the viewport and
 scrollback. A literal input followed immediately by a key but absent from the
