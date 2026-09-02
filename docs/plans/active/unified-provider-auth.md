@@ -217,7 +217,7 @@ user work and integrate rather than revert concurrent changes.
 | `PF-53` | Multi-provider onboarding and deferred Corbanu Plan flow | [PF-53-S01](../../sprints/archive/unified-provider-auth/pf-53-s01-multi-provider-onboarding.md) | completed at `30b595034b` |
 | `PF-54` | Unified `/providers` management and eligibility controls | [PF-54-S01](../../sprints/archive/unified-provider-auth/pf-54-s01-provider-management.md) | completed |
 | `PF-55` | Startup, current-model, and custom-provider convergence | [PF-55-S01](../../sprints/archive/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | completed at `21cf3199f2` |
-| `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/current/unified-provider-auth/pf-56-s01-final-qualification.md) | in progress |
+| `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/archive/unified-provider-auth/pf-56-s01-final-qualification.md) | completed at `fd8a9c900e` |
 
 ## Hard dependency graph
 
@@ -373,7 +373,7 @@ Historical Claude artifacts do not substitute for final integrated-tree runs.
 - [x] Product linkage, P1 priority, scope, invariants, ownership, and worktree are current.
 - [x] Merged PF-42–PF-47 Claude evidence is preserved without claiming open gates.
 - [x] Every new implementation unit has one stable feature ID and one sprint record.
-- [ ] PF-48 through PF-56 are completed and archived.
+- [x] PF-48 through PF-56 are completed and archived; PF-56 implementation is `fd8a9c900e`.
 - [x] Required final-tree automated and adversarial evidence passes.
 - [x] Required true-TUI and both live-repository workflows pass.
 - [ ] Named human acceptance passes.

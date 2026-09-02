@@ -144,4 +144,7 @@ that cannot be fabricated:
 - target version, integration commit/merge/tag, and release ledger;
 - benchmark due-state decision and evidence when required.
 
-Primary integration owns the final implementation commit and sprint archive.
+Primary integration audit found no blocking issue. Signed implementation commit
+`fd8a9c900e37bfb83d7cfb62d0b347d978b14065` was verified and pushed to
+`origin/feat/unified-provider-auth`; the completed PF-56 sprint record was then
+archived. Shipment remains gated by the open active-plan evidence above.

@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-56-S01"
 title: "Unified provider final qualification"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-56"
 execution_order: 15
@@ -60,24 +60,22 @@ updated: 2026-09-02
 
 ## Remaining
 
-- [ ] Primary creates and pushes the signed PF-56 implementation commit.
-- [ ] Primary archives the completed sprint record after verifying the commit and remote branch.
-
-Open shipment evidence remains at the active-plan level: named human acceptance,
-live eligible accounts, required physical-platform confirmation, final upstream
-disposition, target version/integration commit/merge/tag/release ledger, and
-benchmark due-state were not fabricated.
+None for PF-56's implementation and automated qualification scope. Open shipment
+evidence remains at the active-plan level: named human acceptance, live eligible
+accounts, required physical-platform confirmation, final upstream disposition,
+target version/integration commit/merge/tag/release ledger, and benchmark
+due-state were not fabricated.
 
 ## Verification
 
 - [x] Primary reran post-documentation formatting, diff, plan, and sprint governance gates and inspected the final signed-scope diff without a blocking issue.
-- [ ] Primary verifies the signed implementation commit and remote push before archiving the sprint.
+- [x] Primary verified signed implementation commit `fd8a9c900e` and its remote push before archiving the sprint.
 
 ## Exit evidence
 
-- [ ] Final implementation commit is pending primary integration; version, signed scope checkpoints, and binary hash are recorded in the QA ledger.
+- [x] Signed implementation commit `fd8a9c900e` records the PF-56 repairs, tests, documentation, review disposition, and qualification ledger; version, scope checkpoints, and binary hash are recorded in the QA ledger.
 - [x] Final-tree outputs, TMUX bundles, live-repository bases, and canary scans are linked in `qa/provider-auth/pf-56/qualification.md`.
 - [x] The four-review maximum, sole completed external review, superseded Fable attempt, and every finding disposition are recorded.
 - [x] Named-human and release evidence remains explicitly blocked without a pass claim.
 - [x] `Done` and `Remaining` reflect reality.
-- [ ] Completed record archive is pending the primary integration commit.
+- [x] Completed record is archived after the verified implementation commit and remote push.
