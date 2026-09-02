@@ -1,20 +1,20 @@
 ---
 sprint_id: "PF-55-S01"
 title: "Startup and custom-provider convergence"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-55"
 execution_order: 14
 owner: "GPT-5.6 Sol high implementation agent"
-parallel_lane: "UNALLOCATED"
-write_scope: "UNALLOCATED"
-integration_gate: "UNALLOCATED"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+parallel_lane: "provider-auth-serial"
+write_scope: "codex-rs/provider-auth/src/lib.rs; codex-rs/provider-auth/src/runtime_selection.rs; codex-rs/provider-auth/src/runtime_selection_tests.rs; codex-rs/tui/src/startup_provider.rs; codex-rs/tui/src/lib.rs; codex-rs/tui/src/app.rs; codex-rs/tui/src/app/event_dispatch.rs; codex-rs/tui/src/app/session_lifecycle.rs; codex-rs/tui/src/app/test_support.rs; codex-rs/tui/src/app/tests.rs; codex-rs/tui/src/config_update.rs; codex-rs/tui/src/config_update_tests.rs; codex-rs/tui/src/model_catalog.rs; codex-rs/tui/src/model_catalog_tests.rs; codex-rs/tui/src/chatwidget.rs; codex-rs/tui/src/chatwidget/provider_model_policy.rs; codex-rs/tui/src/chatwidget/model_popups.rs; codex-rs/tui/src/chatwidget/settings.rs; codex-rs/tui/src/chatwidget/slash_dispatch.rs; codex-rs/tui/src/chatwidget/tests/; codex-rs/tui/src/chatwidget/snapshots/; codex-rs/tui/src/spawn_orchestration.rs; codex-rs/tui/src/provider_status_host.rs; codex-rs/tui/src/provider_status_host_tests.rs; codex-rs/tui/tests/suite/provider_convergence.rs; codex-rs/tui/tests/suite/mod.rs; docs/sprints/current/unified-provider-auth/pf-55-s01-startup-provider-convergence.md"
+integration_gate: "PF-55 only: converge startup, layered current selection, model picking, resume, and native/child provider use on PF-48 catalog plus PF-49 metadata/eligibility; preserve exact provider identity and first-fresh-success behavior; list any successfully authorized provider regardless of account/API-key/environment/command mechanism; keep failed command auth visible as status/recovery without inventing enrollment; block unusable current selections until explicit repair or replacement; keep resumed-thread replacement session-specific unless the user explicitly changes the global default; and prove custom-provider/restart behavior. Excludes app-server/provider wire-protocol changes, login/vault custody or storage changes, Telegram, interactive command-auth enrollment, PF-56 documentation/release work, and silent provider switching."
+worktree: "/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0"
+branch: "feat/unified-provider-auth"
+base_commit: "f7356a94e032234022a462d65b576a7de2854859"
 depends_on: "PF-54-S01"
 created: 2026-09-01
-updated: 2026-09-01
+updated: 2026-09-02
 ---
 
 # PF-55-S01 — Startup and custom-provider convergence
@@ -38,14 +38,19 @@ updated: 2026-09-01
 
 ## Preconditions
 
-- [ ] Plan is active.
-- [ ] PF-54-S01 is completed and archived.
-- [ ] Exact serial allocation matches the plan.
-- [ ] Runtime resolution remains authoritative; startup cannot infer from catalog presence.
+- [x] Plan is active.
+- [x] PF-54-S01 is completed at signed implementation commit `3db6321294` and archived at `31894e4f1a`.
+- [x] Exact serial allocation matches the plan and uses the continuing GPT-5.6 Sol high owner.
+- [x] Runtime resolution remains authoritative; startup cannot infer from catalog presence.
 
 ## Done
 
 - [x] Draft sprint record created and linked to PF-55.
+- [x] Allocated serially in the plan worktree at post-PF-54 base `31894e4f1a` with literal production, test, and TMUX scope.
+- [x] Froze provider-use authority as layered exact selection → PF-48 identity → PF-49 status/eligibility → runtime confirmation.
+- [x] Froze command-auth parity: a successful real authorization check makes the provider normally visible/selectable regardless of mechanism; failures remain visible for status/recovery with no invented enrollment UI.
+- [x] Froze explicit recovery: cancelling an unusable current-provider recovery leaves requests/spawns blocked and never silently switches.
+- [x] Froze resumed replacement as session-specific unless the user separately changes the global current selection.
 
 ## Remaining
 
