@@ -653,6 +653,7 @@ pub(crate) struct ChatWidget {
     plugin_install_apps_needing_auth: Vec<AppSummary>,
     plugin_install_auth_flow: Option<PluginInstallAuthFlowState>,
     pending_provider_codex_login_id: Option<String>,
+    pending_provider_api_key_save_id: Option<String>,
     plugins_active_tab_id: Option<String>,
     newly_installed_marketplace_tab_id: Option<String>,
     // Queue of interruptive UI events deferred during an active write cycle

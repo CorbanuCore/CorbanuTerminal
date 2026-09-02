@@ -2007,8 +2007,11 @@ impl App {
                 display_name,
                 api_key,
             } => {
-                self.chat_widget
-                    .open_provider_api_key_save_pending(display_name.clone());
+                let save_id = Uuid::new_v4().to_string();
+                self.chat_widget.open_provider_api_key_save_pending(
+                    save_id.clone(),
+                    display_name.clone(),
+                );
                 let request_handle = app_server.request_handle();
                 let tx = self.app_event_tx.clone();
                 tokio::spawn(async move {
@@ -2016,8 +2019,7 @@ impl App {
                         .request_typed::<codex_app_server_protocol::LoginAccountResponse>(
                             ClientRequest::LoginAccount {
                                 request_id: codex_app_server_protocol::RequestId::String(format!(
-                                    "provider-api-key-login-{}",
-                                    Uuid::new_v4()
+                                    "provider-api-key-login-{save_id}"
                                 )),
                                 params:
                                     codex_app_server_protocol::LoginAccountParams::ProviderApiKey {
@@ -2036,17 +2038,19 @@ impl App {
                         Err(err) => Err(err.to_string()),
                     };
                     tx.send(AppEvent::ProviderApiKeySaveFinished {
+                        save_id,
                         display_name,
                         result,
                     });
                 });
             }
             AppEvent::ProviderApiKeySaveFinished {
+                save_id,
                 display_name,
                 result,
             } => {
                 self.chat_widget
-                    .on_provider_api_key_save_finished(display_name, result);
+                    .on_provider_api_key_save_finished(save_id, display_name, result);
             }
             AppEvent::OpenTelegram => {
                 self.chat_widget.open_telegram_menu();
