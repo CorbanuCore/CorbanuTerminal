@@ -1,20 +1,20 @@
 ---
 sprint_id: "PF-30-S01"
 title: "Typed source envelope and trusted ingress"
-status: in_progress
+status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-30"
 execution_order: 37
-owner: "/root/pf30_source_envelope"
-parallel_lane: "source-envelope"
-write_scope: "codex-rs/security-policy/src/provenance.rs, codex-rs/security-policy/src/provenance_tests.rs, codex-rs/protocol/src/provenance.rs, codex-rs/core/src/security/ingress/, codex-rs/core/src/mcp_tool_call.rs, codex-rs/core/src/mcp_tool_call_tests.rs, codex-rs/core/src/hook_runtime.rs, codex-rs/core/src/hook_runtime_tests.rs, codex-rs/core/src/client.rs, codex-rs/core/src/client_tests.rs, codex-rs/core/src/tools/router.rs, codex-rs/core/src/tools/router_tests.rs, codex-rs/core/src/agent/control/spawn.rs, codex-rs/core/src/agent/control_tests.rs, qa/security-levels/sprints/PF-30-S01-typed-source-envelope/, docs/sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md"
-integration_gate: "The round-four integration owner audits the literal PF-30 diff against PF-27 and the independent Claude-auth lane, alone registers shared protocol/Core modules and Cargo/Bazel/lock/schema edges, reruns PF-21 compatibility and all affected suites on the combined tree, completes a real-TMUX smoke and read-only Corbanu/Claude Opus 5 Max closure, and archives only after deterministic cache-stable provider serialization is proven."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-source-envelope"
-branch: "feat/p0-security-source-envelope"
-base_commit: "b457249aa29c912cb2d5404f0939e8b2386f4e5e"
+owner: "UNALLOCATED"
+parallel_lane: "UNALLOCATED"
+write_scope: "UNALLOCATED"
+integration_gate: "UNALLOCATED"
+worktree: "UNALLOCATED"
+branch: "UNALLOCATED"
+base_commit: "UNALLOCATED"
 depends_on: "PF-22-S02"
 created: 2026-08-28
-updated: 2026-08-31
+updated: 2026-09-02
 ---
 
 # PF-30-S01 — Typed source envelope and trusted ingress
@@ -43,12 +43,13 @@ updated: 2026-08-31
 ## Preconditions
 
 - [x] Active plan; PF-22-S02 completed and archived at the exact recorded base.
-- [x] Exact CorbanuDrive worktree/branch/base and a PF-27-disjoint worker scope are allocated; shared registrations remain integration-owner-only.
+- [ ] Allocate a recoverable worktree, branch, base, owner, literal scope, and integration gate before returning this sprint to ready.
 - [ ] Read root and nearest implementation-path AGENTS.md; confirm source pins, provider request paths and fail-closed backend/API availability before code changes.
 
 ## Done
 
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
+- [x] On 2026-09-02, product authority confirmed the recovered repository contains no surviving PF-30 branch, implementation commit, or handoff artifact; the absent `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-source-envelope` reservation was therefore released to draft.
 
 ## Remaining
 
