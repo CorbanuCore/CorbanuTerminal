@@ -17,6 +17,7 @@ use codex_app_server_protocol::SkillsConfigWriteParams;
 use codex_app_server_protocol::SkillsConfigWriteResponse;
 use codex_config::loader::project_trust_key;
 use codex_features::FEATURES;
+use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::resolve_model_for_provider;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::config_types::TrustLevel;
@@ -90,15 +91,27 @@ pub(crate) fn build_onboarding_provider_selection_edits(
     current_model: Option<&str>,
     provider: &str,
 ) -> Vec<ConfigEdit> {
-    let model = resolve_model_for_provider(current_model.map(str::to_string), provider)
-        .filter(|model| !model.trim().is_empty());
-    let Some(model) = model else {
-        return vec![replace_config_value(
+    let current_model = current_model
+        .map(str::trim)
+        .filter(|model| !model.is_empty());
+    let model = if provider == OPENAI_PROVIDER_ID {
+        current_model
+            .filter(|model| model.starts_with("gpt-"))
+            .map(str::to_string)
+    } else {
+        resolve_model_for_provider(current_model.map(str::to_string), provider)
+            .filter(|model| !model.trim().is_empty())
+    };
+
+    match model {
+        Some(model) if Some(model.as_str()) != current_model => {
+            build_model_selection_edits(&model, Some(provider), /*effort*/ None::<String>)
+        }
+        _ => vec![replace_config_value(
             "model_provider",
             serde_json::json!(provider),
-        )];
-    };
-    build_model_selection_edits(&model, Some(provider), /*effort*/ None::<String>)
+        )],
+    }
 }
 
 pub(crate) fn build_service_tier_selection_edits(service_tier: Option<&str>) -> Vec<ConfigEdit> {

@@ -1164,7 +1164,7 @@ impl ModelProviderInfo {
     }
 
     /// Anthropic-wire sibling of the Corbanu Plan provider: same gateway and
-    /// customer key, serving only the plan's non-private Fable route on
+    /// customer key, serving the plan's non-private Fable routes on
     /// `/v1/messages`.
     pub fn create_pfterminal_plan_anthropic_provider() -> ModelProviderInfo {
         ModelProviderInfo {
