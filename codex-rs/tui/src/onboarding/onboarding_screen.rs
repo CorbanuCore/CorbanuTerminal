@@ -324,6 +324,7 @@ impl OnboardingScreen {
                     error: Arc::new(RwLock::new(None)),
                     sign_in_state: Arc::new(RwLock::new(initial_sign_in_state)),
                     login_status,
+                    persist_openai_provider: false,
                     app_server_request_handle,
                     forced_login_method,
                     api_key_provider_id,

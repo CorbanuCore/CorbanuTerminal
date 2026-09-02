@@ -4,6 +4,7 @@
 //! when a config mutation must be owned by the app server rather than written
 //! to the local `config.toml` directly.
 
+use crate::legacy_core::config::Config;
 use codex_app_server_client::AppServerRequestHandle;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::ConfigBatchWriteParams;
@@ -88,6 +89,18 @@ pub(crate) fn build_model_selection_edits(
     edits
 }
 
+pub(crate) fn onboarding_user_model(config: &Config) -> Option<String> {
+    config
+        .config_layer_stack
+        .effective_user_config()
+        .and_then(|user_config| {
+            user_config
+                .get("model")
+                .and_then(toml::Value::as_str)
+                .map(str::to_string)
+        })
+}
+
 pub(crate) fn build_onboarding_provider_selection_edits(
     current_model: Option<&str>,
     provider: &str,
@@ -115,6 +128,8 @@ pub(crate) fn build_onboarding_provider_selection_edits(
 
     let model = resolve_model_for_provider(current_model.map(str::to_string), provider)
         .filter(|model| !model.trim().is_empty());
+    // Re-authenticating an already compatible provider must not reset a user's
+    // reasoning effort; only a provider-driven model translation clears it.
     match model {
         Some(model) if Some(model.as_str()) != current_model => {
             build_model_selection_edits(&model, Some(provider), /*effort*/ None::<String>)

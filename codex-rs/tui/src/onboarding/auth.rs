@@ -315,6 +315,7 @@ pub(crate) struct AuthModeWidget {
     pub error: Arc<RwLock<Option<String>>>,
     pub sign_in_state: Arc<RwLock<SignInState>>,
     pub login_status: LoginStatus,
+    pub persist_openai_provider: bool,
     pub app_server_request_handle: AppServerRequestHandle,
     pub forced_login_method: Option<ForcedLoginMethod>,
     pub api_key_provider_id: String,
@@ -1668,6 +1669,7 @@ impl AuthModeWidget {
 
         if notification.success {
             self.set_error(/*message*/ None);
+            self.persist_openai_provider = true;
             *self.sign_in_state.write().unwrap() = SignInState::ChatGptSuccessMessage;
         } else {
             self.set_error(notification.error);
@@ -1695,7 +1697,7 @@ impl AuthModeWidget {
 
     pub(crate) fn configured_provider(&self) -> Option<String> {
         match &*self.sign_in_state.read().unwrap() {
-            SignInState::ChatGptSuccess => {
+            SignInState::ChatGptSuccess if self.persist_openai_provider => {
                 Some(codex_model_provider_info::OPENAI_PROVIDER_ID.to_string())
             }
             SignInState::ApiKeyConfigured { provider } => Some(
@@ -1893,6 +1895,7 @@ mod tests {
             error: Arc::new(RwLock::new(None)),
             sign_in_state: Arc::new(RwLock::new(SignInState::PickMode)),
             login_status: LoginStatus::NotAuthenticated,
+            persist_openai_provider: false,
             app_server_request_handle: AppServerRequestHandle::InProcess(client.request_handle()),
             forced_login_method: Some(ForcedLoginMethod::Chatgpt),
             api_key_provider_id: "openai".to_string(),
@@ -2181,8 +2184,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn configured_openai_account_reads_provider_success_state() {
-        let (widget, _tmp) = widget_forced_chatgpt().await;
+    async fn configured_explicit_openai_account_reads_provider_success_state() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.persist_openai_provider = true;
         *widget.sign_in_state.write().unwrap() = SignInState::ChatGptSuccess;
 
         assert_eq!(
@@ -2309,8 +2313,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn existing_non_oauth_chatgpt_login_counts_as_signed_in() {
-        for auth_mode in [AuthMode::ChatgptAuthTokens, AuthMode::PersonalAccessToken] {
+    async fn existing_chatgpt_login_shortcut_does_not_request_provider_persistence() {
+        for auth_mode in [
+            AuthMode::Chatgpt,
+            AuthMode::ChatgptAuthTokens,
+            AuthMode::PersonalAccessToken,
+        ] {
             let (mut widget, _tmp) = widget_forced_chatgpt().await;
             widget.login_status = LoginStatus::AuthMode(auth_mode);
 
@@ -2321,6 +2329,7 @@ mod tests {
                 &*widget.sign_in_state.read().unwrap(),
                 SignInState::ChatGptSuccess
             ));
+            assert_eq!(widget.configured_provider(), None);
         }
     }
 
@@ -2532,6 +2541,11 @@ mod tests {
             &*widget.sign_in_state.read().unwrap(),
             SignInState::ChatGptSuccessMessage
         ));
+        *widget.sign_in_state.write().unwrap() = SignInState::ChatGptSuccess;
+        assert_eq!(
+            widget.configured_provider().as_deref(),
+            Some(codex_model_provider_info::OPENAI_PROVIDER_ID)
+        );
     }
 
     #[test]
