@@ -94,23 +94,26 @@ pub(crate) fn build_onboarding_provider_selection_edits(
     let current_model = current_model
         .map(str::trim)
         .filter(|model| !model.is_empty());
-    let model = if provider == OPENAI_PROVIDER_ID {
-        current_model
-            .filter(|model| model.starts_with("gpt-"))
-            .map(str::to_string)
-    } else {
-        resolve_model_for_provider(current_model.map(str::to_string), provider)
-            .filter(|model| !model.trim().is_empty())
-    };
+    let provider_edit = || replace_config_value("model_provider", serde_json::json!(provider));
 
+    if provider == OPENAI_PROVIDER_ID {
+        return match current_model {
+            Some(model) if !model.starts_with("gpt-") => vec![
+                clear_config_value("model"),
+                clear_config_value("model_reasoning_effort"),
+                provider_edit(),
+            ],
+            Some(_) | None => vec![provider_edit()],
+        };
+    }
+
+    let model = resolve_model_for_provider(current_model.map(str::to_string), provider)
+        .filter(|model| !model.trim().is_empty());
     match model {
         Some(model) if Some(model.as_str()) != current_model => {
             build_model_selection_edits(&model, Some(provider), /*effort*/ None::<String>)
         }
-        _ => vec![replace_config_value(
-            "model_provider",
-            serde_json::json!(provider),
-        )],
+        Some(_) | None => vec![provider_edit()],
     }
 }
 

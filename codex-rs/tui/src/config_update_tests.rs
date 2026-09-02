@@ -70,7 +70,7 @@ fn onboarding_openai_without_model_persists_only_provider() {
 }
 
 #[test]
-fn onboarding_openai_omits_fresh_inherited_ambient_model() {
+fn onboarding_openai_clears_fresh_inherited_ambient_model() {
     let edits = build_onboarding_provider_selection_edits(
         Some(codex_model_provider_info::AMBIENT_DEFAULT_MODEL),
         codex_model_provider_info::OPENAI_PROVIDER_ID,
@@ -78,11 +78,56 @@ fn onboarding_openai_omits_fresh_inherited_ambient_model() {
 
     assert_eq!(
         edits,
-        vec![ConfigEdit {
-            key_path: "model_provider".to_string(),
-            value: serde_json::json!(codex_model_provider_info::OPENAI_PROVIDER_ID),
-            merge_strategy: MergeStrategy::Replace,
-        }]
+        vec![
+            ConfigEdit {
+                key_path: "model".to_string(),
+                value: serde_json::Value::Null,
+                merge_strategy: MergeStrategy::Replace,
+            },
+            ConfigEdit {
+                key_path: "model_reasoning_effort".to_string(),
+                value: serde_json::Value::Null,
+                merge_strategy: MergeStrategy::Replace,
+            },
+            ConfigEdit {
+                key_path: "model_provider".to_string(),
+                value: serde_json::json!(codex_model_provider_info::OPENAI_PROVIDER_ID),
+                merge_strategy: MergeStrategy::Replace,
+            },
+        ]
+    );
+}
+
+#[test]
+fn onboarding_openai_clears_explicit_claude_model_and_effort() {
+    let existing_config = serde_json::json!({
+        "model": codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL,
+        "model_reasoning_effort": "high",
+    });
+    let edits = build_onboarding_provider_selection_edits(
+        existing_config["model"].as_str(),
+        codex_model_provider_info::OPENAI_PROVIDER_ID,
+    );
+
+    assert_eq!(
+        edits,
+        vec![
+            ConfigEdit {
+                key_path: "model".to_string(),
+                value: serde_json::Value::Null,
+                merge_strategy: MergeStrategy::Replace,
+            },
+            ConfigEdit {
+                key_path: "model_reasoning_effort".to_string(),
+                value: serde_json::Value::Null,
+                merge_strategy: MergeStrategy::Replace,
+            },
+            ConfigEdit {
+                key_path: "model_provider".to_string(),
+                value: serde_json::json!(codex_model_provider_info::OPENAI_PROVIDER_ID),
+                merge_strategy: MergeStrategy::Replace,
+            },
+        ]
     );
 }
 
