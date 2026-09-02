@@ -69,8 +69,21 @@ pub(crate) fn start_connector(codex_home: &Path) -> Result<String, String> {
 
 pub(crate) fn ensure_connector(codex_home: &Path) -> Result<(), String> {
     with_operation_lock(codex_home, || {
+        let config = read_config(codex_home)?;
+        let configured = config
+            .get("telegram")
+            .and_then(toml::Value::as_table)
+            .and_then(|table| table.get("enabled"))
+            .and_then(toml::Value::as_bool)
+            .unwrap_or(false);
+        // Startup recovery is irrelevant until Telegram is explicitly enabled.
+        // Avoid opening the shared encrypted vault here: an OS-keyring delay in
+        // an unconfigured feature must not block provider authentication.
+        if !configured {
+            return Ok(());
+        }
         let status = read_status(codex_home)?;
-        if !status.configured || !status.token_stored || status.running {
+        if !status.token_stored || status.running {
             return Ok(());
         }
         start_connector_unlocked(codex_home).map(|_| ())

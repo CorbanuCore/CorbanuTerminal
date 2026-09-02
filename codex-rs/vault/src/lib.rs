@@ -440,13 +440,20 @@ impl Vault {
     /// Delete a credential and its secret. Returns `true` if anything was removed.
     pub fn delete(&self, label: &str) -> Result<bool, VaultError> {
         let normalized = normalize_label(label)?;
+        if normalized == MANAGED_CLAUDE_TOKEN_LABEL {
+            return self.remove_managed_claude_subscription_token();
+        }
+        self.delete_normalized(&normalized)
+    }
+
+    fn delete_normalized(&self, normalized: &str) -> Result<bool, VaultError> {
         self.with_storage_lock(|| {
             let mut index = self.load_index()?;
-            let removed_meta = index.credentials.remove(&normalized).is_some();
+            let removed_meta = index.credentials.remove(normalized).is_some();
             if removed_meta {
                 self.save_index(&index)?;
             }
-            let removed_secret = self.delete_secret(&normalized)?;
+            let removed_secret = self.delete_secret(normalized)?;
             Ok(removed_meta || removed_secret)
         })
     }
@@ -457,6 +464,14 @@ impl Vault {
             .iter()
             .map(|label| normalize_label(label))
             .collect::<Result<Vec<_>, _>>()?;
+        if normalized
+            .iter()
+            .any(|label| label == MANAGED_CLAUDE_TOKEN_LABEL)
+        {
+            return Err(VaultError::ProviderManagedCredential {
+                label: MANAGED_CLAUDE_TOKEN_LABEL.to_string(),
+            });
+        }
         self.with_storage_lock(|| {
             let mut index = self.load_index()?;
             let mut secret_entries = Vec::with_capacity(normalized.len());

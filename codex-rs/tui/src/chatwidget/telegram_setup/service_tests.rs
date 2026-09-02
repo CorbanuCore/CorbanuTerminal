@@ -134,4 +134,8 @@ fn startup_recovery_is_a_noop_until_a_bot_is_fully_configured() {
     ensure_connector(home.path()).expect("unconfigured startup recovery");
 
     assert!(!runtime_path(home.path()).exists());
+    assert!(
+        !home.path().join("secrets").exists(),
+        "unconfigured Telegram startup must not open the shared vault"
+    );
 }

@@ -935,7 +935,7 @@ async fn read_status_with_profile(
 fn status_authority_id(status: &ClaudeCodePlanStatus) -> Result<String, String> {
     let ClaudeCodePlanStatus::SignedIn {
         email: Some(email),
-        organization_id: Some(organization_id),
+        organization_id,
         subscription,
     } = status
     else {
@@ -944,7 +944,7 @@ fn status_authority_id(status: &ClaudeCodePlanStatus) -> Result<String, String> 
                 .to_string(),
         );
     };
-    claude_login_authority_id(email, organization_id, subscription.as_deref())
+    claude_login_authority_id(email, organization_id.as_deref(), subscription.as_deref())
 }
 
 fn extract_https_url(line: &str) -> Option<String> {

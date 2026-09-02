@@ -251,22 +251,22 @@ fn serialized_selection_contains_metadata_only() {
 #[test]
 fn claude_login_authority_is_normalized_bound_and_metadata_only() {
     let authority =
-        claude_login_authority_id(" User@Example.COM ", " ORG-Work ", Some(" Max ")).unwrap();
+        claude_login_authority_id(" User@Example.COM ", Some(" ORG-Work "), Some(" Max ")).unwrap();
     assert_eq!(
         authority,
-        claude_login_authority_id("user@example.com", "org-work", Some("max")).unwrap()
+        claude_login_authority_id("user@example.com", Some("org-work"), Some("max")).unwrap()
     );
     assert_ne!(
         authority,
-        claude_login_authority_id("other@example.com", "org-work", Some("max")).unwrap()
+        claude_login_authority_id("other@example.com", Some("org-work"), Some("max")).unwrap()
     );
     assert_ne!(
         authority,
-        claude_login_authority_id("user@example.com", "org-personal", Some("max")).unwrap()
+        claude_login_authority_id("user@example.com", Some("org-personal"), Some("max")).unwrap()
     );
     assert_ne!(
         authority,
-        claude_login_authority_id("user@example.com", "org-work", Some("team")).unwrap()
+        claude_login_authority_id("user@example.com", Some("org-work"), Some("team")).unwrap()
     );
 
     let selection =
@@ -287,12 +287,16 @@ fn claude_login_authority_is_normalized_bound_and_metadata_only() {
     assert!(!debug.contains(&authority));
     assert!(debug.contains("authority_bound: true"));
 
-    for missing_subscription in [None, Some(""), Some("   ")] {
-        assert!(
-            claude_login_authority_id("user@example.com", "org-work", missing_subscription,)
-                .is_err()
-        );
-    }
+    let email_only = claude_login_authority_id("user@example.com", None, None).unwrap();
+    assert_eq!(
+        email_only,
+        claude_login_authority_id(" USER@example.com ", Some(" "), Some("")).unwrap()
+    );
+    assert_ne!(
+        email_only,
+        claude_login_authority_id("user@example.com", Some("org-work"), None).unwrap()
+    );
+    assert!(claude_login_authority_id(" ", None, None).is_err());
 }
 
 #[test]
@@ -510,7 +514,7 @@ fn invalid_managed_tokens_fail_without_echoing_input() {
 }
 
 #[test]
-fn managed_token_removal_preserves_unrelated_credentials() {
+fn generic_managed_token_removal_invalidates_cache_and_preserves_unrelated_credentials() {
     let (directory, vault) = test_vault();
     vault
         .add(crate::AddCredential {
@@ -535,7 +539,7 @@ fn managed_token_removal_preserves_unrelated_credentials() {
     let revision_before =
         std::fs::read(claude_auth_selection_revision_path(directory.path())).unwrap();
 
-    assert!(vault.remove_managed_claude_subscription_token().unwrap());
+    assert!(vault.delete(MANAGED_CLAUDE_TOKEN_LABEL).unwrap());
     let revision_after =
         std::fs::read(claude_auth_selection_revision_path(directory.path())).unwrap();
     assert_ne!(revision_before, revision_after);
@@ -551,4 +555,9 @@ fn managed_token_removal_preserves_unrelated_credentials() {
         .map(|metadata| metadata.label)
         .collect::<Vec<_>>();
     assert_eq!(labels, vec!["provider/unrelated"]);
+
+    assert!(matches!(
+        vault.delete_many(&[MANAGED_CLAUDE_TOKEN_LABEL.to_string()]),
+        Err(VaultError::ProviderManagedCredential { .. })
+    ));
 }

@@ -622,7 +622,7 @@ fn test_create_claude_plan_provider() {
                 command: CORBANU_PROVIDER_AUTH_COMMAND.to_string(),
                 args: vec!["internal-claude-oauth-token".to_string()],
                 timeout_ms: NonZeroU64::new(60_000).expect("timeout should be non-zero"),
-                refresh_interval_ms: 60_000,
+                refresh_interval_ms: 0,
                 cwd: expected_auth_cwd,
             }),
             aws: None,

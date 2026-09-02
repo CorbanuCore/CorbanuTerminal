@@ -1051,7 +1051,11 @@ impl ModelProviderInfo {
                 command: CORBANU_PROVIDER_AUTH_COMMAND.to_string(),
                 args: vec!["internal-claude-oauth-token".to_string()],
                 timeout_ms: claude_provider_auth_timeout_ms(),
-                refresh_interval_ms: 60_000,
+                // The selected Claude source has its own revision marker and
+                // 401 recovery path. Proactive reruns add no freshness while
+                // making long tool-driven turns contend with unrelated vault
+                // readers for the same encrypted store.
+                refresh_interval_ms: 0,
                 cwd: claude_provider_auth_cwd(),
             }),
             aws: None,

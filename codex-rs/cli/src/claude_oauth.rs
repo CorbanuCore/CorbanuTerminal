@@ -405,7 +405,7 @@ async fn verify_selected_claude_login_authority_with_profile_and_security(
     }
     let actual = codex_vault::claude_login_authority_id(
         status.email.as_deref().unwrap_or_default(),
-        status.organization_id.as_deref().unwrap_or_default(),
+        status.organization_id.as_deref(),
         status.subscription_type.as_deref(),
     )
     .map_err(|_| anyhow!("Claude Code did not report a complete account identity"))?;
@@ -1179,7 +1179,7 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
         let directory = tempfile::tempdir().expect("status fixture");
         let expected = codex_vault::claude_login_authority_id(
             "fixture@example.invalid",
-            "org-work",
+            Some("org-work"),
             Some("max"),
         )
         .expect("authority");
@@ -1201,12 +1201,7 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
             "org-personal",
             "team",
         );
-        let (incomplete, _, _) = fake_claude_status(
-            directory.path(),
-            "fixture@example.invalid",
-            "org-incomplete",
-            "",
-        );
+        let (incomplete, _, _) = fake_claude_status(directory.path(), "", "org-incomplete", "max");
 
         let custom_oauth_url = std::ffi::OsStr::new("https://oauth.example.invalid");
         verify_selected_claude_login_authority_with_profile(
@@ -2025,7 +2020,7 @@ printf '%s\n' '{{"loggedIn":true,"authMethod":"claude.ai","email":"{email}","org
                 .expect("legacy source id"),
             codex_vault::claude_login_authority_id(
                 "fixture@example.invalid",
-                "org-fixture",
+                Some("org-fixture"),
                 Some("max"),
             )
             .expect("authority"),

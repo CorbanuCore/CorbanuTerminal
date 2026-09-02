@@ -92,13 +92,19 @@ fn auth_method_choice_is_recommended_by_default_and_dispatches_exact_actions() {
 }
 
 #[test]
-fn account_authority_requires_reported_subscription_type() {
+fn account_authority_accepts_optional_status_metadata_but_requires_email() {
     let status = ClaudeCodePlanStatus::SignedIn {
         email: Some("fixture@example.invalid".to_string()),
-        organization_id: Some("org-fixture".to_string()),
+        organization_id: None,
         subscription: None,
     };
-    assert!(status_authority_id(&status).is_err());
+    assert!(status_authority_id(&status).is_ok());
+    let missing_email = ClaudeCodePlanStatus::SignedIn {
+        email: None,
+        organization_id: Some("org-fixture".to_string()),
+        subscription: Some("max".to_string()),
+    };
+    assert!(status_authority_id(&missing_email).is_err());
 }
 
 #[cfg(target_os = "macos")]
@@ -507,7 +513,7 @@ async fn providers_status_preserves_unavailable_claude_after_a_healthy_probe() {
     std::fs::set_permissions(&healthy_probe, permissions).expect("make health fixture executable");
     let authority_id = codex_vault::claude_login_authority_id(
         "fixture@example.invalid",
-        "org-fixture",
+        Some("org-fixture"),
         Some("max"),
     )
     .expect("authority id");

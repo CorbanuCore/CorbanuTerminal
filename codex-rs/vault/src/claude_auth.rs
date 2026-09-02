@@ -188,38 +188,48 @@ pub fn credentials_file_claude_auth_source_id(config_dir: &Path) -> std::io::Res
     credentials_file_claude_auth_source_id_against(config_dir, &std::env::current_dir()?)
 }
 
-/// Bind a Claude-owned login slot to the exact account and subscription selected by the user.
+/// Bind a Claude-owned login slot to the account identity reported by Claude Code.
 ///
 /// The returned digest is persisted only inside the encrypted selection record. The raw email,
-/// organization identifier, and subscription name are never stored or rendered by Corbanu.
+/// optional organization identifier, and optional subscription name are never stored or rendered
+/// by Corbanu. Claude Code versions do not all report the optional fields, so a normalized email is
+/// the minimum stable identity. When both optional fields are present, the original v1 digest is
+/// retained for compatibility with already-persisted selections.
 pub fn claude_login_authority_id(
     email: &str,
-    organization_id: &str,
+    organization_id: Option<&str>,
     subscription_type: Option<&str>,
 ) -> Result<String, String> {
     let email = email.trim().nfc().collect::<String>().to_lowercase();
     let organization_id = organization_id
-        .trim()
-        .nfc()
-        .collect::<String>()
-        .to_lowercase();
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.nfc().collect::<String>().to_lowercase());
     let subscription_type = subscription_type
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| "Claude login account identity is incomplete".to_string())?
-        .nfc()
-        .collect::<String>()
-        .to_lowercase();
-    if email.is_empty() || organization_id.is_empty() {
+        .map(|value| value.nfc().collect::<String>().to_lowercase());
+    if email.is_empty() {
         return Err("Claude login account identity is incomplete".to_string());
     }
     let mut digest = Sha256::new();
-    digest.update(b"corbanu:claude-login-authority:v1\0");
-    digest.update(organization_id.as_bytes());
-    digest.update(b"\0");
-    digest.update(email.as_bytes());
-    digest.update(b"\0");
-    digest.update(subscription_type.as_bytes());
+    if let (Some(organization_id), Some(subscription_type)) =
+        (organization_id.as_deref(), subscription_type.as_deref())
+    {
+        digest.update(b"corbanu:claude-login-authority:v1\0");
+        digest.update(organization_id.as_bytes());
+        digest.update(b"\0");
+        digest.update(email.as_bytes());
+        digest.update(b"\0");
+        digest.update(subscription_type.as_bytes());
+    } else {
+        digest.update(b"corbanu:claude-login-authority:v2\0");
+        digest.update(email.as_bytes());
+        digest.update(b"\0organization\0");
+        digest.update(organization_id.as_deref().unwrap_or_default().as_bytes());
+        digest.update(b"\0subscription\0");
+        digest.update(subscription_type.as_deref().unwrap_or_default().as_bytes());
+    }
     Ok(format!(
         "{CLAUDE_LOGIN_AUTHORITY_PREFIX}{:x}",
         digest.finalize()
@@ -722,7 +732,7 @@ impl Vault {
             .is_file()
             .then(|| PreparedClaudeAuthRevision::new(&self.codex_home))
             .transpose()?;
-        match self.delete(MANAGED_CLAUDE_TOKEN_LABEL) {
+        match self.delete_normalized(MANAGED_CLAUDE_TOKEN_LABEL) {
             Ok(removed) => {
                 if let Some(revision) = revision {
                     revision.commit()?;
