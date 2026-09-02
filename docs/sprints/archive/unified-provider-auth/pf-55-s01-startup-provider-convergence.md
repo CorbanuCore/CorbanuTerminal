@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-55-S01"
 title: "Startup and custom-provider convergence"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-55"
 execution_order: 14
@@ -63,20 +63,20 @@ updated: 2026-09-02
 
 ## Remaining
 
-- [ ] Primary creates the signed implementation commit, records its identity, and archives the completed sprint.
+- [x] Primary created signed implementation commit `21cf3199f2`, pushed it to `origin/feat/unified-provider-auth`, and archived this completed sprint.
 
 ## Verification
 
 - [x] Focused suites: provider status 9/9, runtime selection 6/6, startup 3/3, model catalog 5/5, shared picker policy 1/1, spawn guards 5/5, inactive selection 1/1, and manager authorization reuse/fallback 1/1.
 - [x] Integration: real loopback runtime requests passed for existing, environment, managed, replacement, resumed, native-child, command-auth, and duplicate-slug exact-provider paths.
 - [x] TUI: 12/12 serial typed-TMUX journeys passed on one exact rebuilt candidate.
-- [ ] Primary verifies the signed implementation commit and completed-sprint archive.
+- [x] Primary verified the signed implementation commit and completed-sprint archive.
 
 ## Exit evidence
 
-- [ ] Implementation commit and removed heuristic inventory recorded.
+- [x] Signed implementation commit `21cf3199f2` records the converged provider runtime-selection policy, startup/picker/resume/native-use adapters, nonblocking skills refresh, exact custom model identity, command-auth status propagation, and associated regressions.
 - [x] TMUX candidate SHA256 `d5c51203779224704487a6596213062b77a15db6e0b55172adfe71cae2dba944`, size `1379543376`, mtime `2026-09-02 19:52:42.853149984 +0000`; success artifacts `pf55-upgrade`, `pf55-freshfirstsuccess`, `pf55-environment`, `pf55-managedrestart`, `pf55-inactivenoncurrent`, `pf55-inactivecurrentcancel`, `pf55-exactreplacement`, `pf55-missingcurrent`, `pf55-resume`, `pf55-nativespawn`, `pf55-commandauth`, and `pf55-duplicateslug` each record that SHA.
 - [x] Seven generated credential canaries were absent from terminal evidence, non-custody files, and success artifacts.
 - [x] Existing-install upgrade, restart retention, and first-success migration evidence passed.
 - [x] `Done` and `Remaining` reflect reality.
-- [ ] Completed record archived.
+- [x] Primary integration audit found no blocking issue; this completed record is archived and the branch is backed up on origin.
