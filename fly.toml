@@ -7,7 +7,7 @@ primary_region = "iad"
 [env]
   PFT_AMBIENT_HOST = "0.0.0.0"
   PFT_AMBIENT_PORT = "8080"
-  PFT_AMBIENT_PUBLIC_BASE_URL = "https://pfterminal-plan-gateway.fly.dev"
+  PFT_AMBIENT_PUBLIC_BASE_URL = "https://api.corbanu.com"
   PFT_X402_NETWORK = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
   PFT_X402_PAY_TO = "G3s13pAE8f72jPPWSvwEfLr6Gg1WRh6Nv7i98HNMoVcd"
 
