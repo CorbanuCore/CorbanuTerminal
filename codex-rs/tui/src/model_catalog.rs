@@ -131,6 +131,28 @@ impl ModelCatalog {
         }
     }
 
+    pub(crate) fn sync_runtime_models<'a>(
+        &self,
+        runtime_provider_ids: impl IntoIterator<Item = &'a str>,
+        preferred_model: Option<&str>,
+    ) {
+        let mut runtime_provider_ids = runtime_provider_ids.into_iter().collect::<Vec<_>>();
+        runtime_provider_ids.sort_unstable();
+        let mut models = self
+            .models
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for runtime_provider_id in runtime_provider_ids {
+            let Some(model) = codex_model_provider_info::resolve_model_for_provider(
+                preferred_model.map(str::to_owned),
+                runtime_provider_id,
+            ) else {
+                continue;
+            };
+            include_runtime_model(&mut models, &model, runtime_provider_id);
+        }
+    }
+
     pub(crate) fn preset_is_selectable(&self, preset: &ModelPreset) -> bool {
         self.provider_policy()
             .is_none_or(|policy| policy.preset_is_selectable(preset))

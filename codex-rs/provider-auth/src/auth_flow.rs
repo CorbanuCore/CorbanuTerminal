@@ -362,28 +362,40 @@ impl ProviderAuthController {
     }
 
     fn timeout(&mut self, attempt_id: ProviderAuthAttemptId) -> Reduction {
-        let ProviderAuthFlowSnapshot::Settling {
-            flow,
-            attempt_id: current,
-        } = &self.snapshot
-        else {
-            return stale();
-        };
-        if *current != attempt_id {
-            return stale();
+        match &self.snapshot {
+            ProviderAuthFlowSnapshot::Settling {
+                flow,
+                attempt_id: current,
+            } if *current == attempt_id => {
+                let flow = flow.clone();
+                self.snapshot = ProviderAuthFlowSnapshot::OutcomeUnknown {
+                    flow: flow.clone(),
+                    attempt_id,
+                };
+                (
+                    vec![
+                        ProviderAuthEffect::RefreshProviderStatus {
+                            attempt_id,
+                            target: flow.target,
+                        },
+                        ProviderAuthEffect::ScheduleTimeout {
+                            attempt_id,
+                            timeout: API_KEY_AUTH_TIMEOUT,
+                        },
+                    ],
+                    ProviderAuthDisposition::Applied,
+                )
+            }
+            ProviderAuthFlowSnapshot::OutcomeUnknown {
+                flow,
+                attempt_id: current,
+            } if *current == attempt_id => {
+                let flow = flow.clone();
+                self.fail(flow, ProviderAuthFailureReason::StorageUnavailable);
+                applied()
+            }
+            _ => stale(),
         }
-        let flow = flow.clone();
-        self.snapshot = ProviderAuthFlowSnapshot::OutcomeUnknown {
-            flow: flow.clone(),
-            attempt_id,
-        };
-        (
-            vec![ProviderAuthEffect::RefreshProviderStatus {
-                attempt_id,
-                target: flow.target,
-            }],
-            ProviderAuthDisposition::Applied,
-        )
     }
 
     fn status_resolved(

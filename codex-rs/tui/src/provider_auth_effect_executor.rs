@@ -15,6 +15,8 @@ use codex_provider_auth::ProviderAuthAction;
 use codex_provider_auth::ProviderAuthCompletion;
 use codex_provider_auth::ProviderAuthController;
 use codex_provider_auth::ProviderAuthEffect;
+use codex_provider_auth::ProviderAuthFailureReason;
+use codex_provider_auth::ProviderAuthFlowSnapshot;
 use codex_provider_auth::ProviderStatusSnapshot;
 use tokio::sync::mpsc::UnboundedSender;
 use uuid::Uuid;
@@ -26,6 +28,7 @@ pub(crate) enum ProviderAuthExecutorError {
     UnsupportedEffect,
     ActionReceiverClosed,
     FlowRejected,
+    SettlementFailed(ProviderAuthFailureReason),
 }
 
 /// Shared renderer-independent host for PF-50 API-key effects.
@@ -172,6 +175,9 @@ fn apply_transition(
     ) {
         return Err(ProviderAuthExecutorError::FlowRejected);
     }
+    if let Some(error) = settlement_failure(&transition.snapshot) {
+        return Err(error);
+    }
     for effect in transition.effects {
         match effect {
             ProviderAuthEffect::Complete(ProviderAuthCompletion::Configured { status, .. }) => {
@@ -184,6 +190,15 @@ fn apply_transition(
         }
     }
     Ok(None)
+}
+
+fn settlement_failure(snapshot: &ProviderAuthFlowSnapshot) -> Option<ProviderAuthExecutorError> {
+    match snapshot {
+        ProviderAuthFlowSnapshot::Failed { reason, .. } => {
+            Some(ProviderAuthExecutorError::SettlementFailed(*reason))
+        }
+        _ => None,
+    }
 }
 
 fn login_params(target: ApiKeyAuthTarget, secret: ApiKeySecret) -> LoginAccountParams {
@@ -239,5 +254,41 @@ mod tests {
                 _ => panic!("unexpected request"),
             }
         }
+    }
+
+    #[test]
+    fn correlated_failed_snapshot_terminates_the_effect_executor_without_secret_data() {
+        let provider = ModelProviderInfo {
+            name: "custom".into(),
+            env_key: Some("CUSTOM_KEY".into()),
+            ..Default::default()
+        };
+        let catalog =
+            ProviderCatalog::from_runtime_providers(&std::collections::HashMap::from([(
+                "custom".into(),
+                provider,
+            )]));
+        let entry = &catalog.entries()[0];
+        let capability = entry
+            .setup_capabilities
+            .iter()
+            .find(|capability| matches!(capability, ProviderSetupCapability::ApiKey { .. }))
+            .unwrap();
+        let target = ApiKeyAuthTarget::from_catalog_capability(entry, capability).unwrap();
+        let snapshot = ProviderAuthFlowSnapshot::Failed {
+            flow: codex_provider_auth::ApiKeyFlowContext {
+                target,
+                intent: ApiKeyFlowIntent::Replace,
+            },
+            reason: ProviderAuthFailureReason::StorageUnavailable,
+        };
+
+        assert_eq!(
+            settlement_failure(&snapshot),
+            Some(ProviderAuthExecutorError::SettlementFailed(
+                ProviderAuthFailureReason::StorageUnavailable
+            ))
+        );
+        assert!(!format!("{snapshot:?}").contains("secret-canary"));
     }
 }

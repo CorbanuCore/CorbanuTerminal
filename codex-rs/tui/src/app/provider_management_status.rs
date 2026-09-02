@@ -23,8 +23,20 @@ pub(super) fn provider_manager_status_host(
     })
 }
 
+fn sync_provider_manager_model_policy(
+    catalog: &crate::model_catalog::ModelCatalog,
+    config: &crate::legacy_core::config::Config,
+) {
+    catalog.sync_runtime_models(
+        config.model_providers.keys().map(String::as_str),
+        config.model.as_deref(),
+    );
+    catalog.refresh_provider_policy();
+}
+
 impl App {
     pub(super) fn open_provider_manager(&mut self, _app_server: &AppServerSession) {
+        sync_provider_manager_model_policy(&self.model_catalog, &self.config);
         let generation = self.next_provider_management_generation();
         self.provider_management_host = None;
         let config = self.config.clone();
@@ -148,5 +160,39 @@ impl App {
         if can_refresh {
             self.schedule_provider_manager_refresh();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn manager_open_syncs_configured_runtime_models_before_policy_refresh() {
+        let mut config = crate::legacy_core::config::ConfigBuilder::default()
+            .build()
+            .await
+            .unwrap();
+        config.model = Some("shared-model".to_string());
+        config.model_providers.insert(
+            "manager-added".to_string(),
+            codex_model_provider_info::ModelProviderInfo {
+                name: "Manager Added".to_string(),
+                ..Default::default()
+            },
+        );
+        let catalog = crate::model_catalog::ModelCatalog::new(Vec::new());
+
+        sync_provider_manager_model_policy(&catalog, &config);
+        sync_provider_manager_model_policy(&catalog, &config);
+
+        let matches = catalog
+            .try_list_models()
+            .unwrap()
+            .into_iter()
+            .filter(|preset| preset.provider_id.as_deref() == Some("manager-added"))
+            .collect::<Vec<_>>();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].model, "shared-model");
     }
 }

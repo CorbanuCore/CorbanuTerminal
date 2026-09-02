@@ -296,31 +296,31 @@ Run fix and formatting tools before the final affected tests.
 
 | Check | Final-tree command | Result | Artifact |
 | --- | --- | --- | --- |
-| Governance | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | pending | pending |
-| Provider contracts | `CARGO_INCREMENTAL=0 just test -p codex-provider-auth -j 1 --retries 0` or the final approved crate target | pending | pending |
-| Login/provider resolution | `CARGO_INCREMENTAL=0 just test -p codex-login -j 1 --retries 0`; affected model-provider tests | pending | pending |
-| TUI focused | `CARGO_INCREMENTAL=0 just test -p codex-tui onboarding -j 1 --retries 0`; provider-management and Claude filters | pending | pending |
-| Config/schema | affected config edit, parse, migration, and schema checks | pending | pending |
-| Adversarial/redaction | cancel races, stale results, timeout, malformed sources, canary scan, and no-regex LLM-path guard | pending | pending |
-| Combined tree | formatting/fixes, `git diff --check`, affected integration suites, and final build | pending | pending |
+| Governance | `python3 docs/plans/check.py && python3 docs/sprints/check.py` | PASS | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Provider contracts | `CARGO_INCREMENTAL=0 cargo test -p codex-provider-auth` | PASS: 62/62 | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Login/provider resolution | `CARGO_INCREMENTAL=0 cargo test -p codex-login`; affected model-provider tests | PASS: 152 unit + 37 integration; focused policy/status/catalog green | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| TUI focused | startup, status, catalog, provider-management, and final typed-TMUX suites | PASS: focused suites plus 26/26 final TMUX | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Config/schema | affected config edit, parse, migration, and schema checks | PASS through login/provider and TensorCash/Isometric native suites | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Adversarial/redaction | cancel races, stale results, timeout, malformed sources, canary scan, and no-regex LLM-path guard | PASS for accepted candidate/bundles; failed diagnostics excluded explicitly | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Combined tree | formatting/fixes, `git diff --check`, affected integration suites, and final build | PASS; binary `c1a444f2…807a0` | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
 
 ## True-TUI evidence
 
 | Flow | Candidate binary | Test repo/worktree | Keys/actions | Visible checkpoints | Result | Artifact |
 | --- | --- | --- | --- | --- | --- | --- |
-| Fresh multi-provider | pending | isolated profile plus TensorCash | Configure multiple providers; return after each; **Done**; send prompt and Enter separately | shared status, active defaults, initial model, real response | pending | pending |
-| Deferred Corbanu | pending | isolated profile plus Isometric Game | Queue Plan; configure another provider; **Done**; success and separate Escape/cancel runs | deferral order, no override, safe cancel/return | pending | pending |
-| Account/API recovery | pending | both applicable repositories | OpenAI, Claude token/login, API-key failure, retry, replace, cancel | identical host semantics, no stale mutation | pending | pending |
-| Eligibility/current model | pending | isolated restart fixtures | deactivate/reactivate; current-provider replacement; cancel; restart/resume | credentials preserved, explicit replacement, state durable | pending | pending |
-| Custom provider | pending | custom `env_key` and command-auth fixtures | inspect both hosts, configure supported custom provider, start request | automatic catalog inclusion and status parity | pending | pending |
-| External review | pending | final candidate | Spawn exactly one Kimi 3.0 high through Vercel in TMUX; supply review mandate; collect findings and exit; preserve the superseded Fable authentication failure | exact provider/model/runtime visible, bounded review, no fallback, disposition recorded | pending | pending |
+| Fresh multi-provider | `c1a444f2…807a0` | isolated profile plus TensorCash | Configure multiple providers; return after each; **Done**; send prompt and Enter separately | shared status, active defaults, initial model, real response | PASS | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Deferred Corbanu | `c1a444f2…807a0` | isolated profile plus Isometric Game | Queue Plan; configure another provider; **Done**; success and separate Escape/cancel runs | deferral order, no override, safe cancel/return | PASS | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Account/API recovery | `c1a444f2…807a0` | isolated fixtures | OpenAI, Claude token/login, API-key failure, retry, replace, cancel | identical host semantics, no stale mutation | PASS | stable PF-54 bundles and [ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Eligibility/current model | `c1a444f2…807a0` | isolated restart fixtures | deactivate/reactivate; current-provider replacement; cancel; restart/resume | credentials preserved, explicit replacement, state durable | PASS | stable PF-54/PF-55 bundles and [ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| Custom provider | `c1a444f2…807a0` | custom `env_key` and command-auth fixtures | inspect both hosts, configure supported custom provider, start request | automatic catalog inclusion and status parity | PASS | stable PF-55 bundles and [ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| External review | reviewed predecessor plus qualified final remediation | final candidate lineage | Exactly one Kimi 3.0 high through Vercel in TMUX; no fallback; superseded Fable failure retained | exact provider/model/runtime, bounded report, disposition | PASS | [review evidence](../../qa/provider-auth/pf-56/review/kimi-runtime.md) and [disposition](../../qa/provider-auth/pf-56/review/kimi-disposition.md) |
 
 ## Live-repository applicability
 
 | Repository | Applicable to this initiative? | Resolved checkout/test worktree | Base commit | Reason or result |
 | --- | --- | --- | --- | --- |
-| TensorCash | yes | `/home/pfrpc/repos/worktrees/pf56-tensorcash-dd6e9202` | `dd6e92024254090de0f596b090bd5c74c4d97b90` | Disposable detached worktree; exercises real provider setup, request, restart, and substantial systems work. |
-| Isometric Game | yes | `/home/pfrpc/repos/worktrees/pf56-isometricgame-59821b7a` | `59821b7a85524f186f946c4670480c7ee96483cb` | Disposable detached worktree; exercises interactive list clarity, cancellation, model switching, and resumed work. |
+| TensorCash | yes | `/home/pfrpc/repos/worktrees/pf56-tensorcash-dd6e9202` | `dd6e92024254090de0f596b090bd5c74c4d97b90` | PASS: clean worktree; 586 native tests; two exact authorized Corbanu requests across process restart. |
+| Isometric Game | yes | `/home/pfrpc/repos/worktrees/pf56-isometricgame-59821b7a` | `59821b7a85524f186f946c4670480c7ee96483cb` | PASS: clean worktree; both world checks and math; exact authorized Corbanu request plus same-thread resume. |
 
 Disposable worktrees and exact base commits must be recorded before PF-56 runs.
 Historical Claude artifacts do not substitute for final integrated-tree runs.
@@ -335,10 +335,10 @@ Historical Claude artifacts do not substitute for final integrated-tree runs.
 
 | Finished-feature doc | Product-spec citation present | Verified candidate |
 | --- | --- | --- |
-| `docs/features/model-providers.md` | required — **Shipping MVP — LIVE** multi-provider and vault requirements | pending |
-| `docs/authentication.md` | required — **Shipping MVP — LIVE** vault requirement | pending |
-| `docs/features/claude-plan-authentication.md` | retain citation; update only if final behavior changes the shipped flow | pending |
-| Corbanu Plan onboarding guide at its existing canonical page | retain citation; update only after accepted candidate | pending |
+| `docs/features/model-providers.md` | required — **Shipping MVP — LIVE** multi-provider and vault requirements | verified and updated for the final candidate |
+| `docs/authentication.md` | required — **Shipping MVP — LIVE** vault requirement | verified and updated for the final candidate |
+| `docs/features/claude-plan-authentication.md` | retained citation; final behavior preserves the shipped flow | verified; no change required |
+| Corbanu Plan onboarding guide at its existing canonical page | retained citation; final behavior preserves the Plan contract | verified; no change required |
 
 ## Dependencies, decisions, and blockers
 
@@ -374,9 +374,9 @@ Historical Claude artifacts do not substitute for final integrated-tree runs.
 - [x] Merged PF-42–PF-47 Claude evidence is preserved without claiming open gates.
 - [x] Every new implementation unit has one stable feature ID and one sprint record.
 - [ ] PF-48 through PF-56 are completed and archived.
-- [ ] Required final-tree automated and adversarial evidence passes.
-- [ ] Required true-TUI and both live-repository workflows pass.
+- [x] Required final-tree automated and adversarial evidence passes.
+- [x] Required true-TUI and both live-repository workflows pass.
 - [ ] Named human acceptance passes.
-- [ ] Finished documentation matches the accepted candidate.
+- [x] Finished documentation matches the accepted candidate.
 - [ ] Upstream disposition, release record, and due benchmark state are linked.
 - [ ] No hard release gate remains pending.

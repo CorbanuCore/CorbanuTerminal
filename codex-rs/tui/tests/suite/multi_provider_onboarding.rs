@@ -203,6 +203,18 @@ async fn tmux_fresh_wallet_plan_success_preserves_existing_current_provider() ->
     if !TmuxServer::should_run("PF-53 fresh wallet Plan success")? {
         return Ok(());
     }
+    fresh_wallet_plan_success(/*has_fallback*/ true).await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_fresh_wallet_plan_without_fallback_selects_plan_in_session() -> Result<()> {
+    if !TmuxServer::should_run("PF-56 fresh wallet Plan no-fallback selection")? {
+        return Ok(());
+    }
+    fresh_wallet_plan_success(/*has_fallback*/ false).await
+}
+
+async fn fresh_wallet_plan_success(has_fallback: bool) -> Result<()> {
     let repo_root = codex_utils_cargo_bin::repo_root()?;
     let binary = codex_binary(&repo_root)?;
     let home = tempdir()?;
@@ -211,10 +223,15 @@ async fn tmux_fresh_wallet_plan_success_preserves_existing_current_provider() ->
     mount_plan_gateway(&server, &plan_key, /*flaky_plans*/ false).await;
     write_config(home.path(), &repo_root, &server.uri())?;
 
-    let tmux = TmuxServer::start("pf53_fresh_wallet_plan_success")?;
+    let scenario = if has_fallback {
+        "fresh-wallet-plan-success"
+    } else {
+        "fresh-wallet-plan-no-fallback"
+    };
+    let tmux = TmuxServer::start(&format!("pf56_{scenario}"))?;
     register_evidence(&tmux, home.path(), &binary)?;
     let session = tmux.new_session(session_spec_with_gateway(
-        "pf53-fresh-plan-success",
+        scenario,
         &binary,
         &repo_root,
         home.path(),
@@ -222,8 +239,10 @@ async fn tmux_fresh_wallet_plan_success_preserves_existing_current_provider() ->
     ))?;
     let pane = session.primary_pane();
     pane.wait_stable_contains("Provider: OpenAI Codex Account", READY_TIMEOUT)?;
-    let ambient_canary = synthetic_canary("existing-current");
-    configure_api_key(pane, "Provider: Ambient API Key", &ambient_canary)?;
+    let ambient_canary = has_fallback.then(|| synthetic_canary("existing-current"));
+    if let Some(canary) = ambient_canary.as_deref() {
+        configure_api_key(pane, "Provider: Ambient API Key", canary)?;
+    }
     select_label(pane, "Corbanu Plan")?;
     select_label(pane, "Done")?;
 
@@ -260,29 +279,29 @@ async fn tmux_fresh_wallet_plan_success_preserves_existing_current_provider() ->
     pane.wait_stable_contains("Payment confirmed:", READY_TIMEOUT)?;
 
     let config = fs::read_to_string(home.path().join("config.toml"))?;
-    ensure!(
-        config.contains("model_provider = \"ambient\""),
-        "reconciled deferred Plan overrode the usable existing current provider:\n{config}"
-    );
-    ensure!(
-        !pane
-            .capture_scrollback_tail(4_000)?
-            .contains("via Corbanu Plan standard"),
-        "deferred fallback receipt reconciliation selected the Plan provider"
-    );
-    capture_success_evidence(
-        "fresh-wallet-plan-success",
-        &binary,
-        home.path(),
-        pane,
-        &server,
-        &[
-            ambient_canary.as_str(),
-            passphrase.as_str(),
-            plan_key.as_str(),
-        ],
-    )
-    .await?;
+    if has_fallback {
+        ensure!(
+            config.contains("model_provider = \"ambient\""),
+            "reconciled deferred Plan overrode the usable existing current provider:\n{config}"
+        );
+        ensure!(
+            !pane
+                .capture_scrollback_tail(4_000)?
+                .contains("via Corbanu Plan standard"),
+            "deferred fallback receipt reconciliation selected the Plan provider"
+        );
+    } else {
+        ensure!(
+            config.contains("model_provider = \"pfterminal-plan\""),
+            "deferred Plan without a fallback was not selected:\n{config}"
+        );
+        pane.wait_stable_contains("via Corbanu Plan standard", READY_TIMEOUT)?;
+    }
+    let mut canaries = vec![passphrase.as_str(), plan_key.as_str()];
+    if let Some(canary) = ambient_canary.as_deref() {
+        canaries.insert(0, canary);
+    }
+    capture_success_evidence(scenario, &binary, home.path(), pane, &server, &canaries).await?;
     exit_tui(pane)?;
     session.wait_for_exit(READY_TIMEOUT)?;
     Ok(())

@@ -147,8 +147,7 @@ async fn tmux_pf52_claude_recovery_cancel_and_retry_are_reused() -> Result<()> {
     pane.wait_stable_contains("Claude account method", READY_TIMEOUT)?;
     pane.send_key(TmuxKey::Escape)?;
     pane.wait_stable_contains("Configure providers and control", READY_TIMEOUT)?;
-    pane.send_key(TmuxKey::Escape)?;
-    wait_chat_ready(pane)?;
+    close_manager(pane)?;
 
     open_manager(pane)?;
     focus_label(pane, "Claude Account")?;
@@ -192,7 +191,13 @@ async fn tmux_noncurrent_deactivate_reactivate_restart_retains_request_credentia
     select_label(pane, "Deactivate")?;
     pane.wait_stable_contains("Inactive", READY_TIMEOUT)?;
     capture_success("noncurrent-inactive", &fixture, pane, &[&canary])?;
-    close_overlay_and_exit(pane)?;
+    close_manager(pane)?;
+    open_model_picker(pane)?;
+    pane.wait_stable_contains("[Other]", READY_TIMEOUT)?;
+    let inactive_model_count = numbered_selection_row_count(&pane.capture_viewport()?);
+    pane.send_key(TmuxKey::Escape)?;
+    wait_chat_ready(pane)?;
+    exit_tui(pane)?;
     first.wait_for_exit(READY_TIMEOUT)?;
 
     let second = tmux.new_session(fixture.session("pf54-retention-reactivate"))?;
@@ -200,11 +205,29 @@ async fn tmux_noncurrent_deactivate_reactivate_restart_retains_request_credentia
     wait_chat_ready(pane)?;
     open_manager(pane)?;
     inspect_provider(pane, "PF54 Managed", "Inactive")?;
+    open_model_picker(pane)?;
+    pane.wait_stable_contains("[Other]", READY_TIMEOUT)?;
+    ensure!(
+        numbered_selection_row_count(&pane.capture_viewport()?) == inactive_model_count,
+        "inactive provider changed picker membership across restart"
+    );
+    pane.send_key(TmuxKey::Escape)?;
+    wait_chat_ready(pane)?;
     open_manager(pane)?;
     select_label(pane, "PF54 Managed")?;
     select_label(pane, "Reactivate")?;
     pane.wait_stable_contains("Active", READY_TIMEOUT)?;
-    close_overlay_and_exit(pane)?;
+    close_manager(pane)?;
+    open_model_picker(pane)?;
+    pane.wait_stable_contains("[Other]", READY_TIMEOUT)?;
+    pane.wait_stable_until(
+        "reactivated provider picker membership",
+        READY_TIMEOUT,
+        |capture| numbered_selection_row_count(capture) == inactive_model_count + 1,
+    )?;
+    pane.send_key(TmuxKey::Escape)?;
+    wait_chat_ready(pane)?;
+    exit_tui(pane)?;
     second.wait_for_exit(READY_TIMEOUT)?;
 
     select_config_provider(fixture.home.path(), MANAGED_PROVIDER)?;
@@ -459,6 +482,25 @@ fn open_manager(pane: &TmuxPane<'_>) -> Result<()> {
     Ok(())
 }
 
+fn close_manager(pane: &TmuxPane<'_>) -> Result<()> {
+    let deadline = std::time::Instant::now() + READY_TIMEOUT;
+    while std::time::Instant::now() < deadline {
+        if chat_footer_visible(&pane.capture_viewport()?) {
+            return Ok(());
+        }
+        pane.send_key(TmuxKey::Escape)?;
+        std::thread::sleep(Duration::from_millis(150));
+    }
+    anyhow::bail!("timed out waiting for provider manager to close")
+}
+
+fn open_model_picker(pane: &TmuxPane<'_>) -> Result<()> {
+    pane.send_literal("/model")?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Select Model", READY_TIMEOUT)?;
+    Ok(())
+}
+
 fn select_label(pane: &TmuxPane<'_>, label: &str) -> Result<()> {
     focus_label(pane, label)?;
     pane.send_key(TmuxKey::Enter)?;
@@ -526,12 +568,38 @@ fn selected_title_matches(title: &str, requested: &str) -> bool {
             .is_some_and(|inline| inline.starts_with("  "))
 }
 
+fn numbered_selection_row_count(capture: &str) -> usize {
+    capture
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            let row = trimmed
+                .strip_prefix('>')
+                .or_else(|| trimmed.strip_prefix('›'))
+                .unwrap_or(trimmed)
+                .trim_start();
+            row.split_once(". ")
+        })
+        .filter(|(number, _)| number.chars().all(|character| character.is_ascii_digit()))
+        .count()
+}
+
 fn wait_chat_ready(pane: &TmuxPane<'_>) -> Result<()> {
     pane.wait_stable_until("chat ready", READY_TIMEOUT, |capture| {
-        capture.contains("/model to change")
-            && !capture.contains("Press enter to confirm or esc to go back")
+        chat_footer_visible(capture)
+            || (capture.contains("/model to change")
+                && !capture.contains("Press enter to confirm or esc to go back"))
     })?;
     Ok(())
+}
+
+fn chat_footer_visible(capture: &str) -> bool {
+    capture
+        .lines()
+        .rev()
+        .filter(|line| !line.trim().is_empty())
+        .take(3)
+        .any(|line| line.contains("Corbanu Terminal · TPS:"))
 }
 
 fn submit_and_wait(pane: &TmuxPane<'_>, prompt: &str, response: &str) -> Result<()> {
@@ -552,6 +620,7 @@ fn close_overlay_and_exit(pane: &TmuxPane<'_>) -> Result<()> {
 
 fn exit_tui(pane: &TmuxPane<'_>) -> Result<()> {
     pane.send_literal("/exit")?;
+    pane.wait_stable_contains("/exit", Duration::from_secs(5))?;
     pane.send_key(TmuxKey::Enter)?;
     Ok(())
 }
@@ -610,6 +679,7 @@ fn write_config(home: &Path, repo_root: &Path, server_uri: &str) -> Result<()> {
         format!(
             r#"model = "fixture-model"
 model_provider = "{PRIMARY_PROVIDER}"
+cli_auth_credentials_store = "file"
 suppress_unstable_features_warning = true
 log_dir = "{}"
 

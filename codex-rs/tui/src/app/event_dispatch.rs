@@ -2619,7 +2619,18 @@ impl App {
                 self.provider_manager_cancel_replacement(target_provider_id);
             }
             AppEvent::ProviderManagerPersistenceFinished { attempt_id, result } => {
+                let policy_may_have_changed = !matches!(
+                    result,
+                    codex_provider_auth::ProviderManagementPersistenceResult::Failed
+                );
                 self.provider_manager_persistence_finished(attempt_id, result);
+                if policy_may_have_changed {
+                    self.model_catalog.sync_runtime_models(
+                        self.config.model_providers.keys().map(String::as_str),
+                        self.config.model.as_deref(),
+                    );
+                    self.model_catalog.refresh_provider_policy();
+                }
             }
             AppEvent::ProviderManagerReplacementPersisted {
                 attempt_id,
@@ -3242,6 +3253,10 @@ impl App {
                         .on_deferred_corbanu_plan_configured(&deferred)
                         .is_ok()
                     {
+                        // The wallet adapter queued an exact provider selection. Refresh the
+                        // shared policy before that event is handled so the newly stored and
+                        // activated plan is selectable in this process.
+                        self.model_catalog.refresh_provider_policy();
                         if let Some(session) = self.shared_provider_setup_session.as_mut() {
                             session.dispatch(
                                 crate::onboarding::provider_setup::ProviderSetupAction::DeferredPlanConfigured {

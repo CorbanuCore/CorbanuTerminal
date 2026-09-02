@@ -163,10 +163,16 @@ fn timeout_nonconfigured_metadata_stays_unknown_until_late_stored_settlement() {
         }),
         transition(
             unknown.clone(),
-            vec![ProviderAuthEffect::RefreshProviderStatus {
-                attempt_id: attempt(1),
-                target: target.clone(),
-            }],
+            vec![
+                ProviderAuthEffect::RefreshProviderStatus {
+                    attempt_id: attempt(1),
+                    target: target.clone(),
+                },
+                ProviderAuthEffect::ScheduleTimeout {
+                    attempt_id: attempt(1),
+                    timeout: API_KEY_AUTH_TIMEOUT,
+                },
+            ],
             ProviderAuthDisposition::Applied,
         )
     );
@@ -221,6 +227,47 @@ fn timeout_then_stored_settlement_reconciles_without_duplicate_persistence() {
             result: ApiKeyPersistenceResult::Stored,
         }),
         stored_reconciliation(target, ApiKeyFlowIntent::Add)
+    );
+}
+
+#[test]
+fn second_correlated_timeout_bounds_unknown_replacement_and_unlocks_retry() {
+    let target = target();
+    let flow = flow(target.clone(), ApiKeyFlowIntent::Replace);
+    let mut controller = submitted_with_intent(target, ApiKeyFlowIntent::Replace);
+    controller.dispatch(ProviderAuthAction::TimeoutElapsed {
+        attempt_id: attempt(1),
+    });
+
+    assert_eq!(
+        controller.dispatch(ProviderAuthAction::TimeoutElapsed {
+            attempt_id: attempt(2),
+        }),
+        transition(
+            ProviderAuthFlowSnapshot::OutcomeUnknown {
+                flow: flow.clone(),
+                attempt_id: attempt(1),
+            },
+            vec![],
+            ProviderAuthDisposition::IgnoredStale,
+        )
+    );
+    assert_eq!(
+        controller.dispatch(ProviderAuthAction::TimeoutElapsed {
+            attempt_id: attempt(1),
+        }),
+        transition(
+            ProviderAuthFlowSnapshot::Failed {
+                flow,
+                reason: ProviderAuthFailureReason::StorageUnavailable,
+            },
+            vec![],
+            ProviderAuthDisposition::Applied,
+        )
+    );
+    assert_eq!(
+        controller.dispatch(ProviderAuthAction::Retry).disposition,
+        ProviderAuthDisposition::Applied
     );
 }
 

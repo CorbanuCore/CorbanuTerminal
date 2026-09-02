@@ -40,7 +40,9 @@ pub(crate) async fn resolve(
     openai: Option<OpenAiAuthMetadata>,
 ) -> StartupProviderResolution {
     let mut account = ProviderAccountMetadata::discover(config).await;
-    if let Some(openai) = openai {
+    if config.model_provider_id == codex_model_provider_info::OPENAI_PROVIDER_ID
+        && let Some(openai) = openai
+    {
         account.openai = openai;
     }
     let mut host = ProviderStatusHost::from_config(config, account);
@@ -119,6 +121,7 @@ pub(crate) fn should_show_provider_onboarding(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codex_model_provider_info::ModelProviderInfo;
 
     #[test]
     fn usable_provider_skips_onboarding_but_trust_and_forced_login_do_not() {
@@ -178,5 +181,98 @@ mod tests {
                 ..
             } if requested_runtime_provider_id == "provider-added-during-onboarding"
         ));
+    }
+
+    #[tokio::test]
+    async fn login_status_metadata_is_scoped_to_the_exact_openai_runtime() {
+        let home = tempfile::tempdir().unwrap();
+        let mut config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .build()
+            .await
+            .unwrap();
+        config.cli_auth_credentials_store_mode = codex_login::AuthCredentialsStoreMode::File;
+        let custom = ModelProviderInfo {
+            name: "Custom Current".into(),
+            env_key: Some("PF56_CUSTOM_CURRENT_KEY".into()),
+            ..Default::default()
+        };
+        config.model_provider_id = "custom-current".into();
+        config.model_provider = custom.clone();
+        config
+            .model_providers
+            .insert("custom-current".into(), custom);
+
+        let custom_current = resolve(&config, Some(OpenAiAuthMetadata::ApiKey)).await;
+        let custom_openai = custom_current
+            .policy
+            .host()
+            .resolve_provider(codex_model_provider_info::OPENAI_PROVIDER_ID)
+            .unwrap();
+        assert_eq!(
+            custom_openai.configuration,
+            codex_provider_auth::ProviderConfigurationState::NotConfigured
+        );
+
+        config.model_provider_id = codex_model_provider_info::OPENAI_PROVIDER_ID.into();
+        config.model_provider = config
+            .model_providers
+            .get(codex_model_provider_info::OPENAI_PROVIDER_ID)
+            .unwrap()
+            .clone();
+        let openai_current = resolve(&config, Some(OpenAiAuthMetadata::ApiKey)).await;
+        assert_eq!(
+            openai_current
+                .policy
+                .host()
+                .resolve_provider(codex_model_provider_info::OPENAI_PROVIDER_ID)
+                .unwrap()
+                .configuration,
+            codex_provider_auth::ProviderConfigurationState::Configured
+        );
+    }
+
+    #[tokio::test]
+    async fn successful_command_authorization_is_immediately_current_and_selectable() {
+        let home = tempfile::tempdir().unwrap();
+        let mut config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .build()
+            .await
+            .unwrap();
+        let provider = ModelProviderInfo {
+            name: "Command Provider".into(),
+            auth: Some(
+                serde_json::from_value(serde_json::json!({
+                    "command": "sh",
+                    "args": ["-c", "printf pf56-command-token-canary"],
+                    "cwd": home.path(),
+                }))
+                .unwrap(),
+            ),
+            ..Default::default()
+        };
+        config.model_provider_id = "command-provider".into();
+        config.model_provider = provider.clone();
+        config.model = Some("command-model".into());
+        config
+            .model_providers
+            .insert("command-provider".into(), provider);
+
+        let resolution = resolve(&config, None).await;
+
+        assert!(resolution.has_usable_provider);
+        assert!(
+            resolution
+                .policy
+                .provider_is_selectable("command-provider", "command-model")
+        );
+        assert!(matches!(
+            resolution.current,
+            CurrentSelectionDecision::Preserve(ref selection)
+                if selection.runtime_provider_id.as_str() == "command-provider"
+                    && selection.model == "command-model"
+        ));
+        assert!(!format!("{:?}", resolution.policy).contains("pf56-command-token-canary"));
     }
 }

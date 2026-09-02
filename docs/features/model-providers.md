@@ -23,8 +23,19 @@ provider access and model selection behind one consistent TUI workflow.
 5. Use `/usage` for allowance and reset information.
 6. Use `/status` to confirm the active model, permissions, and session state.
 
-Adding a credential does not select that provider. Authentication and model
-selection are deliberately separate actions.
+On first run, configure as many providers as you want and then choose **Done**.
+The first provider that completes successfully becomes the fresh installation's
+initial provider; later successful setup does not silently replace it. Choosing
+Corbanu Plan queues that flow until after **Done**, so you can configure the
+other providers first. Cancelling or escaping the deferred Plan flow returns to
+the terminal without changing an already usable provider.
+
+Configured providers are active by default. Adding a credential does not select
+that provider: authentication, eligibility, and the current model are separate.
+Use `/providers` to deactivate or reactivate a provider. Deactivation preserves
+its credential. Deactivating the current provider requires an explicit usable
+replacement; cancelling that choice leaves both current-provider and
+eligibility state unchanged.
 
 ## Account-backed provider login
 
@@ -117,8 +128,15 @@ documented environment or configuration inputs.
 - A listed provider is not necessarily authenticated on the current machine.
 - A configured credential does not guarantee that every model is enabled for
   the current account or plan.
-- Corbanu Terminal preserves the exact provider/model identity when routing a
-  turn.
+- Corbanu Terminal preserves the exact provider/model identity across normal
+  turns, native child-agent requests, process restart, and resumed work.
+- If the current provider becomes inactive, unavailable, or disappears from the
+  active profile, Corbanu blocks requests and child spawns until you recover it
+  or explicitly choose a replacement. It never silently switches providers.
+- A custom command-auth provider becomes selectable only after its real runtime
+  authorization check succeeds. Failed or unchecked command authentication
+  remains visible as status/recovery information; Corbanu does not invent an
+  interactive enrollment screen for an operator-defined command.
 - Provider privacy, retention, billing, and jurisdictional rules still apply.
 - Use the privacy label shown for Corbanu Plan models before sending sensitive
   strategy or financial context.

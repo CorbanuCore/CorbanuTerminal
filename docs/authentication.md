@@ -105,9 +105,18 @@ Built-in providers use these key names:
 | Baseten    | `baseten`    | `BASETEN_API_KEY`    | `provider/baseten_api_key`    |
 | Vercel     | `vercel`     | `AI_GATEWAY_API_KEY` | `provider/ai_gateway_api_key` |
 
-Provider key resolution checks the encrypted vault first. Legacy
-`provider_auth.json` is still read for migration compatibility, and a successful
-vault write removes the migrated plaintext key when possible.
+Provider key resolution uses one exact provider-key identity across onboarding,
+`/providers`, startup, requests, restarts, and resumed sessions. A present
+environment variable is authoritative for that process, including an invalid
+value that requires recovery; when it is absent, Corbanu checks encrypted
+managed storage and then the legacy migration source. Legacy
+`provider_auth.json` remains readable for migration compatibility, and a
+successful vault write removes the migrated plaintext key when possible.
+
+Newly configured providers become active by default. Deactivation changes only
+eligibility and preserves the credential in its existing owner. Reactivation
+therefore does not copy, reveal, or rewrite the key. Metadata and status can
+cross the UI event boundary; raw credential values cannot.
 
 Environment variables are still supported for temporary shells and automation:
 

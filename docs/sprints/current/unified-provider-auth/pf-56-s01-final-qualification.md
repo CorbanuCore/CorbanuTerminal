@@ -51,28 +51,33 @@ updated: 2026-09-02
 - [x] Expanded scope to `tui/src/provider_auth_effect_executor.rs` after reproduction proved a reducer terminal failure alone would leave the API-key executor awaiting its retained action channel; the addition is limited to correlated failed-snapshot settlement and focused tests.
 - [x] Expanded scope to `tui/src/model_catalog.rs` and its adjacent tests after strengthened TMUX proved successful same-session reactivation refreshed eligibility but could not restore a custom provider absent from the bootstrap-only preset list; the repair is limited to idempotent exact-runtime model synchronization before policy refresh.
 
+- [x] Ran fixes/formatting and all affected crate, integration, snapshot, migration, schema, redaction, and canary tests.
+- [x] Executed the final 26/26 serial true-TMUX matrix for multi-provider, OpenAI, Claude, API keys, custom providers, deferred Corbanu, eligibility, current replacement, failure/cancel, restart/resume.
+- [x] Ran real workflows in clean disposable TensorCash and Isometric Game worktrees.
+- [x] Completed the sole external review with Kimi 3.0 high through Vercel in TMUX, stayed below the four-review maximum, retained the pre-inference Fable OAuth failure as superseded evidence, and dispositioned every finding.
+- [x] Updated finished provider/auth docs only after candidate behavior was verified.
+- [x] Recorded open named-human, live-account, physical-platform, upstream, release, and benchmark evidence as shipment blockers without fabricating a pass.
+
 ## Remaining
 
-- [ ] Run fixes/formatting before final automated and TMUX evidence.
-- [ ] Rerun all affected crate, integration, snapshot, migration, schema, redaction, and canary tests.
-- [ ] Execute substantial true-TMUX matrix for multi-provider, OpenAI, Claude, API keys, custom providers, deferred Corbanu, eligibility, current replacement, failure/cancel, restart/resume.
-- [ ] Run real workflows in disposable TensorCash and Isometric Game worktrees.
-- [ ] Complete at most four formal review passes unless a documented major issue justifies more.
-- [ ] Spawn and control exactly one Kimi 3.0 high external reviewer through Vercel in TMUX, with no fallback, and disposition findings; retain the pre-inference Fable OAuth failure as superseded evidence.
-- [ ] Update finished provider/auth docs only after candidate behavior is verified.
-- [ ] Record named human, physical platform, upstream, release, and benchmark evidence or leave shipment blocked.
+- [ ] Primary creates and pushes the signed PF-56 implementation commit.
+- [ ] Primary archives the completed sprint record after verifying the commit and remote branch.
+
+Open shipment evidence remains at the active-plan level: named human acceptance,
+live eligible accounts, required physical-platform confirmation, final upstream
+disposition, target version/integration commit/merge/tag/release ledger, and
+benchmark due-state were not fabricated.
 
 ## Verification
 
-- [ ] Focused test: every final command and result is recorded in the QA ledger.
-- [ ] Integration test: combined-tree build/request/restart and live-repository suites pass.
-- [ ] TUI: final formatted candidate passes all required PTY flows with real keys and artifacts.
+- [x] Primary reran post-documentation formatting, diff, plan, and sprint governance gates and inspected the final signed-scope diff without a blocking issue.
+- [ ] Primary verifies the signed implementation commit and remote push before archiving the sprint.
 
 ## Exit evidence
 
-- [ ] Candidate commit/version/binary hash and implementation commits recorded.
-- [ ] Final-tree outputs, TMUX bundles, live-repository bases, and canary scans linked.
-- [ ] Four-review budget and every finding disposition recorded.
-- [ ] Named human/release evidence linked or remaining blockers stated without a pass claim.
-- [ ] `Done` and `Remaining` reflect reality.
-- [ ] Completed record archived.
+- [ ] Final implementation commit is pending primary integration; version, signed scope checkpoints, and binary hash are recorded in the QA ledger.
+- [x] Final-tree outputs, TMUX bundles, live-repository bases, and canary scans are linked in `qa/provider-auth/pf-56/qualification.md`.
+- [x] The four-review maximum, sole completed external review, superseded Fable attempt, and every finding disposition are recorded.
+- [x] Named-human and release evidence remains explicitly blocked without a pass claim.
+- [x] `Done` and `Remaining` reflect reality.
+- [ ] Completed record archive is pending the primary integration commit.

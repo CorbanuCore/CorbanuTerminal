@@ -94,3 +94,24 @@ fn configured_runtime_model_does_not_duplicate_existing_exact_or_inferred_provid
 
     assert_eq!(models.len(), 2);
 }
+
+#[test]
+fn runtime_sync_is_idempotent_deterministic_and_preserves_exact_provider_identity() {
+    let catalog = ModelCatalog::new(vec![preset("shared-model", Some("provider-a"))]);
+
+    catalog.sync_runtime_models(
+        ["provider-c", "provider-a", "provider-b"],
+        Some("shared-model"),
+    );
+    catalog.sync_runtime_models(
+        ["provider-b", "provider-c", "provider-a"],
+        Some("shared-model"),
+    );
+
+    let models = catalog.try_list_models().unwrap();
+    assert_eq!(models.len(), 3);
+    assert_eq!(models[1].provider_id.as_deref(), Some("provider-b"));
+    assert_eq!(models[1].id, "provider-b:shared-model");
+    assert_eq!(models[2].provider_id.as_deref(), Some("provider-c"));
+    assert_eq!(models[2].id, "provider-c:shared-model");
+}
