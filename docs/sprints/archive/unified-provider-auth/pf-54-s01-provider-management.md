@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-54-S01"
 title: "Provider management and eligibility"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-54"
 execution_order: 13
@@ -65,8 +65,8 @@ updated: 2026-09-02
 
 ## Remaining
 
-- [ ] Primary owner must create the implementation commit and archive this completed implementation record; this execution owner was explicitly instructed not to commit or archive.
-- [ ] PF-55 startup/model-picker/custom-provider convergence and PF-56 integrated documentation/release evidence remain outside PF-54.
+- [x] Primary reviewed and integrated the qualified tree in signed implementation commit `3db6321294`; this completed record is archived with no PF-54 implementation item remaining.
+- [x] PF-55 startup/model-picker/custom-provider convergence and PF-56 integrated documentation/release evidence remain explicitly handed off outside PF-54.
 
 ## Verification
 
@@ -75,15 +75,15 @@ updated: 2026-09-02
 - [x] Final serial true-TMUX matrix passed 8/8 in 505.30s: catalog parity; PF-50 API setup/recovery; PF-51 OpenAI cancel/retry; PF-52 Claude recovery/cancel/retry; noncurrent deactivate/reactivate/restart/request retention; current cancel; exact replacement/restart/retention; environment-backed copy/deactivate/reactivate/no deletion.
 - [x] Governance passed: `python3 docs/plans/check.py` reported active 2/2 with 0 available slots; `python3 docs/sprints/check.py` reported 61 current and 109 archived before this record changes status or location.
 - [x] Production caps passed: status host 393; App management 444; status split 142; auth split 155; management host 200; provider manager 414; account host 356.
-- [ ] Primary-owned post-commit governance and clean-tree verification remains pending because this execution owner was instructed not to commit.
+- [x] Primary post-commit verification confirmed signed implementation commit `3db6321294`; plan and sprint governance pass, and the source tree is clean apart from generated untracked TMUX evidence under `codex-rs/tui/target/`.
 
 ## Exit evidence
 
-- [ ] Implementation commit remains intentionally pending for the primary owner; no commit or archive was created by this execution owner.
+- [x] Primary-owned signed implementation commit `3db6321294` records the exact formatted and qualified PF-54 source tree.
 - [x] Exact formatted candidate: SHA-256 `7bc575da5072b3d959b5474d942972aadddcb841579267bfd1dc40bbe71a037d`; mtime `2026-09-02 00:16:12.214938821 +0000`; size 1,379,184,024 bytes.
 - [x] Final success artifacts: `pf54-catalog-parity`, `pf54-api-setup-recovery`, `pf54-openai-cancel-retry`, `pf54-claude-recovery-cancel`, `pf54-noncurrent-inactive`, `pf54-noncurrent-retention-request`, `pf54-current-cancel`, `pf54-current-replacement`, `pf54-current-replacement-restart`, and `pf54-environment-copy`.
 - [x] Every final artifact records the exact candidate hash and binary metadata; generated secret canaries were absent from viewport, scrollback, logs, and emitted success artifacts and existed nowhere outside authorized credential custody.
 - [x] Credential preservation is proven through restart and a captured authorization-bearing request; environment-backed management copy never claims or performs deletion.
 - [x] Status parity is proven for the shared built-in/custom catalog through the same metadata-only host, including post-save managed readiness and environment Present/Invalid/Missing precedence.
 - [x] `Done` and `Remaining` reflect the uncommitted but fully qualified implementation state.
-- [ ] Completed record archival remains with the primary owner after committing the accepted tree.
+- [x] Primary integration review confirmed literal scope, typed/secret-free correlation, ordered current-provider replacement, credential-preserving eligibility, async bulk metadata resolution, stable TUI view identity, and final 8/8 TMUX evidence; this completed record is archived.
