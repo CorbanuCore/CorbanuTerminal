@@ -14,6 +14,7 @@ workspace = true
 anyhow = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 codex-keyring-store = { workspace = true }
+codex-secret-broker = { workspace = true }
 codex-security-policy = { workspace = true }
 codex-secrets = { workspace = true }
 schemars = { workspace = true }

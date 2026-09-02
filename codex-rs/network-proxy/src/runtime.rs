@@ -3,6 +3,9 @@ use crate::config::NetworkMode;
 use crate::config::NetworkProxyConfig;
 use crate::config::ValidatedUnixSocketPath;
 use crate::credential_broker::CredentialBroker;
+use crate::credential_broker::IsolatedCredentialDispatchError;
+use crate::credential_broker::IsolatedCredentialReceipt;
+use crate::credential_broker::IsolatedCredentialRoute;
 use crate::credential_broker::ScopedCredentialInjectionError;
 use crate::credential_broker::ScopedCredentialRoute;
 use crate::credential_broker::ScopedCredentialRouteError;
@@ -424,6 +427,13 @@ impl NetworkProxyState {
         self.credential_broker.install_scoped_openai_route(route)
     }
 
+    pub fn install_isolated_credential_route(
+        &self,
+        route: IsolatedCredentialRoute,
+    ) -> Result<(), ScopedCredentialRouteError> {
+        self.credential_broker.install_isolated_openai_route(route)
+    }
+
     pub fn scoped_credential_route_enabled(&self) -> bool {
         self.credential_broker.scoped_openai_enabled()
     }
@@ -456,6 +466,20 @@ impl NetworkProxyState {
     ) -> Result<(), ScopedCredentialInjectionError> {
         self.credential_broker
             .inject_request_headers_for_request(scheme, host, port, method, path, headers)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn dispatch_isolated_credential(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        method: &str,
+        path: &str,
+        headers: &mut rama_http::HeaderMap,
+    ) -> Result<IsolatedCredentialReceipt, IsolatedCredentialDispatchError> {
+        self.credential_broker
+            .dispatch_isolated_openai(scheme, host, port, method, path, headers)
     }
 
     pub async fn plaintext_credential_injection_enabled(&self) -> Result<bool> {

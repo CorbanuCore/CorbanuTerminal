@@ -4175,8 +4175,13 @@ name = "codex-secret-broker"
 version = "0.1.35"
 dependencies = [
  "chrono",
+ "hmac 0.12.1",
  "pretty_assertions",
+ "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+ "zeroize",
 ]
 
 [[package]]
@@ -4838,6 +4843,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "codex-keyring-store",
+ "codex-secret-broker",
  "codex-secrets",
  "codex-security-policy",
  "pretty_assertions",
