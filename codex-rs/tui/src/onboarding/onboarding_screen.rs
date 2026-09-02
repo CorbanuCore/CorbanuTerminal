@@ -325,6 +325,9 @@ impl OnboardingScreen {
                     sign_in_state: Arc::new(RwLock::new(initial_sign_in_state)),
                     login_status,
                     persist_openai_provider: false,
+                    replace_provider_with_openai_on_login: config.model_provider_id
+                        == codex_model_provider_info::OPENAI_PROVIDER_ID
+                        || !config.model_provider.requires_openai_auth,
                     app_server_request_handle,
                     forced_login_method,
                     api_key_provider_id,

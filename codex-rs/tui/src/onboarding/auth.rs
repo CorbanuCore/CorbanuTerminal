@@ -316,6 +316,7 @@ pub(crate) struct AuthModeWidget {
     pub sign_in_state: Arc<RwLock<SignInState>>,
     pub login_status: LoginStatus,
     pub persist_openai_provider: bool,
+    pub replace_provider_with_openai_on_login: bool,
     pub app_server_request_handle: AppServerRequestHandle,
     pub forced_login_method: Option<ForcedLoginMethod>,
     pub api_key_provider_id: String,
@@ -1669,7 +1670,7 @@ impl AuthModeWidget {
 
         if notification.success {
             self.set_error(/*message*/ None);
-            self.persist_openai_provider = true;
+            self.persist_openai_provider = self.replace_provider_with_openai_on_login;
             *self.sign_in_state.write().unwrap() = SignInState::ChatGptSuccessMessage;
         } else {
             self.set_error(notification.error);
@@ -1896,6 +1897,7 @@ mod tests {
             sign_in_state: Arc::new(RwLock::new(SignInState::PickMode)),
             login_status: LoginStatus::NotAuthenticated,
             persist_openai_provider: false,
+            replace_provider_with_openai_on_login: true,
             app_server_request_handle: AppServerRequestHandle::InProcess(client.request_handle()),
             forced_login_method: Some(ForcedLoginMethod::Chatgpt),
             api_key_provider_id: "openai".to_string(),
@@ -2546,6 +2548,28 @@ mod tests {
             widget.configured_provider().as_deref(),
             Some(codex_model_provider_info::OPENAI_PROVIDER_ID)
         );
+    }
+
+    #[tokio::test]
+    async fn custom_openai_auth_provider_is_not_replaced_after_login() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.replace_provider_with_openai_on_login = false;
+        *widget.sign_in_state.write().unwrap() =
+            SignInState::ChatGptDeviceCode(ContinueWithDeviceCodeState::ready(
+                "request-1".to_string(),
+                "login-1".to_string(),
+                "https://chatgpt.com/device".to_string(),
+                "ABCD-EFGH".to_string(),
+            ));
+
+        widget.on_account_login_completed(AccountLoginCompletedNotification {
+            login_id: Some("login-1".to_string()),
+            success: true,
+            error: None,
+        });
+
+        *widget.sign_in_state.write().unwrap() = SignInState::ChatGptSuccess;
+        assert_eq!(widget.configured_provider(), None);
     }
 
     #[test]
