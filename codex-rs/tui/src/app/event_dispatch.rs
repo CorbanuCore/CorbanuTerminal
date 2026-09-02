@@ -544,6 +544,7 @@ impl App {
             return;
         }
         let status = host.resolve_target(&target);
+        self.model_catalog.refresh_provider_policy();
         let usable = persisted_status.availability
             == codex_provider_auth::ProviderAvailabilityState::Ready
             && status.configuration == codex_provider_auth::ProviderConfigurationState::Configured
@@ -710,6 +711,7 @@ impl App {
             return;
         }
         let active = host.resolve_provider(provider_id.as_str());
+        self.model_catalog.refresh_provider_policy();
         let usable = status.availability == codex_provider_auth::ProviderAvailabilityState::Ready
             && active.as_ref().is_some_and(|status| {
                 status.eligibility == codex_provider_auth::ProviderEligibilityState::Active
@@ -1859,6 +1861,18 @@ impl App {
                     .await;
             }
             AppEvent::UpdateModelSelection { model, provider } => {
+                let selected_provider = provider
+                    .as_deref()
+                    .unwrap_or(self.config.model_provider_id.as_str());
+                if !self
+                    .model_catalog
+                    .provider_is_selectable(selected_provider, &model)
+                {
+                    self.chat_widget.add_error_message(format!(
+                        "Model provider `{selected_provider}` is inactive or unavailable. Repair or reactivate it in /providers."
+                    ));
+                    return Ok(AppRunControl::Continue);
+                }
                 if let Some(model_provider) = provider.as_ref() {
                     let Some(provider_info) =
                         self.config.model_providers.get(model_provider).cloned()
@@ -1872,6 +1886,8 @@ impl App {
                     self.config.model_provider = provider_info.clone();
                     self.chat_widget
                         .set_model_provider(model_provider.clone(), provider_info);
+                    self.model_catalog
+                        .update_current_provider(model_provider.as_str());
                 }
                 self.chat_widget.set_model(&model);
                 self.refresh_session_header(tui)?;
@@ -2321,13 +2337,15 @@ impl App {
                 });
             }
             AppEvent::OpenSharedProviderSetup => {
-                let host = crate::provider_status_host::ProviderStatusHost::from_config(
-                    &self.config,
-                    crate::provider_status_host::ProviderAccountMetadata {
-                        claude: codex_provider_auth::ClaudeCredentialMetadata::Checking,
-                        ..Default::default()
-                    },
-                );
+                let host = self.shared_provider_status_host.clone().unwrap_or_else(|| {
+                    crate::provider_status_host::ProviderStatusHost::from_config(
+                        &self.config,
+                        crate::provider_status_host::ProviderAccountMetadata {
+                            claude: codex_provider_auth::ClaudeCredentialMetadata::Checking,
+                            ..Default::default()
+                        },
+                    )
+                });
                 let session = crate::onboarding::provider_setup::ProviderSetupSession::from_statuses(
                     host.resolve().entries(),
                 );
@@ -2367,6 +2385,7 @@ impl App {
                 if refreshed {
                     self.render_shared_provider_setup();
                 }
+                self.model_catalog.refresh_provider_policy();
             }
             AppEvent::SharedProviderSetupBegin {
                 provider_id,
@@ -4006,6 +4025,25 @@ impl App {
                 provider,
                 effort,
             } => {
+                let selected_provider = provider
+                    .as_deref()
+                    .unwrap_or(self.config.model_provider_id.as_str());
+                if !self
+                    .model_catalog
+                    .provider_is_selectable(selected_provider, &model)
+                {
+                    self.chat_widget.add_error_message(format!(
+                        "Cannot save `{model}` because provider `{selected_provider}` is inactive or unavailable."
+                    ));
+                    return Ok(AppRunControl::Continue);
+                }
+                if self.model_catalog.take_session_recovery_only() {
+                    self.chat_widget.add_info_message(
+                        "Provider recovery applied to this resumed session only.".to_string(),
+                        Some("Use /model again to change the global default.".to_string()),
+                    );
+                    return Ok(AppRunControl::Continue);
+                }
                 match crate::config_update::write_config_batch(
                     app_server.request_handle(),
                     crate::config_update::build_model_selection_edits(
@@ -5145,7 +5183,7 @@ impl App {
                     }
                 };
                 let model = self.native_spawn_default_model();
-                let provider = crate::chatwidget::ChatWidget::model_provider_for_selection(&model);
+                let provider = self.native_spawn_default_provider(&model);
                 let nickname = match self
                     .unique_native_pane_nickname("Manager", /*exclude_thread_id*/ None)
                 {

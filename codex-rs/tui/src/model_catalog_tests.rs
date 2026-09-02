@@ -48,3 +48,24 @@ fn runtime_refresh_replaces_only_gpu_models() {
         Some("gpu-new")
     );
 }
+
+#[test]
+fn resumed_session_recovery_is_consumed_once() {
+    let catalog = ModelCatalog::new(Vec::new());
+    catalog.set_session_recovery_only(true);
+
+    assert!(catalog.take_session_recovery_only());
+    assert!(!catalog.take_session_recovery_only());
+}
+
+#[test]
+fn duplicate_model_slugs_retain_exact_catalog_provider_identity() {
+    let catalog = ModelCatalog::new(vec![
+        preset("shared-model", Some("provider-a")),
+        preset("shared-model", Some("provider-b")),
+    ]);
+
+    let models = catalog.try_list_models().unwrap();
+    assert_eq!(models[0].provider_id.as_deref(), Some("provider-a"));
+    assert_eq!(models[1].provider_id.as_deref(), Some("provider-b"));
+}

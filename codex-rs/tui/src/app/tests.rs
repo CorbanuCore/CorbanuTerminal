@@ -7622,13 +7622,16 @@ async fn idle_claude_pane_selection_clears_previous_live_status_panel() -> Resul
 #[tokio::test]
 async fn native_spawn_auth_guard_blocks_unauthenticated_openai() {
     let app = make_test_app().await;
+    install_runtime_provider_policy(
+        &app,
+        crate::provider_status_host::ProviderAccountMetadata::default(),
+    );
 
     let error = app
         .native_spawn_provider_auth_error(Some(OPENAI_PROVIDER_ID))
         .expect("OpenAI without auth should be rejected");
 
-    assert!(error.contains("OpenAI"));
-    assert!(error.contains("not configured"));
+    assert!(error.contains("inactive or unavailable"));
 }
 
 #[tokio::test]
@@ -7639,6 +7642,13 @@ async fn native_spawn_auth_guard_accepts_openai_api_key_auth() {
         /*plan_type*/ None,
         /*has_chatgpt_account*/ false,
         /*has_codex_backend_auth*/ false,
+    );
+    install_runtime_provider_policy(
+        &app,
+        crate::provider_status_host::ProviderAccountMetadata {
+            openai: codex_login::OpenAiAuthMetadata::ApiKey,
+            ..Default::default()
+        },
     );
 
     assert_eq!(
@@ -7707,16 +7717,24 @@ async fn spawn_provider_allowlist_unset_stays_unrestricted() {
 #[tokio::test]
 async fn native_spawn_auth_guard_accepts_provider_key_storage() -> Result<()> {
     let app = make_test_app().await;
+    install_runtime_provider_policy(
+        &app,
+        crate::provider_status_host::ProviderAccountMetadata::default(),
+    );
 
     let missing = app
         .native_spawn_provider_auth_error(Some(VERCEL_PROVIDER_ID))
         .expect("Vercel without key should be rejected");
-    assert!(missing.contains(VERCEL_API_KEY_ENV_VAR));
+    assert!(missing.contains("inactive or unavailable"));
 
     std::fs::write(
         app.config.codex_home.join("provider_auth.json"),
         format!(r#"{{"api_keys":{{"{VERCEL_API_KEY_ENV_VAR}":"test-key"}}}}"#),
     )?;
+    install_runtime_provider_policy(
+        &app,
+        crate::provider_status_host::ProviderAccountMetadata::default(),
+    );
 
     assert!(
         app.native_spawn_provider_auth_error(Some(VERCEL_PROVIDER_ID))
@@ -7774,12 +7792,29 @@ async fn native_spawn_auth_guard_uses_selected_provider_after_onboarding() -> Re
         app.config.codex_home.join("provider_auth.json"),
         format!(r#"{{"api_keys":{{"{OPENROUTER_API_KEY_ENV_VAR}":"test-key"}}}}"#),
     )?;
+    install_runtime_provider_policy(
+        &app,
+        crate::provider_status_host::ProviderAccountMetadata::default(),
+    );
 
     assert!(
         app.native_spawn_provider_auth_error(/*provider_id*/ None)
             .is_none()
     );
     Ok(())
+}
+
+fn install_runtime_provider_policy(
+    app: &App,
+    account: crate::provider_status_host::ProviderAccountMetadata,
+) {
+    let host = crate::provider_status_host::ProviderStatusHost::from_config(&app.config, account);
+    app.model_catalog.set_provider_policy(
+        crate::chatwidget::provider_model_policy::ProviderModelPolicy::new(
+            host,
+            codex_provider_auth::ProviderRuntimeAuthorizations::default(),
+        ),
+    );
 }
 
 #[tokio::test]

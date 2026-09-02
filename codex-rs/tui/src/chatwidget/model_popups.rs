@@ -44,7 +44,6 @@ use codex_model_provider_info::OPENROUTER_DEEPSEEK_V4_PRO_0813_MODEL;
 use codex_model_provider_info::OPENROUTER_GROK_4_6_MODEL;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID;
-use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_ANTHROPIC_FAST_PROVIDER_ID;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
@@ -69,10 +68,6 @@ const OPENROUTER_DEEPSEEK_V4_FLASH_0731_MODEL: &str = "deepseek/deepseek-v4-flas
 const OPENROUTER_TENCENT_HY3_FREE_MODEL: &str = "tencent/hy3:free";
 #[cfg(test)]
 const OPENROUTER_KIMI_K3_MODEL: &str = "moonshotai/kimi-k3";
-const OPENAI_GPT_5_5_MODEL: &str = "gpt-5.5";
-const OPENAI_GPT_5_6_SOL_MODEL: &str = "gpt-5.6-sol";
-const OPENAI_GPT_5_6_TERRA_MODEL: &str = "gpt-5.6-terra";
-const OPENAI_GPT_5_6_LUNA_MODEL: &str = "gpt-5.6-luna";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ModelSelectionPurpose {
@@ -117,7 +112,7 @@ struct ModelPickerProviderGroup {
     subtitle: &'static str,
 }
 
-const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 13] = [
+const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 14] = [
     ModelPickerProviderGroup {
         id: "openai",
         label: "OpenAI",
@@ -182,6 +177,11 @@ const MODEL_PICKER_PROVIDER_GROUPS: [ModelPickerProviderGroup; 13] = [
         id: "gpu",
         label: "Rented GPU",
         subtitle: "Authenticated Corbanu Terminal rental",
+    },
+    ModelPickerProviderGroup {
+        id: "other",
+        label: "Other",
+        subtitle: "Configured custom providers",
     },
 ];
 
@@ -254,7 +254,10 @@ impl ChatWidget {
     pub(crate) fn open_model_popup_with_presets(&mut self, presets: Vec<ModelPreset>) {
         let presets: Vec<ModelPreset> = presets
             .into_iter()
-            .filter(Self::show_in_pfterminal_model_picker)
+            .filter(|preset| {
+                Self::show_in_pfterminal_model_picker(preset)
+                    && self.model_catalog.preset_is_selectable(preset)
+            })
             .collect();
 
         let current_model = self.current_model();
@@ -453,6 +456,7 @@ impl ChatWidget {
                 });
             presets.extend(paid_models);
         }
+        presets.retain(|preset| self.model_catalog.preset_is_selectable(preset));
 
         if presets.is_empty() {
             self.add_info_message(
@@ -600,45 +604,7 @@ impl ChatWidget {
     }
 
     pub(crate) fn show_in_pfterminal_model_picker(preset: &ModelPreset) -> bool {
-        if !preset.show_in_picker {
-            return false;
-        }
-
-        let provider = preset
-            .provider_id
-            .clone()
-            .or_else(|| Self::model_provider_for_selection(&preset.model));
-        match provider.as_deref() {
-            Some(OPENAI_PROVIDER_ID) => Self::is_openai_coding_plan_model(&preset.model),
-            Some(
-                AMBIENT_PROVIDER_ID
-                | PFTERMINAL_PLAN_PROVIDER_ID
-                | PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
-                | KIMI_CODE_PROVIDER_ID
-                | CLAUDE_PLAN_PROVIDER_ID
-                | ANTHROPIC_PROVIDER_ID
-                | ZAI_PROVIDER_ID
-                | DEEPSEEK_PROVIDER_ID
-                | BASETEN_PROVIDER_ID
-                | OPENROUTER_PROVIDER_ID
-                | OPENROUTER_ANTHROPIC_PROVIDER_ID
-                | META_PROVIDER_ID
-                | VERCEL_PROVIDER_ID
-                | VERCEL_ANTHROPIC_FAST_PROVIDER_ID,
-            ) => true,
-            Some(provider) if provider.starts_with("gpu-") => true,
-            _ => false,
-        }
-    }
-
-    fn is_openai_coding_plan_model(model: &str) -> bool {
-        matches!(
-            model.trim(),
-            OPENAI_GPT_5_5_MODEL
-                | OPENAI_GPT_5_6_SOL_MODEL
-                | OPENAI_GPT_5_6_TERRA_MODEL
-                | OPENAI_GPT_5_6_LUNA_MODEL
-        )
+        preset.show_in_picker
     }
 
     fn model_picker_provider_group(provider: Option<&str>) -> Option<ModelPickerProviderGroup> {
@@ -658,7 +624,8 @@ impl ChatWidget {
             Some(BASETEN_PROVIDER_ID) => "baseten",
             Some(OPENROUTER_PROVIDER_ID | OPENROUTER_ANTHROPIC_PROVIDER_ID) => "openrouter",
             Some(provider) if provider.starts_with("gpu-") => "gpu",
-            _ => return None,
+            Some(_) => "other",
+            None => return None,
         };
         MODEL_PICKER_PROVIDER_GROUPS
             .into_iter()
@@ -666,13 +633,11 @@ impl ChatWidget {
     }
 
     pub(crate) fn pfterminal_plan_key_is_linked(&self) -> bool {
-        codex_login::provider_api_key_from_auth_storage(
-            &self.config.codex_home,
-            PFTERMINAL_PLAN_API_KEY_ENV_VAR,
-            self.config.cli_auth_credentials_store_mode,
-            self.config.auth_keyring_backend_kind(),
-        )
-        .is_ok_and(|key| key.is_some_and(|value| !value.trim().is_empty()))
+        self.model_catalog.has_provider_policy()
+            && self.model_catalog.provider_is_selectable(
+                PFTERMINAL_PLAN_PROVIDER_ID,
+                AMBIENT_DEFAULT_MODEL,
+            )
     }
 
     fn model_selection_actions(
@@ -1280,27 +1245,22 @@ impl ChatWidget {
         ))
     }
 
-    pub(super) fn apply_model_and_effort_without_persist(
-        &self,
-        model: String,
-        effort: Option<ReasoningEffortConfig>,
-    ) {
+    fn apply_model_and_effort(&self, model: String, effort: Option<ReasoningEffortConfig>) {
+        let provider = self.resolved_model_provider(&model);
         let warning = effort
             .as_ref()
             .and_then(|effort| self.ultra_reasoning_concurrency_warning(effort));
-        self.app_event_tx.send(AppEvent::UpdateModel(model));
+        self.app_event_tx.send(AppEvent::UpdateModelSelection {
+            model: model.clone(),
+            provider: provider.clone(),
+        });
         self.app_event_tx
-            .send(AppEvent::UpdateReasoningEffort(effort));
+            .send(AppEvent::UpdateReasoningEffort(effort.clone()));
         if let Some(warning) = warning {
             self.app_event_tx.send(AppEvent::InsertHistoryCell(Box::new(
                 history_cell::new_warning_event(warning),
             )));
         }
-    }
-
-    fn apply_model_and_effort(&self, model: String, effort: Option<ReasoningEffortConfig>) {
-        self.apply_model_and_effort_without_persist(model.clone(), effort.clone());
-        let provider = self.resolved_model_provider(&model);
         if Self::should_persist_model_provider(provider.as_deref()) {
             self.app_event_tx.send(AppEvent::PersistModelSelection {
                 model,
@@ -1475,7 +1435,7 @@ mod tests {
             group_label(OPENROUTER_ANTHROPIC_PROVIDER_ID),
             Some("OpenRouter")
         );
-        assert_eq!(group_label(AMAZON_BEDROCK_PROVIDER_ID), None);
+        assert_eq!(group_label(AMAZON_BEDROCK_PROVIDER_ID), Some("Other"));
     }
 
     #[test]
@@ -1536,10 +1496,10 @@ mod tests {
                 model, /*show_in_picker*/ true
             )));
         }
-        assert!(!ChatWidget::show_in_pfterminal_model_picker(&preset(
+        assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
             "gpt-5.4", /*show_in_picker*/ true
         )));
-        assert!(!ChatWidget::show_in_pfterminal_model_picker(&preset(
+        assert!(ChatWidget::show_in_pfterminal_model_picker(&preset(
             "codex-auto-review",
             /*show_in_picker*/ true
         )));

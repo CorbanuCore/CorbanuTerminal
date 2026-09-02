@@ -1201,7 +1201,15 @@ impl App {
         if let Some(updated_model) = config.model.clone() {
             model = updated_model;
         }
+        let provider_runtime = crate::startup_provider::resolve(&config, None).await;
+        let session_recovery_only = matches!(
+            provider_runtime.current,
+            codex_provider_auth::CurrentSelectionDecision::RequireExplicitRecovery { .. }
+        ) && matches!(&session_selection, SessionSelection::Resume(_));
+        let shared_provider_status_host = Some(provider_runtime.policy.host());
         let model_catalog = Arc::new(ModelCatalog::new(available_models.clone()));
+        model_catalog.set_provider_policy(provider_runtime.policy);
+        model_catalog.set_session_recovery_only(session_recovery_only);
         let feedback_audience = bootstrap.feedback_audience;
         let auth_mode = bootstrap.auth_mode;
         let has_chatgpt_account = bootstrap.has_chatgpt_account;
@@ -1547,7 +1555,7 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
             config,
             active_deferred_provider_setup: deferred_provider_setup.clone(),
             shared_provider_setup_session: None,
-            shared_provider_status_host: None,
+            shared_provider_status_host,
             shared_provider_account_auth_host: None,
             provider_management_host: None,
             provider_management_generation: 0,

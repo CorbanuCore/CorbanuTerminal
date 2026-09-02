@@ -378,6 +378,7 @@ use self::plugins::PluginsCacheState;
 mod plan_implementation;
 use self::plan_implementation::PLAN_IMPLEMENTATION_TITLE;
 mod model_popups;
+pub(crate) mod provider_model_policy;
 pub(crate) use model_popups::ModelSelectionPurpose;
 mod notifications;
 use self::notifications::Notification;
@@ -1794,6 +1795,19 @@ impl ChatWidget {
         T: Into<AppCommand>,
     {
         let op: AppCommand = op.into();
+        if matches!(
+            &op,
+            AppCommand::UserTurn { .. } | AppCommand::Review { .. } | AppCommand::Compact
+        ) && self.model_catalog.current_requires_recovery(
+            &self.config.model_provider_id,
+            self.current_model(),
+        ) {
+            self.add_error_message(
+                "The current provider is unavailable or inactive. Choose an active provider and model, or repair it in /providers."
+                    .to_string(),
+            );
+            return false;
+        }
         if self.blocks_direct_input
             && matches!(
                 &op,

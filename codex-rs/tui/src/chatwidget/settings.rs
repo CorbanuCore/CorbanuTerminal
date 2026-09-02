@@ -222,14 +222,6 @@ impl ChatWidget {
         self.has_codex_backend_auth
     }
 
-    pub(crate) fn has_openai_auth(&self) -> bool {
-        self.has_codex_backend_auth
-            || matches!(
-                self.status_account_display,
-                Some(StatusAccountDisplay::ApiKey | StatusAccountDisplay::ChatGpt { .. })
-            )
-    }
-
     pub(crate) fn update_account_state(
         &mut self,
         status_account_display: Option<StatusAccountDisplay>,

@@ -2273,6 +2273,15 @@ impl App {
         self.chat_widget.current_model().to_string()
     }
 
+    pub(crate) fn native_spawn_default_provider(&self, model: &str) -> Option<String> {
+        if model == self.chat_widget.current_model() {
+            return Some(self.config.model_provider_id.clone());
+        }
+        self.chat_widget.model_catalog()
+            .provider_for_model(model)
+            .or_else(|| crate::chatwidget::ChatWidget::model_provider_for_selection(model))
+    }
+
     /// Standard crew model/effort mapping (all Codex-native):
     ///   Nazgul: Claude Fable 5 Plan (Claude Plan) @ provider default
     ///   Troll: GPT-5.6-Sol (OpenAI) @ xhigh
@@ -2339,12 +2348,18 @@ impl App {
         provider_id: Option<&str>,
     ) -> Result<()> {
         self.ensure_native_spawn_provider_authorized(provider_id)?;
-
-        if let Some(message) = self.native_spawn_provider_auth_error(provider_id) {
-            return Err(eyre!("{message}"));
-        }
-
         let provider_id = provider_id.unwrap_or(self.config.model_provider_id.as_str());
+        let model = self.native_spawn_default_model();
+        if let Some(decision) = self.chat_widget.model_catalog().provider_use_decision(
+            provider_id,
+            &model,
+            codex_provider_auth::ProviderUseContext::NativeSpawn,
+        ) && matches!(decision, codex_provider_auth::ProviderUseDecision::Blocked { .. })
+        {
+            return Err(eyre!(
+                "Cannot run a native Corbanu Terminal worker on provider `{provider_id}`: it is inactive or unavailable. Repair or reactivate it in /providers."
+            ));
+        }
         let provider = if provider_id == self.config.model_provider_id {
             Some(&self.config.model_provider)
         } else {
@@ -2377,6 +2392,20 @@ impl App {
             .config
             .model_providers
             .keys()
+            .filter(|provider| {
+                self.chat_widget.model_catalog().provider_use_decision(
+                    provider,
+                    &codex_model_provider_info::resolve_model_for_provider(
+                        self.config.model.clone(),
+                        provider,
+                    )
+                    .unwrap_or_default(),
+                    codex_provider_auth::ProviderUseContext::NativeSpawn,
+                ).is_none_or(|decision| !matches!(
+                    decision,
+                    codex_provider_auth::ProviderUseDecision::Blocked { .. }
+                ))
+            })
             .cloned()
             .collect::<Vec<_>>();
         if !providers.contains(&self.config.model_provider_id) {
@@ -2412,52 +2441,26 @@ impl App {
         ))
     }
 
+    #[cfg(test)]
     pub(crate) fn native_spawn_provider_auth_error(
         &self,
         provider_id: Option<&str>,
     ) -> Option<String> {
         let provider_id = provider_id.unwrap_or(self.config.model_provider_id.as_str());
-        let provider = if provider_id == self.config.model_provider_id {
-            Some(&self.config.model_provider)
-        } else {
-            self.config.model_providers.get(provider_id)
-        }?;
-        let provider_name = provider_display_name(provider_id, provider.name.as_str());
-
-        if provider.requires_openai_auth && !self.chat_widget.has_openai_auth() {
-            return Some(format!(
-                "Cannot run native Corbanu Terminal worker on {provider_name}; OpenAI authentication is not configured. Run `corbanu login --with-api-key`, add the OpenAI Codex account in /providers, or choose a non-OpenAI provider/model."
-            ));
-        }
-
-        if let Some(env_key) = provider.env_key.as_deref()
-            && !self.provider_key_is_available(env_key)
-        {
-            return Some(format!(
-                "Cannot run native Corbanu Terminal worker on {provider_name}; missing `{env_key}`. Add it in /providers or choose a different model."
-            ));
-        }
-
-        None
-    }
-
-    fn provider_key_is_available(&self, env_key: &str) -> bool {
-        if std::env::var(env_key)
-            .ok()
-            .is_some_and(|value| !value.trim().is_empty())
-        {
-            return true;
-        }
-
-        codex_login::auth::provider_api_key_from_auth_storage(
-            &self.config.codex_home,
-            env_key,
-            self.config.cli_auth_credentials_store_mode,
-            self.config.auth_keyring_backend_kind(),
-        )
-        .ok()
-        .flatten()
-        .is_some_and(|value| !value.trim().is_empty())
+        let model = self.native_spawn_default_model();
+        self.chat_widget.model_catalog()
+            .provider_use_decision(
+                provider_id,
+                &model,
+                codex_provider_auth::ProviderUseContext::NativeSpawn,
+            )
+            .and_then(|decision| match decision {
+                codex_provider_auth::ProviderUseDecision::Blocked { .. } => Some(format!(
+                    "Cannot run native Corbanu Terminal worker on provider `{provider_id}`; it is inactive or unavailable. Repair or reactivate it in /providers."
+                )),
+                codex_provider_auth::ProviderUseDecision::Ready(_)
+                | codex_provider_auth::ProviderUseDecision::RequiresRuntimeAuthorization(_) => None,
+            })
     }
 
     // These fields mirror the persisted pane identity and its app-server spawn response.
@@ -3056,6 +3059,21 @@ impl App {
             .spawn_native_runtime_by_node
             .get(&logical_node_id)
             .cloned();
+        if let Some(runtime) = saved_runtime.as_ref()
+            && let Some(decision) = self.chat_widget.model_catalog().provider_use_decision(
+                &runtime.provider,
+                &runtime.model,
+                codex_provider_auth::ProviderUseContext::Resume,
+            )
+            && matches!(decision, codex_provider_auth::ProviderUseDecision::Blocked { .. })
+        {
+            self.chat_widget.add_error_message(format!(
+                "Cannot restore pane {} because provider `{}` is inactive or unavailable. Repair or reactivate it in /providers.",
+                self.thread_label(thread_id),
+                runtime.provider,
+            ));
+            return false;
+        }
         let (resume_config, model_override, permission_settings) =
             self.native_spawn_resume_request(saved_runtime.as_ref());
         let model_settings = if model_override.is_some() {

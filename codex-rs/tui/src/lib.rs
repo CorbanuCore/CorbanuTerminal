@@ -185,6 +185,7 @@ mod skills_helpers;
 mod slash_command;
 mod spawn_crew;
 pub(crate) mod spawn_orchestration;
+mod startup_provider;
 mod startup_error;
 mod startup_hooks_review;
 mod status;
@@ -1504,20 +1505,29 @@ async fn run_ratatui_app(
         !uses_remote_workspace && should_show_trust_screen(&initial_config);
     #[cfg(target_os = "windows")]
     let mut trust_decision_was_made = false;
-    let login_status = if provider_requires_login(&initial_config) {
-        let Some(app_server) = app_server.as_mut() else {
-            unreachable!("app server should exist when auth is required");
-        };
-        get_login_status(app_server, &initial_config).await?
-    } else {
-        LoginStatus::NotAuthenticated
+    let Some(app_server_for_status) = app_server.as_mut() else {
+        unreachable!("app server should exist while resolving provider status");
     };
-    let should_show_onboarding =
-        should_show_onboarding(login_status, &initial_config, should_show_trust_screen_flag);
+    let login_status = get_login_status(app_server_for_status, &initial_config).await?;
+    let startup_provider = startup_provider::resolve(
+        &initial_config,
+        Some(startup_provider::openai_metadata(login_status)),
+    )
+    .await;
+    let should_show_onboarding = startup_provider::should_show_provider_onboarding(
+        should_show_trust_screen_flag,
+        startup_provider.has_usable_provider,
+        initial_config.forced_login_method,
+        login_status,
+    );
 
     let mut deferred_provider_setup = None;
     let config = if should_show_onboarding {
-        let show_login_screen = should_show_login_screen(login_status, &initial_config);
+        let show_login_screen = !startup_provider.has_usable_provider
+            || matches!(
+                initial_config.forced_login_method,
+                Some(ForcedLoginMethod::Chatgpt)
+            ) && login_status == LoginStatus::NotAuthenticated;
         let onboarding_result = run_onboarding_app(
             OnboardingScreenArgs {
                 show_login_screen,
@@ -1986,12 +1996,8 @@ pub enum LoginStatus {
 /// rate-limit round-trip that `bootstrap` would trigger.
 async fn get_login_status(
     app_server: &mut AppServerSession,
-    config: &Config,
+    _config: &Config,
 ) -> color_eyre::Result<LoginStatus> {
-    if !provider_requires_login(config) {
-        return Ok(LoginStatus::NotAuthenticated);
-    }
-
     let account = app_server.read_account().await?;
     Ok(match account.account {
         Some(AppServerAccount::ApiKey {}) => LoginStatus::AuthMode(AuthMode::ApiKey),
@@ -2091,49 +2097,6 @@ fn should_show_trust_screen(config: &Config) -> bool {
     config.active_project.trust_level.is_none()
 }
 
-fn should_show_onboarding(
-    login_status: LoginStatus,
-    config: &Config,
-    show_trust_screen: bool,
-) -> bool {
-    if show_trust_screen {
-        return true;
-    }
-
-    should_show_login_screen(login_status, config)
-}
-
-fn should_show_login_screen(login_status: LoginStatus, config: &Config) -> bool {
-    // Only show the login screen for providers that require OpenAI auth or an
-    // explicit provider API key. For OSS/other providers, skip login entirely.
-    if !provider_requires_login(config) {
-        return false;
-    }
-
-    if login_status != LoginStatus::NotAuthenticated {
-        return false;
-    }
-
-    if matches!(config.forced_login_method, Some(ForcedLoginMethod::Chatgpt)) {
-        return true;
-    }
-
-    // Corbanu Plan credentials are provisioned and recovered inside the TUI through
-    // `/wallet`. Sending a disconnected Plan user through the external-provider onboarding
-    // picker makes that recovery path unreachable and falsely suggests that every other
-    // stored account was removed. Keep the terminal available so the wallet can be restored
-    // or its already-paid plan access can be recovered without another provider login.
-    if config.model_provider_id == codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID {
-        return false;
-    }
-
-    !has_linked_provider_credentials(config)
-}
-
-fn provider_requires_login(config: &Config) -> bool {
-    config.model_provider.requires_openai_auth || config.model_provider.env_key.is_some()
-}
-
 fn resume_model_override_from_launch(
     cli: &Cli,
     config: &Config,
@@ -2166,34 +2129,6 @@ fn is_model_affecting_resume_config_key(key: &str) -> bool {
             | "model_reasoning_summary"
             | "model_verbosity"
     )
-}
-
-fn has_linked_provider_credentials(config: &Config) -> bool {
-    config
-        .model_provider
-        .env_key
-        .as_deref()
-        .is_some_and(|env_key| provider_credential_is_linked(config, env_key))
-}
-
-fn provider_credential_is_linked(config: &Config, env_key: &str) -> bool {
-    match codex_login::auth::provider_api_key_from_auth_storage(
-        &config.codex_home,
-        env_key,
-        config.cli_auth_credentials_store_mode,
-        config.auth_keyring_backend_kind(),
-    ) {
-        Ok(Some(key)) => !key.trim().is_empty(),
-        Ok(None) => false,
-        Err(err) => {
-            warn!(
-                provider_key_id = env_key,
-                error = %err,
-                "failed to check stored provider credential while deciding onboarding"
-            );
-            false
-        }
-    }
 }
 
 #[cfg(test)]
@@ -2307,128 +2242,6 @@ mod tests {
         assert!(matches!(
             explicit_fork_selection(Some(target), /*uses_remote_workspace*/ true),
             Some(resume_picker::SessionSelection::Fork(_))
-        ));
-    }
-
-    #[tokio::test]
-    async fn stored_active_provider_key_suppresses_startup_login_screen() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = build_config(&temp_dir).await.unwrap();
-        assert!(provider_requires_login(&config));
-        assert!(should_show_login_screen(
-            LoginStatus::NotAuthenticated,
-            &config
-        ));
-
-        std::fs::write(
-            temp_dir.path().join("provider_auth.json"),
-            r#"{"api_keys":{"AMBIENT_API_KEY":"ambient-test-key"}}"#,
-        )
-        .unwrap();
-
-        assert!(!should_show_login_screen(
-            LoginStatus::NotAuthenticated,
-            &config
-        ));
-    }
-
-    #[tokio::test]
-    async fn stored_non_active_provider_key_does_not_suppress_startup_login_screen() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = build_config(&temp_dir).await.unwrap();
-        assert_eq!(
-            config.model_provider_id,
-            codex_model_provider_info::AMBIENT_PROVIDER_ID
-        );
-        std::fs::write(
-            temp_dir.path().join("provider_auth.json"),
-            r#"{"api_keys":{"OPENROUTER_API_KEY":"openrouter-test-key"}}"#,
-        )
-        .unwrap();
-
-        assert!(should_show_login_screen(
-            LoginStatus::NotAuthenticated,
-            &config
-        ));
-    }
-
-    #[tokio::test]
-    async fn disconnected_pfterminal_plan_skips_external_provider_onboarding() {
-        let temp_dir = TempDir::new().unwrap();
-        std::fs::write(
-            temp_dir.path().join("config.toml"),
-            r#"model_provider = "pfterminal-plan""#,
-        )
-        .unwrap();
-        let config = build_config(&temp_dir).await.unwrap();
-        assert_eq!(
-            config.model_provider_id,
-            codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID
-        );
-        assert!(provider_requires_login(&config));
-
-        assert!(!should_show_login_screen(
-            LoginStatus::NotAuthenticated,
-            &config
-        ));
-    }
-
-    #[tokio::test]
-    async fn forced_chatgpt_login_still_precedes_pfterminal_plan_recovery() {
-        let temp_dir = TempDir::new().unwrap();
-        std::fs::write(
-            temp_dir.path().join("config.toml"),
-            r#"model_provider = "pfterminal-plan""#,
-        )
-        .unwrap();
-        let mut config = build_config(&temp_dir).await.unwrap();
-        config.forced_login_method = Some(ForcedLoginMethod::Chatgpt);
-
-        assert!(should_show_login_screen(
-            LoginStatus::NotAuthenticated,
-            &config
-        ));
-    }
-
-    #[tokio::test]
-    async fn persisted_non_ambient_provider_key_suppresses_startup_login_screen() {
-        let temp_dir = TempDir::new().unwrap();
-        std::fs::write(
-            temp_dir.path().join("config.toml"),
-            r#"model_provider = "openrouter""#,
-        )
-        .unwrap();
-        std::fs::write(
-            temp_dir.path().join("provider_auth.json"),
-            r#"{"api_keys":{"OPENROUTER_API_KEY":"openrouter-test-key"}}"#,
-        )
-        .unwrap();
-        let config = build_config(&temp_dir).await.unwrap();
-        assert_eq!(
-            config.model_provider_id,
-            codex_model_provider_info::OPENROUTER_PROVIDER_ID
-        );
-
-        assert!(!should_show_login_screen(
-            LoginStatus::NotAuthenticated,
-            &config
-        ));
-    }
-
-    #[tokio::test]
-    async fn forced_chatgpt_login_still_shows_login_screen() {
-        let temp_dir = TempDir::new().unwrap();
-        let mut config = build_config(&temp_dir).await.unwrap();
-        config.forced_login_method = Some(ForcedLoginMethod::Chatgpt);
-        std::fs::write(
-            temp_dir.path().join("provider_auth.json"),
-            r#"{"api_keys":{"ZAI_API_KEY":"zai-test-key"}}"#,
-        )
-        .unwrap();
-
-        assert!(should_show_login_screen(
-            LoginStatus::NotAuthenticated,
-            &config
         ));
     }
 
