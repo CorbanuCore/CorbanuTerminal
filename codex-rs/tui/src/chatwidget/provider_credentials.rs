@@ -29,6 +29,7 @@ use std::time::Duration;
 
 const PROVIDER_CREDENTIALS_VIEW_ID: &str = "provider-credentials";
 const CODEX_ACCOUNT_DEVICE_LOGIN_VIEW_ID: &str = "codex-account-device-login";
+const PROVIDER_API_KEY_SAVE_VIEW_ID: &str = "provider-api-key-save";
 const PROVIDER_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -231,6 +232,29 @@ impl ChatWidget {
             }),
         );
         self.bottom_pane.show_view(Box::new(view));
+    }
+
+    pub(crate) fn open_provider_api_key_save_pending(&mut self, display_name: String) {
+        self.bottom_pane
+            .show_view(Box::new(ProviderApiKeySavePendingView { display_name }));
+    }
+
+    pub(crate) fn on_provider_api_key_save_finished(
+        &mut self,
+        display_name: String,
+        result: Result<(), String>,
+    ) {
+        self.bottom_pane
+            .dismiss_view_by_id(PROVIDER_API_KEY_SAVE_VIEW_ID);
+        match result {
+            Ok(()) => self.add_info_message(
+                format!("Stored {display_name} in the vault."),
+                /*hint*/ None,
+            ),
+            Err(message) => {
+                self.add_error_message(format!("Failed to store {display_name}: {message}"));
+            }
+        }
     }
 
     pub(crate) fn open_codex_account_device_login_pending(&mut self) {
@@ -520,6 +544,52 @@ fn provider_credential_display_name(provider_name: &str, env_key: &str) -> Strin
 
 fn provider_vault_label(env_key: &str) -> String {
     format!("provider/{}", env_key.to_ascii_lowercase())
+}
+
+struct ProviderApiKeySavePendingView {
+    display_name: String,
+}
+
+impl ProviderApiKeySavePendingView {
+    fn lines(&self) -> Vec<Line<'static>> {
+        vec![
+            Line::from(format!("Saving {} securely...", self.display_name).bold()),
+            Line::from(""),
+            Line::from("Keep Corbanu Terminal open while the encrypted vault is updated.").dim(),
+        ]
+    }
+}
+
+impl BottomPaneView for ProviderApiKeySavePendingView {
+    fn handle_key_event(&mut self, _key_event: crossterm::event::KeyEvent) {}
+
+    fn is_complete(&self) -> bool {
+        false
+    }
+
+    fn view_id(&self) -> Option<&'static str> {
+        Some(PROVIDER_API_KEY_SAVE_VIEW_ID)
+    }
+
+    fn on_ctrl_c(&mut self) -> CancellationEvent {
+        CancellationEvent::Handled
+    }
+
+    fn prefer_esc_to_handle_key_event(&self) -> bool {
+        true
+    }
+}
+
+impl Renderable for ProviderApiKeySavePendingView {
+    fn render(&self, area: Rect, buf: &mut Buffer) {
+        Paragraph::new(self.lines())
+            .wrap(Wrap { trim: false })
+            .render(area, buf);
+    }
+
+    fn desired_height(&self, _width: u16) -> u16 {
+        3
+    }
 }
 
 struct CodexAccountDeviceLoginView {
@@ -898,6 +968,48 @@ mod tests {
             crossterm::event::KeyModifiers::NONE,
         ));
         assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn provider_api_key_save_view_describes_anthropic_progress() {
+        let view = ProviderApiKeySavePendingView {
+            display_name: "Provider: Anthropic API Key".to_string(),
+        };
+        let area = Rect::new(0, 0, 72, view.desired_height(/*width*/ 72));
+        let mut buffer = Buffer::empty(area);
+        view.render(area, &mut buffer);
+        let rendered = (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        insta::assert_snapshot!(rendered);
+        assert_eq!(view.view_id(), Some(PROVIDER_API_KEY_SAVE_VIEW_ID));
+    }
+
+    #[test]
+    fn provider_api_key_save_view_blocks_input_until_save_finishes() {
+        let mut view = ProviderApiKeySavePendingView {
+            display_name: "Provider: Anthropic API Key".to_string(),
+        };
+        view.handle_key_event(crossterm::event::KeyEvent::new(
+            KeyCode::Char('x'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        view.handle_key_event(crossterm::event::KeyEvent::new(
+            KeyCode::Esc,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+
+        assert!(!view.is_complete());
+        assert_eq!(view.on_ctrl_c(), CancellationEvent::Handled);
+        assert!(view.prefer_esc_to_handle_key_event());
     }
 
     #[test]

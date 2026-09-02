@@ -1460,6 +1460,12 @@ pub(crate) enum AppEvent {
         api_key: ProviderApiKeySecret,
     },
 
+    /// Finish a provider API-key save after app-server has persisted and reloaded auth.
+    ProviderApiKeySaveFinished {
+        display_name: String,
+        result: Result<(), String>,
+    },
+
     OpenTelegram,
     OpenTelegramTokenEntry,
     ValidateTelegramToken {

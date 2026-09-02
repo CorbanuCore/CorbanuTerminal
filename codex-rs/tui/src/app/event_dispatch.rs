@@ -2007,6 +2007,8 @@ impl App {
                 display_name,
                 api_key,
             } => {
+                self.chat_widget
+                    .open_provider_api_key_save_pending(display_name.clone());
                 let request_handle = app_server.request_handle();
                 let tx = self.app_event_tx.clone();
                 tokio::spawn(async move {
@@ -2026,31 +2028,25 @@ impl App {
                         )
                         .await;
 
-                    match result {
-                        Ok(codex_app_server_protocol::LoginAccountResponse::ApiKey {}) => {
-                            tx.send(AppEvent::InsertHistoryCell(Box::new(
-                                history_cell::new_info_event(
-                                    format!("Stored {display_name} in the vault."),
-                                    /*hint*/ None,
-                                ),
-                            )));
-                        }
-                        Ok(other) => {
-                            tx.send(AppEvent::InsertHistoryCell(Box::new(
-                                history_cell::new_error_event(format!(
-                                    "Failed to store {display_name}: unexpected account/login/start response: {other:?}"
-                                )),
-                            )));
-                        }
-                        Err(err) => {
-                            tx.send(AppEvent::InsertHistoryCell(Box::new(
-                                history_cell::new_error_event(format!(
-                                    "Failed to store {display_name}: {err}"
-                                )),
-                            )));
-                        }
-                    }
+                    let result = match result {
+                        Ok(codex_app_server_protocol::LoginAccountResponse::ApiKey {}) => Ok(()),
+                        Ok(other) => Err(format!(
+                            "unexpected account/login/start response: {other:?}"
+                        )),
+                        Err(err) => Err(err.to_string()),
+                    };
+                    tx.send(AppEvent::ProviderApiKeySaveFinished {
+                        display_name,
+                        result,
+                    });
                 });
+            }
+            AppEvent::ProviderApiKeySaveFinished {
+                display_name,
+                result,
+            } => {
+                self.chat_widget
+                    .on_provider_api_key_save_finished(display_name, result);
             }
             AppEvent::OpenTelegram => {
                 self.chat_widget.open_telegram_menu();
