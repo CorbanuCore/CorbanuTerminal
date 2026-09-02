@@ -1460,6 +1460,10 @@ pub(crate) enum AppEvent {
         api_key: ProviderApiKeySecret,
     },
 
+    ProviderApiKeySaveDismissed {
+        save_id: String,
+    },
+
     /// Finish a provider API-key save after app-server has persisted and reloaded auth.
     ProviderApiKeySaveFinished {
         save_id: String,

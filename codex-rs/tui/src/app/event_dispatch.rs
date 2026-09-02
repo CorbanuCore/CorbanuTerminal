@@ -2044,6 +2044,9 @@ impl App {
                     });
                 });
             }
+            AppEvent::ProviderApiKeySaveDismissed { save_id } => {
+                self.chat_widget.on_provider_api_key_save_dismissed(save_id);
+            }
             AppEvent::ProviderApiKeySaveFinished {
                 save_id,
                 display_name,

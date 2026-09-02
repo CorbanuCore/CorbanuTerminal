@@ -239,9 +239,17 @@ impl ChatWidget {
         save_id: String,
         display_name: String,
     ) {
-        self.pending_provider_api_key_save_id = Some(save_id);
+        self.pending_provider_api_key_save_id = Some(save_id.clone());
         self.bottom_pane
-            .show_view(Box::new(ProviderApiKeySavePendingView::new(display_name)));
+            .show_view(Box::new(ProviderApiKeySavePendingView::new(
+                self.app_event_tx.clone(),
+                save_id,
+                display_name,
+            )));
+    }
+
+    pub(crate) fn on_provider_api_key_save_dismissed(&mut self, save_id: String) {
+        clear_matching_provider_api_key_save(&mut self.pending_provider_api_key_save_id, &save_id);
     }
 
     pub(crate) fn on_provider_api_key_save_finished(
@@ -250,20 +258,30 @@ impl ChatWidget {
         display_name: String,
         result: Result<(), String>,
     ) {
-        if clear_matching_provider_api_key_save(
+        let was_active = clear_matching_provider_api_key_save(
             &mut self.pending_provider_api_key_save_id,
             &save_id,
-        ) {
+        );
+        if was_active {
             self.bottom_pane
                 .dismiss_view_by_id(PROVIDER_API_KEY_SAVE_VIEW_ID);
         }
-        match result {
-            Ok(()) => self.add_info_message(
+        match (was_active, result) {
+            (true, Ok(())) => self.add_info_message(
                 format!("Stored {display_name} in the vault."),
                 /*hint*/ None,
             ),
-            Err(message) => {
+            (true, Err(message)) => {
                 self.add_error_message(format!("Failed to store {display_name}: {message}"));
+            }
+            (false, Ok(())) => self.add_info_message(
+                format!("Background save completed: stored {display_name} in the vault."),
+                /*hint*/ None,
+            ),
+            (false, Err(message)) => {
+                self.add_error_message(format!(
+                    "Background save failed for {display_name}: {message}"
+                ));
             }
         }
     }
@@ -569,20 +587,31 @@ fn clear_matching_provider_api_key_save(
 }
 
 struct ProviderApiKeySavePendingView {
+    app_event_tx: AppEventSender,
+    save_id: String,
     display_name: String,
     complete: bool,
 }
 
 impl ProviderApiKeySavePendingView {
-    fn new(display_name: String) -> Self {
+    fn new(app_event_tx: AppEventSender, save_id: String, display_name: String) -> Self {
         Self {
+            app_event_tx,
+            save_id,
             display_name,
             complete: false,
         }
     }
 
     fn cancel(&mut self) {
+        if self.complete {
+            return;
+        }
         self.complete = true;
+        self.app_event_tx
+            .send(AppEvent::ProviderApiKeySaveDismissed {
+                save_id: self.save_id.clone(),
+            });
     }
 
     fn lines(&self) -> Vec<Line<'static>> {
@@ -1015,7 +1044,12 @@ mod tests {
 
     #[test]
     fn provider_api_key_save_view_describes_anthropic_progress() {
-        let view = ProviderApiKeySavePendingView::new("Provider: Anthropic API Key".to_string());
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let view = ProviderApiKeySavePendingView::new(
+            AppEventSender::new(tx),
+            "save-1".to_string(),
+            "Provider: Anthropic API Key".to_string(),
+        );
         let area = Rect::new(0, 0, 72, view.desired_height(/*width*/ 72));
         let mut buffer = Buffer::empty(area);
         view.render(area, &mut buffer);
@@ -1036,13 +1070,19 @@ mod tests {
 
     #[test]
     fn provider_api_key_save_view_blocks_text_but_allows_dismissal() {
-        let mut esc_view =
-            ProviderApiKeySavePendingView::new("Provider: Anthropic API Key".to_string());
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let sender = AppEventSender::new(tx);
+        let mut esc_view = ProviderApiKeySavePendingView::new(
+            sender.clone(),
+            "save-esc".to_string(),
+            "Provider: Anthropic API Key".to_string(),
+        );
         esc_view.handle_key_event(crossterm::event::KeyEvent::new(
             KeyCode::Char('x'),
             crossterm::event::KeyModifiers::NONE,
         ));
         assert!(!esc_view.is_complete());
+        assert!(rx.try_recv().is_err());
 
         esc_view.handle_key_event(crossterm::event::KeyEvent::new(
             KeyCode::Esc,
@@ -1051,32 +1091,51 @@ mod tests {
         assert!(esc_view.is_complete());
         assert_eq!(esc_view.completion(), Some(ViewCompletion::Cancelled));
         assert!(esc_view.prefer_esc_to_handle_key_event());
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::ProviderApiKeySaveDismissed { save_id }) if save_id == "save-esc"
+        ));
+        esc_view.handle_key_event(crossterm::event::KeyEvent::new(
+            KeyCode::Esc,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        assert!(rx.try_recv().is_err());
 
-        let mut ctrl_c_view =
-            ProviderApiKeySavePendingView::new("Provider: Anthropic API Key".to_string());
+        let mut ctrl_c_view = ProviderApiKeySavePendingView::new(
+            sender,
+            "save-ctrl-c".to_string(),
+            "Provider: Anthropic API Key".to_string(),
+        );
         assert_eq!(ctrl_c_view.on_ctrl_c(), CancellationEvent::Handled);
         assert!(ctrl_c_view.is_complete());
         assert_eq!(ctrl_c_view.completion(), Some(ViewCompletion::Cancelled));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::ProviderApiKeySaveDismissed { save_id }) if save_id == "save-ctrl-c"
+        ));
     }
 
     #[test]
-    fn provider_api_key_save_completion_only_clears_the_matching_save() {
-        let mut pending_save_id = Some("new-save".to_string());
+    fn cancelled_save_completion_cannot_clear_a_newer_save() {
+        let mut pending_save_id = Some("first-save".to_string());
 
-        assert!(!clear_matching_provider_api_key_save(
-            &mut pending_save_id,
-            "old-save"
-        ));
-        assert_eq!(pending_save_id.as_deref(), Some("new-save"));
         assert!(clear_matching_provider_api_key_save(
             &mut pending_save_id,
-            "new-save"
+            "first-save"
         ));
         assert_eq!(pending_save_id, None);
+
+        pending_save_id = Some("second-save".to_string());
         assert!(!clear_matching_provider_api_key_save(
             &mut pending_save_id,
-            "new-save"
+            "first-save"
         ));
+        assert_eq!(pending_save_id.as_deref(), Some("second-save"));
+        assert!(clear_matching_provider_api_key_save(
+            &mut pending_save_id,
+            "second-save"
+        ));
+        assert_eq!(pending_save_id, None);
     }
 
     #[test]
