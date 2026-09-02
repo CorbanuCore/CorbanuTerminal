@@ -87,7 +87,7 @@ owner must compare actual diffs to scope and record final combined-tree evidence
 
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
-| [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [54 current sprints](current/p0-security-levels/index.md), 22 completed archives | Round-two PF-19-S02/PF-20-S02/PF-21-S02 are completed and archived; PF-41-S03 and PF-13-S06 are the dependency-complete next frontier, while PF-35-S01 remains readiness-blocked |
+| [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [52 current sprints](current/p0-security-levels/index.md), 24 completed archives | Round-three PF-13-S06/PF-41-S03 are completed and archived; PF-22-S02 and PF-27-S04 are dependency-complete, while PF-35-S01 continues external qualification |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
 | [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | Historical 72-sprint decomposition remains cancelled; every record maps into the active P0 plan's current work |
 
