@@ -1,5 +1,8 @@
 use codex_model_provider_info::ModelProviderInfo;
+use codex_provider_auth::ProviderAvailabilityState;
 use codex_provider_auth::ProviderConfigurationState;
+use codex_provider_auth::ProviderRuntimeAuthorization;
+use codex_provider_auth::ProviderRuntimeAuthorizations;
 use tempfile::tempdir;
 
 use super::*;
@@ -132,6 +135,64 @@ async fn current_selection_changes_status_without_persisting_policy() {
     assert!(!home.path().join("provider-eligibility.json").exists());
 }
 
+#[tokio::test]
+async fn authorized_command_runtime_converges_to_configured_ready() {
+    let home = tempdir().unwrap();
+    let config = config(home.path(), "command", command_provider(home.path())).await;
+    let mut host = ProviderStatusHost::from_config(&config, ProviderAccountMetadata::default());
+    let mut authorizations = ProviderRuntimeAuthorizations::default();
+    authorizations.set("command", ProviderRuntimeAuthorization::Authorized);
+    host.set_runtime_authorizations(authorizations);
+
+    let status = host.resolve_provider("command").unwrap();
+    assert_eq!(status.configuration, ProviderConfigurationState::Configured);
+    assert_eq!(status.availability, ProviderAvailabilityState::Ready);
+}
+
+#[tokio::test]
+async fn rejected_unchecked_and_mismatched_command_authorization_stay_status_only() {
+    let home = tempdir().unwrap();
+    let config = config(home.path(), "command", command_provider(home.path())).await;
+    for (id, state) in [
+        ("command", ProviderRuntimeAuthorization::Rejected),
+        ("other", ProviderRuntimeAuthorization::Authorized),
+        ("command", ProviderRuntimeAuthorization::NotChecked),
+    ] {
+        let mut host = ProviderStatusHost::from_config(&config, ProviderAccountMetadata::default());
+        let mut authorizations = ProviderRuntimeAuthorizations::default();
+        authorizations.set(id, state);
+        host.set_runtime_authorizations(authorizations);
+        assert_eq!(
+            host.resolve_provider("command").unwrap().availability,
+            ProviderAvailabilityState::StatusOnly
+        );
+    }
+}
+
+#[tokio::test]
+async fn command_authorization_is_exact_and_debug_output_is_secret_free() {
+    let home = tempdir().unwrap();
+    let mut config = config(home.path(), "one", command_provider(home.path())).await;
+    config
+        .model_providers
+        .insert("two".into(), command_provider(home.path()));
+    let mut host = ProviderStatusHost::from_config(&config, ProviderAccountMetadata::default());
+    let mut authorizations = ProviderRuntimeAuthorizations::default();
+    authorizations.set("one", ProviderRuntimeAuthorization::Authorized);
+    host.set_runtime_authorizations(authorizations);
+
+    let statuses = host.resolve();
+    assert_eq!(
+        statuses.get("one").unwrap().availability,
+        ProviderAvailabilityState::Ready
+    );
+    assert_eq!(
+        statuses.get("two").unwrap().availability,
+        ProviderAvailabilityState::StatusOnly
+    );
+    assert!(!format!("{host:?} {statuses:?}").contains("secret-canary"));
+}
+
 #[test]
 fn environment_precedence_skips_managed_reads_until_environment_is_missing() {
     for environment in [
@@ -168,4 +229,18 @@ async fn config(path: &std::path::Path, id: &str, provider: ModelProviderInfo) -
     config.model_provider = provider.clone();
     config.model_providers = std::collections::HashMap::from([(id.into(), provider)]);
     config
+}
+
+fn command_provider(path: &std::path::Path) -> ModelProviderInfo {
+    ModelProviderInfo {
+        name: "Command".into(),
+        auth: Some(
+            serde_json::from_value(serde_json::json!({
+                "command": path.join("secret-canary-command"),
+                "cwd": path,
+            }))
+            .unwrap(),
+        ),
+        ..Default::default()
+    }
 }

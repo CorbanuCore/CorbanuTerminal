@@ -8,20 +8,30 @@ pub(super) fn spawn_provider_status_job(job: impl FnOnce() + Send + 'static) {
     tokio::task::spawn_blocking(job);
 }
 
+pub(super) fn provider_manager_status_host(
+    config: &crate::legacy_core::config::Config,
+    shared: Option<crate::provider_status_host::ProviderStatusHost>,
+) -> crate::provider_status_host::ProviderStatusHost {
+    shared.unwrap_or_else(|| {
+        crate::provider_status_host::ProviderStatusHost::from_config(
+            config,
+            crate::provider_status_host::ProviderAccountMetadata {
+                claude: codex_provider_auth::ClaudeCredentialMetadata::Checking,
+                ..Default::default()
+            },
+        )
+    })
+}
+
 impl App {
     pub(super) fn open_provider_manager(&mut self, _app_server: &AppServerSession) {
         let generation = self.next_provider_management_generation();
         self.provider_management_host = None;
         let config = self.config.clone();
+        let shared_status_host = self.shared_provider_status_host.clone();
         let tx = self.app_event_tx.clone();
         spawn_provider_status_job(move || {
-            let status_host = crate::provider_status_host::ProviderStatusHost::from_config(
-                &config,
-                crate::provider_status_host::ProviderAccountMetadata {
-                    claude: codex_provider_auth::ClaudeCredentialMetadata::Checking,
-                    ..Default::default()
-                },
-            );
+            let status_host = provider_manager_status_host(&config, shared_status_host);
             let statuses = status_host.resolve().entries().to_vec();
             tx.send(AppEvent::ProviderManagerStatusesResolved {
                 generation,

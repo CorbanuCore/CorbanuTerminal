@@ -13,6 +13,26 @@ pub(crate) struct StartupProviderResolution {
     pub(crate) policy: ProviderModelPolicy,
     pub(crate) current: CurrentSelectionDecision,
     pub(crate) has_usable_provider: bool,
+    context: StartupProviderContext,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct StartupProviderContext {
+    codex_home: std::path::PathBuf,
+    cwd: std::path::PathBuf,
+    model: Option<String>,
+    model_provider_id: String,
+}
+
+impl StartupProviderContext {
+    fn from_config(config: &Config) -> Self {
+        Self {
+            codex_home: config.codex_home.to_path_buf(),
+            cwd: config.cwd.to_path_buf(),
+            model: config.model.clone(),
+            model_provider_id: config.model_provider_id.clone(),
+        }
+    }
 }
 
 pub(crate) async fn resolve(
@@ -23,7 +43,7 @@ pub(crate) async fn resolve(
     if let Some(openai) = openai {
         account.openai = openai;
     }
-    let host = ProviderStatusHost::from_config(config, account);
+    let mut host = ProviderStatusHost::from_config(config, account);
     let mut authorizations = ProviderRuntimeAuthorizations::default();
     for (runtime_id, provider) in &config.model_providers {
         let Some(auth) = provider.auth.as_ref() else {
@@ -39,6 +59,7 @@ pub(crate) async fn resolve(
         };
         authorizations.set(runtime_id.clone(), state);
     }
+    host.set_runtime_authorizations(authorizations.clone());
     let policy = ProviderModelPolicy::new(host, authorizations);
     let model = config.model.clone().unwrap_or_default();
     let current = policy.current(&config.model_provider_id, &model);
@@ -60,6 +81,17 @@ pub(crate) async fn resolve(
         policy,
         current,
         has_usable_provider,
+        context: StartupProviderContext::from_config(config),
+    }
+}
+
+pub(crate) async fn resolve_for_app(
+    config: &Config,
+    cached: Option<StartupProviderResolution>,
+) -> StartupProviderResolution {
+    match cached {
+        Some(cached) if cached.context == StartupProviderContext::from_config(config) => cached,
+        _ => resolve(config, /*openai*/ None).await,
     }
 }
 
@@ -107,6 +139,44 @@ mod tests {
             true,
             Some(crate::ForcedLoginMethod::Chatgpt),
             crate::LoginStatus::NotAuthenticated,
+        ));
+    }
+
+    #[tokio::test]
+    async fn app_reuses_unchanged_startup_resolution_with_exact_current() {
+        let home = tempfile::tempdir().unwrap();
+        let config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .build()
+            .await
+            .unwrap();
+        let cached = resolve(&config, None).await;
+        let expected = cached.current.clone();
+
+        let reused = resolve_for_app(&config, Some(cached)).await;
+
+        assert_eq!(reused.current, expected);
+    }
+
+    #[tokio::test]
+    async fn app_refreshes_resolution_after_provider_context_changes() {
+        let home = tempfile::tempdir().unwrap();
+        let mut config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .build()
+            .await
+            .unwrap();
+        let cached = resolve(&config, None).await;
+        config.model_provider_id = "provider-added-during-onboarding".to_string();
+
+        let refreshed = resolve_for_app(&config, Some(cached)).await;
+
+        assert!(matches!(
+            refreshed.current,
+            CurrentSelectionDecision::RequireExplicitRecovery {
+                requested_runtime_provider_id,
+                ..
+            } if requested_runtime_provider_id == "provider-added-during-onboarding"
         ));
     }
 }

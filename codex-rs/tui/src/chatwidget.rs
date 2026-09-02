@@ -1798,10 +1798,10 @@ impl ChatWidget {
         if matches!(
             &op,
             AppCommand::UserTurn { .. } | AppCommand::Review { .. } | AppCommand::Compact
-        ) && self.model_catalog.current_requires_recovery(
-            &self.config.model_provider_id,
-            self.current_model(),
-        ) {
+        ) && self
+            .model_catalog
+            .current_requires_recovery(&self.config.model_provider_id, self.current_model())
+        {
             self.add_error_message(
                 "The current provider is unavailable or inactive. Choose an active provider and model, or repair it in /providers."
                     .to_string(),

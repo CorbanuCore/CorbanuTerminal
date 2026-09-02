@@ -1,8 +1,62 @@
+use codex_model_provider_info::canonical_catalog_provider;
+use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelPreset;
+use codex_protocol::openai_models::ReasoningEffort;
 use std::convert::Infallible;
+use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::sync::RwLock;
+
+pub(crate) fn include_runtime_model(
+    models: &mut Vec<ModelPreset>,
+    model: &str,
+    runtime_provider_id: &str,
+) {
+    let model = model.trim();
+    let runtime_provider_id = runtime_provider_id.trim();
+    if model.is_empty()
+        || runtime_provider_id.is_empty()
+        || models.iter().any(|preset| {
+            preset.model == model
+                && preset
+                    .provider_id
+                    .as_deref()
+                    .or_else(|| canonical_catalog_provider(&preset.model))
+                    == Some(runtime_provider_id)
+        })
+    {
+        return;
+    }
+
+    let mut preset = models
+        .iter()
+        .find(|preset| preset.model == model)
+        .cloned()
+        .unwrap_or_else(|| ModelPreset {
+            id: format!("{runtime_provider_id}:{model}"),
+            model: model.to_string(),
+            provider_id: None,
+            orchestration: None,
+            display_name: model.to_string(),
+            description: "Configured runtime provider".to_string(),
+            default_reasoning_effort: ReasoningEffort::None,
+            supported_reasoning_efforts: Vec::new(),
+            supports_personality: false,
+            additional_speed_tiers: Vec::new(),
+            service_tiers: Vec::new(),
+            default_service_tier: None,
+            is_default: false,
+            upgrade: None,
+            show_in_picker: true,
+            multi_agent_version: None,
+            availability_nux: None,
+            supported_in_api: true,
+            input_modalities: vec![InputModality::Text],
+        });
+    preset.id = format!("{runtime_provider_id}:{model}");
+    preset.provider_id = Some(runtime_provider_id.to_string());
+    models.push(preset);
+}
 
 #[derive(Debug)]
 pub(crate) struct ModelCatalog {
@@ -21,7 +75,8 @@ impl ModelCatalog {
     }
 
     pub(crate) fn set_session_recovery_only(&self, session_only: bool) {
-        self.session_recovery_only.store(session_only, Ordering::Release);
+        self.session_recovery_only
+            .store(session_only, Ordering::Release);
     }
 
     pub(crate) fn take_session_recovery_only(&self) -> bool {

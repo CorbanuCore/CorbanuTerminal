@@ -8,6 +8,8 @@ mod multi_provider_onboarding;
 #[cfg(unix)]
 mod output_text_stream;
 #[cfg(unix)]
+mod provider_convergence;
+#[cfg(unix)]
 mod provider_management;
 mod resize_reflow;
 #[cfg(unix)]

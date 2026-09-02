@@ -133,10 +133,7 @@ fn status_only_requires_real_authorization_before_normal_visibility() {
         }
     ));
 
-    authorizations.set(
-        "custom-runtime",
-        ProviderRuntimeAuthorization::Authorized,
-    );
+    authorizations.set("custom-runtime", ProviderRuntimeAuthorization::Authorized);
     assert!(matches!(
         ProviderRuntimeSelectionPolicy::assess(
             &catalog,
@@ -179,10 +176,7 @@ fn rejected_runtime_authorization_is_typed_and_secret_free() {
         ProviderAvailabilityState::StatusOnly,
     );
     let mut authorizations = ProviderRuntimeAuthorizations::default();
-    authorizations.set(
-        "custom-runtime",
-        ProviderRuntimeAuthorization::Rejected,
-    );
+    authorizations.set("custom-runtime", ProviderRuntimeAuthorization::Rejected);
 
     let decision = ProviderRuntimeSelectionPolicy::assess(
         &catalog,

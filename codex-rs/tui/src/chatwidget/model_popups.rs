@@ -634,10 +634,9 @@ impl ChatWidget {
 
     pub(crate) fn pfterminal_plan_key_is_linked(&self) -> bool {
         self.model_catalog.has_provider_policy()
-            && self.model_catalog.provider_is_selectable(
-                PFTERMINAL_PLAN_PROVIDER_ID,
-                AMBIENT_DEFAULT_MODEL,
-            )
+            && self
+                .model_catalog
+                .provider_is_selectable(PFTERMINAL_PLAN_PROVIDER_ID, AMBIENT_DEFAULT_MODEL)
     }
 
     fn model_selection_actions(

@@ -69,3 +69,28 @@ fn duplicate_model_slugs_retain_exact_catalog_provider_identity() {
     assert_eq!(models[0].provider_id.as_deref(), Some("provider-a"));
     assert_eq!(models[1].provider_id.as_deref(), Some("provider-b"));
 }
+
+#[test]
+fn configured_runtime_model_is_added_with_exact_provider_identity() {
+    let mut models = vec![preset("shared-model", Some("provider-a"))];
+
+    include_runtime_model(&mut models, "shared-model", "provider-b");
+
+    assert_eq!(models.len(), 2);
+    assert_eq!(models[1].model, "shared-model");
+    assert_eq!(models[1].provider_id.as_deref(), Some("provider-b"));
+    assert_eq!(models[1].id, "provider-b:shared-model");
+}
+
+#[test]
+fn configured_runtime_model_does_not_duplicate_existing_exact_or_inferred_provider() {
+    let mut models = vec![
+        preset("custom-model", Some("custom")),
+        preset("gpt-5.6-sol", None),
+    ];
+
+    include_runtime_model(&mut models, "custom-model", "custom");
+    include_runtime_model(&mut models, "gpt-5.6-sol", "openai");
+
+    assert_eq!(models.len(), 2);
+}

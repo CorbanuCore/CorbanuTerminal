@@ -2277,7 +2277,8 @@ impl App {
         if model == self.chat_widget.current_model() {
             return Some(self.config.model_provider_id.clone());
         }
-        self.chat_widget.model_catalog()
+        self.chat_widget
+            .model_catalog()
             .provider_for_model(model)
             .or_else(|| crate::chatwidget::ChatWidget::model_provider_for_selection(model))
     }
@@ -2354,8 +2355,10 @@ impl App {
             provider_id,
             &model,
             codex_provider_auth::ProviderUseContext::NativeSpawn,
-        ) && matches!(decision, codex_provider_auth::ProviderUseDecision::Blocked { .. })
-        {
+        ) && matches!(
+            decision,
+            codex_provider_auth::ProviderUseDecision::Blocked { .. }
+        ) {
             return Err(eyre!(
                 "Cannot run a native Corbanu Terminal worker on provider `{provider_id}`: it is inactive or unavailable. Repair or reactivate it in /providers."
             ));
@@ -2393,18 +2396,23 @@ impl App {
             .model_providers
             .keys()
             .filter(|provider| {
-                self.chat_widget.model_catalog().provider_use_decision(
-                    provider,
-                    &codex_model_provider_info::resolve_model_for_provider(
-                        self.config.model.clone(),
+                self.chat_widget
+                    .model_catalog()
+                    .provider_use_decision(
                         provider,
+                        &codex_model_provider_info::resolve_model_for_provider(
+                            self.config.model.clone(),
+                            provider,
+                        )
+                        .unwrap_or_default(),
+                        codex_provider_auth::ProviderUseContext::NativeSpawn,
                     )
-                    .unwrap_or_default(),
-                    codex_provider_auth::ProviderUseContext::NativeSpawn,
-                ).is_none_or(|decision| !matches!(
-                    decision,
-                    codex_provider_auth::ProviderUseDecision::Blocked { .. }
-                ))
+                    .is_none_or(|decision| {
+                        !matches!(
+                            decision,
+                            codex_provider_auth::ProviderUseDecision::Blocked { .. }
+                        )
+                    })
             })
             .cloned()
             .collect::<Vec<_>>();
@@ -3065,7 +3073,10 @@ impl App {
                 &runtime.model,
                 codex_provider_auth::ProviderUseContext::Resume,
             )
-            && matches!(decision, codex_provider_auth::ProviderUseDecision::Blocked { .. })
+            && matches!(
+                decision,
+                codex_provider_auth::ProviderUseDecision::Blocked { .. }
+            )
         {
             self.chat_widget.add_error_message(format!(
                 "Cannot restore pane {} because provider `{}` is inactive or unavailable. Repair or reactivate it in /providers.",

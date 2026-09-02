@@ -24,6 +24,7 @@ use codex_provider_auth::ProviderEligibilitySnapshot;
 use codex_provider_auth::ProviderEligibilityStore;
 use codex_provider_auth::ProviderMetadata;
 use codex_provider_auth::ProviderMetadataSnapshot;
+use codex_provider_auth::ProviderRuntimeAuthorizations;
 use codex_provider_auth::ProviderSetupCapability;
 use codex_provider_auth::ProviderStatusCatalog;
 use codex_provider_auth::ProviderStatusResolver;
@@ -122,6 +123,7 @@ pub(crate) struct ProviderStatusHost {
     codex_home: PathBuf,
     current: Arc<RwLock<CurrentProviderSelection>>,
     account: Arc<RwLock<ProviderAccountMetadata>>,
+    authorizations: ProviderRuntimeAuthorizations,
 }
 
 impl ProviderStatusHost {
@@ -133,7 +135,11 @@ impl ProviderStatusHost {
                 config.model_provider_id.clone(),
             ))),
             account: Arc::new(RwLock::new(account)),
+            authorizations: ProviderRuntimeAuthorizations::default(),
         }
+    }
+    pub(crate) fn set_runtime_authorizations(&mut self, value: ProviderRuntimeAuthorizations) {
+        self.authorizations = value;
     }
     pub(crate) fn catalog(&self) -> &ProviderCatalog {
         &self.catalog
@@ -213,7 +219,7 @@ impl ProviderStatusHost {
         for entry in self.catalog.entries() {
             metadata.insert(entry, self.metadata_for(entry, account, Some(&managed)));
         }
-        ProviderStatusResolver::resolve(
+        let mut statuses = ProviderStatusResolver::resolve(
             &self.catalog,
             &metadata,
             &ProviderEligibilitySnapshot::from(
@@ -223,30 +229,14 @@ impl ProviderStatusHost {
                 .current
                 .read()
                 .unwrap_or_else(std::sync::PoisonError::into_inner),
-        )
+        );
+        self.authorizations
+            .apply_to_status_catalog(&self.catalog, &mut statuses);
+        statuses
     }
 
     pub(crate) fn resolve_provider(&self, provider_id: &str) -> Option<ProviderStatusSnapshot> {
-        let entry = self.catalog.get(provider_id)?;
-        let account = *self
-            .account
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut metadata = ProviderMetadataSnapshot::default();
-        metadata.insert(entry, self.metadata_for(entry, account, /*managed*/ None));
-        ProviderStatusResolver::resolve(
-            &self.catalog,
-            &metadata,
-            &ProviderEligibilitySnapshot::from(
-                ProviderEligibilityStore::new(&self.codex_home).load(),
-            ),
-            &self
-                .current
-                .read()
-                .unwrap_or_else(std::sync::PoisonError::into_inner),
-        )
-        .get(provider_id)
-        .cloned()
+        self.resolve().get(provider_id).cloned()
     }
     pub(crate) fn resolve_target(&self, target: &ApiKeyAuthTarget) -> ProviderStatusSnapshot {
         self.resolve_provider(target.provider_id.as_str())

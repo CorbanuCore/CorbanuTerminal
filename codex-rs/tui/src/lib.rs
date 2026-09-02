@@ -185,9 +185,9 @@ mod skills_helpers;
 mod slash_command;
 mod spawn_crew;
 pub(crate) mod spawn_orchestration;
-mod startup_provider;
 mod startup_error;
 mod startup_hooks_review;
+mod startup_provider;
 mod status;
 mod status_indicator_widget;
 mod streaming;
@@ -1514,16 +1514,19 @@ async fn run_ratatui_app(
         Some(startup_provider::openai_metadata(login_status)),
     )
     .await;
+    let has_usable_provider = startup_provider.has_usable_provider;
     let should_show_onboarding = startup_provider::should_show_provider_onboarding(
         should_show_trust_screen_flag,
-        startup_provider.has_usable_provider,
+        has_usable_provider,
         initial_config.forced_login_method,
         login_status,
     );
+    let mut startup_provider_resolution = Some(startup_provider);
 
     let mut deferred_provider_setup = None;
     let config = if should_show_onboarding {
-        let show_login_screen = !startup_provider.has_usable_provider
+        startup_provider_resolution = None;
+        let show_login_screen = !has_usable_provider
             || matches!(
                 initial_config.forced_login_method,
                 Some(ForcedLoginMethod::Chatgpt)
@@ -1797,6 +1800,10 @@ async fn run_ratatui_app(
         resume_picker::SessionSelection::StartFresh
     ) && (cli.resume_picker || cli.fork_picker);
 
+    let reloads_provider_config = matches!(
+        &session_selection,
+        resume_picker::SessionSelection::Resume(_) | resume_picker::SessionSelection::Fork(_)
+    ) || picker_cancelled_without_selection;
     let mut config = match &session_selection {
         resume_picker::SessionSelection::Resume(_) | resume_picker::SessionSelection::Fork(_) => {
             load_config_or_exit_with_fallback_cwd(
@@ -1821,6 +1828,9 @@ async fn run_ratatui_app(
         }
         _ => config,
     };
+    if reloads_provider_config {
+        startup_provider_resolution = None;
+    }
 
     // Configure syntax highlighting theme from the final config — onboarding
     // and resume/fork can both reload config with a different tui_theme, so
@@ -1948,6 +1958,7 @@ async fn run_ratatui_app(
         startup_bootstrap,
         startup_hooks_browser,
         deferred_provider_setup,
+        startup_provider_resolution,
     )
     .await;
 

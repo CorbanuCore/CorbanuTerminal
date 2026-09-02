@@ -971,15 +971,7 @@ impl App {
                 Ok(true)
             }
             AppCommand::ListSkills { cwds, force_reload } => {
-                self.handle_skills_list_result(
-                    app_server
-                        .skills_list(codex_app_server_protocol::SkillsListParams {
-                            cwds: cwds.clone(),
-                            force_reload: *force_reload,
-                        })
-                        .await,
-                    "failed to refresh skills",
-                );
+                self.refresh_skills(app_server, cwds.clone(), *force_reload);
                 Ok(true)
             }
             AppCommand::Compact => {

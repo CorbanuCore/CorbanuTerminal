@@ -7804,6 +7804,62 @@ async fn native_spawn_auth_guard_uses_selected_provider_after_onboarding() -> Re
     Ok(())
 }
 
+#[test]
+fn guarded_model_selection_rejects_inactive_provider() -> Result<()> {
+    std::thread::Builder::new()
+        .name("guarded-model-selection".to_string())
+        .stack_size(32 * 1024 * 1024)
+        .spawn(|| {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()?
+                .block_on(async {
+                    let mut app = Box::pin(make_test_app()).await;
+                    std::fs::write(
+                        app.config.codex_home.join("provider_auth.json"),
+                        format!(r#"{{"api_keys":{{"{VERCEL_API_KEY_ENV_VAR}":"test-key"}}}}"#),
+                    )?;
+                    let host = crate::provider_status_host::ProviderStatusHost::from_config(
+                        &app.config,
+                        crate::provider_status_host::ProviderAccountMetadata::default(),
+                    );
+                    host.persist_policy(
+                        VERCEL_PROVIDER_ID,
+                        codex_provider_auth::ProviderActivationPolicy::Inactive,
+                    )?;
+                    app.model_catalog.set_provider_policy(
+                        crate::chatwidget::provider_model_policy::ProviderModelPolicy::new(
+                            host,
+                            codex_provider_auth::ProviderRuntimeAuthorizations::default(),
+                        ),
+                    );
+                    let original_provider = app.config.model_provider_id.clone();
+                    let original_model = app.chat_widget.current_model().to_string();
+                    let mut app_server =
+                        Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
+                    let mut tui = crate::tui::test_support::make_test_tui()?;
+
+                    let control = Box::pin(app.handle_event(
+                        &mut tui,
+                        &mut app_server,
+                        AppEvent::UpdateModelSelection {
+                            model: VERCEL_GLM_5_2_FAST_MODEL.to_string(),
+                            provider: Some(VERCEL_PROVIDER_ID.to_string()),
+                        },
+                    ))
+                    .await?;
+
+                    assert!(matches!(control, AppRunControl::Continue));
+                    assert_eq!(app.config.model_provider_id, original_provider);
+                    assert_eq!(app.chat_widget.current_model(), original_model);
+                    app_server.shutdown().await?;
+                    Ok(())
+                })
+        })?
+        .join()
+        .map_err(|_| color_eyre::eyre::eyre!("guarded model selection thread panicked"))?
+}
+
 fn install_runtime_provider_policy(
     app: &App,
     account: crate::provider_status_host::ProviderAccountMetadata,
@@ -11307,6 +11363,7 @@ async fn make_test_app() -> App {
         status_line_invalid_items_warned: Arc::new(AtomicBool::new(false)),
         terminal_title_invalid_items_warned: Arc::new(AtomicBool::new(false)),
         skill_load_warnings: SkillLoadWarningState::default(),
+        skills_refresh_generation: Arc::new(AtomicU64::new(0)),
         backtrack: BacktrackState::default(),
         backtrack_render_pending: false,
         feedback: codex_feedback::CodexFeedback::new(),
@@ -11411,6 +11468,7 @@ async fn make_test_app_with_channels() -> (
             status_line_invalid_items_warned: Arc::new(AtomicBool::new(false)),
             terminal_title_invalid_items_warned: Arc::new(AtomicBool::new(false)),
             skill_load_warnings: SkillLoadWarningState::default(),
+            skills_refresh_generation: Arc::new(AtomicU64::new(0)),
             backtrack: BacktrackState::default(),
             backtrack_render_pending: false,
             feedback: codex_feedback::CodexFeedback::new(),
@@ -14273,6 +14331,51 @@ async fn side_backtrack_rejection_reports_unavailable_message_snapshot() {
         rendered
     );
 }
+#[tokio::test]
+async fn provider_manager_open_preserves_command_authorization_with_unchecked_fallback() {
+    let home = tempfile::tempdir().unwrap();
+    let mut config = ConfigBuilder::default()
+        .codex_home(home.path().to_path_buf())
+        .build()
+        .await
+        .unwrap();
+    let provider = codex_model_provider_info::ModelProviderInfo {
+        name: "Command".into(),
+        auth: Some(
+            serde_json::from_value(serde_json::json!({
+                "command": home.path().join("pf55-command")
+            }))
+            .unwrap(),
+        ),
+        ..Default::default()
+    };
+    config.model_provider_id = "command".into();
+    config.model_provider = provider.clone();
+    config.model_providers.insert("command".into(), provider);
+    let mut shared = crate::provider_status_host::ProviderStatusHost::from_config(
+        &config,
+        crate::provider_status_host::ProviderAccountMetadata::default(),
+    );
+    let mut authorizations = codex_provider_auth::ProviderRuntimeAuthorizations::default();
+    authorizations.set(
+        "command",
+        codex_provider_auth::ProviderRuntimeAuthorization::Authorized,
+    );
+    shared.set_runtime_authorizations(authorizations);
+
+    let reused =
+        super::provider_management_status::provider_manager_status_host(&config, Some(shared));
+    assert_eq!(
+        reused.resolve_provider("command").unwrap().availability,
+        codex_provider_auth::ProviderAvailabilityState::Ready
+    );
+    let fallback = super::provider_management_status::provider_manager_status_host(&config, None);
+    assert_eq!(
+        fallback.resolve_provider("command").unwrap().availability,
+        codex_provider_auth::ProviderAvailabilityState::StatusOnly
+    );
+}
+
 #[test]
 fn provider_manager_claude_intent_uses_typed_status_and_recovery_source() {
     use codex_provider_auth::ProviderAvailabilityState;

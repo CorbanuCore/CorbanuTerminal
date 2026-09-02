@@ -37,7 +37,8 @@ impl ProviderModelPolicy {
     }
 
     pub(crate) fn set_current_runtime(&mut self, runtime_provider_id: &str) {
-        self.host.set_current_runtime(runtime_provider_id.to_string());
+        self.host
+            .set_current_runtime(runtime_provider_id.to_string());
         self.refresh();
     }
 
@@ -57,7 +58,11 @@ impl ProviderModelPolicy {
         )
     }
 
-    pub(crate) fn current(&self, runtime_provider_id: &str, model: &str) -> CurrentSelectionDecision {
+    pub(crate) fn current(
+        &self,
+        runtime_provider_id: &str,
+        model: &str,
+    ) -> CurrentSelectionDecision {
         ProviderRuntimeSelectionPolicy::current(
             self.host.catalog(),
             &self.statuses,
@@ -68,9 +73,11 @@ impl ProviderModelPolicy {
     }
 
     pub(crate) fn preset_is_selectable(&self, preset: &ModelPreset) -> bool {
-        let Some(provider) = preset.provider_id.as_deref().or_else(|| {
-            codex_model_provider_info::canonical_catalog_provider(&preset.model)
-        }) else {
+        let Some(provider) = preset
+            .provider_id
+            .as_deref()
+            .or_else(|| codex_model_provider_info::canonical_catalog_provider(&preset.model))
+        else {
             return false;
         };
         matches!(
@@ -124,10 +131,8 @@ mod tests {
             &config,
             crate::provider_status_host::ProviderAccountMetadata::default(),
         );
-        let mut policy = ProviderModelPolicy::new(
-            host.clone(),
-            ProviderRuntimeAuthorizations::default(),
-        );
+        let mut policy =
+            ProviderModelPolicy::new(host.clone(), ProviderRuntimeAuthorizations::default());
 
         assert!(policy.provider_is_selectable("custom", "custom-model"));
         host.persist_policy(

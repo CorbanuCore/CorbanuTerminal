@@ -55,26 +55,28 @@ updated: 2026-09-02
 - [x] Expanded scope to delete the zero-caller crate-private `AppServerSession::skills_list` wrapper made obsolete by that request-handle redirect; server-side skills APIs remain unchanged.
 - [x] Expanded scope to `tui/src/app/provider_management_status.rs` after true-TMUX proved manager open rebuilt the status host and discarded secret-free command runtime authorization; reuse the shared host and retain config reconstruction only as an unchecked fallback.
 
+- [x] Replaced startup, current-model, picker, resume, and spawn heuristics with the shared typed provider catalog/status/runtime-authorization policy while preserving exact provider identity.
+- [x] Preserved existing usable current selection, first-success fresh-install default, profile/config layering, and session-specific resumed replacement.
+- [x] Excluded inactive providers from normal selection while retaining management visibility and explicit recovery without silent switching.
+- [x] Converged custom environment, managed-key, and command-auth providers across startup, provider management, model picking, requests, restart, resume, and native child use.
+- [x] Preserved real command authorization in provider-management status without persisting or logging tokens or raw command output.
+
 ## Remaining
 
-- [ ] Replace `requires_openai_auth`/environment presence heuristics with shared configured/active status.
-- [ ] Preserve existing usable current selection and implement first-success fresh-install default.
-- [ ] Exclude inactive providers from eligible model choices while retaining management visibility.
-- [ ] Auto-list custom `env_key` providers in both hosts and keep unsupported command-auth status-only.
-- [ ] Make missing/inactive current provider recovery explicit rather than silently switching.
-- [ ] Cover restart/resume, profile/config layering, child/native panes, and generalized custom providers.
-- [ ] Add true-TMUX upgrade, custom-provider, recovery, and resumed-request flows.
+- [ ] Primary creates the signed implementation commit, records its identity, and archives the completed sprint.
 
 ## Verification
 
-- [ ] Focused test: startup/config/model-provider/spawn guard and custom-provider suites.
-- [ ] Integration test: real runtime credential resolution and request selection.
-- [ ] TUI: typed-TMUX existing install, custom env provider, inactive current recovery, restart/resume pass.
+- [x] Focused suites: provider status 9/9, runtime selection 6/6, startup 3/3, model catalog 5/5, shared picker policy 1/1, spawn guards 5/5, inactive selection 1/1, and manager authorization reuse/fallback 1/1.
+- [x] Integration: real loopback runtime requests passed for existing, environment, managed, replacement, resumed, native-child, command-auth, and duplicate-slug exact-provider paths.
+- [x] TUI: 12/12 serial typed-TMUX journeys passed on one exact rebuilt candidate.
+- [ ] Primary verifies the signed implementation commit and completed-sprint archive.
 
 ## Exit evidence
 
 - [ ] Implementation commit and removed heuristic inventory recorded.
-- [ ] TMUX binary hash, keys, artifacts, and canary scan linked.
-- [ ] Existing-user migration evidence recorded.
-- [ ] `Done` and `Remaining` reflect reality.
+- [x] TMUX candidate SHA256 `d5c51203779224704487a6596213062b77a15db6e0b55172adfe71cae2dba944`, size `1379543376`, mtime `2026-09-02 19:52:42.853149984 +0000`; success artifacts `pf55-upgrade`, `pf55-freshfirstsuccess`, `pf55-environment`, `pf55-managedrestart`, `pf55-inactivenoncurrent`, `pf55-inactivecurrentcancel`, `pf55-exactreplacement`, `pf55-missingcurrent`, `pf55-resume`, `pf55-nativespawn`, `pf55-commandauth`, and `pf55-duplicateslug` each record that SHA.
+- [x] Seven generated credential canaries were absent from terminal evidence, non-custody files, and success artifacts.
+- [x] Existing-install upgrade, restart retention, and first-success migration evidence passed.
+- [x] `Done` and `Remaining` reflect reality.
 - [ ] Completed record archived.

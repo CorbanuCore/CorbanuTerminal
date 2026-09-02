@@ -752,6 +752,7 @@ pub(crate) struct App {
     terminal_title_invalid_items_warned: Arc<AtomicBool>,
     // Tracks active skill-load warnings so refreshes do not duplicate history cells.
     skill_load_warnings: SkillLoadWarningState,
+    skills_refresh_generation: Arc<AtomicU64>,
 
     // Esc-backtracking state grouped
     pub(crate) backtrack: crate::app_backtrack::BacktrackState,
@@ -1109,6 +1110,7 @@ impl App {
         startup_bootstrap: Option<AppServerBootstrap>,
         startup_hooks_browser: Option<HooksListEntry>,
         deferred_provider_setup: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+        startup_provider_resolution: Option<crate::startup_provider::StartupProviderResolution>,
     ) -> Result<AppExitInfo> {
         let startup_started_at = Instant::now();
         let (app_event_tx, mut app_event_rx) = unbounded_channel();
@@ -1201,7 +1203,13 @@ impl App {
         if let Some(updated_model) = config.model.clone() {
             model = updated_model;
         }
-        let provider_runtime = crate::startup_provider::resolve(&config, None).await;
+        let provider_runtime =
+            crate::startup_provider::resolve_for_app(&config, startup_provider_resolution).await;
+        crate::model_catalog::include_runtime_model(
+            &mut available_models,
+            &model,
+            &config.model_provider_id,
+        );
         let session_recovery_only = matches!(
             provider_runtime.current,
             codex_provider_auth::CurrentSelectionDecision::RequireExplicitRecovery { .. }
@@ -1582,6 +1590,7 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
             status_line_invalid_items_warned: status_line_invalid_items_warned.clone(),
             terminal_title_invalid_items_warned: terminal_title_invalid_items_warned.clone(),
             skill_load_warnings: SkillLoadWarningState::default(),
+            skills_refresh_generation: Arc::new(AtomicU64::new(0)),
             backtrack: BacktrackState::default(),
             backtrack_render_pending: false,
             feedback: feedback.clone(),

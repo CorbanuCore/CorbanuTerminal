@@ -2,12 +2,17 @@ use std::collections::BTreeMap;
 
 use codex_model_provider_info::canonical_provider_id;
 
+use crate::ConfiguredAvailability;
+use crate::CredentialControl;
 use crate::ExplicitProviderSelection;
 use crate::ProviderAvailabilityState;
 use crate::ProviderCatalog;
 use crate::ProviderConfigurationState;
+use crate::ProviderCredentialSource;
 use crate::ProviderEligibilityState;
+use crate::ProviderMethodState;
 use crate::ProviderRuntimeId;
+use crate::ProviderSetupCapability;
 use crate::ProviderStatusCatalog;
 
 /// The product boundary requesting permission to use a provider runtime.
@@ -33,7 +38,11 @@ pub enum ProviderRuntimeAuthorization {
 pub struct ProviderRuntimeAuthorizations(BTreeMap<String, ProviderRuntimeAuthorization>);
 
 impl ProviderRuntimeAuthorizations {
-    pub fn set(&mut self, runtime_provider_id: impl Into<String>, state: ProviderRuntimeAuthorization) {
+    pub fn set(
+        &mut self,
+        runtime_provider_id: impl Into<String>,
+        state: ProviderRuntimeAuthorization,
+    ) {
         self.0.insert(runtime_provider_id.into(), state);
     }
 
@@ -42,6 +51,45 @@ impl ProviderRuntimeAuthorizations {
             .get(runtime_provider_id)
             .copied()
             .unwrap_or(ProviderRuntimeAuthorization::NotChecked)
+    }
+
+    pub fn apply_to_status_catalog(
+        &self,
+        catalog: &ProviderCatalog,
+        statuses: &mut ProviderStatusCatalog,
+    ) {
+        for status in &mut statuses.entries {
+            let Some(entry) = catalog.get(status.id.as_str()) else {
+                continue;
+            };
+            let command_authorized = entry.runtime_provider_ids.iter().any(|runtime| {
+                self.get(runtime.as_str()) == ProviderRuntimeAuthorization::Authorized
+            });
+            if !command_authorized
+                || !entry.setup_capabilities.iter().any(|capability| {
+                    matches!(capability, ProviderSetupCapability::CommandAuth { .. })
+                })
+            {
+                continue;
+            }
+            for method in &mut status.methods {
+                if matches!(
+                    method.capability,
+                    ProviderSetupCapability::CommandAuth { .. }
+                ) {
+                    method.state = ProviderMethodState::Configured {
+                        source: ProviderCredentialSource::ExternallyManaged,
+                        control: CredentialControl::ExternalProvider,
+                        availability: ConfiguredAvailability::Ready,
+                    };
+                }
+            }
+            status.configuration = ProviderConfigurationState::Configured;
+            if status.eligibility != ProviderEligibilityState::Inactive {
+                status.eligibility = ProviderEligibilityState::Active;
+            }
+            status.availability = ProviderAvailabilityState::Ready;
+        }
     }
 }
 
@@ -123,7 +171,10 @@ impl ProviderRuntimeSelectionPolicy {
                         ProviderUseContext::ExplicitRequest
                             | ProviderUseContext::Resume
                             | ProviderUseContext::NativeSpawn
-                    ) => ProviderUseDecision::RequiresRuntimeAuthorization(selection),
+                    ) =>
+                {
+                    ProviderUseDecision::RequiresRuntimeAuthorization(selection)
+                }
                 ProviderRuntimeAuthorization::NotChecked => blocked(
                     runtime_provider_id,
                     ProviderUseBlocker::RuntimeAuthorizationRequired,
