@@ -217,7 +217,7 @@ user work and integrate rather than revert concurrent changes.
 | `PF-53` | Multi-provider onboarding and deferred Corbanu Plan flow | [PF-53-S01](../../sprints/archive/unified-provider-auth/pf-53-s01-multi-provider-onboarding.md) | completed at `30b595034b` |
 | `PF-54` | Unified `/providers` management and eligibility controls | [PF-54-S01](../../sprints/archive/unified-provider-auth/pf-54-s01-provider-management.md) | completed |
 | `PF-55` | Startup, current-model, and custom-provider convergence | [PF-55-S01](../../sprints/archive/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | completed at `21cf3199f2` |
-| `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/current/unified-provider-auth/pf-56-s01-final-qualification.md) | draft |
+| `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/current/unified-provider-auth/pf-56-s01-final-qualification.md) | in progress |
 
 ## Hard dependency graph
 
@@ -317,8 +317,8 @@ Run fix and formatting tools before the final affected tests.
 
 | Repository | Applicable to this initiative? | Resolved checkout/test worktree | Base commit | Reason or result |
 | --- | --- | --- | --- | --- |
-| TensorCash | yes | pending environment resolution | pending | Exercises real provider setup, request, restart, and substantial systems work. |
-| Isometric Game | yes | pending environment resolution | pending | Exercises interactive list clarity, cancellation, model switching, and resumed work. |
+| TensorCash | yes | `/home/pfrpc/repos/worktrees/pf56-tensorcash-dd6e9202` | `dd6e92024254090de0f596b090bd5c74c4d97b90` | Disposable detached worktree; exercises real provider setup, request, restart, and substantial systems work. |
+| Isometric Game | yes | `/home/pfrpc/repos/worktrees/pf56-isometricgame-59821b7a` | `59821b7a85524f186f946c4670480c7ee96483cb` | Disposable detached worktree; exercises interactive list clarity, cancellation, model switching, and resumed work. |
 
 Disposable worktrees and exact base commits must be recorded before PF-56 runs.
 Historical Claude artifacts do not substitute for final integrated-tree runs.
