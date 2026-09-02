@@ -1504,7 +1504,15 @@ fn fable_5_1_resolves_on_anthropic_routes() {
     assert_eq!(
         resolve_model_for_provider(/*model*/ None, PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID)
             .as_deref(),
-        Some(CLAUDE_FABLE_5_1_MODEL)
+        Some(CLAUDE_FABLE_5_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(
+            Some("unsupported-model".to_string()),
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
+        )
+        .as_deref(),
+        Some(CLAUDE_FABLE_5_MODEL)
     );
 }
 

@@ -396,7 +396,7 @@ pub fn resolve_model_for_provider(
             {
                 Some(model)
             }
-            _ => Some(CLAUDE_FABLE_5_1_MODEL.to_string()),
+            _ => Some(CLAUDE_FABLE_5_MODEL.to_string()),
         },
         PFTERMINAL_PLAN_PROVIDER_ID
             if model.as_deref().map(str::trim) == Some(DEEPSEEK_PRO_MODEL) =>

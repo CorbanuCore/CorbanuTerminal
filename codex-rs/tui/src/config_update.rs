@@ -91,7 +91,13 @@ pub(crate) fn build_onboarding_provider_selection_edits(
     provider: &str,
 ) -> Vec<ConfigEdit> {
     let model = resolve_model_for_provider(current_model.map(str::to_string), provider)
-        .unwrap_or_else(|| current_model.unwrap_or_default().to_string());
+        .filter(|model| !model.trim().is_empty());
+    let Some(model) = model else {
+        return vec![replace_config_value(
+            "model_provider",
+            serde_json::json!(provider),
+        )];
+    };
     build_model_selection_edits(&model, Some(provider), /*effort*/ None::<String>)
 }
 

@@ -53,6 +53,23 @@ fn onboarding_provider_selection_persists_provider_and_compatible_model() {
 }
 
 #[test]
+fn onboarding_openai_without_model_persists_only_provider() {
+    let edits = build_onboarding_provider_selection_edits(
+        /*current_model*/ None,
+        codex_model_provider_info::OPENAI_PROVIDER_ID,
+    );
+
+    assert_eq!(
+        edits,
+        vec![ConfigEdit {
+            key_path: "model_provider".to_string(),
+            value: serde_json::json!(codex_model_provider_info::OPENAI_PROVIDER_ID),
+            merge_strategy: MergeStrategy::Replace,
+        }]
+    );
+}
+
+#[test]
 fn format_config_error_preserves_server_validation_message() {
     let err = Err::<(), _>(color_eyre::eyre::eyre!(
         "config/batchWrite failed: Invalid configuration: features.fast_mode=true violates \
