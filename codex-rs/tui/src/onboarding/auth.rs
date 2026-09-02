@@ -1695,7 +1695,15 @@ impl AuthModeWidget {
 
     pub(crate) fn configured_provider(&self) -> Option<String> {
         match &*self.sign_in_state.read().unwrap() {
-            SignInState::ApiKeyConfigured { provider } => provider.clone(),
+            SignInState::ChatGptSuccess => {
+                Some(codex_model_provider_info::OPENAI_PROVIDER_ID.to_string())
+            }
+            SignInState::ApiKeyConfigured { provider } => Some(
+                provider
+                    .as_deref()
+                    .unwrap_or(codex_model_provider_info::OPENAI_PROVIDER_ID)
+                    .to_string(),
+            ),
             SignInState::ClaudeAccountConfigured => {
                 Some(codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID.to_string())
             }
@@ -2169,6 +2177,28 @@ mod tests {
         assert_eq!(
             widget.configured_provider().as_deref(),
             Some(codex_model_provider_info::OPENROUTER_PROVIDER_ID)
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_openai_account_reads_provider_success_state() {
+        let (widget, _tmp) = widget_forced_chatgpt().await;
+        *widget.sign_in_state.write().unwrap() = SignInState::ChatGptSuccess;
+
+        assert_eq!(
+            widget.configured_provider().as_deref(),
+            Some(codex_model_provider_info::OPENAI_PROVIDER_ID)
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_openai_api_key_reads_provider_success_state() {
+        let (widget, _tmp) = widget_forced_chatgpt().await;
+        *widget.sign_in_state.write().unwrap() = SignInState::ApiKeyConfigured { provider: None };
+
+        assert_eq!(
+            widget.configured_provider().as_deref(),
+            Some(codex_model_provider_info::OPENAI_PROVIDER_ID)
         );
     }
 

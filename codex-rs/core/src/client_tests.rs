@@ -32,6 +32,8 @@ use codex_model_provider::create_model_provider;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
 use codex_model_provider_info::CHATGPT_CODEX_BASE_URL;
+use codex_model_provider_info::CLAUDE_FABLE_5_1_MODEL;
+use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
@@ -316,6 +318,17 @@ fn non_openai_responses_adapts_native_child_mail_to_visible_user_input() {
     assert!(!super::responses_input_needs_synthetic_user_turn(
         &input[..1]
     ));
+}
+
+#[test]
+fn fable_5_1_plan_slug_maps_to_anthropic_upstream_model() {
+    assert!(super::is_claude_plan_model_slug(
+        CLAUDE_FABLE_5_1_PLAN_MODEL
+    ));
+    assert_eq!(
+        super::anthropic_upstream_model(CLAUDE_FABLE_5_1_PLAN_MODEL),
+        CLAUDE_FABLE_5_1_MODEL
+    );
 }
 
 #[test]

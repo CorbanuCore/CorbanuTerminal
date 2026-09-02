@@ -20,6 +20,7 @@ use codex_model_provider_info::ANTHROPIC_PROVIDER_ID;
 #[cfg(test)]
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_PROVIDER_ID;
+use codex_model_provider_info::CLAUDE_FABLE_5_1_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
@@ -413,6 +414,7 @@ impl ChatWidget {
                         preset.model.as_str(),
                         AMBIENT_DEFAULT_MODEL
                             | AMBIENT_KIMI_K2_7_CODE_MODEL
+                            | CLAUDE_FABLE_5_1_MODEL
                             | DEEPSEEK_PRO_MODEL
                             | CLAUDE_FABLE_5_MODEL
                     )
@@ -421,14 +423,19 @@ impl ChatWidget {
                 .map(|mut preset| {
                     // Fable rides the plan's Anthropic-wire sibling provider;
                     // every other plan model uses the chat-wire plan provider.
-                    preset.provider_id = Some(if preset.model == CLAUDE_FABLE_5_MODEL {
-                        PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID.to_string()
-                    } else {
-                        PFTERMINAL_PLAN_PROVIDER_ID.to_string()
-                    });
+                    preset.provider_id = Some(
+                        if matches!(
+                            preset.model.as_str(),
+                            CLAUDE_FABLE_5_1_MODEL | CLAUDE_FABLE_5_MODEL
+                        ) {
+                            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID.to_string()
+                        } else {
+                            PFTERMINAL_PLAN_PROVIDER_ID.to_string()
+                        },
+                    );
                     if matches!(
                         preset.model.as_str(),
-                        DEEPSEEK_PRO_MODEL | CLAUDE_FABLE_5_MODEL
+                        DEEPSEEK_PRO_MODEL | CLAUDE_FABLE_5_1_MODEL | CLAUDE_FABLE_5_MODEL
                     ) {
                         preset.description = format!(
                             "{} Non-private: served through a third-party provider.",
