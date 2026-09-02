@@ -276,8 +276,10 @@ At most four formal review passes are planned across the initiative:
 1. implementation-owner boundary/self-check after the shared contracts;
 2. primary-agent integration review after both hosts are migrated;
 3. primary-agent final-tree completeness/security review;
-4. one external **Claude Fable 5 high** review spawned and controlled through
-   the TMUX harness against the final candidate.
+4. one external **Kimi 3.0 high through Vercel** review spawned and controlled
+   through the TMUX harness against the final candidate. This is the user's
+   explicit replacement for the attempted Claude Fable 5 review, which exited
+   before model inference because its OAuth session could not be refreshed.
 
 No additional autoreview or external review is scheduled. The accountable owner
 may exceed four only when a review uncovers a major issue; the finding, reason,
@@ -311,7 +313,7 @@ Run fix and formatting tools before the final affected tests.
 | Account/API recovery | pending | both applicable repositories | OpenAI, Claude token/login, API-key failure, retry, replace, cancel | identical host semantics, no stale mutation | pending | pending |
 | Eligibility/current model | pending | isolated restart fixtures | deactivate/reactivate; current-provider replacement; cancel; restart/resume | credentials preserved, explicit replacement, state durable | pending | pending |
 | Custom provider | pending | custom `env_key` and command-auth fixtures | inspect both hosts, configure supported custom provider, start request | automatic catalog inclusion and status parity | pending | pending |
-| External review | pending | final candidate | Spawn Claude Fable 5 high through TMUX; supply review mandate; collect findings and exit | exact runtime visible, bounded review, disposition recorded | pending | pending |
+| External review | pending | final candidate | Spawn exactly one Kimi 3.0 high through Vercel in TMUX; supply review mandate; collect findings and exit; preserve the superseded Fable authentication failure | exact provider/model/runtime visible, bounded review, no fallback, disposition recorded | pending | pending |
 
 ## Live-repository applicability
 
@@ -349,7 +351,7 @@ Historical Claude artifacts do not substitute for final integrated-tree runs.
 | Deferred Corbanu | product | final product authority | PF-53 | queue then return; run after **Done**; cancel/escape; no current-provider override |
 | Deactivation | product | final product authority | PF-54 | `/providers`; preserve credential; require replacement before deactivating current |
 | Review budget | delivery | Codex primary agent | PF-56 | four formal passes maximum unless a major finding is documented |
-| External reviewer | delivery | Codex primary agent | PF-56 | Claude Fable 5 high, spawned and controlled via TMUX |
+| External reviewer | delivery | Codex primary agent | PF-56 | User override on 2026-09-02: exactly one Kimi 3.0 high through Vercel, spawned and controlled via TMUX with no fallback; the earlier Fable OAuth failure remains superseded evidence |
 | Upstream baseline/candidate | integration | Codex primary agent | PF-48/PF-56 | local `upstream/main` reverified at `ba6cf9c69277caec51a4c12c5b7401a9920930e0`; reverify final candidate at qualification |
 | Live accounts and named human | release | release owner | PF-56/release | pending; cannot be fabricated |
 | Physical Linux/Windows evidence | release | release owner | release | prior Claude plan left this unclosed; final applicability must be recorded |

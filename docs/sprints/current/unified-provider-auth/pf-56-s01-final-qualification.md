@@ -7,8 +7,8 @@ plan_feature: "PF-56"
 execution_order: 15
 owner: "GPT-5.6 Sol high implementation agent"
 parallel_lane: "provider-auth-serial"
-write_scope: "codex-rs/tui/tests/suite/multi_provider_onboarding.rs; codex-rs/tui/tests/suite/provider_management.rs; codex-rs/tui/tests/suite/provider_convergence.rs; codex-rs/tui/tests/suite/mod.rs; docs/authentication.md; docs/features/model-providers.md; docs/features/claude-plan-authentication.md; docs/corbanu-product-spec.md; docs/plans/active/unified-provider-auth.md; docs/sprints/current/unified-provider-auth/pf-56-s01-final-qualification.md; qa/provider-auth/pf-56/"
-integration_gate: "PF-56 only: qualify the complete PF-48–PF-55 tree, run the bounded final primary review plus one Claude Fable 5 high external review controlled through TMUX, rerun the integrated automated and true-TMUX matrices, exercise disposable TensorCash and Isometric Game worktrees, update finished provider/auth documentation, and record release blockers truthfully. Production fixes or additional paths require a documented literal scope expansion before editing. No fabricated live-account, named-human, platform, benchmark, merge, tag, or release evidence."
+write_scope: "codex-rs/provider-auth/src/auth_flow.rs; codex-rs/provider-auth/src/auth_flow_tests.rs; codex-rs/tui/src/startup_provider.rs; codex-rs/tui/src/chatwidget/provider_model_policy.rs; codex-rs/tui/src/app/event_dispatch.rs; codex-rs/tui/src/app/provider_management_status.rs; codex-rs/tui/tests/suite/multi_provider_onboarding.rs; codex-rs/tui/tests/suite/provider_management.rs; codex-rs/tui/tests/suite/provider_convergence.rs; codex-rs/tui/tests/suite/mod.rs; docs/authentication.md; docs/features/model-providers.md; docs/features/claude-plan-authentication.md; docs/corbanu-product-spec.md; docs/plans/active/unified-provider-auth.md; docs/sprints/current/unified-provider-auth/pf-56-s01-final-qualification.md; qa/provider-auth/pf-56/"
+integration_gate: "PF-56 only: qualify the complete PF-48–PF-55 tree, run the bounded final primary review plus exactly one Kimi 3.0 high external review through Vercel controlled through TMUX (the user-authorized replacement for the superseded Fable OAuth failure), rerun the integrated automated and true-TMUX matrices, exercise disposable TensorCash and Isometric Game worktrees, update finished provider/auth documentation, and record release blockers truthfully. Production fixes or additional paths require a documented literal scope expansion before editing. No fabricated live-account, named-human, platform, benchmark, merge, tag, or release evidence."
 worktree: "/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0"
 branch: "feat/unified-provider-auth"
 base_commit: "f7356a94e032234022a462d65b576a7de2854859"
@@ -41,12 +41,13 @@ updated: 2026-09-02
 - [x] Plan is active.
 - [x] PF-55-S01 and every predecessor are completed and archived; PF-55 implementation is `21cf3199f2` and archive is `5a1fd449e7`.
 - [x] Exact serial allocation matches the plan and retains the GPT-5.6 Sol high implementation owner.
-- [x] Candidate `21cf3199f2`, disposable TensorCash worktree `/home/pfrpc/repos/worktrees/pf56-tensorcash-dd6e9202` at `dd6e92024254090de0f596b090bd5c74c4d97b90`, disposable Isometric Game worktree `/home/pfrpc/repos/worktrees/pf56-isometricgame-59821b7a` at `59821b7a85524f186f946c4670480c7ee96483cb`, pending live-account/platform/release gates, and Claude Fable 5 high reviewer runtime are recorded.
+- [x] Candidate `21cf3199f2`, disposable TensorCash worktree `/home/pfrpc/repos/worktrees/pf56-tensorcash-dd6e9202` at `dd6e92024254090de0f596b090bd5c74c4d97b90`, disposable Isometric Game worktree `/home/pfrpc/repos/worktrees/pf56-isometricgame-59821b7a` at `59821b7a85524f186f946c4670480c7ee96483cb`, pending live-account/platform/release gates, and the user-authorized Kimi 3.0 high through Vercel reviewer runtime are recorded. The single attempted Fable invocation failed authentication before inference and is retained only as superseded evidence.
 
 ## Done
 
 - [x] Draft sprint record created and linked to PF-56.
 - [x] Allocated serially at post-PF-55 archive commit `5a1fd449e7` with literal test, documentation, QA-ledger, and review scope.
+- [x] Expanded remediation scope to the six exact shared policy/settlement paths named by the completed Kimi review; each finding must be reproduced before repair, and unrelated production edits remain excluded.
 
 ## Remaining
 
@@ -55,7 +56,7 @@ updated: 2026-09-02
 - [ ] Execute substantial true-TMUX matrix for multi-provider, OpenAI, Claude, API keys, custom providers, deferred Corbanu, eligibility, current replacement, failure/cancel, restart/resume.
 - [ ] Run real workflows in disposable TensorCash and Isometric Game worktrees.
 - [ ] Complete at most four formal review passes unless a documented major issue justifies more.
-- [ ] Spawn and control one Claude Fable 5 high external reviewer through TMUX and disposition findings.
+- [ ] Spawn and control exactly one Kimi 3.0 high external reviewer through Vercel in TMUX, with no fallback, and disposition findings; retain the pre-inference Fable OAuth failure as superseded evidence.
 - [ ] Update finished provider/auth docs only after candidate behavior is verified.
 - [ ] Record named human, physical platform, upstream, release, and benchmark evidence or leave shipment blocked.
 
