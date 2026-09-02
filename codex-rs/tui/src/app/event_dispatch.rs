@@ -2504,8 +2504,122 @@ impl App {
                 }
             }
             AppEvent::SharedProviderAuthAction(action) => {
-                self.handle_shared_provider_auth_action(action);
+                if self
+                    .provider_management_host
+                    .as_ref()
+                    .is_some_and(|host| host.authenticating_provider().is_some())
+                {
+                    self.handle_provider_manager_auth_action(action);
+                } else {
+                    self.handle_shared_provider_auth_action(action);
+                }
             }
+            AppEvent::OpenProviderManager => self.open_provider_manager(app_server),
+            AppEvent::ProviderManagerStatusesResolved {
+                generation,
+                status_host,
+                statuses,
+            } => self.provider_manager_statuses_resolved(
+                generation,
+                status_host,
+                statuses,
+                app_server,
+            ),
+            AppEvent::ProviderManagerMetadataResolved {
+                generation,
+                metadata,
+            } => {
+                self.provider_manager_metadata_resolved(generation, metadata);
+            }
+            AppEvent::OpenProviderManagerActions { provider_id } => {
+                self.open_provider_manager_actions(provider_id);
+            }
+            AppEvent::ProviderManagerBeginAuthentication {
+                provider_id,
+                capability,
+            } => self.provider_manager_begin_authentication(provider_id, capability),
+            AppEvent::ProviderManagerClaudeRecoverySourceResolved {
+                attempt_id,
+                target,
+                status,
+                source,
+            } => self.provider_manager_claude_recovery_source_resolved(
+                attempt_id, target, status, source,
+            ),
+            AppEvent::SaveProviderManagerApiKey {
+                attempt_id,
+                target,
+                api_key,
+            } => {
+                let Some(host) = self.provider_management_host.as_ref() else {
+                    return Ok(AppRunControl::Continue);
+                };
+                if host.authenticating_attempt()
+                    != Some((attempt_id, target.provider_id.clone()))
+                {
+                    return Ok(AppRunControl::Continue);
+                }
+                let request_handle = app_server.request_handle();
+                let status_host = host.status_host().clone();
+                let tx = self.app_event_tx.clone();
+                let completed_target = target.clone();
+                tokio::spawn(async move {
+                    let status = crate::provider_auth_effect_executor::ProviderAuthEffectExecutor::persist_api_key(
+                        request_handle,
+                        status_host,
+                        target,
+                        codex_provider_auth::ApiKeySecret::new(api_key.into_inner()),
+                    )
+                    .await
+                    .ok();
+                    tx.send(AppEvent::ProviderManagerApiKeyFinished {
+                        attempt_id,
+                        target: completed_target,
+                        status,
+                    });
+                });
+            }
+            AppEvent::ProviderManagerApiKeyFinished {
+                attempt_id,
+                target,
+                status,
+            } => self.provider_manager_api_key_finished(attempt_id, target, status),
+            AppEvent::ProviderManagerRequestPolicy {
+                provider_id,
+                policy,
+            } => self.provider_manager_request_policy(provider_id, policy),
+            AppEvent::ProviderManagerChooseReplacement {
+                target_provider_id,
+                replacement,
+            } => self.provider_manager_choose_replacement(
+                target_provider_id,
+                replacement,
+                app_server,
+            ),
+            AppEvent::ProviderManagerCancelReplacement { target_provider_id } => {
+                self.provider_manager_cancel_replacement(target_provider_id);
+            }
+            AppEvent::ProviderManagerPersistenceFinished { attempt_id, result } => {
+                self.provider_manager_persistence_finished(attempt_id, result);
+            }
+            AppEvent::ProviderManagerReplacementPersisted {
+                attempt_id,
+                target_provider_id,
+                replacement,
+                success,
+            } => self.provider_manager_replacement_persisted(
+                attempt_id,
+                target_provider_id,
+                replacement,
+                success,
+            ),
+            AppEvent::ProviderManagerDeactivateAfterReplacement {
+                attempt_id,
+                target_provider_id,
+            } => self.provider_manager_deactivate_after_replacement(
+                attempt_id,
+                target_provider_id,
+            ),
             AppEvent::OpenTelegram => {
                 self.chat_widget.open_telegram_menu();
             }
@@ -2848,6 +2962,10 @@ impl App {
             }
             AppEvent::ProviderAccountLoginCompleted { login_id, success } => {
                 if let Some(login_id) = login_id {
+                    if let Some(host) = self.provider_management_host.as_ref() {
+                        host.account_auth_host_ref()
+                            .openai_login_completed(login_id.clone(), success);
+                    }
                     if let Some(host) = self.shared_provider_account_auth_host.as_ref() {
                         host.openai_login_completed(login_id.clone(), success);
                     }

@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/provider_manager.rs
+expression: rendered
+---
+  Providers
+  Configure providers and control whether they are eligible for use.
+
+› 1. OpenAI          Active · current
+  2. Claude Account  Inactive
+  3. Corbanu Plan    Recovery required
+
+  Press enter to confirm or esc to go back

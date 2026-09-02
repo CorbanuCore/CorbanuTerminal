@@ -114,9 +114,11 @@ impl ProviderAccountAuthHost {
             ) => presentations.push(ProviderAccountPresentation::Pending(
                 ProviderAccountCancelKind::Claude,
             )),
-            ProviderAuthFlowSnapshot::ClaudeAccount(ClaudeAccountSnapshot::ChoosingMethod {
-                ..
-            }) => presentations.push(ProviderAccountPresentation::ClaudeMethodChoice),
+            ProviderAuthFlowSnapshot::ClaudeAccount(snapshot)
+                if presents_claude_method_choice(snapshot) =>
+            {
+                presentations.push(ProviderAccountPresentation::ClaudeMethodChoice)
+            }
             ProviderAuthFlowSnapshot::ClaudeAccount(
                 ClaudeAccountSnapshot::EnteringManagedToken { .. },
             ) => presentations.push(ProviderAccountPresentation::ClaudeManagedTokenEntry),
@@ -126,9 +128,7 @@ impl ProviderAccountAuthHost {
                 | codex_provider_auth::OpenAiAccountSnapshot::Blocked { .. },
             )
             | ProviderAuthFlowSnapshot::ClaudeAccount(
-                ClaudeAccountSnapshot::Failed { .. }
-                | ClaudeAccountSnapshot::RecoveryRequired { .. }
-                | ClaudeAccountSnapshot::Blocked { .. },
+                ClaudeAccountSnapshot::Failed { .. } | ClaudeAccountSnapshot::Blocked { .. },
             ) => presentations.push(ProviderAccountPresentation::Failed),
             _ => {}
         }
@@ -308,6 +308,14 @@ impl ProviderAccountAuthHost {
             }
         });
     }
+}
+
+fn presents_claude_method_choice(snapshot: &ClaudeAccountSnapshot) -> bool {
+    matches!(
+        snapshot,
+        ClaudeAccountSnapshot::ChoosingMethod { .. }
+            | ClaudeAccountSnapshot::RecoveryRequired { .. }
+    )
 }
 
 fn claude_effect_correlation(

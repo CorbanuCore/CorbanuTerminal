@@ -155,7 +155,7 @@ impl SlashCommand {
             SlashCommand::Mcp => "list configured MCP tools; use /mcp verbose for details",
             SlashCommand::Apps => "manage apps",
             SlashCommand::Plugins => "browse plugins",
-            SlashCommand::Providers => "add provider API keys to the encrypted vault",
+            SlashCommand::Providers => "configure, activate, or deactivate providers",
             SlashCommand::Telegram => "connect and manage Corbanu Terminal from Telegram",
             SlashCommand::Vault => "manage the encrypted credential vault (keys, tokens)",
             SlashCommand::Wallet => "manage SOL, USDC, and Corbanu Terminal inference plans",

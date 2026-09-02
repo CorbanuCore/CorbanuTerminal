@@ -230,6 +230,9 @@ mod pending_interactive_replay;
 mod pets;
 mod platform_actions;
 mod plugin_mentions;
+mod provider_management;
+mod provider_management_auth;
+mod provider_management_status;
 mod replay_filter;
 mod resize_reflow;
 mod safety_buffering;
@@ -712,6 +715,9 @@ pub(crate) struct App {
     pub(crate) shared_provider_status_host: Option<crate::provider_status_host::ProviderStatusHost>,
     pub(crate) shared_provider_account_auth_host:
         Option<crate::provider_account_auth_host::ProviderAccountAuthHost>,
+    pub(crate) provider_management_host:
+        Option<crate::provider_management_host::ProviderManagementHost>,
+    pub(crate) provider_management_generation: u64,
     pub(crate) pending_wallet_create_deferred:
         Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     launch_cwd: PathBuf,
@@ -1543,6 +1549,8 @@ See the Corbanu Terminal keymap documentation for supported actions and examples
             shared_provider_setup_session: None,
             shared_provider_status_host: None,
             shared_provider_account_auth_host: None,
+            provider_management_host: None,
+            provider_management_generation: 0,
             pending_wallet_create_deferred: None,
             launch_cwd,
             state_db,

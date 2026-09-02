@@ -167,6 +167,7 @@ mod pager_overlay;
 mod permission_compat;
 mod provider_account_auth_host;
 mod provider_auth_effect_executor;
+mod provider_management_host;
 mod provider_status_host;
 pub(crate) mod public_widgets;
 mod render;

@@ -101,6 +101,18 @@ pub enum ProviderApiKeyStorageMetadata {
     Suppressed,
 }
 
+/// Secret-free provider-key metadata loaded with one vault-index and one legacy metadata read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderApiKeyStorageMetadataSnapshot {
+    entries: HashMap<String, ProviderApiKeyStorageMetadata>,
+}
+
+impl ProviderApiKeyStorageMetadataSnapshot {
+    pub fn get(&self, provider_key_id: &str) -> Option<ProviderApiKeyStorageMetadata> {
+        self.entries.get(provider_key_id).copied()
+    }
+}
+
 /// Metadata-only state of the primary OpenAI authentication boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpenAiAuthMetadata {
@@ -1286,6 +1298,51 @@ pub fn provider_api_key_metadata_from_auth_storage(
         return Ok(ProviderApiKeyStorageMetadata::Suppressed);
     }
     super::provider_key_vault::provider_key_metadata(codex_home, provider_key_id)
+}
+
+/// Inspect several provider keys without repeatedly opening the encrypted vault or legacy file.
+///
+/// Tombstones retain precedence over encrypted and legacy storage, matching the single-key API.
+/// Only storage metadata is loaded; credential values are never read.
+pub fn provider_api_key_metadata_snapshot_from_auth_storage(
+    codex_home: &Path,
+    provider_key_ids: impl IntoIterator<Item = impl AsRef<str>>,
+) -> std::io::Result<ProviderApiKeyStorageMetadataSnapshot> {
+    let provider_key_ids = provider_key_ids
+        .into_iter()
+        .map(|provider_key_id| provider_key_id.as_ref().to_string())
+        .collect::<Vec<_>>();
+    if provider_key_ids.is_empty() {
+        return Ok(ProviderApiKeyStorageMetadataSnapshot {
+            entries: HashMap::new(),
+        });
+    }
+    let legacy = load_provider_auth(codex_home)?;
+    let vault_ids = super::provider_key_vault::stored_provider_key_ids(codex_home);
+    let entries = provider_key_ids
+        .into_iter()
+        .map(|provider_key_id| {
+            let metadata = if legacy.deleted_api_keys.contains(&provider_key_id) {
+                ProviderApiKeyStorageMetadata::Suppressed
+            } else if vault_ids.contains(&provider_key_id.trim().to_ascii_uppercase()) {
+                ProviderApiKeyStorageMetadata::Stored {
+                    source: ProviderApiKeyStorageSource::EncryptedVault,
+                }
+            } else if legacy
+                .api_keys
+                .get(&provider_key_id)
+                .is_some_and(|value| !value.trim().is_empty())
+            {
+                ProviderApiKeyStorageMetadata::Stored {
+                    source: ProviderApiKeyStorageSource::LegacyPlaintext,
+                }
+            } else {
+                ProviderApiKeyStorageMetadata::Missing
+            };
+            (provider_key_id, metadata)
+        })
+        .collect();
+    Ok(ProviderApiKeyStorageMetadataSnapshot { entries })
 }
 
 /// Read a provider key from the legacy plaintext `provider_auth.json` store only.

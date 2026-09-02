@@ -1528,6 +1528,65 @@ pub(crate) enum AppEvent {
     },
     SharedProviderAuthAction(codex_provider_auth::ProviderAuthAction),
 
+    OpenProviderManager,
+    ProviderManagerStatusesResolved {
+        generation: u64,
+        status_host: crate::provider_status_host::ProviderStatusHost,
+        statuses: Vec<codex_provider_auth::ProviderStatusSnapshot>,
+    },
+    ProviderManagerMetadataResolved {
+        generation: u64,
+        metadata: crate::provider_status_host::ProviderAccountMetadata,
+    },
+    OpenProviderManagerActions {
+        provider_id: codex_provider_auth::ProviderCatalogId,
+    },
+    ProviderManagerBeginAuthentication {
+        provider_id: codex_provider_auth::ProviderCatalogId,
+        capability: codex_provider_auth::ProviderSetupCapability,
+    },
+    ProviderManagerClaudeRecoverySourceResolved {
+        attempt_id: codex_provider_auth::ProviderManagementAttemptId,
+        target: codex_provider_auth::claude_account_flow::ClaudeAccountTarget,
+        status: codex_provider_auth::ProviderStatusSnapshot,
+        source: codex_provider_auth::claude_account_flow::ClaudeUnauthorizedRecoverySource,
+    },
+    SaveProviderManagerApiKey {
+        attempt_id: codex_provider_auth::ProviderManagementAttemptId,
+        target: codex_provider_auth::ApiKeyAuthTarget,
+        api_key: ProviderApiKeySecret,
+    },
+    ProviderManagerApiKeyFinished {
+        attempt_id: codex_provider_auth::ProviderManagementAttemptId,
+        target: codex_provider_auth::ApiKeyAuthTarget,
+        status: Option<codex_provider_auth::ProviderStatusSnapshot>,
+    },
+    ProviderManagerRequestPolicy {
+        provider_id: codex_provider_auth::ProviderCatalogId,
+        policy: codex_provider_auth::ProviderActivationPolicy,
+    },
+    ProviderManagerChooseReplacement {
+        target_provider_id: codex_provider_auth::ProviderCatalogId,
+        replacement: codex_provider_auth::ExplicitProviderSelection,
+    },
+    ProviderManagerCancelReplacement {
+        target_provider_id: codex_provider_auth::ProviderCatalogId,
+    },
+    ProviderManagerPersistenceFinished {
+        attempt_id: codex_provider_auth::ProviderManagementAttemptId,
+        result: codex_provider_auth::ProviderManagementPersistenceResult,
+    },
+    ProviderManagerReplacementPersisted {
+        attempt_id: codex_provider_auth::ProviderManagementAttemptId,
+        target_provider_id: codex_provider_auth::ProviderCatalogId,
+        replacement: codex_provider_auth::ExplicitProviderSelection,
+        success: bool,
+    },
+    ProviderManagerDeactivateAfterReplacement {
+        attempt_id: codex_provider_auth::ProviderManagementAttemptId,
+        target_provider_id: codex_provider_auth::ProviderCatalogId,
+    },
+
     OpenTelegram,
     OpenTelegramTokenEntry,
     ValidateTelegramToken {

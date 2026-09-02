@@ -433,6 +433,7 @@ pub(crate) mod claude_auth_adapter;
 pub(crate) mod claude_code_login;
 mod pfterminal_plan_status;
 pub(crate) mod provider_credentials;
+pub(crate) mod provider_manager;
 mod tasknode_menu;
 pub(crate) mod telegram_setup;
 mod usage;

@@ -10,6 +10,7 @@ mod claude_account_controller;
 pub mod claude_account_flow;
 mod claude_account_settlement;
 mod eligibility;
+mod management;
 mod openai_account_controller;
 mod openai_account_flow;
 mod status;
@@ -40,6 +41,7 @@ pub use eligibility::ProviderEligibility;
 pub use eligibility::ProviderEligibilityError;
 pub use eligibility::ProviderEligibilityId;
 pub use eligibility::ProviderEligibilityStore;
+pub use management::ProviderManagementSession;
 pub use openai_account_flow::OpenAiAccountAction;
 pub use openai_account_flow::OpenAiAccountBlockedReason;
 pub use openai_account_flow::OpenAiAccountCancelPurpose;
@@ -87,6 +89,114 @@ pub use status_contract::ProviderRecoveryReason;
 pub use status_contract::ProviderStatusCatalog;
 pub use status_contract::ProviderStatusSnapshot;
 pub use status_contract::ProviderUnavailableReason;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProviderManagementAttemptId(u64);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExplicitProviderSelection {
+    pub provider_id: ProviderCatalogId,
+    pub runtime_provider_id: ProviderRuntimeId,
+    pub model: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProviderManagementMutation {
+    Eligibility {
+        provider_id: ProviderCatalogId,
+        policy: ProviderActivationPolicy,
+    },
+    ReplacementThenDeactivate {
+        target_provider_id: ProviderCatalogId,
+        replacement: ExplicitProviderSelection,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProviderManagementPhase {
+    Browsing,
+    Authenticating {
+        attempt_id: ProviderManagementAttemptId,
+        provider_id: ProviderCatalogId,
+        preserve_inactive: bool,
+    },
+    AwaitingReplacement {
+        target_provider_id: ProviderCatalogId,
+    },
+    Persisting {
+        attempt_id: ProviderManagementAttemptId,
+        mutation: ProviderManagementMutation,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderManagementPersistenceResult {
+    Applied,
+    ReplacementAppliedDeactivationFailed,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProviderManagementAction {
+    BeginAuthentication {
+        provider_id: ProviderCatalogId,
+    },
+    AuthenticationConfigured {
+        provider_id: ProviderCatalogId,
+    },
+    AuthenticationCancelled {
+        provider_id: ProviderCatalogId,
+    },
+    RequestPolicy {
+        provider_id: ProviderCatalogId,
+        policy: ProviderActivationPolicy,
+    },
+    ChooseReplacement {
+        target_provider_id: ProviderCatalogId,
+        replacement: ExplicitProviderSelection,
+    },
+    CancelReplacement {
+        target_provider_id: ProviderCatalogId,
+    },
+    PersistenceFinished {
+        attempt_id: ProviderManagementAttemptId,
+        result: ProviderManagementPersistenceResult,
+    },
+    Refresh {
+        statuses: Vec<ProviderStatusSnapshot>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProviderManagementEffect {
+    BeginAuthentication {
+        attempt_id: ProviderManagementAttemptId,
+        provider_id: ProviderCatalogId,
+    },
+    PersistEligibility {
+        attempt_id: ProviderManagementAttemptId,
+        provider_id: ProviderCatalogId,
+        policy: ProviderActivationPolicy,
+    },
+    PresentReplacement {
+        target_provider_id: ProviderCatalogId,
+    },
+    PersistReplacementThenDeactivate {
+        attempt_id: ProviderManagementAttemptId,
+        target_provider_id: ProviderCatalogId,
+        replacement: ExplicitProviderSelection,
+    },
+    Refresh,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderManagementTransition {
+    pub phase: ProviderManagementPhase,
+    pub statuses: Vec<ProviderStatusSnapshot>,
+    pub effects: Vec<ProviderManagementEffect>,
+    pub applied: bool,
+    pub persistence_result: Option<ProviderManagementPersistenceResult>,
+}
 
 use codex_model_provider_info::AMAZON_BEDROCK_PROVIDER_ID;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;

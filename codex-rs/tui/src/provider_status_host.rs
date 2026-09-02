@@ -19,6 +19,7 @@ use codex_provider_auth::ManagedApiKeyMetadata;
 use codex_provider_auth::ProviderActivationPolicy;
 use codex_provider_auth::ProviderCatalog;
 use codex_provider_auth::ProviderCatalogEntry;
+use codex_provider_auth::ProviderEligibilityError;
 use codex_provider_auth::ProviderEligibilitySnapshot;
 use codex_provider_auth::ProviderEligibilityStore;
 use codex_provider_auth::ProviderMetadata;
@@ -29,6 +30,8 @@ use codex_provider_auth::ProviderStatusResolver;
 use codex_provider_auth::ProviderStatusSnapshot;
 
 use crate::legacy_core::config::Config;
+
+type ManagedSnapshot = std::io::Result<codex_login::ProviderApiKeyStorageMetadataSnapshot>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProviderAccountMetadata {
@@ -113,11 +116,11 @@ impl ProviderAccountMetadata {
 }
 
 /// Metadata-only adapter shared by onboarding and the later provider manager.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct ProviderStatusHost {
     catalog: ProviderCatalog,
     codex_home: PathBuf,
-    current: CurrentProviderSelection,
+    current: Arc<RwLock<CurrentProviderSelection>>,
     account: Arc<RwLock<ProviderAccountMetadata>>,
 }
 
@@ -126,36 +129,33 @@ impl ProviderStatusHost {
         Self {
             catalog: ProviderCatalog::from_runtime_providers(&config.model_providers),
             codex_home: config.codex_home.to_path_buf(),
-            current: CurrentProviderSelection::runtime_id(config.model_provider_id.clone()),
+            current: Arc::new(RwLock::new(CurrentProviderSelection::runtime_id(
+                config.model_provider_id.clone(),
+            ))),
             account: Arc::new(RwLock::new(account)),
         }
     }
-
     pub(crate) fn catalog(&self) -> &ProviderCatalog {
         &self.catalog
     }
-
     pub(crate) fn update_account_metadata(&self, account: ProviderAccountMetadata) {
         *self
             .account
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = account;
     }
-
     pub(crate) fn mark_openai_api_key(&self) {
         self.account
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .openai = OpenAiAuthMetadata::ApiKey;
     }
-
     pub(crate) fn mark_openai_account(&self) {
         self.account
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .openai = OpenAiAuthMetadata::Account;
     }
-
     pub(crate) fn mark_claude_configured(
         &self,
         source: codex_provider_auth::ClaudeCredentialSource,
@@ -165,18 +165,11 @@ impl ProviderStatusHost {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .claude = ClaudeCredentialMetadata::Configured { source };
     }
-
     pub(crate) fn api_key_metadata(&self, target: &ApiKeyAuthTarget) -> ApiKeyCredentialMetadata {
         match &target.storage {
-            ApiKeyStorage::EnvironmentVariable { env_key } => ApiKeyCredentialMetadata {
-                environment: environment_metadata(env_key),
-                managed: ManagedApiKeyMetadata::from(
-                    codex_login::provider_api_key_metadata_from_auth_storage(
-                        &self.codex_home,
-                        env_key,
-                    ),
-                ),
-            },
+            ApiKeyStorage::EnvironmentVariable { env_key } => {
+                self.environment_api_key_metadata(env_key, /*snapshot*/ None)
+            }
             ApiKeyStorage::OpenAiAuth => {
                 let openai = self
                     .account
@@ -202,9 +195,23 @@ impl ProviderStatusHost {
             .account
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let managed_keys = self.catalog.entries().iter().filter_map(|entry| {
+            match entry.setup_capabilities.iter().next() {
+                Some(ProviderSetupCapability::ApiKey {
+                    storage: ApiKeyStorage::EnvironmentVariable { env_key },
+                }) if environment_metadata(env_key) == EnvironmentCredentialMetadata::Missing => {
+                    Some(env_key.as_str())
+                }
+                _ => None,
+            }
+        });
+        let managed = codex_login::provider_api_key_metadata_snapshot_from_auth_storage(
+            &self.codex_home,
+            managed_keys,
+        );
         let mut metadata = ProviderMetadataSnapshot::default();
         for entry in self.catalog.entries() {
-            metadata.insert(entry, self.metadata_for(entry, account));
+            metadata.insert(entry, self.metadata_for(entry, account, Some(&managed)));
         }
         ProviderStatusResolver::resolve(
             &self.catalog,
@@ -212,7 +219,10 @@ impl ProviderStatusHost {
             &ProviderEligibilitySnapshot::from(
                 ProviderEligibilityStore::new(&self.codex_home).load(),
             ),
-            &self.current,
+            &self
+                .current
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
         )
     }
 
@@ -223,40 +233,58 @@ impl ProviderStatusHost {
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut metadata = ProviderMetadataSnapshot::default();
-        metadata.insert(entry, self.metadata_for(entry, account));
+        metadata.insert(entry, self.metadata_for(entry, account, /*managed*/ None));
         ProviderStatusResolver::resolve(
             &self.catalog,
             &metadata,
             &ProviderEligibilitySnapshot::from(
                 ProviderEligibilityStore::new(&self.codex_home).load(),
             ),
-            &self.current,
+            &self
+                .current
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
         )
         .get(provider_id)
         .cloned()
     }
-
     pub(crate) fn resolve_target(&self, target: &ApiKeyAuthTarget) -> ProviderStatusSnapshot {
         self.resolve_provider(target.provider_id.as_str())
             .unwrap_or_else(|| panic!("catalog target disappeared: {}", target.provider_id))
     }
 
-    pub(crate) fn activate(&self, provider_id: &str) -> bool {
-        let Some(entry) = self.catalog.get(provider_id) else {
-            return false;
-        };
+    pub(crate) fn persist_policy(
+        &self,
+        provider_id: &str,
+        policy: ProviderActivationPolicy,
+    ) -> Result<(), ProviderEligibilityError> {
+        let entry = self
+            .catalog
+            .get(provider_id)
+            .ok_or(ProviderEligibilityError::WriteUnavailable)?;
         let store = ProviderEligibilityStore::new(&self.codex_home);
-        let Ok(mut eligibility) = store.load() else {
-            return false;
-        };
-        eligibility.set_policy(entry, ProviderActivationPolicy::Active);
-        store.save(&eligibility).is_ok()
+        let mut eligibility = store.load()?;
+        eligibility.set_policy(entry, policy);
+        store.save(&eligibility)
+    }
+
+    pub(crate) fn activate(&self, provider_id: &str) -> bool {
+        self.persist_policy(provider_id, ProviderActivationPolicy::Active)
+            .is_ok()
+    }
+    pub(crate) fn set_current_runtime(&self, runtime_provider_id: impl Into<String>) {
+        *self
+            .current
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            CurrentProviderSelection::runtime_id(runtime_provider_id);
     }
 
     fn metadata_for(
         &self,
         entry: &ProviderCatalogEntry,
         account: ProviderAccountMetadata,
+        managed: Option<&ManagedSnapshot>,
     ) -> ProviderMetadata {
         let first = entry.setup_capabilities.iter().next();
         match first {
@@ -266,15 +294,7 @@ impl ProviderStatusHost {
             }) => ProviderMetadata::OpenAi(account.openai),
             Some(ProviderSetupCapability::ApiKey {
                 storage: ApiKeyStorage::EnvironmentVariable { env_key },
-            }) => ProviderMetadata::ApiKey(ApiKeyCredentialMetadata {
-                environment: environment_metadata(env_key),
-                managed: ManagedApiKeyMetadata::from(
-                    codex_login::provider_api_key_metadata_from_auth_storage(
-                        &self.codex_home,
-                        env_key,
-                    ),
-                ),
-            }),
+            }) => ProviderMetadata::ApiKey(self.environment_api_key_metadata(env_key, managed)),
             Some(ProviderSetupCapability::ClaudeAccount) => {
                 ProviderMetadata::Claude(account.claude)
             }
@@ -290,6 +310,39 @@ impl ProviderStatusHost {
             Some(ProviderSetupCapability::StatusOnly { .. }) => ProviderMetadata::StatusOnly,
             None => ProviderMetadata::Unavailable,
         }
+    }
+
+    fn environment_api_key_metadata(
+        &self,
+        env_key: &str,
+        snapshot: Option<&ManagedSnapshot>,
+    ) -> ApiKeyCredentialMetadata {
+        let environment = environment_metadata(env_key);
+        prioritized_api_key_metadata(environment, || match snapshot {
+            Some(Ok(snapshot)) => snapshot
+                .get(env_key)
+                .map(|metadata| ManagedApiKeyMetadata::from(Ok(metadata)))
+                .unwrap_or(ManagedApiKeyMetadata::Unavailable),
+            Some(Err(_)) => ManagedApiKeyMetadata::Unavailable,
+            None => ManagedApiKeyMetadata::from(
+                codex_login::provider_api_key_metadata_from_auth_storage(&self.codex_home, env_key),
+            ),
+        })
+    }
+}
+
+fn prioritized_api_key_metadata(
+    environment: EnvironmentCredentialMetadata,
+    read_managed: impl FnOnce() -> ManagedApiKeyMetadata,
+) -> ApiKeyCredentialMetadata {
+    let managed = if environment == EnvironmentCredentialMetadata::Missing {
+        read_managed()
+    } else {
+        ManagedApiKeyMetadata::Missing
+    };
+    ApiKeyCredentialMetadata {
+        environment,
+        managed,
     }
 }
 
@@ -336,72 +389,5 @@ fn environment_metadata(env_key: &str) -> EnvironmentCredentialMetadata {
 }
 
 #[cfg(test)]
-mod tests {
-    use codex_model_provider_info::ModelProviderInfo;
-    use codex_provider_auth::ProviderConfigurationState;
-    use tempfile::tempdir;
-
-    use super::*;
-
-    #[tokio::test]
-    async fn correlated_corbanu_metadata_resolves_without_credential_reread() {
-        let home = tempdir().unwrap();
-        let mut config = crate::legacy_core::config::ConfigBuilder::default()
-            .codex_home(home.path().to_path_buf())
-            .build()
-            .await
-            .unwrap();
-        config.model_providers = codex_model_provider_info::built_in_model_providers(None);
-        let host = ProviderStatusHost::from_config(
-            &config,
-            ProviderAccountMetadata {
-                corbanu: CorbanuPlanMetadata::Configured {
-                    source: CorbanuCredentialSource::Managed,
-                    availability: ConfiguredAvailability::Ready,
-                },
-                ..Default::default()
-            },
-        );
-
-        let status = host
-            .resolve_provider(codex_model_provider_info::CORBANU_PLAN_PROVIDER_ID)
-            .unwrap();
-
-        assert_eq!(status.configuration, ProviderConfigurationState::Configured);
-    }
-
-    #[tokio::test]
-    async fn custom_storage_metadata_is_secret_free_and_missing_file_is_active() {
-        let home = tempdir().unwrap();
-        let config = config(
-            home.path(),
-            "custom",
-            ModelProviderInfo {
-                name: "Custom".into(),
-                env_key: Some("PF53_STATUS_HOST_MISSING_KEY".into()),
-                ..Default::default()
-            },
-        )
-        .await;
-        let host = ProviderStatusHost::from_config(&config, ProviderAccountMetadata::default());
-        let resolved = host.resolve();
-        let status = resolved.get("custom").unwrap();
-        assert_eq!(
-            status.configuration,
-            ProviderConfigurationState::NotConfigured
-        );
-        assert!(!format!("{resolved:?}").contains("secret"));
-    }
-
-    async fn config(path: &std::path::Path, id: &str, provider: ModelProviderInfo) -> Config {
-        let mut config = crate::legacy_core::config::ConfigBuilder::default()
-            .codex_home(path.to_path_buf())
-            .build()
-            .await
-            .unwrap();
-        config.model_provider_id = id.into();
-        config.model_provider = provider.clone();
-        config.model_providers = std::collections::HashMap::from([(id.into(), provider)]);
-        config
-    }
-}
+#[path = "provider_status_host_tests.rs"]
+mod tests;

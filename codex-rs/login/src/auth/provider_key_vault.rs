@@ -18,6 +18,7 @@
 //! fails for some other reason. Those read/write fallbacks emit `tracing::warn!` so they are never
 //! silent, and the legacy file retains its `0600` permissions.
 
+use std::collections::HashSet;
 use std::path::Path;
 #[cfg(test)]
 use std::sync::Arc;
@@ -77,6 +78,37 @@ pub(crate) fn provider_key_metadata(
         })
     } else {
         Ok(ProviderApiKeyStorageMetadata::Missing)
+    }
+}
+
+/// List stored provider-key identities with one metadata-only vault read.
+///
+/// An unavailable vault degrades to an empty set so callers can preserve the existing legacy
+/// fallback behavior. Secret values are neither decrypted nor returned.
+pub(crate) fn stored_provider_key_ids(codex_home: &Path) -> HashSet<String> {
+    let vault = Vault::new(codex_home.to_path_buf());
+    if vault.key_storage() == VaultKeyStorage::NotInitialized {
+        return HashSet::new();
+    }
+    match vault.list() {
+        Ok(entries) => entries
+            .into_iter()
+            .filter_map(|entry| {
+                let provider_key_id = entry.label.strip_prefix(PROVIDER_LABEL_PREFIX)?;
+                (!provider_key_id.is_empty()
+                    && provider_key_id
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'))
+                .then(|| provider_key_id.to_ascii_uppercase())
+            })
+            .collect(),
+        Err(err) => {
+            tracing::warn!(
+                ?err,
+                "provider key vault metadata unavailable; checking legacy provider storage"
+            );
+            HashSet::new()
+        }
     }
 }
 

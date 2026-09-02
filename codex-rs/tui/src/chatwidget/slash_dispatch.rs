@@ -544,7 +544,7 @@ impl ChatWidget {
                 self.open_wallet_menu();
             }
             SlashCommand::Providers => {
-                self.open_provider_credentials_menu();
+                self.app_event_tx.send(AppEvent::OpenProviderManager);
             }
             SlashCommand::Telegram => {
                 self.open_telegram_menu();

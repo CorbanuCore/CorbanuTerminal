@@ -11248,6 +11248,8 @@ async fn make_test_app() -> App {
         shared_provider_setup_session: None,
         shared_provider_status_host: None,
         shared_provider_account_auth_host: None,
+        provider_management_host: None,
+        provider_management_generation: 0,
         pending_wallet_create_deferred: None,
         state_db: None,
         cli_kv_overrides: Vec::new(),
@@ -11350,6 +11352,8 @@ async fn make_test_app_with_channels() -> (
             shared_provider_setup_session: None,
             shared_provider_status_host: None,
             shared_provider_account_auth_host: None,
+            provider_management_host: None,
+            provider_management_generation: 0,
             pending_wallet_create_deferred: None,
             state_db: None,
             cli_kv_overrides: Vec::new(),
@@ -14234,6 +14238,405 @@ async fn side_backtrack_rejection_reports_unavailable_message_snapshot() {
         rendered
     );
 }
+#[test]
+fn provider_manager_claude_intent_uses_typed_status_and_recovery_source() {
+    use codex_provider_auth::ProviderAvailabilityState;
+    use codex_provider_auth::ProviderConfigurationState;
+    use codex_provider_auth::ProviderCurrentState;
+    use codex_provider_auth::ProviderEligibilityState;
+    use codex_provider_auth::ProviderStatusSnapshot;
+    use codex_provider_auth::claude_account_flow::ClaudeAccountIntent;
+    use codex_provider_auth::claude_account_flow::ClaudeUnauthorizedRecoverySource as Source;
+
+    let catalog = codex_provider_auth::ProviderCatalog::from_runtime_providers(
+        &codex_model_provider_info::built_in_model_providers(None),
+    );
+    let provider_id = catalog
+        .get(codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID)
+        .expect("Claude Account catalog entry")
+        .id
+        .clone();
+    let status = |configuration| ProviderStatusSnapshot {
+        id: provider_id.clone(),
+        methods: Vec::new(),
+        configuration,
+        eligibility: ProviderEligibilityState::Active,
+        current: ProviderCurrentState::NotCurrent,
+        availability: ProviderAvailabilityState::Ready,
+    };
+
+    assert_eq!(
+        super::provider_management::claude_intent_for_status(
+            &status(ProviderConfigurationState::NotConfigured),
+            Source::ManagedToken,
+        ),
+        Some(ClaudeAccountIntent::Add),
+    );
+    for source in [
+        Source::ManagedToken,
+        Source::ClaudeCodeLogin,
+        Source::Environment,
+    ] {
+        assert_eq!(
+            super::provider_management::claude_intent_for_status(
+                &status(ProviderConfigurationState::RecoveryRequired),
+                source,
+            ),
+            Some(ClaudeAccountIntent::UnauthorizedRecovery { source }),
+        );
+    }
+    assert_eq!(
+        super::provider_management::claude_intent_for_status(
+            &status(ProviderConfigurationState::RecoveryRequired),
+            Source::Unknown,
+        ),
+        None,
+    );
+    assert_eq!(
+        super::provider_management::claude_intent_for_status(
+            &status(ProviderConfigurationState::Configured),
+            Source::ManagedToken,
+        ),
+        None,
+    );
+}
+
+#[tokio::test]
+async fn stale_provider_manager_claude_recovery_source_is_inert() -> Result<()> {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let app_server = start_config_write_test_app_server(&app).await?;
+    app.open_provider_manager(&app_server);
+    let (generation, status_host, statuses) = time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Some(AppEvent::ProviderManagerStatusesResolved {
+                generation,
+                status_host,
+                statuses,
+            }) = app_event_rx.recv().await
+            {
+                break (generation, status_host, statuses);
+            }
+        }
+    })
+    .await
+    .expect("timed out waiting for provider statuses");
+    app.provider_manager_statuses_resolved(generation, status_host, statuses, &app_server);
+    let (provider_id, target, mut status) = {
+        let host = app.provider_management_host.as_ref().unwrap();
+        let entry = host
+            .status_host()
+            .catalog()
+            .entries()
+            .iter()
+            .find(|entry| {
+                entry.setup_capabilities.iter().any(|capability| {
+                    *capability == codex_provider_auth::ProviderSetupCapability::ClaudeAccount
+                })
+            })
+            .unwrap();
+        let status = host
+            .statuses()
+            .iter()
+            .find(|status| status.id == entry.id)
+            .unwrap()
+            .clone();
+        (
+            entry.id.clone(),
+            codex_provider_auth::claude_account_flow::ClaudeAccountTarget::from_catalog_entry(
+                entry,
+            )
+            .unwrap(),
+            status,
+        )
+    };
+    let host = app.provider_management_host.as_mut().unwrap();
+    host.dispatch(
+        codex_provider_auth::ProviderManagementAction::BeginAuthentication {
+            provider_id: provider_id.clone(),
+        },
+    );
+    let stale_attempt = host.authenticating_attempt().unwrap().0;
+    host.dispatch(
+        codex_provider_auth::ProviderManagementAction::AuthenticationCancelled {
+            provider_id: provider_id.clone(),
+        },
+    );
+    host.dispatch(
+        codex_provider_auth::ProviderManagementAction::BeginAuthentication { provider_id },
+    );
+    let current_attempt = app
+        .provider_management_host
+        .as_ref()
+        .unwrap()
+        .authenticating_attempt()
+        .unwrap();
+    while app_event_rx.try_recv().is_ok() {}
+    status.configuration = codex_provider_auth::ProviderConfigurationState::RecoveryRequired;
+    app.provider_manager_claude_recovery_source_resolved(
+        stale_attempt,
+        target,
+        status,
+        codex_provider_auth::claude_account_flow::ClaudeUnauthorizedRecoverySource::ManagedToken,
+    );
+
+    assert_eq!(
+        app.provider_management_host
+            .as_ref()
+            .unwrap()
+            .authenticating_attempt(),
+        Some(current_attempt),
+    );
+    assert!(app_event_rx.try_recv().is_err());
+    Ok(())
+}
+
+#[tokio::test]
+async fn provider_manager_stale_api_key_completion_is_inert_and_current_settles() -> Result<()> {
+    let (mut app, mut app_event_rx, _op_rx) = make_test_app_with_channels().await;
+    let app_server = start_config_write_test_app_server(&app).await?;
+    app.open_provider_manager(&app_server);
+    let (generation, status_host, statuses) = time::timeout(Duration::from_secs(5), async {
+        loop {
+            if let Some(AppEvent::ProviderManagerStatusesResolved {
+                generation,
+                status_host,
+                statuses,
+            }) = app_event_rx.recv().await
+            {
+                break (generation, status_host, statuses);
+            }
+        }
+    })
+    .await
+    .expect("timed out waiting for provider statuses");
+    app.provider_manager_statuses_resolved(generation, status_host.clone(), statuses, &app_server);
+    let initial_status_count = app
+        .provider_management_host
+        .as_ref()
+        .unwrap()
+        .statuses()
+        .len();
+    app.provider_manager_statuses_resolved(
+        generation.wrapping_add(1),
+        status_host.clone(),
+        Vec::new(),
+        &app_server,
+    );
+    assert_eq!(
+        app.provider_management_host
+            .as_ref()
+            .unwrap()
+            .statuses()
+            .len(),
+        initial_status_count
+    );
+    let (provider_id, capability, target) = {
+        let host = app.provider_management_host.as_ref().unwrap();
+        let (entry, capability) = host
+            .status_host()
+            .catalog()
+            .entries()
+            .iter()
+            .find_map(|entry| {
+                entry
+                    .setup_capabilities
+                    .iter()
+                    .find(|capability| {
+                        matches!(
+                            capability,
+                            codex_provider_auth::ProviderSetupCapability::ApiKey { .. }
+                        )
+                    })
+                    .cloned()
+                    .map(|capability| (entry.clone(), capability))
+            })
+            .unwrap();
+        let target =
+            codex_provider_auth::ApiKeyAuthTarget::from_catalog_capability(&entry, &capability)
+                .unwrap();
+        (entry.id, capability, target)
+    };
+    app.provider_manager_begin_authentication(provider_id.clone(), capability.clone());
+    let authenticating_status_count = app
+        .provider_management_host
+        .as_ref()
+        .unwrap()
+        .statuses()
+        .len();
+    app.provider_manager_statuses_resolved(
+        generation,
+        status_host.clone(),
+        Vec::new(),
+        &app_server,
+    );
+    assert!(matches!(
+        app.provider_management_host.as_ref().unwrap().phase(),
+        codex_provider_auth::ProviderManagementPhase::Authenticating { .. }
+    ));
+    assert_eq!(
+        app.provider_management_host
+            .as_ref()
+            .unwrap()
+            .statuses()
+            .len(),
+        authenticating_status_count
+    );
+    let (first_attempt, _) = app
+        .provider_management_host
+        .as_ref()
+        .unwrap()
+        .authenticating_attempt()
+        .unwrap();
+    app.provider_manager_authentication_cancelled(provider_id.clone());
+    app.provider_manager_begin_authentication(provider_id.clone(), capability);
+    let (current_attempt, _) = app
+        .provider_management_host
+        .as_ref()
+        .unwrap()
+        .authenticating_attempt()
+        .unwrap();
+    assert_ne!(first_attempt, current_attempt);
+
+    let status = codex_provider_auth::ProviderStatusSnapshot {
+        id: provider_id,
+        methods: Vec::new(),
+        configuration: codex_provider_auth::ProviderConfigurationState::Configured,
+        eligibility: codex_provider_auth::ProviderEligibilityState::Active,
+        current: codex_provider_auth::ProviderCurrentState::NotCurrent,
+        availability: codex_provider_auth::ProviderAvailabilityState::Ready,
+    };
+    app.provider_manager_api_key_finished(first_attempt, target.clone(), Some(status.clone()));
+    assert_eq!(
+        app.provider_management_host
+            .as_ref()
+            .unwrap()
+            .authenticating_attempt(),
+        Some((current_attempt, target.provider_id.clone()))
+    );
+
+    let canary = "pf54-secret-canary-do-not-log";
+    let debug = format!(
+        "{:?}",
+        AppEvent::SaveProviderManagerApiKey {
+            attempt_id: current_attempt,
+            target: target.clone(),
+            api_key: crate::app_event::ProviderApiKeySecret::new(canary.to_string()),
+        }
+    );
+    assert!(!debug.contains(canary));
+    app.provider_manager_api_key_finished(current_attempt, target, Some(status));
+    assert!(matches!(
+        app.provider_management_host.as_ref().unwrap().phase(),
+        codex_provider_auth::ProviderManagementPhase::Persisting { .. }
+    ));
+    app.provider_manager_statuses_resolved(generation, status_host, Vec::new(), &app_server);
+    assert!(matches!(
+        app.provider_management_host.as_ref().unwrap().phase(),
+        codex_provider_auth::ProviderManagementPhase::Persisting { .. }
+    ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn provider_status_jobs_do_not_block_the_app_task() {
+    let (finished_tx, finished_rx) = std::sync::mpsc::channel();
+    let started_at = std::time::Instant::now();
+
+    super::provider_management_status::spawn_provider_status_job(move || {
+        std::thread::sleep(Duration::from_millis(250));
+        finished_tx.send(()).unwrap();
+    });
+    assert!(
+        started_at.elapsed() < Duration::from_millis(100),
+        "scheduling provider status resolution blocked the app task"
+    );
+
+    time::timeout(Duration::from_secs(1), async {
+        tokio::task::spawn_blocking(move || finished_rx.recv())
+            .await
+            .unwrap()
+    })
+    .await
+    .expect("background provider-status job never completed")
+    .unwrap();
+}
+
+#[test]
+fn embedded_provider_key_save_is_visible_to_one_bulk_status_refresh() -> Result<()> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .thread_stack_size(8 * 1024 * 1024)
+        .enable_all()
+        .build()?;
+    runtime.block_on(async {
+        let home = tempdir()?;
+        let provider_id = "pf54-managed";
+        let env_key = "PF54_MANAGED_KEY";
+        let provider = codex_model_provider_info::ModelProviderInfo {
+            name: "PF54 Managed".into(),
+            env_key: Some(env_key.into()),
+            ..Default::default()
+        };
+        let mut config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .build()
+            .await?;
+        config.model_provider_id = provider_id.into();
+        config.model_provider = provider.clone();
+        config.model_providers = codex_model_provider_info::built_in_model_providers(None);
+        config.model_providers.insert(provider_id.into(), provider);
+
+        let app_server = crate::start_embedded_app_server_for_picker(&config).await?;
+        let status_host = crate::provider_status_host::ProviderStatusHost::from_config(
+            &config,
+            crate::provider_status_host::ProviderAccountMetadata::default(),
+        );
+        let entry = status_host.catalog().get(provider_id).unwrap();
+        let capability = entry.setup_capabilities.iter().next().unwrap();
+        let target =
+            codex_provider_auth::ApiKeyAuthTarget::from_catalog_capability(entry, capability)
+                .unwrap();
+        let canary = "pf54-embedded-save-secret-canary";
+        let status = time::timeout(
+            Duration::from_secs(60),
+            crate::provider_auth_effect_executor::ProviderAuthEffectExecutor::persist_api_key(
+                app_server.request_handle(),
+                status_host.clone(),
+                target,
+                codex_provider_auth::ApiKeySecret::new(canary.to_string()),
+            ),
+        )
+        .await
+        .expect("embedded provider-key persistence timed out")
+        .expect("embedded provider-key persistence failed");
+        assert_eq!(
+            status.configuration,
+            codex_provider_auth::ProviderConfigurationState::Configured
+        );
+
+        let refresh_host = status_host.clone();
+        let statuses = time::timeout(Duration::from_secs(30), async move {
+            tokio::task::spawn_blocking(move || refresh_host.resolve())
+                .await
+                .unwrap()
+        })
+        .await
+        .expect("bulk provider-status refresh timed out");
+        let managed = statuses.get(provider_id).unwrap();
+        assert_eq!(
+            managed.configuration,
+            codex_provider_auth::ProviderConfigurationState::Configured
+        );
+        assert_eq!(
+            managed.availability,
+            codex_provider_auth::ProviderAvailabilityState::Ready
+        );
+        assert!(!format!("{status:?} {statuses:?} {status_host:?}").contains(canary));
+        app_server.shutdown().await?;
+        Ok(())
+    })
+}
+
 async fn start_config_write_test_app_server(app: &App) -> Result<AppServerSession> {
     Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await
 }

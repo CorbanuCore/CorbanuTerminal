@@ -28,6 +28,8 @@ pub(super) async fn make_test_app() -> App {
         shared_provider_setup_session: None,
         shared_provider_status_host: None,
         shared_provider_account_auth_host: None,
+        provider_management_host: None,
+        provider_management_generation: 0,
         pending_wallet_create_deferred: None,
         state_db: None,
         cli_kv_overrides: Vec::new(),

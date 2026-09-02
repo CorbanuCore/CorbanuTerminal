@@ -33,6 +33,7 @@ pub(super) const WALLET_MENU_VIEW_ID: &str = "wallet-menu";
 const WALLET_PLANS_VIEW_ID: &str = "wallet-plans";
 const WALLET_PLAN_CONFIRM_VIEW_ID: &str = "wallet-plan-confirm";
 const SHARED_PROVIDER_SETUP_VIEW_ID: &str = "shared-provider-setup";
+const SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID: &str = "shared-provider-account-auth";
 pub(super) const WALLET_DISCONNECT_PLAN_VIEW_ID: &str = "wallet-disconnect-plan";
 pub(super) const WALLET_REMOVE_VIEW_ID: &str = "wallet-remove";
 
@@ -272,7 +273,7 @@ impl ChatWidget {
         } else if let Some(auth_url) = challenge.browser_auth_url() {
             header.push(Line::from(format!("Open: {auth_url}")));
         }
-        self.show_selection_view(SelectionViewParams {
+        self.show_shared_account_auth_selection(SelectionViewParams {
             header: Box::new(header),
             items: vec![SelectionItem {
                 name: "Cancel login".to_string(),
@@ -297,7 +298,7 @@ impl ChatWidget {
         kind: crate::provider_account_auth_host::ProviderAccountCancelKind,
     ) {
         let cancel_action = move || kind.action();
-        self.show_selection_view(SelectionViewParams {
+        self.show_shared_account_auth_selection(SelectionViewParams {
             title: Some("Starting account authentication".to_string()),
             items: vec![SelectionItem {
                 name: "Cancel".to_string(),
@@ -331,7 +332,7 @@ impl ChatWidget {
             })],
             ..Default::default()
         };
-        self.show_selection_view(SelectionViewParams {
+        self.show_shared_account_auth_selection(SelectionViewParams {
             title: Some("Claude account method".to_string()),
             items: vec![
                 method_item(
@@ -351,6 +352,8 @@ impl ChatWidget {
 
     pub(crate) fn open_shared_claude_managed_token_entry(&mut self) {
         use codex_provider_auth::claude_account_flow::ClaudeAccountAction;
+        self.bottom_pane
+            .dismiss_view_by_id(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID);
         let tx = self.app_event_tx.clone();
         let cancel_tx = self.app_event_tx.clone();
         let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret_with_cancel(
@@ -382,6 +385,8 @@ impl ChatWidget {
         challenge: codex_provider_auth::claude_account_flow::ClaudeCodeChallenge,
     ) {
         use codex_provider_auth::claude_account_flow::ClaudeAccountAction;
+        self.bottom_pane
+            .dismiss_view_by_id(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID);
         let tx = self.app_event_tx.clone();
         let cancel_tx = self.app_event_tx.clone();
         let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret_with_cancel(
@@ -403,6 +408,20 @@ impl ChatWidget {
             }),
         );
         self.bottom_pane.show_view(Box::new(view));
+    }
+
+    fn show_shared_account_auth_selection(&mut self, mut params: SelectionViewParams) {
+        params.view_id = Some(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID);
+        if self.bottom_pane.active_view_id() == Some(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID) {
+            let replaced = self
+                .bottom_pane
+                .replace_selection_view_if_active(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID, params);
+            debug_assert!(replaced);
+        } else {
+            self.bottom_pane
+                .dismiss_view_by_id(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID);
+            self.show_selection_view(params);
+        }
     }
 
     pub(crate) fn open_wallet_menu(&mut self) {
@@ -2141,6 +2160,46 @@ fn format_usdc_atomic(value: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn shared_account_auth_phases_replace_one_stack_slot() {
+        let (mut chat, _rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+
+        chat.open_shared_account_pending(
+            crate::provider_account_auth_host::ProviderAccountCancelKind::OpenAi,
+        );
+        chat.open_shared_openai_challenge(
+            codex_provider_auth::OpenAiAccountChallenge::device_code(
+                "https://example.test/device",
+                "TEST-CODE",
+            ),
+        );
+        assert_eq!(
+            chat.bottom_pane.active_view_id(),
+            Some(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID)
+        );
+        assert!(
+            chat.bottom_pane
+                .dismiss_view_by_id(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID)
+        );
+        assert_eq!(chat.bottom_pane.active_view_id(), None);
+
+        chat.open_shared_account_pending(
+            crate::provider_account_auth_host::ProviderAccountCancelKind::Claude,
+        );
+        chat.open_shared_claude_method_choice();
+        chat.open_shared_claude_managed_token_entry();
+        assert_ne!(
+            chat.bottom_pane.active_view_id(),
+            Some(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID)
+        );
+        assert!(
+            !chat
+                .bottom_pane
+                .dismiss_view_by_id(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID)
+        );
+    }
 
     #[test]
     fn balance_reads_use_the_gateway_rpc_only_for_the_wallet_network() {

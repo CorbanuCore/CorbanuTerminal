@@ -2665,6 +2665,99 @@ fn provider_api_key_metadata_reports_legacy_missing_and_suppressed_without_secre
 }
 
 #[test]
+fn provider_api_key_metadata_snapshot_matches_single_key_precedence_without_secret() {
+    let codex_home = tempdir().expect("tempdir");
+    let canary = "bulk-metadata-secret-canary";
+    super::legacy_save_provider_key(codex_home.path(), "LEGACY_API_KEY", canary)
+        .expect("seed legacy provider key");
+    super::legacy_save_provider_key(codex_home.path(), "SUPPRESSED_API_KEY", "suppressed-secret")
+        .expect("seed provider key to suppress");
+    super::suppress_provider_api_key(codex_home.path(), "SUPPRESSED_API_KEY")
+        .expect("suppress provider key");
+
+    let provider_key_ids = ["LEGACY_API_KEY", "SUPPRESSED_API_KEY", "MISSING_API_KEY"];
+    let snapshot = super::provider_api_key_metadata_snapshot_from_auth_storage(
+        codex_home.path(),
+        provider_key_ids,
+    )
+    .expect("inspect provider-key snapshot");
+    for provider_key_id in provider_key_ids {
+        assert_eq!(
+            snapshot.get(provider_key_id),
+            Some(
+                super::provider_api_key_metadata_from_auth_storage(
+                    codex_home.path(),
+                    provider_key_id,
+                )
+                .expect("inspect single provider key"),
+            ),
+        );
+    }
+    assert!(!format!("{snapshot:?}").contains(canary));
+    assert!(!format!("{snapshot:?}").contains("suppressed-secret"));
+}
+
+#[test]
+fn provider_api_key_metadata_snapshot_is_io_free_when_empty_and_redacts_parse_errors() {
+    let codex_home = tempdir().expect("tempdir");
+    let canary = "malformed-secret-canary";
+    std::fs::write(
+        codex_home.path().join("provider_auth.json"),
+        format!("{{ malformed {canary}"),
+    )
+    .expect("write malformed provider auth");
+
+    let empty = super::provider_api_key_metadata_snapshot_from_auth_storage(
+        codex_home.path(),
+        std::iter::empty::<&str>(),
+    )
+    .expect("empty snapshot must not touch storage");
+    assert_eq!(empty.get("ANY_API_KEY"), None);
+
+    let snapshot_error = super::provider_api_key_metadata_snapshot_from_auth_storage(
+        codex_home.path(),
+        ["ANY_API_KEY"],
+    )
+    .expect_err("nonempty snapshot must report malformed legacy metadata");
+    let single_error =
+        super::provider_api_key_metadata_from_auth_storage(codex_home.path(), "ANY_API_KEY")
+            .expect_err("single lookup must report malformed legacy metadata");
+    assert_eq!(snapshot_error.kind(), single_error.kind());
+    assert!(!format!("{snapshot_error:?}").contains(canary));
+}
+
+#[test]
+fn provider_api_key_metadata_snapshot_matches_encrypted_vault_without_secret() {
+    let codex_home = tempdir().expect("tempdir");
+    let canary = "encrypted-bulk-secret-canary";
+    super::login_with_provider_api_key(
+        codex_home.path(),
+        "ENCRYPTED_API_KEY",
+        canary,
+        AuthCredentialsStoreMode::File,
+        AuthKeyringBackendKind::default(),
+    )
+    .expect("store encrypted provider key");
+
+    let snapshot = super::provider_api_key_metadata_snapshot_from_auth_storage(
+        codex_home.path(),
+        ["ENCRYPTED_API_KEY"],
+    )
+    .expect("inspect encrypted provider-key snapshot");
+    let single =
+        super::provider_api_key_metadata_from_auth_storage(codex_home.path(), "ENCRYPTED_API_KEY")
+            .expect("inspect single encrypted provider key");
+    assert_eq!(snapshot.get("ENCRYPTED_API_KEY"), Some(single));
+    assert_eq!(
+        single,
+        ProviderApiKeyStorageMetadata::Stored {
+            source: ProviderApiKeyStorageSource::EncryptedVault,
+        }
+    );
+    assert!(!format!("{snapshot:?}").contains(canary));
+}
+
+#[test]
 fn openai_auth_metadata_distinguishes_account_api_key_and_unsupported_auth() {
     let account =
         AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
