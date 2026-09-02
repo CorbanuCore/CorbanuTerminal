@@ -117,7 +117,8 @@ pub const CORBANU_TERMINAL_PLAN_PROVIDER_ID: &str = "corbanu-terminal-plan";
 pub const CORBANU_PLAN_API_KEY_ENV_VAR: &str = "CORBANU_PLAN_API_KEY";
 pub const PFTERMINAL_PLAN_PROVIDER_ID: &str = "pfterminal-plan";
 /// Anthropic-wire sibling of the Corbanu Plan provider. Same gateway, same
-/// customer key; serves only the plan's non-private `claude-fable-5` route.
+/// customer key; serves the plan's non-private `claude-fable-5` and
+/// `claude-fable-5-1` routes.
 pub const PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID: &str = "pfterminal-plan-anthropic";
 pub const CORBANU_PLAN_ANTHROPIC_PROVIDER_ID: &str = "corbanu-plan-anthropic";
 /// Context reliably served by the SkyAPI Fable route used by Corbanu Plan.

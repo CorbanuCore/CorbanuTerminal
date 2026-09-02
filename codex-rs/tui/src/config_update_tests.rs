@@ -154,6 +154,30 @@ fn onboarding_returning_openai_model_preserves_high_reasoning_effort() {
 }
 
 #[test]
+fn onboarding_openai_preserves_catalog_and_custom_compatible_models() {
+    for model in ["codex-auto-fast", "o3"] {
+        let existing_config = serde_json::json!({
+            "model": model,
+            "model_reasoning_effort": "high",
+        });
+        let edits = build_onboarding_provider_selection_edits(
+            existing_config["model"].as_str(),
+            codex_model_provider_info::OPENAI_PROVIDER_ID,
+        );
+
+        assert_eq!(
+            edits,
+            vec![ConfigEdit {
+                key_path: "model_provider".to_string(),
+                value: serde_json::json!(codex_model_provider_info::OPENAI_PROVIDER_ID),
+                merge_strategy: MergeStrategy::Replace,
+            }],
+            "unexpected edits for OpenAI-compatible model {model}"
+        );
+    }
+}
+
+#[test]
 fn format_config_error_preserves_server_validation_message() {
     let err = Err::<(), _>(color_eyre::eyre::eyre!(
         "config/batchWrite failed: Invalid configuration: features.fast_mode=true violates \

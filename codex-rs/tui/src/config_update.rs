@@ -18,6 +18,7 @@ use codex_app_server_protocol::SkillsConfigWriteResponse;
 use codex_config::loader::project_trust_key;
 use codex_features::FEATURES;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
+use codex_model_provider_info::canonical_catalog_provider;
 use codex_model_provider_info::resolve_model_for_provider;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::config_types::TrustLevel;
@@ -98,11 +99,16 @@ pub(crate) fn build_onboarding_provider_selection_edits(
 
     if provider == OPENAI_PROVIDER_ID {
         return match current_model {
-            Some(model) if !model.starts_with("gpt-") => vec![
-                clear_config_value("model"),
-                clear_config_value("model_reasoning_effort"),
-                provider_edit(),
-            ],
+            Some(model)
+                if canonical_catalog_provider(model)
+                    .is_some_and(|catalog_provider| catalog_provider != OPENAI_PROVIDER_ID) =>
+            {
+                vec![
+                    clear_config_value("model"),
+                    clear_config_value("model_reasoning_effort"),
+                    provider_edit(),
+                ]
+            }
             Some(_) | None => vec![provider_edit()],
         };
     }
