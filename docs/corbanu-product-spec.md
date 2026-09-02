@@ -78,6 +78,8 @@ financial actions.
 
 Corbanu Plan is wallet-native, one-calendar-month prepaid inference purchased through **x402**, normally using canonical USDC on Solana. The wallet proves ownership and receives a revocable Plan credential. Every tier uses the same model catalog and differs by allowance.
 
+The public Corbanu API and Plan gateway base URL is **`https://api.corbanu.com`**. Infrastructure-provider hostnames are compatibility addresses, not customer-facing product surfaces.
+
 | Tier    |    Price | Weekly allowance | Monthly allowance |
 | ------- | -------: | ---------------: | ----------------: |
 | Starter |   1 USDC |             250K |                1M |

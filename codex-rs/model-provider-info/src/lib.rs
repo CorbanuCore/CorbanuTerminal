@@ -121,8 +121,8 @@ pub const CORBANU_PLAN_ANTHROPIC_PROVIDER_ID: &str = "corbanu-plan-anthropic";
 pub const PFTERMINAL_PLAN_FABLE_CONTEXT_WINDOW: i64 = 128_000;
 /// Completion ceiling that leaves input headroom on the SkyAPI Fable route.
 pub const PFTERMINAL_PLAN_FABLE_MAX_OUTPUT_TOKENS: i64 = 32_768;
-pub const PFTERMINAL_PLAN_GATEWAY_ORIGIN: &str = "https://pfterminal-plan-gateway.fly.dev";
-pub const PFTERMINAL_PLAN_DEFAULT_BASE_URL: &str = "https://pfterminal-plan-gateway.fly.dev/v1";
+pub const PFTERMINAL_PLAN_GATEWAY_ORIGIN: &str = "https://api.corbanu.com";
+pub const PFTERMINAL_PLAN_DEFAULT_BASE_URL: &str = "https://api.corbanu.com/v1";
 pub const PFTERMINAL_PLAN_API_KEY_ENV_VAR: &str = "PFTERMINAL_PLAN_API_KEY";
 
 /// Normalize public provider aliases to the stable identifier used by existing

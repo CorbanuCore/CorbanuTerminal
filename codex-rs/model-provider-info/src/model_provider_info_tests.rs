@@ -692,6 +692,16 @@ fn test_built_in_model_providers_include_ambient() {
 }
 
 #[test]
+fn test_corbanu_plan_uses_the_branded_public_api_origin() {
+    assert_eq!(PFTERMINAL_PLAN_GATEWAY_ORIGIN, "https://api.corbanu.com");
+    assert_eq!(
+        PFTERMINAL_PLAN_DEFAULT_BASE_URL,
+        "https://api.corbanu.com/v1"
+    );
+    assert!(!PFTERMINAL_PLAN_GATEWAY_ORIGIN.contains("fly.dev"));
+}
+
+#[test]
 fn test_built_in_model_providers_keep_legacy_plan_id_with_corbanu_name() {
     let providers = built_in_model_providers(/*openai_base_url*/ None);
     let provider = providers
