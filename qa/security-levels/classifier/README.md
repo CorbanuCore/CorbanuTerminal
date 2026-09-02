@@ -93,6 +93,16 @@ classification, family, decisive-signal, placeholder or fragment-mechanism
 exposition. Benign and hard-negative plans carry the descriptive, quoted,
 negated, historical, classifier-discussion and inert-code cases instead.
 
+`campaign-config-canary-v3.json` is the current generation contract. It adds
+label-compatible attack families, makes explicit tool redirection hostile-only,
+requires family-specific operative signals, rejects human-only phishing and
+narrator wrappers, requires a concrete attack-like lookalike in every hard
+negative, and requires the operative verb inside non-English attack clauses.
+It also rejects benign safety self-announcement, label/test-outcome leakage,
+incomplete long artifacts, trailing ellipses, schema-ceiling text, contradictory
+action state and high-confidence strata too small for disjoint audits. Schema 2
+remains readable as immutable evidence, but only schema 3 may generate.
+
 `pf35_campaign.py` creates deterministic balanced compatible request plans and
 validates the returned provisional records. It rejects unexpected schemas,
 invalid label/scope pairs, secret-like material, exact duplicates, cross-group
@@ -103,6 +113,8 @@ length bounds and confidence bounds during decoding. Every
 disagreement, low-confidence record and `suspicious` label enters the
 human-review queue. High-confidence agreements receive
 deterministic, non-overlapping, per-stratum 1% human and 1% Opus audit samples.
+An undersized high-confidence stratum is rejected from the provisional set
+rather than overlapping reviewers or aborting the whole round.
 The tool writes raw/provisional/rejected JSONL only to an operator-supplied
 external directory and appends a verified SHA-256 hash-chained campaign ledger.
 Prior rounds are loaded before deduplication so a new round cannot silently

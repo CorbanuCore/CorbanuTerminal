@@ -44,7 +44,10 @@ production detector weights, signing, or Intel N100 performance.
 
 - `ruff format` and `ruff check`: clean.
 - `python3 -m unittest discover -s scripts -p 'test_security_classifier_eval.py' -v`:
-  21 passed, 0 failed.
+  22 passed, 0 failed.
+- `python3 -m unittest discover -s qa/security-levels/classifier -p 'test_*.py'`:
+  30 passed, 0 failed, including schema-3 compatibility, R4 audit misses,
+  quarantine and disjoint-stratum behavior.
 - `cd codex-rs && just fix -p codex-content-security && just fmt`: clean.
 - `cd codex-rs && just test -p codex-content-security pf_35_s01`: 1 passed,
   21 skipped; the named PF-35 test ran.
@@ -122,37 +125,47 @@ a hash-bound `QUARANTINED.json` marker and ledger entry
 the adjudicator refuses the round. It must not be reviewed to acceptance,
 trained on, imported or used to authorize scale-up.
 
-## Corrected semantic canary — human audit pending
+## Semantic canary audit — all current rounds quarantined
 
-The schema-2 campaign contract replaces unrestricted coverage combination with
-a label/scope compatibility matrix, separates attacker-authentic artifacts from
-benign/hard-negative exposition, assigns short/medium/long length buckets,
-rejects strings that hit their schema ceiling, requires explicit inert context
-for hard negatives, and deterministically rejects attack-class self-description,
-classification rationale, family names, placeholder explanation and fragment-
-joining mechanics. Legacy schema-1 configuration remains readable as immutable
-failure evidence but cannot launch generation. The new `quarantine` command
-hash-binds every output and prevents later adjudication.
+Codex read and evaluated every one of the 82 `canary-r3` human-queue rows.
+Only 27 were acceptable as proposed; 22 required relabeling and 33 required
+rejection. The dominant failures were suspicious records with unequivocally
+hostile behavior, attack labels attached to non-operative prose, narrator or
+cross-segment exposition, human-only phishing, self-announcing benign prose,
+padding, and malformed artifacts. The record-ID-bound decisions remain private;
+the safe counts, reason taxonomy, queue/review hashes, and quarantine identities
+are recorded in the
+[R3 quality review aggregate](r3-quality-review-2026-08-31.json). R3 is
+quarantined and cannot be adjudicated, trained on, imported, or used for dedup.
 
-Two 1,000-candidate canaries were deliberately rejected and quarantined while
-the audit exposed length-ceiling truncation and residual mechanism exposition.
-The clean-root `canary-r3` then requested 1,000 candidates and retained 829. It
-rejected 168 entries, including 68 improperly framed hard negatives, 27 attack
-expositions and 57 length-ceiling records. All accepted records passed the
-configured compatibility and semantic lint; independent aggregate scans found
-zero accepted attack self-description, fragment-mechanism or length-ceiling
-matches. The retained set covers all labels/scopes, all ten coverage dimensions
-and all three length buckets. Exact hashes, balance and the three quarantine
-chains are recorded in
+Schema 3 implements the review-derived corrections: actual-artifact voice;
+assistant/agent/tool targeting for attacks; an explicit suspicious-versus-
+hostile boundary; label-compatible families; required family signals; genuine
+attack-like hard negatives with inert provenance; direct cross-segment content;
+typed placeholders; coherent action state; no label/safety self-announcement;
+complete natural lengths; operative non-English clauses; hostile-only explicit
+tool redirection; and fail-closed handling of strata too small for disjoint human
+and Opus audits. Legacy schemas remain readable as failure evidence but cannot
+launch generation. The vLLM server has a 4,096-token model envelope, so campaign
+completions are capped at 2,048 tokens while retaining the qualified 64 streams.
+
+The final `canary-r4e` attempt requested 1,000 candidates, retained 571 after 426
+deterministic rejection entries, and produced a 51-row human queue plus a
+disjoint 30-row Opus queue. Codex read all 51 human rows: 39 were acceptable as
+proposed, one needed relabeling, and 11 required rejection. This improves the
+content-audit acceptance fraction from R3's 32.93% to 76.47%, but it does not
+meet the admission bar. Residual failures include safety self-announcement and
+padding, one non-operative attack, malformed encoding, unclear hard-negative
+provenance, incomplete code, and one label error. R4e is hash-bound and
+quarantined. Exact prompt/config/output/ledger identities, row-number decision
+sets, rejection taxonomy, and intermediate R4 outcomes are recorded in the
 [canary generation aggregate](canary-generation-2026-08-31.json).
 
-The canary remains provisional until Travis completes the 82-record human queue
-and the separate reviewer completes the disjoint 32-record Opus queue. No
-canary record is training data, and no replacement 10,000-acceptance pilot may
-start until that audit is accepted. The rendered, formula-checked human packet
-is bound to the queue by workbook SHA-256
-`c44bf5b49ca333a7bdd17b95eb6515311b9b95c0884fbfac326cdb74862b8b75`
-and remains outside Git with the private record material.
+No hardware fault or throughput shortfall caused these failures. The next gate
+is a fresh 1,000-candidate canary using a stronger or further-tuned generation
+strategy; it must pass both deterministic checks and content audit before a
+replacement 10,000-acceptance pilot may start. No current canary record is
+training data.
 
 ## Exact-candidate TMUX smoke
 
