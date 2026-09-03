@@ -44,4 +44,15 @@ completions only store and reveal their non-recoverable one-time result.
   branded `corbanu` binary.
 - Final focused Fable rereview: `FINAL_REVIEW: CLEAN`.
 
+## macOS release-build follow-up
+
+The first native macOS release build found that
+`preferred_platform_store` parameters had been renamed with leading
+underscores to satisfy non-macOS linting even though the macOS-only body still
+used the original names. The parameters were restored and a
+`#[cfg(not(target_os = "macos"))]` sink now consumes them on other platforms.
+The native macOS release build and the remote Linux `just fix`/`cargo check`
+then passed. A focused TMUX + Corbanu Terminal + Fable 5.1 Max portability
+rereview returned `FINAL_REVIEW: CLEAN`.
+
 No actionable Fable finding remains in the reconciled surfaces.
