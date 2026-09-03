@@ -74,7 +74,7 @@ silently change existing policies.** Moderate and Aggressive add deterministic
 protections around untrusted content, sensitive data, credentials, tools, and
 financial actions.
 
-# Corbanu Plan — LIVE
+# Corbanu Plan — LIVE; DEPRECATION TARGET
 
 Corbanu Plan is wallet-native, one-calendar-month prepaid inference purchased through **x402**, normally using canonical USDC on Solana. The wallet proves ownership and receives a revocable Plan credential. Every tier uses the same model catalog and differs by allowance.
 
@@ -97,6 +97,53 @@ The public Corbanu API and Plan gateway base URL is **`https://api.corbanu.com`*
 Mainline xAPI uses a protected server-side operator credential and balance gate. A separate branch implements per-wallet xAPI accounts, encrypted tenant keys, capped refills, and wallet-level cost attribution. That work is **BUILT NOT LIVE** until it is merged, deployed, and verified in production.
 
 Model-specific cost normalization, Plan margin targets, and other commercial performance targets are **TBD**. The listed allowances must not be interpreted as equal upstream cost across models.
+
+# Corbanu API — TO BUILD
+
+Product decision: Alex Good, Head of Product, 2026-08-30. Replace new Corbanu
+Plan sales with a wallet-funded, dollar-denominated Corbanu API balance. Alex
+Good amended the migration decision on 2026-08-30: Corbanu has one production
+user, so all legacy paid periods, plan credentials, token allowances, receipts,
+and dependent entitlement records are retired and deleted instead of being
+grandfathered. Wallet assets and Corbanu API balances, keys, and ledgers are not
+legacy plan data and remain intact.
+
+The user tops up with canonical USDC and receives the same number of dollars of
+Corbanu API credit. There are no Starter, Basic, Power, or Pro purchase tiers,
+calendar-month renewals, or weekly/monthly token allowances for new funding.
+Usage debits the balance using an explicit versioned price for input, cached
+input, cache creation where applicable, and output tokens. Reservations,
+settlement, idempotency, and insufficient-balance enforcement remain atomic and
+server-authoritative.
+
+The paying wallet owns one balance shared by its API keys. The first successful
+top-up can create a default API key. Its plaintext is returned and displayed
+only once through a secure non-transcript view; the service stores only a keyed
+hash and display prefix. An unlocked wallet can create and revoke additional
+keys without another payment. Each key retains separate creation, last-use,
+revocation, request, and spend attribution.
+
+The customer-facing model catalog uses Corbanu identities and displays Corbanu
+prices without identifying the upstream compute vendor. The privacy boundary
+remains explicit: every route is labeled either **Corbanu-controlled** or
+**third-party inference**. Provider credentials and internal routing metadata
+never enter model context or customer responses.
+
+Initial intended routes are GLM 5.3 Flash (**Recommended**), GLM 5.3 (labeled as
+using balance faster), GPT-5.6 Luna at xhigh, GPT-5.6 Sol, Kimi K3, and
+DeepSeek V4 Pro. Alex Good replaced Claude Fable with Kimi K3 on 2026-08-30
+after direct SkyAPI qualification found no available Fable channel. Vercel is
+the internal route for both GLM models, the two OpenAI models, and Kimi K3;
+xAPI remains the preferred internal route for DeepSeek where it is cheaper and
+passes reliability checks. Internal routing may change
+without changing the public model identity or price during an in-flight request.
+Customer pricing is exact upstream cost with zero markup, adopted by Alex Good
+on 2026-08-30. Each request pins a versioned upstream route and price schedule;
+catalog and ledger records expose the customer rate without exposing the vendor.
+
+Legacy Corbanu Plan names, purchase/recovery/details surfaces, entitlements, and
+inference authorization are not part of the product. New and existing UI,
+payment, account, and inference flows call the product **Corbanu API**.
 
 # Target product
 
@@ -157,6 +204,7 @@ scope for the `/security` implementation plan.
 |    **9** | USDAI preferred stablecoin partnership               | TO ACQUIRE     | P2         | Head of Product | Commercial and compliance review                                                   | TBD                                     | If acquired, approved USDAI flows are native where appropriate. Corbanu does not center a new native token.                                                                                                                                                                                                                                                                         |
 |   **10** | Per-wallet xAPI isolation                            | BUILT NOT LIVE | P2         | Lead developer  | Merge, deployment, tenant-isolation review, and accounting verification            | TBD                                     | The existing branch is merged and deployed; wallet isolation, encrypted tenant keys, capped refills, and cost attribution pass production verification.                                                                                                                                                                                                                             |
 |   **11** | Upstream Codex parity                                | PRINCIPLE      | CONTINUOUS | Lead developer  | Continuous upstream review and benchmark evidence                                  | Continuous                              | Relevant upstream harness improvements are assessed and adopted without regressions to Corbanu-specific behavior. At least every three releases, the full checked-in coding benchmark catalog is run across the relevant production model set; correctness, end-to-end runtime, and spend are recorded, and a threshold regression blocks release.                                  |
+|   **12** | Corbanu API balance and keys                         | TO BUILD       | P1         | Head of Product | Explicit sell prices, payment/compliance review, backend and Terminal qualification | TBD                                     | A wallet can top up a dollar balance with canonical USDC, receive a one-time API key, create/revoke additional keys, inspect balance and per-model prices, and use the approved provider-neutral model catalog without plan tiers, legacy plan surfaces, or expiring token allowances. |
 
 # P0 `/security` levels
 
@@ -445,7 +493,7 @@ No commercial performance numbers have been supplied. The following metrics must
 
 Revenue comes from:
 
-- Corbanu Plans and bundled data;
+- wallet-funded Corbanu API usage and bundled data;
 - referral or builder codes in execution workflows;
 - commercial integrations;
 - advertising through Corbanu.com;

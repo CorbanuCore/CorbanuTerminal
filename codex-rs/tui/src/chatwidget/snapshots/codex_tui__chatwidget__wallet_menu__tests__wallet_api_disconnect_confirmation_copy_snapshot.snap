@@ -1,0 +1,8 @@
+---
+source: tui/src/chatwidget/wallet_menu.rs
+expression: rendered
+---
+Disconnect Corbanu API
+This removes the stored API credential from this device. Your wallet and dollar balance remain unchanged.
+Cancel — Keep this device connected
+Disconnect API — Remove only the stored API credential

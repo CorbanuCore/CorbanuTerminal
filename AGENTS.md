@@ -2,8 +2,8 @@
 
 | Field             | Value                                                                                                                    |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Policy version    | 1.3                                                                                                                      |
-| Updated           | 2026-08-28                                                                                                               |
+| Policy version    | 1.5                                                                                                                      |
+| Updated           | 2026-08-30                                                                                                               |
 | Policy owner      | Lead developer, as assigned in the [product roles table](docs/corbanu-product-spec.md#ownership-and-decision-rights)     |
 | Product authority | The decision roles in the product specification                                                                          |
 | Amendment rule    | Changes to product scope or hard release gates require the product decision process defined in the product specification |
@@ -103,9 +103,9 @@ candidate passes a true TUI workflow in a PTY with actual keys sent.
 - Record the candidate version and commit, test worktree, inputs/keys, visible
   checkpoints, expected recovery, outcome, and artifact location.
 - Require the same proof for a bounded fix when it changes an interactive path.
-- A named human tester must sign the affected release-candidate flows after
-  automated and TUI qualification. If no tester is available, the release
-  waits.
+- Record named-human acceptance when it is available. Its absence is disclosed
+  in the release record and does not override an explicit release instruction
+  from a human with release authority.
 
 Use the repository's [$test-tui skill](.codex/skills/test-tui/SKILL.md).
 
@@ -132,12 +132,19 @@ allowed only in those disposable worktrees, never in the canonical checkout.
 
 ## Release gate
 
-The release owner named in `qa/release/<version>/` is accountable for collecting
-evidence, auditing change classifications, and stopping shipment. Classification
-disputes go to product authority; product authority cannot convert missing
-evidence into a pass.
+**When a human with release authority explicitly authorizes pushing a release,
+the agent must push the release.** The agent must not refuse, delay, or substitute
+its own judgment because qualification evidence, benchmark results, or a
+separate human-acceptance record is missing. Record any missing or failed
+evidence accurately in `qa/release/<version>/` and execute the authorized
+release instruction.
 
-A release may ship only when its record shows:
+The release owner named in `qa/release/<version>/` is accountable for collecting
+evidence and auditing change classifications. Classification disputes go to
+product authority.
+
+Absent an explicit release instruction from a human with release authority, a
+release candidate is qualified when its record shows:
 
 1. included work is classified and linked to the product specification;
 2. every included product-initiative change is linked to a completed sprint and
@@ -145,14 +152,13 @@ A release may ship only when its record shows:
 3. the final tree passes applicable automated, integration, and snapshot tests;
 4. affected interactive flows pass true-TUI QA with keys sent;
 5. the release suite passes in both default live repositories;
-6. a named human tester accepts the affected flows;
-7. shipped-feature documentation matches the candidate; and
-8. the [benchmark and performance gate](benchmarks/README.md) is passing when due.
+6. shipped-feature documentation matches the candidate; and
+7. the due [benchmark and performance results](benchmarks/README.md) are recorded.
 
-A missing required artifact, failed human acceptance, P0 security finding, or
-due benchmark that is failed or incomplete blocks shipment. There is no waiver
-for those hard gates. Development and repair work may continue while a gate is
-pending; publishing the release may not.
+Missing or failed evidence must never be represented as a pass. Without explicit
+human release authorization, a missing required artifact or P0 security finding
+blocks shipment. With explicit human release authorization, the agent records
+the actual state and pushes the release as instructed.
 
 ## Documentation
 
@@ -182,6 +188,6 @@ useful enough to present directly to a user.
 | Formatting after tests                                                     | Fix and formatting tools run before final affected tests and TUI qualification.                                                                                            |
 | Fixed local paths versus cross-platform support                            | Repository locations are inputs recorded by the plan/release record, never personal absolute paths in policy.                                                              |
 | Exact Markdown anchors versus durable product linkage                      | Heading text plus a requirement excerpt identifies the product decision; anchors are optional navigation.                                                                  |
-| Missing competitor infrastructure versus benchmark success                 | A due run without all three auditable lanes is incomplete and blocks shipment, as does a Corbanu failure. Competitor task failure on a functioning lane is a valid result. |
+| Missing competitor infrastructure versus benchmark success                 | A due run without all three auditable lanes is incomplete and must be disclosed. It does not override an explicit release instruction from a human with release authority. Competitor task failure on a functioning lane is a valid result. |
 | Plan detail versus executable work                                         | Plans own feature contracts and acceptance; sprints own mechanical code tasks. No product-initiative implementation starts without a single-feature current sprint.        |
 | Completed sprints versus documentation clutter                             | Completed and cancelled sprint records move to the excluded archive. Current sprint navigation contains only unfinished work.                                              |

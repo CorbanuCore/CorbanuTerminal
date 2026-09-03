@@ -1,11 +1,19 @@
 //! Passcode-gated local Solana wallet storage and narrowly scoped signing.
 
 mod balance;
+mod corbanu_api;
 mod envelope;
 mod payment;
 
 pub use balance::BalanceClient;
 pub use balance::WalletBalances;
+pub use corbanu_api::CorbanuApiAccount;
+pub use corbanu_api::CorbanuApiBalance;
+pub use corbanu_api::CorbanuApiKeySummary;
+pub use corbanu_api::CorbanuApiModel;
+pub use corbanu_api::CorbanuApiOperation;
+pub use corbanu_api::CorbanuApiOperationResult;
+pub use corbanu_api::CorbanuApiPricing;
 pub use envelope::CreatedWallet;
 pub use envelope::Network;
 pub use envelope::PublicManifest;

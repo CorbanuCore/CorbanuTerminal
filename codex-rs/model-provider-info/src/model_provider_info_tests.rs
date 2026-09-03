@@ -604,6 +604,7 @@ fn test_create_anthropic_provider() {
     assert_eq!(ANTHROPIC_DEFAULT_MODEL, "claude-opus-5");
     assert_eq!(CLAUDE_FABLE_5_1_MODEL, "claude-fable-5-1");
     assert_eq!(CLAUDE_FABLE_5_MODEL, "claude-fable-5");
+    assert_eq!(CLAUDE_FABLE_5_1_MODEL, "claude-fable-5-1");
 }
 
 #[test]
@@ -653,6 +654,8 @@ fn test_create_claude_plan_provider() {
     assert_eq!(CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL, CLAUDE_FABLE_5_1_MODEL);
     assert_eq!(CLAUDE_FABLE_5_PLAN_MODEL, "claude-fable-5-plan");
     assert_eq!(CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL, CLAUDE_FABLE_5_MODEL);
+    assert_eq!(CLAUDE_FABLE_5_1_PLAN_MODEL, "claude-fable-5-1-plan");
+    assert_eq!(CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL, CLAUDE_FABLE_5_1_MODEL);
 }
 
 #[test]
@@ -752,6 +755,7 @@ fn test_built_in_model_providers_keep_legacy_plan_id_with_corbanu_name() {
     assert_eq!(
         provider.api_key_env_vars(),
         vec![
+            CORBANU_API_KEY_ENV_VAR,
             CORBANU_PLAN_API_KEY_ENV_VAR,
             PFTERMINAL_PLAN_API_KEY_ENV_VAR
         ]
@@ -768,6 +772,18 @@ fn test_built_in_model_providers_keep_legacy_plan_id_with_corbanu_name() {
         canonical_provider_id(PFTERMINAL_PLAN_PROVIDER_ID),
         PFTERMINAL_PLAN_PROVIDER_ID
     );
+}
+
+#[test]
+fn corbanu_messages_provider_does_not_expose_the_retired_fable_route() {
+    let providers = built_in_model_providers(/*openai_base_url*/ None);
+    let provider = providers
+        .get(PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID)
+        .expect("Corbanu API Messages provider");
+
+    assert_eq!(provider.name, "Corbanu API");
+    assert!(!provider.name.contains("Fable"));
+    assert_eq!(provider.wire_api, WireApi::Anthropic);
 }
 
 #[test]
@@ -1122,6 +1138,38 @@ fn test_built_in_model_providers_include_vercel() {
     assert!(!vercel.requires_openai_auth);
     assert_eq!(VERCEL_DEFAULT_MODEL, "zai/glm-5.2");
     assert_eq!(VERCEL_GLM_5_2_FAST_MODEL, "zai/glm-5.2-fast");
+    assert_eq!(VERCEL_GLM_5_3_FLASH_MODEL, "zai/glm-5.3-flash");
+    assert_eq!(VERCEL_GLM_5_3_MODEL, "zai/glm-5.3");
+}
+
+#[test]
+fn vercel_new_catalog_models_preserve_provider_and_wire_identity() {
+    for model in [
+        VERCEL_GLM_5_3_FLASH_MODEL,
+        VERCEL_GLM_5_3_MODEL,
+        VERCEL_KIMI_K3_MODEL,
+        VERCEL_DEEPSEEK_V4_PRO_MODEL,
+        VERCEL_KIMI_K3_UPSTREAM_MODEL,
+        VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL,
+    ] {
+        assert_eq!(
+            resolve_model_for_provider(Some(model.to_string()), VERCEL_PROVIDER_ID).as_deref(),
+            Some(model),
+            "Vercel should preserve supported model {model}"
+        );
+    }
+    assert_eq!(
+        vercel_gateway_upstream_model(VERCEL_KIMI_K3_MODEL),
+        VERCEL_KIMI_K3_UPSTREAM_MODEL
+    );
+    assert_eq!(
+        vercel_gateway_upstream_model(VERCEL_DEEPSEEK_V4_PRO_MODEL),
+        VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL
+    );
+    assert_eq!(
+        vercel_gateway_upstream_model(VERCEL_GLM_5_3_FLASH_MODEL),
+        VERCEL_GLM_5_3_FLASH_MODEL
+    );
 }
 
 #[test]
@@ -1394,6 +1442,18 @@ fn corrected_catalog_provider_fixes_impossible_pairs_only() {
         corrected_catalog_provider(KIMI_CODE_K3_MODEL, OPENROUTER_PROVIDER_ID),
         Some(KIMI_CODE_PROVIDER_ID)
     );
+    for model in [
+        VERCEL_GLM_5_3_FLASH_MODEL,
+        VERCEL_GLM_5_3_MODEL,
+        VERCEL_KIMI_K3_MODEL,
+        VERCEL_DEEPSEEK_V4_PRO_MODEL,
+    ] {
+        assert_eq!(
+            corrected_catalog_provider(model, AMBIENT_PROVIDER_ID),
+            Some(VERCEL_PROVIDER_ID),
+            "expected {model} to recover to Vercel"
+        );
+    }
 
     // Consistent pairs and legitimate family variants: untouched.
     assert_eq!(
@@ -1492,6 +1552,14 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (META_DEFAULT_MODEL, META_PROVIDER_ID),
         (VERCEL_DEFAULT_MODEL, VERCEL_PROVIDER_ID),
         (VERCEL_GLM_5_2_FAST_MODEL, VERCEL_ANTHROPIC_FAST_PROVIDER_ID),
+        (VERCEL_GLM_5_3_FLASH_MODEL, VERCEL_PROVIDER_ID),
+        (VERCEL_GLM_5_3_MODEL, VERCEL_PROVIDER_ID),
+        (VERCEL_KIMI_K3_MODEL, VERCEL_PROVIDER_ID),
+        (VERCEL_DEEPSEEK_V4_PRO_MODEL, VERCEL_PROVIDER_ID),
+        (
+            CORBANU_API_KIMI_K3_MODEL,
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+        ),
         (BASETEN_DEFAULT_MODEL, BASETEN_PROVIDER_ID),
         ("gpt-5.6-sol", OPENAI_PROVIDER_ID),
     ] {
@@ -1506,40 +1574,86 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
 }
 
 #[test]
-fn fable_5_1_resolves_on_anthropic_routes() {
+fn fable_plan_versions_resolve_to_their_exact_upstream_models() {
+    for (upstream_model, plan_model) in [
+        (CLAUDE_FABLE_5_MODEL, CLAUDE_FABLE_5_PLAN_MODEL),
+        (CLAUDE_FABLE_5_1_MODEL, CLAUDE_FABLE_5_1_PLAN_MODEL),
+    ] {
+        assert_eq!(
+            resolve_model_for_provider(Some(upstream_model.to_string()), CLAUDE_PLAN_PROVIDER_ID)
+                .as_deref(),
+            Some(plan_model)
+        );
+        assert_eq!(
+            resolve_model_for_provider(Some(plan_model.to_string()), CLAUDE_PLAN_PROVIDER_ID)
+                .as_deref(),
+            Some(plan_model)
+        );
+        assert_eq!(
+            corrected_catalog_provider(plan_model, AMBIENT_PROVIDER_ID),
+            Some(CLAUDE_PLAN_PROVIDER_ID)
+        );
+        assert_eq!(
+            resolve_model_for_provider(Some(upstream_model.to_string()), ANTHROPIC_PROVIDER_ID)
+                .as_deref(),
+            Some(upstream_model)
+        );
+    }
+}
+
+#[test]
+fn corbanu_api_kimi_uses_the_gateway_messages_provider() {
     assert_eq!(
-        resolve_model_for_provider(
-            Some(CLAUDE_FABLE_5_1_MODEL.to_string()),
-            ANTHROPIC_PROVIDER_ID
-        )
-        .as_deref(),
-        Some(CLAUDE_FABLE_5_1_MODEL)
+        corrected_catalog_provider(CORBANU_API_KIMI_K3_MODEL, PFTERMINAL_PLAN_PROVIDER_ID),
+        Some(PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID)
+    );
+    assert_eq!(
+        corrected_catalog_provider(
+            CORBANU_API_KIMI_K3_MODEL,
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+        ),
+        None
     );
     assert_eq!(
         resolve_model_for_provider(
-            Some(CLAUDE_FABLE_5_1_MODEL.to_string()),
-            CLAUDE_PLAN_PROVIDER_ID
+            Some(CORBANU_API_KIMI_K3_MODEL.to_string()),
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
         )
         .as_deref(),
-        Some(CLAUDE_FABLE_5_1_PLAN_MODEL)
+        Some(CORBANU_API_KIMI_K3_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(None, PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID).as_deref(),
+        Some(CLAUDE_FABLE_5_MODEL),
+        "the established bare-provider default remains compatible with pre-0.1.37 sessions",
     );
     assert_eq!(
         resolve_model_for_provider(
-            Some(CLAUDE_FABLE_5_1_MODEL.to_string()),
-            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
+            Some(CORBANU_API_CLAUDE_FABLE_5_MODEL.to_string()),
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
         )
         .as_deref(),
-        Some(CLAUDE_FABLE_5_1_MODEL)
+        Some(CORBANU_API_KIMI_K3_MODEL),
+        "retired Fable sessions must migrate to the active Kimi route",
     );
-    assert_eq!(
-        resolve_model_for_provider(/*model*/ None, PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID)
+}
+
+#[test]
+fn wallet_plan_anthropic_route_accepts_both_fable_versions() {
+    for model in [CLAUDE_FABLE_5_MODEL, CLAUDE_FABLE_5_1_MODEL] {
+        assert_eq!(
+            resolve_model_for_provider(
+                Some(model.to_string()),
+                PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+            )
             .as_deref(),
-        Some(CLAUDE_FABLE_5_MODEL)
-    );
+            Some(model)
+        );
+    }
     assert_eq!(
         resolve_model_for_provider(
             Some("unsupported-model".to_string()),
-            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
         )
         .as_deref(),
         Some(CLAUDE_FABLE_5_MODEL)

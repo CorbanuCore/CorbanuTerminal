@@ -123,6 +123,7 @@ impl ChatWidget {
         match result {
             Ok(unlocked) => {
                 self.wallet_capability = Some(Zeroizing::new(unlocked.capability.into_inner()));
+                self.wallet_capability_policy = Some(policy);
                 self.add_info_message(
                     unlock_confirmation(policy, unlocked.expires_in_seconds),
                     /*hint*/ None,
@@ -130,6 +131,9 @@ impl ChatWidget {
                 match continuation {
                     WalletUnlockContinuation::WalletMenu => self.open_wallet_menu(),
                     WalletUnlockContinuation::OpenPlans { mode } => self.open_wallet_plans(mode),
+                    WalletUnlockContinuation::CorbanuApiOperation { operation } => {
+                        self.request_corbanu_api_operation(operation);
+                    }
                 }
             }
             Err(error) => {
@@ -137,6 +141,19 @@ impl ChatWidget {
                 self.show_wallet_unlock_prompt(policy, continuation);
             }
         }
+    }
+}
+
+pub(super) fn wallet_capability_for_request(
+    capability: &mut Option<Zeroizing<String>>,
+    policy: Option<UnlockPolicy>,
+) -> Option<Zeroizing<String>> {
+    if matches!(policy, Some(UnlockPolicy::OneAction)) {
+        capability.take()
+    } else {
+        capability
+            .as_ref()
+            .map(|value| Zeroizing::new(value.to_string()))
     }
 }
 

@@ -7493,6 +7493,14 @@ async fn standard_crew_quick_start_uses_the_expected_role_picker_label() {
     // 3 Orcs), without restoring the old demo-task behavior.
     let mut app = make_test_app().await;
     app.open_spawn_role_picker();
+    let popup = render_bottom_popup(&app.chat_widget, /*width*/ 120);
+    assert_app_snapshot!("spawn_role_picker_with_corbanu_api_crew", popup);
+    assert!(
+        popup.contains("Create standard crew: Nazgul + Troll + 3 Orcs")
+            && popup
+                .contains("Create Corbanu API crew: Kimi K3 Nazgul + Luna Troll + 3 Flash Orcs"),
+        "both built-in crew choices must remain visible:\n{popup}"
+    );
     // The picker is rendered into the chat widget; assert the role-picker path doesn't error and
     // the standard crew constants resolve to the intended models/providers.
     assert_eq!(App::STANDARD_NAZGUL_MODEL, CLAUDE_FABLE_5_PLAN_MODEL);
@@ -14332,7 +14340,7 @@ async fn side_backtrack_rejection_reports_unavailable_message_snapshot() {
     );
 }
 #[tokio::test]
-async fn provider_manager_open_preserves_command_authorization_with_unchecked_fallback() {
+async fn provider_manager_open_preserves_lazy_command_authorization_without_shared_state() {
     let home = tempfile::tempdir().unwrap();
     let mut config = ConfigBuilder::default()
         .codex_home(home.path().to_path_buf())
@@ -14372,7 +14380,7 @@ async fn provider_manager_open_preserves_command_authorization_with_unchecked_fa
     let fallback = super::provider_management_status::provider_manager_status_host(&config, None);
     assert_eq!(
         fallback.resolve_provider("command").unwrap().availability,
-        codex_provider_auth::ProviderAvailabilityState::StatusOnly
+        codex_provider_auth::ProviderAvailabilityState::Ready
     );
 }
 

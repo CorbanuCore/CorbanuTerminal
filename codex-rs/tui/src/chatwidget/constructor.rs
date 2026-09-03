@@ -161,6 +161,7 @@ impl ChatWidget {
             tasknode_active_chat_stream_id: None,
             clipboard_lease: None,
             wallet_capability: None,
+            wallet_capability_policy: None,
             wallet_status_generation: 0,
             next_wallet_plan_persistence_attempt: 0,
             current_wallet_plan_persistence_attempt: None,

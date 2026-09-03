@@ -40,8 +40,8 @@ Corbanu Terminal currently ships these provider paths:
 | Metered model gateway     | OpenRouter         | `deepseek/deepseek-v4-flash-0731`, `deepseek/deepseek-v4-pro`, `moonshotai/kimi-k3`, and other catalogued routes |
 | Meta API                  | Meta               | `muse-spark-1.1`                                                                                                 |
 | Metered GLM               | Baseten            | `zai-org/GLM-5.2`                                                                                                |
-| Metered GLM gateway       | Vercel             | `zai/glm-5.2`, `zai/glm-5.2-fast`                                                                                |
-| Wallet-funded inference   | Corbanu Plan       | GLM 5.2, Kimi K2.7 Code, DeepSeek V4 Pro, Claude Fable 5.1 and 5                                                 |
+| Metered model gateway     | Vercel             | `zai/glm-5.3-flash`, `zai/glm-5.3`, Kimi K3, DeepSeek V4 Pro, and legacy GLM 5.2 routes                          |
+| Wallet-funded inference   | Corbanu API         | GLM 5.3 Flash, GLM 5.3, GPT-5.6 Luna/Sol, Kimi K3, DeepSeek V4 Pro, plus Claude Fable 5.1 and 5                   |
 | Cloud model runtime       | Bedrock            | Models available to the configured AWS account                                                                   |
 | Local model runtime       | Ollama / LM Studio | Models served by the configured local endpoint                                                                   |
 | Operator-defined endpoint | Custom             | Models declared in `config.toml`                                                                                 |

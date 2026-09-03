@@ -4,6 +4,8 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use codex_uds::UnixStream;
+use codex_wallet::CorbanuApiOperation;
+use codex_wallet::CorbanuApiOperationResult;
 use codex_wallet::GatewayKey;
 use codex_wallet::PlanPurchaseIntent;
 use codex_wallet::ProvisionedPlan;
@@ -192,6 +194,29 @@ impl WalletDaemonClient {
             .await?
         {
             Response::GatewayKeyIssued(result) => Ok(result),
+            other => response_error(other),
+        }
+    }
+
+    pub async fn execute_corbanu_api_operation(
+        &self,
+        capability: String,
+        gateway_origin: String,
+        operation: CorbanuApiOperation,
+    ) -> Result<CorbanuApiOperationResult, WalletDaemonError> {
+        self.ensure_running().await?;
+        match self
+            .call_with_timeout(
+                Request::CorbanuApiOperation {
+                    capability,
+                    gateway_origin,
+                    operation,
+                },
+                NETWORK_OPERATION_TIMEOUT,
+            )
+            .await?
+        {
+            Response::CorbanuApiOperationCompleted(result) => Ok(result),
             other => response_error(other),
         }
     }

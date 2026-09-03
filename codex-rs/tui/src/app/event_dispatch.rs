@@ -3166,6 +3166,31 @@ impl App {
             AppEvent::WalletStatusReady { generation, result } => {
                 self.chat_widget.on_wallet_status_ready(generation, result);
             }
+            AppEvent::OpenCorbanuApi => {
+                self.chat_widget.open_corbanu_api();
+            }
+            AppEvent::CorbanuApiLoaded { result } => {
+                self.chat_widget.on_corbanu_api_loaded(result);
+            }
+            AppEvent::OpenCorbanuApiTopUp => {
+                self.chat_widget.open_corbanu_api_top_up();
+            }
+            AppEvent::ConfirmCorbanuApiTopUp { amount_usd } => {
+                self.chat_widget.confirm_corbanu_api_top_up(amount_usd);
+            }
+            AppEvent::ConfirmCorbanuApiKeyRevocation {
+                key_id,
+                display_prefix,
+            } => {
+                self.chat_widget
+                    .confirm_corbanu_api_key_revocation(key_id, display_prefix);
+            }
+            AppEvent::CorbanuApiOperationRequested { operation } => {
+                self.chat_widget.request_corbanu_api_operation(operation);
+            }
+            AppEvent::CorbanuApiOperationFinished { result } => {
+                self.chat_widget.on_corbanu_api_operation_finished(result);
+            }
             AppEvent::WalletCreateFinished { operation, result } => {
                 if let Some(deferred) = self.pending_wallet_create_deferred.take() {
                     self.chat_widget
@@ -4761,6 +4786,30 @@ impl App {
                         );
                         self.chat_widget
                             .add_error_message(format!("Failed to create standard crew: {err:#}"));
+                    }
+                }
+            }
+            AppEvent::CreateSpawnCorbanuApiCrew => {
+                match self.create_spawn_corbanu_api_crew(app_server).await {
+                    Ok((nazgul_thread_id, troll_thread_id)) => {
+                        self.open_spawn_status();
+                        self.chat_widget.add_info_message(
+                            "Created Corbanu API crew: Kimi K3 Nazgul + Luna Troll + 3 Flash Orcs."
+                                .to_string(),
+                            Some(format!(
+                                "Nazgul: {nazgul_thread_id}. Troll: {troll_thread_id}. No task was started. Send work explicitly from /spawn status or by dispatch block."
+                            )),
+                        );
+                    }
+                    Err(err) => {
+                        tracing::error!(
+                            error = ?err,
+                            error_chain = %format!("{err:#}"),
+                            "Corbanu API crew spawn failed; keeping all live panes available"
+                        );
+                        self.chat_widget.add_error_message(format!(
+                            "Failed to create Corbanu API crew: {err:#}"
+                        ));
                     }
                 }
             }

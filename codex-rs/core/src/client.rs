@@ -168,7 +168,10 @@ use codex_model_provider_info::CLAUDE_PLAN_UPSTREAM_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS;
 use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
+use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
 use codex_model_provider_info::WireApi;
+use codex_model_provider_info::vercel_gateway_upstream_model;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result;
 use codex_response_debug_context::extract_response_debug_context;
@@ -1387,11 +1390,63 @@ impl ModelClient {
     /// The Chat wire needs the same disable the Responses and Anthropic wires
     /// send. Pinning the upstream only guarantees the instruction reaches a
     /// host that obeys it; it is not itself an instruction.
-    fn vercel_reasoning(model_info: &ModelInfo, effort: Option<&ReasoningEffortConfig>) -> Value {
-        let deep = wants_deep_reasoning(effort.or(model_info.default_reasoning_level.as_ref()));
-        // The gateway publishes `high` and `xhigh` for these slugs, so do not
-        // forward an effort level it does not accept.
-        json!({ "effort": if deep { "xhigh" } else { "none" } })
+    fn vercel_reasoning(
+        model_info: &ModelInfo,
+        effort: Option<&ReasoningEffortConfig>,
+    ) -> Result<Value> {
+        let effort = Self::vercel_reasoning_effort(model_info, effort)?;
+        Ok(json!({ "effort": effort.as_str() }))
+    }
+
+    fn vercel_reasoning_effort(
+        model_info: &ModelInfo,
+        effort: Option<&ReasoningEffortConfig>,
+    ) -> Result<ReasoningEffortConfig> {
+        let selected = effort.or(model_info.default_reasoning_level.as_ref());
+        // The older GLM 5.2 routes were qualified as a binary thinking toggle:
+        // Standard means no hidden reasoning and Deep maps to xhigh. New Vercel
+        // catalog routes publish the complete gateway reasoning dialect, so
+        // preserve the selected effort instead of collapsing Low/High to off.
+        if matches!(
+            model_info.slug.as_str(),
+            VERCEL_DEFAULT_MODEL | VERCEL_GLM_5_2_FAST_MODEL
+        ) {
+            return Ok(if wants_deep_reasoning(selected) {
+                ReasoningEffortConfig::XHigh
+            } else {
+                ReasoningEffortConfig::None
+            });
+        }
+        let normalized = match selected {
+            Some(ReasoningEffortConfig::Max | ReasoningEffortConfig::Ultra) => {
+                ReasoningEffortConfig::XHigh
+            }
+            Some(ReasoningEffortConfig::Custom(value))
+                if matches!(value.as_str(), "max" | "ultra" | "deep") =>
+            {
+                ReasoningEffortConfig::XHigh
+            }
+            Some(effort) => effort.clone(),
+            None => ReasoningEffortConfig::None,
+        };
+        if model_info
+            .supported_reasoning_levels
+            .iter()
+            .any(|preset| preset.effort.as_str() == normalized.as_str())
+        {
+            return Ok(normalized);
+        }
+        let supported = model_info
+            .supported_reasoning_levels
+            .iter()
+            .map(|preset| preset.effort.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        Err(CodexErr::InvalidRequest(format!(
+            "{} does not support Vercel reasoning effort `{}`; use {supported}",
+            model_info.slug,
+            normalized.as_str()
+        )))
     }
 
     /// Ambient publishes OpenRouter's `ReasoningConfiguration` shape and does
@@ -1445,18 +1500,15 @@ impl ModelClient {
             .flatten();
         let ambient_enable_thinking =
             uses_zai_reasoning.then_some(ambient_reasoning_effort.is_some());
-        let vercel_provider_options = self
-            .state
-            .provider
-            .info()
-            .is_vercel_gateway()
-            .then(|| vercel_gateway_provider_options(&model_info.slug))
+        let is_vercel_gateway = self.state.provider.info().is_vercel_gateway();
+        let upstream_model = if is_vercel_gateway {
+            vercel_gateway_upstream_model(&model_info.slug)
+        } else {
+            &model_info.slug
+        };
+        let vercel_provider_options = is_vercel_gateway
+            .then(|| vercel_gateway_provider_options(upstream_model))
             .flatten();
-        let vercel_wants_thinking = wants_deep_reasoning(
-            effort
-                .as_ref()
-                .or(model_info.default_reasoning_level.as_ref()),
-        );
         let (instructions, tools) = if model_info.use_responses_lite {
             let tools = create_tools_json_for_responses_api(&prompt.tools)?;
             let mut prefix = vec![ResponseItem::AdditionalTools {
@@ -1484,12 +1536,11 @@ impl ModelClient {
             )
         };
         let mut reasoning = Self::build_reasoning(model_info, effort, summary);
-        if vercel_provider_options.is_some() {
-            reasoning.effort = Some(if vercel_wants_thinking {
-                ReasoningEffortConfig::XHigh
-            } else {
-                ReasoningEffortConfig::None
-            });
+        if is_vercel_gateway {
+            reasoning.effort = Some(Self::vercel_reasoning_effort(
+                model_info,
+                reasoning.effort.as_ref(),
+            )?);
         }
         let stream_options = (self.state.concurrent_reasoning_summaries_enabled
             && is_openai
@@ -1527,7 +1578,7 @@ impl ModelClient {
             model_info.service_tier_for_request(service_tier)
         };
         let request = ResponsesApiRequest {
-            model: model_info.slug.clone(),
+            model: upstream_model.to_string(),
             instructions,
             previous_response_id: None,
             input,
@@ -1688,8 +1739,8 @@ impl ModelClient {
             Some(Self::ambient_reasoning(
                 selected_reasoning_effort.as_deref(),
             ))
-        } else if vercel_provider_options.is_some() {
-            Some(Self::vercel_reasoning(model_info, effort.as_ref()))
+        } else if self.state.provider.info().is_vercel_gateway() {
+            Some(Self::vercel_reasoning(model_info, effort.as_ref())?)
         } else {
             None
         };
@@ -1788,13 +1839,19 @@ impl ModelClient {
                 .web_search_max_uses,
         )?;
         let tool_choice = (!tools.is_empty()).then(|| json!({ "type": "auto" }));
-        let upstream_model = anthropic_upstream_model(&model_info.slug);
-        let (mut thinking, output_config) = anthropic_reasoning_for_model_and_effort(
-            upstream_model,
-            effort
-                .as_ref()
-                .or(model_info.default_reasoning_level.as_ref()),
-        );
+        let catalog_model = if self.state.provider.info().is_vercel_gateway() {
+            vercel_gateway_upstream_model(&model_info.slug)
+        } else {
+            &model_info.slug
+        };
+        let upstream_model = anthropic_upstream_model(catalog_model);
+        let selected_effort = if self.state.provider.info().is_vercel_gateway() {
+            Some(Self::vercel_reasoning_effort(model_info, effort.as_ref())?)
+        } else {
+            effort.or_else(|| model_info.default_reasoning_level.clone())
+        };
+        let (mut thinking, output_config) =
+            anthropic_reasoning_for_model_and_effort(upstream_model, selected_effort.as_ref());
         let provider_options = self
             .state
             .provider
@@ -4391,6 +4448,8 @@ fn anthropic_reasoning_for_model_and_effort(
 fn chat_completions_upstream_model<'a>(model: &'a str, provider: &ModelProviderInfo) -> &'a str {
     if provider.is_ambient() && model.trim() == AMBIENT_LEGACY_GLM_5_2_FP8_MODEL {
         AMBIENT_DEFAULT_MODEL
+    } else if provider.is_vercel_gateway() {
+        vercel_gateway_upstream_model(model)
     } else {
         model
     }
@@ -4441,21 +4500,21 @@ fn anthropic_adaptive_effort_value(effort: &ReasoningEffortConfig) -> Option<Str
 
 /// The Vercel AI Gateway serves third-party model slugs from whichever upstream
 /// host it prefers — `zai/*` defaults to Fireworks — and those hosts silently
-/// drop every thinking toggle the gateway forwards. The vendor's own API is
-/// itself a pinnable upstream, and pinning to it restores the toggle.
+/// drop every thinking toggle the gateway forwards. Z.AI's own API is itself a
+/// pinnable upstream, and pinning to it restores the toggle.
 ///
 /// Measured 2026-07-27 on `zai/glm-5.2` and `zai/glm-5.2-fast`, all three wire
 /// formats, n=3 each: unpinned 88-194 completion tokens with 54-130 of
 /// reasoning regardless of parameter shape; pinned to `zai` with thinking off,
 /// 3 completion tokens and 0 reasoning.
 ///
-/// Pins are validated server-side, so an unknown upstream fails with HTTP 400
-/// rather than degrading silently. Only pin slugs whose vendor is known to be
-/// an available upstream.
+/// Pins are validated server-side, so an incompatible direct upstream fails
+/// instead of using the gateway's working fallback routes. Keep the workaround
+/// limited to the Z.AI models that need it; other Vercel models retain native
+/// multi-provider routing and failover.
 fn vercel_gateway_vendor_pin(model: &str) -> Option<&'static str> {
     match model.split('/').next()?.trim() {
         "zai" => Some("zai"),
-        "moonshotai" => Some("moonshotai"),
         _ => None,
     }
 }

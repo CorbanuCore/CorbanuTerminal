@@ -37,6 +37,18 @@ Status shows the linked account and session state. Task Node-linked Nostr
 identity is already live and remains the identity boundary for future social
 features.
 
+Task Node sessions are owned by the selected Corbanu profile. For example,
+terminals launched with `-p goodalexander` and `-p secondfoundation` can link
+different Task Node accounts on the same machine without sharing tokens,
+pending link attempts, status, or logout state. The Task Node menu shows the
+active Corbanu profile so the local profile and linked identity can be checked
+together.
+
+After upgrading from the older machine-wide session format, a named profile
+reuses that session only when its name matches the linked GitHub username.
+Other profiles remain unlinked and must link once; a mismatched identity is
+never imported.
+
 ## Work with tasks
 
 ```text
@@ -85,8 +97,9 @@ action.
 /tasknode logout
 ```
 
-Logout removes the terminal's Task Node session. It does not alter repository
-Git credentials or imply deletion of the user's Task Node identity.
+Logout removes only the selected Corbanu profile's Task Node session. It does
+not log out another local profile, alter repository Git credentials, or imply
+deletion of the user's Task Node identity.
 
 ## Security boundary
 

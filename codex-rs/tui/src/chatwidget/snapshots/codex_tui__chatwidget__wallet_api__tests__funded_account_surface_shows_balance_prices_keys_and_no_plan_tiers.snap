@@ -1,0 +1,20 @@
+---
+source: tui/src/chatwidget/wallet_api_tests.rs
+expression: rendered
+---
+  Corbanu API
+  $12.20 available
+  $0.25 reserved by in-flight requests
+  Prices are exact upstream cost with zero markup, per million tokens.
+
+› 1. Top up balance                 Choose any positive canonical-USDC amount
+  2. Manage API keys                Unlock to load key summaries and balances
+  3. Create API key                 Unlock and reveal a new key exactly once
+  4. GLM 5.3 Flash · Recommended    $0.15 input · $0.03 cached input · $0.50 output · Third-party
+                                    inference
+  5. GLM 5.3 · uses balance faster  $1.40 input · $0.14 cached input · $4.40 output · Third-party
+                                    inference
+  6. API key cbn_live_4D7K          Last used 2026-08-30T12:10:00.000Z · select to revoke
+  7. Refresh                        Reload balance and model prices
+
+  Press enter to confirm or esc to go back

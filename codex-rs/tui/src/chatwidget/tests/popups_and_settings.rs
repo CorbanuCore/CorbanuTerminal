@@ -23,14 +23,25 @@ use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
+use codex_model_provider_info::CORBANU_API_DEEPSEEK_V4_PRO_MODEL;
+use codex_model_provider_info::CORBANU_API_GLM_5_3_FLASH_MODEL;
+use codex_model_provider_info::CORBANU_API_GLM_5_3_MODEL;
+use codex_model_provider_info::CORBANU_API_GPT_5_6_LUNA_MODEL;
+use codex_model_provider_info::CORBANU_API_GPT_5_6_SOL_MODEL;
+use codex_model_provider_info::CORBANU_API_KIMI_K3_MODEL;
 use codex_model_provider_info::DEEPSEEK_DEFAULT_MODEL;
 use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
 use codex_model_provider_info::KIMI_CODE_K3_MODEL;
 use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
+use codex_model_provider_info::VERCEL_DEEPSEEK_V4_PRO_MODEL;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
 use codex_model_provider_info::VERCEL_GLM_5_2_FAST_MODEL;
+use codex_model_provider_info::VERCEL_GLM_5_3_FLASH_MODEL;
+use codex_model_provider_info::VERCEL_GLM_5_3_MODEL;
+use codex_model_provider_info::VERCEL_KIMI_K3_MODEL;
+use codex_model_provider_info::VERCEL_PROVIDER_ID;
 use codex_model_provider_info::ZAI_DEFAULT_MODEL;
 use codex_protocol::openai_models::ReasoningEffort;
 use pretty_assertions::assert_eq;
@@ -239,7 +250,7 @@ async fn wallet_removal_wraps_copy_and_dismisses_confirmation_before_replacement
             .collect::<Vec<_>>()
             .join(" ");
         assert!(
-            normalized.contains("does not cancel or refund the paid period."),
+            normalized.contains("on-chain funds and dollar balance remain unchanged."),
             "expected complete removal warning at width {width}, got:\n{confirmation}"
         );
     }
@@ -3794,13 +3805,14 @@ async fn model_picker_hides_show_in_picker_false_models_from_cache() {
 }
 
 fn move_model_picker_selection_to(chat: &mut ChatWidget, model: &str) {
+    let exact_model_field = format!("Model: {model}.");
     for _ in 0..16 {
         for _ in 0..20 {
             let popup =
                 render_bottom_popup_with_height(chat, /*width*/ 140, /*height*/ 40);
             if popup
                 .lines()
-                .any(|line| line.contains('›') && line.contains(model))
+                .any(|line| line.contains('›') && line.contains(&exact_model_field))
             {
                 return;
             }
@@ -3879,6 +3891,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
             && claude_plan_popup.contains(CLAUDE_FABLE_5_PLAN_MODEL),
         "expected Claude Code models in the Claude Plan tab:\n{claude_plan_popup}"
     );
+    insta::assert_snapshot!("claude_plan_model_picker_fable_versions", claude_plan_popup);
     assert!(
         !claude_plan_popup.contains("claude-opus-4-8-plan"),
         "deprecated Claude Opus 4.8 Plan must not appear in the picker:\n{claude_plan_popup}"
@@ -3979,6 +3992,22 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
             .contains("Vercel: GLM 5.2 - $1.40/M input, $0.26/M cached input, $4.40/M output."),
         "expected Vercel GLM price description in /model picker:\n{vercel_popup}"
     );
+    for (model, display_name) in [
+        (VERCEL_GLM_5_3_FLASH_MODEL, "Vercel GLM 5.3 Flash"),
+        (VERCEL_GLM_5_3_MODEL, "Vercel GLM 5.3"),
+        (VERCEL_KIMI_K3_MODEL, "Vercel Kimi K3"),
+        (VERCEL_DEEPSEEK_V4_PRO_MODEL, "Vercel DeepSeek V4 Pro"),
+    ] {
+        assert!(
+            vercel_popup.contains(model) && vercel_popup.contains(display_name),
+            "expected {display_name} ({model}) in the Vercel tab:\n{vercel_popup}"
+        );
+        assert_eq!(
+            ChatWidget::model_provider_for_selection(model).as_deref(),
+            Some(VERCEL_PROVIDER_ID),
+            "expected {model} to select the Vercel provider"
+        );
+    }
 
     let (mut vercel_fast_chat, _vercel_fast_rx, _vercel_fast_op_rx) =
         make_chatwidget_manual(Some(VERCEL_GLM_5_2_FAST_MODEL)).await;
@@ -4080,6 +4109,49 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         assert!(
             !reasoning_popup.contains(label),
             "expected old Ambient reasoning option {label:?} to be hidden:\n{reasoning_popup}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn corbanu_api_model_picker_preserves_ambient_and_shows_the_six_public_routes() {
+    let (mut chat, _rx, _op_rx) =
+        make_chatwidget_manual(Some(CORBANU_API_GLM_5_3_FLASH_MODEL)).await;
+    chat.thread_id = Some(ThreadId::new());
+
+    let mut presets = chat
+        .model_catalog
+        .try_list_models()
+        .expect("model catalog should load");
+    presets.extend(ChatWidget::corbanu_api_presets(&presets));
+    chat.open_all_models_popup(presets);
+    let popup = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 40);
+
+    assert_chatwidget_snapshot!("corbanu_api_model_picker", popup);
+    assert!(popup.contains("[Corbanu API]"), "{popup}");
+    for model in [
+        CORBANU_API_GLM_5_3_FLASH_MODEL,
+        AMBIENT_DEFAULT_MODEL,
+        CORBANU_API_GLM_5_3_MODEL,
+        CORBANU_API_GPT_5_6_LUNA_MODEL,
+        CORBANU_API_GPT_5_6_SOL_MODEL,
+        CORBANU_API_KIMI_K3_MODEL,
+        CORBANU_API_DEEPSEEK_V4_PRO_MODEL,
+    ] {
+        assert!(
+            popup.contains(model),
+            "expected {model} in Corbanu API tab:\n{popup}"
+        );
+    }
+    assert!(popup.contains("Recommended"), "{popup}");
+    assert!(popup.contains("Uses balance faster"), "{popup}");
+    assert!(popup.contains("Ambient GLM 5.2"), "{popup}");
+    assert!(!popup.contains("Claude Fable"), "{popup}");
+    assert!(!popup.contains("corbanu/claude-fable-5"), "{popup}");
+    for legacy_row in ["Ambient Kimi K2.7 Code", "DeepSeek V4 Pro (Direct)"] {
+        assert!(
+            !popup.contains(legacy_row),
+            "legacy row {legacy_row:?} leaked into Corbanu API tab:\n{popup}"
         );
     }
 }

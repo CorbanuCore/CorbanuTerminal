@@ -63,6 +63,248 @@
       "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text",
       "input_modalities": [
+        "text",
+        "image"
+      ],
+      "supports_image_detail_original": false,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_parallel_tool_calls": true,
+      "context_window": 1000000,
+      "max_context_window": 1000000,
+      "max_output_tokens": 131000,
+      "auto_compact_token_limit": null,
+      "default_reasoning_summary": "none",
+      "slug": "zai/glm-5.3-flash",
+      "orchestration": {
+        "status": "eligible",
+        "provider_id": "vercel",
+        "capability": "fast",
+        "billing": {
+          "kind": "metered",
+          "input_milli_usd_per_million_tokens": 150,
+          "output_milli_usd_per_million_tokens": 500,
+          "cached_input_milli_usd_per_million_tokens": 30
+        }
+      },
+      "display_name": "Vercel GLM 5.3 Flash",
+      "description": "Vercel: GLM 5.3 Flash - $0.15/M input, $0.03/M cached input, $0.50/M output.",
+      "default_reasoning_level": "low",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Low. Fast reasoning for routine coding work."
+        },
+        {
+          "effort": "high",
+          "description": "High. Stronger reasoning for complex coding work."
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra high. Maximum Vercel gateway reasoning effort."
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "availability_nux": null,
+      "upgrade": null,
+      "priority": 0,
+      "base_instructions": "You are a world class coding agent. You write world class, concise quality code. Act efficiently, inspect code before changing it, keep edits scoped and verify your work when practical. You speak in an extremely concise, easy to understand way and only narrate when needed. You do things as fast as possible while still doing them correctly.\n\nWhen searching, use rg or rg --files first. Never run recursive grep over a repo root; if rg is unavailable, restrict grep to source directories and exclude .git, target, node_modules, dist, build, .next, and vendor.\n\nNever print or commit secret values anywhere: not in chat, logs, source, or files. Corbanu Terminal has an encrypted credential vault holding many classes of secrets; the user manages it via /vault. Operational credentials stored under any vault label may be fetched only at use time, inside quoted command substitution attached to the consuming command: CREDENTIAL=\"$(corbanu vault auth-helper <label>)\" your-command. Never run the helper by itself or print its expansion. The helper rejects seed phrases, crypto private keys, and keystores; those require an explicit user-controlled flow. Credentials given as a file path get the same treatment: CREDENTIAL=\"$(cat /path/to/credential)\" your-command. Scan your diff for key material before committing.",
+      "model_messages": null,
+      "experimental_supported_tools": [],
+      "service_tiers": [],
+      "additional_speed_tiers": [],
+      "supports_reasoning_summaries": false,
+      "supports_search_tool": false
+    },
+    {
+      "support_verbosity": false,
+      "default_verbosity": null,
+      "apply_patch_tool_type": "freeform",
+      "web_search_tool_type": "text",
+      "input_modalities": [
+        "text"
+      ],
+      "supports_image_detail_original": false,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_parallel_tool_calls": true,
+      "context_window": 1000000,
+      "max_context_window": 1000000,
+      "max_output_tokens": 1000000,
+      "auto_compact_token_limit": null,
+      "default_reasoning_summary": "none",
+      "slug": "zai/glm-5.3",
+      "orchestration": {
+        "status": "eligible",
+        "provider_id": "vercel",
+        "capability": "frontier",
+        "billing": {
+          "kind": "metered",
+          "input_milli_usd_per_million_tokens": 1400,
+          "output_milli_usd_per_million_tokens": 4400,
+          "cached_input_milli_usd_per_million_tokens": 140
+        }
+      },
+      "display_name": "Vercel GLM 5.3",
+      "description": "Vercel: GLM 5.3 - $1.40/M input, $0.14/M cached input, $4.40/M output.",
+      "default_reasoning_level": "low",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Low. Efficient reasoning for routine coding work."
+        },
+        {
+          "effort": "high",
+          "description": "High. Enhanced reasoning for complex coding work."
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra high. Maximum Vercel gateway reasoning effort."
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "availability_nux": null,
+      "upgrade": null,
+      "priority": 1,
+      "base_instructions": "You are a world class coding agent. You write world class, concise quality code. Act efficiently, inspect code before changing it, keep edits scoped and verify your work when practical. You speak in an extremely concise, easy to understand way and only narrate when needed. You do things as fast as possible while still doing them correctly.\n\nWhen searching, use rg or rg --files first. Never run recursive grep over a repo root; if rg is unavailable, restrict grep to source directories and exclude .git, target, node_modules, dist, build, .next, and vendor.\n\nNever print or commit secret values anywhere: not in chat, logs, source, or files. Corbanu Terminal has an encrypted credential vault holding many classes of secrets; the user manages it via /vault. Operational credentials stored under any vault label may be fetched only at use time, inside quoted command substitution attached to the consuming command: CREDENTIAL=\"$(corbanu vault auth-helper <label>)\" your-command. Never run the helper by itself or print its expansion. The helper rejects seed phrases, crypto private keys, and keystores; those require an explicit user-controlled flow. Credentials given as a file path get the same treatment: CREDENTIAL=\"$(cat /path/to/credential)\" your-command. Scan your diff for key material before committing.",
+      "model_messages": null,
+      "experimental_supported_tools": [],
+      "service_tiers": [],
+      "additional_speed_tiers": [],
+      "supports_reasoning_summaries": false,
+      "supports_search_tool": false
+    },
+    {
+      "support_verbosity": false,
+      "default_verbosity": null,
+      "apply_patch_tool_type": "freeform",
+      "web_search_tool_type": "text",
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "supports_image_detail_original": false,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_parallel_tool_calls": false,
+      "context_window": 1000000,
+      "max_context_window": 1000000,
+      "max_output_tokens": 128000,
+      "auto_compact_token_limit": null,
+      "default_reasoning_summary": "none",
+      "slug": "vercel/moonshotai/kimi-k3",
+      "orchestration": {
+        "status": "eligible",
+        "provider_id": "vercel",
+        "capability": "frontier",
+        "billing": {
+          "kind": "metered",
+          "input_milli_usd_per_million_tokens": 3000,
+          "output_milli_usd_per_million_tokens": 15000,
+          "cached_input_milli_usd_per_million_tokens": 300
+        }
+      },
+      "display_name": "Vercel Kimi K3",
+      "description": "Vercel: Kimi K3 - $3.00/M input, $0.30/M cached input, $15.00/M output. Sends upstream model moonshotai/kimi-k3.",
+      "default_reasoning_level": "high",
+      "supported_reasoning_levels": [
+        {
+          "effort": "high",
+          "description": "High. Kimi K3 always reasons."
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra high. Maximum Vercel gateway reasoning effort."
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "availability_nux": null,
+      "upgrade": null,
+      "priority": 2,
+      "base_instructions": "You are a world class coding agent. You write world class, concise quality code. Act efficiently, inspect code before changing it, keep edits scoped and verify your work when practical. You speak in an extremely concise, easy to understand way and only narrate when needed. You do things as fast as possible while still doing them correctly.\n\nWhen searching, use rg or rg --files first. Never run recursive grep over a repo root; if rg is unavailable, restrict grep to source directories and exclude .git, target, node_modules, dist, build, .next, and vendor.\n\nNever print or commit secret values anywhere: not in chat, logs, source, or files. Corbanu Terminal has an encrypted credential vault holding many classes of secrets; the user manages it via /vault. Operational credentials stored under any vault label may be fetched only at use time, inside quoted command substitution attached to the consuming command: CREDENTIAL=\"$(corbanu vault auth-helper <label>)\" your-command. Never run the helper by itself or print its expansion. The helper rejects seed phrases, crypto private keys, and keystores; those require an explicit user-controlled flow. Credentials given as a file path get the same treatment: CREDENTIAL=\"$(cat /path/to/credential)\" your-command. Scan your diff for key material before committing.",
+      "model_messages": null,
+      "experimental_supported_tools": [],
+      "service_tiers": [],
+      "additional_speed_tiers": [],
+      "supports_reasoning_summaries": false,
+      "supports_search_tool": false
+    },
+    {
+      "support_verbosity": false,
+      "default_verbosity": null,
+      "apply_patch_tool_type": "freeform",
+      "web_search_tool_type": "text",
+      "input_modalities": [
+        "text"
+      ],
+      "supports_image_detail_original": false,
+      "truncation_policy": {
+        "mode": "tokens",
+        "limit": 10000
+      },
+      "supports_parallel_tool_calls": false,
+      "context_window": 1000000,
+      "max_context_window": 1000000,
+      "max_output_tokens": 384000,
+      "auto_compact_token_limit": null,
+      "default_reasoning_summary": "none",
+      "slug": "vercel/deepseek/deepseek-v4-pro",
+      "orchestration": {
+        "status": "eligible",
+        "provider_id": "vercel",
+        "capability": "frontier",
+        "billing": {
+          "kind": "metered",
+          "input_milli_usd_per_million_tokens": 1320,
+          "output_milli_usd_per_million_tokens": 3960,
+          "cached_input_milli_usd_per_million_tokens": 44
+        }
+      },
+      "display_name": "Vercel DeepSeek V4 Pro",
+      "description": "Vercel: DeepSeek V4 Pro direct route - $0.66/M input, $0.02/M cached input, $1.98/M output off-peak; up to 2x during published weekday peak windows. Sends upstream model deepseek/deepseek-v4-pro.",
+      "default_reasoning_level": "high",
+      "supported_reasoning_levels": [
+        {
+          "effort": "high",
+          "description": "High. Deep reasoning for complex coding work."
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra high. Maximum DeepSeek V4 Pro reasoning."
+        }
+      ],
+      "shell_type": "shell_command",
+      "visibility": "list",
+      "supported_in_api": true,
+      "availability_nux": null,
+      "upgrade": null,
+      "priority": 3,
+      "base_instructions": "You are a world class coding agent. You write world class, concise quality code. Act efficiently, inspect code before changing it, keep edits scoped and verify your work when practical. You speak in an extremely concise, easy to understand way and only narrate when needed. You do things as fast as possible while still doing them correctly.\n\nWhen searching, use rg or rg --files first. Never run recursive grep over a repo root; if rg is unavailable, restrict grep to source directories and exclude .git, target, node_modules, dist, build, .next, and vendor.\n\nNever print or commit secret values anywhere: not in chat, logs, source, or files. Corbanu Terminal has an encrypted credential vault holding many classes of secrets; the user manages it via /vault. Operational credentials stored under any vault label may be fetched only at use time, inside quoted command substitution attached to the consuming command: CREDENTIAL=\"$(corbanu vault auth-helper <label>)\" your-command. Never run the helper by itself or print its expansion. The helper rejects seed phrases, crypto private keys, and keystores; those require an explicit user-controlled flow. Credentials given as a file path get the same treatment: CREDENTIAL=\"$(cat /path/to/credential)\" your-command. Scan your diff for key material before committing.",
+      "model_messages": null,
+      "experimental_supported_tools": [],
+      "service_tiers": [],
+      "additional_speed_tiers": [],
+      "supports_reasoning_summaries": false,
+      "supports_search_tool": false
+    },
+    {
+      "support_verbosity": false,
+      "default_verbosity": null,
+      "apply_patch_tool_type": "freeform",
+      "web_search_tool_type": "text",
+      "input_modalities": [
         "text"
       ],
       "supports_image_detail_original": false,

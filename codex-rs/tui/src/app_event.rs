@@ -315,6 +315,9 @@ pub(crate) enum WalletUnlockContinuation {
     OpenPlans {
         mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode,
     },
+    CorbanuApiOperation {
+        operation: codex_wallet::CorbanuApiOperation,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -438,6 +441,8 @@ pub(crate) enum AppEvent {
     },
     /// Create the standard persistent crew: Nazgul (root) -> Troll -> 3 Orcs. No task is started.
     CreateSpawnStandardCrew,
+    /// Create the Corbanu API persistent crew: Kimi K3 Nazgul -> Luna Troll -> 3 Flash Orcs.
+    CreateSpawnCorbanuApiCrew,
     /// Open a prompt that sends work to an existing spawned-agent pane.
     OpenSpawnAgentTaskPrompt {
         thread_id: codex_protocol::ThreadId,
@@ -1777,6 +1782,24 @@ pub(crate) enum AppEvent {
     WalletStatusReady {
         generation: u64,
         result: Result<crate::chatwidget::wallet_menu::WalletOverview, String>,
+    },
+    OpenCorbanuApi,
+    CorbanuApiLoaded {
+        result: Result<crate::chatwidget::wallet_api::CorbanuApiView, String>,
+    },
+    OpenCorbanuApiTopUp,
+    ConfirmCorbanuApiTopUp {
+        amount_usd: String,
+    },
+    ConfirmCorbanuApiKeyRevocation {
+        key_id: String,
+        display_prefix: String,
+    },
+    CorbanuApiOperationRequested {
+        operation: codex_wallet::CorbanuApiOperation,
+    },
+    CorbanuApiOperationFinished {
+        result: Result<codex_wallet::CorbanuApiOperationResult, String>,
     },
     WalletCreateFinished {
         operation: WalletPersistenceOperation,
