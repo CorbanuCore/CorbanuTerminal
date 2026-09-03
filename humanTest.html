@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Human acceptance checks for the current Corbanu Terminal round-three build">
+  <meta name="description" content="Human acceptance checks for Corbanu Terminal PF-48 through PF-57">
   <link rel="icon" href="data:,">
   <title>Corbanu Terminal — Human Test Plan</title>
   <style>
@@ -201,170 +201,205 @@
   <main>
     <header>
       <p class="eyebrow">Corbanu Terminal · human QA</p>
-      <h1>Did the latest work land cleanly?</h1>
-      <p class="lede">A direct 25–35 minute check of the current Mac build. Complete the nine checks in order. If any red failure condition appears, stop and record what you saw.</p>
+      <h1>Provider setup should feel boring now.</h1>
+      <p class="lede">A 35–45 minute human acceptance pass for PF-48 through PF-57. Work from top to bottom using the Corbanu window opened for you. Stop at the first failure and record the exact visible message—never a credential.</p>
       <div class="release-strip">
         <span><strong>Candidate:</strong> Corbanu 0.1.35</span>
-        <span><strong>Source baseline:</strong> <code>main · 9ac9fb682</code></span>
-        <span><strong>Built:</strong> 30 Aug 2026</span>
-        <span><strong>Shortcut:</strong> stable release build on CorbanuDrive</span>
+        <span><strong>Qualified code:</strong> <code>a935e507b</code></span>
+        <span><strong>Main record:</strong> <code>e36bd1566</code></span>
+        <span><strong>Built:</strong> 2 Sep 2026 (Phoenix)</span>
+        <span><strong>Runtime:</strong> stable release build on CorbanuDrive</span>
       </div>
       <div class="actions">
         <button type="button" onclick="window.print()">Print / save PDF</button>
         <button type="button" id="reset">Reset checks</button>
-        <div class="progress-shell" id="progressShell" role="progressbar" aria-label="Test progress" aria-valuemin="0" aria-valuemax="9" aria-valuenow="0"><div class="progress-bar" id="progress"></div></div>
-        <span class="progress-label" id="progressLabel" aria-live="polite">0 / 9</span>
+        <div class="progress-shell" id="progressShell" role="progressbar" aria-label="Test progress" aria-valuemin="0" aria-valuemax="12" aria-valuenow="0"><div class="progress-bar" id="progress"></div></div>
+        <span class="progress-label" id="progressLabel" aria-live="polite">0 / 12</span>
       </div>
     </header>
 
     <figure class="map" aria-labelledby="map-caption">
       <svg viewBox="0 0 900 220" role="img" aria-labelledby="map-title map-desc">
-        <title id="map-title">The three round-three security workstreams</title>
-        <desc id="map-desc">PF-13 credential reservations and PF-41 durable events are archived. PF-35 has a merged deterministic evaluator foundation while external classifier qualification remains open.</desc>
+        <title id="map-title">The four phases of provider-auth human acceptance</title>
+        <desc id="map-desc">Verify the build and launch, exercise provider setup and model switching, restart and recover, then stress the live session and launcher.</desc>
         <defs>
           <linearGradient id="flow" x1="0" x2="1"><stop stop-color="#57d6d0"/><stop offset="1" stop-color="#8ddd8c"/></linearGradient>
           <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#57d6d0"/></marker>
         </defs>
-        <rect x="20" y="34" width="208" height="116" rx="16" fill="#191c22" stroke="#303641"/>
-        <rect x="330" y="34" width="188" height="116" rx="16" fill="#191c22" stroke="#303641"/>
-        <rect x="620" y="34" width="260" height="116" rx="16" fill="#191c22" stroke="#303641"/>
-        <text x="42" y="65" fill="#57d6d0" font-size="15" font-family="sans-serif" font-weight="700">PF-13</text>
-        <text x="42" y="91" fill="#f7f6ef" font-size="18" font-family="sans-serif" font-weight="700">Usage reservations</text>
-        <text x="42" y="118" fill="#aaaeb7" font-size="14" font-family="sans-serif">Archived · 6/7</text>
-        <text x="352" y="65" fill="#f6c76a" font-size="15" font-family="sans-serif" font-weight="700">PF-35</text>
-        <text x="352" y="91" fill="#f7f6ef" font-size="18" font-family="sans-serif" font-weight="700">Classifier evaluator</text>
-        <text x="352" y="118" fill="#aaaeb7" font-size="14" font-family="sans-serif">Qualification open</text>
-        <text x="642" y="65" fill="#57d6d0" font-size="15" font-family="sans-serif" font-weight="700">PF-41</text>
-        <text x="642" y="91" fill="#f7f6ef" font-size="18" font-family="sans-serif" font-weight="700">Durable audit base</text>
-        <text x="642" y="118" fill="#aaaeb7" font-size="14" font-family="sans-serif">Archived · 1/3</text>
-        <path d="M124 150 V164 H450 V174 M424 150 V174 M750 150 V164 H450" fill="none" stroke="#303641" stroke-width="2"/>
-        <rect x="330" y="174" width="240" height="36" rx="18" fill="#0c0e12" stroke="#8ddd8c"/>
-        <text x="450" y="197" text-anchor="middle" fill="#8ddd8c" font-size="14" font-family="sans-serif" font-weight="700">2 ARCHIVED · 1 QUALIFYING</text>
+        <rect x="20" y="44" width="185" height="104" rx="16" fill="#191c22" stroke="#57d6d0"/>
+        <rect x="245" y="44" width="185" height="104" rx="16" fill="#191c22" stroke="#57d6d0"/>
+        <rect x="470" y="44" width="185" height="104" rx="16" fill="#191c22" stroke="#f6c76a"/>
+        <rect x="695" y="44" width="185" height="104" rx="16" fill="#191c22" stroke="#8ddd8c"/>
+        <text x="42" y="73" fill="#57d6d0" font-size="14" font-family="sans-serif" font-weight="700">01 · IDENTITY</text>
+        <text x="42" y="101" fill="#f7f6ef" font-size="18" font-family="sans-serif" font-weight="700">Launch cleanly</text>
+        <text x="42" y="127" fill="#aaaeb7" font-size="13" font-family="sans-serif">Checks 1–2</text>
+        <text x="267" y="73" fill="#57d6d0" font-size="14" font-family="sans-serif" font-weight="700">02 · PROVIDERS</text>
+        <text x="267" y="101" fill="#f7f6ef" font-size="18" font-family="sans-serif" font-weight="700">Configure &amp; use</text>
+        <text x="267" y="127" fill="#aaaeb7" font-size="13" font-family="sans-serif">Checks 3–6</text>
+        <text x="492" y="73" fill="#f6c76a" font-size="14" font-family="sans-serif" font-weight="700">03 · RECOVERY</text>
+        <text x="492" y="101" fill="#f7f6ef" font-size="18" font-family="sans-serif" font-weight="700">Restart &amp; repair</text>
+        <text x="492" y="127" fill="#aaaeb7" font-size="13" font-family="sans-serif">Checks 7–10</text>
+        <text x="717" y="73" fill="#8ddd8c" font-size="14" font-family="sans-serif" font-weight="700">04 · CONFIDENCE</text>
+        <text x="717" y="101" fill="#f7f6ef" font-size="18" font-family="sans-serif" font-weight="700">Stream &amp; scale</text>
+        <text x="717" y="127" fill="#aaaeb7" font-size="13" font-family="sans-serif">Checks 11–12</text>
+        <path d="M205 96 H237 M430 96 H462 M655 96 H687" fill="none" stroke="url(#flow)" stroke-width="3" marker-end="url(#arrow)"/>
+        <rect x="285" y="174" width="330" height="36" rx="18" fill="#0c0e12" stroke="#8ddd8c"/>
+        <text x="450" y="197" text-anchor="middle" fill="#8ddd8c" font-size="14" font-family="sans-serif" font-weight="700">12 CHECKS · ONE SIGN-OFF</text>
       </svg>
-      <figcaption id="map-caption">This round strengthens internal foundations. It deliberately does not turn on Moderate/Aggressive security modes or add a new security screen.</figcaption>
+      <figcaption id="map-caption">The order matters: establish a known build, prove immediate provider use, then test persistence and intentional failure recovery.</figcaption>
     </figure>
 
     <aside class="callout">
-      <strong>Expected limitation:</strong> protected-mode activation is still blocked on the measured Mac, Linux, and Windows platforms. Seeing no new <code>/security</code> interface is correct for this build; it is not evidence that the merges are missing.
+      <strong>Credential safety:</strong> retrieve the long-lived Anthropic credential from <code>Documents/clAuth.txt</code> only when a masked provider-entry field asks for it. Never paste it into chat, this page, notes, screenshots, logs, or a bug report. Close the file immediately after copying.
     </aside>
 
     <section aria-labelledby="checks-title">
-      <h2 id="checks-title">Nine checks</h2>
+      <h2 id="checks-title">Twelve acceptance checks</h2>
       <div class="checklist">
         <label class="test">
           <input type="checkbox" data-check="launch">
           <span>
             <h3>1. Launch from the app shortcut</h3>
-            <p>Quit any Corbanu window you were using before this build. Open <strong>Corbanu Terminal Launcher</strong> from your usual app shortcut.</p>
+            <p>Use the <strong>Corbanu Terminal Launcher</strong> window opened for this run. If you need to relaunch, use the same app shortcut—not a shell command or debug launcher.</p>
             <p class="expected">Pass: a new Terminal window opens on Desktop 3 in the first free position of the 2 × 3 card grid.</p>
-            <p class="failure">Fail: it opens beside Codex on Desktop 4, overlaps another Corbanu window, says the build is missing, or opens a debug launcher.</p>
+            <p class="failure">Fail: it opens beside Codex on another desktop, overlaps an existing terminal, says the build is missing, or opens a debug build.</p>
           </span>
         </label>
 
         <label class="test">
           <input type="checkbox" data-check="startup">
           <span>
-            <h3>2. Check startup health</h3>
-            <p>Wait until the composer is ready, then type <span class="keys">/status</span> and press Return.</p>
-            <p class="expected">Pass: the status panel opens, the terminal remains responsive, and startup shows no Code Mode host warning and no “MCP startup interrupted” warning for <code>codex_apps</code>.</p>
-            <p class="failure">Fail: either warning appears, the UI freezes, or the application panics.</p>
+            <h3>2. Verify startup identity and remembered setup</h3>
+            <p>Wait for the composer, then run <span class="keys">/status</span>. Note the current provider and model. Do not configure anything yet.</p>
+            <p class="expected">Pass: startup reaches chat without forcing <code>/providers</code>, your previously selected provider/model is remembered, Code Mode is available, and no <code>codex_apps</code> startup warning appears.</p>
+            <p class="failure">Fail: provider onboarding appears despite a valid prior setup, the provider silently changes, Code Mode host is missing, MCP startup is interrupted, or the UI stalls.</p>
           </span>
         </label>
 
         <label class="test">
-          <input type="checkbox" data-check="model">
+          <input type="checkbox" data-check="catalog">
           <span>
-            <h3>3. Switch models and compare both labels</h3>
-            <p>Run <span class="keys">/model</span>, choose a different model and reasoning level, and watch both the boxed header near the top and the footer at the bottom. Press <span class="keys">Control-L</span>, then switch once more.</p>
-            <p class="expected">Pass: both labels change immediately and continue to agree after Control-L.</p>
-            <p class="failure">Fail: the footer changes but the boxed header stays on the old model.</p>
+            <h3>3. Inspect the unified provider catalog</h3>
+            <p>Run <span class="keys">/providers</span>. Move through the list, inspecting OpenAI, Anthropic/Claude, Corbanu Plan, API-key providers, and any local/custom entries.</p>
+            <p class="expected">Pass: the list opens promptly; configured, active, current, unavailable, and recovery states make sense; moving the selection remains responsive.</p>
+            <p class="failure">Fail: statuses contradict startup, secrets are visible, key navigation pauses repeatedly, the vault hangs, or a provider is unexpectedly absent.</p>
           </span>
         </label>
 
         <label class="test">
-          <input type="checkbox" data-check="provider">
+          <input type="checkbox" data-check="same-session-key">
           <span>
-            <h3>4. Exercise Claude Plan</h3>
-            <p>Select your logged-in Claude Plan model (for example Fable High), then send <span class="keys">Reply with exactly: CLAUDE_OK</span>. Type the prompt and press Return as a separate action.</p>
-            <p class="expected">Pass: the reply is <code>CLAUDE_OK</code> and no provider-auth executable error appears.</p>
-            <p class="failure">Fail: you see “provider auth command corbanu failed to start”, a missing-credentials error despite being logged in, or no response.</p>
+            <h3>4. Store the Anthropic credential and use it immediately</h3>
+            <p>In <span class="keys">/providers</span>, choose the matching Anthropic API-key/token setup. Paste the credential only into its masked entry field, finish setup, and return to chat without restarting.</p>
+            <p class="expected">Pass: Anthropic immediately shows configured and active in the same session; setup does not expose or echo the credential.</p>
+            <p class="failure">Fail: it still says <code>ANTHROPIC_API_KEY</code> is missing, requires a restart, reveals the value, freezes while saving, or reports a vault/keyring error.</p>
           </span>
         </label>
 
         <label class="test">
-          <input type="checkbox" data-check="stream">
+          <input type="checkbox" data-check="fable">
           <span>
-            <h3>5. Cancel and recover a streamed response</h3>
-            <p>Ask for a few paragraphs of text. While it is streaming, press <span class="keys">Escape</span>. Then send <span class="keys">Reply with exactly: RECOVERY_OK</span>.</p>
-            <p class="expected">Pass: the first response stops, the second returns <code>RECOVERY_OK</code>, and the same session remains usable.</p>
-            <p class="failure">Fail: Corbanu panics, exits, or displays “OutputTextDelta without active item”.</p>
+            <h3>5. Select Fable 5.1 Max and make a live request</h3>
+            <p>Run <span class="keys">/model</span>, select <strong>Claude Fable 5.1</strong> at <strong>Max</strong>, then send <span class="keys">Reply with exactly: FABLE_51_OK</span>. Type the prompt and press Return separately.</p>
+            <p class="expected">Pass: Fable 5.1 is offered, both model labels change immediately, the response is <code>FABLE_51_OK</code>, and no missing-environment or provider-auth-command error appears.</p>
+            <p class="failure">Fail: Fable 5.1 is absent, the header and footer disagree, the request uses another model, or authentication fails.</p>
           </span>
         </label>
 
         <label class="test">
-          <input type="checkbox" data-check="grid">
+          <input type="checkbox" data-check="model-sync">
           <span>
-            <h3>6. Open two more launcher windows</h3>
-            <p>Use the same app shortcut twice more. Return to Desktop 3 and inspect all three Corbanu windows.</p>
-            <p class="expected">Pass: each window occupies a different card slot, all remain usable, and existing sessions are not replaced.</p>
-            <p class="failure">Fail: windows overlap, appear on the wrong desktop, or a new launch reuses/closes an existing session.</p>
-          </span>
-        </label>
-
-        <label class="test">
-          <input type="checkbox" data-check="soak">
-          <span>
-            <h3>7. Run a short long-session soak</h3>
-            <p>In one window, complete five prompt/response turns. Make turns two and four long enough to stream for several seconds; cancel turn four with <span class="keys">Escape</span>, then continue normally.</p>
-            <p class="expected">Pass: every turn has one coherent response, cancellation recovers, memory remains responsive, and no panic or orphaned output appears.</p>
-            <p class="failure">Fail: duplicate text, a stalled composer, “OutputTextDelta without active item”, an application panic, or a forced restart.</p>
+            <h3>6. Switch models and compare both labels</h3>
+            <p>Use <span class="keys">/model</span> to select a different provider/model, then switch back to Fable 5.1 Max. Watch the boxed model indicator near the top and the footer throughout.</p>
+            <p class="expected">Pass: both labels update immediately after each selection and always agree—no redraw, restart, or prompt is required.</p>
+            <p class="failure">Fail: the footer changes while the boxed indicator remains on the previous model, or either label changes before selection is complete.</p>
           </span>
         </label>
 
         <label class="test">
           <input type="checkbox" data-check="restart">
           <span>
-            <h3>8. Restart after active use</h3>
-            <p>Quit the soaked Corbanu window normally. Launch a fresh window with the shortcut, run <span class="keys">/status</span>, then send <span class="keys">Reply with exactly: RESTART_OK</span>.</p>
-            <p class="expected">Pass: startup is clean, the intended provider remains available, and the response is <code>RESTART_OK</code>.</p>
-            <p class="failure">Fail: startup reports journal/recovery corruption, MCP or Code Mode regressions, stale output from the prior session, or provider authentication loss.</p>
+            <h3>7. Restart and confirm provider persistence</h3>
+            <p>Quit this Corbanu window normally, relaunch from the app shortcut, and run <span class="keys">/status</span>. Send <span class="keys">Reply with exactly: RESTART_OK</span>.</p>
+            <p class="expected">Pass: startup goes directly to chat, the selected provider/model and active providers are preserved, and the response is <code>RESTART_OK</code>.</p>
+            <p class="failure">Fail: <code>/providers</code> appears automatically, authentication is lost, a different provider is silently selected, or the request fails.</p>
           </span>
         </label>
 
         <label class="test">
-          <input type="checkbox" data-check="activation">
+          <input type="checkbox" data-check="inactive">
           <span>
-            <h3>9. Confirm protected modes did not activate early</h3>
-            <p>Open the slash-command picker and inspect the available commands. Continue one ordinary permissive conversation without changing configuration.</p>
-            <p class="expected">Pass: no unfinished <code>/security</code> activation control appears, normal permissive behavior is unchanged, and no classifier verdict or credential accounting detail leaks into chat.</p>
-            <p class="failure">Fail: Moderate/Aggressive mode appears enabled, ordinary work is unexpectedly blocked, or internal audit/classifier/credential data is printed to the conversation.</p>
+            <h3>8. Deactivate and reactivate a non-current provider</h3>
+            <p>In <span class="keys">/providers</span>, deactivate a configured provider that is not currently selected. Exit and reopen the screen, then reactivate it.</p>
+            <p class="expected">Pass: the current model does not change, credentials remain stored, inactive state is visible, and reactivation requires no reauthentication.</p>
+            <p class="failure">Fail: credentials are deleted, the current model changes, the status does not persist, or reactivation asks for the key again.</p>
+          </span>
+        </label>
+
+        <label class="test">
+          <input type="checkbox" data-check="current-guard">
+          <span>
+            <h3>9. Cancel deactivation of the current provider</h3>
+            <p>Attempt to deactivate the provider serving the current model. When asked to choose a replacement, cancel or press <span class="keys">Escape</span>.</p>
+            <p class="expected">Pass: no state changes—the same provider stays active/current and the next request works.</p>
+            <p class="failure">Fail: Corbanu silently selects another provider, deactivates the current one, loses credentials, or leaves requests blocked after cancellation.</p>
+          </span>
+        </label>
+
+        <label class="test">
+          <input type="checkbox" data-check="missing-current">
+          <span>
+            <h3>10. Recover an intentionally missing current credential</h3>
+            <p>Only after confirming you can restore the credential: remove the current provider’s stored credential, quit, and relaunch. Try one harmless prompt, then open <span class="keys">/providers</span> and restore or explicitly select a usable replacement.</p>
+            <p class="expected">Pass: Corbanu enters chat without forcing fresh-install onboarding, blocks the request with clear recovery guidance, never switches silently, and resumes after explicit recovery.</p>
+            <p class="failure">Fail: full onboarding appears, another provider is silently chosen, a request escapes through the wrong provider, or recovery cannot be completed.</p>
+          </span>
+        </label>
+
+        <label class="test">
+          <input type="checkbox" data-check="stream">
+          <span>
+            <h3>11. Cancel a stream and continue the same session</h3>
+            <p>Ask for several paragraphs. While text is streaming, press <span class="keys">Escape</span>, then send <span class="keys">Reply with exactly: RECOVERY_OK</span>.</p>
+            <p class="expected">Pass: streaming stops cleanly, the second response is <code>RECOVERY_OK</code>, and the composer remains responsive.</p>
+            <p class="failure">Fail: Corbanu panics, exits, stalls, duplicates output, or displays <code>OutputTextDelta without active item</code>.</p>
+          </span>
+        </label>
+
+        <label class="test">
+          <input type="checkbox" data-check="grid-soak">
+          <span>
+            <h3>12. Open three concurrent launcher windows</h3>
+            <p>Use the app shortcut twice more. On Desktop 3, send a short request in each of the three windows and switch models in one of them.</p>
+            <p class="expected">Pass: the windows occupy distinct card slots, remain independently usable, and no launch replaces, overlaps, or moves another session.</p>
+            <p class="failure">Fail: any window lands on the wrong desktop, overlaps, reuses an existing session, or becomes unresponsive under concurrent use.</p>
           </span>
         </label>
       </div>
     </section>
 
     <section aria-labelledby="evidence-title" style="margin-top:42px">
-      <h2 id="evidence-title">What the automated merge checks already proved</h2>
-      <p style="color:var(--muted)">You do not need to reproduce these internals by hand. The human checks above look for integration regressions around them.</p>
+      <h2 id="evidence-title">What machines already proved</h2>
+      <p style="color:var(--muted)">Human acceptance focuses on visible trust and usability. These implementation checks already passed on the exact code candidate.</p>
       <div class="evidence">
-        <div class="metric"><b>47 / 47</b><span>security-policy tests</span></div>
-        <div class="metric"><b>229 / 229</b><span>configuration tests</span></div>
-        <div class="metric"><b>51 / 51</b><span>Core security tests</span></div>
-        <div class="metric"><b>44 / 44</b><span>security-audit tests</span></div>
-        <div class="metric"><b>22 / 22</b><span>content-security tests</span></div>
-        <div class="metric"><b>21 / 21</b><span>classifier evaluator tests</span></div>
+        <div class="metric"><b>390</b><span>core/provider tests passed</span></div>
+        <div class="metric"><b>75 / 75</b><span>focused TUI tests passed</span></div>
+        <div class="metric"><b>14 / 14</b><span>true-TMUX journeys passed</span></div>
+        <div class="metric"><b>3 / 3</b><span>Fable findings remediated</span></div>
+        <div class="metric"><b>1.32s</b><span>batched vault deletion</span></div>
+        <div class="metric"><b>CLEAN</b><span>Fable 5.1 final rereview</span></div>
       </div>
     </section>
 
     <details>
       <summary>Optional technical identity check</summary>
       <div>
-        <p>Paste this into a normal shell—not into Corbanu chat—to confirm the shortcut target and source commit:</p>
+        <p>Paste this into a normal shell—not Corbanu chat—to confirm the durable launcher target and qualified source lineage:</p>
         <pre><code>/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/bin/corbanu --version
-cd /Volumes/CorbanuDrive/Corbanu/CorbanuTerminal
-git merge-base --is-ancestor 9ac9fb682f0f1fee967036d4a4888c7c230e06c3 HEAD &amp;&amp; echo "round-three source baseline present"
-readlink /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/bin/corbanu</code></pre>
-        <p>Expected: <code>corbanu 0.1.35</code>, <code>round-three source baseline present</code>, and <code>../target/release/corbanu</code>. A later documentation-only commit may be the repository HEAD.</p>
+readlink /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/bin/corbanu
+cd /Volumes/CorbanuDrive/Corbanu/worktrees/integrate-unified-provider-auth-final
+git merge-base --is-ancestor a935e507b0173f4ee9c1f0aa539eea6e24ed200f HEAD &amp;&amp; echo "PF-57 candidate present"</code></pre>
+        <p>Expected: <code>corbanu 0.1.35</code>, <code>../target/release/corbanu</code>, and <code>PF-57 candidate present</code>. Documentation-only commits after the qualified code candidate are expected.</p>
       </div>
     </details>
 
@@ -373,19 +408,21 @@ readlink /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/bin/corbanu<
       <div class="signoff">
         <label class="field">Tester<input type="text" data-note="tester" placeholder="Your name"></label>
         <label class="field">Date<input type="date" data-note="date"></label>
-        <label class="field wide">Notes<textarea data-note="notes" placeholder="PASS, or describe the first failed step and the exact message shown."></textarea></label>
+        <label class="field">Platform<input type="text" data-note="platform" value="macOS · local CorbanuDrive"></label>
+        <label class="field">Result<input type="text" data-note="result" placeholder="PASS or FAIL at step …"></label>
+        <label class="field wide">Notes<textarea data-note="notes" placeholder="Record the first failed step, visible behavior, and exact non-secret message. Never record a credential."></textarea></label>
       </div>
     </section>
 
     <footer>
-      This is a focused integration check, not release sign-off for the unfinished Moderate/Aggressive security product. Test state is saved only in this browser on this Mac.
+      Product citation: <strong>Shipping MVP — LIVE</strong> — “Encrypted /vault, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat.” Test state stays only in this browser on this Mac.
     </footer>
   </main>
 
   <script>
     const boxes = [...document.querySelectorAll('[data-check]')];
     const notes = [...document.querySelectorAll('[data-note]')];
-    const key = 'corbanu-human-test-9ac9fb682';
+    const key = 'corbanu-human-test-pf57-a935e507b';
 
     function loadState() {
       try {
