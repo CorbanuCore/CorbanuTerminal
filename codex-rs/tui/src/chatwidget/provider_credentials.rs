@@ -29,6 +29,7 @@ use std::time::Duration;
 
 const PROVIDER_CREDENTIALS_VIEW_ID: &str = "provider-credentials";
 const CODEX_ACCOUNT_DEVICE_LOGIN_VIEW_ID: &str = "codex-account-device-login";
+const PROVIDER_API_KEY_SAVE_VIEW_ID: &str = "provider-api-key-save";
 const PROVIDER_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -231,6 +232,58 @@ impl ChatWidget {
             }),
         );
         self.bottom_pane.show_view(Box::new(view));
+    }
+
+    pub(crate) fn open_provider_api_key_save_pending(
+        &mut self,
+        save_id: String,
+        display_name: String,
+    ) {
+        self.pending_provider_api_key_save_id = Some(save_id.clone());
+        self.bottom_pane
+            .show_view(Box::new(ProviderApiKeySavePendingView::new(
+                self.app_event_tx.clone(),
+                save_id,
+                display_name,
+            )));
+    }
+
+    pub(crate) fn on_provider_api_key_save_dismissed(&mut self, save_id: String) {
+        clear_matching_provider_api_key_save(&mut self.pending_provider_api_key_save_id, &save_id);
+    }
+
+    pub(crate) fn on_provider_api_key_save_finished(
+        &mut self,
+        save_id: String,
+        display_name: String,
+        result: Result<(), String>,
+    ) {
+        let was_active = clear_matching_provider_api_key_save(
+            &mut self.pending_provider_api_key_save_id,
+            &save_id,
+        );
+        if was_active {
+            self.bottom_pane
+                .dismiss_view_by_id(PROVIDER_API_KEY_SAVE_VIEW_ID);
+        }
+        match (was_active, result) {
+            (true, Ok(())) => self.add_info_message(
+                format!("Stored {display_name} in the vault."),
+                /*hint*/ None,
+            ),
+            (true, Err(message)) => {
+                self.add_error_message(format!("Failed to store {display_name}: {message}"));
+            }
+            (false, Ok(())) => self.add_info_message(
+                format!("Background save completed: stored {display_name} in the vault."),
+                /*hint*/ None,
+            ),
+            (false, Err(message)) => {
+                self.add_error_message(format!(
+                    "Background save failed for {display_name}: {message}"
+                ));
+            }
+        }
     }
 
     pub(crate) fn open_codex_account_device_login_pending(&mut self) {
@@ -529,6 +582,95 @@ fn provider_credential_display_name(provider_name: &str, env_key: &str) -> Strin
 
 fn provider_vault_label(env_key: &str) -> String {
     format!("provider/{}", env_key.to_ascii_lowercase())
+}
+
+fn clear_matching_provider_api_key_save(
+    pending_save_id: &mut Option<String>,
+    completed_save_id: &str,
+) -> bool {
+    if pending_save_id.as_deref() != Some(completed_save_id) {
+        return false;
+    }
+    *pending_save_id = None;
+    true
+}
+
+struct ProviderApiKeySavePendingView {
+    app_event_tx: AppEventSender,
+    save_id: String,
+    display_name: String,
+    complete: bool,
+}
+
+impl ProviderApiKeySavePendingView {
+    fn new(app_event_tx: AppEventSender, save_id: String, display_name: String) -> Self {
+        Self {
+            app_event_tx,
+            save_id,
+            display_name,
+            complete: false,
+        }
+    }
+
+    fn cancel(&mut self) {
+        if self.complete {
+            return;
+        }
+        self.complete = true;
+        self.app_event_tx
+            .send(AppEvent::ProviderApiKeySaveDismissed {
+                save_id: self.save_id.clone(),
+            });
+    }
+
+    fn lines(&self) -> Vec<Line<'static>> {
+        vec![
+            Line::from(format!("Saving {} securely...", self.display_name).bold()),
+            Line::from(""),
+            Line::from("Keep Corbanu Terminal open while the encrypted vault is updated.").dim(),
+        ]
+    }
+}
+
+impl BottomPaneView for ProviderApiKeySavePendingView {
+    fn handle_key_event(&mut self, key_event: crossterm::event::KeyEvent) {
+        if key_event.code == KeyCode::Esc {
+            self.cancel();
+        }
+    }
+
+    fn is_complete(&self) -> bool {
+        self.complete
+    }
+
+    fn completion(&self) -> Option<ViewCompletion> {
+        self.complete.then_some(ViewCompletion::Cancelled)
+    }
+
+    fn view_id(&self) -> Option<&'static str> {
+        Some(PROVIDER_API_KEY_SAVE_VIEW_ID)
+    }
+
+    fn on_ctrl_c(&mut self) -> CancellationEvent {
+        self.cancel();
+        CancellationEvent::Handled
+    }
+
+    fn prefer_esc_to_handle_key_event(&self) -> bool {
+        true
+    }
+}
+
+impl Renderable for ProviderApiKeySavePendingView {
+    fn render(&self, area: Rect, buf: &mut Buffer) {
+        Paragraph::new(self.lines())
+            .wrap(Wrap { trim: false })
+            .render(area, buf);
+    }
+
+    fn desired_height(&self, _width: u16) -> u16 {
+        3
+    }
 }
 
 struct CodexAccountDeviceLoginView {
@@ -907,6 +1049,102 @@ mod tests {
             crossterm::event::KeyModifiers::NONE,
         ));
         assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn provider_api_key_save_view_describes_anthropic_progress() {
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let view = ProviderApiKeySavePendingView::new(
+            AppEventSender::new(tx),
+            "save-1".to_string(),
+            "Provider: Anthropic API Key".to_string(),
+        );
+        let area = Rect::new(0, 0, 72, view.desired_height(/*width*/ 72));
+        let mut buffer = Buffer::empty(area);
+        view.render(area, &mut buffer);
+        let rendered = (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        insta::assert_snapshot!(rendered);
+        assert_eq!(view.view_id(), Some(PROVIDER_API_KEY_SAVE_VIEW_ID));
+    }
+
+    #[test]
+    fn provider_api_key_save_view_blocks_text_but_allows_dismissal() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let sender = AppEventSender::new(tx);
+        let mut esc_view = ProviderApiKeySavePendingView::new(
+            sender.clone(),
+            "save-esc".to_string(),
+            "Provider: Anthropic API Key".to_string(),
+        );
+        esc_view.handle_key_event(crossterm::event::KeyEvent::new(
+            KeyCode::Char('x'),
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        assert!(!esc_view.is_complete());
+        assert!(rx.try_recv().is_err());
+
+        esc_view.handle_key_event(crossterm::event::KeyEvent::new(
+            KeyCode::Esc,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        assert!(esc_view.is_complete());
+        assert_eq!(esc_view.completion(), Some(ViewCompletion::Cancelled));
+        assert!(esc_view.prefer_esc_to_handle_key_event());
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::ProviderApiKeySaveDismissed { save_id }) if save_id == "save-esc"
+        ));
+        esc_view.handle_key_event(crossterm::event::KeyEvent::new(
+            KeyCode::Esc,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+        assert!(rx.try_recv().is_err());
+
+        let mut ctrl_c_view = ProviderApiKeySavePendingView::new(
+            sender,
+            "save-ctrl-c".to_string(),
+            "Provider: Anthropic API Key".to_string(),
+        );
+        assert_eq!(ctrl_c_view.on_ctrl_c(), CancellationEvent::Handled);
+        assert!(ctrl_c_view.is_complete());
+        assert_eq!(ctrl_c_view.completion(), Some(ViewCompletion::Cancelled));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::ProviderApiKeySaveDismissed { save_id }) if save_id == "save-ctrl-c"
+        ));
+    }
+
+    #[test]
+    fn cancelled_save_completion_cannot_clear_a_newer_save() {
+        let mut pending_save_id = Some("first-save".to_string());
+
+        assert!(clear_matching_provider_api_key_save(
+            &mut pending_save_id,
+            "first-save"
+        ));
+        assert_eq!(pending_save_id, None);
+
+        pending_save_id = Some("second-save".to_string());
+        assert!(!clear_matching_provider_api_key_save(
+            &mut pending_save_id,
+            "first-save"
+        ));
+        assert_eq!(pending_save_id.as_deref(), Some("second-save"));
+        assert!(clear_matching_provider_api_key_save(
+            &mut pending_save_id,
+            "second-save"
+        ));
+        assert_eq!(pending_save_id, None);
     }
 
     #[test]

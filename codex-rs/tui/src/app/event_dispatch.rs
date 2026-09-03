@@ -2291,6 +2291,11 @@ impl App {
                 display_name,
                 api_key,
             } => {
+                let save_id = Uuid::new_v4().to_string();
+                self.chat_widget.open_provider_api_key_save_pending(
+                    save_id.clone(),
+                    display_name.clone(),
+                );
                 let request_handle = app_server.request_handle();
                 let tx = self.app_event_tx.clone();
                 tokio::spawn(async move {
@@ -2298,8 +2303,7 @@ impl App {
                         .request_typed::<codex_app_server_protocol::LoginAccountResponse>(
                             ClientRequest::LoginAccount {
                                 request_id: codex_app_server_protocol::RequestId::String(format!(
-                                    "provider-api-key-login-{}",
-                                    Uuid::new_v4()
+                                    "provider-api-key-login-{save_id}"
                                 )),
                                 params:
                                     codex_app_server_protocol::LoginAccountParams::ProviderApiKey {
@@ -2310,30 +2314,18 @@ impl App {
                         )
                         .await;
 
-                    match result {
-                        Ok(codex_app_server_protocol::LoginAccountResponse::ApiKey {}) => {
-                            tx.send(AppEvent::InsertHistoryCell(Box::new(
-                                history_cell::new_info_event(
-                                    format!("Stored {display_name} in the vault."),
-                                    /*hint*/ None,
-                                ),
-                            )));
-                        }
-                        Ok(other) => {
-                            tx.send(AppEvent::InsertHistoryCell(Box::new(
-                                history_cell::new_error_event(format!(
-                                    "Failed to store {display_name}: unexpected account/login/start response: {other:?}"
-                                )),
-                            )));
-                        }
-                        Err(err) => {
-                            tx.send(AppEvent::InsertHistoryCell(Box::new(
-                                history_cell::new_error_event(format!(
-                                    "Failed to store {display_name}: {err}"
-                                )),
-                            )));
-                        }
-                    }
+                    let result = match result {
+                        Ok(codex_app_server_protocol::LoginAccountResponse::ApiKey {}) => Ok(()),
+                        Ok(other) => Err(format!(
+                            "unexpected account/login/start response: {other:?}"
+                        )),
+                        Err(err) => Err(err.to_string()),
+                    };
+                    tx.send(AppEvent::ProviderApiKeySaveFinished {
+                        save_id,
+                        display_name,
+                        result,
+                    });
                 });
             }
             AppEvent::OpenSharedProviderSetup => {
@@ -2650,6 +2642,17 @@ impl App {
                 attempt_id,
                 target_provider_id,
             ),
+            AppEvent::ProviderApiKeySaveDismissed { save_id } => {
+                self.chat_widget.on_provider_api_key_save_dismissed(save_id);
+            }
+            AppEvent::ProviderApiKeySaveFinished {
+                save_id,
+                display_name,
+                result,
+            } => {
+                self.chat_widget
+                    .on_provider_api_key_save_finished(save_id, display_name, result);
+            }
             AppEvent::OpenTelegram => {
                 self.chat_widget.open_telegram_menu();
             }

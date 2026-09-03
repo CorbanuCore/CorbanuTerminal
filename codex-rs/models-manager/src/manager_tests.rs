@@ -1469,8 +1469,10 @@ fn bundled_models_json_tracks_verified_image_capabilities() {
         "minimax/minimax-m3",
         "google/gemini-3.5-flash",
         "claude-opus-5-plan",
+        "claude-fable-5-1-plan",
         "claude-fable-5-plan",
         "claude-opus-5",
+        "claude-fable-5-1",
         "claude-fable-5",
     ] {
         assert!(supports_images(slug), "{slug} should accept image input");
@@ -1498,8 +1500,10 @@ fn bundled_claude_5_models_have_provider_reported_output_limits() {
 
     for (slug, max_output_tokens) in [
         ("claude-opus-5-plan", 128_000),
+        ("claude-fable-5-1-plan", 128_000),
         ("claude-fable-5-plan", 128_000),
         ("claude-opus-5", 128_000),
+        ("claude-fable-5-1", 128_000),
         ("claude-fable-5", 128_000),
     ] {
         let model = response
@@ -1898,8 +1902,10 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
         "tencent/hy3:free",
         "muse-spark-1.1",
         "claude-opus-5-plan",
+        "claude-fable-5-1-plan",
         "claude-fable-5-plan",
         "claude-opus-5",
+        "claude-fable-5-1",
         "claude-fable-5",
     ] {
         let model = response
@@ -2227,6 +2233,33 @@ fn bundled_models_json_contains_openrouter_models() {
         )),
         "deprecated Claude Opus 4.8 variants must not appear in the bundled catalog"
     );
+
+    for (slug, display_name, description) in [
+        (
+            "claude-fable-5-1-plan",
+            "Claude Fable 5.1 Plan",
+            "Claude Fable 5.1 through Claude Code subscription auth in Corbanu Terminal.",
+        ),
+        (
+            "claude-fable-5-1",
+            "Claude Fable 5.1",
+            "Claude Fable 5.1 through the Anthropic Messages API.",
+        ),
+    ] {
+        let model = response
+            .models
+            .iter()
+            .find(|model| model.slug == slug)
+            .unwrap_or_else(|| panic!("bundled models.json should include {display_name}"));
+        assert_eq!(
+            (
+                model.display_name.as_str(),
+                model.description.as_deref(),
+                model.visibility,
+            ),
+            (display_name, Some(description), ModelVisibility::List,)
+        );
+    }
 
     let claude_fable_plan = response
         .models

@@ -85,6 +85,9 @@ impl ProviderRuntimeAuthorizations {
                 }
             }
             status.configuration = ProviderConfigurationState::Configured;
+            if status.eligibility == ProviderEligibilityState::Unavailable {
+                continue;
+            }
             if status.eligibility != ProviderEligibilityState::Inactive {
                 status.eligibility = ProviderEligibilityState::Active;
             }
@@ -157,6 +160,11 @@ impl ProviderRuntimeSelectionPolicy {
 
         if status.eligibility == ProviderEligibilityState::Inactive {
             return blocked(runtime_provider_id, ProviderUseBlocker::Inactive);
+        }
+        if status.configuration == ProviderConfigurationState::Unavailable
+            || status.eligibility == ProviderEligibilityState::Unavailable
+        {
+            return blocked(runtime_provider_id, ProviderUseBlocker::Unavailable);
         }
         if status.availability == ProviderAvailabilityState::StatusOnly {
             return match authorizations.get(runtime_provider_id) {

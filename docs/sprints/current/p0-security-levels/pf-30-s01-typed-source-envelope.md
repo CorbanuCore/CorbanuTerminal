@@ -14,7 +14,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-22-S02"
 created: 2026-08-28
-updated: 2026-09-01
+updated: 2026-09-02
 ---
 
 # PF-30-S01 — Typed source envelope and trusted ingress
@@ -49,7 +49,7 @@ updated: 2026-09-01
 ## Done
 
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
-- [x] On 2026-09-01, product authority confirmed the CorbanuDrive failure was unrecoverable; the absent `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-source-envelope` allocation had no implementation commit or artifact to hand off, so its reservation was released to draft.
+- [x] On 2026-09-02, product authority confirmed the recovered repository contains no surviving PF-30 branch, implementation commit, or handoff artifact; the absent `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-source-envelope` reservation was therefore released to draft.
 
 ## Remaining
 

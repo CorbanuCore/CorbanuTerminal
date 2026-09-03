@@ -31,8 +31,8 @@ Corbanu Terminal currently ships these provider paths:
 | Use case                  | Provider           | Current release-visible model examples                                                                           |
 | ------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | OpenAI Codex account      | OpenAI             | `gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra`                                                                   |
-| Claude subscription       | Claude Plan        | `claude-opus-5-plan`, `claude-fable-5-plan`                                                                      |
-| Direct Claude API         | Anthropic          | `claude-opus-5`, `claude-fable-5`                                                                                |
+| Claude subscription       | Claude Plan        | `claude-opus-5-plan`, `claude-fable-5-1-plan`, `claude-fable-5-plan`                                             |
+| Direct Claude API         | Anthropic          | `claude-opus-5`, `claude-fable-5-1`, `claude-fable-5`                                                           |
 | Ambient coding plan       | Ambient            | `z-ai/glm-5.2`, `moonshotai/kimi-k2.7-code`                                                                      |
 | Kimi coding plan          | Kimi Code          | `k3`                                                                                                             |
 | Z.AI coding plan          | Z.AI               | `glm-5.2`                                                                                                        |
@@ -41,7 +41,7 @@ Corbanu Terminal currently ships these provider paths:
 | Meta API                  | Meta               | `muse-spark-1.1`                                                                                                 |
 | Metered GLM               | Baseten            | `zai-org/GLM-5.2`                                                                                                |
 | Metered GLM gateway       | Vercel             | `zai/glm-5.2`, `zai/glm-5.2-fast`                                                                                |
-| Wallet-funded inference   | Corbanu Plan       | GLM 5.2, Kimi K2.7 Code, DeepSeek V4 Pro, Claude Fable 5                                                         |
+| Wallet-funded inference   | Corbanu Plan       | GLM 5.2, Kimi K2.7 Code, DeepSeek V4 Pro, Claude Fable 5.1 and 5                                                 |
 | Cloud model runtime       | Bedrock            | Models available to the configured AWS account                                                                   |
 | Local model runtime       | Ollama / LM Studio | Models served by the configured local endpoint                                                                   |
 | Operator-defined endpoint | Custom             | Models declared in `config.toml`                                                                                 |

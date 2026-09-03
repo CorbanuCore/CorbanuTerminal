@@ -602,6 +602,7 @@ fn test_create_anthropic_provider() {
         }
     );
     assert_eq!(ANTHROPIC_DEFAULT_MODEL, "claude-opus-5");
+    assert_eq!(CLAUDE_FABLE_5_1_MODEL, "claude-fable-5-1");
     assert_eq!(CLAUDE_FABLE_5_MODEL, "claude-fable-5");
 }
 
@@ -648,6 +649,8 @@ fn test_create_claude_plan_provider() {
     );
     assert_eq!(CLAUDE_PLAN_MODEL, "claude-opus-5-plan");
     assert_eq!(CLAUDE_PLAN_UPSTREAM_MODEL, ANTHROPIC_DEFAULT_MODEL);
+    assert_eq!(CLAUDE_FABLE_5_1_PLAN_MODEL, "claude-fable-5-1-plan");
+    assert_eq!(CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL, CLAUDE_FABLE_5_1_MODEL);
     assert_eq!(CLAUDE_FABLE_5_PLAN_MODEL, "claude-fable-5-plan");
     assert_eq!(CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL, CLAUDE_FABLE_5_MODEL);
 }
@@ -719,6 +722,16 @@ fn test_built_in_model_providers_include_ambient() {
             .map(ModelProviderInfo::is_ambient),
         Some(true)
     );
+}
+
+#[test]
+fn test_corbanu_plan_uses_the_branded_public_api_origin() {
+    assert_eq!(PFTERMINAL_PLAN_GATEWAY_ORIGIN, "https://api.corbanu.com");
+    assert_eq!(
+        PFTERMINAL_PLAN_DEFAULT_BASE_URL,
+        "https://api.corbanu.com/v1"
+    );
+    assert!(!PFTERMINAL_PLAN_GATEWAY_ORIGIN.contains("fly.dev"));
 }
 
 #[test]
@@ -1462,8 +1475,10 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
         (ZAI_DEFAULT_MODEL, ZAI_PROVIDER_ID),
         ("glm-5.3", ZAI_PROVIDER_ID),
         (CLAUDE_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
+        (CLAUDE_FABLE_5_1_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (ANTHROPIC_DEFAULT_MODEL, CLAUDE_PLAN_PROVIDER_ID),
+        (CLAUDE_FABLE_5_1_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (CLAUDE_FABLE_5_MODEL, CLAUDE_PLAN_PROVIDER_ID),
         (OPENROUTER_GROK_4_6_MODEL, OPENROUTER_PROVIDER_ID),
         ("x-ai/grok-4.5", OPENROUTER_PROVIDER_ID),
@@ -1488,6 +1503,47 @@ fn canonical_catalog_provider_exposes_exact_picker_runtime_pairs() {
     }
     assert_eq!(canonical_catalog_provider(""), None);
     assert_eq!(canonical_catalog_provider("private/custom-model"), None);
+}
+
+#[test]
+fn fable_5_1_resolves_on_anthropic_routes() {
+    assert_eq!(
+        resolve_model_for_provider(
+            Some(CLAUDE_FABLE_5_1_MODEL.to_string()),
+            ANTHROPIC_PROVIDER_ID
+        )
+        .as_deref(),
+        Some(CLAUDE_FABLE_5_1_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(
+            Some(CLAUDE_FABLE_5_1_MODEL.to_string()),
+            CLAUDE_PLAN_PROVIDER_ID
+        )
+        .as_deref(),
+        Some(CLAUDE_FABLE_5_1_PLAN_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(
+            Some(CLAUDE_FABLE_5_1_MODEL.to_string()),
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
+        )
+        .as_deref(),
+        Some(CLAUDE_FABLE_5_1_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(/*model*/ None, PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID)
+            .as_deref(),
+        Some(CLAUDE_FABLE_5_MODEL)
+    );
+    assert_eq!(
+        resolve_model_for_provider(
+            Some("unsupported-model".to_string()),
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
+        )
+        .as_deref(),
+        Some(CLAUDE_FABLE_5_MODEL)
+    );
 }
 
 #[test]

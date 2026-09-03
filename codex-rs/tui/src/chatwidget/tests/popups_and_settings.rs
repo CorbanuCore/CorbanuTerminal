@@ -18,6 +18,8 @@ use codex_model_provider_info::AMBIENT_KIMI_K2_7_CODE_MODEL;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
 use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
+use codex_model_provider_info::CLAUDE_FABLE_5_1_MODEL;
+use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
@@ -3869,10 +3871,11 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         .expect("model catalog should load");
     claude_plan_chat.open_all_models_popup(presets);
     let claude_plan_popup =
-        render_bottom_popup_with_height(&claude_plan_chat, /*width*/ 140, /*height*/ 28);
+        render_bottom_popup_with_height(&claude_plan_chat, /*width*/ 140, /*height*/ 36);
     assert!(
         claude_plan_popup.contains("[Claude Plan]")
             && claude_plan_popup.contains(CLAUDE_PLAN_MODEL)
+            && claude_plan_popup.contains(CLAUDE_FABLE_5_1_PLAN_MODEL)
             && claude_plan_popup.contains(CLAUDE_FABLE_5_PLAN_MODEL),
         "expected Claude Code models in the Claude Plan tab:\n{claude_plan_popup}"
     );
@@ -3893,7 +3896,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         .expect("model catalog should load");
     anthropic_chat.open_all_models_popup(presets);
     let anthropic_popup =
-        render_bottom_popup_with_height(&anthropic_chat, /*width*/ 140, /*height*/ 28);
+        render_bottom_popup_with_height(&anthropic_chat, /*width*/ 140, /*height*/ 36);
 
     assert!(
         anthropic_popup.contains("[Anthropic]"),
@@ -3904,7 +3907,8 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         "expected Anthropic API-key model in /model picker:\n{anthropic_popup}"
     );
     assert!(
-        anthropic_popup.contains(CLAUDE_FABLE_5_MODEL),
+        anthropic_popup.contains(CLAUDE_FABLE_5_1_MODEL)
+            && anthropic_popup.contains(CLAUDE_FABLE_5_MODEL),
         "expected Claude Fable API-key model in /model picker:\n{anthropic_popup}"
     );
     assert!(

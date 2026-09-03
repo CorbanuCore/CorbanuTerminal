@@ -577,6 +577,8 @@ mod tests {
     use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
     use codex_model_provider_info::ANTHROPIC_API_KEY_ENV_VAR;
     use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
+    use codex_model_provider_info::CLAUDE_FABLE_5_1_MODEL;
+    use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
     use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
     use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
     use codex_model_provider_info::ModelProviderAwsAuthInfo;
@@ -839,6 +841,13 @@ mod tests {
             catalog
                 .models
                 .iter()
+                .any(|model| model.slug == CLAUDE_FABLE_5_1_PLAN_MODEL),
+            "Claude Fable 5.1 Plan should be available in the static Claude Plan catalog"
+        );
+        assert!(
+            catalog
+                .models
+                .iter()
                 .any(|model| model.slug == CLAUDE_FABLE_5_PLAN_MODEL),
             "Claude Fable Plan should be available in the static Claude Plan catalog"
         );
@@ -873,6 +882,13 @@ mod tests {
                 .iter()
                 .all(|model| model.slug != "claude-opus-4-8"),
             "deprecated Claude Opus 4.8 should not remain in the static catalog"
+        );
+        assert!(
+            catalog
+                .models
+                .iter()
+                .any(|model| model.slug == CLAUDE_FABLE_5_1_MODEL),
+            "Claude Fable 5.1 should be available in the static Anthropic API-key catalog"
         );
         assert!(
             catalog

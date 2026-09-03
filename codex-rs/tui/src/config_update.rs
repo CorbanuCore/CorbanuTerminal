@@ -4,6 +4,7 @@
 //! when a config mutation must be owned by the app server rather than written
 //! to the local `config.toml` directly.
 
+use crate::legacy_core::config::Config;
 use codex_app_server_client::AppServerRequestHandle;
 use codex_app_server_protocol::ClientRequest;
 use codex_app_server_protocol::ConfigBatchWriteParams;
@@ -17,6 +18,8 @@ use codex_app_server_protocol::SkillsConfigWriteParams;
 use codex_app_server_protocol::SkillsConfigWriteResponse;
 use codex_config::loader::project_trust_key;
 use codex_features::FEATURES;
+use codex_model_provider_info::OPENAI_PROVIDER_ID;
+use codex_model_provider_info::canonical_catalog_provider;
 use codex_model_provider_info::resolve_model_for_provider;
 use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
 use codex_protocol::config_types::TrustLevel;
@@ -86,13 +89,53 @@ pub(crate) fn build_model_selection_edits(
     edits
 }
 
+pub(crate) fn onboarding_user_model(config: &Config) -> Option<String> {
+    config
+        .config_layer_stack
+        .effective_user_config()
+        .and_then(|user_config| {
+            user_config
+                .get("model")
+                .and_then(toml::Value::as_str)
+                .map(str::to_string)
+        })
+}
+
 pub(crate) fn build_onboarding_provider_selection_edits(
     current_model: Option<&str>,
     provider: &str,
 ) -> Vec<ConfigEdit> {
+    let current_model = current_model
+        .map(str::trim)
+        .filter(|model| !model.is_empty());
+    let provider_edit = || replace_config_value("model_provider", serde_json::json!(provider));
+
+    if provider == OPENAI_PROVIDER_ID {
+        return match current_model {
+            Some(model)
+                if canonical_catalog_provider(model)
+                    .is_some_and(|catalog_provider| catalog_provider != OPENAI_PROVIDER_ID) =>
+            {
+                vec![
+                    clear_config_value("model"),
+                    clear_config_value("model_reasoning_effort"),
+                    provider_edit(),
+                ]
+            }
+            Some(_) | None => vec![provider_edit()],
+        };
+    }
+
     let model = resolve_model_for_provider(current_model.map(str::to_string), provider)
-        .unwrap_or_else(|| current_model.unwrap_or_default().to_string());
-    build_model_selection_edits(&model, Some(provider), /*effort*/ None::<String>)
+        .filter(|model| !model.trim().is_empty());
+    // Re-authenticating an already compatible provider must not reset a user's
+    // reasoning effort; only a provider-driven model translation clears it.
+    match model {
+        Some(model) if Some(model.as_str()) != current_model => {
+            build_model_selection_edits(&model, Some(provider), /*effort*/ None::<String>)
+        }
+        Some(_) | None => vec![provider_edit()],
+    }
 }
 
 pub(crate) fn build_service_tier_selection_edits(service_tier: Option<&str>) -> Vec<ConfigEdit> {

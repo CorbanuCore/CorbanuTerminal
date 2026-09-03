@@ -1573,10 +1573,11 @@ async fn run_ratatui_app(
                     "app server should exist when onboarding persists a provider selection"
                 );
             };
+            let user_model = config_update::onboarding_user_model(&initial_config);
             config_update::write_config_batch(
                 app_server_session.request_handle(),
                 config_update::build_onboarding_provider_selection_edits(
-                    initial_config.model.as_deref(),
+                    user_model.as_deref(),
                     provider,
                 ),
             )

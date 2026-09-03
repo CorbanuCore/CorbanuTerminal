@@ -309,11 +309,8 @@ impl KeyboardHandler for AuthModeWidget {
                 SignInState::PickMode => {
                     self.handle_sign_in_option(self.highlighted_mode);
                 }
-                SignInState::ChatGptSuccessMessage => {
-                    self.record_configured(
-                        OPENAI_PROVIDER_ID,
-                        ConfiguredProviderMethod::OpenAiAccount,
-                    );
+                SignInState::ChatGptSuccessMessage | SignInState::ChatGptSuccess => {
+                    self.finish_openai_account_setup();
                 }
                 SignInState::ApiKeyConfigured { provider } => {
                     self.record_configured(
@@ -399,6 +396,7 @@ pub(crate) struct AuthModeWidget {
     pub error: Arc<RwLock<Option<String>>>,
     pub sign_in_state: Arc<RwLock<SignInState>>,
     pub login_status: LoginStatus,
+    pub replace_provider_with_openai_on_login: bool,
     pub app_server_request_handle: AppServerRequestHandle,
     pub forced_login_method: Option<ForcedLoginMethod>,
     pub api_key_provider_id: String,
@@ -759,6 +757,17 @@ impl AuthModeWidget {
                 SignInState::PickMode
             };
         }
+        self.request_frame.schedule_frame();
+    }
+
+    fn finish_openai_account_setup(&self) {
+        if self.replace_provider_with_openai_on_login {
+            self.record_configured(OPENAI_PROVIDER_ID, ConfiguredProviderMethod::OpenAiAccount);
+            return;
+        }
+
+        self.provider_status_host.mark_openai_account();
+        *self.sign_in_state.write().unwrap() = SignInState::Complete;
         self.request_frame.schedule_frame();
     }
 
@@ -2246,6 +2255,7 @@ mod tests {
             error: Arc::new(RwLock::new(None)),
             sign_in_state: Arc::new(RwLock::new(SignInState::PickMode)),
             login_status: LoginStatus::NotAuthenticated,
+            replace_provider_with_openai_on_login: true,
             app_server_request_handle: AppServerRequestHandle::InProcess(client.request_handle()),
             forced_login_method: Some(ForcedLoginMethod::Chatgpt),
             api_key_provider_id: "openai".to_string(),
@@ -2505,15 +2515,65 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn configured_provider_api_key_reads_provider_success_state() {
+    async fn configured_provider_reads_first_usable_runtime_from_shared_session() {
         let (widget, _tmp) = widget_forced_chatgpt().await;
-        *widget.sign_in_state.write().unwrap() = SignInState::ApiKeyConfigured {
-            provider: Some(codex_model_provider_info::OPENROUTER_PROVIDER_ID.to_string()),
-        };
+        let entry = widget
+            .provider_status_host
+            .catalog()
+            .get(codex_model_provider_info::OPENROUTER_PROVIDER_ID)
+            .expect("OpenRouter catalog entry");
+        let provider_id = entry.id.clone();
+        let runtime_provider_id = entry
+            .runtime_provider_ids
+            .first()
+            .expect("OpenRouter runtime")
+            .clone();
+        let mut session = widget.provider_setup_session.write().unwrap();
+        session.dispatch(ProviderSetupAction::Begin {
+            provider_id: provider_id.clone(),
+        });
+        session.dispatch(ProviderSetupAction::AuthConfigured {
+            provider_id: provider_id.clone(),
+            runtime_provider_id: runtime_provider_id.clone(),
+        });
+        session.dispatch(ProviderSetupAction::ActivationResolved {
+            provider_id,
+            runtime_provider_id,
+            usable: true,
+        });
+        drop(session);
 
         assert_eq!(
             widget.configured_provider().as_deref(),
             Some(codex_model_provider_info::OPENROUTER_PROVIDER_ID)
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_explicit_openai_account_reads_provider_success_state() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.replace_provider_with_openai_on_login = true;
+        widget.begin_provider(codex_model_provider_info::OPENAI_PROVIDER_ID);
+        *widget.sign_in_state.write().unwrap() = SignInState::ChatGptSuccess;
+        widget.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        assert_eq!(
+            widget.configured_provider().as_deref(),
+            Some(codex_model_provider_info::OPENAI_PROVIDER_ID)
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_openai_api_key_reads_provider_success_state() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.begin_provider(codex_model_provider_info::OPENAI_PROVIDER_ID);
+        widget.provider_status_host.mark_openai_api_key();
+        *widget.sign_in_state.write().unwrap() = SignInState::ApiKeyConfigured { provider: None };
+        widget.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+
+        assert_eq!(
+            widget.configured_provider().as_deref(),
+            Some(codex_model_provider_info::OPENAI_PROVIDER_ID)
         );
     }
 
@@ -2593,12 +2653,14 @@ mod tests {
     #[tokio::test]
     async fn claude_auth_success_returns_plan_provider_only_after_success() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.begin_provider(codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID);
         *widget.sign_in_state.write().unwrap() = SignInState::ClaudeManagedTokenSaving;
         assert_eq!(widget.configured_provider(), None);
 
         widget.handle_claude_event(AppEvent::ClaudeManagedSubscriptionTokenSaved {
             result: Ok("saved".to_string()),
         });
+        widget.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
         assert_eq!(
             widget.configured_provider().as_deref(),
@@ -2624,8 +2686,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn existing_non_oauth_chatgpt_login_counts_as_signed_in() {
-        for auth_mode in [AuthMode::ChatgptAuthTokens, AuthMode::PersonalAccessToken] {
+    async fn existing_chatgpt_login_shortcut_does_not_request_provider_persistence() {
+        for auth_mode in [
+            AuthMode::Chatgpt,
+            AuthMode::ChatgptAuthTokens,
+            AuthMode::PersonalAccessToken,
+        ] {
             let (mut widget, _tmp) = widget_forced_chatgpt().await;
             widget.login_status = LoginStatus::AuthMode(auth_mode);
 
@@ -2636,6 +2702,7 @@ mod tests {
                 &*widget.sign_in_state.read().unwrap(),
                 SignInState::ChatGptSuccess
             ));
+            assert_eq!(widget.configured_provider(), None);
         }
     }
 
@@ -2829,6 +2896,7 @@ mod tests {
     #[tokio::test]
     async fn device_code_login_completion_advances_to_success_message() {
         let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.begin_provider(codex_model_provider_info::OPENAI_PROVIDER_ID);
         *widget.sign_in_state.write().unwrap() =
             SignInState::ChatGptDeviceCode(ContinueWithDeviceCodeState::ready(
                 "request-1".to_string(),
@@ -2847,6 +2915,37 @@ mod tests {
             &*widget.sign_in_state.read().unwrap(),
             SignInState::ChatGptSuccessMessage
         ));
+        widget.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(
+            widget.configured_provider().as_deref(),
+            Some(codex_model_provider_info::OPENAI_PROVIDER_ID)
+        );
+    }
+
+    #[tokio::test]
+    async fn custom_openai_auth_provider_is_not_replaced_after_login() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.replace_provider_with_openai_on_login = false;
+        *widget.sign_in_state.write().unwrap() =
+            SignInState::ChatGptDeviceCode(ContinueWithDeviceCodeState::ready(
+                "request-1".to_string(),
+                "login-1".to_string(),
+                "https://chatgpt.com/device".to_string(),
+                "ABCD-EFGH".to_string(),
+            ));
+
+        widget.on_account_login_completed(AccountLoginCompletedNotification {
+            login_id: Some("login-1".to_string()),
+            success: true,
+            error: None,
+        });
+
+        widget.handle_key_event(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(matches!(
+            &*widget.sign_in_state.read().unwrap(),
+            SignInState::Complete
+        ));
+        assert_eq!(widget.configured_provider(), None);
     }
 
     #[test]

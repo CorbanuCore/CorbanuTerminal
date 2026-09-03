@@ -194,6 +194,7 @@ impl ChatWidget {
             plugin_install_apps_needing_auth: Vec::new(),
             plugin_install_auth_flow: None,
             pending_provider_codex_login_id: None,
+            pending_provider_api_key_save_id: None,
             plugins_active_tab_id: None,
             newly_installed_marketplace_tab_id: None,
             interrupts: InterruptManager::new(),

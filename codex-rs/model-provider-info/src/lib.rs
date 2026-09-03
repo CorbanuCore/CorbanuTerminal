@@ -83,6 +83,7 @@ pub const ANTHROPIC_PROVIDER_ID: &str = "anthropic";
 pub const ANTHROPIC_BASE_URL: &str = "https://api.anthropic.com/v1";
 pub const ANTHROPIC_DEFAULT_MODEL: &str = "claude-opus-5";
 pub const ANTHROPIC_LEGACY_OPUS_4_8_MODEL: &str = "claude-opus-4-8";
+pub const CLAUDE_FABLE_5_1_MODEL: &str = "claude-fable-5-1";
 pub const CLAUDE_FABLE_5_MODEL: &str = "claude-fable-5";
 pub const ANTHROPIC_API_KEY_ENV_VAR: &str = "ANTHROPIC_API_KEY";
 const CLAUDE_PLAN_PROVIDER_NAME: &str = "Claude Plan";
@@ -90,6 +91,8 @@ pub const CLAUDE_PLAN_PROVIDER_ID: &str = "claude-plan";
 pub const CLAUDE_PLAN_MODEL: &str = "claude-opus-5-plan";
 pub const CLAUDE_PLAN_UPSTREAM_MODEL: &str = ANTHROPIC_DEFAULT_MODEL;
 pub const CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL: &str = "claude-opus-4-8-plan";
+pub const CLAUDE_FABLE_5_1_PLAN_MODEL: &str = "claude-fable-5-1-plan";
+pub const CLAUDE_FABLE_5_1_PLAN_UPSTREAM_MODEL: &str = CLAUDE_FABLE_5_1_MODEL;
 pub const CLAUDE_FABLE_5_PLAN_MODEL: &str = "claude-fable-5-plan";
 pub const CLAUDE_FABLE_5_PLAN_UPSTREAM_MODEL: &str = CLAUDE_FABLE_5_MODEL;
 const AMBIENT_PROVIDER_NAME: &str = "Ambient";
@@ -114,15 +117,16 @@ pub const CORBANU_TERMINAL_PLAN_PROVIDER_ID: &str = "corbanu-terminal-plan";
 pub const CORBANU_PLAN_API_KEY_ENV_VAR: &str = "CORBANU_PLAN_API_KEY";
 pub const PFTERMINAL_PLAN_PROVIDER_ID: &str = "pfterminal-plan";
 /// Anthropic-wire sibling of the Corbanu Plan provider. Same gateway, same
-/// customer key; serves only the plan's non-private `claude-fable-5` route.
+/// customer key; serves the plan's non-private `claude-fable-5` and
+/// `claude-fable-5-1` routes.
 pub const PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID: &str = "pfterminal-plan-anthropic";
 pub const CORBANU_PLAN_ANTHROPIC_PROVIDER_ID: &str = "corbanu-plan-anthropic";
 /// Context reliably served by the SkyAPI Fable route used by Corbanu Plan.
 pub const PFTERMINAL_PLAN_FABLE_CONTEXT_WINDOW: i64 = 128_000;
 /// Completion ceiling that leaves input headroom on the SkyAPI Fable route.
 pub const PFTERMINAL_PLAN_FABLE_MAX_OUTPUT_TOKENS: i64 = 32_768;
-pub const PFTERMINAL_PLAN_GATEWAY_ORIGIN: &str = "https://pfterminal-plan-gateway.fly.dev";
-pub const PFTERMINAL_PLAN_DEFAULT_BASE_URL: &str = "https://pfterminal-plan-gateway.fly.dev/v1";
+pub const PFTERMINAL_PLAN_GATEWAY_ORIGIN: &str = "https://api.corbanu.com";
+pub const PFTERMINAL_PLAN_DEFAULT_BASE_URL: &str = "https://api.corbanu.com/v1";
 pub const PFTERMINAL_PLAN_API_KEY_ENV_VAR: &str = "PFTERMINAL_PLAN_API_KEY";
 
 /// Normalize public provider aliases to the stable identifier used by existing
@@ -262,11 +266,16 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     }
     if matches!(
         model,
-        CLAUDE_PLAN_MODEL | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL | CLAUDE_FABLE_5_PLAN_MODEL
+        CLAUDE_PLAN_MODEL
+            | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
+            | CLAUDE_FABLE_5_1_PLAN_MODEL
+            | CLAUDE_FABLE_5_PLAN_MODEL
     ) {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
-    if model == ANTHROPIC_DEFAULT_MODEL || model == CLAUDE_FABLE_5_MODEL {
+    if model == ANTHROPIC_DEFAULT_MODEL
+        || matches!(model, CLAUDE_FABLE_5_1_MODEL | CLAUDE_FABLE_5_MODEL)
+    {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
     }
     if model == META_DEFAULT_MODEL {
@@ -341,7 +350,10 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     }
     if matches!(
         model,
-        CLAUDE_PLAN_MODEL | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL | CLAUDE_FABLE_5_PLAN_MODEL
+        CLAUDE_PLAN_MODEL
+            | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
+            | CLAUDE_FABLE_5_1_PLAN_MODEL
+            | CLAUDE_FABLE_5_PLAN_MODEL
     ) && provider != CLAUDE_PLAN_PROVIDER_ID
     {
         return Some(CLAUDE_PLAN_PROVIDER_ID);
@@ -379,7 +391,14 @@ pub fn resolve_model_for_provider(
     model_provider_id: &str,
 ) -> Option<String> {
     match model_provider_id {
-        PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID => Some(CLAUDE_FABLE_5_MODEL.to_string()),
+        PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID => match model {
+            Some(model)
+                if matches!(model.trim(), CLAUDE_FABLE_5_1_MODEL | CLAUDE_FABLE_5_MODEL) =>
+            {
+                Some(model)
+            }
+            _ => Some(CLAUDE_FABLE_5_MODEL.to_string()),
+        },
         PFTERMINAL_PLAN_PROVIDER_ID
             if model.as_deref().map(str::trim) == Some(DEEPSEEK_PRO_MODEL) =>
         {
@@ -413,6 +432,7 @@ pub fn resolve_model_for_provider(
                 if model.trim().starts_with("claude-")
                     && model.trim() != CLAUDE_PLAN_MODEL
                     && model.trim() != CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
+                    && model.trim() != CLAUDE_FABLE_5_1_PLAN_MODEL
                     && model.trim() != CLAUDE_FABLE_5_PLAN_MODEL =>
             {
                 Some(model)
@@ -426,6 +446,9 @@ pub fn resolve_model_for_provider(
             Some(model) if model.trim() == ANTHROPIC_LEGACY_OPUS_4_8_MODEL => {
                 Some(CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL.to_string())
             }
+            Some(model) if model.trim() == CLAUDE_FABLE_5_1_MODEL => {
+                Some(CLAUDE_FABLE_5_1_PLAN_MODEL.to_string())
+            }
             Some(model) if model.trim() == CLAUDE_FABLE_5_MODEL => {
                 Some(CLAUDE_FABLE_5_PLAN_MODEL.to_string())
             }
@@ -434,6 +457,7 @@ pub fn resolve_model_for_provider(
                     model.trim(),
                     CLAUDE_PLAN_MODEL
                         | CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL
+                        | CLAUDE_FABLE_5_1_PLAN_MODEL
                         | CLAUDE_FABLE_5_PLAN_MODEL
                 ) =>
             {
@@ -495,7 +519,7 @@ pub fn default_model_context_window_for_provider(
         (AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID, AMBIENT_DEFAULT_MODEL) => {
             Some(AMBIENT_GLM_5_2_CONTEXT_WINDOW)
         }
-        (PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID, CLAUDE_FABLE_5_MODEL) => {
+        (PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID, CLAUDE_FABLE_5_1_MODEL | CLAUDE_FABLE_5_MODEL) => {
             Some(PFTERMINAL_PLAN_FABLE_CONTEXT_WINDOW)
         }
         _ => None,
@@ -509,7 +533,7 @@ pub fn default_model_max_output_tokens_for_provider(
     model: &str,
 ) -> Option<i64> {
     match (canonical_provider_id(model_provider_id), model.trim()) {
-        (PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID, CLAUDE_FABLE_5_MODEL) => {
+        (PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID, CLAUDE_FABLE_5_1_MODEL | CLAUDE_FABLE_5_MODEL) => {
             Some(PFTERMINAL_PLAN_FABLE_MAX_OUTPUT_TOKENS)
         }
         _ => None,
@@ -1169,7 +1193,7 @@ impl ModelProviderInfo {
     }
 
     /// Anthropic-wire sibling of the Corbanu Plan provider: same gateway and
-    /// customer key, serving only the plan's non-private Fable route on
+    /// customer key, serving the plan's non-private Fable routes on
     /// `/v1/messages`.
     pub fn create_pfterminal_plan_anthropic_provider() -> ModelProviderInfo {
         ModelProviderInfo {

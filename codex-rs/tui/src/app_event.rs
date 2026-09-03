@@ -1587,6 +1587,17 @@ pub(crate) enum AppEvent {
         target_provider_id: codex_provider_auth::ProviderCatalogId,
     },
 
+    ProviderApiKeySaveDismissed {
+        save_id: String,
+    },
+
+    /// Finish a provider API-key save after app-server has persisted and reloaded auth.
+    ProviderApiKeySaveFinished {
+        save_id: String,
+        display_name: String,
+        result: Result<(), String>,
+    },
+
     OpenTelegram,
     OpenTelegramTokenEntry,
     ValidateTelegramToken {

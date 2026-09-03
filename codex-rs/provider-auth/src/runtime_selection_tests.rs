@@ -2,9 +2,11 @@ use super::*;
 use crate::ProviderCatalogEntry;
 use crate::ProviderCatalogId;
 use crate::ProviderCurrentState;
+use crate::ProviderMethodStatus;
 use crate::ProviderSetupCapabilities;
 use crate::ProviderSetupCapability;
 use crate::ProviderStatusSnapshot;
+use crate::ProviderUnavailableReason;
 
 fn fixture(
     configuration: ProviderConfigurationState,
@@ -194,4 +196,62 @@ fn rejected_runtime_authorization_is_typed_and_secret_free() {
         }
     ));
     assert!(!format!("{decision:?}").contains("credential"));
+}
+
+#[test]
+fn status_only_runtime_cannot_bypass_unavailable_eligibility() {
+    let (catalog, statuses) = fixture(
+        ProviderConfigurationState::NotConfigured,
+        ProviderEligibilityState::Unavailable,
+        ProviderAvailabilityState::StatusOnly,
+    );
+    let mut authorizations = ProviderRuntimeAuthorizations::default();
+    authorizations.set("custom-runtime", ProviderRuntimeAuthorization::Authorized);
+
+    assert!(matches!(
+        ProviderRuntimeSelectionPolicy::assess(
+            &catalog,
+            &statuses,
+            &authorizations,
+            "custom-runtime",
+            "custom-model",
+            ProviderUseContext::NativeSpawn,
+        ),
+        ProviderUseDecision::Blocked {
+            reason: ProviderUseBlocker::Unavailable,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn command_authorization_preserves_unavailable_eligibility() {
+    let (mut catalog, mut statuses) = fixture(
+        ProviderConfigurationState::NotConfigured,
+        ProviderEligibilityState::Unavailable,
+        ProviderAvailabilityState::Unavailable {
+            reason: ProviderUnavailableReason::RecoveryRequired,
+        },
+    );
+    let capability = ProviderSetupCapability::CommandAuth {
+        setup: crate::CommandAuthSetup::StatusOnly,
+    };
+    catalog.entries[0].setup_capabilities = ProviderSetupCapabilities::one(capability.clone());
+    statuses.entries[0].methods = vec![ProviderMethodStatus {
+        capability,
+        state: ProviderMethodState::StatusOnly,
+    }];
+    let mut authorizations = ProviderRuntimeAuthorizations::default();
+    authorizations.set("custom-runtime", ProviderRuntimeAuthorization::Authorized);
+
+    authorizations.apply_to_status_catalog(&catalog, &mut statuses);
+
+    assert_eq!(
+        statuses.entries[0].eligibility,
+        ProviderEligibilityState::Unavailable
+    );
+    assert!(matches!(
+        statuses.entries[0].availability,
+        ProviderAvailabilityState::Unavailable { .. }
+    ));
 }
