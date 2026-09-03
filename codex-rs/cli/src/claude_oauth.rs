@@ -676,8 +676,8 @@ fn platform_store_for_source_id(
 }
 
 async fn preferred_platform_store(
-    config_dir: &Path,
-    security: Option<&Path>,
+    _config_dir: &Path,
+    _security: Option<&Path>,
 ) -> Result<PlatformCredentialStore> {
     #[cfg(target_os = "macos")]
     {
