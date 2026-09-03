@@ -36,30 +36,46 @@ impl ChatWidget {
     ) {
         let home = self.config.codex_home.as_path().to_path_buf();
         let tx = self.app_event_tx.clone();
-        let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
-            "wallet-passcode".to_string(),
-            "Unlock wallet".to_string(),
-            "Wallet passcode — masked".to_string(),
-            "Passcode (masked)".to_string(),
-            Box::new(move |_label, mut passcode| {
-                tokio::spawn(async move {
-                    let result = WalletDaemonClient::new(home)
-                        .unlock(std::mem::take(&mut passcode), policy)
-                        .await
-                        .map(|(capability, expires_in_seconds)| WalletUnlockedResult {
-                            capability: WalletSecret::new(capability),
-                            expires_in_seconds,
-                        })
-                        .map_err(|error| error.to_string());
-                    passcode.zeroize();
-                    tx.send(AppEvent::WalletUnlockFinished {
-                        policy,
-                        continuation,
-                        result,
-                    });
+        let cancel_tx = self.app_event_tx.clone();
+        let cancelled_deferred = wallet_unlock_deferred_setup(&continuation).cloned();
+        let submit = Box::new(move |_label: String, mut passcode: String| {
+            tokio::spawn(async move {
+                let result = WalletDaemonClient::new(home)
+                    .unlock(std::mem::take(&mut passcode), policy)
+                    .await
+                    .map(|(capability, expires_in_seconds)| WalletUnlockedResult {
+                        capability: WalletSecret::new(capability),
+                        expires_in_seconds,
+                    })
+                    .map_err(|error| error.to_string());
+                passcode.zeroize();
+                tx.send(AppEvent::WalletUnlockFinished {
+                    policy,
+                    continuation,
+                    result,
                 });
-            }),
-        );
+            });
+        });
+        let view = if let Some(deferred) = cancelled_deferred {
+            crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret_with_cancel(
+                "wallet-passcode".to_string(),
+                "Unlock wallet".to_string(),
+                "Wallet passcode — masked".to_string(),
+                "Passcode (masked)".to_string(),
+                submit,
+                Box::new(move || {
+                    cancel_tx.send(AppEvent::DeferredCorbanuPlanCancelled { deferred });
+                }),
+            )
+        } else {
+            crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
+                "wallet-passcode".to_string(),
+                "Unlock wallet".to_string(),
+                "Wallet passcode — masked".to_string(),
+                "Passcode (masked)".to_string(),
+                submit,
+            )
+        };
         self.bottom_pane.show_view(Box::new(view));
     }
 
@@ -76,11 +92,22 @@ impl ChatWidget {
                     "Cannot unlock wallet: no local wallet exists. Use /wallet create or /wallet restore."
                         .to_string(),
                 );
-                self.open_wallet_menu();
+                if let Some(deferred) = wallet_unlock_deferred_setup(&continuation).cloned() {
+                    self.app_event_tx
+                        .send(AppEvent::DeferredCorbanuPlanCancelled { deferred });
+                } else {
+                    self.open_wallet_menu();
+                }
             }
-            Err(error) => self.add_error_message(format!(
-                "Cannot check wallet state before unlock: {error}. No passcode was requested."
-            )),
+            Err(error) => {
+                self.add_error_message(format!(
+                    "Cannot check wallet state before unlock: {error}. No passcode was requested."
+                ));
+                if let Some(deferred) = wallet_unlock_deferred_setup(&continuation).cloned() {
+                    self.app_event_tx
+                        .send(AppEvent::DeferredCorbanuPlanCancelled { deferred });
+                }
+            }
         }
     }
 
@@ -151,6 +178,16 @@ impl ChatWidget {
                 self.show_wallet_unlock_prompt(policy, continuation);
             }
         }
+    }
+}
+
+fn wallet_unlock_deferred_setup(
+    continuation: &WalletUnlockContinuation,
+) -> Option<&crate::onboarding::provider_setup::DeferredProviderSetup> {
+    match continuation {
+        WalletUnlockContinuation::OpenCorbanuApi { deferred }
+        | WalletUnlockContinuation::CorbanuApiOperation { deferred, .. } => deferred.as_ref(),
+        WalletUnlockContinuation::WalletMenu | WalletUnlockContinuation::OpenPlans { .. } => None,
     }
 }
 

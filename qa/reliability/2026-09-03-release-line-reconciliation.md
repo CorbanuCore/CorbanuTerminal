@@ -66,8 +66,10 @@ work, follow-up TUI fixes, and human-test documentation.
 ## Evidence ledger
 
 - [x] Merge commit `aeaabfeaae1c2595a80c7118926e855de4ad6537`
-  retains both exact histories. Ancestry checks pass for main
-  `6dd9ad646beb4a7407521439411f436f21ea4af1` and release
+  retains both exact histories. Its exact main-line parent is
+  `64b12a2e42a73ed17fa9186cf590380d77e27ad6` (including main through
+  `6dd9ad646beb4a7407521439411f436f21ea4af1`), and ancestry checks pass
+  for that parent and release
   `43ff201aabb633a8b6a1a10ea2b1544d92ad3902`.
 - [x] Conflict-by-conflict dispositions are recorded above.
 - [x] `just fix`, `just fmt`, `git diff --check`, plan/sprint checkers, and the
@@ -80,12 +82,15 @@ work, follow-up TUI fixes, and human-test documentation.
 - [x] The focused provider/streaming core run passed 31/31 (nextest run
   `75e64c46-ee5b-4ff2-920f-c0b16d9cfd5e`); the later edits are confined to the
   TUI reconciliation and documentation.
-- [x] The complete affected multi-provider true-TMUX module passes 10/10 after
-  formatting, including fresh/locked wallet, fallback/no-fallback, cancel,
+- [x] The complete affected multi-provider true-TMUX module passes 11/11 after
+  formatting, including fresh/locked wallet, fallback/no-fallback, cancel and
+  ordinary re-entry, one-time key create/store/reveal/activate without restart,
   restart, and request paths. The exact PF-52 Claude recovery journey separately
   passes 1/1.
 - [ ] Release build produces Corbanu 0.1.38 plus a matching code-mode host.
-- [ ] Independent Fable 5.1 Max review has no unresolved actionable finding.
+- [x] Independent Fable 5.1 Max review through TMUX + Corbanu Terminal
+  converged to `FINAL_REVIEW: CLEAN`; its findings and dispositions are in
+  `qa/release/0.1.38/autoreview-fable.md`.
 - [ ] Exact candidate commit and binary digests are recorded and pushed.
 - [ ] Named-human acceptance of the installed candidate is recorded.
 

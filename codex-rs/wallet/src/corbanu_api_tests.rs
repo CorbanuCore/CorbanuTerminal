@@ -65,6 +65,20 @@ fn created_keys_accept_the_public_api_shape_without_changing_daemon_ipc() {
 }
 
 #[test]
+fn gateway_key_debug_output_redacts_plaintext() {
+    let key = GatewayKey {
+        key_id: "key-id".to_string(),
+        api_key: "cbn_live_debug_canary".to_string(),
+        display_prefix: "cbn_live_debug".to_string(),
+    };
+
+    let debug = format!("{key:?}");
+    assert!(!debug.contains("cbn_live_debug_canary"));
+    assert!(debug.contains("[REDACTED]"));
+    assert!(debug.contains("key-id"));
+}
+
+#[test]
 fn post_settlement_account_creates_a_key_only_without_an_active_one() {
     let account = |keys| CorbanuApiAccount {
         balance: CorbanuApiBalance {

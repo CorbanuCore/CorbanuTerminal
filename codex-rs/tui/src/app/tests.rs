@@ -7882,6 +7882,48 @@ fn install_runtime_provider_policy(
 }
 
 #[tokio::test]
+async fn stored_corbanu_key_can_refresh_the_current_runtime_policy_in_process() {
+    let app = make_test_app().await;
+    install_runtime_provider_policy(
+        &app,
+        crate::provider_status_host::ProviderAccountMetadata::default(),
+    );
+    let policy = app
+        .model_catalog
+        .provider_policy()
+        .expect("test app should install a provider policy");
+    let host = policy.host();
+    codex_login::login_with_provider_api_key(
+        &app.config.codex_home,
+        codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR,
+        "corbanu-refresh-test-key",
+        app.config.cli_auth_credentials_store_mode,
+        app.config.auth_keyring_backend_kind(),
+    )
+    .expect("store Corbanu API key");
+    assert!(host.activate(codex_model_provider_info::CORBANU_PLAN_PROVIDER_ID));
+    app.model_catalog.refresh_provider_policy();
+
+    assert!(app.model_catalog.provider_is_selectable(
+        codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID,
+        "corbanu/glm-5.3-flash",
+    ));
+
+    assert!(
+        codex_login::delete_provider_api_key(
+            &app.config.codex_home,
+            codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR,
+        )
+        .expect("delete Corbanu API key")
+    );
+    app.model_catalog.refresh_provider_policy();
+    assert!(!app.model_catalog.provider_is_selectable(
+        codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID,
+        "corbanu/glm-5.3-flash",
+    ));
+}
+
+#[tokio::test]
 async fn open_agent_picker_keeps_missing_threads_for_replay() -> Result<()> {
     let mut app = Box::pin(make_test_app()).await;
     let mut app_server = Box::pin(crate::start_embedded_app_server_for_picker(

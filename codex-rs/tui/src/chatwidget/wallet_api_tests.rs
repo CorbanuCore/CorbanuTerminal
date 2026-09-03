@@ -186,7 +186,6 @@ async fn non_key_operation_preserves_deferred_cancel_continuation() {
             key_id: "key-for-continuation-test".to_string(),
         }),
         Some(deferred.clone()),
-        /*select_model*/ false,
         /*refresh_surface*/ true,
     ));
     chat.handle_key_event(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
@@ -283,7 +282,6 @@ async fn stale_non_key_completion_does_not_reopen_the_api_surface() {
             key_id: "stale-key".to_string(),
         }),
         None,
-        /*select_model*/ false,
         /*refresh_surface*/ false,
     ));
 

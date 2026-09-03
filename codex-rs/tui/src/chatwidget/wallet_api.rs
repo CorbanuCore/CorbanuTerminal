@@ -324,7 +324,6 @@ impl ChatWidget {
         &mut self,
         result: Result<CorbanuApiOperationResult, String>,
         deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
-        select_model: bool,
         refresh_surface: bool,
     ) -> bool {
         match result {
@@ -357,7 +356,7 @@ impl ChatWidget {
                     None,
                 );
                 if let Some(api_key) = api_key {
-                    self.store_and_reveal_corbanu_api_key(api_key, select_model)
+                    self.store_and_reveal_corbanu_api_key(api_key)
                 } else {
                     if refresh_surface {
                         self.open_corbanu_api_after_operation(deferred);
@@ -371,7 +370,7 @@ impl ChatWidget {
                         .to_string(),
                     None,
                 );
-                self.store_and_reveal_corbanu_api_key(api_key, select_model)
+                self.store_and_reveal_corbanu_api_key(api_key)
             }
             Ok(CorbanuApiOperationResult::KeyRevoked { .. }) => {
                 self.add_info_message(
@@ -408,11 +407,7 @@ impl ChatWidget {
         }
     }
 
-    fn store_and_reveal_corbanu_api_key(
-        &mut self,
-        api_key: GatewayKey,
-        select_model: bool,
-    ) -> bool {
+    fn store_and_reveal_corbanu_api_key(&mut self, api_key: GatewayKey) -> bool {
         let mut plaintext = api_key.api_key;
         let stored = codex_login::login_with_provider_api_key(
             &self.config.codex_home,
@@ -422,12 +417,7 @@ impl ChatWidget {
             self.config.auth_keyring_backend_kind(),
         );
         let stored = match stored {
-            Ok(()) => {
-                if select_model {
-                    self.select_corbanu_api_model("corbanu/glm-5.3-flash");
-                }
-                true
-            }
+            Ok(()) => true,
             Err(error) => {
                 self.add_error_message(format!(
                     "The API key was created but could not be stored in the encrypted credential store: {error}"
@@ -445,7 +435,7 @@ impl ChatWidget {
         stored
     }
 
-    fn select_corbanu_api_model(&self, model: &str) {
+    pub(crate) fn select_corbanu_api_model(&self, model: &str) {
         let provider = canonical_catalog_provider(model).unwrap_or(PFTERMINAL_PLAN_PROVIDER_ID);
         self.app_event_tx.send(AppEvent::UpdateModelSelection {
             model: model.to_string(),
@@ -631,9 +621,10 @@ fn corbanu_api_params(
                 items.push(SelectionItem {
                     name: format!("{}{}{}", model.display_name, recommended, faster),
                     description: Some(format!(
-                        "${} input · ${} cached input · ${} output · {privacy}",
+                        "${} input · ${} cache read · ${} cache write · ${} output · {privacy}",
                         model.pricing.input_usd,
                         model.pricing.cache_read_usd,
+                        model.pricing.cache_write_usd,
                         model.pricing.output_usd,
                     )),
                     is_disabled: is_deferred,

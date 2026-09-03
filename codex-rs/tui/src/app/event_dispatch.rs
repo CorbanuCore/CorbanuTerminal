@@ -1905,10 +1905,20 @@ impl App {
                     .model_catalog
                     .provider_is_selectable(selected_provider, &model)
                 {
-                    self.chat_widget.add_error_message(format!(
-                        "Model provider `{selected_provider}` is inactive or unavailable. Repair or reactivate it in /providers."
-                    ));
-                    return Ok(AppRunControl::Continue);
+                    // Selection events can be queued behind credential-entry or secure-reveal
+                    // overlays. Re-resolve the provider snapshot once before rejecting them so a
+                    // credential that was stored and activated earlier in this event batch is
+                    // immediately usable without a restart.
+                    self.model_catalog.refresh_provider_policy();
+                    if !self
+                        .model_catalog
+                        .provider_is_selectable(selected_provider, &model)
+                    {
+                        self.chat_widget.add_error_message(format!(
+                            "Model provider `{selected_provider}` is inactive or unavailable. Repair or reactivate it in /providers."
+                        ));
+                        return Ok(AppRunControl::Continue);
+                    }
                 }
                 if let Some(model_provider) = provider.as_ref() {
                     let Some(provider_info) =
@@ -3274,7 +3284,8 @@ impl App {
             AppEvent::CorbanuApiOperationFinished { result, deferred } => {
                 // A submitted wallet operation cannot be cancelled. Always surface its result so a
                 // one-time generated key is stored and revealed instead of being lost. A stale
-                // deferred continuation is stripped below, which prevents provider activation.
+                // deferred continuation is stripped below, which prevents provider activation and
+                // model selection.
                 let was_deferred = deferred.is_some();
                 let active_deferred = deferred.filter(|deferred| {
                     self.active_deferred_provider_setup.as_ref() == Some(deferred)
@@ -3287,9 +3298,43 @@ impl App {
                     .on_corbanu_api_operation_finished(
                         result,
                         active_deferred.clone(),
-                        /*select_model*/ ordinary_operation_is_current,
                         refresh_surface,
                     );
+                if configured && ordinary_operation_is_current {
+                    // The credential write is synchronous. Activate the still-current ordinary
+                    // operation, then rebuild the policy from durable storage before queueing its
+                    // model selection. Deferred activation remains owned by the exact deferred
+                    // continuation below; stale submitted completions only store/reveal their key.
+                    let activated = if let Some(policy) = self.model_catalog.provider_policy() {
+                        let host = policy.host();
+                        if !host.activate(codex_model_provider_info::CORBANU_PLAN_PROVIDER_ID) {
+                            self.chat_widget.add_error_message(
+                                "Corbanu API key was stored, but provider activation could not be persisted."
+                                    .to_string(),
+                            );
+                            false
+                        } else {
+                            true
+                        }
+                    } else {
+                        true
+                    };
+                    self.model_catalog.refresh_provider_policy();
+                    if activated {
+                        let model = "corbanu/glm-5.3-flash";
+                        if self.model_catalog.provider_is_selectable(
+                            codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID,
+                            model,
+                        ) {
+                            self.chat_widget.select_corbanu_api_model(model);
+                        } else {
+                            self.chat_widget.add_error_message(
+                                "Corbanu API key was stored, but provider status reconciliation is still incomplete."
+                                    .to_string(),
+                            );
+                        }
+                    }
+                }
                 if configured && let Some(deferred) = active_deferred {
                     self.app_event_tx
                         .send(AppEvent::DeferredCorbanuPlanConfigured { deferred });
@@ -4238,10 +4283,18 @@ impl App {
                     .model_catalog
                     .provider_is_selectable(selected_provider, &model)
                 {
-                    self.chat_widget.add_error_message(format!(
-                        "Cannot save `{model}` because provider `{selected_provider}` is inactive or unavailable."
-                    ));
-                    return Ok(AppRunControl::Continue);
+                    // Match the in-session update path above. A queued persistence event must not
+                    // retain the snapshot from before its provider credential was stored.
+                    self.model_catalog.refresh_provider_policy();
+                    if !self
+                        .model_catalog
+                        .provider_is_selectable(selected_provider, &model)
+                    {
+                        self.chat_widget.add_error_message(format!(
+                            "Cannot save `{model}` because provider `{selected_provider}` is inactive or unavailable."
+                        ));
+                        return Ok(AppRunControl::Continue);
+                    }
                 }
                 if self.model_catalog.take_session_recovery_only() {
                     self.chat_widget.add_info_message(
@@ -4282,12 +4335,18 @@ impl App {
                             .filter(|display_name| !display_name.trim().is_empty())
                             .unwrap_or_else(|| model.clone());
                         let provider_label = provider.as_deref().map(|provider_id| {
-                            self.config
-                                .model_providers
-                                .get(provider_id)
-                                .map(|provider| provider.name.clone())
-                                .filter(|name| !name.trim().is_empty())
-                                .unwrap_or_else(|| provider_id.to_string())
+                            if provider_id
+                                == codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID
+                            {
+                                "Corbanu API".to_string()
+                            } else {
+                                self.config
+                                    .model_providers
+                                    .get(provider_id)
+                                    .map(|provider| provider.name.clone())
+                                    .filter(|name| !name.trim().is_empty())
+                                    .unwrap_or_else(|| provider_id.to_string())
+                            }
                         });
                         let mut message = if let Some(provider_label) = provider_label {
                             format!("Model changed to {model_label} via {provider_label}")

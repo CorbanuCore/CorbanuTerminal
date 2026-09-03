@@ -59,5 +59,8 @@
   refresh-view replacement.
 - Provider credential tests: 12/12, including the corrected snapshot.
 - Wallet unlock tests: 7/7.
-- Complete multi-provider true-TMUX module: 10/10.
-- Clean structured-review rerun after the final fix: pending.
+- Complete multi-provider true-TMUX module: 11/11, including exact deferred
+  passcode cancellation/re-entry and one-time key create/store/reveal/activate
+  without restart.
+- Clean structured-review rerun after the final fix: `findings: []`, with
+  `overall_correctness: patch is correct` (confidence 0.84).

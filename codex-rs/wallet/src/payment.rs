@@ -76,11 +76,22 @@ pub struct ProvisionedPlan {
     pub transaction: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GatewayKey {
     pub key_id: String,
     pub api_key: String,
     pub display_prefix: String,
+}
+
+impl std::fmt::Debug for GatewayKey {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("GatewayKey")
+            .field("key_id", &self.key_id)
+            .field("api_key", &"[REDACTED]")
+            .field("display_prefix", &self.display_prefix)
+            .finish()
+    }
 }
 
 #[derive(Debug, Error)]

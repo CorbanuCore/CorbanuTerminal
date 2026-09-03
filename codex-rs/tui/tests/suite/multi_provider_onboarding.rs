@@ -214,6 +214,98 @@ async fn tmux_fresh_wallet_api_cancel_without_fallback_returns_to_setup() -> Res
     fresh_wallet_api_handoff(/*has_fallback*/ false).await
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_fresh_wallet_api_key_success_activates_without_restart() -> Result<()> {
+    if !TmuxServer::should_run("PF-56 Corbanu API key success and in-session activation")? {
+        return Ok(());
+    }
+    let repo_root = codex_utils_cargo_bin::repo_root()?;
+    let binary = codex_binary(&repo_root)?;
+    let home = tempdir()?;
+    let server = MockServer::start().await;
+    mount_corbanu_api_gateway(&server).await;
+    write_config(home.path(), &repo_root, &server.uri())?;
+
+    let tmux = TmuxServer::start("pf56_fresh_wallet_api_key_success")?;
+    register_evidence(&tmux, home.path(), &binary)?;
+    let session = tmux.new_session(session_spec_with_gateway(
+        "fresh-wallet-api-key-success",
+        &binary,
+        &repo_root,
+        home.path(),
+        &server.uri(),
+    ))?;
+    let pane = session.primary_pane();
+    pane.wait_stable_contains("Provider: OpenAI Codex Account", READY_TIMEOUT)?;
+    select_label(pane, "Corbanu API")?;
+    select_label(pane, "Done")?;
+
+    let passphrase = synthetic_canary("wallet-key-success-passphrase");
+    pane.wait_stable_contains("Create Solana wallet", READY_TIMEOUT)?;
+    pane.send_secret_literal(&passphrase)?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Confirm the value", READY_TIMEOUT)?;
+    pane.send_secret_literal(&passphrase)?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Wallet recovery — secure view", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Unlock wallet", READY_TIMEOUT)?;
+    pane.send_secret_literal(&passphrase)?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Create API key", READY_TIMEOUT)?;
+    let before_key_creation = pane.capture_scrollback_tail(4_000)?;
+    ensure!(
+        !before_key_creation.contains("inactive or unavailable"),
+        "deferred Corbanu setup attempted model selection before key creation:\n{before_key_creation}"
+    );
+    select_label(pane, "Create API key")?;
+    pane.wait_stable_contains("Corbanu API cbn_live_pf53 — shown once", READY_TIMEOUT)?;
+    pane.wait_stable_contains("cbn_live_pf53_success_key", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Enter)?;
+    wait_chat_ready(pane)?;
+
+    let config = wait_for_config_values(
+        home.path(),
+        &[
+            "model_provider = \"pfterminal-plan\"",
+            "model = \"corbanu/glm-5.3-flash\"",
+        ],
+    )
+    .await?;
+    let scrollback = pane.capture_scrollback_tail(4_000)?;
+    ensure!(
+        !scrollback.contains("inactive or unavailable"),
+        "newly stored Corbanu API key was not activated in the current process:\n{config}\nredacted terminal scrollback:\n{scrollback}"
+    );
+    ensure!(
+        scrollback.contains("Model changed to corbanu/glm-5.3-flash via Corbanu API"),
+        "successful Corbanu API activation did not use the product label:\n{scrollback}"
+    );
+    let provider_auth = codex_login::provider_api_key_from_auth_storage(
+        home.path(),
+        codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR,
+        codex_config::types::AuthCredentialsStoreMode::File,
+        codex_config::types::AuthKeyringBackendKind::default(),
+    )?;
+    ensure!(
+        provider_auth.as_deref() == Some("cbn_live_pf53_success_key"),
+        "one-time Corbanu API key was not stored in provider custody"
+    );
+
+    capture_success_evidence(
+        "fresh-wallet-api-key-success",
+        &binary,
+        home.path(),
+        pane,
+        &server,
+        &[passphrase.as_str()],
+    )
+    .await?;
+    exit_tui(pane)?;
+    session.wait_for_exit(READY_TIMEOUT)?;
+    Ok(())
+}
+
 async fn fresh_wallet_api_handoff(has_fallback: bool) -> Result<()> {
     let repo_root = codex_utils_cargo_bin::repo_root()?;
     let binary = codex_binary(&repo_root)?;
@@ -321,12 +413,23 @@ async fn tmux_locked_wallet_api_unlocks_and_cancels() -> Result<()> {
     select_label(pane, "Corbanu API")?;
     select_label(pane, "Done")?;
     pane.wait_stable_contains("Unlock wallet", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Escape)?;
+    wait_chat_ready(pane)?;
+    pane.send_literal("/wallet")?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Corbanu API", READY_TIMEOUT)?;
+    select_label(pane, "Corbanu API")?;
+    pane.wait_stable_contains("Manage API keys", READY_TIMEOUT)?;
+    select_label(pane, "Manage API keys")?;
+    pane.wait_stable_contains("Unlock wallet", READY_TIMEOUT)?;
     pane.send_secret_literal(&passphrase)?;
     pane.send_key(TmuxKey::Enter)?;
     pane.wait_stable_contains("Corbanu API", READY_TIMEOUT)?;
     pane.wait_stable_contains("Top up balance", READY_TIMEOUT)?;
     pane.send_key(TmuxKey::Escape)?;
-    pane.wait_stable_contains("Corbanu Terminal", READY_TIMEOUT)?;
+    pane.wait_stable_contains("Wallet", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Escape)?;
+    wait_chat_ready(pane)?;
     capture_success_evidence(
         "locked-wallet-failure-retry",
         &binary,
@@ -499,6 +602,8 @@ fn wait_chat_ready(pane: &TmuxPane<'_>) -> Result<()> {
         |capture| {
             capture.contains("/model to change")
                 && !capture.contains("Press enter to confirm or esc to go back")
+                && !capture.contains("Vault credential — secure view")
+                && !capture.contains("Press Enter or Esc to clear")
         },
     )?;
     Ok(())
@@ -782,27 +887,10 @@ fn register_evidence(tmux: &TmuxServer, home: &Path, binary: &Path) -> Result<()
 }
 
 async fn mount_corbanu_api_gateway(server: &MockServer) {
-    Mock::given(method("POST"))
-        .and(path("/v1/wallet/challenge"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(serde_json::json!({"challenge":"pf53-api-account"})),
-        )
-        .mount(server)
-        .await;
-    Mock::given(method("POST"))
-        .and(path("/v1/wallet/execute"))
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "balance": {
-                "balanceMicrousd": "0",
-                "reservedMicrousd": "0",
-                "availableMicrousd": "0",
-                "balanceUsd": "0",
-                "reservedUsd": "0",
-                "availableUsd": "0"
-            },
-            "keys": [],
-            "models": [{
+            "data": [{
                 "id": "corbanu/glm-5.3-flash",
                 "displayName": "GLM 5.3 Flash",
                 "recommended": true,
@@ -819,6 +907,73 @@ async fn mount_corbanu_api_gateway(server: &MockServer) {
         })))
         .mount(server)
         .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/wallet/challenge"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"challenge":"pf53-api-account"})),
+        )
+        .mount(server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/wallet/execute"))
+        .respond_with(|request: &wiremock::Request| {
+            let operation = serde_json::from_slice::<serde_json::Value>(&request.body)
+                .ok()
+                .and_then(|body| body.pointer("/operation/kind").cloned())
+                .and_then(|kind| kind.as_str().map(str::to_owned));
+            if operation.as_deref() == Some("create_key") {
+                return ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "id": "pf53-success-key-id",
+                    "key": "cbn_live_pf53_success_key",
+                    "displayPrefix": "cbn_live_pf53"
+                }));
+            }
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "balance": {
+                    "balanceMicrousd": "0",
+                    "reservedMicrousd": "0",
+                    "availableMicrousd": "0",
+                    "balanceUsd": "0",
+                    "reservedUsd": "0",
+                    "availableUsd": "0"
+                },
+                "keys": [],
+                "models": [{
+                    "id": "corbanu/glm-5.3-flash",
+                    "displayName": "GLM 5.3 Flash",
+                    "recommended": true,
+                    "balanceRate": "standard",
+                    "privacy": "corbanu-controlled",
+                    "pricing": {
+                        "inputUsd": "0.10",
+                        "outputUsd": "0.30",
+                        "cacheReadUsd": "0.01",
+                        "cacheWriteUsd": "0.10",
+                        "version": "pf53-test"
+                    }
+                }]
+            }))
+        })
+        .mount(server)
+        .await;
+}
+
+async fn wait_for_config_values(home: &Path, expected: &[&str]) -> Result<String> {
+    let path = home.join("config.toml");
+    let deadline = std::time::Instant::now() + READY_TIMEOUT;
+    loop {
+        let config = fs::read_to_string(&path)?;
+        if expected.iter().all(|value| config.contains(value)) {
+            return Ok(config);
+        }
+        if std::time::Instant::now() >= deadline {
+            anyhow::bail!(
+                "timed out waiting for config values {expected:?}; final config:\n{config}"
+            );
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }
 
 async fn capture_success_evidence(
@@ -916,12 +1071,14 @@ fn response(text: &str) -> String {
 }
 
 fn codex_binary(repo_root: &Path) -> Result<PathBuf> {
-    for name in ["codex", "corbanu", "pfterminal"] {
+    // These scenarios qualify the branded product. Prefer its freshly built binary instead of a
+    // potentially stale upstream `codex` sibling left in the shared target directory.
+    for name in ["corbanu", "pfterminal", "codex"] {
         if let Ok(binary) = codex_utils_cargo_bin::cargo_bin(name) {
             return Ok(binary);
         }
     }
-    for name in ["codex", "corbanu", "pfterminal"] {
+    for name in ["corbanu", "pfterminal", "codex"] {
         let binary = repo_root.join("codex-rs/target/debug").join(name);
         if binary.is_file() {
             return Ok(binary);
