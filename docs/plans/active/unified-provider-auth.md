@@ -124,6 +124,9 @@ requires the user to choose a usable replacement first.
 - Bounded operating-system keyring access for the encrypted provider vault so a
   locked or unresponsive credential service degrades through the existing
   fallback policy instead of freezing startup, save, read, or logout.
+- One encrypted-store rewrite per logical vault mutation so provider add,
+  rotation, and bulk removal do not repeatedly pay the age/scrypt cost while a
+  save or logout is visibly pending.
 - Focused automated, snapshot, integration, adversarial redaction, substantial
   typed-TMUX, live-repository, human, documentation, and release evidence.
 
@@ -380,7 +383,7 @@ Historical Claude artifacts do not substitute for final integrated-tree runs.
 | Physical Linux/Windows evidence | release | release owner | release | prior Claude plan left this unclosed; final applicability must be recorded |
 | Target version and benchmark state | release | release owner | release | pending |
 | Latest-main integration | integration | Codex primary integration agent | PF-57 | Merge `origin/main` into the preserved PF-48–PF-56 lineage; validate the combined commit before proposing it for `main`. |
-| Credential-store liveness | regression | Codex primary integration agent | PF-57 | The combined `codex-login` suite reproduced two 60-second timeouts and repeated 8–40 second OS-keyring waits; bound the shared keyring operation, preserve encrypted-vault fallback semantics, and prove recovery without weakening credential custody. |
+| Credential-store liveness | regression | Codex primary integration agent | PF-57 | The locked-keyring flow requires a bounded shared keyring operation. Separately, the combined `codex-login` suite reproduced two 60-second timeouts; a live stack sample placed the CPU-bound wait in repeated age/scrypt rewrites during one vault mutation. Preserve encrypted-vault fallback and work factor while bounding keyring waits and coalescing each logical mutation. |
 
 ## Release linkage
 
