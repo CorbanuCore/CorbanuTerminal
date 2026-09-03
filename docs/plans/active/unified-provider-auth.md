@@ -11,7 +11,7 @@ activation_basis: "The user's 2026-09-01 P1 decision to supersede the remaining 
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-08-30
-updated: 2026-09-01
+updated: 2026-09-02
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Shipping MVP — LIVE"
@@ -20,6 +20,9 @@ implementation_worktrees:
   - path: "/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0"
     branch: "feat/unified-provider-auth"
     base_commit: "f7356a94e032234022a462d65b576a7de2854859"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/integrate-unified-provider-auth-final"
+    branch: "integration/unified-provider-auth-final"
+    base_commit: "06211dbfca61d3f36df3bf069a79ed53ad7a6fa2"
 ---
 
 # Unified provider onboarding and management
@@ -167,6 +170,7 @@ requires the user to choose a usable replacement first.
 | --- | --- | --- | --- | --- |
 | GPT-5.6 Sol high implementation agent | `/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0` | `feat/unified-provider-auth` | `f7356a94e032234022a462d65b576a7de2854859` | Serial implementation of PF-48 through PF-56 only. |
 | Codex primary agent | same receiving worktree | same branch | same base | Feature completeness, integration decisions, scope control, review budget, final-tree verification, and TMUX acceptance. |
+| Codex primary integration agent | `/Volumes/CorbanuDrive/Corbanu/worktrees/integrate-unified-provider-auth-final` | `integration/unified-provider-auth-final` | `06211dbfca61d3f36df3bf069a79ed53ad7a6fa2` | PF-57 latest-main merge, conflict resolution, verified regression repairs, combined-tree qualification, and handoff. |
 
 `parallel_sprint_limit: 1` is intentional. Shared manifests, config schemas,
 provider state, event routing, and TUI hosts make parallel writes unsafe. The
@@ -218,6 +222,7 @@ user work and integrate rather than revert concurrent changes.
 | `PF-54` | Unified `/providers` management and eligibility controls | [PF-54-S01](../../sprints/archive/unified-provider-auth/pf-54-s01-provider-management.md) | completed |
 | `PF-55` | Startup, current-model, and custom-provider convergence | [PF-55-S01](../../sprints/archive/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | completed at `21cf3199f2` |
 | `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/archive/unified-provider-auth/pf-56-s01-final-qualification.md) | completed at `fd8a9c900e` |
+| `PF-57` | Latest-main integration and regression preservation | [PF-57-S01](../../sprints/current/unified-provider-auth/pf-57-s01-latest-main-integration.md) | in progress |
 
 ## Hard dependency graph
 
@@ -232,6 +237,7 @@ PF-42..PF-47 merged Claude foundation
               -> PF-54 /providers management
                 -> PF-55 startup/current/custom convergence
                   -> PF-56 integrated qualification
+                    -> PF-57 latest-main integration and regression preservation
 ```
 
 One sprint is executable at a time. A dependent sprint remains draft until its
@@ -268,6 +274,9 @@ predecessor is completed and archived.
    model behavior in PF-55.
 8. Format, test, perform substantial true-TMUX qualification, run the bounded
    review program, document, and collect release evidence in PF-56.
+9. Merge the latest `origin/main` without rewriting archived sprint commits,
+   resolve shared-provider conflicts semantically, preserve post-fork fixes, and
+   rerun combined-tree qualification and independent review in PF-57.
 
 ## Review and TMUX policy
 
@@ -284,6 +293,12 @@ At most four formal review passes are planned across the initiative:
 No additional autoreview or external review is scheduled. The accountable owner
 may exceed four only when a review uncovers a major issue; the finding, reason,
 remediation, and additional review must be recorded.
+
+PF-57 is the recorded exception: integrating fourteen post-fork `main` commits
+created two semantic Rust conflicts, and the first integration review identified
+two fail-closed eligibility concerns. The user's 2026-09-02 direction requires
+validation against latest `main`; after reproducing and remediating applicable
+findings, run one combined-candidate Fable 5.1 review through Corbanu and TMUX.
 
 TMUX proof is continuous, not deferred to a token final smoke. PF-53, PF-54, and
 PF-55 add focused typed-TMUX scenarios; PF-56 reruns the full matrix on the
@@ -356,6 +371,7 @@ Historical Claude artifacts do not substitute for final integrated-tree runs.
 | Live accounts and named human | release | release owner | PF-56/release | pending; cannot be fabricated |
 | Physical Linux/Windows evidence | release | release owner | release | prior Claude plan left this unclosed; final applicability must be recorded |
 | Target version and benchmark state | release | release owner | release | pending |
+| Latest-main integration | integration | Codex primary integration agent | PF-57 | Merge `origin/main` into the preserved PF-48–PF-56 lineage; validate the combined commit before proposing it for `main`. |
 
 ## Release linkage
 

@@ -2,8 +2,8 @@
 
 The active [unified provider onboarding and management plan](../../../plans/active/unified-provider-auth.md)
 allows one serial sprint. PF-42 through PF-47 are the merged Claude-auth
-foundation. PF-48 through PF-53 are completed and archived; PF-54 is the
-allocated serial sprint in progress.
+foundation. PF-48 through PF-56 are completed and archived; PF-57 is the
+allocated latest-main integration sprint.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
@@ -13,18 +13,19 @@ allocated serial sprint in progress.
 | 10 | [PF-51-S01](../../archive/unified-provider-auth/pf-51-s01-openai-account-adapter.md) | OpenAI account adapter | completed | PF-50-S01 |
 | 11 | [PF-52-S01](../../archive/unified-provider-auth/pf-52-s01-claude-auth-adapter.md) | Merged Claude backend adapter | completed | PF-51-S01 |
 | 12 | [PF-53-S01](../../archive/unified-provider-auth/pf-53-s01-multi-provider-onboarding.md) | Configure-many onboarding and deferred Corbanu | completed | PF-52-S01 |
-| 13 | [PF-54-S01](pf-54-s01-provider-management.md) | `/providers` eligibility management | in progress | PF-53-S01 |
-| 14 | [PF-55-S01](pf-55-s01-startup-provider-convergence.md) | Startup, current-model, and custom-provider convergence | draft | PF-54-S01 |
-| 15 | [PF-56-S01](pf-56-s01-final-qualification.md) | Final automated, TMUX, review, documentation, and release evidence | draft | PF-55-S01 |
+| 13 | [PF-54-S01](../../archive/unified-provider-auth/pf-54-s01-provider-management.md) | `/providers` eligibility management | completed | PF-53-S01 |
+| 14 | [PF-55-S01](../../archive/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | Startup, current-model, and custom-provider convergence | completed | PF-54-S01 |
+| 15 | [PF-56-S01](../../archive/unified-provider-auth/pf-56-s01-final-qualification.md) | Final automated, TMUX, review, documentation, and release evidence | completed | PF-55-S01 |
+| 16 | [PF-57-S01](pf-57-s01-latest-main-integration.md) | Latest-main integration and regression preservation | in progress | PF-56-S01 |
 
 ## Delivery contract
 
-- Implementation owner: GPT-5.6 Sol high implementation agent.
-- Accountable integration and feature-completeness owner: Codex primary agent.
-- Formal review maximum: four unless a review uncovers and records a major issue.
-- External review: one Claude Fable 5 high reviewer spawned and controlled
-  through the TMUX harness.
-- True-TMUX qualification begins in PF-53 and expands through PF-56.
+- PF-48 through PF-56 implementation owner: GPT-5.6 Sol high implementation agent.
+- PF-57 integration and feature-completeness owner: Codex primary integration agent.
+- PF-57 preserves archived commit identities by merging rather than rebasing.
+- Its recorded review exception is one Fable 5.1 review through Corbanu and TMUX
+  after applicable integration findings are repaired.
+- True-TMUX qualification from PF-56 is rerun on the combined PF-57 candidate.
 
 ## Machine checks
 
