@@ -7,7 +7,7 @@ plan_feature: "PF-57"
 execution_order: 16
 owner: "Codex primary integration agent"
 parallel_lane: "provider-auth-main-integration"
-write_scope: "codex-rs/keyring-store/Cargo.toml; codex-rs/keyring-store/src/lib.rs; codex-rs/secrets/src/lib.rs; codex-rs/secrets/src/local.rs; codex-rs/vault/src/lib.rs; codex-rs/vault/src/tests.rs; codex-rs/login/src/auth/provider_key_vault.rs; codex-rs/provider-auth/src/runtime_selection.rs; codex-rs/provider-auth/src/runtime_selection_tests.rs; codex-rs/tui/src/app/event_dispatch.rs; codex-rs/tui/src/onboarding/auth.rs; codex-rs/tui/tests/; docs/plans/active/p0-security-levels.md; docs/sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md; docs/sprints/index.md; docs/sprints/current/unified-provider-auth/index.md; docs/plans/active/unified-provider-auth.md; docs/sprints/current/unified-provider-auth/pf-57-s01-latest-main-integration.md; mkdocs.yml; qa/provider-auth/pf-57/"
+write_scope: "codex-rs/Cargo.toml; codex-rs/keyring-store/Cargo.toml; codex-rs/keyring-store/src/lib.rs; codex-rs/secrets/src/lib.rs; codex-rs/secrets/src/local.rs; codex-rs/vault/src/lib.rs; codex-rs/vault/src/tests.rs; codex-rs/login/src/auth/provider_key_vault.rs; codex-rs/provider-auth/src/runtime_selection.rs; codex-rs/provider-auth/src/runtime_selection_tests.rs; codex-rs/tui/src/app/event_dispatch.rs; codex-rs/tui/src/onboarding/auth.rs; codex-rs/tui/tests/; docs/plans/active/p0-security-levels.md; docs/sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md; docs/sprints/index.md; docs/sprints/current/unified-provider-auth/index.md; docs/plans/active/unified-provider-auth.md; docs/sprints/current/unified-provider-auth/pf-57-s01-latest-main-integration.md; mkdocs.yml; qa/provider-auth/pf-57/"
 integration_gate: "Codex primary integration agent merges origin/main into the preserved PF-48–PF-56 lineage, resolves only the declared conflicts/findings, bounds locked OS-keyring access and coalesces logical vault mutations without weakening encrypted-vault fallback or scrypt strength, reruns post-fork main regression tests plus provider-auth and true-TMUX suites on the combined tree, obtains one Fable 5.1 review through Corbanu/TMUX, and records the exact candidate before any main update."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/integrate-unified-provider-auth-final"
 branch: "integration/unified-provider-auth-final"
@@ -58,6 +58,7 @@ updated: 2026-09-02
 
 - [ ] Bound OS-keyring calls and prevent repeated stuck-worker accumulation for read, write, delete, and startup/logout callers.
 - [ ] Coalesce each vault add, update, delete, and bulk-delete mutation into one encrypted-file rewrite without lowering the pinned scrypt work factor or changing vault format.
+- [ ] Optimize the scrypt and Salsa implementation only in development/test profiles so exact provider flows remain below the harness timeout without reducing cryptographic work.
 - [ ] Verify existing encrypted-vault and locked-keyring fallback behavior remains fail-closed for existing vaults and usable for new keyring-less profiles.
 - [ ] Run formatting, governance, affected automated tests, combined true-TMUX flows, and secret-canary checks.
 - [ ] Run one Fable 5.1 independent review through Corbanu/TMUX and remediate applicable findings.
