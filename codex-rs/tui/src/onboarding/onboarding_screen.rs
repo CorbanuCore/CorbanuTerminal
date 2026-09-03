@@ -52,7 +52,7 @@ use crate::onboarding::auth::ApiKeyProviderOption;
 use crate::onboarding::auth::AuthModeWidget;
 use crate::onboarding::auth::SignInOption;
 use crate::onboarding::auth::SignInState;
-use crate::onboarding::auth::catalog_sign_in_options;
+use crate::onboarding::auth::catalog_sign_in_options_from_statuses;
 use crate::onboarding::keys;
 use crate::onboarding::provider_setup::DeferredProviderSetup;
 use crate::onboarding::provider_setup::ProviderSetupSession;
@@ -205,8 +205,9 @@ impl OnboardingScreen {
                 ..ProviderAccountMetadata::default()
             },
         );
+        let provider_statuses = provider_status_host.resolve();
         let provider_setup_session = Arc::new(RwLock::new(ProviderSetupSession::from_statuses(
-            provider_status_host.resolve().entries(),
+            provider_statuses.entries(),
         )));
         let (provider_auth_action_tx, provider_auth_action_rx) =
             tokio::sync::mpsc::unbounded_channel();
@@ -258,8 +259,11 @@ impl OnboardingScreen {
             config.animations,
         )));
         if show_login_screen {
-            let catalog_options =
-                catalog_sign_in_options(&provider_status_host, &api_key_provider_options);
+            let catalog_options = catalog_sign_in_options_from_statuses(
+                &provider_status_host,
+                &provider_statuses,
+                &api_key_provider_options,
+            );
             let has_multiple_provider_options = catalog_options.len() > 1;
             let highlighted_mode = initial_sign_in_option(&catalog_options, forced_login_method);
             let initial_sign_in_state =
@@ -293,6 +297,7 @@ impl OnboardingScreen {
                     claude_event_tx,
                     provider_setup_session,
                     provider_status_host,
+                    provider_statuses: Arc::new(RwLock::new(provider_statuses)),
                     provider_auth_action_tx,
                 }));
             } else {

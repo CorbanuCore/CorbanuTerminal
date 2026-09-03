@@ -10,7 +10,7 @@ use crate::provider_status_host::ProviderStatusHost;
 pub(crate) struct StartupProviderResolution {
     pub(crate) policy: ProviderModelPolicy,
     pub(crate) current: CurrentSelectionDecision,
-    pub(crate) has_usable_provider: bool,
+    pub(crate) requires_provider_onboarding: bool,
     context: StartupProviderContext,
 }
 
@@ -53,15 +53,21 @@ pub(crate) async fn resolve(
     let policy = ProviderModelPolicy::new(host, authorizations);
     let model = config.model.clone().unwrap_or_default();
     let current = policy.current(&config.model_provider_id, &model);
-    // Only the explicit current selection can satisfy the startup gate. Built-in local and
-    // status-only providers are always present in the catalog and may be selected without an
-    // enrollment flow, but their mere presence must not hide onboarding for a missing current
-    // provider or silently choose a replacement.
-    let has_usable_provider = matches!(current, CurrentSelectionDecision::Preserve(_));
+    // Onboarding is an enrollment gate, not the recovery UI for an existing installation. A
+    // current provider that has never been configured needs enrollment; inactive, unavailable,
+    // recovery-required, and removed custom providers must still enter chat so their established
+    // `/providers` recovery path remains reachable. None of those cases selects a replacement.
+    let requires_provider_onboarding = matches!(
+        &current,
+        CurrentSelectionDecision::RequireExplicitRecovery {
+            reason: codex_provider_auth::ProviderUseBlocker::NotConfigured,
+            ..
+        }
+    ) && !policy.has_ready_configured_provider();
     StartupProviderResolution {
         policy,
         current,
-        has_usable_provider,
+        requires_provider_onboarding,
         context: StartupProviderContext::from_config(config),
     }
 }
@@ -87,12 +93,12 @@ pub(crate) fn openai_metadata(login_status: crate::LoginStatus) -> OpenAiAuthMet
 
 pub(crate) fn should_show_provider_onboarding(
     show_trust_screen: bool,
-    has_usable_provider: bool,
+    requires_provider_onboarding: bool,
     forced_login_method: Option<crate::ForcedLoginMethod>,
     login_status: crate::LoginStatus,
 ) -> bool {
     show_trust_screen
-        || !has_usable_provider
+        || requires_provider_onboarding
         || matches!(forced_login_method, Some(crate::ForcedLoginMethod::Chatgpt))
             && login_status == crate::LoginStatus::NotAuthenticated
 }
@@ -103,23 +109,29 @@ mod tests {
     use codex_model_provider_info::ModelProviderInfo;
 
     #[test]
-    fn usable_provider_skips_onboarding_but_trust_and_forced_login_do_not() {
+    fn recovered_install_skips_provider_onboarding_but_not_other_gates() {
         assert!(!should_show_provider_onboarding(
             false,
-            true,
+            false,
             None,
             crate::LoginStatus::NotAuthenticated,
         ));
         assert!(should_show_provider_onboarding(
             true,
-            true,
+            false,
             None,
             crate::LoginStatus::NotAuthenticated,
         ));
         assert!(should_show_provider_onboarding(
             false,
-            true,
+            false,
             Some(crate::ForcedLoginMethod::Chatgpt),
+            crate::LoginStatus::NotAuthenticated,
+        ));
+        assert!(should_show_provider_onboarding(
+            false,
+            true,
+            None,
             crate::LoginStatus::NotAuthenticated,
         ));
     }
@@ -240,7 +252,7 @@ mod tests {
 
         let resolution = resolve(&config, None).await;
 
-        assert!(resolution.has_usable_provider);
+        assert!(!resolution.requires_provider_onboarding);
         assert!(
             resolution
                 .policy
@@ -260,7 +272,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn implicit_local_entries_do_not_hide_a_missing_current_provider() {
+    async fn implicit_local_entries_do_not_hide_an_unconfigured_current_provider() {
         let home = tempfile::tempdir().unwrap();
         let config = crate::legacy_core::config::ConfigBuilder::default()
             .codex_home(home.path().to_path_buf())
@@ -270,7 +282,7 @@ mod tests {
 
         let resolution = resolve(&config, None).await;
 
-        assert!(!resolution.has_usable_provider);
+        assert!(resolution.requires_provider_onboarding);
         assert!(matches!(
             resolution.current,
             CurrentSelectionDecision::RequireExplicitRecovery { .. }
@@ -280,6 +292,77 @@ mod tests {
                 .policy
                 .provider_is_selectable(codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID, "qwen3")
         );
+    }
+
+    #[tokio::test]
+    async fn removed_custom_current_enters_chat_for_explicit_providers_recovery() {
+        let home = tempfile::tempdir().unwrap();
+        let mut config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .build()
+            .await
+            .unwrap();
+        config.model_provider_id = "removed-custom-provider".into();
+        config.model = Some("custom-model".into());
+
+        let resolution = resolve(&config, None).await;
+
+        assert!(!resolution.requires_provider_onboarding);
+        assert!(matches!(
+            resolution.current,
+            CurrentSelectionDecision::RequireExplicitRecovery {
+                reason: codex_provider_auth::ProviderUseBlocker::UnknownProvider,
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn unconfigured_current_with_ready_alternative_uses_in_app_recovery() {
+        let home = tempfile::tempdir().unwrap();
+        let mut config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .build()
+            .await
+            .unwrap();
+        let missing = ModelProviderInfo {
+            name: "Missing Current".into(),
+            env_key: Some("PF57_MISSING_CURRENT_KEY".into()),
+            ..Default::default()
+        };
+        let fallback = ModelProviderInfo {
+            name: "Ready Alternative".into(),
+            env_key: Some("PF57_READY_ALTERNATIVE_KEY".into()),
+            ..Default::default()
+        };
+        config.model_provider_id = "missing-current".into();
+        config.model_provider = missing.clone();
+        config.model = Some("custom-model".into());
+        config
+            .model_providers
+            .insert("missing-current".into(), missing);
+        config
+            .model_providers
+            .insert("ready-alternative".into(), fallback);
+        codex_login::login_with_provider_api_key(
+            home.path(),
+            "PF57_READY_ALTERNATIVE_KEY",
+            "pf57-ready-alternative-canary",
+            config.cli_auth_credentials_store_mode,
+            config.auth_keyring_backend_kind(),
+        )
+        .unwrap();
+
+        let resolution = resolve(&config, None).await;
+
+        assert!(!resolution.requires_provider_onboarding);
+        assert!(matches!(
+            resolution.current,
+            CurrentSelectionDecision::RequireExplicitRecovery {
+                reason: codex_provider_auth::ProviderUseBlocker::NotConfigured,
+                ..
+            }
+        ));
     }
 
     #[tokio::test]
@@ -303,7 +386,7 @@ mod tests {
 
         let resolution = resolve(&config, None).await;
 
-        assert!(resolution.has_usable_provider);
+        assert!(!resolution.requires_provider_onboarding);
         assert!(matches!(
             resolution.current,
             CurrentSelectionDecision::Preserve(ref selection)
@@ -333,7 +416,7 @@ mod tests {
 
         let resolution = resolve(&config, None).await;
 
-        assert!(resolution.has_usable_provider);
+        assert!(!resolution.requires_provider_onboarding);
         assert!(matches!(
             resolution.current,
             CurrentSelectionDecision::Preserve(ref selection)

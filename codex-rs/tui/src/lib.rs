@@ -1514,10 +1514,10 @@ async fn run_ratatui_app(
         Some(startup_provider::openai_metadata(login_status)),
     )
     .await;
-    let has_usable_provider = startup_provider.has_usable_provider;
+    let requires_provider_onboarding = startup_provider.requires_provider_onboarding;
     let should_show_onboarding = startup_provider::should_show_provider_onboarding(
         should_show_trust_screen_flag,
-        has_usable_provider,
+        requires_provider_onboarding,
         initial_config.forced_login_method,
         login_status,
     );
@@ -1526,7 +1526,7 @@ async fn run_ratatui_app(
     let mut deferred_provider_setup = None;
     let config = if should_show_onboarding {
         startup_provider_resolution = None;
-        let show_login_screen = !has_usable_provider
+        let show_login_screen = requires_provider_onboarding
             || matches!(
                 initial_config.forced_login_method,
                 Some(ForcedLoginMethod::Chatgpt)

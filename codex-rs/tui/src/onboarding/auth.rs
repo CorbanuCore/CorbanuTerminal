@@ -79,6 +79,7 @@ use codex_provider_auth::ProviderAvailabilityState;
 use codex_provider_auth::ProviderConfigurationState;
 use codex_provider_auth::ProviderEligibilityState;
 use codex_provider_auth::ProviderSetupCapability;
+use codex_provider_auth::ProviderStatusCatalog;
 
 /// Marks buffer cells that have cyan+underlined style as an OSC 8 hyperlink.
 ///
@@ -359,12 +360,21 @@ impl ApiKeyProviderOption {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn catalog_sign_in_options(
     host: &ProviderStatusHost,
     api_key_options: &[ApiKeyProviderOption],
 ) -> Vec<SignInOption> {
-    let mut options = Vec::new();
     let statuses = host.resolve();
+    catalog_sign_in_options_from_statuses(host, &statuses, api_key_options)
+}
+
+pub(crate) fn catalog_sign_in_options_from_statuses(
+    host: &ProviderStatusHost,
+    statuses: &ProviderStatusCatalog,
+    api_key_options: &[ApiKeyProviderOption],
+) -> Vec<SignInOption> {
+    let mut options = Vec::new();
     for (entry_index, entry) in host.catalog().entries().iter().enumerate() {
         let status = statuses.get(entry.id.as_str());
         let has_noninteractive_capability = entry.setup_capabilities.iter().any(|capability| {
@@ -430,6 +440,7 @@ pub(crate) struct AuthModeWidget {
     pub claude_event_tx: AppEventSender,
     pub provider_setup_session: Arc<RwLock<ProviderSetupSession>>,
     pub provider_status_host: ProviderStatusHost,
+    pub provider_statuses: Arc<RwLock<ProviderStatusCatalog>>,
     pub provider_auth_action_tx: tokio::sync::mpsc::UnboundedSender<ProviderAuthAction>,
 }
 
@@ -529,8 +540,12 @@ impl AuthModeWidget {
 
     fn provider_picker_enabled(&self) -> bool {
         self.forced_login_method.is_none()
-            && !catalog_sign_in_options(&self.provider_status_host, &self.api_key_provider_options)
-                .is_empty()
+            && !catalog_sign_in_options_from_statuses(
+                &self.provider_status_host,
+                &self.provider_statuses.read().unwrap(),
+                &self.api_key_provider_options,
+            )
+            .is_empty()
     }
 
     fn is_chatgpt_login_allowed(&self) -> bool {
@@ -543,8 +558,11 @@ impl AuthModeWidget {
 
     fn displayed_sign_in_options(&self) -> Vec<SignInOption> {
         if self.provider_picker_enabled() {
-            let mut options =
-                catalog_sign_in_options(&self.provider_status_host, &self.api_key_provider_options);
+            let mut options = catalog_sign_in_options_from_statuses(
+                &self.provider_status_host,
+                &self.provider_statuses.read().unwrap(),
+                &self.api_key_provider_options,
+            );
             options.push(SignInOption::Done);
             return options;
         }
@@ -791,6 +809,7 @@ impl AuthModeWidget {
                 | crate::onboarding::provider_setup::ProviderSetupEffect::ReturnToProviderList => {}
             }
         }
+        *self.provider_statuses.write().unwrap() = self.provider_status_host.resolve();
         self.set_error(None);
         if self.provider_picker_enabled() {
             *self.sign_in_state.write().unwrap() = SignInState::PickMode;
@@ -1702,6 +1721,7 @@ impl AuthModeWidget {
         match event {
             AppEvent::ProviderAccountMetadataResolved { metadata } => {
                 self.provider_status_host.update_account_metadata(metadata);
+                let statuses = self.provider_status_host.resolve();
                 let can_refresh = self
                     .provider_setup_session
                     .read()
@@ -1711,8 +1731,9 @@ impl AuthModeWidget {
                     self.provider_setup_session
                         .write()
                         .unwrap()
-                        .refresh_from_statuses(self.provider_status_host.resolve().entries());
+                        .refresh_from_statuses(statuses.entries());
                 }
+                *self.provider_statuses.write().unwrap() = statuses;
             }
             AppEvent::ClaudeManagedSubscriptionTokenSaved { result } => match result {
                 Ok(_) => {
@@ -2288,8 +2309,9 @@ mod tests {
             &config,
             crate::provider_status_host::ProviderAccountMetadata::default(),
         );
+        let provider_statuses = provider_status_host.resolve();
         let provider_setup_session = Arc::new(RwLock::new(ProviderSetupSession::from_statuses(
-            provider_status_host.resolve().entries(),
+            provider_statuses.entries(),
         )));
         let (provider_auth_action_tx, _provider_auth_action_rx) =
             tokio::sync::mpsc::unbounded_channel();
@@ -2349,6 +2371,7 @@ mod tests {
             claude_event_tx: AppEventSender::new(claude_event_tx),
             provider_setup_session,
             provider_status_host,
+            provider_statuses: Arc::new(RwLock::new(provider_statuses)),
             provider_auth_action_tx,
         };
         (widget, codex_home)

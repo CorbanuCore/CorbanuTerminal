@@ -22,6 +22,20 @@ use std::collections::HashSet;
 
 const SHUTDOWN_FIRST_EXIT_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 2);
 
+fn resolve_shared_provider_selection_model(
+    configured_model: Option<String>,
+    active_model: &str,
+    runtime_provider_id: &str,
+) -> Option<String> {
+    let model = configured_model
+        .filter(|model| !model.trim().is_empty())
+        .or_else(|| {
+            let active_model = active_model.trim();
+            (!active_model.is_empty()).then(|| active_model.to_string())
+        });
+    codex_model_provider_info::resolve_model_for_provider(model, runtime_provider_id)
+}
+
 fn refresh_shared_provider_session_if_idle(
     session: Option<&mut crate::onboarding::provider_setup::ProviderSetupSession>,
     resolve: impl FnOnce() -> Vec<codex_provider_auth::ProviderStatusSnapshot>,
@@ -562,8 +576,9 @@ impl App {
                 runtime,
             ) = effect
             {
-                let Some(model) = codex_model_provider_info::resolve_model_for_provider(
+                let Some(model) = resolve_shared_provider_selection_model(
                     self.config.model.clone(),
+                    self.chat_widget.current_model(),
                     runtime.as_str(),
                 ) else {
                     self.chat_widget.add_error_message(
@@ -728,8 +743,9 @@ impl App {
             if let crate::onboarding::provider_setup::ProviderSetupEffect::PersistInitialSelection(
                 runtime,
             ) = effect
-                && let Some(model) = codex_model_provider_info::resolve_model_for_provider(
+                && let Some(model) = resolve_shared_provider_selection_model(
                     self.config.model.clone(),
+                    self.chat_widget.current_model(),
                     runtime.as_str(),
                 )
             {
@@ -2464,6 +2480,16 @@ impl App {
                 provider_id,
                 runtime_provider_id,
             } => {
+                let Some(model) = resolve_shared_provider_selection_model(
+                    self.config.model.clone(),
+                    self.chat_widget.current_model(),
+                    runtime_provider_id.as_str(),
+                ) else {
+                    self.chat_widget.add_error_message(
+                        "No compatible model is available for the selected provider.".to_string(),
+                    );
+                    return Ok(AppRunControl::Continue);
+                };
                 let Some(session) = self.shared_provider_setup_session.as_mut() else {
                     return Ok(AppRunControl::Continue);
                 };
@@ -2478,22 +2504,12 @@ impl App {
                         runtime,
                     ) = effect
                     {
-                        let Some(model) = codex_model_provider_info::resolve_model_for_provider(
-                            self.config.model.clone(),
-                            runtime.as_str(),
-                        ) else {
-                            self.chat_widget.add_error_message(
-                                "No compatible model is available for the selected provider."
-                                    .to_string(),
-                            );
-                            continue;
-                        };
                         self.app_event_tx.send(AppEvent::UpdateModelSelection {
                             model: model.clone(),
                             provider: Some(runtime.to_string()),
                         });
                         self.app_event_tx.send(AppEvent::PersistModelSelection {
-                            model,
+                            model: model.clone(),
                             provider: Some(runtime.to_string()),
                             effort: None,
                         });
@@ -6056,6 +6072,7 @@ mod gpu_notification_tests {
 
     use super::failed_gpu_notification;
     use super::refresh_shared_provider_session_if_idle;
+    use super::resolve_shared_provider_selection_model;
     use crate::onboarding::provider_setup::ProviderSetupAction;
     use crate::onboarding::provider_setup::ProviderSetupSession;
 
@@ -6095,5 +6112,17 @@ mod gpu_notification_tests {
 
         assert!(message.contains("selected capacity was claimed"));
         assert!(message.contains("/gpu"));
+    }
+
+    #[test]
+    fn shared_provider_selection_uses_active_model_when_config_has_no_model() {
+        assert_eq!(
+            resolve_shared_provider_selection_model(None, "active-custom-model", "custom"),
+            Some("active-custom-model".to_string())
+        );
+        assert_eq!(
+            resolve_shared_provider_selection_model(None, "", "custom"),
+            None
+        );
     }
 }

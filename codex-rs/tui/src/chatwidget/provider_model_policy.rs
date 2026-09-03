@@ -92,6 +92,29 @@ impl ProviderModelPolicy {
             ProviderUseDecision::Ready(_)
         )
     }
+
+    pub(crate) fn has_ready_configured_provider(&self) -> bool {
+        self.statuses.entries().iter().any(|status| {
+            status.configuration == codex_provider_auth::ProviderConfigurationState::Configured
+                && status.eligibility == codex_provider_auth::ProviderEligibilityState::Active
+                && status.availability == codex_provider_auth::ProviderAvailabilityState::Ready
+                && self
+                    .host
+                    .catalog()
+                    .get(status.id.as_str())
+                    .is_some_and(|entry| {
+                        entry.setup_capabilities.iter().any(|capability| {
+                            matches!(
+                                capability,
+                                codex_provider_auth::ProviderSetupCapability::ApiKey { .. }
+                                    | codex_provider_auth::ProviderSetupCapability::OpenAiAccount
+                                    | codex_provider_auth::ProviderSetupCapability::ClaudeAccount
+                                    | codex_provider_auth::ProviderSetupCapability::CorbanuPlan
+                            )
+                        })
+                    })
+        })
+    }
 }
 
 #[cfg(test)]
