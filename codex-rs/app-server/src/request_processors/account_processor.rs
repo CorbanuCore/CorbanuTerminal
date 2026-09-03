@@ -454,9 +454,7 @@ impl AccountRequestProcessor {
         .await
         .map_err(|err| internal_error(format!("provider API key storage task failed: {err}")))?
         .map_err(|err| internal_error(format!("failed to save provider API key: {err}")))?;
-        // Provider keys are revisioned independently from primary OpenAI auth. Reloading primary
-        // auth here is unnecessary and can add a second OS-keyring timeout on headless hosts,
-        // causing an otherwise successful provider-key write to miss the request deadline.
+        self.auth_manager.reload().await;
         Ok(())
     }
 
