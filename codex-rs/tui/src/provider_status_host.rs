@@ -292,7 +292,9 @@ impl ProviderStatusHost {
                 ProviderMetadata::CorbanuPlan(corbanu_metadata(&self.codex_home, account.corbanu))
             }
             Some(ProviderSetupCapability::Local { .. }) => {
-                ProviderMetadata::Local(LocalProviderMetadata::Checking)
+                // Local runtimes have no credential enrollment boundary. Availability is
+                // established by the actual request, matching the pre-unification behavior.
+                ProviderMetadata::Local(LocalProviderMetadata::Available)
             }
             Some(ProviderSetupCapability::CommandAuth { .. }) => {
                 ProviderMetadata::CommandAuth(CommandAuthMetadata::StatusOnly)

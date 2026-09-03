@@ -977,6 +977,30 @@ mod tests {
     }
 
     #[test]
+    fn apply_batch_commits_upserts_and_deletes_together() -> Result<()> {
+        let codex_home = tempfile::tempdir().expect("tempdir");
+        let keyring = Arc::new(MockKeyringStore::default());
+        let backend = LocalSecretsBackend::new(codex_home.path().to_path_buf(), keyring);
+        let scope = SecretScope::Global;
+        let removed = SecretName::new("REMOVE_ME")?;
+        let retained = SecretName::new("RETAIN_ME")?;
+        let added = SecretName::new("ADD_ME")?;
+        backend.set(&scope, &removed, "old")?;
+        backend.set(&scope, &retained, "keep")?;
+
+        let deleted = backend.apply_batch(
+            &[(scope.clone(), added.clone(), "new".to_string())],
+            &[(scope.clone(), removed.clone())],
+        )?;
+
+        assert_eq!(deleted, 1);
+        assert_eq!(backend.get(&scope, &removed)?, None);
+        assert_eq!(backend.get(&scope, &retained)?, Some("keep".to_string()));
+        assert_eq!(backend.get(&scope, &added)?, Some("new".to_string()));
+        Ok(())
+    }
+
+    #[test]
     fn default_keyring_fallback_persists_when_os_keyring_is_unavailable() -> Result<()> {
         let codex_home = tempfile::tempdir().expect("tempdir");
         let backend = LocalSecretsBackend::new_with_default_primary(

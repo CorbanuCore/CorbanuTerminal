@@ -112,7 +112,7 @@ fn unknown_current_is_not_rewritten_to_a_catalog_default() {
 }
 
 #[test]
-fn status_only_requires_real_authorization_before_normal_visibility() {
+fn status_only_is_visible_without_eager_runtime_authorization() {
     let (catalog, statuses) = fixture(
         ProviderConfigurationState::NotConfigured,
         ProviderEligibilityState::NotConfigured,
@@ -129,10 +129,7 @@ fn status_only_requires_real_authorization_before_normal_visibility() {
             "custom-model",
             ProviderUseContext::ModelPicker,
         ),
-        ProviderUseDecision::Blocked {
-            reason: ProviderUseBlocker::RuntimeAuthorizationRequired,
-            ..
-        }
+        ProviderUseDecision::Ready(_)
     ));
 
     authorizations.set("custom-runtime", ProviderRuntimeAuthorization::Authorized);
@@ -150,7 +147,7 @@ fn status_only_requires_real_authorization_before_normal_visibility() {
 }
 
 #[test]
-fn explicit_status_only_use_defers_to_runtime_adapter_without_enrollment() {
+fn explicit_status_only_use_is_preserved_for_the_runtime_adapter() {
     let (catalog, statuses) = fixture(
         ProviderConfigurationState::NotConfigured,
         ProviderEligibilityState::NotConfigured,
@@ -166,7 +163,7 @@ fn explicit_status_only_use_defers_to_runtime_adapter_without_enrollment() {
             "custom-model",
             ProviderUseContext::NativeSpawn,
         ),
-        ProviderUseDecision::RequiresRuntimeAuthorization(_)
+        ProviderUseDecision::Ready(_)
     ));
 }
 

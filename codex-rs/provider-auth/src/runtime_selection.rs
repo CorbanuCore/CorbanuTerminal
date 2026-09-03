@@ -62,27 +62,36 @@ impl ProviderRuntimeAuthorizations {
             let Some(entry) = catalog.get(status.id.as_str()) else {
                 continue;
             };
-            let command_authorized = entry.runtime_provider_ids.iter().any(|runtime| {
-                self.get(runtime.as_str()) == ProviderRuntimeAuthorization::Authorized
-            });
-            if !command_authorized
-                || !entry.setup_capabilities.iter().any(|capability| {
-                    matches!(capability, ProviderSetupCapability::CommandAuth { .. })
-                })
+            if !entry
+                .setup_capabilities
+                .iter()
+                .any(|capability| matches!(capability, ProviderSetupCapability::CommandAuth { .. }))
             {
                 continue;
             }
+            let command_rejected = entry.runtime_provider_ids.iter().any(|runtime| {
+                self.get(runtime.as_str()) == ProviderRuntimeAuthorization::Rejected
+            });
             for method in &mut status.methods {
                 if matches!(
                     method.capability,
                     ProviderSetupCapability::CommandAuth { .. }
                 ) {
-                    method.state = ProviderMethodState::Configured {
-                        source: ProviderCredentialSource::ExternallyManaged,
-                        control: CredentialControl::ExternalProvider,
-                        availability: ConfiguredAvailability::Ready,
+                    method.state = if command_rejected {
+                        ProviderMethodState::StatusOnly
+                    } else {
+                        ProviderMethodState::Configured {
+                            source: ProviderCredentialSource::ExternallyManaged,
+                            control: CredentialControl::ExternalProvider,
+                            availability: ConfiguredAvailability::Ready,
+                        }
                     };
                 }
+            }
+            if command_rejected {
+                status.configuration = ProviderConfigurationState::NotConfigured;
+                status.availability = ProviderAvailabilityState::StatusOnly;
+                continue;
             }
             status.configuration = ProviderConfigurationState::Configured;
             if status.eligibility == ProviderEligibilityState::Unavailable {
@@ -137,7 +146,7 @@ impl ProviderRuntimeSelectionPolicy {
         authorizations: &ProviderRuntimeAuthorizations,
         runtime_provider_id: &str,
         model: impl Into<String>,
-        context: ProviderUseContext,
+        _context: ProviderUseContext,
     ) -> ProviderUseDecision {
         let model = model.into();
         let Some(entry) = catalog.entries().iter().find(|entry| {
@@ -158,6 +167,18 @@ impl ProviderRuntimeSelectionPolicy {
             model,
         };
 
+        if entry
+            .setup_capabilities
+            .iter()
+            .any(|capability| matches!(capability, ProviderSetupCapability::CommandAuth { .. }))
+            && authorizations.get(runtime_provider_id) == ProviderRuntimeAuthorization::Rejected
+        {
+            return blocked(
+                runtime_provider_id,
+                ProviderUseBlocker::RuntimeAuthorizationRejected,
+            );
+        }
+
         if status.eligibility == ProviderEligibilityState::Inactive {
             return blocked(runtime_provider_id, ProviderUseBlocker::Inactive);
         }
@@ -173,20 +194,11 @@ impl ProviderRuntimeSelectionPolicy {
                     runtime_provider_id,
                     ProviderUseBlocker::RuntimeAuthorizationRejected,
                 ),
-                ProviderRuntimeAuthorization::NotChecked
-                    if matches!(
-                        context,
-                        ProviderUseContext::ExplicitRequest
-                            | ProviderUseContext::Resume
-                            | ProviderUseContext::NativeSpawn
-                    ) =>
-                {
-                    ProviderUseDecision::RequiresRuntimeAuthorization(selection)
-                }
-                ProviderRuntimeAuthorization::NotChecked => blocked(
-                    runtime_provider_id,
-                    ProviderUseBlocker::RuntimeAuthorizationRequired,
-                ),
+                // Status-only providers have no interactive enrollment contract. A command-auth
+                // provider validates lazily in the model-provider adapter, while local, AWS, and
+                // credential-free custom providers have no command to preflight. Preserve their
+                // exact selection here and let the real runtime boundary report any failure.
+                ProviderRuntimeAuthorization::NotChecked => ProviderUseDecision::Ready(selection),
             };
         }
         if status.configuration == ProviderConfigurationState::Checking

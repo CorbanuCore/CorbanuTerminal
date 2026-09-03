@@ -1,6 +1,5 @@
 use codex_login::OpenAiAuthMetadata;
 use codex_provider_auth::CurrentSelectionDecision;
-use codex_provider_auth::ProviderRuntimeAuthorization;
 use codex_provider_auth::ProviderRuntimeAuthorizations;
 use codex_provider_auth::ProviderUseDecision;
 
@@ -46,21 +45,11 @@ pub(crate) async fn resolve(
         account.openai = openai;
     }
     let mut host = ProviderStatusHost::from_config(config, account);
-    let mut authorizations = ProviderRuntimeAuthorizations::default();
-    for (runtime_id, provider) in &config.model_providers {
-        let Some(auth) = provider.auth.as_ref() else {
-            continue;
-        };
-        let state = if codex_login::validate_provider_auth_command(auth)
-            .await
-            .is_ok()
-        {
-            ProviderRuntimeAuthorization::Authorized
-        } else {
-            ProviderRuntimeAuthorization::Rejected
-        };
-        authorizations.set(runtime_id.clone(), state);
-    }
+    // Provider auth commands are executable credential resolvers. Running every configured
+    // command during startup creates unrelated side effects and can add a full command timeout
+    // before onboarding. The model-provider and native-spawn boundaries validate the selected
+    // provider lazily when it is actually used.
+    let authorizations = ProviderRuntimeAuthorizations::default();
     host.set_runtime_authorizations(authorizations.clone());
     let policy = ProviderModelPolicy::new(host, authorizations);
     let model = config.model.clone().unwrap_or_default();
@@ -233,7 +222,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn successful_command_authorization_is_immediately_current_and_selectable() {
+    async fn command_authorization_is_lazy_but_current_and_selectable() {
         let home = tempfile::tempdir().unwrap();
         let mut config = crate::legacy_core::config::ConfigBuilder::default()
             .codex_home(home.path().to_path_buf())
@@ -245,7 +234,7 @@ mod tests {
             auth: Some(
                 serde_json::from_value(serde_json::json!({
                     "command": "sh",
-                    "args": ["-c", "printf pf56-command-token-canary"],
+                    "args": ["-c", "touch command-ran; printf pf56-command-token-canary"],
                     "cwd": home.path(),
                 }))
                 .unwrap(),
@@ -273,6 +262,69 @@ mod tests {
                 if selection.runtime_provider_id.as_str() == "command-provider"
                     && selection.model == "command-model"
         ));
+        assert!(
+            !home.path().join("command-ran").exists(),
+            "startup must not execute a provider auth command"
+        );
         assert!(!format!("{:?}", resolution.policy).contains("pf56-command-token-canary"));
+    }
+
+    #[tokio::test]
+    async fn local_only_runtime_skips_provider_onboarding() {
+        let home = tempfile::tempdir().unwrap();
+        let mut config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .build()
+            .await
+            .unwrap();
+        config.model_provider_id = codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID.into();
+        config.model_provider = codex_model_provider_info::create_oss_provider_with_base_url(
+            "http://localhost:11434/v1",
+            codex_model_provider_info::WireApi::Responses,
+        );
+        config.model = Some("qwen3".into());
+        config.model_providers = std::collections::HashMap::from([(
+            config.model_provider_id.clone(),
+            config.model_provider.clone(),
+        )]);
+
+        let resolution = resolve(&config, None).await;
+
+        assert!(resolution.has_usable_provider);
+        assert!(matches!(
+            resolution.current,
+            CurrentSelectionDecision::Preserve(ref selection)
+                if selection.runtime_provider_id.as_str()
+                    == codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID
+        ));
+    }
+
+    #[tokio::test]
+    async fn credential_free_custom_runtime_skips_provider_onboarding() {
+        let home = tempfile::tempdir().unwrap();
+        let mut config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .build()
+            .await
+            .unwrap();
+        config.model_provider_id = "no-auth-custom".into();
+        config.model_provider = ModelProviderInfo {
+            name: "No Auth Custom".into(),
+            ..Default::default()
+        };
+        config.model = Some("custom-model".into());
+        config.model_providers = std::collections::HashMap::from([(
+            config.model_provider_id.clone(),
+            config.model_provider.clone(),
+        )]);
+
+        let resolution = resolve(&config, None).await;
+
+        assert!(resolution.has_usable_provider);
+        assert!(matches!(
+            resolution.current,
+            CurrentSelectionDecision::Preserve(ref selection)
+                if selection.runtime_provider_id.as_str() == "no-auth-custom"
+        ));
     }
 }

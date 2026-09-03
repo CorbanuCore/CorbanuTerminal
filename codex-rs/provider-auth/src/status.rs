@@ -81,7 +81,11 @@ fn resolve_method(
         ProviderMetadata::CommandAuth(CommandAuthMetadata::StatusOnly)
             if matches!(capability, ProviderSetupCapability::CommandAuth { .. }) =>
         {
-            ProviderMethodState::StatusOnly
+            configured(
+                ProviderCredentialSource::ExternallyManaged,
+                CredentialControl::ExternalProvider,
+                ConfiguredAvailability::Ready,
+            )
         }
         ProviderMetadata::StatusOnly
             if matches!(capability, ProviderSetupCapability::StatusOnly { .. }) =>

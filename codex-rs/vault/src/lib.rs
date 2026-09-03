@@ -644,28 +644,11 @@ impl Vault {
         }
     }
 
-    fn save_index(&self, index: &VaultIndex) -> Result<(), VaultError> {
-        let (scope, name, serialized) = index_secret_entry(index)?;
-        self.secrets.set(&scope, &name, &serialized)?;
-        Ok(())
-    }
-
     // ---- per-credential secret helpers ----
-
-    fn write_secret(&self, label: &str, secret: &str) -> Result<(), VaultError> {
-        let name = secret_name_for(label)?;
-        self.secrets.set(&VAULT_SCOPE, &name, secret)?;
-        Ok(())
-    }
 
     fn read_secret(&self, label: &str) -> Result<Option<String>, VaultError> {
         let name = secret_name_for(label)?;
         Ok(self.secrets.get(&VAULT_SCOPE, &name)?)
-    }
-
-    fn delete_secret(&self, label: &str) -> Result<bool, VaultError> {
-        let name = secret_name_for(label)?;
-        Ok(self.secrets.delete(&VAULT_SCOPE, &name)?)
     }
 }
 

@@ -92,6 +92,36 @@ async fn saved_managed_custom_key_resolves_configured_ready_without_secret_leaka
 }
 
 #[tokio::test]
+async fn local_and_no_auth_custom_providers_are_ready_without_enrollment() {
+    let home = tempdir().unwrap();
+    let mut config = crate::legacy_core::config::ConfigBuilder::default()
+        .codex_home(home.path().to_path_buf())
+        .build()
+        .await
+        .unwrap();
+    config.model_providers = codex_model_provider_info::built_in_model_providers(None);
+    config.model_providers.insert(
+        "no-auth-custom".into(),
+        ModelProviderInfo {
+            name: "No Auth Custom".into(),
+            ..Default::default()
+        },
+    );
+    let host = ProviderStatusHost::from_config(&config, ProviderAccountMetadata::default());
+
+    let local = host
+        .resolve_provider(codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID)
+        .expect("Ollama status");
+    assert_eq!(local.configuration, ProviderConfigurationState::Configured);
+    assert_eq!(local.availability, ProviderAvailabilityState::Ready);
+
+    let no_auth = host
+        .resolve_provider("no-auth-custom")
+        .expect("custom status");
+    assert_eq!(no_auth.availability, ProviderAvailabilityState::StatusOnly);
+}
+
+#[tokio::test]
 async fn eligibility_survives_restart_without_touching_credentials() {
     let home = tempdir().unwrap();
     let provider = ModelProviderInfo {
@@ -150,13 +180,25 @@ async fn authorized_command_runtime_converges_to_configured_ready() {
 }
 
 #[tokio::test]
-async fn rejected_unchecked_and_mismatched_command_authorization_stay_status_only() {
+async fn unchecked_command_is_configured_but_a_rejected_authorization_is_status_only() {
     let home = tempdir().unwrap();
     let config = config(home.path(), "command", command_provider(home.path())).await;
-    for (id, state) in [
-        ("command", ProviderRuntimeAuthorization::Rejected),
-        ("other", ProviderRuntimeAuthorization::Authorized),
-        ("command", ProviderRuntimeAuthorization::NotChecked),
+    for (id, state, expected) in [
+        (
+            "command",
+            ProviderRuntimeAuthorization::Rejected,
+            ProviderAvailabilityState::StatusOnly,
+        ),
+        (
+            "other",
+            ProviderRuntimeAuthorization::Authorized,
+            ProviderAvailabilityState::Ready,
+        ),
+        (
+            "command",
+            ProviderRuntimeAuthorization::NotChecked,
+            ProviderAvailabilityState::Ready,
+        ),
     ] {
         let mut host = ProviderStatusHost::from_config(&config, ProviderAccountMetadata::default());
         let mut authorizations = ProviderRuntimeAuthorizations::default();
@@ -164,13 +206,13 @@ async fn rejected_unchecked_and_mismatched_command_authorization_stay_status_onl
         host.set_runtime_authorizations(authorizations);
         assert_eq!(
             host.resolve_provider("command").unwrap().availability,
-            ProviderAvailabilityState::StatusOnly
+            expected
         );
     }
 }
 
 #[tokio::test]
-async fn command_authorization_is_exact_and_debug_output_is_secret_free() {
+async fn command_authorization_rejection_is_exact_and_debug_output_is_secret_free() {
     let home = tempdir().unwrap();
     let mut config = config(home.path(), "one", command_provider(home.path())).await;
     config
@@ -178,17 +220,17 @@ async fn command_authorization_is_exact_and_debug_output_is_secret_free() {
         .insert("two".into(), command_provider(home.path()));
     let mut host = ProviderStatusHost::from_config(&config, ProviderAccountMetadata::default());
     let mut authorizations = ProviderRuntimeAuthorizations::default();
-    authorizations.set("one", ProviderRuntimeAuthorization::Authorized);
+    authorizations.set("one", ProviderRuntimeAuthorization::Rejected);
     host.set_runtime_authorizations(authorizations);
 
     let statuses = host.resolve();
     assert_eq!(
         statuses.get("one").unwrap().availability,
-        ProviderAvailabilityState::Ready
+        ProviderAvailabilityState::StatusOnly
     );
     assert_eq!(
         statuses.get("two").unwrap().availability,
-        ProviderAvailabilityState::StatusOnly
+        ProviderAvailabilityState::Ready
     );
     assert!(!format!("{host:?} {statuses:?}").contains("secret-canary"));
 }

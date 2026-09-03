@@ -269,7 +269,7 @@ fn claude_resolution_and_corbanu_outage_are_typed_without_losing_configuration()
 }
 
 #[test]
-fn local_command_and_aws_adapters_do_not_infer_configuration_from_catalog_presence() {
+fn local_and_command_adapters_are_configured_while_aws_remains_status_only() {
     let mut providers = built_in_model_providers(/*openai_base_url*/ None);
     let mut command = ModelProviderInfo::create_claude_plan_provider();
     command.name = "Custom Command".to_string();
@@ -312,8 +312,8 @@ fn local_command_and_aws_adapters_do_not_infer_configuration_from_catalog_presen
                 ProviderAvailabilityState::Ready,
             ),
             (
-                ProviderConfigurationState::NotConfigured,
-                ProviderAvailabilityState::StatusOnly,
+                ProviderConfigurationState::Configured,
+                ProviderAvailabilityState::Ready,
             ),
             (
                 ProviderConfigurationState::NotConfigured,

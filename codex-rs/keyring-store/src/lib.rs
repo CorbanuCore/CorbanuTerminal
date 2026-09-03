@@ -14,7 +14,7 @@ use std::time::Duration;
 use std::time::Instant;
 use tracing::trace;
 
-const DEFAULT_KEYRING_OPERATION_TIMEOUT: Duration = Duration::from_secs(5);
+const DEFAULT_KEYRING_OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug)]
 pub enum CredentialStoreError {
@@ -125,10 +125,13 @@ impl KeyringOperationGate {
         }
     }
 
-    fn finish(&self, generation: u64) {
+    fn finish(&self, generation: u64, completed_successfully: bool) {
         let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
         if state.in_flight == Some(generation) {
             state.in_flight = None;
+            if completed_successfully {
+                state.circuit_open = false;
+            }
             self.changed.notify_all();
         }
     }
@@ -138,11 +141,21 @@ impl KeyringOperationGate {
 struct KeyringOperationPermit {
     gate: Arc<KeyringOperationGate>,
     generation: u64,
+    finished: bool,
+}
+
+impl KeyringOperationPermit {
+    fn finish(mut self, completed_successfully: bool) {
+        self.gate.finish(self.generation, completed_successfully);
+        self.finished = true;
+    }
 }
 
 impl Drop for KeyringOperationPermit {
     fn drop(&mut self) {
-        self.gate.finish(self.generation);
+        if !self.finished {
+            self.gate.finish(self.generation, false);
+        }
     }
 }
 
@@ -161,28 +174,30 @@ where
     T: Send + 'static,
     F: FnOnce() -> Result<T, CredentialStoreError> + Send + 'static,
 {
-    let deadline = Instant::now() + timeout;
-    let generation = gate.acquire(operation, deadline)?;
+    let acquire_deadline = Instant::now() + timeout;
+    let generation = gate.acquire(operation, acquire_deadline)?;
     let permit = KeyringOperationPermit {
         gate: Arc::clone(&gate),
         generation,
+        finished: false,
     };
     let (sender, receiver) = mpsc::sync_channel(1);
     let spawn_result = thread::Builder::new()
         .name(format!("codex-keyring-{operation}"))
         .spawn(move || {
-            let _permit = permit;
-            let _ = sender.send(callback());
+            let result = callback();
+            let completed_successfully = result.is_ok();
+            permit.finish(completed_successfully);
+            let _ = sender.send(result);
         });
     if let Err(error) = spawn_result {
-        gate.finish(generation);
+        gate.finish(generation, false);
         return Err(CredentialStoreError::from_message(format!(
             "failed to start OS keyring {operation}: {error}"
         )));
     }
 
-    let remaining = deadline.saturating_duration_since(Instant::now());
-    match receiver.recv_timeout(remaining) {
+    match receiver.recv_timeout(timeout) {
         Ok(result) => result,
         Err(mpsc::RecvTimeoutError::Timeout) => {
             gate.mark_timed_out(generation);
@@ -308,6 +323,7 @@ mod bounded_operation_tests {
     #[test]
     fn timeout_opens_circuit_without_starting_another_worker() {
         let gate = Arc::new(KeyringOperationGate::default());
+        let gate_for_recovery = Arc::clone(&gate);
         let (release_sender, release_receiver) = mpsc::channel();
         let error = run_bounded_keyring_operation(
             Arc::clone(&gate),
@@ -339,6 +355,63 @@ mod bounded_operation_tests {
         assert!(started.elapsed() < Duration::from_millis(100));
         assert!(!follow_up_ran.load(Ordering::SeqCst));
         release_sender.send(()).expect("release first worker");
+
+        let recovery_deadline = Instant::now() + Duration::from_secs(1);
+        loop {
+            let recovered = {
+                let state = gate_for_recovery
+                    .state
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner);
+                state.in_flight.is_none() && !state.circuit_open
+            };
+            if recovered {
+                break;
+            }
+            assert!(
+                Instant::now() < recovery_deadline,
+                "late success should close the process circuit"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+        run_bounded_keyring_operation(gate_for_recovery, "load", Duration::from_secs(1), || Ok(()))
+            .expect("keyring should be retried after late success");
+    }
+
+    #[test]
+    fn serialized_operation_receives_its_own_execution_timeout() {
+        let gate = Arc::new(KeyringOperationGate::default());
+        let first_gate = Arc::clone(&gate);
+        let first = thread::spawn(move || {
+            run_bounded_keyring_operation(first_gate, "load", Duration::from_millis(200), || {
+                thread::sleep(Duration::from_millis(80));
+                Ok(())
+            })
+        });
+        let wait_deadline = Instant::now() + Duration::from_secs(1);
+        while gate
+            .state
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .in_flight
+            .is_none()
+        {
+            assert!(
+                Instant::now() < wait_deadline,
+                "first operation did not start"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+
+        run_bounded_keyring_operation(gate, "save", Duration::from_millis(100), || {
+            thread::sleep(Duration::from_millis(80));
+            Ok(())
+        })
+        .expect("queue wait must not consume the operation execution timeout");
+        first
+            .join()
+            .expect("first worker thread")
+            .expect("first result");
     }
 }
 

@@ -14,8 +14,11 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::CredentialType;
+use crate::VAULT_SCOPE;
 use crate::Vault;
 use crate::VaultError;
+use crate::index_secret_entry;
+use crate::secret_name_for;
 use codex_secrets::SecretName;
 use codex_secrets::SecretScope;
 
@@ -552,8 +555,15 @@ impl Vault {
             let mut index = self.load_index()?;
             let now = Utc::now().timestamp();
             upsert_managed_token_metadata(&mut index, now)?;
-            self.write_secret(MANAGED_CLAUDE_TOKEN_LABEL, token.as_str())?;
-            self.save_index(&index)?;
+            let updates = vec![
+                (
+                    VAULT_SCOPE.clone(),
+                    secret_name_for(MANAGED_CLAUDE_TOKEN_LABEL)?,
+                    token.to_string(),
+                ),
+                index_secret_entry(&index)?,
+            ];
+            self.secrets.apply_batch(&updates, &[])?;
             Ok(ManagedClaudeTokenStatus::Stored { updated_at: now })
         });
         match result {
@@ -609,83 +619,37 @@ impl Vault {
 
         let result = self.with_storage_lock(|| {
             let selection_name = claude_auth_selection_secret_name()?;
-            let previous_index = self.load_index()?;
-            let previous_token = self
-                .read_secret(MANAGED_CLAUDE_TOKEN_LABEL)?
-                .map(Zeroizing::new);
-            let previous_selection = self.secrets.get(&SecretScope::Global, &selection_name)?;
-            let mut next_index = previous_index.clone();
+            let mut next_index = self.load_index()?;
             let now = Utc::now().timestamp();
             upsert_managed_token_metadata(&mut next_index, now)?;
             let serialized_selection = serde_json::to_string(&selection)
                 .map_err(|error| VaultError::Storage(error.into()))?;
 
-            let mut token_written = false;
-            let mut index_written = false;
-            let mut selection_write_attempted = false;
-            let write_result = (|| -> Result<(), VaultError> {
-                self.write_secret(MANAGED_CLAUDE_TOKEN_LABEL, token.as_str())?;
-                token_written = true;
-                #[cfg(test)]
-                if failure_point == EnrollmentFailurePoint::AfterTokenWrite {
+            #[cfg(test)]
+            match failure_point {
+                EnrollmentFailurePoint::AfterTokenWrite => {
                     return Err(VaultError::Storage(anyhow::anyhow!(
-                        "injected managed-token enrollment failure after token write"
+                        "injected managed-token enrollment failure before atomic commit (token checkpoint)"
                     )));
                 }
-                self.save_index(&next_index)?;
-                index_written = true;
-                #[cfg(test)]
-                if failure_point == EnrollmentFailurePoint::AfterIndexWrite {
+                EnrollmentFailurePoint::AfterIndexWrite => {
                     return Err(VaultError::Storage(anyhow::anyhow!(
-                        "injected managed-token enrollment failure after index write"
+                        "injected managed-token enrollment failure before atomic commit (index checkpoint)"
                     )));
                 }
-                selection_write_attempted = true;
-                self.secrets.set(
-                    &SecretScope::Global,
-                    &selection_name,
-                    &serialized_selection,
-                )?;
-                Ok(())
-            })();
-
-            if let Err(write_error) = write_result {
-                let rollback_result = (|| -> Result<(), VaultError> {
-                    if token_written {
-                        match previous_token.as_deref() {
-                            Some(previous_token) => {
-                                self.write_secret(MANAGED_CLAUDE_TOKEN_LABEL, previous_token)?;
-                            }
-                            None => {
-                                self.delete_secret(MANAGED_CLAUDE_TOKEN_LABEL)?;
-                            }
-                        }
-                    }
-                    if index_written {
-                        self.save_index(&previous_index)?;
-                    }
-                    if selection_write_attempted {
-                        match previous_selection.as_deref() {
-                            Some(previous_selection) => self.secrets.set(
-                                &SecretScope::Global,
-                                &selection_name,
-                                previous_selection,
-                            )?,
-                            None => {
-                                self.secrets
-                                    .delete(&SecretScope::Global, &selection_name)?;
-                            }
-                        }
-                    }
-                    Ok(())
-                })();
-                if rollback_result.is_err() {
-                    return Err(VaultError::Storage(anyhow::anyhow!(
-                        "managed Claude token enrollment failed and encrypted-state rollback was incomplete"
-                    )));
-                }
-                return Err(write_error);
+                EnrollmentFailurePoint::None => {}
             }
+
+            let updates = vec![
+                (
+                    VAULT_SCOPE.clone(),
+                    secret_name_for(MANAGED_CLAUDE_TOKEN_LABEL)?,
+                    token.to_string(),
+                ),
+                index_secret_entry(&next_index)?,
+                (VAULT_SCOPE.clone(), selection_name, serialized_selection),
+            ];
+            self.secrets.apply_batch(&updates, &[])?;
 
             Ok(selection.clone())
         });
