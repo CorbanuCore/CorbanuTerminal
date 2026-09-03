@@ -587,6 +587,21 @@ ignored = [
 # across local dev builds.
 debug = "limited"
 
+# Vault passphrases use the production scrypt work factor in every profile.
+# Optimize the CPU-heavy primitives so debug builds stay responsive without
+# weakening the KDF parameters or changing the encrypted file format.
+[profile.dev.package.scrypt]
+opt-level = 3
+
+[profile.dev.package.salsa20]
+opt-level = 3
+
+[profile.test.package.scrypt]
+opt-level = 3
+
+[profile.test.package.salsa20]
+opt-level = 3
+
 [profile.dev-small]
 inherits = "dev"
 opt-level = 0

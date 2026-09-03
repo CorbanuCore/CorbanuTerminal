@@ -3,7 +3,18 @@ use keyring::Error as KeyringError;
 use std::error::Error;
 use std::fmt;
 use std::fmt::Debug;
+use std::sync::Arc;
+use std::sync::Condvar;
+use std::sync::Mutex;
+use std::sync::OnceLock;
+use std::sync::PoisonError;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+use std::time::Instant;
 use tracing::trace;
+
+const DEFAULT_KEYRING_OPERATION_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug)]
 pub enum CredentialStoreError {
@@ -58,61 +69,276 @@ pub trait KeyringStore: Debug + Send + Sync {
 #[derive(Debug, Clone, Copy)]
 pub struct DefaultKeyringStore;
 
-impl KeyringStore for DefaultKeyringStore {
-    fn load(&self, service: &str, account: &str) -> Result<Option<String>, CredentialStoreError> {
-        trace!("keyring.load start, service={service}, account={account}");
-        let entry = Entry::new(service, account).map_err(CredentialStoreError::new)?;
-        match entry.get_password() {
-            Ok(password) => {
-                trace!("keyring.load success, service={service}, account={account}");
-                Ok(Some(password))
+#[derive(Debug, Default)]
+struct KeyringOperationGate {
+    state: Mutex<KeyringOperationState>,
+    changed: Condvar,
+}
+
+#[derive(Debug, Default)]
+struct KeyringOperationState {
+    in_flight: Option<u64>,
+    next_generation: u64,
+    circuit_open: bool,
+}
+
+impl KeyringOperationGate {
+    fn acquire(&self, operation: &str, deadline: Instant) -> Result<u64, CredentialStoreError> {
+        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        loop {
+            if state.circuit_open {
+                return Err(CredentialStoreError::from_message(format!(
+                    "OS keyring {operation} unavailable because a prior keyring operation timed out"
+                )));
             }
-            Err(keyring::Error::NoEntry) => {
-                trace!("keyring.load no entry, service={service}, account={account}");
-                Ok(None)
+            if state.in_flight.is_none() {
+                state.next_generation = state.next_generation.wrapping_add(1);
+                let generation = state.next_generation;
+                state.in_flight = Some(generation);
+                return Ok(generation);
             }
-            Err(error) => {
-                trace!("keyring.load error, service={service}, account={account}, error={error}");
-                Err(CredentialStoreError::new(error))
+
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(CredentialStoreError::from_message(format!(
+                    "OS keyring {operation} timed out waiting for another keyring operation"
+                )));
+            }
+            let (next_state, wait_result) = self
+                .changed
+                .wait_timeout(state, remaining)
+                .unwrap_or_else(PoisonError::into_inner);
+            state = next_state;
+            if wait_result.timed_out() && state.in_flight.is_some() {
+                return Err(CredentialStoreError::from_message(format!(
+                    "OS keyring {operation} timed out waiting for another keyring operation"
+                )));
             }
         }
+    }
+
+    fn mark_timed_out(&self, generation: u64) {
+        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        if state.in_flight == Some(generation) {
+            state.circuit_open = true;
+            self.changed.notify_all();
+        }
+    }
+
+    fn finish(&self, generation: u64) {
+        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        if state.in_flight == Some(generation) {
+            state.in_flight = None;
+            self.changed.notify_all();
+        }
+    }
+}
+
+#[derive(Debug)]
+struct KeyringOperationPermit {
+    gate: Arc<KeyringOperationGate>,
+    generation: u64,
+}
+
+impl Drop for KeyringOperationPermit {
+    fn drop(&mut self) {
+        self.gate.finish(self.generation);
+    }
+}
+
+fn default_keyring_operation_gate() -> Arc<KeyringOperationGate> {
+    static GATE: OnceLock<Arc<KeyringOperationGate>> = OnceLock::new();
+    Arc::clone(GATE.get_or_init(|| Arc::new(KeyringOperationGate::default())))
+}
+
+fn run_bounded_keyring_operation<T, F>(
+    gate: Arc<KeyringOperationGate>,
+    operation: &'static str,
+    timeout: Duration,
+    callback: F,
+) -> Result<T, CredentialStoreError>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, CredentialStoreError> + Send + 'static,
+{
+    let deadline = Instant::now() + timeout;
+    let generation = gate.acquire(operation, deadline)?;
+    let permit = KeyringOperationPermit {
+        gate: Arc::clone(&gate),
+        generation,
+    };
+    let (sender, receiver) = mpsc::sync_channel(1);
+    let spawn_result = thread::Builder::new()
+        .name(format!("codex-keyring-{operation}"))
+        .spawn(move || {
+            let _permit = permit;
+            let _ = sender.send(callback());
+        });
+    if let Err(error) = spawn_result {
+        gate.finish(generation);
+        return Err(CredentialStoreError::from_message(format!(
+            "failed to start OS keyring {operation}: {error}"
+        )));
+    }
+
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    match receiver.recv_timeout(remaining) {
+        Ok(result) => result,
+        Err(mpsc::RecvTimeoutError::Timeout) => {
+            gate.mark_timed_out(generation);
+            Err(CredentialStoreError::from_message(format!(
+                "OS keyring {operation} timed out after {} seconds; OS keyring access is disabled for this process",
+                timeout.as_secs()
+            )))
+        }
+        Err(mpsc::RecvTimeoutError::Disconnected) => Err(CredentialStoreError::from_message(
+            format!("OS keyring {operation} worker stopped unexpectedly"),
+        )),
+    }
+}
+
+impl KeyringStore for DefaultKeyringStore {
+    fn load(&self, service: &str, account: &str) -> Result<Option<String>, CredentialStoreError> {
+        let service = service.to_string();
+        let account = account.to_string();
+        run_bounded_keyring_operation(
+            default_keyring_operation_gate(),
+            "load",
+            DEFAULT_KEYRING_OPERATION_TIMEOUT,
+            move || {
+                trace!("keyring.load start, service={service}, account={account}");
+                let entry = Entry::new(&service, &account).map_err(CredentialStoreError::new)?;
+                match entry.get_password() {
+                    Ok(password) => {
+                        trace!("keyring.load success, service={service}, account={account}");
+                        Ok(Some(password))
+                    }
+                    Err(keyring::Error::NoEntry) => {
+                        trace!("keyring.load no entry, service={service}, account={account}");
+                        Ok(None)
+                    }
+                    Err(error) => {
+                        trace!(
+                            "keyring.load error, service={service}, account={account}, error={error}"
+                        );
+                        Err(CredentialStoreError::new(error))
+                    }
+                }
+            },
+        )
     }
 
     fn save(&self, service: &str, account: &str, value: &str) -> Result<(), CredentialStoreError> {
-        trace!(
-            "keyring.save start, service={service}, account={account}, value_len={}",
-            value.len()
-        );
-        let entry = Entry::new(service, account).map_err(CredentialStoreError::new)?;
-        match entry.set_password(value) {
-            Ok(()) => {
-                trace!("keyring.save success, service={service}, account={account}");
-                Ok(())
-            }
-            Err(error) => {
-                trace!("keyring.save error, service={service}, account={account}, error={error}");
-                Err(CredentialStoreError::new(error))
-            }
-        }
+        let service = service.to_string();
+        let account = account.to_string();
+        let value = value.to_string();
+        run_bounded_keyring_operation(
+            default_keyring_operation_gate(),
+            "save",
+            DEFAULT_KEYRING_OPERATION_TIMEOUT,
+            move || {
+                trace!(
+                    "keyring.save start, service={service}, account={account}, value_len={}",
+                    value.len()
+                );
+                let entry = Entry::new(&service, &account).map_err(CredentialStoreError::new)?;
+                match entry.set_password(&value) {
+                    Ok(()) => {
+                        trace!("keyring.save success, service={service}, account={account}");
+                        Ok(())
+                    }
+                    Err(error) => {
+                        trace!(
+                            "keyring.save error, service={service}, account={account}, error={error}"
+                        );
+                        Err(CredentialStoreError::new(error))
+                    }
+                }
+            },
+        )
     }
 
     fn delete(&self, service: &str, account: &str) -> Result<bool, CredentialStoreError> {
-        trace!("keyring.delete start, service={service}, account={account}");
-        let entry = Entry::new(service, account).map_err(CredentialStoreError::new)?;
-        match entry.delete_credential() {
-            Ok(()) => {
-                trace!("keyring.delete success, service={service}, account={account}");
-                Ok(true)
-            }
-            Err(keyring::Error::NoEntry) => {
-                trace!("keyring.delete no entry, service={service}, account={account}");
-                Ok(false)
-            }
-            Err(error) => {
-                trace!("keyring.delete error, service={service}, account={account}, error={error}");
-                Err(CredentialStoreError::new(error))
-            }
-        }
+        let service = service.to_string();
+        let account = account.to_string();
+        run_bounded_keyring_operation(
+            default_keyring_operation_gate(),
+            "delete",
+            DEFAULT_KEYRING_OPERATION_TIMEOUT,
+            move || {
+                trace!("keyring.delete start, service={service}, account={account}");
+                let entry = Entry::new(&service, &account).map_err(CredentialStoreError::new)?;
+                match entry.delete_credential() {
+                    Ok(()) => {
+                        trace!("keyring.delete success, service={service}, account={account}");
+                        Ok(true)
+                    }
+                    Err(keyring::Error::NoEntry) => {
+                        trace!("keyring.delete no entry, service={service}, account={account}");
+                        Ok(false)
+                    }
+                    Err(error) => {
+                        trace!(
+                            "keyring.delete error, service={service}, account={account}, error={error}"
+                        );
+                        Err(CredentialStoreError::new(error))
+                    }
+                }
+            },
+        )
+    }
+}
+
+#[cfg(test)]
+mod bounded_operation_tests {
+    use super::*;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn bounded_operation_returns_its_result() {
+        let gate = Arc::new(KeyringOperationGate::default());
+        let result = run_bounded_keyring_operation(gate, "load", Duration::from_secs(1), || {
+            Ok("stored-value".to_string())
+        });
+
+        assert_eq!(result.expect("bounded operation"), "stored-value");
+    }
+
+    #[test]
+    fn timeout_opens_circuit_without_starting_another_worker() {
+        let gate = Arc::new(KeyringOperationGate::default());
+        let (release_sender, release_receiver) = mpsc::channel();
+        let error = run_bounded_keyring_operation(
+            Arc::clone(&gate),
+            "load",
+            Duration::from_millis(20),
+            move || {
+                release_receiver.recv().expect("release first worker");
+                Ok(())
+            },
+        )
+        .expect_err("blocked operation must time out");
+        assert!(error.to_string().contains("timed out"));
+
+        let follow_up_ran = Arc::new(AtomicBool::new(false));
+        let follow_up_ran_in_worker = Arc::clone(&follow_up_ran);
+        let started = Instant::now();
+        let error =
+            run_bounded_keyring_operation(gate, "save", Duration::from_secs(1), move || {
+                follow_up_ran_in_worker.store(true, Ordering::SeqCst);
+                Ok(())
+            })
+            .expect_err("open circuit must fail fast");
+
+        assert!(
+            error
+                .to_string()
+                .contains("prior keyring operation timed out")
+        );
+        assert!(started.elapsed() < Duration::from_millis(100));
+        assert!(!follow_up_ran.load(Ordering::SeqCst));
+        release_sender.send(()).expect("release first worker");
     }
 }
 

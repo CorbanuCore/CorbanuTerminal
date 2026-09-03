@@ -98,6 +98,17 @@ pub trait SecretsBackend: Send + Sync {
         }
         Ok(deleted)
     }
+    fn apply_batch(
+        &self,
+        upserts: &[(SecretScope, SecretName, String)],
+        deletes: &[(SecretScope, SecretName)],
+    ) -> Result<usize> {
+        let deleted = self.delete_many(deletes)?;
+        for (scope, name, value) in upserts {
+            self.set(scope, name, value)?;
+        }
+        Ok(deleted)
+    }
     fn list(&self, scope_filter: Option<&SecretScope>) -> Result<Vec<SecretListEntry>>;
 }
 
@@ -159,6 +170,15 @@ impl SecretsManager {
 
     pub fn delete_many(&self, entries: &[(SecretScope, SecretName)]) -> Result<usize> {
         self.backend.delete_many(entries)
+    }
+
+    /// Apply several secret updates and removals as one backend transaction when supported.
+    pub fn apply_batch(
+        &self,
+        upserts: &[(SecretScope, SecretName, String)],
+        deletes: &[(SecretScope, SecretName)],
+    ) -> Result<usize> {
+        self.backend.apply_batch(upserts, deletes)
     }
 
     pub fn list(&self, scope_filter: Option<&SecretScope>) -> Result<Vec<SecretListEntry>> {

@@ -181,6 +181,30 @@ impl LocalSecretsBackend {
         Ok(deleted)
     }
 
+    pub fn apply_batch(
+        &self,
+        upserts: &[(SecretScope, SecretName, String)],
+        deletes: &[(SecretScope, SecretName)],
+    ) -> Result<usize> {
+        anyhow::ensure!(
+            upserts.iter().all(|(_, _, value)| !value.is_empty()),
+            "secret value must not be empty"
+        );
+        let mut file = self.load_file()?;
+        let deleted = deletes
+            .iter()
+            .filter(|(scope, name)| file.secrets.remove(&scope.canonical_key(name)).is_some())
+            .count();
+        for (scope, name, value) in upserts {
+            file.secrets
+                .insert(scope.canonical_key(name), value.clone());
+        }
+        if deleted > 0 || !upserts.is_empty() {
+            self.save_file(&file)?;
+        }
+        Ok(deleted)
+    }
+
     pub fn list(&self, scope_filter: Option<&SecretScope>) -> Result<Vec<SecretListEntry>> {
         let file = self.load_file()?;
         let mut entries = Vec::new();
@@ -582,6 +606,14 @@ impl SecretsBackend for LocalSecretsBackend {
 
     fn delete_many(&self, entries: &[(SecretScope, SecretName)]) -> Result<usize> {
         LocalSecretsBackend::delete_many(self, entries)
+    }
+
+    fn apply_batch(
+        &self,
+        upserts: &[(SecretScope, SecretName, String)],
+        deletes: &[(SecretScope, SecretName)],
+    ) -> Result<usize> {
+        LocalSecretsBackend::apply_batch(self, upserts, deletes)
     }
 
     fn list(&self, scope_filter: Option<&SecretScope>) -> Result<Vec<SecretListEntry>> {

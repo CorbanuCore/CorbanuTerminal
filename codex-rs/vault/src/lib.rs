@@ -383,9 +383,16 @@ impl Vault {
                 storage_backend: StorageBackend::EncryptedSecrets,
             };
 
-            self.write_secret(&label, secret.as_str())?;
-            index.credentials.insert(label, meta);
-            self.save_index(&index)?;
+            index.credentials.insert(label.clone(), meta);
+            let updates = vec![
+                (
+                    VAULT_SCOPE.clone(),
+                    secret_name_for(&label)?,
+                    secret.to_string(),
+                ),
+                index_secret_entry(&index)?,
+            ];
+            self.secrets.apply_batch(&updates, &[])?;
             Ok(())
         })
     }
@@ -414,13 +421,19 @@ impl Vault {
                     label: label.clone(),
                 })?;
 
-            if let Some(secret) = secret {
+            let secret_update = if let Some(secret) = secret {
                 let secret = Zeroizing::new(secret);
                 if secret.trim().is_empty() {
                     return Err(VaultError::EmptySecret);
                 }
-                self.write_secret(&label, secret.as_str())?;
-            }
+                Some((
+                    VAULT_SCOPE.clone(),
+                    secret_name_for(&label)?,
+                    secret.to_string(),
+                ))
+            } else {
+                None
+            };
             if let Some(provider) = provider {
                 meta.provider = provider;
             }
@@ -432,7 +445,12 @@ impl Vault {
             }
             meta.updated_at = Utc::now().timestamp();
             let updated = meta.clone();
-            self.save_index(&index)?;
+            let mut updates = Vec::with_capacity(2);
+            if let Some(secret_update) = secret_update {
+                updates.push(secret_update);
+            }
+            updates.push(index_secret_entry(&index)?);
+            self.secrets.apply_batch(&updates, &[])?;
             Ok(updated)
         })
     }
@@ -450,11 +468,14 @@ impl Vault {
         self.with_storage_lock(|| {
             let mut index = self.load_index()?;
             let removed_meta = index.credentials.remove(normalized).is_some();
-            if removed_meta {
-                self.save_index(&index)?;
-            }
-            let removed_secret = self.delete_secret(normalized)?;
-            Ok(removed_meta || removed_secret)
+            let updates = if removed_meta {
+                vec![index_secret_entry(&index)?]
+            } else {
+                Vec::new()
+            };
+            let deletes = vec![(VAULT_SCOPE.clone(), secret_name_for(normalized)?)];
+            let removed_secrets = self.secrets.apply_batch(&updates, &deletes)?;
+            Ok(removed_meta || removed_secrets > 0)
         })
     }
 
@@ -480,10 +501,12 @@ impl Vault {
                 removed_metadata += usize::from(index.credentials.remove(label).is_some());
                 secret_entries.push((VAULT_SCOPE.clone(), secret_name_for(label)?));
             }
-            if removed_metadata > 0 {
-                self.save_index(&index)?;
-            }
-            let removed_secrets = self.secrets.delete_many(&secret_entries)?;
+            let updates = if removed_metadata > 0 {
+                vec![index_secret_entry(&index)?]
+            } else {
+                Vec::new()
+            };
+            let removed_secrets = self.secrets.apply_batch(&updates, &secret_entries)?;
             Ok(removed_metadata.max(removed_secrets))
         })
     }
@@ -622,9 +645,8 @@ impl Vault {
     }
 
     fn save_index(&self, index: &VaultIndex) -> Result<(), VaultError> {
-        let name = index_secret_name()?;
-        let serialized = serde_json::to_string(index).context("failed to serialize vault index")?;
-        self.secrets.set(&VAULT_SCOPE, &name, &serialized)?;
+        let (scope, name, serialized) = index_secret_entry(index)?;
+        self.secrets.set(&scope, &name, &serialized)?;
         Ok(())
     }
 
@@ -696,6 +718,12 @@ fn index_secret_name() -> Result<SecretName, VaultError> {
     SecretName::new(VAULT_INDEX_SECRET_NAME).map_err(|err| {
         VaultError::Storage(anyhow::anyhow!("invalid vault index secret name: {err}"))
     })
+}
+
+fn index_secret_entry(index: &VaultIndex) -> Result<(SecretScope, SecretName, String), VaultError> {
+    let name = index_secret_name()?;
+    let serialized = serde_json::to_string(index).context("failed to serialize vault index")?;
+    Ok((VAULT_SCOPE.clone(), name, serialized))
 }
 
 /// Format a Unix-seconds timestamp as an ISO-8601 string for display.

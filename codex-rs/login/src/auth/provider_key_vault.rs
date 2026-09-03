@@ -282,18 +282,21 @@ fn delete_all_provider_keys_with_vault(vault: Vault) -> std::io::Result<bool> {
             return Ok(false);
         }
     };
-    let mut removed_any = false;
-    for meta in listing {
-        if meta.label.starts_with(PROVIDER_LABEL_PREFIX) {
-            match vault.delete(&meta.label) {
-                Ok(removed) => removed_any |= removed,
-                Err(err) => {
-                    tracing::debug!(label = %meta.label, ?err, "vault delete failed during logout")
-                }
-            }
+    let labels = listing
+        .into_iter()
+        .filter(|meta| meta.label.starts_with(PROVIDER_LABEL_PREFIX))
+        .map(|meta| meta.label)
+        .collect::<Vec<_>>();
+    if labels.is_empty() {
+        return Ok(false);
+    }
+    match vault.delete_many(&labels) {
+        Ok(removed) => Ok(removed > 0),
+        Err(err) => {
+            tracing::debug!(?err, "vault provider-key batch delete failed during logout");
+            Ok(false)
         }
     }
-    Ok(removed_any)
 }
 
 fn provider_label(provider_key_id: &str) -> String {
