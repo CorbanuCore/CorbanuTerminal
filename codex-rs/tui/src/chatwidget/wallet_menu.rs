@@ -170,6 +170,14 @@ impl ChatWidget {
         let mut items = Vec::new();
         for entry in host.catalog().entries() {
             let status = statuses.get(entry.id.as_str());
+            let has_noninteractive_capability = entry.setup_capabilities.iter().any(|capability| {
+                matches!(
+                    capability,
+                    codex_provider_auth::ProviderSetupCapability::Local { .. }
+                        | codex_provider_auth::ProviderSetupCapability::CommandAuth { .. }
+                        | codex_provider_auth::ProviderSetupCapability::StatusOnly { .. }
+                )
+            });
             for capability in entry.setup_capabilities.iter() {
                 let provider_id = entry.id.clone();
                 let selected = capability.clone();
@@ -204,10 +212,52 @@ impl ChatWidget {
                     codex_provider_auth::ProviderSetupCapability::Local { .. }
                     | codex_provider_auth::ProviderSetupCapability::CommandAuth { .. }
                     | codex_provider_auth::ProviderSetupCapability::StatusOnly { .. } => {
-                        item.is_disabled = true;
+                        if status.is_some_and(
+                            crate::onboarding::provider_setup::provider_is_explicitly_selectable,
+                        ) && let Some(runtime_provider_id) =
+                            entry.runtime_provider_ids.first().cloned()
+                        {
+                            item.description = Some(format!(
+                                "{} · select as current provider",
+                                shared_provider_status_description(status)
+                            ));
+                            item.actions.push(Box::new(move |tx| {
+                                tx.send(AppEvent::SharedProviderSetupSelectExisting {
+                                    provider_id: provider_id.clone(),
+                                    runtime_provider_id: runtime_provider_id.clone(),
+                                });
+                            }));
+                        } else {
+                            item.is_disabled = true;
+                        }
                     }
                 }
                 items.push(item);
+            }
+            if !has_noninteractive_capability
+                && status.is_some_and(|status| {
+                    crate::onboarding::provider_setup::provider_should_offer_existing_selection(
+                        status,
+                        has_noninteractive_capability,
+                    )
+                })
+                && let Some(runtime_provider_id) = entry.runtime_provider_ids.first().cloned()
+            {
+                let provider_id = entry.id.clone();
+                items.push(SelectionItem {
+                    name: format!("{} — use existing configuration", entry.display_name),
+                    description: Some(
+                        "Select as current provider without re-authenticating".to_string(),
+                    ),
+                    search_value: Some(format!("{} use existing", entry.display_name)),
+                    actions: vec![Box::new(move |tx| {
+                        tx.send(AppEvent::SharedProviderSetupSelectExisting {
+                            provider_id: provider_id.clone(),
+                            runtime_provider_id: runtime_provider_id.clone(),
+                        });
+                    })],
+                    ..Default::default()
+                });
             }
         }
         items.push(SelectionItem {
@@ -2160,6 +2210,38 @@ fn format_usdc_atomic(value: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn shared_provider_setup_can_select_a_noninteractive_runtime() {
+        let (mut chat, mut rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+        while rx.try_recv().is_ok() {}
+        let host = crate::provider_status_host::ProviderStatusHost::from_config(
+            &chat.config,
+            crate::provider_status_host::ProviderAccountMetadata::default(),
+        );
+
+        chat.open_shared_provider_setup(&host, false, false);
+        for character in "ollama".chars() {
+            chat.handle_key_event(crossterm::event::KeyEvent::new(
+                crossterm::event::KeyCode::Char(character),
+                crossterm::event::KeyModifiers::NONE,
+            ));
+        }
+        chat.handle_key_event(crossterm::event::KeyEvent::new(
+            crossterm::event::KeyCode::Enter,
+            crossterm::event::KeyModifiers::NONE,
+        ));
+
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::SharedProviderSetupSelectExisting {
+                runtime_provider_id,
+                ..
+            }) if runtime_provider_id.as_str()
+                == codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID
+        ));
+    }
 
     #[tokio::test]
     async fn shared_account_auth_phases_replace_one_stack_slot() {

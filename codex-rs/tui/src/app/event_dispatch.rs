@@ -2460,6 +2460,47 @@ impl App {
                     }
                 }
             }
+            AppEvent::SharedProviderSetupSelectExisting {
+                provider_id,
+                runtime_provider_id,
+            } => {
+                let Some(session) = self.shared_provider_setup_session.as_mut() else {
+                    return Ok(AppRunControl::Continue);
+                };
+                let transition = session.dispatch(
+                    crate::onboarding::provider_setup::ProviderSetupAction::SelectExisting {
+                        provider_id,
+                        runtime_provider_id,
+                    },
+                );
+                for effect in transition.effects {
+                    if let crate::onboarding::provider_setup::ProviderSetupEffect::PersistInitialSelection(
+                        runtime,
+                    ) = effect
+                    {
+                        let Some(model) = codex_model_provider_info::resolve_model_for_provider(
+                            self.config.model.clone(),
+                            runtime.as_str(),
+                        ) else {
+                            self.chat_widget.add_error_message(
+                                "No compatible model is available for the selected provider."
+                                    .to_string(),
+                            );
+                            continue;
+                        };
+                        self.app_event_tx.send(AppEvent::UpdateModelSelection {
+                            model: model.clone(),
+                            provider: Some(runtime.to_string()),
+                        });
+                        self.app_event_tx.send(AppEvent::PersistModelSelection {
+                            model,
+                            provider: Some(runtime.to_string()),
+                            effort: None,
+                        });
+                    }
+                }
+                self.render_shared_provider_setup();
+            }
             AppEvent::SharedProviderSetupQueueCorbanu(queued) => {
                 if let Some(session) = self.shared_provider_setup_session.as_mut() {
                     session.dispatch(

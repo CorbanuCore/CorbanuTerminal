@@ -133,10 +133,10 @@ documented environment or configuration inputs.
 - If the current provider becomes inactive, unavailable, or disappears from the
   active profile, Corbanu blocks requests and child spawns until you recover it
   or explicitly choose a replacement. It never silently switches providers.
-- A custom command-auth provider becomes selectable only after its real runtime
-  authorization check succeeds. Failed or unchecked command authentication
-  remains visible as status/recovery information; Corbanu does not invent an
-  interactive enrollment screen for an operator-defined command.
+- A custom command-auth provider is visible and selectable without an invented
+  enrollment screen. Corbanu executes and validates the configured command only
+  when a request or native child-agent launch actually uses that provider; a
+  failed command blocks that operation with the provider error.
 - Provider privacy, retention, billing, and jurisdictional rules still apply.
 - Use the privacy label shown for Corbanu Plan models before sending sensitive
   strategy or financial context.

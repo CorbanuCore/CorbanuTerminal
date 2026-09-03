@@ -143,6 +143,7 @@ pub(crate) enum SignInOption {
     AnthropicAccount,
     ApiKey,
     ProviderApiKey(usize),
+    ProviderRuntime(usize),
     CorbanuPlan,
     Done,
 }
@@ -363,7 +364,17 @@ pub(crate) fn catalog_sign_in_options(
     api_key_options: &[ApiKeyProviderOption],
 ) -> Vec<SignInOption> {
     let mut options = Vec::new();
-    for entry in host.catalog().entries() {
+    let statuses = host.resolve();
+    for (entry_index, entry) in host.catalog().entries().iter().enumerate() {
+        let status = statuses.get(entry.id.as_str());
+        let has_noninteractive_capability = entry.setup_capabilities.iter().any(|capability| {
+            matches!(
+                capability,
+                ProviderSetupCapability::Local { .. }
+                    | ProviderSetupCapability::CommandAuth { .. }
+                    | ProviderSetupCapability::StatusOnly { .. }
+            )
+        });
         for capability in entry.setup_capabilities.iter() {
             let option = match capability {
                 ProviderSetupCapability::OpenAiAccount => Some(SignInOption::DeviceCode),
@@ -383,6 +394,15 @@ pub(crate) fn catalog_sign_in_options(
             if let Some(option) = option {
                 options.push(option);
             }
+        }
+        if status.is_some_and(|status| {
+            super::provider_setup::provider_should_offer_existing_selection(
+                status,
+                has_noninteractive_capability,
+            )
+        }) && !entry.runtime_provider_ids.is_empty()
+        {
+            options.push(SignInOption::ProviderRuntime(entry_index));
         }
     }
     options
@@ -619,6 +639,9 @@ impl AuthModeWidget {
                     self.start_api_key_entry();
                 }
             }
+            SignInOption::ProviderRuntime(index) => {
+                self.select_provider_runtime_option(index);
+            }
             SignInOption::CorbanuPlan => {
                 let queued = !self
                     .provider_setup_session
@@ -661,6 +684,32 @@ impl AuthModeWidget {
             .dispatch(ProviderSetupAction::Begin {
                 provider_id: entry.id.clone(),
             });
+    }
+
+    fn select_provider_runtime_option(&mut self, index: usize) {
+        let Some(entry) = self.provider_status_host.catalog().entries().get(index) else {
+            self.set_error(Some(
+                "Selected provider is no longer available.".to_string(),
+            ));
+            return;
+        };
+        let Some(runtime_provider_id) = entry.runtime_provider_ids.first().cloned() else {
+            self.set_error(Some("Selected provider has no runtime.".to_string()));
+            return;
+        };
+        let provider_id = entry.id.clone();
+        let transition = self.provider_setup_session.write().unwrap().dispatch(
+            ProviderSetupAction::SelectExisting {
+                provider_id,
+                runtime_provider_id,
+            },
+        );
+        if transition.applied {
+            self.set_error(None);
+        } else {
+            self.set_error(Some("Selected provider could not be applied.".to_string()));
+        }
+        self.request_frame.schedule_frame();
     }
 
     fn record_configured(&self, provider_id: &str, method: ConfiguredProviderMethod) {
@@ -963,6 +1012,37 @@ impl AuthModeWidget {
                                 provider,
                             );
                         option_lines.extend(create_mode_item(idx, option, &text, &description));
+                    }
+                }
+                SignInOption::ProviderRuntime(provider_index) => {
+                    if let Some(provider) = self
+                        .provider_status_host
+                        .catalog()
+                        .entries()
+                        .get(provider_index)
+                    {
+                        let selected = self
+                            .provider_setup_session
+                            .read()
+                            .unwrap()
+                            .snapshot()
+                            .first_fresh_runtime
+                            .as_ref()
+                            .is_some_and(|runtime| provider.runtime_provider_ids.contains(runtime));
+                        let description = self.provider_status_description(
+                            provider.id.as_str(),
+                            if selected {
+                                "Selected as the current provider"
+                            } else {
+                                "Use this provider without an enrollment step"
+                            },
+                        );
+                        option_lines.extend(create_mode_item(
+                            idx,
+                            option,
+                            &format!("Provider: {}", provider.display_name),
+                            &description,
+                        ));
                     }
                 }
                 SignInOption::CorbanuPlan => {
@@ -2337,6 +2417,9 @@ mod tests {
                 SignInOption::ProviderApiKey(3),
                 SignInOption::ProviderApiKey(4),
                 SignInOption::ProviderApiKey(5),
+                SignInOption::ProviderRuntime(12),
+                SignInOption::ProviderRuntime(13),
+                SignInOption::ProviderRuntime(14),
                 SignInOption::Done,
             ]
         );
@@ -2547,6 +2630,41 @@ mod tests {
             widget.configured_provider().as_deref(),
             Some(codex_model_provider_info::OPENROUTER_PROVIDER_ID)
         );
+    }
+
+    #[tokio::test]
+    async fn explicit_noninteractive_provider_option_records_the_replacement() {
+        let (mut widget, _tmp) = widget_forced_chatgpt().await;
+        widget.forced_login_method = None;
+        let option = catalog_sign_in_options(
+            &widget.provider_status_host,
+            &widget.api_key_provider_options,
+        )
+        .into_iter()
+        .find(|option| {
+            let SignInOption::ProviderRuntime(index) = option else {
+                return false;
+            };
+            widget
+                .provider_status_host
+                .catalog()
+                .entries()
+                .get(*index)
+                .is_some_and(|entry| {
+                    entry.runtime_provider_ids.iter().any(|runtime| {
+                        runtime.as_str() == codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID
+                    })
+                })
+        })
+        .expect("Ollama explicit-selection option");
+
+        widget.handle_sign_in_option(option);
+
+        assert_eq!(
+            widget.configured_provider().as_deref(),
+            Some(codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID)
+        );
+        assert!(widget.provider_setup_session.read().unwrap().can_finish());
     }
 
     #[tokio::test]

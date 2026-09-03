@@ -1,7 +1,6 @@
 use codex_login::OpenAiAuthMetadata;
 use codex_provider_auth::CurrentSelectionDecision;
 use codex_provider_auth::ProviderRuntimeAuthorizations;
-use codex_provider_auth::ProviderUseDecision;
 
 use crate::chatwidget::provider_model_policy::ProviderModelPolicy;
 use crate::legacy_core::config::Config;
@@ -54,20 +53,11 @@ pub(crate) async fn resolve(
     let policy = ProviderModelPolicy::new(host, authorizations);
     let model = config.model.clone().unwrap_or_default();
     let current = policy.current(&config.model_provider_id, &model);
-    let has_usable_provider = config.model_providers.iter().any(|(runtime_id, _)| {
-        matches!(
-            policy.assess(
-                runtime_id,
-                &codex_model_provider_info::resolve_model_for_provider(
-                    config.model.clone(),
-                    runtime_id,
-                )
-                .unwrap_or_default(),
-                codex_provider_auth::ProviderUseContext::AutomaticDefault,
-            ),
-            ProviderUseDecision::Ready(_)
-        )
-    });
+    // Only the explicit current selection can satisfy the startup gate. Built-in local and
+    // status-only providers are always present in the catalog and may be selected without an
+    // enrollment flow, but their mere presence must not hide onboarding for a missing current
+    // provider or silently choose a replacement.
+    let has_usable_provider = matches!(current, CurrentSelectionDecision::Preserve(_));
     StartupProviderResolution {
         policy,
         current,
@@ -267,6 +257,29 @@ mod tests {
             "startup must not execute a provider auth command"
         );
         assert!(!format!("{:?}", resolution.policy).contains("pf56-command-token-canary"));
+    }
+
+    #[tokio::test]
+    async fn implicit_local_entries_do_not_hide_a_missing_current_provider() {
+        let home = tempfile::tempdir().unwrap();
+        let config = crate::legacy_core::config::ConfigBuilder::default()
+            .codex_home(home.path().to_path_buf())
+            .build()
+            .await
+            .unwrap();
+
+        let resolution = resolve(&config, None).await;
+
+        assert!(!resolution.has_usable_provider);
+        assert!(matches!(
+            resolution.current,
+            CurrentSelectionDecision::RequireExplicitRecovery { .. }
+        ));
+        assert!(
+            resolution
+                .policy
+                .provider_is_selectable(codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID, "qwen3")
+        );
     }
 
     #[tokio::test]

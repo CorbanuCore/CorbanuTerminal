@@ -1511,6 +1511,10 @@ pub(crate) enum AppEvent {
         provider_id: codex_provider_auth::ProviderCatalogId,
         capability: codex_provider_auth::ProviderSetupCapability,
     },
+    SharedProviderSetupSelectExisting {
+        provider_id: codex_provider_auth::ProviderCatalogId,
+        runtime_provider_id: codex_provider_auth::ProviderRuntimeId,
+    },
     SharedProviderSetupQueueCorbanu(bool),
     SaveSharedProviderApiKey {
         target: codex_provider_auth::ApiKeyAuthTarget,

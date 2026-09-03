@@ -6,6 +6,7 @@ use codex_provider_auth::ProviderConfigurationState;
 use codex_provider_auth::ProviderCurrentState;
 use codex_provider_auth::ProviderEligibilityState;
 use codex_provider_auth::ProviderRuntimeId;
+use codex_provider_auth::ProviderSetupCapability;
 use codex_provider_auth::ProviderStatusSnapshot;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -76,6 +77,10 @@ pub(crate) enum ProviderSetupAction {
         runtime_provider_id: ProviderRuntimeId,
         usable: bool,
     },
+    SelectExisting {
+        provider_id: ProviderCatalogId,
+        runtime_provider_id: ProviderRuntimeId,
+    },
     AuthCancelled,
     AuthFailed,
     QueueCorbanu(bool),
@@ -142,7 +147,7 @@ impl ProviderSetupSession {
     }
 
     pub(crate) fn can_finish(&self) -> bool {
-        !self.snapshot.usable.is_empty() || self.snapshot.queued_corbanu
+        self.has_selected_usable_provider() || self.snapshot.queued_corbanu
     }
 
     pub(crate) fn can_refresh_statuses(&self) -> bool {
@@ -222,6 +227,20 @@ impl ProviderSetupSession {
                 self.snapshot.phase = ProviderSetupPhase::ProviderList;
                 true
             }
+            ProviderSetupAction::SelectExisting {
+                provider_id,
+                runtime_provider_id,
+            } if matches!(self.snapshot.phase, ProviderSetupPhase::ProviderList) => {
+                self.snapshot.usable.insert(provider_id);
+                // Unlike enrollment, this action is an explicit provider choice. Honor it even
+                // when another provider was current when the setup session opened.
+                self.snapshot.preserve_initial_current = false;
+                self.snapshot.first_fresh_runtime = Some(runtime_provider_id.clone());
+                effects.push(ProviderSetupEffect::PersistInitialSelection(
+                    runtime_provider_id,
+                ));
+                true
+            }
             ProviderSetupAction::AuthCancelled | ProviderSetupAction::AuthFailed
                 if matches!(
                     self.snapshot.phase,
@@ -246,7 +265,7 @@ impl ProviderSetupSession {
                 if self.snapshot.queued_corbanu {
                     let continuation = DeferredProviderSetup::CorbanuPlan {
                         continuation_id: self.allocate_continuation_id(),
-                        has_usable_fallback: !self.snapshot.usable.is_empty(),
+                        has_usable_fallback: self.has_selected_usable_provider(),
                     };
                     self.snapshot.phase = ProviderSetupPhase::Deferred(continuation.clone());
                     effects.push(ProviderSetupEffect::BeginDeferred(continuation));
@@ -266,7 +285,7 @@ impl ProviderSetupSession {
             ProviderSetupAction::DeferredPlanCancelled { continuation_id }
                 if self.matches_continuation(continuation_id) =>
             {
-                if self.snapshot.usable.is_empty() {
+                if !self.has_selected_usable_provider() {
                     self.snapshot.queued_corbanu = false;
                     self.snapshot.phase = ProviderSetupPhase::ProviderList;
                     effects.push(ProviderSetupEffect::ReturnToProviderList);
@@ -300,12 +319,51 @@ impl ProviderSetupSession {
             }) if *continuation_id == id
         )
     }
+
+    fn has_selected_usable_provider(&self) -> bool {
+        self.snapshot.preserve_initial_current || self.snapshot.first_fresh_runtime.is_some()
+    }
 }
 
 fn provider_is_usable(status: &ProviderStatusSnapshot) -> bool {
-    status.configuration == ProviderConfigurationState::Configured
+    let configured_and_ready = status.configuration == ProviderConfigurationState::Configured
         && status.eligibility == ProviderEligibilityState::Active
-        && status.availability == ProviderAvailabilityState::Ready
+        && status.availability == ProviderAvailabilityState::Ready;
+    if !configured_and_ready {
+        return false;
+    }
+
+    // Local, command-auth, and status-only entries have no interactive setup action. They may be
+    // selected explicitly and validated at the real runtime boundary, but an incidental built-in
+    // entry must not make a fresh setup completable or preserve an unrelated missing current.
+    let requires_explicit_selection = status.methods.iter().any(|method| {
+        matches!(
+            method.capability,
+            ProviderSetupCapability::Local { .. }
+                | ProviderSetupCapability::CommandAuth { .. }
+                | ProviderSetupCapability::StatusOnly { .. }
+        )
+    });
+    !requires_explicit_selection || status.current == ProviderCurrentState::Current
+}
+
+pub(crate) fn provider_is_explicitly_selectable(status: &ProviderStatusSnapshot) -> bool {
+    !matches!(
+        status.eligibility,
+        ProviderEligibilityState::Inactive | ProviderEligibilityState::Unavailable
+    ) && matches!(
+        status.availability,
+        ProviderAvailabilityState::Ready | ProviderAvailabilityState::StatusOnly
+    )
+}
+
+pub(crate) fn provider_should_offer_existing_selection(
+    status: &ProviderStatusSnapshot,
+    has_noninteractive_capability: bool,
+) -> bool {
+    provider_is_explicitly_selectable(status)
+        && (status.configuration == ProviderConfigurationState::Configured
+            || has_noninteractive_capability)
 }
 
 #[cfg(test)]
