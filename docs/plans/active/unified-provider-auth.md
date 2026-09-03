@@ -11,7 +11,7 @@ activation_basis: "The user's 2026-09-01 P1 decision to supersede the remaining 
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-08-30
-updated: 2026-09-02
+updated: 2026-09-03
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Shipping MVP — LIVE"
@@ -234,7 +234,7 @@ user work and integrate rather than revert concurrent changes.
 | `PF-54` | Unified `/providers` management and eligibility controls | [PF-54-S01](../../sprints/archive/unified-provider-auth/pf-54-s01-provider-management.md) | completed |
 | `PF-55` | Startup, current-model, and custom-provider convergence | [PF-55-S01](../../sprints/archive/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | completed at `21cf3199f2` |
 | `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/archive/unified-provider-auth/pf-56-s01-final-qualification.md) | completed at `fd8a9c900e` |
-| `PF-57` | Latest-main integration, regression preservation, and credential-store liveness | [PF-57-S01](../../sprints/current/unified-provider-auth/pf-57-s01-latest-main-integration.md) | in progress |
+| `PF-57` | Latest-main integration, regression preservation, and credential-store liveness | [PF-57-S01](../../sprints/archive/unified-provider-auth/pf-57-s01-latest-main-integration.md) | completed at `a935e507b` |
 
 ## Hard dependency graph
 
@@ -309,10 +309,10 @@ may exceed four only when a review uncovers a major issue; the finding, reason,
 remediation, and additional review must be recorded.
 
 PF-57 is the recorded exception: integrating fourteen post-fork `main` commits
-created two semantic Rust conflicts, and the first integration review identified
-two fail-closed eligibility concerns. The user's 2026-09-02 direction requires
-validation against latest `main`; after reproducing and remediating applicable
-findings, run one combined-candidate Fable 5.1 review through Corbanu and TMUX.
+created two semantic Rust conflicts and review exposed provider-recovery edge
+cases. The combined candidate was validated against `81dcbef5d`, reviewed with
+Fable 5.1 Plan max through Corbanu and TMUX, and ended
+`FINAL_REREVIEW: CLEAN`; see the [PF-57 record](../../qa/provider-auth/pf-57/fable-review.md).
 
 TMUX proof is continuous, not deferred to a token final smoke. PF-53, PF-54, and
 PF-55 add focused typed-TMUX scenarios; PF-56 reruns the full matrix on the
@@ -332,6 +332,7 @@ Run fix and formatting tools before the final affected tests.
 | Config/schema | affected config edit, parse, migration, and schema checks | PASS through login/provider and TensorCash/Isometric native suites | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
 | Adversarial/redaction | cancel races, stale results, timeout, malformed sources, canary scan, and no-regex LLM-path guard | PASS for accepted candidate/bundles; failed diagnostics excluded explicitly | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
 | Combined tree | formatting/fixes, `git diff --check`, affected integration suites, and final build | PASS; binary `c1a444f2…807a0` | [PF-56 ledger](../../qa/provider-auth/pf-56/qualification.md) |
+| PF-57 latest-main integration | final build; 390 core/provider tests; focused startup/onboarding/provider TUI suites | PASS; candidate `a935e507b`, binary `23f37955…33d2` | [PF-57 ledger](../../qa/provider-auth/pf-57/qualification.md) |
 
 ## True-TUI evidence
 
@@ -343,6 +344,7 @@ Run fix and formatting tools before the final affected tests.
 | Eligibility/current model | `c1a444f2…807a0` | isolated restart fixtures | deactivate/reactivate; current-provider replacement; cancel; restart/resume | credentials preserved, explicit replacement, state durable | PASS | stable PF-54/PF-55 bundles and [ledger](../../qa/provider-auth/pf-56/qualification.md) |
 | Custom provider | `c1a444f2…807a0` | custom `env_key` and command-auth fixtures | inspect both hosts, configure supported custom provider, start request | automatic catalog inclusion and status parity | PASS | stable PF-55 bundles and [ledger](../../qa/provider-auth/pf-56/qualification.md) |
 | External review | reviewed predecessor plus qualified final remediation | final candidate lineage | Exactly one Kimi 3.0 high through Vercel in TMUX; no fallback; superseded Fable failure retained | exact provider/model/runtime, bounded report, disposition | PASS | [review evidence](../../qa/provider-auth/pf-56/review/kimi-runtime.md) and [disposition](../../qa/provider-auth/pf-56/review/kimi-disposition.md) |
+| PF-57 combined recovery matrix | `23f37955…33d2` | isolated startup/provider fixtures on remote Linux | Run all 12 PF-55 journeys plus PF-53 configure-many and cancel | fresh versus established recovery, current-provider blocking, restart, lazy command auth | PASS: 14 flows in 147.84s | [PF-57 ledger](../../qa/provider-auth/pf-57/qualification.md) |
 
 ## Live-repository applicability
 
@@ -385,27 +387,27 @@ Historical Claude artifacts do not substitute for final integrated-tree runs.
 | Live accounts and named human | release | release owner | PF-56/release | pending; cannot be fabricated |
 | Physical Linux/Windows evidence | release | release owner | release | prior Claude plan left this unclosed; final applicability must be recorded |
 | Target version and benchmark state | release | release owner | release | pending |
-| Latest-main integration | integration | Codex primary integration agent | PF-57 | Merge `origin/main` into the preserved PF-48–PF-56 lineage; validate the combined commit before proposing it for `main`. |
-| Credential-store liveness | regression | Codex primary integration agent | PF-57 | The locked-keyring flow requires a bounded shared keyring operation. Separately, the combined `codex-login` suite reproduced two 60-second timeouts; a live stack sample placed the CPU-bound wait in repeated unoptimized age/scrypt rewrites during one vault mutation. Preserve encrypted-vault fallback, work factor, and format while bounding keyring waits, giving each serialized operation its own deadline, recovering the process circuit after a late success, coalescing each logical mutation (including managed Claude token enrollment), and optimizing only the development/test crypto implementation. |
-| Review remediation | regression | Codex primary integration agent | PF-57 | Reproduce the required Fable 5.1 Max findings before editing. Preserve no-auth local/custom provider usability and keep command-auth validation lazy to actual runtime use. Implicit local/status-only catalog entries do not suppress fresh-install onboarding or satisfy its completion gate unless explicitly current or explicitly chosen as the persisted replacement; expose that explicit replacement action in both startup onboarding and the shared in-app provider setup surface. Update the shipped command-auth description to match lazy validation. Dead legacy provider UI is cleanup-only and must not expand the release-critical patch unless it blocks a required gate. |
+| Latest-main integration | integration | Codex primary integration agent | PF-57 | Completed: preserved PF-48–PF-56 identities, merged latest-main baseline `81dcbef5d`, and qualified candidate `a935e507b`. |
+| Credential-store liveness | regression | Codex primary integration agent | PF-57 | Completed: bounded serialized keyring operations, late-success circuit recovery, batched logical vault mutations including managed Claude token enrollment, and development/test-only crypto optimization preserve encrypted-vault fallback, work factor, format, and production implementation. |
+| Review remediation | regression | Codex primary integration agent | PF-57 | Completed: fresh onboarding occurs only when the current provider is unconfigured and no ready configured interactive alternative exists; established inactive, unavailable, recovery-required, removed, or missing-current profiles enter chat blocked until explicit recovery. Onboarding caches status, compatible-model persistence precedes selection completion, local/status-only providers remain usable, and command auth stays lazy. Dead legacy UI cleanup remains nonblocking follow-up work. |
 
 ## Release linkage
 
 - Release record: `qa/release/<version>/` — target version pending.
 - Benchmark tracker row: `benchmarks/README.md` when due.
-- Carried blockers from the earlier Claude plan: live eligible account evidence,
-  named human acceptance, TensorCash and Isometric Game runs, physical
-  Linux/Windows confirmation where required, target release/tag/merge decision,
-  release ledger, and due benchmark evidence.
-- New blockers: every PF-48–PF-56 sprint must complete and the final integrated
-  candidate must pass the stated TMUX and review program.
+- Remaining gates from the earlier Claude plan: live eligible production-account
+  evidence, named human acceptance, physical Linux/Windows confirmation where
+  applicable, target release/tag and release-ledger decisions, upstream
+  disposition, and due benchmark evidence.
+- PF-48–PF-57 implementation, combined-tree TMUX qualification, and independent
+  review are complete; they are no longer release blockers.
 
 ## Completion
 
 - [x] Product linkage, P1 priority, scope, invariants, ownership, and worktree are current.
 - [x] Merged PF-42–PF-47 Claude evidence is preserved without claiming open gates.
 - [x] Every new implementation unit has one stable feature ID and one sprint record.
-- [x] PF-48 through PF-56 are completed and archived; PF-56 implementation is `fd8a9c900e`.
+- [x] PF-48 through PF-57 are completed and archived; final code candidate is `a935e507b`.
 - [x] Required final-tree automated and adversarial evidence passes.
 - [x] Required true-TUI and both live-repository workflows pass.
 - [ ] Named human acceptance passes.

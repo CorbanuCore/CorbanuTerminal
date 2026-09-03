@@ -179,7 +179,6 @@ nav:
                   - "PF-26-S03 — Human acceptance and docs": sprints/current/p0-security-levels/pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md
           - Current Provider Auth Work:
               - Overview: sprints/current/unified-provider-auth/index.md
-              - "PF-57-S01 — Latest-main integration": sprints/current/unified-provider-auth/pf-57-s01-latest-main-integration.md
           - Current Autoreview Work:
               - Overview: sprints/current/arbitrary-model-autoreview/index.md
               - "PF-14 — Arbitrary-model Autoreview":

@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-57-S01"
 title: "Latest-main integration and credential-store liveness"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-57"
 execution_order: 16
@@ -14,7 +14,7 @@ branch: "integration/unified-provider-auth-final"
 base_commit: "06211dbfca61d3f36df3bf069a79ed53ad7a6fa2"
 depends_on: "PF-56-S01"
 created: 2026-09-02
-updated: 2026-09-02
+updated: 2026-09-03
 ---
 
 # PF-57-S01 — Latest-main integration and credential-store liveness
@@ -56,27 +56,31 @@ updated: 2026-09-02
 - [x] Expanded remediation scope after the required Fable 5.1 Max review reported local/no-auth provider blocking, eager startup command execution, keyring deadline/circuit semantics, dead legacy provider UI, and incomplete Claude-token batching. Production work is limited to reproduced provider usability, lazy command validation, bounded-keyring recovery, and atomic managed-Claude mutations; dead-code cleanup is disposition-only unless it blocks a required gate.
 - [x] Expanded the second review cycle only for the reproduced fresh-install regression: implicit local/status-only catalog entries must not suppress onboarding or satisfy its completion gate unless they are the explicit current provider; shipped command-auth documentation must describe lazy request-time validation.
 - [x] Kept the recovery contract convergent after structured review: a usable non-interactive replacement is exposed as an explicit onboarding choice, and **Done** remains blocked until a current provider is preserved or a replacement is selected and queued for persistence.
+- [x] Bounded OS-keyring reads, writes, and deletes behind one shared operation gate with per-operation deadlines, stuck-worker suppression, and late-success recovery at `458ac28b0`.
+- [x] Coalesced vault add, update, delete, bulk-delete, and managed Claude-token mutations into one encrypted-file rewrite per logical operation without changing the vault format or pinned scrypt work factor.
+- [x] Optimized scrypt/Salsa only in development and test profiles while preserving production cryptographic parameters and on-disk compatibility.
+- [x] Verified fail-closed existing-vault behavior and usable new-profile fallback across the final provider/login test matrix.
+- [x] Preserved command-auth laziness, local/status-only provider usability, and explicit established-profile recovery without silent provider substitution at `004556c52`, `247d5bbb`, and `a935e507b`.
+- [x] Ran formatting, affected automated tests, combined true-TMUX flows, and final build on the combined tree.
+- [x] Ran Claude Fable 5.1 Plan max through Corbanu/TMUX, remediated all three actionable findings, and obtained `FINAL_REREVIEW: CLEAN` on `a935e507b`.
+- [x] Recorded the exact candidate, lineage, test counts, binary digest, review, and truthful remaining release gates in [PF-57 qualification](../../../../qa/provider-auth/pf-57/qualification.md).
 
 ## Remaining
 
-- [ ] Bound OS-keyring calls and prevent repeated stuck-worker accumulation for read, write, delete, and startup/logout callers.
-- [ ] Coalesce each vault add, update, delete, and bulk-delete mutation into one encrypted-file rewrite without lowering the pinned scrypt work factor or changing vault format.
-- [ ] Optimize the scrypt and Salsa implementation only in development/test profiles so exact provider flows remain below the harness timeout without reducing cryptographic work.
-- [ ] Verify existing encrypted-vault and locked-keyring fallback behavior remains fail-closed for existing vaults and usable for new keyring-less profiles.
-- [ ] Run formatting, governance, affected automated tests, combined true-TMUX flows, and secret-canary checks.
-- [ ] Run one Fable 5.1 independent review through Corbanu/TMUX and remediate applicable findings.
-- [ ] Record the candidate, test artifacts, exact integration commit, and truthful remaining release gates.
+No sprint-scoped implementation or qualification work remains. Named human,
+live-account, physical-platform, release/tag, upstream-disposition, and benchmark
+gates remain at plan/release level and are not claimed by this archive.
 
 ## Verification
 
-- [ ] Focused test: `CARGO_TARGET_DIR=/Volumes/CorbanuDrive/Corbanu/.codex-work/targets/pf57 CARGO_INCREMENTAL=0 just test -p codex-provider-auth -j 1 --retries 0`.
-- [ ] Integration tests: affected `codex-login` and `codex-tui` suites after `just fmt`.
-- [ ] TUI: final combined candidate launched through the repository harness with text and Enter sent separately; startup, provider setup/replacement, restart, failure, and recovery checkpoints recorded.
+- [x] Focused provider/core matrix: 390 tests passed with external target storage.
+- [x] Integration tests: final provider-auth, login, keyring, secrets, vault, model-provider, and affected TUI suites passed after formatting.
+- [x] TUI: final `a935e507b` candidate launched through the repository harness with text and Enter sent separately; the remote final run passed all 12 PF-55 convergence journeys plus two PF-53 onboarding journeys in 147.84 seconds.
 
 ## Exit evidence
 
-- [ ] Implementation and merge commits recorded.
-- [ ] Final-tree outputs and TMUX/review artifacts linked under `qa/provider-auth/pf-57/`.
-- [ ] Scope audit confirms post-fork main fixes and PF-48–PF-56 behavior are both preserved.
-- [ ] `Done` and `Remaining` ledgers reflect reality.
-- [ ] Completed record moved to `docs/sprints/archive/unified-provider-auth/`.
+- [x] Implementation and merge commits recorded through final code candidate `a935e507b0173f4ee9c1f0aa539eea6e24ed200f`.
+- [x] Final-tree outputs and TMUX/review artifacts linked under `qa/provider-auth/pf-57/`.
+- [x] Scope audit confirms latest-main baseline `81dcbef5d` and PF-48–PF-56 tip `06211dbfc` are both ancestors of the candidate.
+- [x] `Done` and `Remaining` ledgers reflect reality.
+- [x] Completed record moved to `docs/sprints/archive/unified-provider-auth/`.
