@@ -20,7 +20,7 @@ use serde::Deserialize;
 use zeroize::Zeroize;
 use zeroize::Zeroizing;
 
-const CORBANU_API_VIEW_ID: &str = "corbanu-api";
+pub(super) const CORBANU_API_VIEW_ID: &str = "corbanu-api";
 
 #[derive(Debug, Clone)]
 pub(crate) struct CorbanuApiView {
@@ -44,7 +44,21 @@ struct ModelListResponse {
 
 impl ChatWidget {
     pub(crate) fn open_corbanu_api(&mut self) {
-        self.show_corbanu_api_loading();
+        self.open_corbanu_api_with_deferred(None);
+    }
+
+    pub(crate) fn open_corbanu_api_for_deferred(
+        &mut self,
+        deferred: crate::onboarding::provider_setup::DeferredProviderSetup,
+    ) {
+        self.open_corbanu_api_with_deferred(Some(deferred));
+    }
+
+    fn open_corbanu_api_with_deferred(
+        &mut self,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    ) {
+        self.show_corbanu_api_loading_with_deferred(deferred.clone());
         let home = self.config.codex_home.as_path().to_path_buf();
         let capability = wallet_capability_for_request(
             &mut self.wallet_capability,
@@ -77,15 +91,23 @@ impl ChatWidget {
                 } else {
                     load_read_only_account(home, credential_store_mode, keyring_backend).await
                 };
-            tx.send(AppEvent::CorbanuApiLoaded { result });
+            tx.send(AppEvent::CorbanuApiLoaded { result, deferred });
         });
     }
 
+    #[cfg(test)]
     fn show_corbanu_api_loading(&mut self) {
+        self.show_corbanu_api_loading_with_deferred(None);
+    }
+
+    fn show_corbanu_api_loading_with_deferred(
+        &mut self,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    ) {
         let mut header = ColumnRenderable::new();
         header.push(Line::from("Corbanu API".bold()));
         header.push(Line::from("Loading balance and at-cost prices…".dim()));
-        self.show_selection_view(SelectionViewParams {
+        let params = SelectionViewParams {
             view_id: Some(CORBANU_API_VIEW_ID),
             header: Box::new(header),
             items: vec![SelectionItem {
@@ -94,16 +116,43 @@ impl ChatWidget {
                 ..Default::default()
             }],
             footer_hint: Some(standard_popup_hint_line()),
+            on_cancel: deferred.map(|deferred| {
+                Box::new(move |tx: &crate::app_event_sender::AppEventSender| {
+                    tx.send(AppEvent::DeferredCorbanuPlanCancelled {
+                        deferred: deferred.clone(),
+                    });
+                })
+                    as Box<dyn Fn(&crate::app_event_sender::AppEventSender) + Send + Sync>
+            }),
             ..Default::default()
-        });
+        };
+        if self.bottom_pane.active_view_id() == Some(CORBANU_API_VIEW_ID) {
+            let _ = self.replace_selection_view_if_present(CORBANU_API_VIEW_ID, params);
+        } else {
+            self.show_selection_view(params);
+        }
     }
 
+    #[cfg(test)]
     pub(crate) fn on_corbanu_api_loaded(&mut self, result: Result<CorbanuApiView, String>) {
-        self.bottom_pane
-            .replace_selection_view_if_present(CORBANU_API_VIEW_ID, corbanu_api_params(result));
+        self.on_corbanu_api_loaded_with_deferred(result, None);
     }
 
-    pub(crate) fn open_corbanu_api_top_up(&mut self) {
+    pub(crate) fn on_corbanu_api_loaded_with_deferred(
+        &mut self,
+        result: Result<CorbanuApiView, String>,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    ) {
+        self.bottom_pane.replace_selection_view_if_present(
+            CORBANU_API_VIEW_ID,
+            corbanu_api_params(result, deferred),
+        );
+    }
+
+    pub(crate) fn open_corbanu_api_top_up(
+        &mut self,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    ) {
         let tx = self.app_event_tx.clone();
         self.bottom_pane.show_view(Box::new(CustomPromptView::new(
             "Top up Corbanu API".to_string(),
@@ -111,17 +160,24 @@ impl ChatWidget {
             String::new(),
             Some("One canonical USDC adds exactly one dollar of API balance.".to_string()),
             Box::new(move |amount_usd| {
-                tx.send(AppEvent::ConfirmCorbanuApiTopUp { amount_usd });
+                tx.send(AppEvent::ConfirmCorbanuApiTopUp {
+                    amount_usd,
+                    deferred: deferred.clone(),
+                });
             }),
         )));
     }
 
-    pub(crate) fn confirm_corbanu_api_top_up(&mut self, amount_usd: String) {
+    pub(crate) fn confirm_corbanu_api_top_up(
+        &mut self,
+        amount_usd: String,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    ) {
         let amount_micros = match parse_top_up_amount(&amount_usd) {
             Ok(amount) => amount,
             Err(error) => {
                 self.add_error_message(error);
-                self.open_corbanu_api_top_up();
+                self.open_corbanu_api_top_up(deferred);
                 return;
             }
         };
@@ -176,6 +232,7 @@ impl ChatWidget {
                     actions: vec![Box::new(move |tx| {
                         tx.send(AppEvent::CorbanuApiOperationRequested {
                             operation: operation.clone(),
+                            deferred: deferred.clone(),
                         });
                     })],
                     dismiss_on_select: true,
@@ -193,6 +250,7 @@ impl ChatWidget {
         &mut self,
         key_id: String,
         display_prefix: String,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     ) {
         let mut header = ColumnRenderable::new();
         header.push(Line::from("Revoke Corbanu API key".bold()));
@@ -215,6 +273,7 @@ impl ChatWidget {
                     actions: vec![Box::new(move |tx| {
                         tx.send(AppEvent::CorbanuApiOperationRequested {
                             operation: operation.clone(),
+                            deferred: deferred.clone(),
                         });
                     })],
                     dismiss_on_select: true,
@@ -228,7 +287,11 @@ impl ChatWidget {
         });
     }
 
-    pub(crate) fn request_corbanu_api_operation(&mut self, operation: CorbanuApiOperation) {
+    pub(crate) fn request_corbanu_api_operation(
+        &mut self,
+        operation: CorbanuApiOperation,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    ) {
         let Some(capability) = wallet_capability_for_request(
             &mut self.wallet_capability,
             self.wallet_capability_policy,
@@ -237,6 +300,7 @@ impl ChatWidget {
                 policy: UnlockPolicy::OneAction,
                 continuation: crate::app_event::WalletUnlockContinuation::CorbanuApiOperation {
                     operation,
+                    deferred,
                 },
             });
             return;
@@ -252,22 +316,31 @@ impl ChatWidget {
                 .execute_corbanu_api_operation(capability.to_string(), gateway_origin(), operation)
                 .await
                 .map_err(|error| error.to_string());
-            tx.send(AppEvent::CorbanuApiOperationFinished { result });
+            tx.send(AppEvent::CorbanuApiOperationFinished { result, deferred });
         });
     }
 
     pub(crate) fn on_corbanu_api_operation_finished(
         &mut self,
         result: Result<CorbanuApiOperationResult, String>,
-    ) {
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+        select_model: bool,
+        refresh_surface: bool,
+    ) -> bool {
         match result {
             Ok(CorbanuApiOperationResult::Account { account }) => {
-                self.on_corbanu_api_loaded(Ok(CorbanuApiView {
-                    account: Some(account),
-                    models: Vec::new(),
-                    key_summaries_loaded: true,
-                    notice: None,
-                }));
+                if refresh_surface {
+                    self.on_corbanu_api_loaded_with_deferred(
+                        Ok(CorbanuApiView {
+                            account: Some(account),
+                            models: Vec::new(),
+                            key_summaries_loaded: true,
+                            notice: None,
+                        }),
+                        deferred,
+                    );
+                }
+                false
             }
             Ok(CorbanuApiOperationResult::TopUp {
                 balance,
@@ -284,9 +357,12 @@ impl ChatWidget {
                     None,
                 );
                 if let Some(api_key) = api_key {
-                    self.store_and_reveal_corbanu_api_key(api_key);
+                    self.store_and_reveal_corbanu_api_key(api_key, select_model)
                 } else {
-                    self.open_corbanu_api();
+                    if refresh_surface {
+                        self.open_corbanu_api_after_operation(deferred);
+                    }
+                    false
                 }
             }
             Ok(CorbanuApiOperationResult::KeyCreated { api_key }) => {
@@ -295,14 +371,17 @@ impl ChatWidget {
                         .to_string(),
                     None,
                 );
-                self.store_and_reveal_corbanu_api_key(api_key);
+                self.store_and_reveal_corbanu_api_key(api_key, select_model)
             }
             Ok(CorbanuApiOperationResult::KeyRevoked { .. }) => {
                 self.add_info_message(
                     "Corbanu API key revoked. The shared dollar balance was unchanged.".to_string(),
                     None,
                 );
-                self.open_corbanu_api();
+                if refresh_surface {
+                    self.open_corbanu_api_after_operation(deferred);
+                }
+                false
             }
             Err(error) => {
                 self.wallet_capability = None;
@@ -310,12 +389,30 @@ impl ChatWidget {
                 self.add_error_message(format!(
                     "Corbanu API wallet operation failed: {error}. No automatic retry was sent."
                 ));
-                self.open_corbanu_api();
+                if refresh_surface {
+                    self.open_corbanu_api_after_operation(deferred);
+                }
+                false
             }
         }
     }
 
-    fn store_and_reveal_corbanu_api_key(&mut self, api_key: GatewayKey) {
+    fn open_corbanu_api_after_operation(
+        &mut self,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    ) {
+        if let Some(deferred) = deferred {
+            self.open_corbanu_api_for_deferred(deferred);
+        } else {
+            self.open_corbanu_api();
+        }
+    }
+
+    fn store_and_reveal_corbanu_api_key(
+        &mut self,
+        api_key: GatewayKey,
+        select_model: bool,
+    ) -> bool {
         let mut plaintext = api_key.api_key;
         let stored = codex_login::login_with_provider_api_key(
             &self.config.codex_home,
@@ -324,13 +421,20 @@ impl ChatWidget {
             self.config.cli_auth_credentials_store_mode,
             self.config.auth_keyring_backend_kind(),
         );
-        if let Err(error) = stored {
-            self.add_error_message(format!(
-                "The API key was created but could not be stored in the encrypted credential store: {error}"
-            ));
-        } else {
-            self.select_corbanu_api_model("corbanu/glm-5.3-flash");
-        }
+        let stored = match stored {
+            Ok(()) => {
+                if select_model {
+                    self.select_corbanu_api_model("corbanu/glm-5.3-flash");
+                }
+                true
+            }
+            Err(error) => {
+                self.add_error_message(format!(
+                    "The API key was created but could not be stored in the encrypted credential store: {error}"
+                ));
+                false
+            }
+        };
         self.bottom_pane.show_view(Box::new(
             crate::bottom_pane::vault_secret_reveal::VaultSecretRevealView::new(
                 format!("Corbanu API {} — shown once", api_key.display_prefix),
@@ -338,6 +442,7 @@ impl ChatWidget {
             ),
         ));
         plaintext.zeroize();
+        stored
     }
 
     fn select_corbanu_api_model(&self, model: &str) {
@@ -448,7 +553,10 @@ async fn load_read_only_account(
     })
 }
 
-fn corbanu_api_params(result: Result<CorbanuApiView, String>) -> SelectionViewParams {
+fn corbanu_api_params(
+    result: Result<CorbanuApiView, String>,
+    deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+) -> SelectionViewParams {
     let mut header = ColumnRenderable::new();
     header.push(Line::from("Corbanu API".bold()));
     let mut items = Vec::new();
@@ -499,6 +607,27 @@ fn corbanu_api_params(result: Result<CorbanuApiView, String>) -> SelectionViewPa
                     "Third-party inference"
                 };
                 let model_id = model.id.clone();
+                let is_deferred = deferred.is_some();
+                let actions = if is_deferred {
+                    Vec::new()
+                } else {
+                    vec![
+                        Box::new(move |tx: &crate::app_event_sender::AppEventSender| {
+                            let provider = canonical_catalog_provider(&model_id)
+                                .unwrap_or(PFTERMINAL_PLAN_PROVIDER_ID);
+                            tx.send(AppEvent::UpdateModelSelection {
+                                model: model_id.clone(),
+                                provider: Some(provider.to_string()),
+                            });
+                            tx.send(AppEvent::PersistModelSelection {
+                                model: model_id.clone(),
+                                provider: Some(provider.to_string()),
+                                effort: None,
+                            });
+                        })
+                            as Box<dyn Fn(&crate::app_event_sender::AppEventSender) + Send + Sync>,
+                    ]
+                };
                 items.push(SelectionItem {
                     name: format!("{}{}{}", model.display_name, recommended, faster),
                     description: Some(format!(
@@ -507,19 +636,8 @@ fn corbanu_api_params(result: Result<CorbanuApiView, String>) -> SelectionViewPa
                         model.pricing.cache_read_usd,
                         model.pricing.output_usd,
                     )),
-                    actions: vec![Box::new(move |tx| {
-                        let provider = canonical_catalog_provider(&model_id)
-                            .unwrap_or(PFTERMINAL_PLAN_PROVIDER_ID);
-                        tx.send(AppEvent::UpdateModelSelection {
-                            model: model_id.clone(),
-                            provider: Some(provider.to_string()),
-                        });
-                        tx.send(AppEvent::PersistModelSelection {
-                            model: model_id.clone(),
-                            provider: Some(provider.to_string()),
-                            effort: None,
-                        });
-                    })],
+                    is_disabled: is_deferred,
+                    actions,
                     ..Default::default()
                 });
             }
@@ -527,6 +645,7 @@ fn corbanu_api_params(result: Result<CorbanuApiView, String>) -> SelectionViewPa
                 for key in keys.into_iter().filter(|key| key.revoked_at.is_none()) {
                     let key_id = key.id.clone();
                     let prefix = key.display_prefix.clone();
+                    let revoke_deferred = deferred.clone();
                     items.push(SelectionItem {
                         name: format!("API key {}", key.display_prefix),
                         description: Some(match key.last_used_at {
@@ -539,6 +658,7 @@ fn corbanu_api_params(result: Result<CorbanuApiView, String>) -> SelectionViewPa
                             tx.send(AppEvent::ConfirmCorbanuApiKeyRevocation {
                                 key_id: key_id.clone(),
                                 display_prefix: prefix.clone(),
+                                deferred: revoke_deferred.clone(),
                             });
                         })],
                         ..Default::default()
@@ -550,42 +670,61 @@ fn corbanu_api_params(result: Result<CorbanuApiView, String>) -> SelectionViewPa
             }
         }
     }
+    let top_up_deferred = deferred.clone();
     items.insert(
         0,
         item(
             "Top up balance",
             "Choose any positive canonical-USDC amount",
-            || AppEvent::OpenCorbanuApiTopUp,
+            move || AppEvent::OpenCorbanuApiTopUp {
+                deferred: top_up_deferred.clone(),
+            },
         ),
     );
+    let account_deferred = deferred.clone();
     items.insert(
         1,
         item(
             "Manage API keys",
             "Unlock to load key summaries and balances",
-            || AppEvent::CorbanuApiOperationRequested {
+            move || AppEvent::CorbanuApiOperationRequested {
                 operation: CorbanuApiOperation::Account,
+                deferred: account_deferred.clone(),
             },
         ),
     );
+    let create_key_deferred = deferred.clone();
     items.insert(
         2,
         item(
             "Create API key",
             "Unlock and reveal a new key exactly once",
-            || AppEvent::CorbanuApiOperationRequested {
+            move || AppEvent::CorbanuApiOperationRequested {
                 operation: CorbanuApiOperation::CreateKey,
+                deferred: create_key_deferred.clone(),
             },
         ),
     );
-    items.push(item("Refresh", "Reload balance and model prices", || {
-        AppEvent::OpenCorbanuApi
-    }));
+    let refresh_deferred = deferred.clone();
+    items.push(item(
+        "Refresh",
+        "Reload balance and model prices",
+        move || AppEvent::OpenCorbanuApi {
+            deferred: refresh_deferred.clone(),
+        },
+    ));
     SelectionViewParams {
         view_id: Some(CORBANU_API_VIEW_ID),
         header: Box::new(header),
         items,
         footer_hint: Some(standard_popup_hint_line()),
+        on_cancel: deferred.map(|deferred| {
+            Box::new(move |tx: &crate::app_event_sender::AppEventSender| {
+                tx.send(AppEvent::DeferredCorbanuPlanCancelled {
+                    deferred: deferred.clone(),
+                });
+            }) as Box<dyn Fn(&crate::app_event_sender::AppEventSender) + Send + Sync>
+        }),
         ..Default::default()
     }
 }

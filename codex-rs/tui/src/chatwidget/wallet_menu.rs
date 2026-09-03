@@ -15,7 +15,6 @@ use crate::chatwidget::wallet_receipt::reconcile_plan_receipt;
 use crate::chatwidget::wallet_render::WalletTextStyle;
 use crate::chatwidget::wallet_render::push_wallet_text;
 use crate::chatwidget::wallet_unlock::wallet_capability_for_request;
-use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_wallet::BalanceClient;
@@ -261,7 +260,7 @@ impl ChatWidget {
             description: Some(if can_finish {
                 "Finish provider setup".to_string()
             } else {
-                "Configure a usable provider or queue Corbanu Plan".to_string()
+                "Configure a usable provider or queue Corbanu API".to_string()
             }),
             is_disabled: !can_finish,
             actions: vec![Box::new(|tx| tx.send(AppEvent::SharedProviderSetupDone))],
@@ -723,9 +722,10 @@ impl ChatWidget {
                             policy: codex_wallet_daemon::UnlockPolicy::Timed {
                                 duration_seconds: 300,
                             },
-                            continuation: crate::app_event::WalletUnlockContinuation::OpenPlans {
-                                mode: WalletPlanPurchaseMode::Onboarding { deferred: next },
-                            },
+                            continuation:
+                                crate::app_event::WalletUnlockContinuation::OpenCorbanuApi {
+                                    deferred: Some(next.clone()),
+                                },
                         });
                     }))
                     .with_cancellation(Box::new(move || {
@@ -753,7 +753,7 @@ impl ChatWidget {
         let retry = deferred.clone();
         let cancel = deferred.clone();
         self.show_selection_view(SelectionViewParams {
-            title: Some("Continue Corbanu Plan setup".to_string()),
+            title: Some("Continue Corbanu API setup".to_string()),
             items: vec![
                 SelectionItem {
                     name: "Retry wallet setup".to_string(),
@@ -1241,6 +1241,7 @@ impl ChatWidget {
 
     pub(crate) fn dismiss_deferred_wallet_plan_views(&mut self) {
         for view_id in [
+            crate::chatwidget::wallet_api::CORBANU_API_VIEW_ID,
             crate::chatwidget::wallet_receipt::WALLET_PLAN_RECEIPT_VIEW_ID,
             WALLET_PLAN_CONFIRM_VIEW_ID,
             WALLET_PLANS_VIEW_ID,
@@ -1509,11 +1510,11 @@ impl ChatWidget {
 
     pub(super) fn select_pfterminal_plan_provider(&self) {
         self.app_event_tx.send(AppEvent::UpdateModelSelection {
-            model: AMBIENT_DEFAULT_MODEL.to_string(),
+            model: "corbanu/glm-5.3-flash".to_string(),
             provider: Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
         });
         self.app_event_tx.send(AppEvent::PersistModelSelection {
-            model: AMBIENT_DEFAULT_MODEL.to_string(),
+            model: "corbanu/glm-5.3-flash".to_string(),
             provider: Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
             effort: None,
         });
@@ -1535,7 +1536,7 @@ impl ChatWidget {
         );
         if !host.activate(codex_model_provider_info::CORBANU_PLAN_PROVIDER_ID) {
             self.add_error_message(
-                "Corbanu Plan was stored, but activation could not be persisted.".to_string(),
+                "Corbanu API was stored, but activation could not be persisted.".to_string(),
             );
             self.show_deferred_plan_activation_retry(deferred.clone());
             return Err(DeferredPlanActivationError::Persistence);
@@ -1549,7 +1550,7 @@ impl ChatWidget {
             });
         if !reconciled {
             self.add_error_message(
-                "Corbanu Plan was stored, but status reconciliation is still incomplete."
+                "Corbanu API was stored, but status reconciliation is still incomplete."
                     .to_string(),
             );
             self.show_deferred_plan_activation_retry(deferred.clone());
@@ -1568,7 +1569,7 @@ impl ChatWidget {
         let retry = deferred.clone();
         let cancel = deferred.clone();
         self.show_selection_view(SelectionViewParams {
-            title: Some("Finish Corbanu Plan setup".to_string()),
+            title: Some("Finish Corbanu API setup".to_string()),
             items: vec![
                 SelectionItem {
                     name: "Retry activation".to_string(),
@@ -1612,7 +1613,7 @@ fn shared_provider_method_label(
         codex_provider_auth::ProviderSetupCapability::OpenAiAccount => "account",
         codex_provider_auth::ProviderSetupCapability::ApiKey { .. } => "API key",
         codex_provider_auth::ProviderSetupCapability::ClaudeAccount => "account",
-        codex_provider_auth::ProviderSetupCapability::CorbanuPlan => "Plan",
+        codex_provider_auth::ProviderSetupCapability::CorbanuPlan => "API",
         codex_provider_auth::ProviderSetupCapability::Local { .. } => "local runtime",
         codex_provider_auth::ProviderSetupCapability::CommandAuth { .. } => "external command",
         codex_provider_auth::ProviderSetupCapability::StatusOnly { .. } => "status only",
@@ -1807,7 +1808,7 @@ fn wallet_items(
     items.push(item(
         "Corbanu API",
         "View dollar balance, at-cost model prices, top up, and manage API keys",
-        || AppEvent::OpenCorbanuApi,
+        || AppEvent::OpenCorbanuApi { deferred: None },
     ));
     if !can_sign && !overview.daemon.busy {
         for (name, policy) in [
@@ -2168,7 +2169,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn deferred_cancellation_removes_every_wallet_plan_view() {
+    async fn deferred_cancellation_removes_every_corbanu_api_and_wallet_plan_view() {
         let (mut chat, _rx, _op_rx) =
             crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
         for view_id in [
@@ -2176,6 +2177,8 @@ mod tests {
             WALLET_PLANS_VIEW_ID,
             WALLET_PLANS_VIEW_ID,
             WALLET_PLAN_CONFIRM_VIEW_ID,
+            crate::chatwidget::wallet_api::CORBANU_API_VIEW_ID,
+            crate::chatwidget::wallet_api::CORBANU_API_VIEW_ID,
         ] {
             chat.show_selection_view(SelectionViewParams {
                 view_id: Some(view_id),
@@ -2420,7 +2423,10 @@ mod tests {
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = crate::app_event_sender::AppEventSender::new(tx);
         (items[api].actions[0])(&sender);
-        assert!(matches!(rx.try_recv(), Ok(AppEvent::OpenCorbanuApi)));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(AppEvent::OpenCorbanuApi { deferred: None })
+        ));
     }
 
     #[test]

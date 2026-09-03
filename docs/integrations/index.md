@@ -10,7 +10,7 @@ onboarding, packaging, and branding changes.
 The important boundary: Corbanu Terminal still uses the Codex execution engine, tool
 system, approval flows, sandboxing, and session mechanics, while adding OpenAI
 Codex, Claude Plan, Anthropic, Ambient, Kimi Code, Z.AI, DeepSeek, OpenRouter,
-Meta, Baseten, Vercel, Bedrock, Ollama, LM Studio, Corbanu Plan, and custom
+Meta, Baseten, Vercel, Bedrock, Ollama, LM Studio, Corbanu API, and custom
 providers as first-class choices.
 
 ## What Exists Now
@@ -30,7 +30,7 @@ providers as first-class choices.
 | Vercel provider | Built-in provider named `vercel`, using `AI_GATEWAY_API_KEY` for GLM 5.3 Flash, GLM 5.3, Kimi K3, DeepSeek V4 Pro, and legacy GLM 5.2 routes. | `codex-rs/model-provider-info/src/lib.rs` |
 | Amazon Bedrock | Cloud-authenticated Bedrock models through the inherited provider route. | `codex-rs/model-provider-info/src/lib.rs`, `docs/config.md` |
 | Ollama and LM Studio | Local model-server routes configured against the operator's endpoint. | `codex-rs/model-provider-info/src/lib.rs`, `docs/config.md` |
-| Corbanu Plan | Wallet-linked prepaid inference credential, usage, and model routes. | `codex-rs/tui/src/chatwidget/wallet_menu.rs`, `codex-rs/tui/src/chatwidget/model_popups.rs` |
+| Corbanu API | Wallet-linked dollar balance, API-key lifecycle, explicit model prices, and model routes. | `codex-rs/tui/src/chatwidget/wallet_api.rs`, `codex-rs/tui/src/chatwidget/model_popups.rs` |
 | Custom providers | Operator-defined endpoints and wire configuration in `config.toml`. | `codex-rs/core/src/config/`, `docs/config.md` |
 | Provider key vault | Provider keys are stored in encrypted vault labels such as `provider/zai_api_key`. | `codex-rs/login/src/auth/provider_key_vault.rs`, `codex-rs/vault/` |
 | GLM request shaping | Ambient and Z.AI requests map Corbanu Terminal reasoning levels to provider-specific `reasoning_effort`, `enable_thinking`, and `emit_usage` fields. | `codex-rs/core/src/client.rs` |

@@ -130,9 +130,19 @@ impl ChatWidget {
                 );
                 match continuation {
                     WalletUnlockContinuation::WalletMenu => self.open_wallet_menu(),
+                    WalletUnlockContinuation::OpenCorbanuApi { deferred } => {
+                        if let Some(deferred) = deferred {
+                            self.open_corbanu_api_for_deferred(deferred);
+                        } else {
+                            self.open_corbanu_api();
+                        }
+                    }
                     WalletUnlockContinuation::OpenPlans { mode } => self.open_wallet_plans(mode),
-                    WalletUnlockContinuation::CorbanuApiOperation { operation } => {
-                        self.request_corbanu_api_operation(operation);
+                    WalletUnlockContinuation::CorbanuApiOperation {
+                        operation,
+                        deferred,
+                    } => {
+                        self.request_corbanu_api_operation(operation, deferred);
                     }
                 }
             }

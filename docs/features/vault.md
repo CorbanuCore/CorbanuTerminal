@@ -79,12 +79,12 @@ workflow.
 | `/vault` | Add, inspect, copy, use, or delete service credentials by label. |
 | `/providers` | See provider authentication status and enter supported provider credentials. |
 | `/model` | Choose the active provider, model, and reasoning effort after authentication. |
-| `/wallet` | Manage signing custody, balances, backup/restore, and Corbanu Plan linkage. |
+| `/wallet` | Manage signing custody, balances, backup/restore, and Corbanu API linkage. |
 
 The vault and wallet are separate security boundaries. Deleting a vault
 credential can make its provider or service unavailable, but it does not delete
-the Solana wallet. Disconnecting Corbanu Plan removes its local Plan credential
-without deleting the wallet or paid period.
+the Solana wallet. Disconnecting Corbanu API removes its local API credential
+without deleting the wallet or changing its server-authoritative dollar balance.
 
 ## Storage and security boundary
 

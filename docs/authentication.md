@@ -191,6 +191,6 @@ remove provider API keys from the vault and legacy provider auth storage.
 Neither command owns Claude Code's separate subscription account state.
 
 For API-key providers, use the onboarding picker, `/providers`, `/vault`, or
-the provider environment variables above. Claude Plan and Corbanu Plan are
-account/entitlement routes rather than API-key rows; `/providers` reports their
-actual status separately.
+the provider environment variables above. Claude Plan remains an account route.
+Corbanu API is wallet-linked and stores its generated API credential through the
+same encrypted provider-key boundary; `/providers` reports both routes separately.

@@ -683,8 +683,7 @@ impl AuthModeWidget {
                     *self.sign_in_state.write().unwrap() = SignInState::Complete;
                 } else {
                     self.set_error(Some(
-                        "Configure a usable provider or queue Corbanu Plan before Done."
-                            .to_string(),
+                        "Configure a usable provider or queue Corbanu API before Done.".to_string(),
                     ));
                 }
                 self.request_frame.schedule_frame();
@@ -1075,11 +1074,11 @@ impl AuthModeWidget {
                         idx,
                         option,
                         if queued {
-                            "Corbanu Plan (queued)"
+                            "Corbanu API (queued)"
                         } else {
-                            "Corbanu Plan"
+                            "Corbanu API"
                         },
-                        "Queue protected wallet setup; it runs after Done",
+                        "Queue protected wallet and API-key setup; it runs after Done",
                     ));
                 }
                 SignInOption::Done => {
@@ -1090,7 +1089,7 @@ impl AuthModeWidget {
                         if self.provider_setup_session.read().unwrap().can_finish() {
                             "Finish provider setup"
                         } else {
-                            "Configure a usable provider or queue Corbanu Plan first"
+                            "Configure a usable provider or queue Corbanu API first"
                         },
                     ));
                 }

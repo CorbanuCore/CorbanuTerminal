@@ -2,7 +2,7 @@
 
 Corbanu Terminal is a trader-first, wallet-native agentic terminal built on the
 open-source Codex CLI. It keeps the local coding-agent runtime and makes model
-providers, retained orchestration, wallet and Plan, GPU compute, Telegram,
+providers, retained orchestration, wallet and Corbanu API, GPU compute, Telegram,
 Task Node identity, encrypted credentials, and persistent workspaces one
 coherent product.
 
@@ -22,8 +22,8 @@ product behavior.
 | Vault          | Secrets should never be pasted into chat             | Encrypted storage, masked entry, metadata-only inspection, and operational credential use               | [`/vault` and credentials](features/vault.md)                                                                 |
 | Orchestration  | Delegated work needs hierarchy and supervision       | Nazgul, Troll, and Orc roles; subagents; durable mailboxes; persistent assignments; resume and recovery | [`/spawn` hierarchy](features/spawn-orchestration.md) · [`/orchestrate` supervision](features/orchestrate.md) |
 | Workspaces     | Long-running sessions are hard to track              | User, Claude, and agent panes; retained state; approvals; background terminals                          | [`/panes` and workspaces](features/workspaces.md)                                                             |
-| Wallet         | Custody and payment need explicit control            | Local Solana wallet, SOL/USDC, scoped signing, backup/restore, and Plan ownership                       | [Wallet and Corbanu Plan](features/wallet-plan.md)                                                            |
-| Corbanu Plan   | Inference payment and entitlement should be native   | Wallet-purchased monthly x402 Plan, tier allowance, receipt, recovery, usage, and model routing         | [Wallet and Corbanu Plan](features/wallet-plan.md)                                                            |
+| Wallet         | Custody and payment need explicit control            | Local Solana wallet, SOL/USDC, scoped signing, backup/restore, and API-account ownership                | [Wallet and Corbanu API](features/wallet-plan.md)                                                             |
+| Corbanu API    | Metered inference funding should be native           | Wallet-funded dollar balance, explicit prices, one-time key reveal, key lifecycle, and model routing   | [Wallet and Corbanu API](features/wallet-plan.md)                                                             |
 | Compute        | GPU rentals can overspend or continue billing        | Vast.ai and RunPod budgets, readiness, stop, and provider-confirmed termination                         | [GPU rentals](features/gpu-rentals.md)                                                                        |
 | Task Node      | Tasks and identity should follow the agent           | Tasks, evidence, requests, context, chat, rewards, balances, and Task Node-linked Nostr identity        | [Task Node and identity](features/tasknode.md)                                                                |
 | Remote control | Users need bounded access away from the keyboard     | Allowlisted Telegram connector with explicit workspace and authorization                                | [Telegram](features/telegram.md)                                                                              |

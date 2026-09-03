@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Human acceptance checks for Corbanu Terminal PF-48 through PF-57">
+  <meta name="description" content="Human acceptance checks for the Corbanu Terminal 0.1.38 reconciliation candidate">
   <link rel="icon" href="data:,">
   <title>Corbanu Terminal — Human Test Plan</title>
   <style>
@@ -202,12 +202,12 @@
     <header>
       <p class="eyebrow">Corbanu Terminal · human QA</p>
       <h1>Provider setup should feel boring now.</h1>
-      <p class="lede">A 35–45 minute human acceptance pass for PF-48 through PF-57. Work from top to bottom using the Corbanu window opened for you. Stop at the first failure and record the exact visible message—never a credential.</p>
+      <p class="lede">A 35–45 minute human acceptance pass for the combined PF-48–PF-57 and 0.1.37 release-line candidate. Work from top to bottom using the Corbanu window opened for you. Stop at the first failure and record the exact visible message—never a credential.</p>
       <div class="release-strip">
-        <span><strong>Candidate:</strong> Corbanu 0.1.35</span>
-        <span><strong>Qualified code:</strong> <code>a935e507b</code></span>
-        <span><strong>Main record:</strong> <code>e36bd1566</code></span>
-        <span><strong>Built:</strong> 2 Sep 2026 (Phoenix)</span>
+        <span><strong>Candidate:</strong> Corbanu 0.1.38</span>
+        <span><strong>Combined lines:</strong> <code>a935e507b</code> + <code>rust-v0.1.37</code></span>
+        <span><strong>Integration base:</strong> <code>6dd9ad646</code></span>
+        <span><strong>Built:</strong> 3 Sep 2026 (Phoenix)</span>
         <span><strong>Runtime:</strong> stable release build on CorbanuDrive</span>
       </div>
       <div class="actions">
@@ -271,8 +271,8 @@
           <span>
             <h3>2. Verify startup identity and remembered setup</h3>
             <p>Wait for the composer, then run <span class="keys">/status</span>. Note the current provider and model. Do not configure anything yet.</p>
-            <p class="expected">Pass: startup reaches chat without forcing <code>/providers</code>, your previously selected provider/model is remembered, Code Mode is available, and no <code>codex_apps</code> startup warning appears.</p>
-            <p class="failure">Fail: provider onboarding appears despite a valid prior setup, the provider silently changes, Code Mode host is missing, MCP startup is interrupted, or the UI stalls.</p>
+            <p class="expected">Pass: startup reaches chat without forcing <code>/providers</code>, your previously selected provider/model is remembered, Code Mode is available, no <code>codex_apps</code> startup warning appears, and Corbanu does not offer an “update” to the older 0.1.37 release.</p>
+            <p class="failure">Fail: provider onboarding appears despite a valid prior setup, the provider silently changes, Code Mode host is missing, MCP startup is interrupted, an update-to-0.1.37 message appears, or the UI stalls.</p>
           </span>
         </label>
 
@@ -280,9 +280,9 @@
           <input type="checkbox" data-check="catalog">
           <span>
             <h3>3. Inspect the unified provider catalog</h3>
-            <p>Run <span class="keys">/providers</span>. Move through the list, inspecting OpenAI, Anthropic/Claude, Corbanu Plan, API-key providers, and any local/custom entries.</p>
-            <p class="expected">Pass: the list opens promptly; configured, active, current, unavailable, and recovery states make sense; moving the selection remains responsive.</p>
-            <p class="failure">Fail: statuses contradict startup, secrets are visible, key navigation pauses repeatedly, the vault hangs, or a provider is unexpectedly absent.</p>
+            <p>Run <span class="keys">/providers</span>. Move through the list, inspecting OpenAI, Anthropic/Claude, Corbanu API, API-key providers, and any local/custom entries. Then run <span class="keys">/wallet</span> and inspect the Corbanu API entry.</p>
+            <p class="expected">Pass: the lists open promptly; configured, active, current, unavailable, and recovery states make sense; the wallet offers dollar balance, top-up, model prices, and API-key management without Starter/Basic/Power/Pro plan-sale actions.</p>
+            <p class="failure">Fail: statuses contradict startup, secrets are visible, key navigation pauses repeatedly, the vault hangs, Corbanu API is absent, or a legacy Corbanu Plan purchase/recovery/details action is visible.</p>
           </span>
         </label>
 
@@ -382,12 +382,12 @@
       <h2 id="evidence-title">What machines already proved</h2>
       <p style="color:var(--muted)">Human acceptance focuses on visible trust and usability. These implementation checks already passed on the exact code candidate.</p>
       <div class="evidence">
-        <div class="metric"><b>390</b><span>core/provider tests passed</span></div>
-        <div class="metric"><b>75 / 75</b><span>focused TUI tests passed</span></div>
-        <div class="metric"><b>14 / 14</b><span>true-TMUX journeys passed</span></div>
-        <div class="metric"><b>3 / 3</b><span>Fable findings remediated</span></div>
-        <div class="metric"><b>1.32s</b><span>batched vault deletion</span></div>
-        <div class="metric"><b>CLEAN</b><span>Fable 5.1 final rereview</span></div>
+        <div class="metric"><b>64 / 64</b><span>provider contract tests passed</span></div>
+        <div class="metric"><b>72 / 72</b><span>onboarding tests passed</span></div>
+        <div class="metric"><b>31 / 31</b><span>provider/stream core tests passed</span></div>
+        <div class="metric"><b>11 / 11</b><span>true-TMUX journeys passed</span></div>
+        <div class="metric"><b>10 / 10</b><span>Corbanu API UI tests passed</span></div>
+        <div class="metric"><b>0.1.38</b><span>combined candidate identity</span></div>
       </div>
     </section>
 
@@ -397,9 +397,10 @@
         <p>Paste this into a normal shell—not Corbanu chat—to confirm the durable launcher target and qualified source lineage:</p>
         <pre><code>/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/bin/corbanu --version
 readlink /Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/bin/corbanu
-cd /Volumes/CorbanuDrive/Corbanu/worktrees/integrate-unified-provider-auth-final
-git merge-base --is-ancestor a935e507b0173f4ee9c1f0aa539eea6e24ed200f HEAD &amp;&amp; echo "PF-57 candidate present"</code></pre>
-        <p>Expected: <code>corbanu 0.1.35</code>, <code>../target/release/corbanu</code>, and <code>PF-57 candidate present</code>. Documentation-only commits after the qualified code candidate are expected.</p>
+cd /Volumes/CorbanuDrive/Corbanu/worktrees/reconcile-release-0.1.37
+git merge-base --is-ancestor a935e507b0173f4ee9c1f0aa539eea6e24ed200f HEAD &amp;&amp; echo "PF-57 present"
+git merge-base --is-ancestor rust-v0.1.37 HEAD &amp;&amp; echo "0.1.37 release line present"</code></pre>
+        <p>Expected: <code>corbanu 0.1.38</code>, <code>../target/release/corbanu</code>, <code>PF-57 present</code>, and <code>0.1.37 release line present</code>.</p>
       </div>
     </details>
 
@@ -422,7 +423,7 @@ git merge-base --is-ancestor a935e507b0173f4ee9c1f0aa539eea6e24ed200f HEAD &amp;
   <script>
     const boxes = [...document.querySelectorAll('[data-check]')];
     const notes = [...document.querySelectorAll('[data-note]')];
-    const key = 'corbanu-human-test-pf57-a935e507b';
+    const key = 'corbanu-human-test-0-1-38-reconciliation';
 
     function loadState() {
       try {

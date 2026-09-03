@@ -26,8 +26,8 @@ provider access and model selection behind one consistent TUI workflow.
 On first run, configure as many providers as you want and then choose **Done**.
 The first provider that completes successfully becomes the fresh installation's
 initial provider; later successful setup does not silently replace it. Choosing
-Corbanu Plan queues that flow until after **Done**, so you can configure the
-other providers first. Cancelling or escaping the deferred Plan flow returns to
+Corbanu API queues wallet and API-key setup until after **Done**, so you can configure the
+other providers first. Cancelling or escaping the deferred API flow returns to
 the terminal without changing an already usable provider.
 
 Configured providers are active by default. Adding a credential does not select
@@ -101,7 +101,7 @@ server.
 | Amazon Bedrock | Built-in `amazon-bedrock` cloud route | Configure AWS credentials/profile or a managed Bedrock API key and region. |
 | Ollama | Built-in `ollama` local route | Run Ollama locally and select it as the local provider. |
 | LM Studio | Built-in `lmstudio` local route | Run LM Studio locally and select it as the local provider. |
-| Corbanu Plan | Wallet-linked `corbanu-plan` route | Buy or recover a Plan in `/wallet`; inspect status in `/providers`. |
+| Corbanu API | Wallet-linked `corbanu-plan` compatibility route | Fund a dollar balance and manage keys in `/wallet`; inspect status in `/providers`. |
 | Custom provider | Operator-defined compatible route | Add a `[model_providers.<id>]` entry in `config.toml`. |
 
 Some provider families have additional internal wire-protocol routes so the
@@ -138,7 +138,7 @@ documented environment or configuration inputs.
   when a request or native child-agent launch actually uses that provider; a
   failed command blocks that operation with the provider error.
 - Provider privacy, retention, billing, and jurisdictional rules still apply.
-- Use the privacy label shown for Corbanu Plan models before sending sensitive
+- Use the privacy label shown for Corbanu API models before sending sensitive
   strategy or financial context.
 
 ## Related documentation
@@ -146,5 +146,5 @@ documented environment or configuration inputs.
 - [`/vault` and credentials](vault.md)
 - [Authentication and account setup](../authentication.md)
 - [Configuration](../config.md)
-- [Corbanu Plan](wallet-plan.md)
+- [Corbanu API](wallet-plan.md)
 - [Provider integration references](../integrations/index.md)

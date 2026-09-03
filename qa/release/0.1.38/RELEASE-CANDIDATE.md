@@ -22,8 +22,28 @@ qualification only; it does not authorize a tag or publication.
 
 ## Qualification evidence
 
-- Pending final merge commit, formatting, focused suites, release build,
-  true-TUI smoke, and independent review.
+- Merge commit `aeaabfeaae1c2595a80c7118926e855de4ad6537` preserves both
+  exact histories. Main `6dd9ad646beb4a7407521439411f436f21ea4af1` and
+  `rust-v0.1.37` (`43ff201aabb633a8b6a1a10ea2b1544d92ad3902`) are both
+  ancestors of the candidate.
+- Semantic reconciliation routes unified onboarding's deferred Corbanu choice
+  into the release line's wallet-funded Corbanu API balance/key flow. New Plan
+  sales and legacy entitlement UI remain retired; persisted compatibility IDs
+  remain stable.
+- `just fix`, `just fmt`, `git diff --check`, plan/sprint governance checks,
+  and the portable-skills mirror check pass.
+- Focused final-tree suites: provider-auth 64/64; Corbanu API UI 10/10;
+  provider credentials 12/12; wallet unlock 7/7; onboarding 72/72; wallet menu
+  25/25; provider manager 8/8.
+- Focused provider/stream core: 31/31, nextest run
+  `75e64c46-ee5b-4ff2-920f-c0b16d9cfd5e`.
+- True-TMUX: multi-provider onboarding 10/10 on the formatted final source,
+  plus the exact PF-52 Claude recovery journey 1/1.
+- Strict MkDocs is still blocked by 19 pre-existing excluded/missing-link
+  warnings outside this candidate's changed pages; the non-strict site build
+  completes and changed pages introduce no new warning.
+- Final release build, binary digests, independent Fable review, installed-app
+  smoke, and human acceptance remain pending.
 
 ## Disclosed incomplete gates
 

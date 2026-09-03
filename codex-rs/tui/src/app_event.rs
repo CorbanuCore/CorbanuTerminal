@@ -312,11 +312,15 @@ pub(crate) struct WalletUnlockedResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WalletUnlockContinuation {
     WalletMenu,
+    OpenCorbanuApi {
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    },
     OpenPlans {
         mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode,
     },
     CorbanuApiOperation {
         operation: codex_wallet::CorbanuApiOperation,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     },
 }
 
@@ -1783,23 +1787,32 @@ pub(crate) enum AppEvent {
         generation: u64,
         result: Result<crate::chatwidget::wallet_menu::WalletOverview, String>,
     },
-    OpenCorbanuApi,
+    OpenCorbanuApi {
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    },
     CorbanuApiLoaded {
         result: Result<crate::chatwidget::wallet_api::CorbanuApiView, String>,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     },
-    OpenCorbanuApiTopUp,
+    OpenCorbanuApiTopUp {
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    },
     ConfirmCorbanuApiTopUp {
         amount_usd: String,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     },
     ConfirmCorbanuApiKeyRevocation {
         key_id: String,
         display_prefix: String,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     },
     CorbanuApiOperationRequested {
         operation: codex_wallet::CorbanuApiOperation,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     },
     CorbanuApiOperationFinished {
         result: Result<codex_wallet::CorbanuApiOperationResult, String>,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     },
     WalletCreateFinished {
         operation: WalletPersistenceOperation,

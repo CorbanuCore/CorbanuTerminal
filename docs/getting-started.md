@@ -92,7 +92,7 @@ Provider API keys stored through onboarding use labels such as
 | [`/panes`](features/workspaces.md)          | Create or switch persistent native, Claude, and managed crew panes       |
 | [`/spawn`](features/spawn-orchestration.md) | Create or bind retained Nazgul/Troll/Orc agents                          |
 | [`/orchestrate`](features/orchestrate.md)   | Attach persistent Manager → Worker supervision                           |
-| `/wallet`                                   | Manage the local SOL/USDC wallet and Corbanu Plans                       |
+| `/wallet`                                   | Manage the local SOL/USDC wallet and Corbanu API balance/keys            |
 | `/gpu`                                      | Inspect, rent, stop, or terminate supported GPU capacity                 |
 | `/telegram`                                 | Configure and control the Telegram connector                             |
 | `/tasknode`                                 | Link and use Task Node tasks, context, chat, balances, and rewards       |
