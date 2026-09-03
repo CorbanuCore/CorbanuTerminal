@@ -121,6 +121,9 @@ requires the user to choose a usable replacement first.
   current provider.
 - Startup gating and current-model selection derived from the shared status and
   eligibility state rather than host-specific heuristics.
+- Bounded operating-system keyring access for the encrypted provider vault so a
+  locked or unresponsive credential service degrades through the existing
+  fallback policy instead of freezing startup, save, read, or logout.
 - Focused automated, snapshot, integration, adversarial redaction, substantial
   typed-TMUX, live-repository, human, documentation, and release evidence.
 
@@ -161,6 +164,9 @@ requires the user to choose a usable replacement first.
   first successfully configured provider's default model.
 - Unsupported or ambiguous auth sources fail visibly with recovery guidance;
   there is no heuristic account or billing-context fallback.
+- An unresponsive operating-system credential service cannot block a provider
+  operation indefinitely or start an unbounded number of stuck workers; the
+  encrypted-vault fallback contract remains authoritative.
 - No regular expression may inspect, route, transform, approve, repair, score,
   or gate any LLM prompt, model output, tool call, or provider response.
 
@@ -222,7 +228,7 @@ user work and integrate rather than revert concurrent changes.
 | `PF-54` | Unified `/providers` management and eligibility controls | [PF-54-S01](../../sprints/archive/unified-provider-auth/pf-54-s01-provider-management.md) | completed |
 | `PF-55` | Startup, current-model, and custom-provider convergence | [PF-55-S01](../../sprints/archive/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | completed at `21cf3199f2` |
 | `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/archive/unified-provider-auth/pf-56-s01-final-qualification.md) | completed at `fd8a9c900e` |
-| `PF-57` | Latest-main integration and regression preservation | [PF-57-S01](../../sprints/current/unified-provider-auth/pf-57-s01-latest-main-integration.md) | in progress |
+| `PF-57` | Latest-main integration, regression preservation, and credential-store liveness | [PF-57-S01](../../sprints/current/unified-provider-auth/pf-57-s01-latest-main-integration.md) | in progress |
 
 ## Hard dependency graph
 
@@ -237,7 +243,8 @@ PF-42..PF-47 merged Claude foundation
               -> PF-54 /providers management
                 -> PF-55 startup/current/custom convergence
                   -> PF-56 integrated qualification
-                    -> PF-57 latest-main integration and regression preservation
+                    -> PF-57 latest-main integration, regression preservation,
+                       and credential-store liveness
 ```
 
 One sprint is executable at a time. A dependent sprint remains draft until its
@@ -276,7 +283,8 @@ predecessor is completed and archived.
    review program, document, and collect release evidence in PF-56.
 9. Merge the latest `origin/main` without rewriting archived sprint commits,
    resolve shared-provider conflicts semantically, preserve post-fork fixes, and
-   rerun combined-tree qualification and independent review in PF-57.
+   repair the combined suite's reproduced unbounded keyring wait before rerunning
+   combined-tree qualification and independent review in PF-57.
 
 ## Review and TMUX policy
 
@@ -372,6 +380,7 @@ Historical Claude artifacts do not substitute for final integrated-tree runs.
 | Physical Linux/Windows evidence | release | release owner | release | prior Claude plan left this unclosed; final applicability must be recorded |
 | Target version and benchmark state | release | release owner | release | pending |
 | Latest-main integration | integration | Codex primary integration agent | PF-57 | Merge `origin/main` into the preserved PF-48–PF-56 lineage; validate the combined commit before proposing it for `main`. |
+| Credential-store liveness | regression | Codex primary integration agent | PF-57 | The combined `codex-login` suite reproduced two 60-second timeouts and repeated 8–40 second OS-keyring waits; bound the shared keyring operation, preserve encrypted-vault fallback semantics, and prove recovery without weakening credential custody. |
 
 ## Release linkage
 

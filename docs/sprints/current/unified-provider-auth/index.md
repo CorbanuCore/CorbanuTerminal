@@ -3,7 +3,7 @@
 The active [unified provider onboarding and management plan](../../../plans/active/unified-provider-auth.md)
 allows one serial sprint. PF-42 through PF-47 are the merged Claude-auth
 foundation. PF-48 through PF-56 are completed and archived; PF-57 is the
-allocated latest-main integration sprint.
+allocated latest-main integration and credential-store liveness sprint.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
@@ -16,7 +16,7 @@ allocated latest-main integration sprint.
 | 13 | [PF-54-S01](../../archive/unified-provider-auth/pf-54-s01-provider-management.md) | `/providers` eligibility management | completed | PF-53-S01 |
 | 14 | [PF-55-S01](../../archive/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | Startup, current-model, and custom-provider convergence | completed | PF-54-S01 |
 | 15 | [PF-56-S01](../../archive/unified-provider-auth/pf-56-s01-final-qualification.md) | Final automated, TMUX, review, documentation, and release evidence | completed | PF-55-S01 |
-| 16 | [PF-57-S01](pf-57-s01-latest-main-integration.md) | Latest-main integration and regression preservation | in progress | PF-56-S01 |
+| 16 | [PF-57-S01](pf-57-s01-latest-main-integration.md) | Latest-main integration and credential-store liveness | in progress | PF-56-S01 |
 
 ## Delivery contract
 
