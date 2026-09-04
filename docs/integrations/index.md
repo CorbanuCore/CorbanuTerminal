@@ -20,7 +20,7 @@ providers as first-class choices.
 | OpenAI Codex account | Built-in provider named `openai`, using Codex account auth and exposing the release-visible GPT-5.5/5.6 catalog. | `codex-rs/model-provider-info/src/lib.rs`, `codex-rs/tui/src/chatwidget/provider_credentials.rs` |
 | Claude routes | Claude Plan account models and direct Anthropic Opus/Fable API-key models remain distinct billing/auth routes. | `codex-rs/model-provider-info/src/lib.rs` |
 | Ambient provider | Built-in provider named `ambient`, using `AMBIENT_API_KEY` and the Chat Completions wire shape. | `codex-rs/model-provider-info/src/lib.rs` |
-| Ambient default model | Bundled model `z-ai/glm-5.2`, displayed as `Ambient GLM 5.2`, plus Ambient Kimi K2.7 Code. | `codex-rs/models-manager/models.json` |
+| Ambient default model | Bundled model `z-ai/glm-5.2`, displayed as `Ambient GLM 5.2`, is the only Ambient model option. | `codex-rs/models-manager/models.json` |
 | Kimi Code provider | Built-in provider `kimi-code` using `KIMI_API_KEY` and current model `k3`. | `codex-rs/model-provider-info/src/lib.rs` |
 | Z.AI provider | Built-in provider named `zai`, using `ZAI_API_KEY` and the Z.AI coding plan API base URL. | `codex-rs/model-provider-info/src/lib.rs` |
 | DeepSeek provider | Direct Responses routes `deepseek-v4-flash` and `deepseek-v4-pro`, backed by `DEEPSEEK_API_KEY`. | `codex-rs/model-provider-info/src/lib.rs` |

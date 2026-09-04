@@ -584,15 +584,10 @@
       "default_reasoning_summary": "none",
       "slug": "moonshotai/kimi-k2.7-code",
       "orchestration": {
-        "status": "eligible",
+        "status": "disabled",
         "provider_id": "ambient",
         "capability": "balanced",
-        "billing": {
-          "kind": "metered",
-          "input_milli_usd_per_million_tokens": 730,
-          "output_milli_usd_per_million_tokens": 3500,
-          "cached_input_milli_usd_per_million_tokens": 150
-        }
+        "reason": "retired Ambient model option; use z-ai/glm-5.2"
       },
       "display_name": "Ambient Kimi K2.7 Code",
       "description": "Ambient: Kimi K2.7 Code - $0.73/M input, $0.15/M cached input, $3.50/M output.",
@@ -608,7 +603,7 @@
         }
       ],
       "shell_type": "shell_command",
-      "visibility": "list",
+      "visibility": "hide",
       "supported_in_api": true,
       "availability_nux": null,
       "upgrade": null,

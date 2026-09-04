@@ -434,6 +434,11 @@ impl OpenAiModelsManager {
                 .position(|existing| existing.slug == model.slug)
             {
                 let bundled = &existing_models[existing_index];
+                // Keep the retired Ambient option hidden even with an older cache
+                // or discovery response. Retain metadata for existing sessions.
+                if model.slug == "moonshotai/kimi-k2.7-code" {
+                    model.visibility = bundled.visibility.clone();
+                }
                 // Provider discovery owns availability and presentation. The bundled catalogue
                 // owns spend authorization, capability classification, and allowed effort. A
                 // remote payload must never authorize a route, change its billing, or broaden

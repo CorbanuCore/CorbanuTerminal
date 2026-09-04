@@ -282,6 +282,7 @@
           <span>
             <h3>3. Inspect the unified provider catalog</h3>
             <p>Run <span class="keys">/providers</span>. Move through the list, inspecting OpenAI, Anthropic/Claude, Corbanu API, API-key providers, and any local/custom entries. Then run <span class="keys">/wallet</span> and inspect the Corbanu API entry.</p>
+            <p>In <span class="keys">/model</span>, select Ambient: its only offered model should be GLM 5.2. Kimi 2.7 should not appear under Ambient; other providers' Kimi models are unchanged.</p>
             <p class="expected">Pass: the lists open promptly; configured, active, current, unavailable, and recovery states make sense; the wallet offers dollar balance, top-up, model prices, and API-key management without Starter/Basic/Power/Pro plan-sale actions.</p>
             <p class="failure">Fail: statuses contradict startup, secrets are visible, key navigation pauses repeatedly, the vault hangs, Corbanu API is absent, or a legacy Corbanu Plan purchase/recovery/details action is visible.</p>
           </span>

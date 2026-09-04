@@ -33,6 +33,54 @@ const MANAGED_PROVIDER: &str = "pf54-managed";
 const ENV_PROVIDER: &str = "pf54-environment";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_ambient_model_picker_offers_only_glm() -> Result<()> {
+    if !TmuxServer::should_run("Ambient GLM-only picker")? {
+        return Ok(());
+    }
+    let fixture = Fixture::new("ambient-glm-only", /*openai_auth*/ true).await?;
+    let tmux = fixture.tmux()?;
+    let session = tmux.new_session(SessionSpec::new(
+        "ambient-glm-only",
+        TerminalSize::new(140, 44),
+        CommandSpec::new(&fixture.binary)
+            .env("CODEX_HOME", fixture.home.path())
+            .env("CORBANU_HOME", fixture.home.path())
+            .env("AMBIENT_API_KEY", "ambient-picker-synthetic-fixture")
+            .env("RUST_LOG", "trace")
+            .arg("-c")
+            .arg("tui.animations=false")
+            .arg("-c")
+            .arg("model_provider=\"ambient\"")
+            .arg("-m")
+            .arg("z-ai/glm-5.2")
+            .arg("-c")
+            .arg(format!("log_dir={:?}", fixture.home.path().join("logs")))
+            .arg("--no-alt-screen")
+            .arg("-C")
+            .arg(&fixture.repo_root),
+    ))?;
+    let pane = session.primary_pane();
+    wait_chat_ready(pane)?;
+    for _ in 0..2 {
+        open_model_picker(pane)?;
+        pane.wait_stable_contains("[Ambient]", READY_TIMEOUT)?;
+        let capture = pane.wait_stable_contains("Ambient GLM 5.2", READY_TIMEOUT)?;
+        ensure!(
+            !capture.contains("Kimi K2.7"),
+            "retired Ambient option is visible"
+        );
+        capture_success("ambient-glm-only", &fixture, pane, &[])?;
+        pane.send_key(TmuxKey::Escape)?;
+        pane.wait_stable_until("model picker cancelled", READY_TIMEOUT, |capture| {
+            !capture.contains("Select Model")
+        })?;
+    }
+    exit_tui(pane)?;
+    session.wait_for_exit(READY_TIMEOUT)?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tmux_shared_and_custom_catalog_have_management_status_parity() -> Result<()> {
     if !TmuxServer::should_run("PF-54 shared/custom catalog parity")? {
         return Ok(());

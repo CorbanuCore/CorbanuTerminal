@@ -690,6 +690,31 @@ async fn chatgpt_cache_does_not_evict_pfterminal_provider_models() {
 }
 
 #[tokio::test]
+async fn remote_overlay_keeps_retired_ambient_model_out_of_picker() {
+    let endpoint = TestModelsEndpoint::new(vec![vec![remote_model(
+        "moonshotai/kimi-k2.7-code",
+        "Old cached Ambient Kimi",
+        /*priority*/ 0,
+    )]]);
+    let codex_home = tempdir().expect("temp dir");
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+    let models = manager
+        .list_models(
+            RefreshStrategy::OnlineIfUncached,
+            DEFAULT_HTTP_CLIENT_FACTORY,
+        )
+        .await;
+    assert_eq!(
+        models
+            .iter()
+            .filter(|model| model.provider_id.as_deref() == Some("ambient") && model.show_in_picker)
+            .map(|model| model.model.as_str())
+            .collect::<Vec<_>>(),
+        vec!["z-ai/glm-5.2"]
+    );
+}
+
+#[tokio::test]
 async fn remote_model_overlay_preserves_bundled_orchestration_metadata() {
     let mut remote_models = vec![remote_model(
         "gpt-5.6-sol",
@@ -1895,7 +1920,7 @@ fn bundled_models_json_contains_ambient_and_zai_models() {
             .collect::<Vec<_>>(),
         vec![ReasoningEffort::Medium, ReasoningEffort::XHigh]
     );
-    assert_eq!(ambient_kimi.visibility, ModelVisibility::List);
+    assert_eq!(ambient_kimi.visibility, ModelVisibility::Hide);
     assert!(ambient_kimi.supports_parallel_tool_calls);
     assert_standard_base(&ambient_kimi.base_instructions);
     assert!(!ambient_kimi.used_fallback_model_metadata);

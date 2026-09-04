@@ -1,6 +1,5 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
-assertion_line: 3350
 expression: popup
 ---
   Select Model and Effort
@@ -11,8 +10,5 @@ expression: popup
 
 › 1. Ambient GLM 5.2 (current)  Model: z-ai/glm-5.2. Ambient: GLM 5.2 - $0.76/
                                 M input, $0.14/M cached input, $2.42/M output.
-  2. Ambient Kimi K2.7 Code     Model: moonshotai/kimi-k2.7-code. Ambient:
-                                Kimi K2.7 Code - $0.73/M input, $0.15/M cached
-                                input, $3.50/M output.
 
   Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

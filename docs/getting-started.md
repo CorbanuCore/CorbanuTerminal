@@ -33,7 +33,7 @@ Corbanu Terminal currently ships these provider paths:
 | OpenAI Codex account      | OpenAI             | `gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra`                                                                   |
 | Claude subscription       | Claude Plan        | `claude-opus-5-plan`, `claude-fable-5-1-plan`, `claude-fable-5-plan`                                             |
 | Direct Claude API         | Anthropic          | `claude-opus-5`, `claude-fable-5-1`, `claude-fable-5`                                                           |
-| Ambient coding plan       | Ambient            | `z-ai/glm-5.2`, `moonshotai/kimi-k2.7-code`                                                                      |
+| Ambient coding plan       | Ambient            | `z-ai/glm-5.2`                                                                                                 |
 | Kimi coding plan          | Kimi Code          | `k3`                                                                                                             |
 | Z.AI coding plan          | Z.AI               | `glm-5.2`                                                                                                        |
 | Direct DeepSeek Responses | DeepSeek           | `deepseek-v4-flash` (DeepSeek V4 Flash 0731)                                                                     |

@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/tests/popups_and_settings.rs
+expression: popup
+---
+  Select Model and Effort
+  Ambient coding plan
+
+  OpenAI  [Ambient]  Kimi Code  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta  Vercel  Baseten  OpenRouter
+
+› 1. Ambient GLM 5.2 (current)  Model: z-ai/glm-5.2. Ambient: GLM 5.2 - $0.76/M input, $0.14/M cached input, $2.42/M output.
+
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

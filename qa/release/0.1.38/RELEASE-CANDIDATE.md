@@ -116,7 +116,7 @@ qualification only; it does not authorize a tag or publication.
 - The final native Mac release build completed and passed `--version` and
   `codesign --verify --verbose`. The stable Apps launcher still resolves
   `bin/corbanu` to `../target/release/corbanu`; the wallet daemon is installed
-  alongside the canonical executable. Current SHA-256:
+  alongside the canonical executable. SHA-256 at that qualification:
   `corbanu` = `0a9adad86c75de8200cebe862a6124fdbba46c0be6b6c554172f50bbc5f8e36e`;
   `pfterminal-walletd` = `684fbe986ba6c3d4cee4c7a3b1e6ea7fc3c82eebcadb01312b155f566656552b`.
 - Expanded TMUX qualification: 32/33 passed in the matrix, with the remaining
@@ -142,6 +142,12 @@ qualification only; it does not authorize a tag or publication.
   that prompt has not been verified in this launch. See the parity audit.
 
 ## Disclosed incomplete gates
+
+The subsequent Ambient GLM-only catalog correction and its newer verified
+native executable hash are recorded in [ambient-glm-only.md](ambient-glm-only.md).
+It passed 63 model-manager tests, 14 focused UI tests, a true-TMUX picker
+journey, and final Fable 5.1 Max review. It does not complete the release gates
+below or change other providers' model catalogs.
 
 - No named-human acceptance has yet been recorded for the combined candidate.
 - The benchmark bootstrap cycle is due and has not been run.

@@ -269,17 +269,13 @@ pub(crate) fn turn_index_from_artifact_name(name: &str) -> Option<u64> {
 }
 
 pub(crate) fn profile_from_audit(audit: &ClaudePaneTurnAudit) -> Option<ClaudeProviderProfileKind> {
-    ClaudeProviderProfileKind::creation_options()
-        .iter()
-        .copied()
+    ClaudeProviderProfileKind::restoration_options()
         .find(|kind| {
             let profile = kind.profile();
             profile.title == audit.provider && profile.provider_model == audit.model
         })
         .or_else(|| {
-            ClaudeProviderProfileKind::creation_options()
-                .iter()
-                .copied()
+            ClaudeProviderProfileKind::restoration_options()
                 .find(|kind| kind.profile().title == audit.provider)
         })
         .or_else(|| legacy_profile_from_audit(audit))
@@ -305,9 +301,7 @@ pub(crate) fn profile_from_settings(artifact_dir: &Path) -> Option<ClaudeProvide
                 .pointer("/env/ANTHROPIC_MODEL")
                 .and_then(Value::as_str)
         })?;
-    ClaudeProviderProfileKind::creation_options()
-        .iter()
-        .copied()
+    ClaudeProviderProfileKind::restoration_options()
         .find(|kind| kind.profile().provider_model == model)
 }
 
