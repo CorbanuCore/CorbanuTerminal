@@ -58,6 +58,28 @@ and spend attribution.
 If settlement is ambiguous, refresh `/wallet` and inspect the server-authoritative
 balance before attempting another payment.
 
+## After upgrading Terminal
+
+Terminal checks the daemon protocol before sending a passcode or wallet operation.
+If `/wallet` reports `daemon_upgrade_required`, an older detached daemon may still
+be running; closing and reopening only the TUI does not replace it.
+
+Let existing payments finish and verify their outcomes. Close Terminal sessions
+using the affected home, then use the operating system's process manager to stop
+only the `pfterminal-walletd` or `corbanu-walletd` process with the matching
+`--codex-home` argument shown in the error. Reopen Terminal to start its matching
+daemon. Do not delete wallet files, the socket, or the ownership lock. Do not pay
+again while a previous payment's outcome is unknown.
+
+`/wallet lock` remains available against legacy daemons, but locking is revocation,
+not proof that a payment has settled. Automatic process termination is deliberately
+not used: older daemons cannot safely acknowledge that all work has drained.
+
+Environment-provided Corbanu keys are recognized by provider setup, model
+eligibility and read-only API balance/usage views. They are not copied into the
+credential store. Disconnecting the stored credential does not unset a shell key;
+remove it from the launching environment and restart Terminal if needed.
+
 ## Custody boundary
 
 The wallet and vault are separate. The wallet manages signing keys, balances,

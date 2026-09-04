@@ -849,22 +849,15 @@ impl ChatWidget {
         let tx = self.app_event_tx.clone();
         tokio::spawn(async move {
             let client = WalletDaemonClient::new(home);
-            let cell: Box<dyn HistoryCell> = match client.status().await {
-                Ok(status) if !status.wallet_exists => Box::new(history_cell::new_info_event(
-                    "No local wallet exists; there is nothing to lock.".to_string(),
+            // Revocation must work even when a legacy daemon fails the new
+            // protocol preflight. Lock is also harmless without a local wallet.
+            let cell: Box<dyn HistoryCell> = match client.lock().await {
+                Ok(()) => Box::new(history_cell::new_info_event(
+                    "Wallet locked in every Corbanu Terminal process.".to_string(),
                     /*hint*/ None,
                 )),
-                Ok(_) => match client.lock().await {
-                    Ok(()) => Box::new(history_cell::new_info_event(
-                        "Wallet locked in every Corbanu Terminal process.".to_string(),
-                        /*hint*/ None,
-                    )),
-                    Err(error) => Box::new(history_cell::new_error_event(format!(
-                        "Wallet lock failed: {error}"
-                    ))),
-                },
                 Err(error) => Box::new(history_cell::new_error_event(format!(
-                    "Wallet lock failed while checking wallet state: {error}"
+                    "Wallet lock failed: {error}"
                 ))),
             };
             tx.send(AppEvent::InsertHistoryCell(cell));
@@ -1717,7 +1710,11 @@ fn wallet_params(
             }]
         }
         Some(Err(error)) => {
-            header.push(Line::from(format!("Unavailable: {error}").red()));
+            push_wallet_text(
+                &mut header,
+                &format!("Unavailable: {error}"),
+                WalletTextStyle::Danger,
+            );
             vec![SelectionItem {
                 name: "Retry".to_string(),
                 actions: vec![Box::new(|tx| tx.send(AppEvent::OpenWallet))],
@@ -2397,6 +2394,47 @@ mod tests {
         );
         assert!(!items.iter().any(|name| name == "Buy a Corbanu Plan"));
         insta::assert_snapshot!("wallet_locked_action_names", items.join("\n"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn legacy_daemon_upgrade_guidance_is_visible_in_wallet_surface() {
+        use tokio::io::AsyncBufReadExt;
+        use tokio::io::AsyncWriteExt;
+        use tokio::io::BufReader;
+
+        let home = tempfile::tempdir().unwrap();
+        let run_dir = home.path().join("wallet/run");
+        std::fs::create_dir_all(&run_dir).unwrap();
+        let listener = tokio::net::UnixListener::bind(run_dir.join("walletd.sock")).unwrap();
+        let server = tokio::spawn(async move {
+            for response in [
+                "{\"type\":\"pong\"}\n",
+                "{\"type\":\"error\",\"code\":\"invalid_request\",\"message\":\"request was malformed\"}\n",
+            ] {
+                let (stream, _) = listener.accept().await.unwrap();
+                let (read, mut write) = tokio::io::split(stream);
+                let mut line = String::new();
+                BufReader::new(read).read_line(&mut line).await.unwrap();
+                write.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let error = WalletDaemonClient::new(home.path().to_path_buf())
+            .status()
+            .await
+            .unwrap_err()
+            .to_string()
+            .replace(home.path().to_str().unwrap(), "[home]");
+        server.await.unwrap();
+        let (mut chat, _, _, _) =
+            crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+        chat.show_selection_view(wallet_params(Some(Err(error)), false));
+        let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 100);
+        assert!(rendered.contains("daemon_upgrade_required"));
+        assert!(rendered.contains("pfterminal-walletd"));
+        assert!(rendered.contains("outcome is unknown"));
+        assert!(rendered.contains("Retry"));
+        insta::assert_snapshot!("wallet_legacy_daemon_upgrade", rendered);
     }
 
     #[test]

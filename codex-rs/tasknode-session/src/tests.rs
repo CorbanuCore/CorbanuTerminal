@@ -8,6 +8,8 @@ use super::*;
 #[derive(Default)]
 struct MemoryStore {
     entries: Mutex<HashMap<String, String>>,
+    fail_delete: Mutex<Option<String>>,
+    fail_upsert: Mutex<Option<String>>,
 }
 
 impl MemoryStore {
@@ -36,6 +38,9 @@ impl SessionStore for MemoryStore {
         _notes: &str,
         _origin: &str,
     ) -> Result<(), SessionStoreError> {
+        if self.fail_upsert.lock().unwrap().as_deref() == Some(label) {
+            return Err(SessionStoreError::Corrupt("injected write failure".into()));
+        }
         self.entries
             .lock()
             .expect("memory store lock")
@@ -44,6 +49,9 @@ impl SessionStore for MemoryStore {
     }
 
     fn delete(&self, label: &str) -> Result<bool, SessionStoreError> {
+        if self.fail_delete.lock().unwrap().as_deref() == Some(label) {
+            return Err(SessionStoreError::Corrupt("injected delete failure".into()));
+        }
         Ok(self
             .entries
             .lock()
@@ -166,6 +174,122 @@ fn matching_named_profile_imports_legacy_identity_once() {
             .active
             .map(|session| session.terminal_token),
         Some("tok-secondfoundation".to_string())
+    );
+}
+
+#[test]
+fn unlink_survives_restart_without_reimporting_matching_legacy_credentials() {
+    let store = MemoryStore::default();
+    let scope = SessionScope::for_profile("tester");
+    promote_active_to_store(&store, &active("legacy-token")).unwrap();
+    assert!(
+        load_scoped_from_store(&store, &scope)
+            .unwrap()
+            .active
+            .is_some()
+    );
+    clear_all_scoped_from_store(&store, &scope).unwrap();
+    clear_all_scoped_from_store(&store, &scope).unwrap();
+
+    // Re-open persisted records with no in-process migration state.
+    let restarted = MemoryStore {
+        entries: Mutex::new(store.entries.into_inner().unwrap()),
+        ..Default::default()
+    };
+    assert_eq!(
+        load_scoped_from_store(&restarted, &scope).unwrap(),
+        LocalState::default()
+    );
+    assert_eq!(
+        load_from_store(&restarted).unwrap().active,
+        Some(active("legacy-token"))
+    );
+}
+
+#[test]
+fn unlink_before_first_import_and_cancelled_relink_do_not_restore_legacy_authority() {
+    let store = MemoryStore::default();
+    let scope = SessionScope::for_profile("tester");
+    promote_active_to_store(&store, &active("legacy-token")).unwrap();
+    clear_all_scoped_from_store(&store, &scope).unwrap();
+    assert_eq!(
+        load_scoped_from_store(&store, &scope).unwrap(),
+        LocalState::default()
+    );
+
+    save_pending_scoped_to_store(&store, &scope, &pending("replacement")).unwrap();
+    assert!(
+        load_scoped_from_store(&store, &scope)
+            .unwrap()
+            .active
+            .is_none()
+    );
+    clear_pending_scoped_from_store(&store, &scope).unwrap();
+    assert_eq!(
+        load_scoped_from_store(&store, &scope).unwrap(),
+        LocalState::default()
+    );
+
+    promote_active_scoped_to_store(&store, &scope, &active("explicit-replacement")).unwrap();
+    assert_eq!(
+        load_scoped_from_store(&store, &scope).unwrap().active,
+        Some(active("explicit-replacement"))
+    );
+}
+
+#[test]
+fn failed_unlink_cleanup_is_reported_and_remaining_credentials_stay_unusable() {
+    for failed_label in ["session", "link-pending"] {
+        let store = MemoryStore::default();
+        let scope = SessionScope::for_profile("tester");
+        promote_active_to_store(&store, &active("legacy-token")).unwrap();
+        promote_active_scoped_to_store(&store, &scope, &active("scoped-token")).unwrap();
+        save_pending_scoped_to_store(&store, &scope, &pending("pending")).unwrap();
+        let label = if failed_label == "session" {
+            scope.active_label()
+        } else {
+            scope.pending_label()
+        };
+        *store.fail_delete.lock().unwrap() = Some(label.clone());
+
+        assert!(clear_all_scoped_from_store(&store, &scope).is_err());
+        assert_eq!(
+            load_scoped_from_store(&store, &scope).unwrap(),
+            LocalState::default()
+        );
+        assert!(store.reveal_optional(&label).unwrap().is_some());
+        let other = if failed_label == "session" {
+            scope.pending_label()
+        } else {
+            scope.active_label()
+        };
+        assert!(
+            store.reveal_optional(&other).unwrap().is_none(),
+            "both cleanup operations must be attempted"
+        );
+
+        *store.fail_delete.lock().unwrap() = None;
+        save_pending_scoped_to_store(&store, &scope, &pending("new-attempt")).unwrap();
+        assert!(
+            load_scoped_from_store(&store, &scope)
+                .unwrap()
+                .active
+                .is_none(),
+            "relink must not revive leftover active state"
+        );
+    }
+}
+
+#[test]
+fn failed_unlink_marker_write_does_not_report_success_or_delete_credentials() {
+    let store = MemoryStore::default();
+    let scope = SessionScope::for_profile("tester");
+    promote_active_scoped_to_store(&store, &scope, &active("live-token")).unwrap();
+    *store.fail_upsert.lock().unwrap() = Some(scope.lifecycle_label());
+    assert!(clear_all_scoped_from_store(&store, &scope).is_err());
+    assert_eq!(
+        load_scoped_from_store(&store, &scope).unwrap().active,
+        Some(active("live-token"))
     );
 }
 

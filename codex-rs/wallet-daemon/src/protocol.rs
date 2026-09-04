@@ -6,6 +6,9 @@ use codex_wallet::ProvisionedPlan;
 use serde::Deserialize;
 use serde::Serialize;
 
+/// Increment when client operations or wire semantics become incompatible.
+pub(crate) const PROTOCOL_VERSION: u32 = 1;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum UnlockPolicy {
@@ -17,6 +20,7 @@ pub enum UnlockPolicy {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum Request {
     Ping,
+    ProtocolVersion,
     Status,
     Unlock {
         passcode: String,
@@ -52,6 +56,9 @@ pub(crate) enum Request {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum Response {
     Pong,
+    ProtocolVersion {
+        version: u32,
+    },
     Status(DaemonStatus),
     Unlocked {
         capability: String,

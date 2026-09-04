@@ -30,6 +30,183 @@ use crate::support::tmux::TmuxServer;
 const READY_TIMEOUT: Duration = Duration::from_secs(45);
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_corbanu_env_aliases_restart_account_read_and_legacy_daemon_recovery() -> Result<()> {
+    corbanu_env_alias_restart(/*index*/ 0).await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_corbanu_env_plan_alias_restart_and_account_read() -> Result<()> {
+    corbanu_env_alias_restart(/*index*/ 1).await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_corbanu_env_legacy_alias_restart_and_account_read() -> Result<()> {
+    corbanu_env_alias_restart(/*index*/ 2).await
+}
+
+async fn corbanu_env_alias_restart(index: usize) -> Result<()> {
+    use tokio::io::AsyncBufReadExt;
+    use tokio::io::AsyncWriteExt;
+    use tokio::io::BufReader;
+
+    if !TmuxServer::should_run("PF-57 Corbanu environment aliases and daemon recovery")? {
+        return Ok(());
+    }
+    let repo_root = codex_utils_cargo_bin::repo_root()?;
+    let binary = codex_binary(&repo_root)?;
+    let alias = codex_model_provider_info::CORBANU_API_KEY_ENV_VARS[index];
+    let home = tempdir()?;
+    let server = MockServer::start().await;
+    mount_corbanu_api_gateway(&server).await;
+    let canary = synthetic_canary("environment-alias");
+    Mock::given(method("GET"))
+        .and(path("/v1/account"))
+        .and(wiremock::matchers::header(
+            "authorization",
+            format!("Bearer {canary}"),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "walletAddress": "fixture-wallet",
+            "corbanuApi": {
+                "balanceMicrousd": "12200000", "reservedMicrousd": "0",
+                "availableMicrousd": "12200000", "balanceUsd": "12.20",
+                "reservedUsd": "0", "availableUsd": "12.20"
+            }
+        })))
+        .mount(&server)
+        .await;
+    write_config(home.path(), &repo_root, &server.uri())?;
+    let config_path = home.path().join("config.toml");
+    let config = fs::read_to_string(&config_path)?
+        .replace("model = \"gpt-5.4\"", "model = \"corbanu/glm-5.3-flash\"")
+        .replace(
+            "model_provider = \"openai\"",
+            "model_provider = \"pfterminal-plan\"",
+        );
+    fs::write(config_path, config)?;
+
+    // No wallet, RPC, signing or payment: only the private socket's read-only
+    // status and revocation boundary is mocked for this UI regression.
+    let run_dir = home.path().join("wallet/run");
+    fs::create_dir_all(&run_dir)?;
+    let listener = tokio::net::UnixListener::bind(run_dir.join("walletd.sock"))?;
+    let compatible = Arc::new(std::sync::atomic::AtomicBool::new(index != 0));
+    let locks = Arc::new(AtomicUsize::new(0));
+    let mock_daemon = tokio::spawn({
+        let compatible = Arc::clone(&compatible);
+        let locks = Arc::clone(&locks);
+        async move {
+            loop {
+                let (stream, _) = listener.accept().await.unwrap();
+                let (read, mut write) = tokio::io::split(stream);
+                let mut line = String::new();
+                BufReader::new(read).read_line(&mut line).await.unwrap();
+                let request: serde_json::Value = serde_json::from_str(&line).unwrap();
+                let response = match request["type"].as_str() {
+                    Some("ping") => serde_json::json!({"type": "pong"}),
+                    Some("protocol_version") if compatible.load(Ordering::SeqCst) => {
+                        serde_json::json!({"type": "protocol_version", "version": 1})
+                    }
+                    Some("lock") => {
+                        locks.fetch_add(1, Ordering::SeqCst);
+                        serde_json::json!({"type": "locked"})
+                    }
+                    Some("status") => serde_json::json!({
+                            "type": "status", "wallet_exists": true, "address": "fixture-wallet",
+                        "network": null, "locked": true, "busy": false, "expires_in_seconds": null
+                    }),
+                    _ => {
+                        serde_json::json!({"type": "error", "code": "invalid_request", "message": "request was malformed"})
+                    }
+                };
+                write
+                    .write_all(format!("{response}\n").as_bytes())
+                    .await
+                    .unwrap();
+            }
+        }
+    });
+    let tmux = TmuxServer::start(&format!("pf57_env_alias_{index}"))?;
+    register_evidence(&tmux, home.path(), &binary)?;
+    for restart in [false, true] {
+        let mut command = CommandSpec::new(&binary)
+            .env("CODEX_HOME", home.path())
+            .env("CORBANU_HOME", home.path())
+            .env("PFTERMINAL_HOME", home.path())
+            .env("RUST_LOG", "trace")
+            .env("PFTERMINAL_PLAN_GATEWAY_URL", server.uri())
+            .env("CORBANU_API_BASE_URL", format!("{}/v1", server.uri()));
+        for name in codex_model_provider_info::CORBANU_API_KEY_ENV_VARS {
+            command = command.env(name, if name == alias { canary.as_str() } else { " " });
+        }
+        let session = tmux.new_session(
+            SessionSpec::new(
+                "env-alias",
+                TerminalSize::new(160, 50),
+                command
+                    .arg("-c")
+                    .arg("analytics.enabled=false")
+                    .arg("-c")
+                    .arg("tui.animations=false")
+                    .arg("--no-alt-screen")
+                    .arg("-C")
+                    .arg(&repo_root),
+            )
+            .current_dir(&repo_root),
+        )?;
+        let pane = session.primary_pane();
+        wait_chat_ready(pane)?;
+        ensure!(
+            !pane
+                .capture_viewport()?
+                .contains("Choose a provider account"),
+            "environment-only Corbanu account was incorrectly sent to onboarding"
+        );
+        pane.send_literal("/wallet")?;
+        pane.send_key(TmuxKey::Enter)?;
+        if index == 0 && !restart {
+            pane.wait_stable_contains("daemon_upgrade_required", READY_TIMEOUT)?;
+            pane.send_key(TmuxKey::Escape)?;
+            pane.send_literal("/wallet lock")?;
+            pane.send_key(TmuxKey::Enter)?;
+            pane.wait_stable_contains(
+                "Wallet locked in every Corbanu Terminal process",
+                READY_TIMEOUT,
+            )?;
+            ensure!(
+                locks.load(Ordering::SeqCst) > 0,
+                "TUI revocation did not reach the legacy daemon"
+            );
+            compatible.store(true, Ordering::SeqCst);
+            select_label(pane, "Retry")?;
+        }
+        pane.wait_stable_contains("Corbanu API", READY_TIMEOUT)?;
+        select_label(pane, "Corbanu API")?;
+        pane.wait_stable_contains("$12.20 available", READY_TIMEOUT)?;
+        capture_success_evidence(
+            &format!("env-alias-{index}-restart-{restart}"),
+            &binary,
+            home.path(),
+            pane,
+            &server,
+            &[&canary],
+        )
+        .await?;
+        pane.send_key(TmuxKey::Escape)?;
+        pane.send_key(TmuxKey::Escape)?;
+        wait_chat_ready(pane)?;
+        exit_tui(pane)?;
+        session.wait_for_exit(READY_TIMEOUT)?;
+    }
+    ensure!(
+        !home.path().join("provider_auth.json").exists(),
+        "environment credentials must not be persisted"
+    );
+    mock_daemon.abort();
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tmux_configure_many_preserves_first_default_restart_and_request() -> Result<()> {
     if !TmuxServer::should_run("PF-53 configure-many default restart request")? {
         return Ok(());
@@ -875,7 +1052,7 @@ trust_level = "trusted"
 }
 
 fn register_evidence(tmux: &TmuxServer, home: &Path, binary: &Path) -> Result<()> {
-    let hash = format!("{:x}", Sha256::digest(fs::read(binary)?));
+    let hash = binary_sha256(binary)?;
     fs::write(
         home.join("binary.sha256"),
         format!("{hash}  {}\n", binary.display()),
@@ -884,6 +1061,30 @@ fn register_evidence(tmux: &TmuxServer, home: &Path, binary: &Path) -> Result<()
     tmux.register_artifact("config.toml", home.join("config.toml"));
     tmux.register_artifact("codex-tui.log", home.join("log/codex-tui.log"));
     Ok(())
+}
+
+fn binary_sha256(binary: &Path) -> Result<String> {
+    // Debug binaries can exceed a gigabyte. Use a streaming system hash instead
+    // of loading the whole binary and hashing it in unoptimized test code.
+    for (program, arguments) in [("sha256sum", &[][..]), ("shasum", &["-a", "256"][..])] {
+        let output = match std::process::Command::new(program)
+            .args(arguments)
+            .arg(binary)
+            .output()
+        {
+            Ok(output) if output.status.success() => output,
+            _ => continue,
+        };
+        if let Some(hash) = std::str::from_utf8(&output.stdout)
+            .ok()
+            .and_then(|text| text.split_whitespace().next())
+            && hash.len() == 64
+            && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            return Ok(hash.to_string());
+        }
+    }
+    Ok(format!("{:x}", Sha256::digest(fs::read(binary)?)))
 }
 
 async fn mount_corbanu_api_gateway(server: &MockServer) {
@@ -990,7 +1191,7 @@ async fn capture_success_evidence(
     fs::create_dir_all(&directory)?;
     fs::write(directory.join("viewport.txt"), &viewport)?;
     fs::write(directory.join("scrollback.txt"), &scrollback)?;
-    let binary_hash = format!("{:x}", Sha256::digest(fs::read(binary)?));
+    let binary_hash = binary_sha256(binary)?;
     fs::write(
         directory.join("binary.sha256"),
         format!("{binary_hash}  {}\n", binary.display()),

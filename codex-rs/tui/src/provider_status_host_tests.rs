@@ -7,6 +7,62 @@ use tempfile::tempdir;
 
 use super::*;
 
+#[test]
+fn every_corbanu_environment_alias_is_ready_and_precedes_stored_account_status() {
+    let home = tempdir().unwrap();
+    for alias in CORBANU_API_KEY_ENV_VARS {
+        for supplied in [
+            CorbanuPlanMetadata::NotConfigured,
+            CorbanuPlanMetadata::Unavailable,
+            CorbanuPlanMetadata::Configured {
+                source: CorbanuCredentialSource::Managed,
+                availability: ConfiguredAvailability::Ready,
+            },
+        ] {
+            let metadata = corbanu_metadata_with_environment(home.path(), supplied, |name| {
+                if name == alias {
+                    EnvironmentCredentialMetadata::Present
+                } else {
+                    EnvironmentCredentialMetadata::Invalid
+                }
+            });
+            assert_eq!(
+                metadata,
+                CorbanuPlanMetadata::Configured {
+                    source: CorbanuCredentialSource::Environment,
+                    availability: ConfiguredAvailability::Ready,
+                }
+            );
+        }
+    }
+}
+
+#[test]
+fn blank_or_missing_corbanu_aliases_allow_the_managed_credential_fallback() {
+    let home = tempdir().unwrap();
+    let managed = CorbanuPlanMetadata::Configured {
+        source: CorbanuCredentialSource::Managed,
+        availability: ConfiguredAvailability::Ready,
+    };
+    for environment in [
+        EnvironmentCredentialMetadata::Missing,
+        EnvironmentCredentialMetadata::Invalid,
+    ] {
+        assert_eq!(
+            corbanu_metadata_with_environment(home.path(), managed, |_| environment),
+            managed
+        );
+        assert_eq!(
+            corbanu_metadata_with_environment(
+                home.path(),
+                CorbanuPlanMetadata::NotConfigured,
+                |_| environment
+            ),
+            CorbanuPlanMetadata::NotConfigured
+        );
+    }
+}
+
 #[tokio::test]
 async fn correlated_corbanu_metadata_resolves_without_credential_reread() {
     let home = tempdir().unwrap();

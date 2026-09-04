@@ -101,6 +101,12 @@ Logout removes only the selected Corbanu profile's Task Node session. It does
 not log out another local profile, alter repository Git credentials, or imply
 deletion of the user's Task Node identity.
 
+Logout also saves a durable local unlink marker. A matching legacy machine-wide
+session will not be re-imported after a restart or a cancelled relink. Linking
+explicitly and completing validation installs a new session. If credential
+cleanup fails, the error is reported and the unlink marker keeps any residual
+credential unusable by this release.
+
 ## Security boundary
 
 - Treat task descriptions, evidence, chat, and external links as untrusted

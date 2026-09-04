@@ -18,7 +18,6 @@ use codex_wallet_daemon::UnlockPolicy;
 use codex_wallet_daemon::WalletDaemonClient;
 use serde::Deserialize;
 use zeroize::Zeroize;
-use zeroize::Zeroizing;
 
 pub(super) const CORBANU_API_VIEW_ID: &str = "corbanu-api";
 
@@ -472,14 +471,8 @@ async fn load_read_only_account(
         .await
         .map_err(|error| format!("Corbanu API model catalog was malformed: {error}"))?
         .data;
-    let api_key = codex_login::provider_api_key_from_auth_storage(
-        &home,
-        PFTERMINAL_PLAN_API_KEY_ENV_VAR,
-        credential_store_mode,
-        keyring_backend,
-    )
-    .map_err(|error| error.to_string())?
-    .map(Zeroizing::new);
+    let api_key =
+        super::wallet_http::corbanu_account_key(&home, credential_store_mode, keyring_backend)?;
     let Some(api_key) = api_key else {
         return Ok(CorbanuApiView {
             account: None,

@@ -140,6 +140,27 @@ pub const PFTERMINAL_PLAN_GATEWAY_ORIGIN: &str = "https://api.corbanu.com";
 pub const PFTERMINAL_PLAN_DEFAULT_BASE_URL: &str = "https://api.corbanu.com/v1";
 pub const PFTERMINAL_PLAN_API_KEY_ENV_VAR: &str = "PFTERMINAL_PLAN_API_KEY";
 
+/// Ordered public and compatibility aliases, shared by transport and UI status.
+pub const CORBANU_API_KEY_ENV_VARS: [&str; 3] = [
+    CORBANU_API_KEY_ENV_VAR,
+    CORBANU_PLAN_API_KEY_ENV_VAR,
+    PFTERMINAL_PLAN_API_KEY_ENV_VAR,
+];
+
+/// Read the same non-blank environment credential used by Corbanu transports.
+pub fn corbanu_api_key_from_env() -> Option<String> {
+    api_key_from_environment(&CORBANU_API_KEY_ENV_VARS, |name| std::env::var(name).ok())
+}
+
+fn api_key_from_environment(
+    names: &[&str],
+    read: impl Fn(&str) -> Option<String>,
+) -> Option<String> {
+    names
+        .iter()
+        .find_map(|name| read(name).filter(|value| !value.trim().is_empty()))
+}
+
 /// Normalize public provider aliases to the stable identifier used by existing
 /// configuration and credential storage.
 pub fn canonical_provider_id(provider_id: &str) -> &str {
@@ -1023,16 +1044,15 @@ impl ModelProviderInfo {
     pub fn api_key(&self) -> CodexResult<Option<String>> {
         match &self.env_key {
             Some(env_key) => {
-                let api_key = self
-                    .api_key_env_vars()
-                    .into_iter()
-                    .find_map(|name| std::env::var(name).ok().filter(|v| !v.trim().is_empty()))
-                    .ok_or_else(|| {
-                        CodexErr::EnvVar(EnvVarError {
-                            var: env_key.clone(),
-                            instructions: self.env_key_instructions.clone(),
-                        })
-                    })?;
+                let api_key = api_key_from_environment(&self.api_key_env_vars(), |name| {
+                    std::env::var(name).ok()
+                })
+                .ok_or_else(|| {
+                    CodexErr::EnvVar(EnvVarError {
+                        var: env_key.clone(),
+                        instructions: self.env_key_instructions.clone(),
+                    })
+                })?;
                 Ok(Some(api_key))
             }
             None => Ok(None),
@@ -1043,11 +1063,7 @@ impl ModelProviderInfo {
     /// current public name to compatibility fallbacks.
     pub fn api_key_env_vars(&self) -> Vec<&str> {
         match self.env_key.as_deref() {
-            Some(PFTERMINAL_PLAN_API_KEY_ENV_VAR) => vec![
-                CORBANU_API_KEY_ENV_VAR,
-                CORBANU_PLAN_API_KEY_ENV_VAR,
-                PFTERMINAL_PLAN_API_KEY_ENV_VAR,
-            ],
+            Some(PFTERMINAL_PLAN_API_KEY_ENV_VAR) => CORBANU_API_KEY_ENV_VARS.to_vec(),
             Some(env_key) => vec![env_key],
             None => Vec::new(),
         }

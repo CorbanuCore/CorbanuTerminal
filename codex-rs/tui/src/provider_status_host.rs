@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::sync::RwLock;
 
 use codex_login::OpenAiAuthMetadata;
+use codex_model_provider_info::CORBANU_API_KEY_ENV_VARS;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_provider_auth::ApiKeyAuthTarget;
 use codex_provider_auth::ApiKeyCredentialMetadata;
@@ -342,16 +343,25 @@ fn corbanu_metadata(
     codex_home: &std::path::Path,
     supplied: CorbanuPlanMetadata,
 ) -> CorbanuPlanMetadata {
-    if supplied != CorbanuPlanMetadata::NotConfigured {
-        return supplied;
-    }
-    if environment_metadata(PFTERMINAL_PLAN_API_KEY_ENV_VAR)
-        == EnvironmentCredentialMetadata::Present
+    corbanu_metadata_with_environment(codex_home, supplied, environment_metadata)
+}
+
+fn corbanu_metadata_with_environment(
+    codex_home: &std::path::Path,
+    supplied: CorbanuPlanMetadata,
+    read_environment: impl Fn(&str) -> EnvironmentCredentialMetadata,
+) -> CorbanuPlanMetadata {
+    if CORBANU_API_KEY_ENV_VARS
+        .into_iter()
+        .any(|name| read_environment(name) == EnvironmentCredentialMetadata::Present)
     {
         return CorbanuPlanMetadata::Configured {
             source: CorbanuCredentialSource::Environment,
             availability: ConfiguredAvailability::Ready,
         };
+    }
+    if supplied != CorbanuPlanMetadata::NotConfigured {
+        return supplied;
     }
     match codex_login::provider_api_key_metadata_from_auth_storage(
         codex_home,

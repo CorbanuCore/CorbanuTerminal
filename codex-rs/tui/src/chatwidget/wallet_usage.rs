@@ -5,7 +5,6 @@ use crate::chatwidget::wallet_menu::WalletPlanStatus;
 use crate::chatwidget::wallet_menu::title_case_plan;
 use crate::chatwidget::wallet_render::WalletTextStyle;
 use crate::chatwidget::wallet_render::push_wallet_text;
-use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use zeroize::Zeroizing;
 
 const WALLET_PLAN_USAGE_VIEW_ID: &str = "wallet-plan-usage";
@@ -21,15 +20,13 @@ impl ChatWidget {
     pub(crate) fn open_wallet_plan_usage(&mut self) {
         self.show_selection_view(plan_usage_loading_params());
         let home = self.config.codex_home.as_path().to_path_buf();
-        let key = codex_login::provider_api_key_from_auth_storage(
+        let key = super::wallet_http::corbanu_account_key(
             &home,
-            PFTERMINAL_PLAN_API_KEY_ENV_VAR,
             self.config.cli_auth_credentials_store_mode,
             self.config.auth_keyring_backend_kind(),
         )
         .ok()
-        .flatten()
-        .map(Zeroizing::new);
+        .flatten();
         let tx = self.app_event_tx.clone();
         tokio::spawn(async move {
             let result = load_plan_usage(key).await;

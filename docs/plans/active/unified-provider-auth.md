@@ -11,12 +11,15 @@ activation_basis: "The user's 2026-09-01 P1 decision to supersede the remaining 
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-08-30
-updated: 2026-09-03
+updated: 2026-09-04
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Shipping MVP — LIVE"
   requirement_excerpt: "Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat."
 implementation_worktrees:
+  - path: "/home/pfrpc/repos/worktrees/corbanu-reconcile-release-fixes"
+    branch: "fix/reconcile-release-0.1.37-review"
+    base_commit: "f03e95f7a65609bb442764d6306682d5fe43f6bb"
   - path: "/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0"
     branch: "feat/unified-provider-auth"
     base_commit: "f7356a94e032234022a462d65b576a7de2854859"
@@ -53,6 +56,13 @@ contracts, represent their unclosed release gates as passed, or consume a third
 active-plan slot.
 
 ## User pain
+
+The user's 2026-09-04 instruction authorizes repairing Astra's reconciliation
+findings under PF-57: wallet daemon upgrade compatibility, durable Task Node
+profile logout, and Corbanu API environment-alias eligibility. This extends the
+credential-lifecycle regression scope to the existing Task Node session store;
+it does not authorize publication, live payments, or changes to site behavior.
+The site/backend API-key flow is reviewed separately without production writes.
 
 First-run onboarding and `/providers` currently maintain separate provider
 lists, status rules, persistence decisions, event routes, and completion
@@ -183,6 +193,7 @@ requires the user to choose a usable replacement first.
 | GPT-5.6 Sol high implementation agent | `/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0` | `feat/unified-provider-auth` | `f7356a94e032234022a462d65b576a7de2854859` | Serial implementation of PF-48 through PF-56 only. |
 | Codex primary agent | same receiving worktree | same branch | same base | Feature completeness, integration decisions, scope control, review budget, final-tree verification, and TMUX acceptance. |
 | Codex primary integration agent | `/Volumes/CorbanuDrive/Corbanu/worktrees/integrate-unified-provider-auth-final` | `integration/unified-provider-auth-final` | `06211dbfca61d3f36df3bf069a79ed53ad7a6fa2` | PF-57 latest-main merge, conflict resolution, verified regression repairs, combined-tree qualification, and handoff. |
+| Codex primary agent | `/home/pfrpc/repos/worktrees/corbanu-reconcile-release-fixes` | `fix/reconcile-release-0.1.37-review` | `f03e95f7a65609bb442764d6306682d5fe43f6bb` | PF-57-S02: the three user-authorized release credential-lifecycle regressions; serial implementation. |
 
 `parallel_sprint_limit: 1` is intentional. Shared manifests, config schemas,
 provider state, event routing, and TUI hosts make parallel writes unsafe. The
@@ -215,6 +226,13 @@ user work and integrate rather than revert concurrent changes.
 | Verification | Contract and migration tests, affected crate suites, snapshots, config schema checks, redaction/canary checks, typed-TMUX flows, both default live repositories, physical platform evidence where required, and release records. |
 | Upgrade handling | At final qualification, record upstream candidate, classify each adapter as retained/adapted/removed, resolve conflicts in a disposable worktree, and rerun combined-tree tests and TUI qualification. |
 
+PF-57-S02 reverified the same local upstream baseline on 2026-09-04; it does not
+merge an upstream update. Its fork base is `f03e95f7a65609bb442764d6306682d5fe43f6bb`.
+Product-owned wallet IPC, Task Node persistence, and provider metadata adapters
+retain existing authorization, wire formats, wallet assets, and session history.
+Exact files, regression commands, candidate identity and platform limitations
+are recorded in the sprint and `qa/release/0.1.38/astra-fixes.md`.
+
 ## Sprint execution map
 
 | Feature ID | Plan feature | Sprint record | State |
@@ -235,6 +253,7 @@ user work and integrate rather than revert concurrent changes.
 | `PF-55` | Startup, current-model, and custom-provider convergence | [PF-55-S01](../../sprints/archive/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | completed at `21cf3199f2` |
 | `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/archive/unified-provider-auth/pf-56-s01-final-qualification.md) | completed at `fd8a9c900e` |
 | `PF-57` | Latest-main integration, regression preservation, and credential-store liveness | [PF-57-S01](../../sprints/archive/unified-provider-auth/pf-57-s01-latest-main-integration.md) | completed at `a935e507b` |
+| `PF-57` | Reconciled release credential-lifecycle regressions | [PF-57-S02](../../sprints/current/unified-provider-auth/pf-57-s02-reconciliation-auth-repairs.md) | in progress; user-authorized Astra findings |
 
 ## Hard dependency graph
 
@@ -355,6 +374,15 @@ Run fix and formatting tools before the final affected tests.
 
 Disposable worktrees and exact base commits must be recorded before PF-56 runs.
 Historical Claude artifacts do not substitute for final integrated-tree runs.
+
+PF-57-S02 is a home-level credential-lifecycle repair, not a coding workflow or
+release qualification. Neither TensorCash nor Isometric Game is applicable to
+this bounded repair: the changed boundaries do not inspect project contents,
+edit project files, or execute project tasks. Its proof uses isolated homes,
+private daemon sockets and a loopback API with actual TUI input and restart.
+The older PF-56 live-repository results above are historical, not reruns on the
+2026-09-04 repair tree. Both live repositories, named-human acceptance and due
+benchmarks remain release-level gates, not claims made by PF-57-S02.
 
 ## Human acceptance
 
