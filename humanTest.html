@@ -207,14 +207,14 @@
         <span><strong>Candidate:</strong> Corbanu 0.1.38</span>
         <span><strong>Combined lines:</strong> <code>a935e507b</code> + <code>rust-v0.1.37</code></span>
         <span><strong>Integration base:</strong> <code>6dd9ad646</code></span>
-        <span><strong>Built:</strong> 3 Sep 2026 (Phoenix)</span>
+        <span><strong>UX parity follow-up:</strong> 4 Sep 2026 (Phoenix)</span>
         <span><strong>Runtime:</strong> stable release build on CorbanuDrive</span>
       </div>
       <div class="actions">
         <button type="button" onclick="window.print()">Print / save PDF</button>
         <button type="button" id="reset">Reset checks</button>
-        <div class="progress-shell" id="progressShell" role="progressbar" aria-label="Test progress" aria-valuemin="0" aria-valuemax="12" aria-valuenow="0"><div class="progress-bar" id="progress"></div></div>
-        <span class="progress-label" id="progressLabel" aria-live="polite">0 / 12</span>
+        <div class="progress-shell" id="progressShell" role="progressbar" aria-label="Test progress" aria-valuemin="0" aria-valuemax="15" aria-valuenow="0"><div class="progress-bar" id="progress"></div></div>
+        <span class="progress-label" id="progressLabel" aria-live="polite">0 / 15</span>
       </div>
     </header>
 
@@ -241,20 +241,21 @@
         <text x="492" y="127" fill="#aaaeb7" font-size="13" font-family="sans-serif">Checks 7–10</text>
         <text x="717" y="73" fill="#8ddd8c" font-size="14" font-family="sans-serif" font-weight="700">04 · CONFIDENCE</text>
         <text x="717" y="101" fill="#f7f6ef" font-size="18" font-family="sans-serif" font-weight="700">Stream &amp; scale</text>
-        <text x="717" y="127" fill="#aaaeb7" font-size="13" font-family="sans-serif">Checks 11–12</text>
+        <text x="717" y="127" fill="#aaaeb7" font-size="13" font-family="sans-serif">Checks 11–15</text>
         <path d="M205 96 H237 M430 96 H462 M655 96 H687" fill="none" stroke="url(#flow)" stroke-width="3" marker-end="url(#arrow)"/>
         <rect x="285" y="174" width="330" height="36" rx="18" fill="#0c0e12" stroke="#8ddd8c"/>
-        <text x="450" y="197" text-anchor="middle" fill="#8ddd8c" font-size="14" font-family="sans-serif" font-weight="700">12 CHECKS · ONE SIGN-OFF</text>
+        <text x="450" y="197" text-anchor="middle" fill="#8ddd8c" font-size="14" font-family="sans-serif" font-weight="700">15 CHECKS · ONE SIGN-OFF</text>
       </svg>
       <figcaption id="map-caption">The order matters: establish a known build, prove immediate provider use, then test persistence and intentional failure recovery.</figcaption>
     </figure>
 
     <aside class="callout">
-      <strong>Credential safety:</strong> retrieve the long-lived Anthropic credential from <code>Documents/clAuth.txt</code> only when a masked provider-entry field asks for it. Never paste it into chat, this page, notes, screenshots, logs, or a bug report. Close the file immediately after copying.
+      <strong>Credential safety:</strong> retrieve the long-lived Anthropic credential from <code>Documents/clAuth.txt</code> only when a masked provider-entry field asks for it. Never paste it into chat, this page, notes, screenshots, logs, or a bug report. Close the file immediately after copying. Use normal launcher logging: do not enable debug/trace logging when typing real credentials, because a pre-existing key-event logging issue is documented in the provider UX audit.
+      <p><strong>Candidate startup:</strong> if 0.1.38 offers an “update” to 0.1.37, choose <strong>2. Skip</strong>. Do not install the downgrade. The existing release-recall heuristic mistakes this unpublished candidate for a recalled release; that separate issue is documented in the audit.</p>
     </aside>
 
     <section aria-labelledby="checks-title">
-      <h2 id="checks-title">Twelve acceptance checks</h2>
+      <h2 id="checks-title">Core acceptance checks</h2>
       <div class="checklist">
         <label class="test">
           <input type="checkbox" data-check="launch">
@@ -378,9 +379,30 @@
       </div>
     </section>
 
+    <section aria-labelledby="parity-title" style="margin-top:42px">
+      <h2 id="parity-title">Retest the provider UX corrections</h2>
+      <div class="checklist">
+        <label class="test"><input type="checkbox" data-check="claude-guidance"><span>
+          <h3>13. Find the token instructions and resize the window</h3>
+          <p>Open <code>/providers</code> → Claude Account → account setup. The recommended choice should explain <code>claude setup-token</code>. Open its masked entry and resize the window to about 40 columns, then restore the usual size.</p>
+          <p class="expected">Pass: the instructions, account-source guidance, and privacy explanation remain readable. The token is masked. Escape returns to the provider list.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="auth-error-retry"><span>
+          <h3>14. Recover from an invalid token</h3>
+          <p>In Claude's token entry, submit exactly <code>not a valid token</code>, including the spaces. Spaces make it fail the local format check before storage. Do not substitute a whitespace-free dummy string: that could replace your saved token. Read the error, choose Retry authentication, and then press Escape.</p>
+          <p class="expected">Pass: the error explains why setup failed and how to obtain a token. Retry reopens masked entry. Escape returns cleanly, and your previously configured account still works.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="auth-parity"><span>
+          <h3>15. Check API-key and browser guidance</h3>
+          <p>Inspect an API-key provider's entry screen, then cancel. If an OpenAI account setup action is available, open it and inspect the login link and device-code guidance, then cancel.</p>
+          <p class="expected">Pass: API-key guidance identifies its environment variable and credential storage, and says it is never added to chat. The OpenAI link remains clickable when wrapped, and explains signing in from another device. No repeated keychain prompts appear during this pass.</p>
+        </span></label>
+      </div>
+    </section>
+
     <section aria-labelledby="evidence-title" style="margin-top:42px">
       <h2 id="evidence-title">What machines already proved</h2>
-      <p style="color:var(--muted)">Human acceptance focuses on visible trust and usability. These implementation checks already passed on the exact code candidate.</p>
+      <p style="color:var(--muted)">These counts describe the previously qualified integration base. The additional provider UX corrections and their current validation results are recorded in <a href="qa/release/0.1.38/provider-ux-parity-audit.md">the provider UX audit</a>.</p>
       <div class="evidence">
         <div class="metric"><b>64 / 64</b><span>provider contract tests passed</span></div>
         <div class="metric"><b>72 / 72</b><span>onboarding tests passed</span></div>
@@ -444,6 +466,7 @@ git merge-base --is-ancestor rust-v0.1.37 HEAD &amp;&amp; echo "0.1.37 release l
 
     function updateProgress() {
       const complete = boxes.filter(box => box.checked).length;
+      document.getElementById('progressShell').setAttribute('aria-valuemax', String(boxes.length));
       document.getElementById('progress').style.width = `${(complete / boxes.length) * 100}%`;
       document.getElementById('progressShell').setAttribute('aria-valuenow', String(complete));
       document.getElementById('progressLabel').textContent = `${complete} / ${boxes.length}`;

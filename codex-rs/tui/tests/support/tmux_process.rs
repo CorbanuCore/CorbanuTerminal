@@ -11,6 +11,24 @@ use anyhow::Result;
 
 const CLEANUP_TIMEOUT: Duration = Duration::from_secs(2);
 
+pub(super) const CLEANUP_WATCHDOG: &str = r#"
+trap '' HUP INT TERM
+while IFS= read -r line; do :; done
+panes=$(tmux -L "$1" list-panes -a -F '#{pane_pid}' 2>/dev/null)
+for pid in $panes; do
+    case "$pid" in ''|*[!0-9]*) continue;; esac
+    group=$(ps -o pgid= -p "$pid" | tr -d ' ')
+    if [ "$group" = "$pid" ]; then kill -s TERM -- "-$pid" 2>/dev/null; fi
+done
+sleep 0.2
+for pid in $panes; do
+    case "$pid" in ''|*[!0-9]*) continue;; esac
+    group=$(ps -o pgid= -p "$pid" | tr -d ' ')
+    if [ "$group" = "$pid" ]; then kill -s KILL -- "-$pid" 2>/dev/null; fi
+done
+exec tmux -L "$1" kill-server
+"#;
+
 #[derive(Debug, Default)]
 pub(super) struct TmuxProcesses {
     server_pid: Cell<Option<u32>>,
@@ -25,9 +43,31 @@ impl TmuxProcesses {
 
     pub(super) fn wait_for_cleanup(&mut self) {
         for pid in self.pane_pids.get_mut().drain(..) {
-            wait_for_exit(pid, CLEANUP_TIMEOUT);
+            terminate_pane_group(pid);
         }
         if let Some(pid) = self.server_pid.get() {
+            wait_for_exit(pid, CLEANUP_TIMEOUT);
+        }
+    }
+}
+
+pub(super) fn terminate_pane_group(pid: u32) {
+    // Only signal a pane group while its recorded leader still owns that group.
+    let group = Command::new("ps")
+        .args(["-o", "pgid=", "-p", &pid.to_string()])
+        .output();
+    if group
+        .ok()
+        .is_some_and(|output| String::from_utf8_lossy(&output.stdout).trim() == pid.to_string())
+    {
+        let _ = Command::new("kill")
+            .args(["-s", "TERM", "--", &format!("-{pid}")])
+            .output();
+        wait_for_exit(pid, CLEANUP_TIMEOUT);
+        if is_running(pid) {
+            let _ = Command::new("kill")
+                .args(["-s", "KILL", "--", &format!("-{pid}")])
+                .output();
             wait_for_exit(pid, CLEANUP_TIMEOUT);
         }
     }

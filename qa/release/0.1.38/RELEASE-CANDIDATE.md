@@ -83,6 +83,63 @@ qualification only; it does not authorize a tag or publication.
   warnings outside this candidate's changed pages; the non-strict site build
   completes and changed pages introduce no new warning.
 - Human acceptance remains pending.
+- Provider UX parity follow-up: the `/providers` Claude managed-token route now
+  restores the established `claude setup-token` instructions from one shared
+  presentation source, with rendered snapshots and true-TMUX coverage. The
+  broader audit and the subsequent six-finding correction are recorded in
+  [provider-ux-parity-audit.md](provider-ux-parity-audit.md).
+- Follow-up final-tree checks: `just fix -p codex-tui`, `just fmt`, and
+  `git diff --check` pass. Both shared-Claude presentation snapshots pass
+  (nextest run `4e31e145-3a4c-4229-b261-4dd6292975c2`), and the corrected PF-52
+  true-TMUX journey passes independently (nextest run
+  `0c78c3bd-b6fd-4e56-b206-668ac1fa20d0`).
+- A broader fresh-binary provider-management run passed the other nine tests;
+  PF-52 timed out under parallel contention despite its independent pass. The
+  matrix rerun exposed a separate macOS fixture/keychain isolation defect, so
+  local true-TMUX launches were stopped and leaked test process trees removed.
+  No production credential was deleted or modified.
+
+### Combined provider UX correction, September 4
+
+- All six audited findings are implemented: typed visible failure/recovery,
+  wrapped masked-entry guidance, clickable OpenAI challenges, shared API-key
+  custody/privacy instructions, shared onboarding copy, and isolated/cleaned-up
+  macOS TMUX fixtures.
+- Focused unit/component qualification: **253/253 passed**. Harness cleanup:
+  **8/8 passed**, including forced parent termination and a signal-resistant
+  pane. Formatting, scoped fix, and diff checks passed.
+- Fable 5.1 Max via Corbanu/TMUX reviewed the combined patch: no correctness
+  blockers; two P3 findings covered headless step numbering and stale release
+  wording. Both are corrected. Post-review UI checks passed **50/50** without
+  snapshot updates; the final review resolution exited **0** with no actionable
+  findings after verifying the accepted snapshot and passing test evidence.
+- The final native Mac release build completed and passed `--version` and
+  `codesign --verify --verbose`. The stable Apps launcher still resolves
+  `bin/corbanu` to `../target/release/corbanu`; the wallet daemon is installed
+  alongside the canonical executable. Current SHA-256:
+  `corbanu` = `0a9adad86c75de8200cebe862a6124fdbba46c0be6b6c554172f50bbc5f8e36e`;
+  `pfterminal-walletd` = `684fbe986ba6c3d4cee4c7a3b1e6ea7fc3c82eebcadb01312b155f566656552b`.
+- Expanded TMUX qualification: 32/33 passed in the matrix, with the remaining
+  Claude submission/recovery case passing a final no-retry rerun after fixing
+  a blank form reopening on submission. All 33 selected cases have passing
+  coverage across these runs, not one clean matrix run. An environment-case
+  input-timing retry also passed a separate no-retry run. Earlier obsolete test
+  wording and missing wallet-daemon fixture prerequisites were corrected.
+- The final submission correction passed 38/38 focused UI tests and Fable 5.1
+  Max review through Corbanu/TMUX (no findings, exit 0). The human negative
+  token test now requires embedded spaces to guarantee rejection before storage.
+- A pre-existing debug key-event logging privacy concern was found using
+  synthetic credentials and is documented in the parity audit. Do not enable
+  debug/trace logging while entering real credentials. Its protected-data fix
+  remains separately scoped; no production credential was used in these tests.
+- `humanTest.html` now includes checks 13–15 for the corrected flows. Named-human
+  acceptance is still pending. Nothing has been merged or published by this
+  correction.
+- Latest installed-app smoke created the new `Corbanu — provider UX retest`
+  window with the verified binary. Startup stopped at the existing release-
+  recall heuristic's erroneous 0.1.38 → 0.1.37 prompt. Choose **2. Skip**;
+  do not downgrade. Computer Use denied Terminal access, so reaching chat after
+  that prompt has not been verified in this launch. See the parity audit.
 
 ## Disclosed incomplete gates
 

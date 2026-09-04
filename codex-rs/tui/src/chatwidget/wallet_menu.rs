@@ -295,7 +295,7 @@ impl ChatWidget {
             format!("provider:{}", target.provider_id),
             format!("Add {display_name}"),
             "API key — masked".to_string(),
-            "Stored through the selected provider credential backend".to_string(),
+            crate::provider_auth_presentation::api_key_guidance(&target.storage),
             Box::new(move |_label, secret| {
                 tx.send(AppEvent::SaveSharedProviderApiKey {
                     target: target.clone(),
@@ -310,16 +310,10 @@ impl ChatWidget {
         &mut self,
         challenge: codex_provider_auth::OpenAiAccountChallenge,
     ) {
-        let mut header = ColumnRenderable::new();
-        header.push(Line::from("OpenAI account login".bold()));
-        if let Some((verification_url, user_code)) = challenge.device_code_values() {
-            header.push(Line::from(format!("Open: {verification_url}")));
-            header.push(Line::from(format!("Code: {user_code}").cyan().bold()));
-        } else if let Some(auth_url) = challenge.browser_auth_url() {
-            header.push(Line::from(format!("Open: {auth_url}")));
-        }
         self.show_shared_account_auth_selection(SelectionViewParams {
-            header: Box::new(header),
+            header: Box::new(
+                crate::provider_auth_presentation::OpenAiChallengeHeader::new(challenge),
+            ),
             items: vec![SelectionItem {
                 name: "Cancel login".to_string(),
                 actions: vec![Box::new(|tx| {
@@ -360,11 +354,59 @@ impl ChatWidget {
         });
     }
 
-    pub(crate) fn open_shared_claude_method_choice(&mut self) {
+    pub(crate) fn open_shared_account_failure(
+        &mut self,
+        failure: crate::provider_account_feedback::AccountFailure,
+    ) {
+        let kind = failure.kind;
+        let mut items = Vec::new();
+        if failure.retry {
+            items.push(SelectionItem {
+                name: "Retry authentication".into(),
+                actions: vec![Box::new(move |tx| {
+                    let action = match kind {
+                        crate::provider_account_auth_host::ProviderAccountCancelKind::OpenAi => {
+                            codex_provider_auth::OpenAiAccountAction::Retry.into()
+                        }
+                        crate::provider_account_auth_host::ProviderAccountCancelKind::Claude => {
+                            codex_provider_auth::claude_account_flow::ClaudeAccountAction::Retry
+                                .into()
+                        }
+                    };
+                    tx.send(AppEvent::SharedProviderAuthAction(action));
+                })],
+                ..Default::default()
+            });
+        }
+        items.push(SelectionItem {
+            name: "Back to providers".into(),
+            actions: vec![Box::new(move |tx| {
+                tx.send(AppEvent::SharedProviderAuthAction(kind.action()))
+            })],
+            ..Default::default()
+        });
+        self.show_shared_account_auth_selection(SelectionViewParams {
+            header: Box::new(
+                ratatui::widgets::Paragraph::new(vec![
+                    Line::from("Authentication needs attention".bold()),
+                    Line::from(failure.message),
+                ])
+                .wrap(ratatui::widgets::Wrap { trim: false }),
+            ),
+            items,
+            on_cancel: Some(Box::new(move |tx| {
+                tx.send(AppEvent::SharedProviderAuthAction(kind.action()))
+            })),
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn open_shared_claude_method_choice(&mut self, recovery: Option<&str>) {
         use codex_provider_auth::claude_account_flow::ClaudeAccountAction;
         use codex_provider_auth::claude_account_flow::ClaudeAccountMethod;
-        let method_item = |name: &str, method| SelectionItem {
+        let method_item = |name: &str, description: &str, method| SelectionItem {
             name: name.to_string(),
+            description: Some(description.to_string()),
             actions: vec![Box::new(move |tx: &AppEventSender| {
                 tx.send(AppEvent::SharedProviderAuthAction(
                     ClaudeAccountAction::ChooseMethod(method).into(),
@@ -377,14 +419,18 @@ impl ChatWidget {
             })],
             ..Default::default()
         };
-        self.show_shared_account_auth_selection(SelectionViewParams {
-            title: Some("Claude account method".to_string()),
+        let mut params = SelectionViewParams {
             items: vec![
                 method_item(
-                    "Managed subscription token",
+                    super::claude_auth_presentation::MANAGED_TOKEN_METHOD_NAME,
+                    super::claude_auth_presentation::MANAGED_TOKEN_METHOD_DESCRIPTION,
                     ClaudeAccountMethod::ManagedToken,
                 ),
-                method_item("Claude Code login", ClaudeAccountMethod::ClaudeCodeLogin),
+                method_item(
+                    super::claude_auth_presentation::CLAUDE_CODE_LOGIN_METHOD_NAME,
+                    super::claude_auth_presentation::CLAUDE_CODE_LOGIN_METHOD_DESCRIPTION,
+                    ClaudeAccountMethod::ClaudeCodeLogin,
+                ),
             ],
             on_cancel: Some(Box::new(|tx| {
                 tx.send(AppEvent::SharedProviderAuthAction(
@@ -392,7 +438,21 @@ impl ChatWidget {
                 ));
             })),
             ..Default::default()
-        });
+        };
+        super::claude_auth_presentation::apply_method_choice_copy(&mut params);
+        if let Some(message) = recovery {
+            params.title = None;
+            params.subtitle = None;
+            params.header = Box::new(
+                ratatui::widgets::Paragraph::new(vec![
+                    Line::from(super::claude_auth_presentation::METHOD_TITLE.bold()),
+                    Line::from(message.to_owned()),
+                    Line::from(super::claude_auth_presentation::METHOD_SUBTITLE),
+                ])
+                .wrap(ratatui::widgets::Wrap { trim: false }),
+            );
+        }
+        self.show_shared_account_auth_selection(params);
     }
 
     pub(crate) fn open_shared_claude_managed_token_entry(&mut self) {
@@ -403,9 +463,9 @@ impl ChatWidget {
         let cancel_tx = self.app_event_tx.clone();
         let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret_with_cancel(
             "claude-managed-token".into(),
-            "Claude managed subscription token".into(),
-            "Token — masked".into(),
-            "Paste the long-lived subscription token".into(),
+            super::claude_auth_presentation::MANAGED_TOKEN_ENTRY_TITLE.into(),
+            super::claude_auth_presentation::MANAGED_TOKEN_ENTRY_LABEL.into(),
+            super::claude_auth_presentation::MANAGED_TOKEN_ENTRY_GUIDANCE.into(),
             Box::new(move |_, secret| {
                 tx.send(AppEvent::SharedProviderAuthAction(
                     ClaudeAccountAction::SetManagedToken(
@@ -1980,6 +2040,23 @@ fn format_usdc_atomic(value: u64) -> String {
 mod tests {
     use super::*;
 
+    fn render_bottom_pane(chat: &ChatWidget, width: u16) -> String {
+        let height = chat.bottom_pane.desired_height(width);
+        let area = ratatui::layout::Rect::new(0, 0, width, height);
+        let mut buffer = ratatui::buffer::Buffer::empty(area);
+        chat.bottom_pane.render(area, &mut buffer);
+        (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     #[tokio::test]
     async fn shared_provider_setup_can_select_a_noninteractive_runtime() {
         let (mut chat, mut rx, _op_rx) =
@@ -2039,7 +2116,7 @@ mod tests {
         chat.open_shared_account_pending(
             crate::provider_account_auth_host::ProviderAccountCancelKind::Claude,
         );
-        chat.open_shared_claude_method_choice();
+        chat.open_shared_claude_method_choice(None);
         chat.open_shared_claude_managed_token_entry();
         assert_ne!(
             chat.bottom_pane.active_view_id(),
@@ -2049,6 +2126,68 @@ mod tests {
             !chat
                 .bottom_pane
                 .dismiss_view_by_id(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID)
+        );
+    }
+
+    #[tokio::test]
+    async fn shared_claude_method_choice_matches_established_presentation() {
+        let (mut chat, _rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+
+        chat.open_shared_claude_method_choice(None);
+
+        insta::assert_snapshot!(render_bottom_pane(&chat, 76));
+    }
+
+    #[tokio::test]
+    async fn shared_claude_managed_token_entry_matches_established_presentation() {
+        let (mut chat, _rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+
+        chat.open_shared_claude_managed_token_entry();
+
+        insta::assert_snapshot!(render_bottom_pane(&chat, 76));
+    }
+
+    #[tokio::test]
+    async fn provider_auth_guidance_wraps_and_failures_remain_actionable() {
+        let (mut chat, _rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+        chat.open_shared_claude_managed_token_entry();
+        for width in [40, 76, 120] {
+            let rendered = render_bottom_pane(&chat, width);
+            assert!(
+                rendered.contains("chat."),
+                "privacy guidance must remain visible"
+            );
+            insta::assert_snapshot!(format!("claude_token_guidance_{width}"), rendered);
+        }
+        chat.open_shared_account_failure(crate::provider_account_feedback::AccountFailure {
+            message: "The subscription token was not accepted. Run claude setup-token in a private terminal, then retry with its token.",
+            kind: crate::provider_account_auth_host::ProviderAccountCancelKind::Claude,
+            retry: true,
+        });
+        let rendered = render_bottom_pane(&chat, 76);
+        assert!(rendered.contains("then retry with its token."));
+        insta::assert_snapshot!("provider_auth_failure_recovery", rendered);
+    }
+
+    #[tokio::test]
+    async fn openai_challenge_wraps_as_one_clickable_url() {
+        let (mut chat, _rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+        let url = "https://example.com/device/very-long-authentication-link";
+        chat.open_shared_openai_challenge(
+            codex_provider_auth::OpenAiAccountChallenge::device_code(url, "TEST-CODE"),
+        );
+        let rendered = render_bottom_pane(&chat, 40);
+        assert!(
+            rendered.contains(&format!("\u{1b}]8;;{url}")),
+            "the wrapped URL must carry OSC8 metadata"
+        );
+        insta::assert_snapshot!(
+            "openai_provider_challenge_narrow",
+            crate::terminal_hyperlinks::strip_osc8(&rendered)
         );
     }
 

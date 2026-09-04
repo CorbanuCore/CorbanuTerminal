@@ -1169,7 +1169,7 @@ impl AuthModeWidget {
         let auth_url = if let SignInState::ChatGptContinueInBrowser(state) = &*sign_in_state
             && !state.auth_url.is_empty()
         {
-            lines.push("  If the link doesn't open automatically, open the following link to authenticate:".into());
+            lines.push(crate::provider_auth_presentation::OPENAI_BROWSER_GUIDANCE.into());
             lines.push("".into());
             lines.push(Line::from(vec![
                 "  ".into(),
@@ -1211,6 +1211,7 @@ impl AuthModeWidget {
         buf: &mut Buffer,
         highlighted: ClaudeAuthMethod,
     ) {
+        use crate::chatwidget::claude_auth_presentation as copy;
         let option = |selected: bool, label: &str, description: &str| {
             let marker = if selected { ">" } else { " " };
             vec![
@@ -1224,19 +1225,21 @@ impl AuthModeWidget {
             ]
         };
         let mut lines: Vec<Line> = vec![
-            "  Choose Anthropic account authentication".bold().into(),
+            copy::METHOD_TITLE.bold().into(),
+            copy::METHOD_SUBTITLE.into(),
             "".into(),
         ];
         lines.extend(option(
             highlighted == ClaudeAuthMethod::ManagedToken,
-            "Long-lived subscription token (Recommended)",
-            "Run `claude setup-token`, then store its approximately one-year token securely",
+            copy::MANAGED_TOKEN_METHOD_NAME,
+            copy::MANAGED_TOKEN_METHOD_DESCRIPTION,
         ));
         lines.extend(option(
             highlighted == ClaudeAuthMethod::ClaudeCodeLogin,
-            "Claude Code login",
-            "Use Claude Code's rotating login state; reauthorization may be needed more often",
+            copy::CLAUDE_CODE_LOGIN_METHOD_NAME,
+            copy::CLAUDE_CODE_LOGIN_METHOD_DESCRIPTION,
         ));
+        lines.push(copy::METHOD_FOOTER.dim().into());
         lines.push(Line::from(vec![
             "  Use ↑/↓ to choose · Press ".dim(),
             self.confirm_binding().into(),
@@ -1268,9 +1271,9 @@ impl AuthModeWidget {
             )
         } else {
             (
-                "Save Claude subscription token",
-                "In a separate private terminal, run `claude setup-token`, then paste the token here. Corbanu never adds it to chat.",
-                "Long-lived token",
+                crate::chatwidget::claude_auth_presentation::MANAGED_TOKEN_ENTRY_TITLE,
+                crate::chatwidget::claude_auth_presentation::MANAGED_TOKEN_ENTRY_GUIDANCE,
+                crate::chatwidget::claude_auth_presentation::MANAGED_TOKEN_ENTRY_LABEL,
             )
         };
         let [intro_area, input_area, footer_area] = Layout::vertical([
@@ -1477,7 +1480,14 @@ impl AuthModeWidget {
                 .bold(),
             ]),
             "".into(),
-            "  Paste or type your API key below. It will be stored in your vault.".into(),
+            crate::provider_auth_presentation::api_key_guidance(
+                &self
+                    .selected_api_key_option
+                    .as_ref()
+                    .map(|option| option.target.storage.clone())
+                    .unwrap_or(codex_provider_auth::ApiKeyStorage::OpenAiAuth),
+            )
+            .into(),
             "".into(),
         ];
         if let Some(env_var) = state.prepopulated_env_var.as_ref() {
@@ -2009,6 +2019,10 @@ impl AuthModeWidget {
     }
 
     pub(crate) fn on_provider_auth_snapshot(&self, snapshot: &ProviderAuthFlowSnapshot) {
+        if let Some(failure) = crate::provider_account_feedback::account_failure(snapshot) {
+            self.fail_provider_attempt(failure.message);
+            return;
+        }
         if matches!(
             snapshot,
             ProviderAuthFlowSnapshot::Blocked { .. } | ProviderAuthFlowSnapshot::Failed { .. }
@@ -2562,7 +2576,7 @@ mod tests {
             "rendered:\n{rendered}"
         );
         assert!(
-            rendered.contains("stored in your vault"),
+            rendered.contains("configured OpenAI credential store and never adds it to chat"),
             "rendered:\n{rendered}"
         );
     }
@@ -2778,14 +2792,17 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         insta::assert_snapshot!(visible, @r###"
-  Choose Anthropic account authentication
+Claude Plan authentication
+Choose one source; Corbanu never falls back to another account.
 
 > Long-lived subscription token (Recommended)
-    Run `claude setup-token`, then store its approximately one-year token securely
+    Run `claude setup-token` in a private terminal, then paste its approximately
+one-year token here (Pro, Max, Team, or Enterprise).
 
   Claude Code login
-    Use Claude Code's rotating login state; reauthorization may be needed more often
+    Use Claude Code's rotating login state; reauthorization may be needed more often.
 
+Your account and billing path change only after success. Esc keeps the current method.
   Use ↑/↓ to choose · Press enter to continue · Press esc to go back
 "###);
     }
@@ -3020,6 +3037,39 @@ mod tests {
             ));
 
         assert_eq!(widget.should_suppress_animations(), true);
+    }
+
+    #[tokio::test]
+    async fn device_code_guidance_keeps_numbered_steps_and_cancel_visible() {
+        let (widget, _tmp) = widget_forced_chatgpt().await;
+        widget.set_animations_suppressed(true);
+        let state = ContinueWithDeviceCodeState::ready(
+            "request-1".to_string(),
+            "login-1".to_string(),
+            "https://example.com/device".to_string(),
+            "ABCD-EFGH".to_string(),
+        );
+        let area = Rect::new(0, 0, 76, 22);
+        let mut terminal = crate::custom_terminal::Terminal::with_options(
+            crate::test_backend::VT100Backend::new(area.width, area.height),
+        )
+        .expect("terminal");
+        terminal.set_viewport_area(area);
+        terminal
+            .draw(|frame| {
+                headless_chatgpt_login::render_device_code_login(
+                    &widget,
+                    area,
+                    frame.buffer_mut(),
+                    &state,
+                );
+            })
+            .expect("draw");
+        let contents = terminal.backend().to_string();
+        assert!(contents.contains("1. On a remote or headless machine"));
+        assert!(contents.contains("2. Enter this one-time code"));
+        assert!(contents.contains("Press esc to cancel"));
+        insta::assert_snapshot!("device_code_numbered_guidance", contents);
     }
 
     #[test]

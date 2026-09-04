@@ -89,6 +89,7 @@ pub(crate) struct TmuxServer {
     socket_dir: TempDir,
     pub(super) artifacts: ArtifactRecorder,
     pub(super) processes: TmuxProcesses,
+    cleanup_guard: std::process::Child,
 }
 
 impl TmuxServer {
@@ -122,8 +123,25 @@ impl TmuxServer {
             .prefix("cdx-tmux-")
             .tempdir_in("/tmp")
             .context("create private tmux socket directory")?;
+        let socket_name = format!("codex-tui-test-{}-{id}", std::process::id());
+        // The pipe closes even when nextest terminates this process without running
+        // Drop. Keep the watchdog outside tmux so a killed test cannot orphan it.
+        let cleanup_guard = Command::new("sh")
+            .args([
+                "-c",
+                super::tmux_process::CLEANUP_WATCHDOG,
+                "tmux-test-cleanup",
+            ])
+            .arg(&socket_name)
+            .env("TMUX_TMPDIR", socket_dir.path())
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .context("start tmux cleanup watchdog")?;
         Ok(Self {
-            socket_name: format!("codex-tui-test-{}-{id}", std::process::id()),
+            socket_name,
+            cleanup_guard,
             socket_dir,
             artifacts: ArtifactRecorder::new(artifact_root, scenario, id),
             processes: TmuxProcesses::default(),
@@ -280,7 +298,8 @@ impl Drop for TmuxServer {
                 /*pane_id*/ None,
             );
         }
-        let _ = self.command().arg("kill-server").output();
+        self.cleanup_guard.stdin.take();
+        let _ = self.cleanup_guard.wait();
         self.processes.wait_for_cleanup();
     }
 }
@@ -331,7 +350,7 @@ impl Drop for TmuxSession<'_> {
                 .arg(&self.name)
                 .output();
         }
-        wait_for_process_exit(self.primary_pane.pid, Duration::from_secs(/*secs*/ 2));
+        super::tmux_process::terminate_pane_group(self.primary_pane.pid);
     }
 }
 

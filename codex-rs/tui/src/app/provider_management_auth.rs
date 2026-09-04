@@ -79,8 +79,8 @@ impl App {
             Presentation::OpenAiChallenge { challenge } => {
                 self.chat_widget.open_shared_openai_challenge(challenge);
             }
-            Presentation::ClaudeMethodChoice => {
-                self.chat_widget.open_shared_claude_method_choice();
+            Presentation::ClaudeMethodChoice { recovery } => {
+                self.chat_widget.open_shared_claude_method_choice(recovery);
             }
             Presentation::ClaudeManagedTokenEntry => {
                 self.chat_widget.open_shared_claude_managed_token_entry();
@@ -91,14 +91,8 @@ impl App {
             Presentation::Completion(completion) => {
                 self.apply_provider_manager_account_completion(completion);
             }
-            Presentation::Failed => {
-                if let Some(provider_id) = self
-                    .provider_management_host
-                    .as_ref()
-                    .and_then(|host| host.authenticating_provider().cloned())
-                {
-                    self.provider_manager_authentication_cancelled(provider_id);
-                }
+            Presentation::Failed(failure) => {
+                self.chat_widget.open_shared_account_failure(failure);
             }
         }
     }

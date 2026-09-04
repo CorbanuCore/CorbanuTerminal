@@ -27,7 +27,7 @@ impl ChatWidget {
             format!("provider:{}", target.provider_id),
             format!("Add {display_name}"),
             "API key — masked".to_string(),
-            "Stored through the selected provider credential backend".to_string(),
+            crate::provider_auth_presentation::api_key_guidance(&target.storage),
             Box::new(move |_label, secret| {
                 tx.send(AppEvent::SaveProviderManagerApiKey {
                     attempt_id,

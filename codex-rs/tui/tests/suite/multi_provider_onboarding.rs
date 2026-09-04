@@ -181,7 +181,7 @@ async fn tmux_only_corbanu_api_cancel_returns_to_shared_provider_list() -> Resul
     pane.wait_stable_contains("Provider: OpenAI Codex Account", READY_TIMEOUT)?;
 
     select_label(pane, "Provider: Ambient API Key")?;
-    pane.wait_stable_contains("Paste or type your API key below.", READY_TIMEOUT)?;
+    pane.wait_stable_contains("never adds it to chat.", READY_TIMEOUT)?;
     pane.send_key(TmuxKey::Escape)?;
     pane.wait_stable_contains("Provider: Ambient API Key", READY_TIMEOUT)?;
     select_label(pane, "Corbanu API")?;
@@ -446,7 +446,7 @@ async fn tmux_locked_wallet_api_unlocks_and_cancels() -> Result<()> {
 
 fn configure_api_key(pane: &TmuxPane<'_>, label: &str, secret: &str) -> Result<()> {
     select_label(pane, label)?;
-    pane.wait_stable_contains("Paste or type your API key below.", READY_TIMEOUT)?;
+    pane.wait_stable_contains("never adds it to chat.", READY_TIMEOUT)?;
     pane.send_secret_literal(secret)?;
     pane.send_key(TmuxKey::Enter)?;
     pane.wait_stable_contains("API key configured", READY_TIMEOUT)?;

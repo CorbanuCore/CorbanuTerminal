@@ -1,0 +1,11 @@
+---
+source: tui/src/chatwidget/wallet_menu.rs
+expression: rendered
+---
+▌ Save Claude subscription token
+▌ Long-lived token — masked
+▌
+▌ In a separate private terminal, run `claude setup-token`. Paste its token
+▌ here; Corbanu never captures the command output or adds the token to chat.
+
+Press enter to confirm or esc to go back

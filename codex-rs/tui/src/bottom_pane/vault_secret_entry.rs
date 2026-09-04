@@ -304,8 +304,12 @@ impl VaultSecretEntryView {
 
     fn input_height(&self, width: u16) -> u16 {
         let usable_width = width.saturating_sub(2);
-        let text_height = self.textarea.desired_height(usable_width).clamp(1, 5);
-        text_height.saturating_add(1).min(6)
+        let text_height = if self.textarea.text().is_empty() {
+            textwrap::wrap(self.active_prompt(), usize::from(usable_width.max(1))).len() as u16
+        } else {
+            self.textarea.desired_height(usable_width)
+        };
+        text_height.clamp(1, 10).saturating_add(1)
     }
 }
 
@@ -407,7 +411,8 @@ impl Renderable for VaultSecretEntryView {
             y: input_y,
             width: area.width,
             height: input_height,
-        };
+        }
+        .intersection(area);
         if input_area.width >= 2 {
             for row in 0..input_area.height {
                 Paragraph::new(Line::from(vec![gutter()])).render(
@@ -459,8 +464,12 @@ impl Renderable for VaultSecretEntryView {
                     }
                 }
                 if self.textarea.text().is_empty() {
-                    Paragraph::new(Line::from(self.active_prompt().dim()))
-                        .render(textarea_rect, buf);
+                    let lines =
+                        textwrap::wrap(self.active_prompt(), usize::from(textarea_rect.width))
+                            .into_iter()
+                            .map(|line| Line::from(line.into_owned()).dim())
+                            .collect::<Vec<_>>();
+                    Paragraph::new(lines).render(textarea_rect, buf);
                 }
             }
         }

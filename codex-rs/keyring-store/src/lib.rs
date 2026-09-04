@@ -214,6 +214,7 @@ where
 
 impl KeyringStore for DefaultKeyringStore {
     fn load(&self, service: &str, account: &str) -> Result<Option<String>, CredentialStoreError> {
+        reject_fixture_keyring_access()?;
         let service = service.to_string();
         let account = account.to_string();
         run_bounded_keyring_operation(
@@ -244,6 +245,7 @@ impl KeyringStore for DefaultKeyringStore {
     }
 
     fn save(&self, service: &str, account: &str, value: &str) -> Result<(), CredentialStoreError> {
+        reject_fixture_keyring_access()?;
         let service = service.to_string();
         let account = account.to_string();
         let value = value.to_string();
@@ -274,6 +276,7 @@ impl KeyringStore for DefaultKeyringStore {
     }
 
     fn delete(&self, service: &str, account: &str) -> Result<bool, CredentialStoreError> {
+        reject_fixture_keyring_access()?;
         let service = service.to_string();
         let account = account.to_string();
         run_bounded_keyring_operation(
@@ -304,11 +307,58 @@ impl KeyringStore for DefaultKeyringStore {
     }
 }
 
+// Debug fixtures exercise the existing profile-local fallback without ever calling
+// the native keyring. Release builds cannot enable this test isolation override.
+fn reject_fixture_keyring_access() -> Result<(), CredentialStoreError> {
+    if cfg!(debug_assertions) && std::env::var_os("CORBANU_TEST_NO_NATIVE_KEYRING").is_some() {
+        return Err(CredentialStoreError::from_message(
+            "Native keyring is unavailable in an isolated test fixture".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod bounded_operation_tests {
     use super::*;
     use std::sync::atomic::AtomicBool;
     use std::sync::atomic::Ordering;
+
+    #[test]
+    fn isolated_fixture_never_accesses_native_keyring() {
+        if std::env::var_os("CORBANU_TEST_NO_NATIVE_KEYRING").is_some() {
+            for result in [
+                DefaultKeyringStore
+                    .load("codex", "fixture-canary")
+                    .map(|_| ()),
+                DefaultKeyringStore.save("codex", "fixture-canary", "synthetic-value"),
+                DefaultKeyringStore
+                    .delete("codex", "fixture-canary")
+                    .map(|_| ()),
+            ] {
+                assert!(
+                    result
+                        .unwrap_err()
+                        .message()
+                        .contains("isolated test fixture")
+                );
+            }
+            return;
+        }
+        let result = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "bounded_operation_tests::isolated_fixture_never_accesses_native_keyring",
+            ])
+            .env("CORBANU_TEST_NO_NATIVE_KEYRING", "1")
+            .output()
+            .unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+    }
 
     #[test]
     fn bounded_operation_returns_its_result() {
