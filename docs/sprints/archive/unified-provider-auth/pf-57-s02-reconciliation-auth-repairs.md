@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-57-S02"
 title: "Reconciled release credential-lifecycle repairs"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-57"
 execution_order: 17
@@ -55,17 +55,19 @@ updated: 2026-09-04
 
 ## Remaining
 
-- [ ] Finish final-tree TUI/snapshot qualification, evidence and archive steps below.
+No sprint-scoped work remains. Legacy daemon restart is a disclosed one-time user
+action; site fixes, production rollout and broader release gates are outside this sprint.
 
 ## Verification
 
-- [ ] Run scoped `just fix` and `just fmt`, then affected `just test` suites and inspect final diff.
-- [ ] Run true-TUI provider configuration, failure/recovery and restart checks with synthetic credentials.
-- [ ] Record live-repository applicability, source/build identity and platform limitations.
-- [ ] Run `python3 docs/plans/check.py`, `python3 docs/sprints/check.py`, portable skill checks and `git diff --check`.
+- [x] Scoped `just fix` and `just fmt`, then 175 domain tests and 82 focused TUI tests passed; final production diff re-reviewed by Astra.
+- [x] Three true-TMUX alias/restart/account-read cases passed, including legacy daemon failure, direct Lock and retry; additional manual `just codex` provider check passed.
+- [x] New wrapped recovery-message snapshot reviewed and accepted; real encrypted-vault reopen probe passed.
+- [x] Live-repository applicability, source/build identity and platform limits recorded without a broader release claim.
+- [x] Plan/sprint checks, portable-skill parity and `git diff --check` passed.
 
 ## Exit evidence
 
-- [ ] Record final implementation identity and commands in `qa/release/0.1.38/astra-fixes.md`.
-- [ ] Finish documentation, ledger and handoff; do not claim unpublished release gates passed.
-- [ ] Archive completed sprint and update plan backlinks after all scoped proof passes.
+- [x] Implementation `41794c3ae7de689594b21837c18899945ee75cf5`; commands, hashes, test IDs and limits in [Astra fixes](../../../../qa/release/0.1.38/astra-fixes.md).
+- [x] User documentation and site review match the scoped result; no merge, push or deployment performed.
+- [x] Completed sprint archived and plan backlinks updated.
