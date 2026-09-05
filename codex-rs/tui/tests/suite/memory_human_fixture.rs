@@ -67,19 +67,46 @@ impl PendingExitProof {
     fn is_pending(self) -> bool {
         // Polling observes the request after it arrives; reserve one second so
         // this cannot extend the fake response's actual pending window.
-        self.elapsed.is_some_and(|elapsed| elapsed + Duration::from_secs(1) < self.window)
-            && self.canaries == 1 && self.outputs == 0 && !self.failed
+        self.elapsed
+            .is_some_and(|elapsed| elapsed + Duration::from_secs(1) < self.window)
+            && self.canaries == 1
+            && self.outputs == 0
+            && !self.failed
     }
 }
 
 #[test]
 fn memory_human_pending_exit_rejects_unproven_lifecycle() {
-    let valid = PendingExitProof { elapsed:Some(Duration::from_secs(1)), window:Duration::from_secs(30), canaries:1, outputs:0, failed:false };
+    let valid = PendingExitProof {
+        elapsed: Some(Duration::from_secs(1)),
+        window: Duration::from_secs(30),
+        canaries: 1,
+        outputs: 0,
+        failed: false,
+    };
     assert!(valid.is_pending());
-    for invalid in [PendingExitProof { elapsed:None, ..valid },
-        PendingExitProof { elapsed:Some(Duration::from_secs(29)), ..valid },
-        PendingExitProof { failed:true, ..valid }, PendingExitProof { outputs:1, ..valid },
-        PendingExitProof { canaries:0, ..valid }] {
+    for invalid in [
+        PendingExitProof {
+            elapsed: None,
+            ..valid
+        },
+        PendingExitProof {
+            elapsed: Some(Duration::from_secs(29)),
+            ..valid
+        },
+        PendingExitProof {
+            failed: true,
+            ..valid
+        },
+        PendingExitProof {
+            outputs: 1,
+            ..valid
+        },
+        PendingExitProof {
+            canaries: 0,
+            ..valid
+        },
+    ] {
         assert!(!invalid.is_pending());
     }
 }
@@ -419,13 +446,24 @@ animations = false
         } else if case == Case::PendingExit && !restarted {
             if pending_exit_elapsed.is_none() {
                 let proof = PendingExitProof {
-                    elapsed: pending.map(|time| time.elapsed()), window: delay, canaries, outputs,
-                    failed: denied || log.contains(&format!("Phase 1 job failed for thread {source}:")),
+                    elapsed: pending.map(|time| time.elapsed()),
+                    window: delay,
+                    canaries,
+                    outputs,
+                    failed: denied
+                        || log.contains(&format!("Phase 1 job failed for thread {source}:")),
                 };
-                ensure!(proof.is_pending(), "exit missed pending window or job already failed; not exercised");
+                ensure!(
+                    proof.is_pending(),
+                    "exit missed pending window or job already failed; not exercised"
+                );
                 pending_exit_elapsed = proof.elapsed.map(|elapsed| elapsed.as_millis());
-                write_json(root, "pending-exit.json", &json!({"elapsed_ms":pending_exit_elapsed,
-                    "response_delay_ms":delay.as_millis(), "source":source, "pending_proven":true}))?;
+                write_json(
+                    root,
+                    "pending-exit.json",
+                    &json!({"elapsed_ms":pending_exit_elapsed,
+                    "response_delay_ms":delay.as_millis(), "source":source, "pending_proven":true}),
+                )?;
             }
             if driver == Driver::Rehearsal || root.join("restart").exists() {
                 session = tmux.new_session(spec("memory-restart"))?;
