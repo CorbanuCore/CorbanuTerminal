@@ -16,6 +16,7 @@ pub enum SlashCommand {
     Gpu,
     Ide,
     Permissions,
+    Security,
     Keymap,
     Vim,
     #[strum(serialize = "setup-default-sandbox")]
@@ -143,6 +144,7 @@ impl SlashCommand {
                 "start a side conversation in an ephemeral fork"
             }
             SlashCommand::Permissions => "choose what Corbanu Terminal is allowed to do",
+            SlashCommand::Security => "explore security profiles and protection readiness (read only)",
             SlashCommand::Keymap => "remap TUI shortcuts",
             SlashCommand::Vim => "toggle Vim mode for the composer",
             SlashCommand::ElevateSandbox => "set up elevated agent sandbox",
@@ -213,6 +215,7 @@ impl SlashCommand {
                 | SlashCommand::Docs
                 | SlashCommand::Mention
                 | SlashCommand::Status
+                | SlashCommand::Security
                 | SlashCommand::Usage
                 | SlashCommand::Ide
                 | SlashCommand::Providers
@@ -254,6 +257,7 @@ impl SlashCommand {
             | SlashCommand::Gpu
             | SlashCommand::Personality
             | SlashCommand::Permissions
+            | SlashCommand::Security
             | SlashCommand::Copy
             | SlashCommand::Raw
             | SlashCommand::Rename

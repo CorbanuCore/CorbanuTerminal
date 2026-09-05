@@ -109,6 +109,7 @@ struct StatusHistoryCell {
     model_details: Vec<String>,
     directory: PathBuf,
     permissions: String,
+    security: String,
     agents_summary: Arc<RwLock<String>>,
     collaboration_mode: Option<String>,
     model_provider: Option<String>,
@@ -360,6 +361,7 @@ impl StatusHistoryCell {
                 model_details,
                 directory: config.cwd.to_path_buf(),
                 permissions,
+                security: crate::security::view::status_summary(config.security_level),
                 collaboration_mode: collaboration_mode.map(ToString::to_string),
                 model_provider,
                 remote_connection: remote_connection.cloned(),
@@ -758,7 +760,7 @@ impl HistoryCell for StatusHistoryCell {
 
         let account_value = self.account_value.clone();
 
-        let mut labels: Vec<String> = vec!["Model", "Directory", "Permissions", "Agents.md"]
+        let mut labels: Vec<String> = vec!["Model", "Directory", "Permissions", "Security", "Agents.md"]
             .into_iter()
             .map(str::to_string)
             .collect();
@@ -856,6 +858,7 @@ impl HistoryCell for StatusHistoryCell {
         }
         lines.push(formatter.line("Directory", vec![Span::from(directory_value)]));
         lines.push(formatter.line("Permissions", vec![Span::from(self.permissions.clone())]));
+        lines.push(formatter.line("Security", vec![Span::from(self.security.clone())]));
         lines.push(formatter.line("Agents.md", vec![Span::from(agents_summary)]));
 
         if let Some(account_value) = account_value {
