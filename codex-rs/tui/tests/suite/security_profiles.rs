@@ -103,22 +103,34 @@ fn tmux_security_unknown_config_fails_without_permissive_fallback() -> Result<()
     let repo = codex_utils_cargo_bin::repo_root()?;
     let binary = codex_utils_cargo_bin::cargo_bin("codex")?;
     let home = tempdir()?;
-    fs::write(home.path().join("config.toml"), "[security]\nversion = 1\nlevel = \"unknown\"\n")?;
+    fs::write(
+        home.path().join("config.toml"),
+        "[security]\nversion = 1\nlevel = \"unknown\"\n",
+    )?;
     let tmux = TmuxServer::start("security_unknown_config")?;
     // Keep the disposable error terminal visible after Corbanu exits, so the
     // typed driver can inspect startup rejection and dismiss it with Enter.
     let session = tmux.new_session(SessionSpec::new(
-        "security-invalid", TerminalSize::new(80, 24),
+        "security-invalid",
+        TerminalSize::new(80, 24),
         CommandSpec::new("sh")
-            .env("CODEX_HOME", home.path()).env("CORBANU_HOME", home.path())
+            .env("CODEX_HOME", home.path())
+            .env("CORBANU_HOME", home.path())
             .env("RUST_LOG", "trace")
-            .arg("-c").arg("\"$@\"; printf '\\nPress Enter to close fixture\\n'; read -r reply")
-            .arg("security-error-fixture").arg(binary)
-            .arg("--no-alt-screen").arg("-C").arg(repo),
+            .arg("-c")
+            .arg("\"$@\"; printf '\\nPress Enter to close fixture\\n'; read -r reply")
+            .arg("security-error-fixture")
+            .arg(binary)
+            .arg("--no-alt-screen")
+            .arg("-C")
+            .arg(repo),
     ))?;
     let pane = session.primary_pane();
     let text = pane.wait_stable_contains("unknown variant", TIMEOUT)?;
-    ensure!(!text.contains("Requested: Permissive"), "unknown state fell back to Permissive");
+    ensure!(
+        !text.contains("Requested: Permissive"),
+        "unknown state fell back to Permissive"
+    );
     capture(pane, "unknown-config-error")?;
     pane.wait_stable_contains("Press Enter to close fixture", TIMEOUT)?;
     pane.send_key(TmuxKey::Enter)?;

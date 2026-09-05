@@ -760,10 +760,11 @@ impl HistoryCell for StatusHistoryCell {
 
         let account_value = self.account_value.clone();
 
-        let mut labels: Vec<String> = vec!["Model", "Directory", "Permissions", "Security", "Agents.md"]
-            .into_iter()
-            .map(str::to_string)
-            .collect();
+        let mut labels: Vec<String> =
+            vec!["Model", "Directory", "Permissions", "Security", "Agents.md"]
+                .into_iter()
+                .map(str::to_string)
+                .collect();
         let mut seen: BTreeSet<String> = labels.iter().cloned().collect();
         let thread_name = self.thread_name.as_deref().filter(|name| !name.is_empty());
         #[expect(clippy::expect_used)]
@@ -858,7 +859,13 @@ impl HistoryCell for StatusHistoryCell {
         }
         lines.push(formatter.line("Directory", vec![Span::from(directory_value)]));
         lines.push(formatter.line("Permissions", vec![Span::from(self.permissions.clone())]));
-        lines.push(formatter.line("Security", vec![Span::from(self.security.clone())]));
+        let mut security_lines = textwrap::wrap(&self.security, value_width.max(1)).into_iter();
+        if let Some(first) = security_lines.next() {
+            lines.push(formatter.line("Security", vec![Span::from(first.into_owned())]));
+            lines.extend(security_lines.map(|line| {
+                formatter.continuation(vec![Span::from(line.into_owned())])
+            }));
+        }
         lines.push(formatter.line("Agents.md", vec![Span::from(agents_summary)]));
 
         if let Some(account_value) = account_value {
