@@ -403,9 +403,18 @@
 
     <section aria-labelledby="security-round5-title" style="margin-top:42px">
       <h2 id="security-round5-title">Round five: understand your protection</h2>
-      <p><strong>Not ready for human sign-off yet.</strong> The combined candidate is being tested on RTX.
+      <p><strong>Ready for read-only UX testing on RTX.</strong> The combined candidate passed its automated and actual-key TMUX gates.
         The existing Mac Apps shortcut has not been changed by this security round.
         Do not mistake its matching version number for the new build: record the supplied candidate commit and machine before checks 16–20.</p>
+      <p>Use <code>ssh travis@100.99.88.49</code>, then launch the exact candidate below from your intended test directory.
+        This is commit <code>dd2adb72b967602c6851bb4f4257eb34ad135459</code>, Corbanu <code>0.1.38</code>; it is not yet merged to main.</p>
+      <pre><code>/home/travis/security-round5/evidence/integration/dd2adb72b/candidate/codex</code></pre>
+      <details><summary>Candidate identity and automated evidence</summary>
+        <p>SHA-256: <code>6af243a3a249ddb44f3344a40aeeb5e21dbbc5e0b156167577db4d848c806ab3</code>.
+          Final combined Core 94/94 and actual-key TMUX 3/3 passed. Unchanged protocol 285/285, broker/Vault/proxy 338/338 and UI 235/235 evidence is explicitly reused.
+          <a href="qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/combined-qualification.md">Exact run IDs and evidence</a>.
+          Human checks below remain yours to perform; no human acceptance is implied.</p>
+      </details>
       <p>This slice is observation-only. It cannot activate Moderate or Aggressive, grant permissions or downgrade protection.
         Broker service isolation, production screening, the separate memory-worker policy binding and all-platform qualification remain unfinished.
         <a href="securityProgress.html">See progress and remaining gates</a>.</p>

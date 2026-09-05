@@ -82,8 +82,11 @@ Review 3 used the Corbanu wrapper with `--model claude-fable-5-1-plan --thinking
 through private TMUX. These were code reviews, not substitutes for the actual-key
 TUI tests. Both verified the observation-only boundary and reported no findings.
 The combined source f60d15f16 plus module sort subsequently passed UI 235/235
-and all three actual-key workflows; final combined rerun after the independent
-realtime source fix is pending before coordinator archival.
+and all three actual-key workflows. Final combined source dd2adb72b, including
+the realtime fix, passed Core 94/94 and actual-key TMUX 3/3 after fix/format;
+the unchanged UI suite evidence is reused explicitly. The coordinator archived
+PF-24-S01 with the [final evidence](../../planning/parallel-handoffs-2026-09-04-round-5/combined-qualification.md).
+This completes only the observation-only sprint, not protected activation or release.
 
 ## Human/interactive script
 

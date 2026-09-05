@@ -106,7 +106,9 @@ The earlier combined source f60d15f16 plus the committed module sort passed
 protocol 285/285, Core 26/26, broker/Vault/proxy 338/338, UI 235/235 and
 actual-key TMUX 3/3 after fix/format. Realtime lane source e592cf75a passed
 88/88 provenance/realtime cases and actual-key TMUX. The final combined
-affected-Core and three-TMUX rerun is underway at dd2adb72b.
+affected-Core rerun passed 94/94 and all three actual-key TMUX journeys passed
+at dd2adb72b, after fix/full formatting with no changes. The immutable RTX
+candidate and exact run IDs are in [combined qualification](combined-qualification.md).
 No merge to main or release is claimed.
 The integration branch also contains the earlier, unmerged provider/onboarding
 reconciliation inherited at its source base. Main has no new divergence as of
@@ -147,6 +149,25 @@ server can inherit the lock descriptor. One such inherited lock was safely
 released this way; no process was forcibly killed.
 
 ## Integration and follow-through
+
+PF-24-S01 is completed and archived after the final combined run; 26/76 P0
+sprints are archived (34% rounded). The two other engineering sprints remain
+in progress, not silently completed from staged evidence. Worker tasks have
+finished their allocated checkpoints; none is still compiling or reviewing.
+Next broker service work and the provenance/memory follow-up require their
+recorded scope/contract decisions. PF-35 remains external.
+All current source and evidence are preserved on the integration branch.
+Main merge still awaits the already-asked product decision, including the
+inherited provider reconciliation. No additional reviews are running.
+
+Documentation closeout: plan/sprint checks pass (57 current and 114 archived
+across all plans; P0 alone is 50 current and 26 archived). Both HTML files pass
+unique-ID and local-link checks, and humanTest retains 20 independent checkboxes.
+An isolated browser profile visually verified the 34% progress display, three
+lane cards and RTX candidate instructions; no human test was marked accepted.
+Screenshots are retained on CorbanuDrive under
+`.codex-work/security-round5/security-progress-final.png`,
+`security-lanes-final.png` and `human-test-final.png`.
 
 Allocation is committed and pushed as 4f263ca73. All three workers were dispatched
 with implementation authority and remote build instructions. Broker's first

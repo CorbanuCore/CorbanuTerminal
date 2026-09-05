@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-24-S01"
 title: "Security command and profile view"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-24"
 execution_order: 34
@@ -55,15 +55,16 @@ updated: 2026-09-04
 - [x] Keep 40-column terminals readable and expose the requested/unverified state in `/status`.
 - [x] Add focused behavior tests and reviewed snapshots for every profile, narrow width, and unknown-state error.
 - [x] Coordinator-numbered Astra High review 2 and Fable 5.1 High review 3 both returned no findings; original structured verdicts retained in lane QA. Three of five invocations used including the old-CLI rejection.
+- [x] Coordinator completed combined-tree qualification at dd2adb72b: focused Core 94/94 and actual-key TMUX 3/3; unchanged combined UI 235/235 reused explicitly. Full protected activation and PF-26 qualification remain separate.
 
 ## Remaining
 
-- [ ] Integration owner completes combined-tree gates and archive; full protected activation and PF-26 qualification remain separate.
+None within this observation-only sprint.
 
 ## Verification
 
 - [x] Complete coordinator-numbered Astra High and Fable 5.1 High independent reviews, with verified disposition and no source remediation required.
-- [ ] Integration owner repeats the applicable standalone gates on the combined three-lane tree before completion/archive.
+- [x] Integration owner repeated applicable standalone gates on the combined three-lane tree; final source, candidate hash, filters, run IDs and safe evidence paths are in the [combined qualification](../../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/combined-qualification.md).
 - [x] Fix: `cd codex-rs && just fix -p codex-tui`; final source passed on RTX.
 - [x] Format: complete `just fmt` passed after coordinator supplied uv 0.11.3; no file changes and final tested source remains exact.
 - [x] Final-tree focused TUI test: 235/235 security-view/status/slash-command cases passed; exact filter and run ID in lane evidence.
@@ -74,4 +75,4 @@ updated: 2026-09-04
 
 - [x] Source commit `0ecb19969`, snapshots, candidate hash, changed paths and actual key script recorded.
 - [x] Test output and safe captures linked under `qa/security-levels/sprints/PF-24-S01/`.
-- [ ] Ledgers reflect reality and the completed record is archived.
+- [x] Ledgers reflect reality and the completed record is archived. Human acceptance, live-repository, cross-platform and benchmark/release qualification remain unclaimed; no protected-mode activation is included.

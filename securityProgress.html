@@ -115,7 +115,7 @@
       height: 110px;
       place-items: center;
       border-radius: 50%;
-      background: conic-gradient(var(--complete) 0 33%, var(--line) 33% 100%);
+      background: conic-gradient(var(--complete) 0 34%, var(--line) 34% 100%);
     }
     .donut::after {
       display: grid;
@@ -125,7 +125,7 @@
       border-radius: 50%;
       background: var(--surface);
       color: var(--text);
-      content: "33%";
+      content: "34%";
       font-size: 1.45rem;
       font-weight: 750;
     }
@@ -317,19 +317,19 @@
 
     <section class="hero-grid" aria-label="Program summary">
       <div class="metric primary">
-        <div class="donut" role="img" aria-label="33 percent of planned security sprints are completed"></div>
+        <div class="donut" role="img" aria-label="34 percent of planned security sprints are completed"></div>
         <div>
-          <span class="metric-number">25 of 76</span>
+          <span class="metric-number">26 of 76</span>
           <span class="metric-label">sprints completed and archived</span>
         </div>
       </div>
       <div class="metric">
         <span class="metric-number green">100%</span>
-        <span class="metric-label">UI review pair clean: Astra High and Fable 5.1 High; final combined rerun underway</span>
+        <span class="metric-label">UI review pair clean: Astra High and Fable 5.1 High; final combined tests passed</span>
       </div>
       <div class="metric">
-        <span class="metric-number blue">3</span>
-        <span class="metric-label">active engineering lanes; builds and true-TUI tests on RTX</span>
+        <span class="metric-number blue">2</span>
+        <span class="metric-label">unfinished engineering lanes; security-view sprint completed on RTX</span>
       </div>
       <div class="metric">
         <span class="metric-number amber">1</span>
@@ -353,10 +353,10 @@
 
       <div class="lanes">
         <article class="lane">
-          <span class="lane-order">Lane 1 · broker remediation</span>
+          <span class="lane-order">Lane 1 · staged, production gates open</span>
           <h3>Isolated credential broker</h3>
           <a class="sprint-id" href="docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md">PF-27-S04</a>
-          <p>Recovered broker code, durable audit binding and Linux peer/framing tests are implemented. Review found disconnect, audit-correlation and timeout defects; fixes are being independently rechecked.</p>
+          <p>Recovered broker code, durable audit binding and Linux peer/framing tests are implemented. Disconnect, audit-correlation and timeout fixes passed review. The real isolated service and streaming integration are still to be built.</p>
           <p><strong>Evidence:</strong> Final broker/Vault/proxy 338/338, focused Core 6/6 and Bazel checks passed. Four reviews used; one low-priority signal-handling follow-up remains. Production service, streaming and all-OS qualification remain open.</p>
           <div class="status-line">
             <div class="bar-row"><span>PF-27 archived sprints</span><strong>2 / 4 · 50%</strong></div>
@@ -378,15 +378,15 @@
           </div>
         </article>
 
-        <article class="lane">
-          <span class="lane-order">Lane 3 · combined testing</span>
+        <article class="lane" style="border-top-color:var(--complete)">
+          <span class="lane-order">Lane 3 · completed and archived</span>
           <h3>Understand your security posture</h3>
-          <a class="sprint-id" href="docs/sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md">PF-24-S01</a>
+          <a class="sprint-id" href="docs/sprints/archive/p0-security-levels/pf-24-s01-security-command-and-profile-view.md">PF-24-S01</a>
           <p>The read-only <code>/security</code> view explains three profiles, distinguishes requested settings from unverified protection, and supports keyboard navigation and cancellation.</p>
-          <p><strong>Evidence:</strong> Combined UI 235/235 and all three actual-key TMUX workflows passed, with clean Astra High + Fable 5.1 High reviews. Final combined rerun after the realtime fix is underway; human acceptance remains pending.</p>
+          <p><strong>Evidence:</strong> Combined UI 235/235, final Core 94/94 and all three actual-key TMUX workflows passed, with clean Astra High + Fable 5.1 High reviews. Only this observation-only sprint is completed; human and protected-mode acceptance remain pending.</p>
           <div class="status-line">
-            <div class="bar-row"><span>PF-24 archived sprints</span><strong>0 / 2 · 0%</strong></div>
-            <div class="track" role="progressbar" aria-label="PF-24 archived completion" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:0%"></div></div>
+            <div class="bar-row"><span>PF-24 archived sprints</span><strong>1 / 2 · 50%</strong></div>
+            <div class="track" role="progressbar" aria-label="PF-24 archived completion" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100"><div class="fill complete" style="width:50%"></div></div>
           </div>
         </article>
       </div>
@@ -405,7 +405,7 @@
         <div class="flow">
           <div class="node complete"><strong>PF-20-S02 + PF-22-S02</strong><small>Authoritative state and protected runtime foundations archived</small></div>
           <div class="flow-arrow" aria-hidden="true">→</div>
-          <div class="node next"><strong>PF-30-S01 + PF-24-S01</strong><small>Parallel provenance and observation-only security view</small></div>
+          <div class="node next"><strong>PF-30-S01 in progress</strong><small>PF-24-S01 observation-only view completed; provenance still staged</small></div>
           <div class="flow-arrow" aria-hidden="true">→</div>
           <div class="node queued"><strong>Later protected workflows</strong><small>Full provenance, enforcement, migration and confirmed transitions remain gated</small></div>
         </div>
@@ -486,8 +486,8 @@
         </div>
         <div class="phase">
           <div class="phase-name"><strong>Operator and protected workflows</strong><small>PF-23–25 and PF-36–41</small></div>
-          <div class="track" role="progressbar" aria-label="Operator and protected workflows" aria-valuenow="5" aria-valuemin="0" aria-valuemax="100"><div class="fill complete" style="width:5%"></div></div>
-          <div class="phase-value"><strong>5%</strong><small>1 / 22</small></div>
+          <div class="track" role="progressbar" aria-label="Operator and protected workflows" aria-valuenow="9" aria-valuemin="0" aria-valuemax="100"><div class="fill complete" style="width:9%"></div></div>
+          <div class="phase-value"><strong>9%</strong><small>2 / 22</small></div>
         </div>
         <div class="phase">
           <div class="phase-name"><strong>Final qualification and acceptance</strong><small>PF-26</small></div>
@@ -497,7 +497,7 @@
       </div>
 
       <div class="footnote">
-        <strong>Scheduling conclusion:</strong> PF-27-S04, PF-30-S01 and PF-24-S01 are the three active engineering lanes. PF-35 qualification proceeds separately and is not on their engineering path; its dependent features still wait for honest qualification and archival. Maximum five reviews per lane unless critical findings continue. <a href="qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md">Coordination and evidence ledger</a>.
+        <strong>Scheduling conclusion:</strong> PF-24-S01 is completed and archived. PF-27-S04 and PF-30-S01 remain staged, with production service/screening and memory-policy follow-ups explicit. The combined branch awaits the main-merge decision. PF-35 remains separate; its dependent features still wait for qualification. Reviews used: broker 4/5, provenance 3/5, UI 3/5. <a href="qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md">Coordination and evidence ledger</a>.
       </div>
 
       <details>

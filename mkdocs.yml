@@ -111,7 +111,6 @@ nav:
                   - "PF-23-S02 — Aggressive deny and grant": sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md
                   - "PF-23-S03 — Downgrade and recovery": sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md
               - "Security TUI":
-                  - "PF-24-S01 — Command and profile view": sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md
                   - "PF-24-S02 — Confirm, cancel, downgrade": sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md
                   - "PF-25-S01 — Temporary grants": sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md
                   - "PF-25-S02 — Revocation and kill switch": sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md
