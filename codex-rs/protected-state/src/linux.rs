@@ -37,7 +37,8 @@ struct OpenHow {
 fn open_at(fd: i32, name: &str, flags: i32, mode: u64) -> Result<File, RootError> {
     let name = CString::new(name).map_err(|_| RootError::Invalid)?;
     let how = OpenHow {
-        flags: u64::try_from(flags | libc::O_CLOEXEC | libc::O_NOFOLLOW)
+        // A corrupt FIFO must not block before regular-file validation.
+        flags: u64::try_from(flags | libc::O_CLOEXEC | libc::O_NOFOLLOW | libc::O_NONBLOCK)
             .map_err(|_| RootError::Invalid)?,
         mode,
         // Never follow a symlink, including /proc magic links. Relative opens

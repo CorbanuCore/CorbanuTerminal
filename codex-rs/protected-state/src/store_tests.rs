@@ -157,6 +157,18 @@ fn pf20_s03_successor_overflow_and_generation_regression_deny() {
 }
 
 #[test]
+fn pf20_s03_non_regular_root_record_never_blocks_before_rejection() {
+    use std::os::unix::ffi::OsStrExt;
+    let (temp, root) = fixture();
+    let path = temp.path().join("storage/head");
+    fs::remove_file(&path).unwrap();
+    let path = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap();
+    // SAFETY: a valid NUL-terminated path inside this test's private directory.
+    assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0);
+    assert!(IntegrityRootStore::load(&root).is_err());
+}
+
+#[test]
 fn pf20_s03_lost_corrupt_key_registry_head_and_partial_enrollment_deny() {
     for target in [
         "registry/enrollment",
