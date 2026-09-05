@@ -93,7 +93,9 @@ fn binding() -> BrokerJournalBinding {
             },
         )
         .unwrap(),
-        authority: AuthorityIdentity::Grant { grant_id: text("grant-1") },
+        authority: AuthorityIdentity::Grant {
+            grant_id: text("grant-1"),
+        },
         operation: OpenAiResponsesOperation::new("/v1/responses-private-path-canary").unwrap(),
     }
 }
@@ -121,7 +123,10 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
-        Self { temp: tempfile::tempdir().unwrap(), root: Arc::new(TestRoot::default()) }
+        Self {
+            temp: tempfile::tempdir().unwrap(),
+            root: Arc::new(TestRoot::default()),
+        }
     }
 
     fn adapter(&self, recover: bool) -> JournalBrokerAudit<FixedClock> {
@@ -140,7 +145,8 @@ impl Fixture {
             binding(),
             EventContext::new(producer, 1, 1).unwrap(),
             FixedClock,
-        ).unwrap()
+        )
+        .unwrap()
     }
 }
 
@@ -149,17 +155,52 @@ fn pf_27_s01_audit_commits_before_permit_and_minimizes_exact_semantics() {
     let fixture = Fixture::new();
     let audit = fixture.adapter(/*recover*/ true);
     let permit = audit.reserve(&intent()).unwrap();
-    assert_eq!(fixture.root.checkpoint.lock().unwrap().as_ref().unwrap().sequence, 1);
-    let record = std::fs::read_to_string(fixture.temp.path().join(
-        "journal/segment-00000000000000000001/record-00000000000000000001.json",
-    )).unwrap();
-    for private in ["private-purpose-canary", "private-path-canary", "https://api.openai.com"] {
+    assert_eq!(
+        fixture
+            .root
+            .checkpoint
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .sequence,
+        1
+    );
+    let record = std::fs::read_to_string(
+        fixture
+            .temp
+            .path()
+            .join("journal/segment-00000000000000000001/record-00000000000000000001.json"),
+    )
+    .unwrap();
+    for private in [
+        "private-purpose-canary",
+        "private-path-canary",
+        "https://api.openai.com",
+    ] {
         assert!(!record.contains(private));
     }
-    audit.resolve(permit, BrokerAuditResolution::Completed).unwrap();
-    assert_eq!(fixture.root.checkpoint.lock().unwrap().as_ref().unwrap().sequence, 2);
+    audit
+        .resolve(permit, BrokerAuditResolution::Completed)
+        .unwrap();
+    assert_eq!(
+        fixture
+            .root
+            .checkpoint
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .sequence,
+        2
+    );
     drop(audit);
-    assert!(fixture.adapter(/*recover*/ true).reserve(&intent()).is_err());
+    assert!(
+        fixture
+            .adapter(/*recover*/ true)
+            .reserve(&intent())
+            .is_err()
+    );
 }
 
 #[test]
@@ -181,10 +222,18 @@ fn pf_27_s01_audit_rejects_binding_changes_before_journal_write() {
 #[test]
 fn pf_27_s01_audit_unrecovered_or_ambiguous_root_returns_no_permit() {
     let fixture = Fixture::new();
-    assert!(fixture.adapter(/*recover*/ false).reserve(&intent()).is_err());
+    assert!(
+        fixture
+            .adapter(/*recover*/ false)
+            .reserve(&intent())
+            .is_err()
+    );
     let audit = fixture.adapter(/*recover*/ true);
     fixture.root.fail.store(true, Ordering::SeqCst);
-    assert_eq!(audit.reserve(&intent()).err(), Some(BrokerAuditError::CommitUnknown));
+    assert_eq!(
+        audit.reserve(&intent()).err(),
+        Some(BrokerAuditError::CommitUnknown)
+    );
     fixture.root.fail.store(false, Ordering::SeqCst);
     assert!(audit.reserve(&intent()).is_err());
 }
@@ -198,17 +247,38 @@ fn pf_27_s01_audit_crash_pending_intent_blocks_restart_replay() {
     let restarted = fixture.adapter(/*recover*/ true);
     assert!(restarted.reserve(&intent()).is_err());
     assert_ne!(
-        restarted.journal.lock().unwrap().recover(1, 1, &RevocationState::new()).state,
+        restarted
+            .journal
+            .lock()
+            .unwrap()
+            .recover(1, 1, &RevocationState::new())
+            .state,
         RecoveryState::Ready,
     );
 }
 
 #[test]
 fn pf_27_s01_audit_all_terminal_outcomes_are_durable() {
-    for outcome in [BrokerAuditResolution::Failed, BrokerAuditResolution::Cancelled, BrokerAuditResolution::Unknown] {
+    for outcome in [
+        BrokerAuditResolution::Failed,
+        BrokerAuditResolution::Cancelled,
+        BrokerAuditResolution::Unknown,
+    ] {
         let fixture = Fixture::new();
         let audit = fixture.adapter(/*recover*/ true);
-        audit.resolve(audit.reserve(&intent()).unwrap(), outcome).unwrap();
-        assert_eq!(fixture.root.checkpoint.lock().unwrap().as_ref().unwrap().sequence, 2);
+        audit
+            .resolve(audit.reserve(&intent()).unwrap(), outcome)
+            .unwrap();
+        assert_eq!(
+            fixture
+                .root
+                .checkpoint
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .sequence,
+            2
+        );
     }
 }

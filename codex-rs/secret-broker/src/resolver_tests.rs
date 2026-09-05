@@ -28,7 +28,11 @@ fn pf_27_s01_native_registered_connection_replacement_and_revocation() {
     use std::os::unix::net::UnixStream;
 
     let backend = Arc::new(FakeBackend::default());
-    let runtime = Arc::new(runtime(INSTANCE, backend.clone(), Arc::new(FakeAudit::default())));
+    let runtime = Arc::new(runtime(
+        INSTANCE,
+        backend.clone(),
+        Arc::new(FakeAudit::default()),
+    ));
     let (client, server) = UnixStream::pair().expect("socket pair");
     let peer = observed_peer(&client).expect("OS peer");
     let channel = LinuxBrokerChannel::new(client, &peer).expect("client");
