@@ -840,7 +840,9 @@ async fn pf_30_s04_live_provider_refresh_preserves_consolidation_pair() -> anyho
             let mut provider = config.model_provider.clone();
             provider.name = "Synthetic replacement".into();
             provider.base_url = Some(replacement_url);
-            config.model_providers.insert("replacement".into(), provider);
+            config
+                .model_providers
+                .insert("replacement".into(), provider);
         })
         .build(&original)
         .await?;
