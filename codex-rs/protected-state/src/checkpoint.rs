@@ -47,6 +47,20 @@ impl Checkpoint {
         previous: Option<&Self>,
         binding: &Binding,
     ) -> Result<(), RootError> {
+        self.validate(binding)?;
+        let sequence = self.sequence();
+        if sequence != previous.map_or(Some(1), |old| old.sequence().checked_add(1)).ok_or(RootError::Invalid)? {
+            return Err(RootError::Invalid);
+        }
+        match (self, previous) {
+            (Self::Journal(next), Some(Self::Journal(old)))
+                if next.policy_generation < old.policy_generation || next.run_generation < old.run_generation => Err(RootError::Invalid),
+            (Self::Journal(_), Some(Self::Policy(_))) | (Self::Policy(_), Some(Self::Journal(_))) => Err(RootError::Invalid),
+            _ => Ok(()),
+        }
+    }
+
+    pub(crate) fn validate(&self, binding: &Binding) -> Result<(), RootError> {
         let valid = match (self, binding) {
             (Self::Journal(next), Binding::Journal { producer, owner_generation, integrity_key_id }) => {
                 next.schema_version == 1 && next.sequence > 0 && next.run_generation > 0
@@ -61,17 +75,7 @@ impl Checkpoint {
             }
             _ => false,
         };
-        if !valid { return Err(RootError::Invalid); }
-        let sequence = self.sequence();
-        if sequence != previous.map_or(Some(1), |old| old.sequence().checked_add(1)).ok_or(RootError::Invalid)? {
-            return Err(RootError::Invalid);
-        }
-        match (self, previous) {
-            (Self::Journal(next), Some(Self::Journal(old)))
-                if next.policy_generation < old.policy_generation || next.run_generation < old.run_generation => Err(RootError::Invalid),
-            (Self::Journal(_), Some(Self::Policy(_))) | (Self::Policy(_), Some(Self::Journal(_))) => Err(RootError::Invalid),
-            _ => Ok(()),
-        }
+        if valid { Ok(()) } else { Err(RootError::Invalid) }
     }
 
     pub(crate) fn sequence(&self) -> u64 {

@@ -141,5 +141,26 @@ fn pf20_s03_data_rollback_rejected_by_real_pf41_journal() {
     let journal_path = AbsolutePathBuf::from_absolute_path_checked(temp.path().join("restored-journal")).unwrap();
     let mut journal = ReferenceJournal::new(journal_path, owner(), Arc::new(root), JournalConfig::default());
     let report = journal.recover(1, 1, &RevocationState::default());
-    assert!(!report.permits_journal_writes());
+    assert!(matches!(report.state, codex_security_audit::RecoveryState::Blocked(_)));
+}
+
+#[test]
+fn pf20_s03_every_failed_durability_boundary_withholds_and_latches() {
+    use crate::linux::Fault;
+    for fault in [Fault::NoSpace, Fault::ShortWrite, Fault::FileSync, Fault::DirectorySync, Fault::AfterDurable] {
+        let (temp, root) = fixture();
+        root.state.lock().unwrap().directory.fault.set(Some(fault));
+        let error = if matches!(fault, Fault::DirectorySync | Fault::AfterDurable) { IntegrityRootError::Timeout } else { IntegrityRootError::Unavailable };
+        assert_eq!(root.compare_and_store(None, &checkpoint(1)), Err(error));
+        assert_eq!(IntegrityRootStore::load(&root), Err(IntegrityRootError::Unavailable));
+        drop(root);
+        let reopened = ControllerRoot::open(&temp.path().join("registry"), &temp.path().join("storage"));
+        match fault {
+            Fault::NoSpace => assert_eq!(IntegrityRootStore::load(&reopened.unwrap()), Ok(None)),
+            Fault::ShortWrite | Fault::FileSync => assert_eq!(reopened.unwrap_err(), RootError::Ambiguous),
+            // This is a process-restart observation, not physical power-loss
+            // qualification: the kernel still retains the rename here.
+            Fault::DirectorySync | Fault::AfterDurable => assert_eq!(IntegrityRootStore::load(&reopened.unwrap()), Ok(Some(checkpoint(1)))),
+        }
+    }
 }

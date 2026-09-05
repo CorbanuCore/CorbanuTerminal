@@ -65,7 +65,7 @@ fn read<T: DeserializeOwned>(stream: &mut UnixStream) -> Result<T, RootError> {
     serde_json::from_slice(&bytes).map_err(|_| RootError::Invalid)
 }
 
-fn write<T: Serialize>(stream: &mut UnixStream, value: &T) -> Result<(), RootError> {
+fn write<T: Serialize + ?Sized>(stream: &mut UnixStream, value: &T) -> Result<(), RootError> {
     let bytes = Zeroizing::new(serde_json::to_vec(value).map_err(|_| RootError::Invalid)?);
     if bytes.len() > MAX_BYTES { return Err(RootError::Invalid); }
     stream.write_all(&(bytes.len() as u32).to_be_bytes()).and_then(|()| stream.write_all(&bytes)).map_err(|_| RootError::Unavailable)

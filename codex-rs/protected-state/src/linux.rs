@@ -11,7 +11,15 @@ use std::path::Path;
 pub(crate) const MAX_BYTES: usize = 16 * 1024;
 
 #[derive(Debug)]
-pub(crate) struct Directory(File);
+pub(crate) struct Directory {
+    file: File,
+    #[cfg(test)]
+    pub(crate) fault: std::cell::Cell<Option<Fault>>,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Fault { NoSpace, ShortWrite, FileSync, DirectorySync, AfterDurable }
 
 #[repr(C)]
 struct OpenHow { flags: u64, mode: u64, resolve: u64 }
@@ -53,14 +61,14 @@ impl Directory {
         if unsafe { libc::fstatfs(file.as_raw_fd(), stat.as_mut_ptr()) } != 0 { return Err(RootError::Unavailable); }
         // SAFETY: fstatfs returned success.
         let filesystem = unsafe { stat.assume_init() }.f_type;
-        // Initial qualified implementation supports local ext-family and XFS
+        // Initial selected implementation supports local ext-family and XFS
         // semantics only. tmpfs/network/overlay/unknown filesystems deny.
         if filesystem != 0xef53 && filesystem != 0x58465342 { return Err(RootError::Unsupported); }
-        Ok(Self(file))
+        Ok(Self { file, #[cfg(test)] fault: std::cell::Cell::new(None) })
     }
 
     pub(crate) fn read(&self, name: &str) -> Result<Vec<u8>, RootError> {
-        let file = open_at(self.0.as_raw_fd(), name, libc::O_RDONLY, 0)?;
+        let file = open_at(self.file.as_raw_fd(), name, libc::O_RDONLY, 0)?;
         private(&file, false)?;
         let mut bytes = Vec::new();
         file.take((MAX_BYTES + 1) as u64).read_to_end(&mut bytes).map_err(|_| RootError::Unavailable)?;
@@ -70,15 +78,24 @@ impl Directory {
 
     pub(crate) fn create(&self, name: &str, bytes: &[u8]) -> Result<(), RootError> {
         if bytes.len() > MAX_BYTES { return Err(RootError::Invalid); }
-        let mut file = open_at(self.0.as_raw_fd(), name, libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL, 0o600)?;
+        #[cfg(test)]
+        if self.fault.get() == Some(Fault::NoSpace) { return Err(RootError::Unavailable); }
+        let mut file = open_at(self.file.as_raw_fd(), name, libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL, 0o600)?;
+        #[cfg(test)]
+        if self.fault.get() == Some(Fault::ShortWrite) {
+            file.write_all(&bytes[..bytes.len() / 2]).map_err(|_| RootError::Unavailable)?;
+            return Err(RootError::Unavailable);
+        }
         file.write_all(bytes).map_err(|_| RootError::Unavailable)?;
+        #[cfg(test)]
+        if self.fault.get() == Some(Fault::FileSync) { return Err(RootError::Unavailable); }
         file.sync_all().map_err(|_| RootError::Unavailable)?;
         self.sync()
     }
 
     pub(crate) fn lock(&self) -> Result<File, RootError> {
         // The inode is enrolled once and never replaced or recreated by open.
-        let file = open_at(self.0.as_raw_fd(), "lock", libc::O_RDWR, 0)?;
+        let file = open_at(self.file.as_raw_fd(), "lock", libc::O_RDWR, 0)?;
         private(&file, false)?;
         // SAFETY: flock acts only on the owned descriptor.
         if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
@@ -89,21 +106,26 @@ impl Directory {
 
     pub(crate) fn publish(&self) -> Result<(), RootError> {
         // SAFETY: static NUL-terminated names and live directory descriptor.
-        if unsafe { libc::renameat(self.0.as_raw_fd(), c"pending".as_ptr(), self.0.as_raw_fd(), c"head".as_ptr()) } != 0 {
+        if unsafe { libc::renameat(self.file.as_raw_fd(), c"pending".as_ptr(), self.file.as_raw_fd(), c"head".as_ptr()) } != 0 {
             return Err(RootError::Unavailable);
         }
-        self.sync().map_err(|_| RootError::Ambiguous)
+        #[cfg(test)]
+        if self.fault.get() == Some(Fault::DirectorySync) { return Err(RootError::Ambiguous); }
+        self.sync().map_err(|_| RootError::Ambiguous)?;
+        #[cfg(test)]
+        if self.fault.get() == Some(Fault::AfterDurable) { return Err(RootError::Ambiguous); }
+        Ok(())
     }
 
     pub(crate) fn has_pending(&self) -> Result<bool, RootError> {
         let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY: valid descriptor, static name and writable stat storage.
-        let result = unsafe { libc::fstatat(self.0.as_raw_fd(), c"pending".as_ptr(), stat.as_mut_ptr(), libc::AT_SYMLINK_NOFOLLOW) };
+        let result = unsafe { libc::fstatat(self.file.as_raw_fd(), c"pending".as_ptr(), stat.as_mut_ptr(), libc::AT_SYMLINK_NOFOLLOW) };
         if result == 0 { return Ok(true); }
         if std::io::Error::last_os_error().raw_os_error() == Some(libc::ENOENT) { Ok(false) } else { Err(RootError::Unavailable) }
     }
 
     fn sync(&self) -> Result<(), RootError> {
-        self.0.sync_all().map_err(|_| RootError::Unavailable)
+        self.file.sync_all().map_err(|_| RootError::Unavailable)
     }
 }

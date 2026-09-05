@@ -206,15 +206,8 @@ impl State {
         mac.verify_slice(&encoded.tag).map_err(|_| RootError::Invalid)?;
         let head: Head = serde_json::from_slice(&encoded.payload).map_err(|_| RootError::Invalid)?;
         if head.registration != self.registration { return Err(RootError::Invalid); }
-        // Check loaded payload binding/shape using a predecessor carrying only
-        // the previous sequence, without accepting it as a persisted authority.
         if let Some(checkpoint) = &head.checkpoint {
-            let mut predecessor = checkpoint.clone();
-            match &mut predecessor {
-                Checkpoint::Journal(value) => value.sequence = value.sequence.checked_sub(1).ok_or(RootError::Invalid)?,
-                Checkpoint::Policy(value) => value.revision = value.revision.checked_sub(1).ok_or(RootError::Invalid)?,
-            }
-            checkpoint.validate_successor(Some(&predecessor), &self.registration.binding)?;
+            checkpoint.validate(&self.registration.binding)?;
         }
         Ok(head.checkpoint)
     }
