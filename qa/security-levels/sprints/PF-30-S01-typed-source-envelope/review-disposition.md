@@ -1,6 +1,6 @@
 # Independent review ledger
 
-Limit: five invocations for this lane; one used so far. No runtime/model substitution or automatic rerun.
+Limit: five invocations for this lane; two used so far. No runtime/model substitution or automatic rerun.
 
 ## Review 1 — Astra High
 
@@ -9,6 +9,13 @@ Limit: five invocations for this lane; one used so far. No runtime/model substit
 - Scope: `review-scope.md`, including explicit staged native-screening limitations and the potentially >1,000-token fragment bound.
 - Result: two P2 findings, retained verbatim in `astra-review-1.json`.
 - Accepted in-scope lifecycle issue: the actual session settings replacement path discarded the native registry. Fixed in `60dba1d32` by carrying the host-held registry only across matching thread identities. A regression invokes `Session::update_settings` and checks both pending source identity and admitted projections, plus cross-thread non-sharing. Remote scoped fix/full formatting and all 20 `pf_30_s01` Core tests passed before this review-triggered fix was committed/pushed.
-- Accepted shared registration issue: the isolated lane lacked the new Core dependency edge in Cargo.lock. Integration owner already prepared that exact edge in `ff2922928`, alongside other lanes' lock edges. Isolated-lane extraction/registration remains coordinator-owned; it is not silently dismissed as a clean review.
+- Accepted shared registration issue: the isolated lane lacked the new Core dependency edge in Cargo.lock. Integration owner applied the exact isolated-lane edge in `7b884e477`; the locked CLI build subsequently passed.
 
-Review 2, Fable 5.1 High through Corbanu in a private TMUX fixture, remains pending on the corrected frozen candidate. Production screening qualification and sprint completion are not claimed.
+## Review 2 — Fable 5.1 High
+
+- Candidate: `4f263ca73..7b884e477`.
+- Structured autoreview using the coordinator's Corbanu wrapper, model `claude-fable-5-1-plan`, effort `high`, inside a private TMUX session. This is a structured exec review in TMUX, not an interactive slash-command review.
+- Verified both Astra fixes and the explicit >1,000-token fragment bound. One P2 remained: default realtime WebSocket startup directly connects without the ModelClient WebRTC admission guard. Independent output and TMUX transcript are retained in `fable-review-2.json` and `fable-review-2-tmux.txt`.
+- The realtime implementation/test files are outside the current allocation; requested a coordinator scope amendment before editing. No clean overall review or complete realtime coverage is claimed.
+
+Production screening qualification and sprint completion are not claimed.
