@@ -51,8 +51,6 @@ updated: 2026-09-04
 
 - [x] Read-only architecture identifies enrollment, exact durable CAS, narrow capability bootstrap, ambiguity and missing-native-provider requirements.
 
-## Remaining
-
 - [x] Implement bounded, owner/key/namespace-bound authenticated checkpoints using existing config/journal types where appropriate; no self-selected authority.
 - [x] Explicit one-time enrollment and authenticated Genesis; normal startup opens existing only. Lost/corrupt registry, head or key denies. Interrupted enrollment requires human reconciliation.
 - [x] Exact full-value CAS, checked monotone successor, process-wide exclusive ownership, no-follow directory-relative operations, sync file then atomic publication then directory sync before success.
@@ -62,6 +60,10 @@ updated: 2026-09-04
 - [x] Prove restored/deleted agent data is rejected against intact controller state; document whole-controller snapshot rollback as excluded rather than a passing protection test (unprivileged real PF41 consumer and synthetic Core adapter tests, not privileged deployment).
 - [x] Test enrollment interruption, restart, competing processes, wrong identity, short writes/fsync/ENOSPC/ack loss, stale channels and inherited-socketpair negative control with synthetic data.
 - [x] Produce exact PF27 consumer handoff and proposed privileged qualification requirements. No sudo, principal/ACL/service setup or real credentials under this allocation. Broker and coordinator accepted the seam; revised privileged installation manifest remains unapproved.
+
+## Remaining
+
+- [ ] Qualify the combined integration tree on RTX, record final evidence and complete coordinator governance checks before archival. Native privileged qualification remains PF27 work.
 
 ## Verification
 
