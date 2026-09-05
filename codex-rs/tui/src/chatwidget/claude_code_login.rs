@@ -1062,31 +1062,22 @@ fn persist_claude_code_login_selection_blocking(
 }
 
 fn auth_method_choice_params() -> SelectionViewParams {
-    SelectionViewParams {
+    let mut params = SelectionViewParams {
         view_id: Some(CLAUDE_AUTH_METHOD_VIEW_ID),
-        title: Some("Claude Plan authentication".to_string()),
-        subtitle: Some(
-            "Choose one source; Corbanu never falls back to another account.".to_string(),
-        ),
-        footer_note: Some(Line::from(
-            "Your account and billing path change only after success. Esc keeps the current method."
-                .dim(),
-        )),
         items: vec![
             SelectionItem {
-                name: "Long-lived subscription token (Recommended)".to_string(),
+                name: super::claude_auth_presentation::MANAGED_TOKEN_METHOD_NAME.to_string(),
                 description: Some(
-                    "Run `claude setup-token` in a private terminal, then paste its approximately one-year token here (Pro, Max, Team, or Enterprise)."
-                        .to_string(),
+                    super::claude_auth_presentation::MANAGED_TOKEN_METHOD_DESCRIPTION.to_string(),
                 ),
                 actions: vec![Box::new(|tx| tx.send(AppEvent::RunClaudeSetupToken))],
                 dismiss_on_select: true,
                 ..Default::default()
             },
             SelectionItem {
-                name: "Claude Code login".to_string(),
+                name: super::claude_auth_presentation::CLAUDE_CODE_LOGIN_METHOD_NAME.to_string(),
                 description: Some(
-                    "Use Claude Code's rotating login state; reauthorization may be needed more often."
+                    super::claude_auth_presentation::CLAUDE_CODE_LOGIN_METHOD_DESCRIPTION
                         .to_string(),
                 ),
                 actions: vec![Box::new(|tx| tx.send(AppEvent::UseClaudeCodePlanLogin))],
@@ -1094,10 +1085,10 @@ fn auth_method_choice_params() -> SelectionViewParams {
                 ..Default::default()
             },
         ],
-        initial_selected_idx: Some(0),
-        allow_number_shortcuts: false,
         ..Default::default()
-    }
+    };
+    super::claude_auth_presentation::apply_method_choice_copy(&mut params);
+    params
 }
 
 fn auth_recovery_params(message: String) -> SelectionViewParams {
@@ -1263,10 +1254,9 @@ impl ChatWidget {
         let submit_tx = self.app_event_tx.clone();
         let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret_with_cancel(
             "claude-subscription-token".to_string(),
-            "Save Claude subscription token".to_string(),
-            "Long-lived token — masked".to_string(),
-            "In a separate private terminal, run `claude setup-token`. Paste its token here; Corbanu never captures the command output or adds the token to chat."
-                .to_string(),
+            super::claude_auth_presentation::MANAGED_TOKEN_ENTRY_TITLE.to_string(),
+            super::claude_auth_presentation::MANAGED_TOKEN_ENTRY_LABEL.to_string(),
+            super::claude_auth_presentation::MANAGED_TOKEN_ENTRY_GUIDANCE.to_string(),
             Box::new(move |_label, token| {
                 submit_tx.send(AppEvent::SaveClaudeManagedSubscriptionToken {
                     token: ClaudeSubscriptionTokenSecret::new(token),

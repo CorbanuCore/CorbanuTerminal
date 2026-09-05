@@ -437,7 +437,7 @@ fn write_command(home: &Path, token: &str) -> Result<()> {
 
 fn configure_onboarding_key(pane: &TmuxPane<'_>, label: &str, secret: &str) -> Result<()> {
     select_label(pane, label)?;
-    pane.wait_stable_contains("Paste or type your API key below.", READY_TIMEOUT)?;
+    pane.wait_stable_contains("never adds it to chat.", READY_TIMEOUT)?;
     pane.send_secret_literal(secret)?;
     pane.send_key(TmuxKey::Enter)?;
     pane.wait_stable_contains("API key configured", READY_TIMEOUT)?;

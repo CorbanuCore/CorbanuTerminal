@@ -31,6 +31,17 @@ max-threads = 1
 [test-groups.windows_process_heavy]
 max-threads = 2
 
+[test-groups.provider_tui_journeys]
+max-threads = 1
+
+[[profile.default.overrides]]
+# These real-key journeys hash a large debug binary and exercise multiple
+# setup, recovery, and restart cycles. Each UI checkpoint still has its own
+# bounded timeout; allow the complete journey more than the default 60 seconds.
+filter = 'package(codex-tui) & (test(suite::provider_management::tmux_) | test(suite::multi_provider_onboarding::tmux_) | test(suite::provider_convergence::tmux_))'
+test-group = 'provider_tui_journeys'
+slow-timeout = { period = "60s", terminate-after = 3 }
+
 [[profile.default.overrides]]
 # Do not add new tests here
 filter = 'test(rmcp_client) | test(humanlike_typing_1000_chars_appears_live_no_placeholder)'

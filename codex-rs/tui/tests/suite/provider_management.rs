@@ -33,6 +33,54 @@ const MANAGED_PROVIDER: &str = "pf54-managed";
 const ENV_PROVIDER: &str = "pf54-environment";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_ambient_model_picker_offers_only_glm() -> Result<()> {
+    if !TmuxServer::should_run("Ambient GLM-only picker")? {
+        return Ok(());
+    }
+    let fixture = Fixture::new("ambient-glm-only", /*openai_auth*/ true).await?;
+    let tmux = fixture.tmux()?;
+    let session = tmux.new_session(SessionSpec::new(
+        "ambient-glm-only",
+        TerminalSize::new(140, 44),
+        CommandSpec::new(&fixture.binary)
+            .env("CODEX_HOME", fixture.home.path())
+            .env("CORBANU_HOME", fixture.home.path())
+            .env("AMBIENT_API_KEY", "ambient-picker-synthetic-fixture")
+            .env("RUST_LOG", "trace")
+            .arg("-c")
+            .arg("tui.animations=false")
+            .arg("-c")
+            .arg("model_provider=\"ambient\"")
+            .arg("-m")
+            .arg("z-ai/glm-5.2")
+            .arg("-c")
+            .arg(format!("log_dir={:?}", fixture.home.path().join("logs")))
+            .arg("--no-alt-screen")
+            .arg("-C")
+            .arg(&fixture.repo_root),
+    ))?;
+    let pane = session.primary_pane();
+    wait_chat_ready(pane)?;
+    for _ in 0..2 {
+        open_model_picker(pane)?;
+        pane.wait_stable_contains("[Ambient]", READY_TIMEOUT)?;
+        let capture = pane.wait_stable_contains("Ambient GLM 5.2", READY_TIMEOUT)?;
+        ensure!(
+            !capture.contains("Kimi K2.7"),
+            "retired Ambient option is visible"
+        );
+        capture_success("ambient-glm-only", &fixture, pane, &[])?;
+        pane.send_key(TmuxKey::Escape)?;
+        pane.wait_stable_until("model picker cancelled", READY_TIMEOUT, |capture| {
+            !capture.contains("Select Model")
+        })?;
+    }
+    exit_tui(pane)?;
+    session.wait_for_exit(READY_TIMEOUT)?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tmux_shared_and_custom_catalog_have_management_status_parity() -> Result<()> {
     if !TmuxServer::should_run("PF-54 shared/custom catalog parity")? {
         return Ok(());
@@ -74,6 +122,7 @@ async fn tmux_pf50_api_key_setup_and_recovery_are_reused() -> Result<()> {
     pane.wait_stable_contains("Not configured", READY_TIMEOUT)?;
     select_label(pane, "Set up with API key")?;
     pane.wait_stable_contains("API key — masked", READY_TIMEOUT)?;
+    pane.wait_stable_contains("encrypted vault", READY_TIMEOUT)?;
     pane.send_secret_literal(&canary)?;
     pane.send_key(TmuxKey::Enter)?;
     wait_manager_row(pane, fixture.home.path(), "PF54 Managed", "Active")?;
@@ -112,6 +161,24 @@ async fn tmux_pf51_openai_account_cancel_and_retry_are_correlated() -> Result<()
     pane.wait_stable_contains("OpenAI account login", READY_TIMEOUT)?;
     cancel_account_auth(pane)?;
 
+    fixture.server.reset().await;
+    Mock::given(method("POST"))
+        .and(path("/api/accounts/deviceauth/usercode"))
+        .respond_with(ResponseTemplate::new(400))
+        .mount(&fixture.server)
+        .await;
+    open_manager(pane)?;
+    select_label(pane, "OpenAI")?;
+    select_label(pane, "Set up with OpenAI account")?;
+    pane.wait_stable_contains("Authentication needs attention", READY_TIMEOUT)?;
+    pane.wait_stable_contains("OpenAI could not start login", READY_TIMEOUT)?;
+    fixture.server.reset().await;
+    mock_openai_device_code(&fixture.server).await;
+    select_label(pane, "Retry authentication")?;
+    pane.wait_stable_contains("OpenAI account login", READY_TIMEOUT)?;
+    pane.wait_stable_contains("remote or headless", READY_TIMEOUT)?;
+    cancel_account_auth(pane)?;
+
     capture_success("openai-cancel-retry", &fixture, pane, &[])?;
     exit_tui(pane)?;
     session.wait_for_exit(READY_TIMEOUT)?;
@@ -136,6 +203,9 @@ async fn tmux_pf52_claude_recovery_cancel_and_retry_are_reused() -> Result<()> {
     let pane = session.primary_pane();
     wait_chat_ready(pane)?;
     let canary = synthetic_canary("claude-managed-token");
+    // The local token format check accepts arbitrary whitespace-free strings;
+    // embedded whitespace makes this a deterministic rejection before storage.
+    let invalid_canary = format!("invalid {canary}");
 
     open_manager(pane)?;
     focus_label(pane, "Claude Account")?;
@@ -144,7 +214,7 @@ async fn tmux_pf52_claude_recovery_cancel_and_retry_are_reused() -> Result<()> {
     })?;
     pane.send_key(TmuxKey::Enter)?;
     select_label(pane, "Recover with Claude account")?;
-    pane.wait_stable_contains("Claude account method", READY_TIMEOUT)?;
+    pane.wait_stable_contains("Claude Plan authentication", READY_TIMEOUT)?;
     pane.send_key(TmuxKey::Escape)?;
     pane.wait_stable_contains("Configure providers and control", READY_TIMEOUT)?;
     close_manager(pane)?;
@@ -156,14 +226,59 @@ async fn tmux_pf52_claude_recovery_cancel_and_retry_are_reused() -> Result<()> {
     })?;
     pane.send_key(TmuxKey::Enter)?;
     select_label(pane, "Recover with Claude account")?;
-    pane.wait_stable_contains("Claude account method", READY_TIMEOUT)?;
-    select_label(pane, "Managed subscription token")?;
-    pane.wait_stable_contains("Token — masked", READY_TIMEOUT)?;
+    pane.wait_stable_contains("Claude Plan authentication", READY_TIMEOUT)?;
+    pane.wait_stable_contains("claude setup-token", READY_TIMEOUT)?;
+    select_label(pane, "Long-lived subscription token (Recommended)")?;
+    pane.wait_stable_contains("Long-lived token — masked", READY_TIMEOUT)?;
+    pane.wait_stable_contains("claude setup-token", READY_TIMEOUT)?;
     pane.send_secret_literal(&canary)?;
     pane.send_key(TmuxKey::Escape)?;
     pane.wait_stable_contains("Configure providers and control", READY_TIMEOUT)?;
 
-    capture_success("claude-recovery-cancel", &fixture, pane, &[&canary])?;
+    // A rejected token must remain visibly recoverable without leaking its value.
+    close_manager(pane)?;
+    open_manager(pane)?;
+    select_label(pane, "Claude Account")?;
+    select_label(pane, "Recover with Claude account")?;
+    select_label(pane, "Long-lived subscription token (Recommended)")?;
+    pane.wait_stable_contains("Long-lived token — masked", READY_TIMEOUT)?;
+    pane.send_secret_literal(&invalid_canary)?;
+    pane.wait_stable_contains(
+        &format!("••••••• {}", "•".repeat(canary.chars().count())),
+        READY_TIMEOUT,
+    )?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Authentication needs attention", READY_TIMEOUT)?;
+    pane.wait_stable_contains("subscription token was not accepted", READY_TIMEOUT)?;
+    select_label(pane, "Retry authentication")?;
+    pane.wait_stable_contains("Long-lived token — masked", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Escape)?;
+    pane.wait_stable_contains("Configure providers and control", READY_TIMEOUT)?;
+
+    // A successful local save must return to the manager, not reopen a blank
+    // token form. This synthetic value never makes a live inference request.
+    close_manager(pane)?;
+    open_manager(pane)?;
+    select_label(pane, "Claude Account")?;
+    select_label(pane, "Recover with Claude account")?;
+    select_label(pane, "Long-lived subscription token (Recommended)")?;
+    pane.wait_stable_contains("Long-lived token — masked", READY_TIMEOUT)?;
+    pane.send_secret_literal(&canary)?;
+    pane.wait_stable_contains(&"•".repeat(canary.chars().count()), READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Configure providers and control", READY_TIMEOUT)?;
+    ensure!(
+        !pane
+            .capture_viewport()?
+            .contains("Save Claude subscription token")
+    );
+
+    capture_success(
+        "claude-recovery-cancel",
+        &fixture,
+        pane,
+        &[&canary, &invalid_canary],
+    )?;
     close_overlay_and_exit(pane)?;
     session.wait_for_exit(READY_TIMEOUT)?;
     Ok(())

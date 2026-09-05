@@ -14,7 +14,6 @@ use codex_app_server_protocol::PluginSource;
 use codex_connectors::AppInfo;
 use codex_features::Stage;
 use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
-use codex_model_provider_info::AMBIENT_KIMI_K2_7_CODE_MODEL;
 use codex_model_provider_info::AMBIENT_PROVIDER_ID;
 use codex_model_provider_info::ANTHROPIC_DEFAULT_MODEL;
 use codex_model_provider_info::BASETEN_DEFAULT_MODEL;
@@ -3860,14 +3859,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
         popup.contains("Ambient: GLM 5.2 - $0.76/M input, $0.14/M cached input, $2.42/M output."),
         "expected Ambient model description in /model picker:\n{popup}"
     );
-    assert!(
-        popup.contains(AMBIENT_KIMI_K2_7_CODE_MODEL),
-        "expected Ambient Kimi K2.7 Code in /model picker:\n{popup}"
-    );
-    assert!(
-        popup.contains("Ambient: Kimi K2.7 Code - $0.73/M input"),
-        "expected Ambient Kimi description in /model picker:\n{popup}"
-    );
+    assert_chatwidget_snapshot!("ambient_glm_only_model_picker", popup);
     assert!(
         !popup.contains(&format!("Model: {ZAI_DEFAULT_MODEL}."))
             && !popup.contains(&format!("Model: {CLAUDE_PLAN_MODEL}.")),

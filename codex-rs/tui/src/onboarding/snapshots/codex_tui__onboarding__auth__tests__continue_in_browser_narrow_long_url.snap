@@ -1,11 +1,12 @@
 ---
 source: tui/src/onboarding/auth.rs
+assertion_line: 2956
 expression: contents
 ---
   Finish signing in via your browser
 
-  If the link doesn't open automatically,
-open the following link to authenticate:
+Open this link in your browser to finish
+signing in.
 
   https://auth.openai.com/oauth/authorize?re
 sponse_type=code&client_id=app_EMoamEEZ73f0C

@@ -667,8 +667,8 @@ impl App {
                 crate::provider_account_auth_host::ProviderAccountPresentation::OpenAiChallenge {
                     challenge,
                 } => self.chat_widget.open_shared_openai_challenge(challenge),
-                crate::provider_account_auth_host::ProviderAccountPresentation::ClaudeMethodChoice => {
-                    self.chat_widget.open_shared_claude_method_choice();
+                crate::provider_account_auth_host::ProviderAccountPresentation::ClaudeMethodChoice { recovery } => {
+                    self.chat_widget.open_shared_claude_method_choice(recovery);
                 }
                 crate::provider_account_auth_host::ProviderAccountPresentation::ClaudeManagedTokenEntry => {
                     self.chat_widget.open_shared_claude_managed_token_entry();
@@ -679,13 +679,8 @@ impl App {
                 crate::provider_account_auth_host::ProviderAccountPresentation::Completion(
                     completion,
                 ) => self.apply_shared_account_completion(completion),
-                crate::provider_account_auth_host::ProviderAccountPresentation::Failed => {
-                    if let Some(session) = self.shared_provider_setup_session.as_mut() {
-                        session.dispatch(
-                            crate::onboarding::provider_setup::ProviderSetupAction::AuthFailed,
-                        );
-                    }
-                    self.render_shared_provider_setup();
+                crate::provider_account_auth_host::ProviderAccountPresentation::Failed(failure) => {
+                    self.chat_widget.open_shared_account_failure(failure);
                 }
             }
         }

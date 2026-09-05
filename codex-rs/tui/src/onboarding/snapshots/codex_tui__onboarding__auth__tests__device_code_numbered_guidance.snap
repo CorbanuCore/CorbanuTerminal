@@ -1,0 +1,20 @@
+---
+source: tui/src/onboarding/auth.rs
+expression: contents
+---
+  Finish signing in via your browser
+
+  1. On a remote or headless machine, open this link on another device and
+enter the code.
+
+  https://example.com/device
+
+  2. Enter this one-time code after you are signed in (expires in 15
+minutes)
+
+  ABCD-EFGH
+
+  Continue only if you started this login in Codex. If a website or another
+person gave you this code, cancel.
+
+  Press esc to cancel
