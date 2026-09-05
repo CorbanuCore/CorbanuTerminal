@@ -24,6 +24,7 @@ use std::os::unix::net::UnixStream;
 use std::process::Child;
 use std::sync::Mutex;
 use std::time::Duration;
+use std::time::Instant;
 use zeroize::Zeroizing;
 
 const SOCKET: &str = "/run/corbanu-protected-state.sock";
@@ -86,18 +87,15 @@ fn configure(stream: &UnixStream) -> Result<(), RootError> {
 }
 
 fn read<T: DeserializeOwned>(stream: &mut UnixStream) -> Result<T, RootError> {
+    let deadline = Instant::now() + Duration::from_secs(10);
     let mut prefix = [0; 4];
-    stream
-        .read_exact(&mut prefix)
-        .map_err(|_| RootError::Unavailable)?;
+    read_before(stream, &mut prefix, deadline)?;
     let length = u32::from_be_bytes(prefix) as usize;
     if length > MAX_BYTES {
         return Err(RootError::Invalid);
     }
     let mut bytes = Zeroizing::new(vec![0; length]);
-    stream
-        .read_exact(&mut bytes)
-        .map_err(|_| RootError::Unavailable)?;
+    read_before(stream, &mut bytes, deadline)?;
     serde_json::from_slice(&bytes).map_err(|_| RootError::Invalid)
 }
 
@@ -106,10 +104,34 @@ fn write<T: Serialize + ?Sized>(stream: &mut UnixStream, value: &T) -> Result<()
     if bytes.len() > MAX_BYTES {
         return Err(RootError::Invalid);
     }
-    stream
-        .write_all(&(bytes.len() as u32).to_be_bytes())
-        .and_then(|()| stream.write_all(&bytes))
-        .map_err(|_| RootError::Unavailable)
+    let mut frame = Zeroizing::new(Vec::with_capacity(bytes.len() + 4));
+    frame.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+    frame.extend_from_slice(&bytes);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut remaining = frame.as_slice();
+    while !remaining.is_empty() {
+        stream.set_write_timeout(Some(deadline.checked_duration_since(Instant::now()).ok_or(RootError::Unavailable)?)).map_err(|_| RootError::Unavailable)?;
+        match stream.write(remaining) {
+            Ok(0) => return Err(RootError::Unavailable),
+            Ok(count) => remaining = &remaining[count..],
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => return Err(RootError::Unavailable),
+        }
+    }
+    Ok(())
+}
+
+fn read_before(stream: &mut UnixStream, mut output: &mut [u8], deadline: Instant) -> Result<(), RootError> {
+    while !output.is_empty() {
+        stream.set_read_timeout(Some(deadline.checked_duration_since(Instant::now()).ok_or(RootError::Unavailable)?)).map_err(|_| RootError::Unavailable)?;
+        match stream.read(output) {
+            Ok(0) => return Err(RootError::Unavailable),
+            Ok(count) => output = &mut output[count..],
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => return Err(RootError::Unavailable),
+        }
+    }
+    Ok(())
 }
 
 struct Channel {
@@ -229,7 +251,7 @@ impl ControllerRoot {
                     }
                 }
             };
-            alive(&pidfd)?;
+            alive(&pidfd).map_err(|error| if matches!(reply, Reply::Stored) { RootError::Ambiguous } else { error })?;
             channel
                 .send(&reply, b"corbanu-anchor-reply/v1")
                 .map_err(|_| RootError::Ambiguous)?;

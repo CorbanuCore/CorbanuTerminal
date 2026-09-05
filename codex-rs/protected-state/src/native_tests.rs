@@ -144,3 +144,13 @@ fn pf20_s03_authenticated_definite_conflict_is_not_ambiguous() {
     assert_eq!(client.load(), Err(IntegrityRootError::Unavailable));
     thread.join().unwrap();
 }
+
+#[test]
+fn pf20_s03_partial_frame_obeys_one_total_deadline() {
+    let (mut server, mut client) = UnixStream::pair().unwrap();
+    client.write_all(&[1]).unwrap();
+    let mut output = [0; 2];
+    let start = Instant::now();
+    assert_eq!(read_before(&mut server, &mut output, start + Duration::from_millis(25)), Err(RootError::Unavailable));
+    assert!(start.elapsed() < Duration::from_secs(1));
+}
