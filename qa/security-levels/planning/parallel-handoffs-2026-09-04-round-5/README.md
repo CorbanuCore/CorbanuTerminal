@@ -54,9 +54,17 @@ Host: authorized RTX machine; login details stay outside tracked files.
 Preflight: 1.7 TB free disk, approximately 80 GiB available memory; no shutdown
 needed at dispatch. Existing remote worktrees/processes remain untouched.
 Each lane gets a new mirror worktree under /home/travis/worktrees/security-round5-*.
-The coordinator supplies the authenticated connection and exact toolchain/cache
-paths separately. No local compilation. Serialize heavy builds initially, reuse
-verified remote caches and never conflate artifacts from different candidates.
+Authenticated remote mirrors are created at allocation
+`4f263ca73a2860031be37945204f4676cbb347d4`. Toolchain 1.95.0, just 1.58.0 and
+nextest 0.9.143 are installed. Set PATH to include /home/travis/.cargo/bin,
+CARGO_TARGET_DIR=/home/travis/repos/CorbanuTerminal-harness/codex-rs/target,
+TMPDIR=/home/travis/security-round5/tmp and CARGO_BUILD_JOBS=8.
+Use `flock /home/travis/security-round5/locks/build.lock` around every
+compile/fix/fmt/test command. Push/fetch exact checkpoints into each clean
+disposable mirror; preserve other worktrees. Copy each tested binary into
+/home/travis/security-round5/evidence/<lane> before releasing the build lock.
+Bring intended remote formatting back with apply_patch before final tests.
+No local compilation; never conflate artifacts from different candidates.
 
 Run scoped fix and formatting before final affected tests. Use just test, not
 direct cargo test. Record version, commit, commands, counts, artifacts, actual
@@ -76,6 +84,10 @@ actual findings; exceed five only when critical findings continue.
 | Security UI | 0 / 5 | Implementation first; no review started |
 
 ## Integration and follow-through
+
+Allocation is committed and pushed as 4f263ca73. All three workers were dispatched
+with implementation authority and remote build instructions. Broker's first
+recovery checkpoint 90ae3a0cf is pushed; this is not new final-tree qualification.
 
 Coordinator serializes shared Core/protocol/TUI exports, Cargo/Bazel/locks and
 navigation. Audit each actual diff against declared scope before handback.
