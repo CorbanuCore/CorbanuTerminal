@@ -188,6 +188,7 @@ codex-home = { path = "codex-home" }
 codex-http-client = { path = "http-client" }
 codex-websocket-client = { path = "websocket-client" }
 codex-config = { path = "config" }
+codex-content-security = { path = "content-security" }
 codex-connectors = { path = "connectors" }
 codex-agent-extension = { path = "ext/agent" }
 codex-connectors-extension = { path = "ext/connectors" }
