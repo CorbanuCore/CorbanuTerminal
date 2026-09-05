@@ -51,14 +51,17 @@ updated: 2026-09-04
 - [x] Host-owned factory/opaque facade and per-attempt transport guard authored; first Core compile and binding tests passed on RTX. Worker routing/persistence and expanded canary/TMUX tests authored, final qualification still pending.
 - [x] [Versioned evidence and limitations](../../../../qa/security-levels/sprints/PF-30-S04/qualification.md) created; review invocation count 0/5.
 
-## Remaining
-
 - [x] Implement one host-owned opaque stage-one client factory; expected identity/provider are assertions, never authority selectors. Unknown/uninitialized/terminated/mismatched bindings deny.
 - [x] Preserve maximum configured/current/inherited policy floor; fail closed for all protected raw-rollout dispatch independently of admission/screening readiness.
 - [x] Check at actual HTTP retry dispatch and post-connect WebSocket send, then stream completion and before worker success persistence. Preserve Permissive payload, proxy, auth and cache shaping.
 - [x] Remove detached worker construction; use current per-job context, typed bounded denial and finite existing retry/backoff. Do not mark denied/EOF/cancelled work successful.
 - [x] Preserve feature-disabled, ephemeral, non-root and unavailable-DB skips; no new model traffic or memory activation.
 - [x] Cover real worker canary paths, wrong owner, live increase barriers, provider replacement, HTTP/WS retry, restart/cancel and legacy/mixed/forged sources. Historical rollout IDs remain data, not runtime owner IDs.
+
+## Remaining
+
+- [ ] Complete the allocated independent reviews and disposition actionable findings.
+- [ ] Complete coordinator combined-tree qualification, final evidence and archival.
 
 ## Verification
 
