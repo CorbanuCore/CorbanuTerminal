@@ -3,6 +3,7 @@
 
 use super::AdmittedSource;
 use super::IngressError;
+use super::NativeScreeningCandidate;
 use super::PendingSource;
 use crate::context::ContextualUserFragment;
 use crate::context::ProvenanceContext;
@@ -96,7 +97,7 @@ impl NativeIngress {
                 return;
             };
             match PendingSource::prepare(route, descriptor, text, &[]) {
-                Ok((pending, _normalized)) => {
+                Ok((pending, _)) => {
                     self.pending.insert(key, pending);
                 }
                 Err(_) => {
@@ -105,6 +106,13 @@ impl NativeIngress {
                 }
             }
         }
+    }
+
+    /// Preserve the exact bounded payload and host identity for a producer.
+    pub(crate) fn screening_candidate(&self, item: &ResponseItem) -> Result<NativeScreeningCandidate, IngressError> {
+        if self.unavailable { return Err(IngressError::RegistryUnavailable); }
+        let bytes = serde_json::to_vec(item).map_err(|_| IngressError::InvalidEnvelope)?;
+        self.pending.get(&ContentDigest::of(&bytes)).map(PendingSource::screening_candidate).ok_or(IngressError::NativeAdmissionUnavailable)
     }
 
     /// Only a producer's complete matching screening result can advance pending

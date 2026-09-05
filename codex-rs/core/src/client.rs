@@ -839,6 +839,20 @@ impl ModelClient {
         }
     }
 
+    /// Staged producer handoff: reading a candidate does not release its data.
+    #[allow(dead_code)]
+    pub(crate) fn pending_native_screening(&self, item: &ResponseItem) -> Result<crate::security::ingress::NativeScreeningCandidate> {
+        self.ingress_items.lock().map_err(|_| CodexErr::InvalidRequest("source admission registry is unavailable".into()))?
+            .screening_candidate(item).map_err(|error| CodexErr::InvalidRequest(error.to_string()))
+    }
+
+    /// A complete screening result must match this exact host-observed item.
+    #[allow(dead_code)]
+    pub(crate) fn admit_native_screening(&self, item: &ResponseItem, screened: codex_content_security::ScreenedContent) -> Result<()> {
+        self.ingress_items.lock().map_err(|_| CodexErr::InvalidRequest("source admission registry is unavailable".into()))?
+            .admit_screened(item, screened).map_err(|error| CodexErr::InvalidRequest(error.to_string()))
+    }
+
     pub(crate) fn register_native_tool_origin(
         &self,
         call_id: &str,

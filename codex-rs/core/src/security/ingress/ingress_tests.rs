@@ -15,6 +15,11 @@ fn descriptor() -> SourceDescriptor {
 }
 
 pub(crate) fn screen(pending: &PendingSource, text: &str) -> ScreenedContent {
+    screen_binding(pending.screening_binding(), text)
+}
+
+// Synthetic fixture engine, never a production classifier or qualification.
+pub(crate) fn screen_binding(source: SourceBinding, text: &str) -> ScreenedContent {
     let digest = ContentDigest::of(text.as_bytes());
     let transformation = TransformationBinding::new(
         ContractId::new("fixture").unwrap(),
@@ -25,7 +30,7 @@ pub(crate) fn screen(pending: &PendingSource, text: &str) -> ScreenedContent {
     )
     .unwrap();
     let target = ScreeningTarget::new(
-        ContentBinding::new(pending.screening_binding(), transformation),
+        ContentBinding::new(source, transformation),
         digest,
         1,
     )

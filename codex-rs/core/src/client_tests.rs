@@ -198,9 +198,6 @@ fn pf_30_s01_permissive_wire_payload_is_unchanged() {
 
 #[test]
 fn pf_30_s01_admitted_context_round_trips_through_each_real_provider_adapter() {
-    use crate::security::ingress::PendingSource;
-    use codex_protocol::provenance::SourceDescriptor;
-    use codex_protocol::provenance::SourceKind;
     let client = test_model_client(SessionSource::Cli)
         .with_ingress_level(codex_security_policy::SecurityLevel::Moderate);
     let item = ResponseItem::Message {
@@ -212,21 +209,11 @@ fn pf_30_s01_admitted_context_round_trips_through_each_real_provider_adapter() {
         phase: None,
         internal_chat_message_metadata_passthrough: None,
     };
-    let raw = serde_json::to_string(&item).unwrap();
-    let descriptor = SourceDescriptor {
-        kind: SourceKind::Unknown,
-        origin_id: "fixture".into(),
-        actor_id: "fixture".into(),
-        retrieved_at_unix_ms: 1,
-    };
-    let (pending, normalized) = PendingSource::prepare("file", descriptor, &raw, &[]).unwrap();
-    let screened = crate::security::ingress::tests::screen(&pending, &normalized);
-    client
-        .ingress_items
-        .lock()
-        .unwrap()
-        .insert(&item, pending.admit(screened).unwrap())
-        .unwrap();
+    client.observe_native_ingress(std::slice::from_ref(&item));
+    let candidate = client.pending_native_screening(&item).unwrap();
+    let screened = crate::security::ingress::tests::screen_binding(candidate.source(), candidate.normalized());
+    client.admit_native_screening(&item, screened).unwrap();
+    assert!(client.pending_native_screening(&item).is_err());
     let prompt = Prompt {
         input: vec![item],
         ..Default::default()

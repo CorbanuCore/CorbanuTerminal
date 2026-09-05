@@ -50,10 +50,28 @@ fn route_kind(route: &str) -> Result<SourceKind, IngressError> {
 }
 
 /// Host-created pending binding. It is not deserializable or model-visible.
-#[derive(Debug)]
 pub(crate) struct PendingSource {
     envelope: SourceEnvelope,
     screening_binding: SourceBinding,
+    normalized: String,
+}
+
+impl std::fmt::Debug for PendingSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PendingSource").field("envelope", &self.envelope).finish_non_exhaustive()
+    }
+}
+
+/// Read-only, bounded handoff to a trusted screening producer. This carrier is
+/// not an admission capability and cannot be reconstructed from provider text.
+pub(crate) struct NativeScreeningCandidate {
+    source: SourceBinding,
+    normalized: String,
+}
+
+impl NativeScreeningCandidate {
+    pub(crate) fn source(&self) -> SourceBinding { self.source }
+    pub(crate) fn normalized(&self) -> &str { &self.normalized }
 }
 
 impl PendingSource {
@@ -104,6 +122,7 @@ impl PendingSource {
             Self {
                 envelope,
                 screening_binding,
+                normalized: normalized.clone(),
             },
             normalized,
         ))
@@ -114,6 +133,10 @@ impl PendingSource {
     }
     pub(crate) fn screening_binding(&self) -> SourceBinding {
         self.screening_binding
+    }
+
+    fn screening_candidate(&self) -> NativeScreeningCandidate {
+        NativeScreeningCandidate { source: self.screening_binding, normalized: self.normalized.clone() }
     }
 
     /// An Allow verdict still only releases untrusted data. Match the exact
