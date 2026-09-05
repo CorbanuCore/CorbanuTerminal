@@ -93,8 +93,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Err("synthetic journal recovery denied".into());
     }
     let mut audit_request = request.authorization.clone();
-    audit_request.context.grant_id = Some(text("fixture-grant")?);
-    let audit = JournalBrokerAudit::new(journal, BrokerJournalBinding { binding: binding.clone(), credential: reference.clone(), request: audit_request, authority: AuthorityIdentity::Grant { grant_id: text("fixture-grant")? }, operation }, EventContext::new(producer, 1, 1)?, FixtureClock)?;
+    audit_request.context.grant_id = Some(request.grant.grant_id.clone());
+    let audit = JournalBrokerAudit::new(journal, BrokerJournalBinding { binding: binding.clone(), credential: reference.clone(), request: audit_request, authority: AuthorityIdentity::Grant { grant_id: request.grant.grant_id.clone() }, operation }, EventContext::new(producer, 1, 1)?, FixtureClock)?;
     let backend = VaultBrokerBackend::with_clock(vault, vec![(reference.clone(), credential)], Arc::new(RwLock::new(revocations)), SyntheticTransport, FixtureClock)?;
     let capabilities = REQUIRED_CAPABILITIES.iter().copied().map(|capability| CapabilityResult { capability, status: CapabilityStatus::Supported, observation: Observation::Denied, mechanism: "synthetic-fixture-only", detail_code: "denied" }).collect::<Vec<_>>();
     let target = "1".repeat(64);
