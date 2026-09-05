@@ -170,6 +170,20 @@ fn pf_30_s01_admitted_context_round_trips_through_each_real_provider_adapter() {
 }
 
 #[test]
+fn pf_30_s01_live_policy_cannot_be_weakened_by_configured_floor() {
+    use crate::security::{EffectivePolicyInitialization, EffectivePolicyView, PersistedHumanSecurityState, TrustedSecurityController};
+    use codex_security_policy::{PolicyPrincipal, PrincipalKind, RevocationState, SecurityLevel, SecuritySettings};
+    let client = test_model_client(SessionSource::Cli);
+    let view = EffectivePolicyView::default();
+    let state = PersistedHumanSecurityState::new(SecuritySettings::new(SecurityLevel::Aggressive), PolicyPrincipal::new(PrincipalKind::Human, "fixture-human").unwrap(), RevocationState::new()).unwrap();
+    let _controller = TrustedSecurityController::initialize(&view, state, client.state.thread_id, codex_protocol::SessionId::from(client.state.thread_id), EffectivePolicyInitialization::Root).unwrap();
+    let client = client.with_ingress_policy(SecurityLevel::Permissive, view);
+    assert_eq!(client.source_admission_level().unwrap(), SecurityLevel::Aggressive);
+    let unbound = test_model_client(SessionSource::Cli).with_ingress_policy(SecurityLevel::Permissive, EffectivePolicyView::default());
+    assert!(unbound.source_admission_level().is_err());
+}
+
+#[test]
 fn non_openai_responses_request_sends_only_current_dynamic_context() {
     let client = test_model_client(SessionSource::Cli);
     let provider = client

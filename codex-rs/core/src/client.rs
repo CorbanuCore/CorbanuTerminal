@@ -766,6 +766,7 @@ impl ModelClient {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn with_ingress_level(mut self, level: codex_security_policy::SecurityLevel) -> Self {
         self.ingress_level = level;
         self

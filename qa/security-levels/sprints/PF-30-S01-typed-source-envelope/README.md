@@ -13,19 +13,28 @@ Plan: `docs/plans/active/p0-security-levels.md`, feature PF-30, sprint PF-30-S01
   Unicode controls. No generated fragment exceeds 8,192 bytes. This can exceed
   1,000 tokens and requires explicit reviewer attention under Core context policy;
   it remains below the hard 10,000-token per-item bound.
-- Native Responses, Chat Completions and Anthropic request constructors reject
-  configured protected intent without an authenticated admitted-context carrier.
-  Initial session creation and model-provider replacement preserve this restriction.
+- A host-held exact-item sidecar observes native history append, tool dispatch and
+  MCP origin refinement. Message-shaped sources are conservatively untrusted
+  transcripts; child messages have child provenance. An output cannot register
+  its own tool origin. Unsupported native variants remain absent and deny.
+- Native Responses, Chat Completions and Anthropic request constructors project
+  only exactly bound admitted items and reject raw/legacy/forged inputs. Initial
+  session creation and model-provider replacement enforce the maximum of
+  configured intent and live inherited policy. Unavailable policy fails closed.
   Memory and realtime alternate input routes also fail closed.
+- Host authorization notices require the separately held human controller and
+  an exact validated confirmation. They explicitly do not apply policy changes.
 - Permissive request behavior is unchanged; no protected mode is activated.
 
 ## Explicit remaining work
 
-The native gate is refusal, not successful producer integration. Per-source native
-capture/admission for web, files, MCP, hooks, plugins, child messages and other
-external sources still needs its trusted carrier and producer registrations.
-Typed host authorization notices remain separate required work. Provider-safe
-projection fixtures alone do not prove native successful ingestion. Persistent
+Native producer observation and wire projection are connected; production
+screening capability delivery and complete-input segmentation are not. Tool-based
+file/web/plugin output retains conservative tool provenance, and message-based
+hook/social/email content retains conservative transcript provenance rather than
+claiming unobserved finer origin. Native hosted web/search/opaque variants without
+a registered source carrier reject. Provider-safe projection fixtures alone do
+not prove native successful protected inference. Persistent
 resume/memory lineage remains PF-30-S02, post-taint enforcement PF-30-S03, and
 qualified detector delivery PF-35. Unknown or unavailable routes remain closed.
 

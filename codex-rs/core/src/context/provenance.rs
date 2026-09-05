@@ -1,5 +1,6 @@
 //! Provider-independent data fragment. Construction requires Core admission;
 //! external content cannot choose a role or supply its own wrapper metadata.
+#![cfg_attr(not(test), allow(dead_code))]
 
 use super::ContextualUserFragment;
 use crate::security::ingress::AdmittedSource;
