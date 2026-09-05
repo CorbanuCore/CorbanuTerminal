@@ -85,7 +85,12 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
         let mut metadata =
             codex_state::ThreadMetadataBuilder::new(source, rollout, timestamp, SessionSource::Cli);
         metadata.cwd = repo.clone();
-        db.upsert_thread(&metadata.build("openai")).await?;
+        let mut metadata = metadata.build("openai");
+        // Startup scans deliberately exclude empty previews, just like real
+        // persisted conversations. The canary must be an eligible source.
+        metadata.preview = Some(CANARY.into());
+        metadata.first_user_message = Some(CANARY.into());
+        db.upsert_thread(&metadata).await?;
         db.set_thread_memory_mode(source, "enabled").await?;
         let tmux = TmuxServer::start(&format!("memory_policy_{case}"))?;
         tmux.register_artifact("codex-tui.log", home.path().join("logs/codex-tui.log"));
