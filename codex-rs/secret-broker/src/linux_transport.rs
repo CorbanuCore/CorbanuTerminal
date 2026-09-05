@@ -148,6 +148,7 @@ fn watch_disconnect<H: LinuxBrokerHandler>(stream: &UnixStream, guard: &CloseGua
     while !guard.closed.load(Ordering::Acquire) {
         match poll(&mut fds, 100_u16) {
             Ok(0) => {}
+            Err(nix::errno::Errno::EINTR) => continue,
             Ok(_) | Err(_) => {
                 guard.close();
                 let _ = stream.shutdown(Shutdown::Both);
@@ -326,7 +327,11 @@ fn read_before(
         stream
             .set_read_timeout(Some(remaining))
             .map_err(unavailable)?;
-        let count = stream.read(bytes).map_err(unavailable)?;
+        let count = match stream.read(bytes) {
+            // Preserve the absolute deadline across benign signal delivery.
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            result => result.map_err(unavailable)?,
+        };
         if count == 0 {
             return Err(BrokerDispatchError::SessionUnavailable);
         }
