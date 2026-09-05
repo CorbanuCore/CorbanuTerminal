@@ -1,0 +1,13 @@
+# PF-30-S01 staged ingress review scope
+
+Review the branch diff from allocation `4f263ca73` to the candidate HEAD. Shared registration and allocation changes were supplied by the integration coordinator. This lane owns protocol source envelopes, Core admission, exact native-history sidecars, three provider-wire builders, and the scoped session/tool/MCP hooks. Permissive behavior must remain unchanged.
+
+This is explicitly a staged integration, not completion of PF-30-S01. Native producers now observe bounded exact items, preserve their normalized payload and host binding, and expose a read-only candidate / `ScreenedContent` handoff. Positive native/provider tests use the existing synthetic screening fixture; they do not qualify a real classifier. Production screening delivery, complete-input segmentation, fine-grained native source identity, unsupported hosted items, persistence and post-taint enforcement remain unfinished. Do not manufacture an Allow verdict or weaken the fail-closed boundary to conceal those gaps. PF-35 qualification is external, not a prerequisite for this deterministic typed boundary.
+
+Protected requests without a matching host-held admission fail before network. Permissive follows its original formatting path. An unavailable inherited policy cannot degrade to Permissive. Transport changes must preserve the guard. The authenticated controller notice is a separate staged constructor and does not itself apply a security action.
+
+Check actual caller paths, bindings, exact replay stability, capacity failure, source/role forgery, wire serialization and sanitized diagnostics. Descriptive protocol deserialization is not authentication. The private Core capability, not a textual wrapper or provider passthrough field, authorizes untrusted data projection. Screened Allow never grants authority.
+
+Core context-review attention: the bounded JSON projection can be up to 8,192 bytes plus fixed wrapper text, below the hard 10k-token maximum but potentially above 1,000 tokens. This is explicitly flagged for mandatory manual reviewer attention; a real integration must not silently treat a large admitted fragment as harmless. Review the bound and fail-closed behavior, not only the existence of an escaping helper.
+
+The allocation is roughly 22 files / 1,000 production lines plus tests and documentation, split into scoped recovery checkpoints. Do not broaden into PF-35 model qualification, PF-30-S02 persistence, PF-30-S03 post-taint controls or another lane's UI/broker. Report any necessary scope expansion separately. No nested reviewers or code mutations; do not read credentials.

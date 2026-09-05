@@ -10,13 +10,17 @@ Plan: `docs/plans/active/p0-security-levels.md`, feature PF-30, sprint PF-30-S01
 - Core-only admission binds an existing screening capability to the exact source
   envelope and normalized content digest; an Allow verdict releases untrusted data.
 - Bounded context fragments use the user/data role, escaped delimiters and explicit
-  Unicode controls. No generated fragment exceeds 8,192 bytes. This can exceed
+  Unicode controls. The JSON projection is capped at 8,192 bytes plus fixed wrapper text. This can exceed
   1,000 tokens and requires explicit reviewer attention under Core context policy;
   it remains below the hard 10,000-token per-item bound.
 - A host-held exact-item sidecar observes native history append, tool dispatch and
   MCP origin refinement. Message-shaped sources are conservatively untrusted
   transcripts; child messages have child provenance. An output cannot register
   its own tool origin. Unsupported native variants remain absent and deny.
+- The bounded normalized payload and exact source binding remain in a private
+  pending carrier. A producer can read that immutable candidate and return real
+  `ScreenedContent` through the native client handoff. Reading is not admission;
+  a mismatch consumes the pending candidate and never restores raw data.
 - Native Responses, Chat Completions and Anthropic request constructors project
   only exactly bound admitted items and reject raw/legacy/forged inputs. Initial
   session creation and model-provider replacement enforce the maximum of
