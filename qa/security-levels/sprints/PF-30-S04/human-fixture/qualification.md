@@ -112,3 +112,14 @@ bundled CodexCLI `/Applications/ChatGPT.app/Contents/Resources/codex`, requested
 review-scope.md. Result pending; no nested reviewer. Review4 Fable5.1High remains
 conditional on disposition of review3. At most5 total absent continuing critical
 issues; the limit is not a target.
+
+Review3 completed with three accepted in-scope P2 findings: unpinned source
+catalog; cancellation rehearsal that accepted unrelated nonzero failures; and
+pending-exit counts without an enforced pending deadline/failure check. Original
+structured result/text are preserved under review-3-astra.*. No product
+authorization boundary changed. Remediation checkpoint `36c98ca93` is WIP:
+bundled catalog API; exact final cancellation outcome validation and negative
+Python regression; first observed exit proof before the delayed response
+deadline, with a conservative polling margin and source failure rejection.
+The new pending-proof test rejects missing/expired/failed/completed evidence.
+Final affected tests and pinned runner must be regenerated before review4.
