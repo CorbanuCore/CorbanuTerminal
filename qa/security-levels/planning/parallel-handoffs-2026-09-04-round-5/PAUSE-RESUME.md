@@ -10,6 +10,14 @@ qualification. This is not a main merge or a qualification claim. RTX SSH works;
 approximately 1.5 TiB disk and 82 GiB memory were available at the resume check.
 Existing review budgets, allocations and pending authority decisions are unchanged.
 
+Subsequent combined qualification completed successfully on that exact runtime:
+controller18/Core127/audit46/config229/memory44+3/UI235/TMUX4 and restart passed.
+PF20S03 is archived;28/78 P0 sprints are archived. The current human guide now
+pins `/home/travis/security-round5/evidence/anchor/combined-b12e32d/candidate/codex`,
+SHA256 `c567826ff5f15fccd71f8294c93210a158217a2ba31224c55d7d78269b1d2bea`.
+See PF20S03 combined-b12e32d QA for exact run IDs. The last-candidate section
+below describes the historical pause, not the latest qualified candidate.
+
 The historical pause instructions below are retained as a recovery checkpoint;
 the explicit resume request satisfies their stop condition.
 

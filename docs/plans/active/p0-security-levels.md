@@ -719,7 +719,7 @@ requesting the coordinator's next numbered review.
 
 ## Sprint execution map
 
-This map currently covers **51 current and 27 completed archived sprints**.
+This map currently covers **50 current and 28 completed archived sprints**.
 The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
 is dependency-correct; feature IDs are not execution order. Archive orders 1–9
 stay unchanged and current orders start at 10. Existing allocation coordinates
@@ -738,7 +738,7 @@ document original scope, not new passes.
 | `PF-17` | Bounded grants and delegation | [PF-17-S01](../../sprints/archive/p0-security-levels/pf-17-s01-bounded-delegation-grants.md) | S01 completed and archived |
 | `PF-18` | Human mandates and secret-free receipts | [PF-18-S01](../../sprints/archive/p0-security-levels/pf-18-s01-human-mandates-and-receipts.md) | S01 completed and archived |
 | `PF-19` | Revocation and invalidation contract | [PF-19-S01](../../sprints/archive/p0-security-levels/pf-19-s01-revocation-contract.md), [PF-19-S02](../../sprints/archive/p0-security-levels/pf-19-s02-dispatch-revocation-fence.md) | S01/S02 completed and archived |
-| `PF-20` | Versioned security persistence | [PF-20-S01](../../sprints/archive/p0-security-levels/pf-20-s01-versioned-security-persistence.md), [PF-20-S02](../../sprints/archive/p0-security-levels/pf-20-s02-protected-authoritative-state.md), [PF-20-S03](../../sprints/current/p0-security-levels/pf-20-s03-local-controller-integrity-root.md) | S01/S02 archived; S03 local controller implementation allocated; protected activation blocked |
+| `PF-20` | Versioned security persistence | [PF-20-S01](../../sprints/archive/p0-security-levels/pf-20-s01-versioned-security-persistence.md), [PF-20-S02](../../sprints/archive/p0-security-levels/pf-20-s02-protected-authoritative-state.md), [PF-20-S03](../../sprints/archive/p0-security-levels/pf-20-s03-local-controller-integrity-root.md) | S01/S02/S03 archived; combined native dependency qualified at b12e32db3; protected activation blocked |
 | `PF-21` | Frozen Permissive compatibility | [PF-21-S01](../../sprints/archive/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md), [PF-21-S02](../../sprints/archive/p0-security-levels/pf-21-s02-expanded-compatibility-and-upstream-drift.md) | S01/S02 completed and archived |
 | `PF-22` | Effective runtime policy and agent inheritance | [PF-22-S01](../../sprints/archive/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md), [PF-22-S02](../../sprints/archive/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md) | S01/S02 completed and archived; PF-23/PF-24 retain authenticated adapter provenance |
 | `PF-13` | Vault-backed exact-host credential boundary | [S01](../../sprints/archive/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md), [S02](../../sprints/archive/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/archive/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/archive/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/archive/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md), [S06](../../sprints/archive/p0-security-levels/pf-13-s06-credential-usage-reservations.md), [S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md) | S01–S06 completed; S07 draft |
@@ -768,7 +768,7 @@ Product authority selected data-rollback protection, excluding whole-machine
 snapshot rollback; see the product specification's **Data-rollback scope
 decision — 2026-09-04**. Implement the Linux local-controller root proposed in
 [the design](../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/protected-audit-root-design.md)
-under [PF-20-S03](../../sprints/current/p0-security-levels/pf-20-s03-local-controller-integrity-root.md).
+under [PF-20-S03](../../sprints/archive/p0-security-levels/pf-20-s03-local-controller-integrity-root.md).
 This is a genuine missing PF20 native dependency, not an unfinished PF27 bypass.
 Prerequisites PF20S02, PF41S03 and PF27S03 are archived; PF27S04 will consume
 the adapter at its separate protected bootstrap/containment gate.
@@ -784,6 +784,14 @@ PF27 retains broker/platform access controls and privileged deployment.
 No TPM/off-host implementation is needed. No elevated installation or real
 Vault migration is authorized by the scope choice; missing protected state
 continues to fail closed.
+
+PF20S03 is now completed and archived following combined RTX source `b12e32db3`:
+controller18, Core127, audit46, config229, memory44+3, UI235, actual-key TMUX4
+and restart passed. No source/formatter/lock delta or additional review.
+[Combined evidence](../../../qa/security-levels/sprints/PF-20-S03/combined-b12e32d/README.md).
+PF30S04 was already archived; only PF27S04 retains an implementation reservation.
+Native principal isolation, privileged deployment and protected activation remain
+separate gates. Routine human-memory fixture work continues outside sprint capacity.
 
 ### PF-13 integration contract
 

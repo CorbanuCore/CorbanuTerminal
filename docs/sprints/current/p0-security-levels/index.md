@@ -1,7 +1,7 @@
 # P0 security-level execution sprints
 
 The active [P0 security plan](../../../plans/active/p0-security-levels.md) owns
-**51 current sprints** and **27 completed archives**.
+**50 current sprints** and **28 completed archives**.
 The integrated Sprint 13 branch completes PF-13-S02–S04 and the early PF-26-S01
 harness; PF-13-S05 is also completed and archived after its integrated Core and
 platform qualification. PF-13-S06 and PF-41-S03 are now also completed and
@@ -76,7 +76,6 @@ archived evidence proves only its recorded candidate and scope.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
-| 78 | [PF-20-S03](pf-20-s03-local-controller-integrity-root.md) | Linux local controller root detects restored agent data | in progress | PF-20-S02, PF-41-S03, PF-27-S03 |
 
 The rolling allocation adds this independent denial boundary after the original
 76-record map. Its topological number does not require unrelated earlier work

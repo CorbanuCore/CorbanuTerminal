@@ -209,7 +209,7 @@
         <span><strong>Integration base:</strong> <code>6dd9ad646</code></span>
         <span><strong>UX parity follow-up:</strong> 4 Sep 2026 (Phoenix)</span>
         <span><strong>Provider baseline:</strong> Mac launcher unchanged</span>
-        <span><strong>Security/memory runtime:</strong> RTX <code>6a6bb029d</code> · instructions below</span>
+        <span><strong>Security/memory runtime:</strong> RTX <code>b12e32db3</code> · instructions below</span>
       </div>
       <div class="actions">
         <button type="button" onclick="window.print()">Print / save PDF</button>
@@ -408,12 +408,12 @@
         The existing Mac Apps shortcut has not been changed by this security round.
         Do not mistake its matching version number for the new build: record the supplied candidate commit and machine before checks 16–23.</p>
       <p>Use <code>ssh travis@100.99.88.49</code>, then launch the exact candidate below from your intended test directory.
-        This is commit <code>6a6bb029d8f3e0c16653ce335d252f45b4d7326f</code>, Corbanu <code>0.1.38</code>; it is not yet merged to main.</p>
-      <pre><code>/home/travis/security-round5/evidence/integration/6a6bb029d/candidate/codex</code></pre>
+        This is commit <code>b12e32db398c83854271e2e70f29e5290278af8b</code>, Corbanu <code>0.1.38</code>; it is not yet merged to main.</p>
+      <pre><code>/home/travis/security-round5/evidence/anchor/combined-b12e32d/candidate/codex</code></pre>
       <details><summary>Candidate identity and automated evidence</summary>
-        <p>SHA-256: <code>90d6a1f7f72c5397ff858583c038b2615c8fb034f57a890d6595d6b98afccd4f</code>.
-          Final combined Core 110/110, memory-write 44/44, memory-read 3/3, UI 235/235 and actual-key TMUX 4/4 passed, including four memory scenarios and four restarts.
-          <a href="qa/security-levels/sprints/PF-30-S04/combined-qualification.md">Exact run IDs and evidence</a>.
+        <p>SHA-256: <code>c567826ff5f15fccd71f8294c93210a158217a2ba31224c55d7d78269b1d2bea</code>.
+          Final combined controller 18/18, Core 127/127, audit 46/46, config 229/229, memory-write 44/44, memory-read 3/3, UI 235/235 and actual-key TMUX 4/4 passed, including four memory scenarios and four restarts.
+          <a href="qa/security-levels/sprints/PF-20-S03/combined-b12e32d/README.md">Exact run IDs and evidence</a>.
           Human checks below remain yours to perform; no human acceptance is implied.</p>
       </details>
       <p>This slice is observation-only. It cannot activate Moderate or Aggressive, grant permissions or downgrade protection.

@@ -8,6 +8,16 @@ scope are in each sprint.
 
 ## Dispatch
 
+Latest resumed checkpoint: PF20S03 is integrated and archived after exact combined
+RTX `b12e32db3` passed controller18/Core127/audit46/config229/memory44+3/UI235,
+actual-key TMUX4 and same-home restart. [Final evidence](../../sprints/PF-20-S03/combined-b12e32d/README.md).
+P0 counts:28/78 archived (36% rounded),50 current; PF27S04 is the sole remaining
+implementation reservation. Human-memory fixture remains routine QA in progress;
+humanTest21–23 remain queued. Its documented `/providers` switch is not a pass
+for the adjacent custom `/model` identity/label issues. Review budgets unchanged.
+Root-launcher manifest v2 is planning-only and awaits implementation pins and
+explicit privileged approval; no deployment or main merge is claimed.
+
 Source base: `07791288b6feeccfaee5a57c12452359cc666957`.
 Coordinator branch: `integration/security-round5-20260904`, worktree:
 `/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-20260904`.
@@ -83,7 +93,7 @@ actual findings; exceed five only when critical findings continue.
 | Provenance | 5 / 5 | Earlier #1–3 dispositions retained; bounded segmentation #4 Astra High and #5 Fable High both clean. Final lane e890ae4a9 integrated; no further review |
 | Security UI | 3 / 5 | #1 CLI rejected; #2 Astra High clean; #3 Fable High clean; no further review planned |
 | Memory dispatch and human fixture support | 2 / 5 | Runtime integrated/qualified at 6a6bb029d and PF30S04 archived. Fixture support still rehearsing; #3 Astra/#4 Fable authorized only after final fixture proof. Existing P3 snapshot-cloning optimization deferred |
-| Local controller (PF-20-S03) | 2 / 5 | Astra #1 P2 blocking-connect issue fixed with nonblocking connect and real backlog regression. Fable #2 confirmed fix and found no code blockers; two P3 documentation/environment notes being closed. No extra review required for docs |
+| Local controller (PF-20-S03) | 2 / 5 | Astra #1 P2 blocking-connect issue fixed with nonblocking connect and real backlog regression. Fable #2 confirmed fix and found no code blockers; two P3 documentation/environment notes recorded and addressed. Combined b12e32db3 qualified and sprint archived; no extra review |
 
 Successful Astra runtime: installed app-bundled Codex 0.153.1; 0.145.0 was
 rejected by the backend before any review verdict. Keep these attempts visible.

@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-20-S03"
 title: "Local controller integrity root"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-20"
 execution_order: 78
@@ -60,10 +60,11 @@ updated: 2026-09-04
 - [x] Prove restored/deleted agent data is rejected against intact controller state; document whole-controller snapshot rollback as excluded rather than a passing protection test (unprivileged real PF41 consumer and synthetic Core adapter tests, not privileged deployment).
 - [x] Test enrollment interruption, restart, competing processes, wrong identity, short writes/fsync/ENOSPC/ack loss, stale channels and inherited-socketpair negative control with synthetic data.
 - [x] Produce exact PF27 consumer handoff and proposed privileged qualification requirements. No sudo, principal/ACL/service setup or real credentials under this allocation. Broker and coordinator accepted the seam; revised privileged installation manifest remains unapproved.
+- [x] Qualify combined integration source `b12e32db398c83854271e2e70f29e5290278af8b` on RTX: controller18, Core127, audit46, config229, memory44+3, UI235, actual-key TMUX4 and same-home restart passed. [Final evidence](../../../../qa/security-levels/sprints/PF-20-S03/combined-b12e32d/README.md); no source/lock/formatter delta, review budget2/5 unchanged.
 
 ## Remaining
 
-- [ ] Qualify the combined integration tree on RTX, record final evidence and complete coordinator governance checks before archival. Native privileged qualification remains PF27 work.
+None within this bounded dependency. Native privileged composition and deployment qualification remain PF27 work, not an acceptance claim of this archive.
 
 ## Verification
 
@@ -71,11 +72,11 @@ updated: 2026-09-04
 - [x] Use unprivileged real subprocess tests plus fault injection; never claim separate-principal isolation from same-user fixtures.
 - [x] No new UI: supporting actual-key TMUX /security, /status, cancel/exit/restart retained visible unavailable protected state. Final source `8d6967179`; immutable CLI SHA256 `42fe2d0168a4f9079f6faa4f4a7b6aa41deabe6f1322d0e921b8c40b4cfc4076`; eleven captures and exact commands in PF20S03 QA.
 - [x] Astra High and Fable5.1 High via Corbanu/private TMUX;2/5 used. Astra1 found one verified P2, fixed/tested in `8d6967179`; Fable2 verifies fix and reports no code blockers, plus two nonblocking documentation/environment notes. Neither helper result is mislabeled clean. Exact dispositions under QA; root owns shared ledger refresh. No review-budget reset of frozen PF30S01 or PF27.
-- [ ] Coordinator combined-tree tests and lock/governance checks; native privileged qualification remains PF27 integration evidence.
+- [x] Coordinator combined-tree tests and lock/governance checks; native privileged qualification remains PF27 integration evidence.
 
 ## Exit evidence
 
 - [x] Exact implementation commit, tests, fault outcomes, keys/captures and review dispositions under QA.
 - [x] Separate algorithm/native transport proof from missing principal-isolation/production activation proof. No platform, human or release acceptance implied.
 - [x] Record TensorCash/Isometric applicability: no repository-specific behavior in this leaf; final release qualification in both remains required.
-- [ ] Done/Remaining reflect reality; archive only this bounded dependency after required evidence and root integration, not the composed protected workflow.
+- [x] Done/Remaining reflect reality; archive only this bounded dependency after required evidence and root integration, not the composed protected workflow.
