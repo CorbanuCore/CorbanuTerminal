@@ -79,9 +79,24 @@ actual findings; exceed five only when critical findings continue.
 
 | Lane | Invocations | Evidence / next action |
 | --- | ---: | --- |
-| Broker | 0 / 5 | Implementation first; no review started |
-| Provenance | 0 / 5 | Implementation first; no review started |
-| Security UI | 0 / 5 | Implementation first; no review started |
+| Broker | 2 / 5 | #1 rejected pre-inference (old CLI); #2 Astra High found disconnect/audit-correlation issues, scoped remediation running; #3 Fable High allocated after fixes |
+| Provenance | 0 / 5 | Shared registrations supplied; RTX compilation/fix underway before review |
+| Security UI | 2 / 5 | #1 rejected pre-inference (old CLI); #2 Astra High clean; #3 Fable High allocated and starting |
+
+Successful Astra runtime: installed app-bundled Codex 0.153.1; 0.145.0 was
+rejected by the backend before any review verdict. Keep these attempts visible.
+Fable wrapper forces claude-fable-5-1-plan at High and runs via private TMUX;
+credentials never enter the committed packet.
+
+Remote formatter prerequisite: uv 0.11.3, installed in the broker lane's
+tools-venv and reused by all lanes. Bazel 9.0.0 matches .bazelversion; isolated
+remote install SHA-256 c44a93f25398c68f904fa1d19b61d321de6c0d2f09dca375d7bc0dc9b9428403,
+verified against releases.bazel.build's matching checksum.
+Combined registration source 71afdd426 passed a remote broker/network-proxy/Vault
+compile check in 14.66 seconds. Generated Cargo.lock adds only the intended
+13 dependency lines. Both just bazel-lock-update and just bazel-lock-check pass;
+MODULE.bazel.lock unchanged. Existing platforms/rules_cc version warnings remain.
+These are preliminary combined checks, not final post-review qualification.
 
 ## Integration and follow-through
 
