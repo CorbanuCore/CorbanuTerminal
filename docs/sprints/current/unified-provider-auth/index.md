@@ -7,7 +7,8 @@ sprint from that sequence remains open. PF-57-S02 also completed the user's
 2026-09-04 Astra reconciliation repairs in its isolated serial worktree.
 PF-57-S03 also completed and is archived: it reconciled those repairs with
 Travis's two subsequent integration-branch commits under the user's 2026-09-05
-mandate. No current implementation sprint remains in this plan.
+mandate. PF-55-S02 is now the sole current sprint, adding the user's explicitly
+requested OpenAI Astra selector option without changing defaults or delegation.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
@@ -23,6 +24,7 @@ mandate. No current implementation sprint remains in this plan.
 | 16 | [PF-57-S01](../../archive/unified-provider-auth/pf-57-s01-latest-main-integration.md) | Latest-main integration and credential-store liveness | completed | PF-56-S01 |
 | 17 | [PF-57-S02](../../archive/unified-provider-auth/pf-57-s02-reconciliation-auth-repairs.md) | Reconciliation credential-lifecycle repairs | completed | PF-57-S01 |
 | 18 | [PF-57-S03](../../archive/unified-provider-auth/pf-57-s03-travis-release-reconciliation.md) | Travis/provider UX and release repair reconciliation | completed | PF-57-S02 |
+| 19 | [PF-55-S02](pf-55-s02-openai-astra-selector.md) | Explicit OpenAI Astra model selection | in_progress | PF-57-S03 |
 
 ## Delivery contract
 
