@@ -54,6 +54,36 @@ enum Outcome {
     TimedOut,
 }
 
+#[derive(Clone, Copy)]
+struct PendingExitProof {
+    elapsed: Option<Duration>,
+    window: Duration,
+    canaries: usize,
+    outputs: usize,
+    failed: bool,
+}
+
+impl PendingExitProof {
+    fn is_pending(self) -> bool {
+        // Polling observes the request after it arrives; reserve one second so
+        // this cannot extend the fake response's actual pending window.
+        self.elapsed.is_some_and(|elapsed| elapsed + Duration::from_secs(1) < self.window)
+            && self.canaries == 1 && self.outputs == 0 && !self.failed
+    }
+}
+
+#[test]
+fn memory_human_pending_exit_rejects_unproven_lifecycle() {
+    let valid = PendingExitProof { elapsed:Some(Duration::from_secs(1)), window:Duration::from_secs(30), canaries:1, outputs:0, failed:false };
+    assert!(valid.is_pending());
+    for invalid in [PendingExitProof { elapsed:None, ..valid },
+        PendingExitProof { elapsed:Some(Duration::from_secs(29)), ..valid },
+        PendingExitProof { failed:true, ..valid }, PendingExitProof { outputs:1, ..valid },
+        PendingExitProof { canaries:0, ..valid }] {
+        assert!(!invalid.is_pending());
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "explicit operator opt-in; see QA human-fixture guide"]
 async fn human_memory_fixture() -> Result<()> {
@@ -161,8 +191,7 @@ async fn run_case(
     let binary = &artifacts.binary;
     let a = fake_provider("A", case, delay).await;
     let b = fake_provider("B", case, delay).await;
-    let models: Value =
-        serde_json::from_slice(&fs::read(repo.join("codex-rs/models-manager/models.json"))?)?;
+    let models = serde_json::to_value(codex_models_manager::bundled_models_response()?)?;
     let template = models["models"]
         .as_array()
         .context("model catalog")?
@@ -309,6 +338,7 @@ animations = false
     let mut keys = Vec::new();
     let start = Instant::now();
     let mut pending = None;
+    let mut pending_exit_elapsed = None;
     let mut switched = false;
     let mut restarted = false;
     if driver == Driver::Rehearsal && !matches!(case, Case::Cancel | Case::Timeout) {
@@ -337,6 +367,7 @@ animations = false
             "status.json",
             &json!({"case":format!("{case:?}"), "source":source.to_string(), "canary_requests":canaries, "source_outputs":outputs,
             "provider_change_denied":denied, "foreground_b":foreground_b, "restarted":restarted,
+            "pending_exit_elapsed_ms":pending_exit_elapsed,
             "pending_window_remaining_seconds":pending.map(|time| delay.saturating_sub(time.elapsed()).as_secs()), "routes":routes}),
         )?;
         fs::write(root.join("input-events.txt"), keys.join("\n"))?;
@@ -386,10 +417,16 @@ animations = false
                 }
             }
         } else if case == Case::PendingExit && !restarted {
-            ensure!(
-                canaries == 1 && outputs == 0,
-                "exit missed pending window; not exercised"
-            );
+            if pending_exit_elapsed.is_none() {
+                let proof = PendingExitProof {
+                    elapsed: pending.map(|time| time.elapsed()), window: delay, canaries, outputs,
+                    failed: denied || log.contains(&format!("Phase 1 job failed for thread {source}:")),
+                };
+                ensure!(proof.is_pending(), "exit missed pending window or job already failed; not exercised");
+                pending_exit_elapsed = proof.elapsed.map(|elapsed| elapsed.as_millis());
+                write_json(root, "pending-exit.json", &json!({"elapsed_ms":pending_exit_elapsed,
+                    "response_delay_ms":delay.as_millis(), "source":source, "pending_proven":true}))?;
+            }
             if driver == Driver::Rehearsal || root.join("restart").exists() {
                 session = tmux.new_session(spec("memory-restart"))?;
                 restarted = true;

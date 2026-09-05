@@ -26,6 +26,12 @@ def read_json(path):
         return None
 
 
+def validate_completion(code, case, finished):
+    expected = "Ok(Complete)" if case == "startup" else "Ok(Cancelled)"
+    assert (code == 0) == (case == "startup"), code
+    assert finished == {"outcome": expected, "human_acceptance": False}, finished
+
+
 def run_case(args, case):
     evidence = args.evidence / case
     env = dict(os.environ, CORBANU_MEMORY_HUMAN_OPT_IN="1",
@@ -77,10 +83,9 @@ def run_case(args, case):
             else:
                 (evidence / "cancel").touch(exist_ok=False)
             code = process.wait(timeout=45)
-            assert (code == 0) == (case == "startup"), code
+            validate_completion(code, case, read_json(evidence / "finished.json"))
             assert not Path(ready["home"]).exists(), "disposable home leaked"
             assert not Path(ready["socket_dir"]).exists(), "owned socket leaked"
-            assert (evidence / "finished.json").exists()
         finally:
             if process.poll() is None:
                 if evidence.exists():
