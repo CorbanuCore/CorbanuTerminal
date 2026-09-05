@@ -83,15 +83,15 @@ impl SecurityView {
 
 impl BottomPaneView for SecurityView {
     fn handle_key_event(&mut self, key: KeyEvent) {
-        if key_hint::plain(KeyCode::Esc).is_press(key) || self.keymap.cancel.is_press(key) {
+        if key_hint::plain(KeyCode::Esc).is_press(key) || self.keymap.cancel.is_pressed(key) {
             self.cancelled = true;
-        } else if self.keymap.move_up.is_press(key) {
+        } else if self.keymap.move_up.is_pressed(key) {
             self.selected = (self.selected + PROFILES.len() - 1) % PROFILES.len();
             self.inspected = false;
-        } else if self.keymap.move_down.is_press(key) {
+        } else if self.keymap.move_down.is_pressed(key) {
             self.selected = (self.selected + 1) % PROFILES.len();
             self.inspected = false;
-        } else if self.keymap.accept.is_press(key) {
+        } else if self.keymap.accept.is_pressed(key) {
             self.inspected = true;
         }
     }

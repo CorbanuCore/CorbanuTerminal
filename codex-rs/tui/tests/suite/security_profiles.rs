@@ -50,16 +50,27 @@ fn tmux_security_profiles_are_observation_only_at_normal_and_narrow_widths() -> 
             pane.send_key(TmuxKey::Enter)?;
             pane.wait_stable_contains("Nothing changed.", TIMEOUT)?;
         }
+        capture(pane, &format!("{level}-{width}-profile"))?;
         pane.send_key(TmuxKey::Escape)?;
         pane.wait_stable_until("profile view closes", TIMEOUT, |text| !text.contains("Security profiles — read only"))?;
         command(pane, "/status")?;
         pane.wait_stable_contains("Security:", TIMEOUT)?;
+        capture(pane, &format!("{level}-{width}-status"))?;
         ensure!(fs::read_to_string(home.path().join("config.toml"))? == config, "profile exploration changed configuration");
         command(pane, "/security")?;
         pane.wait_stable_contains("Security profiles", TIMEOUT)?;
         pane.send_key(TmuxKey::Escape)?;
         command(pane, "/exit")?;
         session.wait_for_exit(TIMEOUT)?;
+    }
+    Ok(())
+}
+
+fn capture(pane: &TmuxPane<'_>, name: &str) -> Result<()> {
+    if let Some(directory) = std::env::var_os("CORBANU_SECURITY_UI_EVIDENCE") {
+        let directory = std::path::PathBuf::from(directory);
+        fs::create_dir_all(&directory)?;
+        fs::write(directory.join(format!("{name}.txt")), pane.capture_viewport()?)?;
     }
     Ok(())
 }
