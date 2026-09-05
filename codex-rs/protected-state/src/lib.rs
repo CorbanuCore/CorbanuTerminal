@@ -28,5 +28,9 @@ pub use store::Enrollment;
 /// authenticated namespace; implementing this trait does not confer authority.
 pub trait PolicyRootStore: std::fmt::Debug + Send + Sync {
     fn load_policy(&self) -> Result<Option<PolicyCheckpoint>, RootError>;
-    fn compare_policy(&self, expected: Option<&PolicyCheckpoint>, next: &PolicyCheckpoint) -> Result<(), RootError>;
+    fn compare_policy(
+        &self,
+        expected: Option<&PolicyCheckpoint>,
+        next: &PolicyCheckpoint,
+    ) -> Result<(), RootError>;
 }

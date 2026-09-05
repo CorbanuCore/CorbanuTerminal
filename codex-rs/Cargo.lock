@@ -2852,6 +2852,7 @@ dependencies = [
  "codex-otel",
  "codex-plugin",
  "codex-prompts",
+ "codex-protected-state",
  "codex-protocol",
  "codex-response-debug-context",
  "codex-rmcp-client",
@@ -3992,6 +3993,26 @@ dependencies = [
  "codex-utils-absolute-path",
  "codex-utils-template",
  "pretty_assertions",
+]
+
+[[package]]
+name = "codex-protected-state"
+version = "0.1.38"
+dependencies = [
+ "codex-config",
+ "codex-security-audit",
+ "codex-security-policy",
+ "codex-utils-absolute-path",
+ "hmac 0.12.1",
+ "libc",
+ "pretty_assertions",
+ "rand 0.9.3",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "zeroize",
 ]
 
 [[package]]

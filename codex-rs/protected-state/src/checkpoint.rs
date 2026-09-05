@@ -34,11 +34,16 @@ pub(crate) enum Binding {
         owner_generation: u64,
         integrity_key_id: BoundedText,
     },
-    Policy { owner: AuthoritativeStateOwner },
+    Policy {
+        owner: AuthoritativeStateOwner,
+    },
 }
 
 pub(crate) fn hash_valid(hash: &str) -> bool {
-    hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    hash.len() == 64
+        && hash
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 impl Checkpoint {
@@ -49,36 +54,66 @@ impl Checkpoint {
     ) -> Result<(), RootError> {
         self.validate(binding)?;
         let sequence = self.sequence();
-        if sequence != previous.map_or(Some(1), |old| old.sequence().checked_add(1)).ok_or(RootError::Invalid)? {
+        if sequence
+            != previous
+                .map_or(Some(1), |old| old.sequence().checked_add(1))
+                .ok_or(RootError::Invalid)?
+        {
             return Err(RootError::Invalid);
         }
         match (self, previous) {
             (Self::Journal(next), Some(Self::Journal(old)))
-                if next.policy_generation < old.policy_generation || next.run_generation < old.run_generation => Err(RootError::Invalid),
-            (Self::Journal(_), Some(Self::Policy(_))) | (Self::Policy(_), Some(Self::Journal(_))) => Err(RootError::Invalid),
+                if next.policy_generation < old.policy_generation
+                    || next.run_generation < old.run_generation =>
+            {
+                Err(RootError::Invalid)
+            }
+            (Self::Journal(_), Some(Self::Policy(_)))
+            | (Self::Policy(_), Some(Self::Journal(_))) => Err(RootError::Invalid),
             _ => Ok(()),
         }
     }
 
     pub(crate) fn validate(&self, binding: &Binding) -> Result<(), RootError> {
         let valid = match (self, binding) {
-            (Self::Journal(next), Binding::Journal { producer, owner_generation, integrity_key_id }) => {
-                next.schema_version == 1 && next.sequence > 0 && next.run_generation > 0
-                    && next.owner_generation > 0 && hash_valid(&next.record_sha256)
-                    && &next.producer == producer && &next.owner_generation == owner_generation
+            (
+                Self::Journal(next),
+                Binding::Journal {
+                    producer,
+                    owner_generation,
+                    integrity_key_id,
+                },
+            ) => {
+                next.schema_version == 1
+                    && next.sequence > 0
+                    && next.run_generation > 0
+                    && next.owner_generation > 0
+                    && hash_valid(&next.record_sha256)
+                    && &next.producer == producer
+                    && &next.owner_generation == owner_generation
                     && &next.integrity_key_id == integrity_key_id
             }
             (Self::Policy(next), Binding::Policy { owner }) => {
-                next.schema_version == 1 && next.revision > 0 && next.owner.validate().is_ok()
-                    && &next.owner == owner && hash_valid(&next.state_sha256)
+                next.schema_version == 1
+                    && next.revision > 0
+                    && next.owner.validate().is_ok()
+                    && &next.owner == owner
+                    && hash_valid(&next.state_sha256)
                     && hash_valid(&next.commit_sha256)
             }
             _ => false,
         };
-        if valid { Ok(()) } else { Err(RootError::Invalid) }
+        if valid {
+            Ok(())
+        } else {
+            Err(RootError::Invalid)
+        }
     }
 
     pub(crate) fn sequence(&self) -> u64 {
-        match self { Self::Journal(value) => value.sequence, Self::Policy(value) => value.revision }
+        match self {
+            Self::Journal(value) => value.sequence,
+            Self::Policy(value) => value.revision,
+        }
     }
 }
