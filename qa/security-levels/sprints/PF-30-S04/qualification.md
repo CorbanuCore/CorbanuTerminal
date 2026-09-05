@@ -63,13 +63,40 @@ output schema or cache-key format is added or rewritten.
 
 ## Required final matrix
 
+Final registered qualification: Core **11/11** (including public host factory),
+`9b8fdd5a-d123-427e-a4cc-723ddc827356`; memories-write **43/43**, final mixed
+legacy/tool/forged-source run `2e111402-cd92-4239-b92b-044f43fe2125` after scoped
+fix/full fmt; memories-read **3/3**, `7833ad45-658c-452e-9f86-713f26c6fe01`.
+
+Actual-key TMUX **1/1 test containing four scenarios and four same-home restarts**:
+`be38c029-38b9-41c2-917d-b572f1f4329a`, `tmux-qualified.log`, after TUI fix/full
+fmt with a clean remote diff. Initial TUI failures were fixture eligibility
+(missing preview, deliberately excluded by startup SQL); production was not
+changed to admit empty-preview histories. Successful captures/key events/outcomes
+are committed in `tmux/`; full synthetic traces remain under RTX
+`candidate-72c210c5f/tmux-qualified/` and the preceding equivalent `tmux-final/`.
+
+| Scenario | Raw-canary requests | Persisted stage-one outputs |
+| --- | ---: | ---: |
+| Permissive | 1 | 1 |
+| Moderate | 0 | 0 |
+| Aggressive | 0 | 0 |
+| Exit during pending Permissive extraction | 1 | 0 |
+
+The locked CLI was built from `72c210c5f` plus formatter. Later changes are tests,
+captures and documentation only; the Core/worker runtime diff is empty. Immutable
+RTX launch path: `/home/travis/security-round5/evidence/memory/candidate-72c210c5f/codex`.
+SHA-256 before and after actual-key tests:
+`75ea4bd96d56ad919b83add8275cf0d391ae8942c9fac3e33542e9c0e9365668`.
+This is a Linux candidate, not a rebuilt Mac app shortcut.
+
 - [x] Configured Moderate/Aggressive, inherited stronger floor and live increase.
 - [x] Missing policy, wrong owner, terminated/dropped owner, live kill switch.
 - [x] Same owner exact provider replacement; new-job current routing.
 - [x] HTTP execute/stream attempt barrier and WebSocket connect-time barrier.
 - [x] Real worker synthetic output persistence in Permissive; zero protected
       canary requests and outputs; finite retry backoff; EOF cannot save JSON.
-- [ ] Actual-key TMUX memory-enabled startup, foreground turn and exit/restart
+- [x] Actual-key TMUX memory-enabled startup, foreground turn and exit/restart
       with isolated synthetic fixtures and recorded DB/provider outcomes.
 - [x] Scoped fix, full formatter, Core/memories-write/memories-read tests on the
       authored runtime checkpoint; public integration/TMUX registration and

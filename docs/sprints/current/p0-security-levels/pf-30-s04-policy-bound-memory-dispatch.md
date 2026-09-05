@@ -53,18 +53,18 @@ updated: 2026-09-04
 
 ## Remaining
 
-- [ ] Implement one host-owned opaque stage-one client factory; expected identity/provider are assertions, never authority selectors. Unknown/uninitialized/terminated/mismatched bindings deny.
-- [ ] Preserve maximum configured/current/inherited policy floor; fail closed for all protected raw-rollout dispatch independently of admission/screening readiness.
-- [ ] Check at actual HTTP retry dispatch and post-connect WebSocket send, then stream completion and before worker success persistence. Preserve Permissive payload, proxy, auth and cache shaping.
-- [ ] Remove detached worker construction; use current per-job context, typed bounded denial and finite existing retry/backoff. Do not mark denied/EOF/cancelled work successful.
-- [ ] Preserve feature-disabled, ephemeral, non-root and unavailable-DB skips; no new model traffic or memory activation.
-- [ ] Cover real worker canary paths, wrong owner, live increase barriers, provider replacement, HTTP/WS retry, restart/cancel and legacy/mixed/forged sources. Historical rollout IDs remain data, not runtime owner IDs.
+- [x] Implement one host-owned opaque stage-one client factory; expected identity/provider are assertions, never authority selectors. Unknown/uninitialized/terminated/mismatched bindings deny.
+- [x] Preserve maximum configured/current/inherited policy floor; fail closed for all protected raw-rollout dispatch independently of admission/screening readiness.
+- [x] Check at actual HTTP retry dispatch and post-connect WebSocket send, then stream completion and before worker success persistence. Preserve Permissive payload, proxy, auth and cache shaping.
+- [x] Remove detached worker construction; use current per-job context, typed bounded denial and finite existing retry/backoff. Do not mark denied/EOF/cancelled work successful.
+- [x] Preserve feature-disabled, ephemeral, non-root and unavailable-DB skips; no new model traffic or memory activation.
+- [x] Cover real worker canary paths, wrong owner, live increase barriers, provider replacement, HTTP/WS retry, restart/cancel and legacy/mixed/forged sources. Historical rollout IDs remain data, not runtime owner IDs.
 
 ## Verification
 
-- [ ] RTX only: scoped just fix, full just fmt, affected Core and full memories-write suites; relevant memories-read regression suite.
-- [ ] Fake providers and synthetic fixtures only; prove zero canary-bearing requests under protected/unavailable policy and unchanged Permissive success.
-- [ ] Actual-key TMUX startup/turn/cancel/restart with memory-enabled isolated home and recorded fake-provider/DB outcomes; text and Enter separately.
+- [x] RTX only: scoped just fix, full just fmt, affected Core and full memories-write suites; relevant memories-read regression suite.
+- [x] Fake providers and synthetic fixtures only; prove zero canary-bearing requests under protected/unavailable policy and unchanged Permissive success.
+- [x] Actual-key TMUX startup/turn/cancel/restart with memory-enabled isolated home and recorded fake-provider/DB outcomes; text and Enter separately.
 - [ ] Astra High and Fable 5.1 High review via Corbanu/private TMUX with exact frozen source; maximum five invocations, no redundant reviews.
 - [ ] Coordinator exports/registries, lock parity if needed, combined-tree and governance checks.
 
