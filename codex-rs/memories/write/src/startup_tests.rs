@@ -851,6 +851,7 @@ async fn pf_30_s04_live_provider_refresh_preserves_consolidation_pair() -> anyho
     ]);
     let original_requests = mount_sse_once(&original, response.clone()).await;
     let replacement_requests = mount_sse_once(&replacement, response).await;
+    seed_required_memory_artifacts(&home.path().join("memories")).await?;
     core_test_support::submit_thread_settings(
         &test.codex,
         codex_protocol::protocol::ThreadSettingsOverrides {
