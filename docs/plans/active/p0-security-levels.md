@@ -629,6 +629,12 @@ admission-policy builder hook and `codex-rs/core/src/client_tests.rs` for actual
 provider wire tests; no other lane owns these paths. Keep ResponseItem and
 provider-owned passthrough schemas unchanged. Missing protected admission or
 screening fails closed; configured intent does not establish effective readiness.
+PF-30 review remediation additionally owns `core/src/realtime_conversation.rs`
+and `core/src/realtime_conversation_tests.rs` under codex-rs. Guard the direct
+realtime websocket path as well as WebRTC using the same effective-policy
+admission rule; prove no network admission in protected/unavailable states.
+Keep Permissive unchanged and inspect live policy changes on an existing stream.
+This closes a provider-route omission; it does not activate protected realtime.
 PF-24 delivers observation-only requested/effective-state UX. No activation,
 grants or downgrade mutations are introduced; unavailable protection is explicit.
 
