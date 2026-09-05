@@ -116,7 +116,7 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
         )
     );
     assert!(description.contains(
-        "- `example-provider` / `visible-model`; text-only; efforts: xhigh (default); tiers: priority"
+        "- `example-provider` / `visible-model`; explicit-choice only; allocation economics unavailable; text-only; efforts: xhigh (default); tiers: priority"
     ));
     assert!(!description.contains("hidden-model"));
     assert!(description.contains("legacy-model"));
@@ -216,6 +216,40 @@ fn spawn_agent_catalog_exposes_parent_runtime_and_frontier_effort_policy() {
         description
             .contains("If the user names a provider or model, treat it as an exact constraint")
     );
+}
+
+#[test]
+fn spawn_agent_catalog_separates_explicit_choices_from_cost_based_allocation() {
+    let mut unpriced = model_preset("unpriced", /*show_in_picker*/ true);
+    unpriced.provider_id = Some("openai".to_string());
+    let mut disabled = unpriced.clone();
+    disabled.model = "manual-model".to_string();
+    disabled.orchestration = Some(ModelOrchestrationMetadata::Disabled {
+        provider_id: "openai".to_string(),
+        capability: ModelCapabilityTier::Frontier,
+        reason: "No verified allocation economics".to_string(),
+    });
+    let mut priced = unpriced.clone();
+    priced.model = "priced-model".to_string();
+    priced.orchestration = Some(ModelOrchestrationMetadata::Eligible {
+        provider_id: "openai".to_string(),
+        capability: ModelCapabilityTier::Balanced,
+        billing: ModelBilling::Plan {
+            relative_burn_millis: 1_000,
+        },
+    });
+    let description = spawn_agent_models_description(
+        &[unpriced, disabled, priced],
+        /*inherited_runtime*/ None,
+    );
+    for slug in ["unpriced-model", "manual-model"] {
+        assert!(description.contains(&format!(
+            "`openai` / `{slug}`; explicit-choice only; allocation economics unavailable;"
+        )));
+    }
+    assert!(description.contains("`openai` / `priced-model`; plan, burn 1x, balanced;"));
+    assert!(description.contains("must not be chosen for automatic cost-based allocation"));
+    assert!(description.contains("not an exhaustive allowlist"));
 }
 
 #[test]

@@ -1818,8 +1818,10 @@ async fn multi_agent_v2_advertises_cross_provider_catalog_from_third_party_paren
         "v2 managers on third-party providers need the authorized cross-provider catalog"
     );
     assert!(
-        !v2_description.contains("`openai` / `gpt-5.5`"),
-        "catalogue-disabled models must not be advertised for spawned work"
+        v2_description.contains(
+            "`openai` / `gpt-6-astra`; explicit-choice only; allocation economics unavailable;"
+        ),
+        "explicit model discovery must not require automatic-allocation economics"
     );
 
     let v1 = probe(|turn| {

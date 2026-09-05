@@ -9,7 +9,9 @@ use codex_models_manager::manager::RefreshStrategy;
 use codex_models_manager::manager::SharedModelsManager;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::openai_models::ConfigShellToolType;
+use codex_protocol::openai_models::ModelCapabilityTier;
 use codex_protocol::openai_models::ModelInfo;
+use codex_protocol::openai_models::ModelOrchestrationMetadata;
 use codex_protocol::openai_models::ModelServiceTier;
 use codex_protocol::openai_models::ModelVisibility;
 use codex_protocol::openai_models::ModelsResponse;
@@ -37,14 +39,17 @@ use std::time::Instant;
 use test_case::test_case;
 use tokio::time::sleep;
 
-#[test_case(false; "model-only selection")]
-#[test_case(true; "exact provider and model selection")]
+#[test_case(false, "gpt-5.6-luna"; "Luna model-only selection")]
+#[test_case(true, "gpt-5.6-luna"; "Luna exact provider and model selection")]
+#[test_case(false, "gpt-6-astra"; "unpriced Astra model-only selection")]
+#[test_case(true, "gpt-6-astra"; "unpriced Astra exact provider and model selection")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn plaintext_spawn_dispatches_selected_openai_child_with_legacy_model_preference(
     explicit_provider: bool,
+    model: &'static str,
 ) -> Result<()> {
     let server = start_mock_server().await;
-    let mut args = json!({"task_name": "worker", "message": "Report one fact", "fork_turns": "none", "model": "gpt-5.6-luna", "reasoning_effort": "medium"});
+    let mut args = json!({"task_name": "worker", "message": "Report one fact", "fork_turns": "none", "model": model, "reasoning_effort": "medium"});
     if explicit_provider {
         args["model_provider"] = json!("openai");
     }
@@ -60,7 +65,7 @@ async fn plaintext_spawn_dispatches_selected_openai_child_with_legacy_model_pref
     .await;
     let child = mount_sse_once_match(
         &server,
-        wiremock::matchers::body_partial_json(json!({"model": "gpt-5.6-luna"})),
+        wiremock::matchers::body_partial_json(json!({"model": model})),
         sse(vec![
             ev_response_created("child-1"),
             ev_assistant_message("child-result", "Verified child fact"),
@@ -89,7 +94,7 @@ async fn plaintext_spawn_dispatches_selected_openai_child_with_legacy_model_pref
     )
     .await;
     let test = test_codex()
-        .with_model_info_override("gpt-5.6-luna", |model| {
+        .with_model_info_override(model, |model| {
             model.multi_agent_version = Some(MultiAgentVersion::V1);
             model.tool_mode = None;
             model.use_responses_lite = false;
@@ -108,7 +113,8 @@ async fn plaintext_spawn_dispatches_selected_openai_child_with_legacy_model_pref
         })
         .build_with_auto_env(&server)
         .await?;
-    test.submit_turn("Spawn the requested Luna child").await?;
+    test.submit_turn("Spawn the explicitly requested child")
+        .await?;
     let output: Value = serde_json::from_str(
         &parent
             .function_call_output_text("spawn-mixed")
@@ -116,13 +122,13 @@ async fn plaintext_spawn_dispatches_selected_openai_child_with_legacy_model_pref
     )?;
     assert_eq!(
         (output["model_provider"].as_str(), output["model"].as_str()),
-        (Some("openai"), Some("gpt-5.6-luna"))
+        (Some("openai"), Some(model))
     );
     let deadline = Instant::now() + Duration::from_secs(5);
     while !child
         .requests()
         .iter()
-        .any(|request| request.body_json()["model"] == "gpt-5.6-luna")
+        .any(|request| request.body_json()["model"] == model)
         && Instant::now() < deadline
     {
         sleep(Duration::from_millis(25)).await;
@@ -132,7 +138,7 @@ async fn plaintext_spawn_dispatches_selected_openai_child_with_legacy_model_pref
         .requests()
         .into_iter()
         .map(|request| request.body_json())
-        .find(|body| body["model"] == "gpt-5.6-luna")
+        .find(|body| body["model"] == model)
         .expect("selected child request");
     assert!(
         namespace_child_tool(&request, MULTI_AGENT_V2_NAMESPACE, SPAWN_AGENT_TOOL_NAME).is_some(),
@@ -169,7 +175,11 @@ fn test_model_info(
 ) -> ModelInfo {
     ModelInfo {
         slug: slug.to_string(),
-        orchestration: None,
+        orchestration: Some(ModelOrchestrationMetadata::Disabled {
+            provider_id: "openai".to_string(),
+            capability: ModelCapabilityTier::Unclassified,
+            reason: "No allocation economics for this synthetic runtime".to_string(),
+        }),
         chat_completions: Default::default(),
         display_name: display_name.to_string(),
         description: Some(description.to_string()),
@@ -340,8 +350,10 @@ async fn spawn_agent_description_lists_visible_models_and_reasoning_efforts() ->
         "expected model override usage guidance in spawn_agent description: {description:?}"
     );
     assert!(
-        !description.contains("- model `visible-model`"),
-        "remote models without orchestration policy must fail closed as overrides: {description:?}"
+        description.contains(
+            "`openai` / `visible-model`; explicit-choice only; allocation economics unavailable;"
+        ),
+        "remote models without economics remain explicit choices: {description:?}"
     );
     assert!(
         !description.contains("hidden-model"),
@@ -447,6 +459,14 @@ async fn openai_reserved_spawn_schema_is_not_mutated_by_pf_role_configuration(
             .iter()
             .find(|tool| tool.get("name").and_then(Value::as_str) == Some(adapter_name))
             .unwrap_or_else(|| panic!("expected {adapter_name} in the model request"));
+        if adapter_name == "spawn_agent_plaintext" {
+            let description = adapter["description"]
+                .as_str()
+                .expect("adapter description");
+            assert!(description.contains(
+                "`openai` / `gpt-6-astra`; explicit-choice only; allocation economics unavailable;"
+            ));
+        }
         assert_eq!(
             adapter.get("type").and_then(Value::as_str),
             Some("function")
@@ -511,10 +531,11 @@ async fn spawn_agent_v2_catalog_respects_provider_policy_with_mixed_model_defaul
     assert_eq!(
         (
             description.contains("`openai` / `gpt-5.6-luna`"),
+            description.contains("`openai` / `gpt-6-astra`; explicit-choice only;"),
             description.contains("`kimi-code` / `k3`")
         ),
-        (expected_openai, expected_kimi),
-        "the effective provider policy, not a model's engine preference, owns the catalog: {description}"
+        (expected_openai, expected_openai, expected_kimi),
+        "provider policy, not engine preference or allocation economics, owns discovery: {description}"
     );
     assert!(
         plaintext

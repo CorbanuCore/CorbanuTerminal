@@ -1211,10 +1211,13 @@ fn spawn_agent_available_models(
                 .is_some_and(|provider| allowlist.contains(provider))
         });
     }
+    // Explicit runtime discovery follows configured providers, not automatic-allocation
+    // economics. Missing billing metadata does not make a requested model unavailable.
     models.retain(|model| {
-        model.orchestration.as_ref().is_some_and(
-            codex_protocol::openai_models::ModelOrchestrationMetadata::is_spawn_eligible,
-        )
+        model
+            .provider_id
+            .as_ref()
+            .is_some_and(|provider| turn_context.config.model_providers.contains_key(provider))
     });
     models
 }
