@@ -58,15 +58,15 @@ updated: 2026-09-05
 - [x] Confirmed local compatibility `0.144.1` and exact upstream Astra minimum
   `0.153.0`, native Code Mode/Responses Lite/unified-execution metadata.
 - [x] Preserved user-provided 400 as failed live acceptance, not an auth failure.
+- [x] Integrated the native Astra contract and shared discovery/inference version;
+  preserved template-only instructions through personality overrides.
+- [x] Added native request/header regressions and an opt-in structured live TUI
+  harness. Final affected Rust checks: 445/445; harness checks: 12/12.
+- [x] First live TensorCash diagnostic passed real Astra file/tool work,
+  Escape cancellation/recovery and process restart/same-thread resume.
 
 ## Remaining
 
-- [ ] Audit and integrate native Astra contract and necessary client upgrades.
-- [ ] Add regression coverage for the actual negotiated version and runtime
-  tool/transport contract, including adjacent OpenAI models and other providers.
-- [ ] Build an opt-in live TUI harness that fails on provider errors or missing
-  model/tool/resume evidence and never prints credentials.
-- [ ] Run final fix/format and affected automated suites; review snapshots.
 - [ ] Run actual Astra TUI responses and file/tool work, cancel/recovery,
   process restart and same-thread resume, with exact binary and structured evidence.
 - [ ] Exercise both TensorCash and Isometric Game in disposable worktrees;
