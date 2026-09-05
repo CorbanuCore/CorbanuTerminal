@@ -172,7 +172,7 @@ fn pf_30_s01_permissive_wire_payload_is_unchanged() {
                     .build_responses_request(
                         &provider,
                         &prompt,
-                    &model,
+                        &model,
                         None,
                         super::ReasoningSummaryConfig::None,
                         None,
