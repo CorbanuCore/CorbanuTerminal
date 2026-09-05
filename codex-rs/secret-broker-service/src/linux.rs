@@ -36,6 +36,7 @@ pub struct BrokerService<T, V, J> {
 impl<T: VaultBrokerTransport, V: VaultBrokerClock, J: BrokerJournalClock> BrokerService<T, V, J> {
     pub fn new(
         broker_instance: String,
+        config: BrokerRuntimeConfig,
         authorization: ProtectedModeAuthorization,
         backend: VaultBrokerBackend<T, V>,
         audit: JournalBrokerAudit<J>,
@@ -43,7 +44,7 @@ impl<T: VaultBrokerTransport, V: VaultBrokerClock, J: BrokerJournalClock> Broker
         Ok(Self {
             runtime: Arc::new(BrokerRuntime::new(
                 broker_instance,
-                BrokerRuntimeConfig::default(),
+                config,
                 authorization,
                 backend,
                 audit,
