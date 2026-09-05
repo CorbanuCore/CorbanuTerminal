@@ -1,12 +1,22 @@
 //! Synthetic provider, evidence and identity support for the owned manual fixture.
-use super::{CANARY, FOREGROUND, Case};
+use super::CANARY;
+use super::Case;
+use super::FOREGROUND;
 use crate::support::tmux::TmuxSession;
-use anyhow::{Context, Result};
+use anyhow::Context;
+use anyhow::Result;
 use core_test_support::responses;
-use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
-use std::{fs, io::Read, path::Path, time::Duration};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use serde_json::Value;
+use serde_json::json;
+use sha2::Digest;
+use sha2::Sha256;
+use std::fs;
+use std::io::Read;
+use std::path::Path;
+use std::time::Duration;
+use wiremock::Mock;
+use wiremock::MockServer;
+use wiremock::ResponseTemplate;
 
 pub(super) struct Artifacts {
     pub(super) binary: std::path::PathBuf,

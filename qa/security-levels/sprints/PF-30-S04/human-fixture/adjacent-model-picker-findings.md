@@ -24,6 +24,12 @@ Product runtime inspected/tested: `6a6bb029d`, immutable RTX codex0.1.38.
    the current runtime preset. This is a source-supported limitation, not a
    claim that all configured providers are broken.
 
+Additional observation, not fully diagnosed: in the tenth rehearsal a Bedrock
+model remained selectable even with `provider:amazon-bedrock` present in the
+fresh inactive eligibility file. Selecting it failed closed with incompatible
+model/provider configuration and made no request. This fixture does not repair
+or claim full inactive-provider parity. Evidence: `rehearsal-tenth/ProviderSwitch`.
+
 Two unsuitable fixture approaches were discarded: overriding built-in provider
 endpoints (only transport retry/timeout overrides are accepted), and inventing
 a `gpu-` custom route (rental catalog refresh removes non-rental entries). No
@@ -32,6 +38,9 @@ real rental or external provider was used and no product safeguards disabled.
 Coordinator-approved human journey instead uses `/providers` to deactivate
 fixture A and explicitly replace it with fixture B, then `/model` to select
 effort. The fresh disposable eligibility store makes unrelated built-in routes
-inactive, so the fixture presents only its own two synthetic routes. This has
-no effect on personal provider settings. Actual B routing and source-specific
-memory persistence outcomes remain mandatory; final qualification is pending.
+inactive. Because existing model labels are not sufficient identity proof, the
+final fixture also uses the existing `model_catalog_json` option to provide
+distinct synthetic A/B slugs, labels and explicit provider metadata. It chooses
+the uniquely named B model after replacement. This has no effect on personal
+provider settings. Actual B routing and source-specific memory persistence
+outcomes remain mandatory; final qualification is pending.

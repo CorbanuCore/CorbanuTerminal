@@ -24,7 +24,11 @@ use tempfile::tempdir;
 
 #[path = "memory_human_fixture_support.rs"]
 mod fixture_support;
-use fixture_support::{Artifacts, fake_provider, publish_attachment, routing, write_json};
+use fixture_support::Artifacts;
+use fixture_support::fake_provider;
+use fixture_support::publish_attachment;
+use fixture_support::routing;
+use fixture_support::write_json;
 
 const CANARY: &str = "PF30S04_SYNTHETIC_ROLLOUT_CANARY";
 const FOREGROUND: &str = "HUMAN_FOREGROUND synthetic fixture";
@@ -157,9 +161,14 @@ async fn run_case(
     let binary = &artifacts.binary;
     let a = fake_provider("A", case, delay).await;
     let b = fake_provider("B", case, delay).await;
-    let models: Value = serde_json::from_slice(&fs::read(repo.join("codex-rs/models-manager/models.json"))?)?;
-    let template = models["models"].as_array().context("model catalog")?.iter()
-        .find(|model| model["slug"] == "gpt-5.6-terra").context("fixture metadata template")?;
+    let models: Value =
+        serde_json::from_slice(&fs::read(repo.join("codex-rs/models-manager/models.json"))?)?;
+    let template = models["models"]
+        .as_array()
+        .context("model catalog")?
+        .iter()
+        .find(|model| model["slug"] == "gpt-5.6-terra")
+        .context("fixture metadata template")?;
     let synthetic = ["a", "b"].map(|id| {
         let mut model = template.clone();
         model["slug"] = json!(format!("memory-fixture-{id}"));
@@ -168,7 +177,11 @@ async fn run_case(
             "capability":"balanced", "reason":"Synthetic manual fixture; no delegation"});
         model
     });
-    write_json(home.path(), "fixture-models.json", &json!({"models":synthetic}))?;
+    write_json(
+        home.path(),
+        "fixture-models.json",
+        &json!({"models":synthetic}),
+    )?;
     let config = format!(
         r#"model = "memory-fixture-a"
 model_provider = "memory-a"

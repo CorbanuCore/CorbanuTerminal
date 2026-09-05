@@ -48,18 +48,21 @@ Attach to a new `provider-switch` fixture. Send the prompt, wait for one pending
 A canary and zero source outputs, then act within the120second window:
 
 1. `/providers` → **Memory Fixture A** → **Deactivate**.
-2. In “Choose replacement”, select **Memory Fixture B — gpt-5.6-terra**.
+2. In “Choose replacement”, select **Memory Fixture B — memory-fixture-a**.
    This persists B before deactivating A, in the disposable fixture only.
-3. Escape back to chat. `/model` → the remaining GPT-5.6-Terra model → confirm
+3. Escape back to chat. `/model` → **Memory Fixture b model** → confirm
    effort. Then send the harmless prompt again.
 4. Observe “B foreground complete”. The status must show a foreground request
-   at endpoint B with model `gpt-5.6-terra`, the old binding's provider-change
+   at endpoint B with model `memory-fixture-b`, the old binding's provider-change
    denial, and zero successful outputs for the original canary source.
 5. `/exit`, then inspect the final outcome.
 
 This is provider replacement plus model-effort selection, **not proof that
 direct `/model` custom-provider switching has UX parity**. See
 [unpatched adjacent findings](adjacent-model-picker-findings.md).
+The fixture supplies its own synthetic `model_catalog_json`, with distinct
+model names and exact provider metadata; no provider/model identity is inferred
+from row numbers or “current” labels. These are fake models, not live GPT calls.
 
 ### 23 — owner exit and explicit restart
 
