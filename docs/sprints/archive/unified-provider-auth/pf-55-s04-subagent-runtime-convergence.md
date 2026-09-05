@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-55-S04"
 title: "Mixed-model native subagent runtime convergence"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-55"
 execution_order: 21
@@ -62,10 +62,14 @@ updated: 2026-09-05
   exact child tool/results, parent cancellation/recovery and cold resume/followup.
 - [x] Installed binary `bdc666c3098d48030e8474173ae53b169708a803dbac1b92088c44ce42e88ff1`
   behind `corbanu-debug`; a fresh `corbanu-agents` session preserves the old session.
+- [x] Installed-binary reruns pass both repositories: eight child turns, 23 child
+  responses and 14 paired tool calls, with the same child IDs after cold restart.
+- [x] Natural-language human-session smoke passes both named models without
+  adapter instructions; source `e7cdb94359a7bdedeb6b0abdf2f17f09823d08e1` recorded.
 
 ## Remaining
 
-- [ ] Record the installed-binary rerun, finished docs and source identity; archive.
+None. Named-human and unrelated release gates remain disclosed, not claimed.
 
 ## Verification
 
@@ -77,7 +81,8 @@ updated: 2026-09-05
 
 ## Exit evidence
 
-- [ ] Candidate source identity, binary hash and artifact paths recorded.
-- [ ] Actual scope and final-tree test evidence linked; no unrelated edits.
-- [ ] Named-human acceptance and remaining release gates accurately disclosed.
-- [ ] Done/Remaining ledgers current; completed record archived only after proof.
+- [x] Candidate source identity, binary hash and artifact paths recorded in
+  [qualification](../../../../qa/release/0.1.38/subagent-runtime.md).
+- [x] Actual scope and final-tree test evidence linked; no unrelated edits.
+- [x] Named-human acceptance and remaining release gates accurately disclosed.
+- [x] Done/Remaining ledgers current; completed record archived only after proof.

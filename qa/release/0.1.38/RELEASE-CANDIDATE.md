@@ -1,6 +1,16 @@
 # Corbanu Terminal 0.1.38 integration candidate
 
-## Latest repair — live GPT-6 Astra, September 5
+## Latest repair — native Luna/Kimi subagents, September 5
+
+Runtime source `e7cdb94359a7bdedeb6b0abdf2f17f09823d08e1` repairs the mixed-model
+catalog filter, V2 child inheritance and exact OpenAI-runtime adapter dead end.
+180 selected Core tests and 19 harness tests pass. Both real child runtimes pass
+tool-backed repository tasks, parent cancellation/recovery and cold resume with
+the original child IDs. `corbanu-debug` now uses this verified build;
+`corbanu-agents` is the fresh human session, with the old session preserved.
+[Exact evidence and limits](subagent-runtime.md). No release was published.
+
+## Historical repair — live GPT-6 Astra, September 5
 
 Runtime source `6df2f2e2ed545506057e9e1aa7a76b9375aaea73`, harness/source tree
 `f848954d7739da8eaa4962f0866c612dedbaf5bb`. Fixed the real newer-client rejection

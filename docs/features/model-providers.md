@@ -37,6 +37,24 @@ its credential. Deactivating the current provider requires an explicit usable
 replacement; cancelling that choice leaves both current-provider and
 eligibility state unchanged.
 
+## Choosing subagent models
+
+Ask for the model you want, for example: “Use Luna and Kimi K3 as separate
+subagents and wait for both results.” Providers still need working credentials,
+and any explicit `agents.provider_allowlist` remains authoritative.
+
+The reconciled debug candidate supports OpenAI Luna (`gpt-5.6-luna`) and Kimi
+Code K3 (`k3`) under the same native V2 orchestration engine. A model's preferred
+engine version does not exclude it from child selection. Exact runtime overrides
+use the typed plaintext adapter; the native encrypted OpenAI interface remains
+available for inherited runtimes. Kimi K3 supports low, high and max effort, not
+medium. No fallback model is substituted when an exact request fails.
+
+Both runtimes have passed real TUI repository work and follow-up on the same
+child threads after a parent restart. [Candidate evidence](../../qa/release/0.1.38/subagent-runtime.md).
+This implements **Shipping MVP — LIVE**, “model-aware delegation, durable
+mailboxes, supervision, resume, and recovery.”
+
 ## Account-backed provider login
 
 Account login is one access mode inside the provider feature. OpenAI Codex
