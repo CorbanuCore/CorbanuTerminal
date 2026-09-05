@@ -67,6 +67,15 @@ updated: 2026-09-04
 
 ## Verification
 
+Round-five staged checkpoint: validated envelopes, native host observation/pending
+screening handoff and three wire projections are implemented and tested, without
+claiming production screening or complete source coverage. RTX focused protocol:
+285/285; latest combined Core provenance/realtime: 88/88 (22 provenance tests).
+Full Core: 3,455 passed, five request-permissions failures reproduced on the
+allocation baseline, eight skips. Astra review 1 fixes and Fable review 2 realtime
+remediation are tracked in the QA ledger; final realtime TMUX/review 3 are pending.
+Keep this sprint `in_progress` until the remaining production criteria are met.
+
 - [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
 - [ ] Focused: `cd codex-rs && just test -p codex-protocol pf_30_s01 && just test -p codex-core pf_30_s01`; confirm tests actually ran.
 - [ ] Integration: full affected crate suites via `just test -p <affected-crate>`; update Bazel locks when manifests change.

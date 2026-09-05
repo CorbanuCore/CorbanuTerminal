@@ -16,6 +16,6 @@ Limit: five invocations for this lane; two used so far. No runtime/model substit
 - Candidate: `4f263ca73..7b884e477`.
 - Structured autoreview using the coordinator's Corbanu wrapper, model `claude-fable-5-1-plan`, effort `high`, inside a private TMUX session. This is a structured exec review in TMUX, not an interactive slash-command review.
 - Verified both Astra fixes and the explicit >1,000-token fragment bound. One P2 remained: default realtime WebSocket startup directly connects without the ModelClient WebRTC admission guard. Independent output and TMUX transcript are retained in `fable-review-2.json` and `fable-review-2-tmux.txt`.
-- The realtime implementation/test files are outside the current allocation; requested a coordinator scope amendment before editing. No clean overall review or complete realtime coverage is claimed.
+- Classified as the same in-scope alternate-transport admission bug. The coordinator approved the exact realtime implementation/test files in `03ec8a6f1` (lane `112878848`) before editing. The second review-remediation cycle adds the shared effective-policy guard before both realtime transports, per-operation live-policy checks, and no transcript-tail flush after denial. Focused remote proof and review 3 are pending; no clean overall review is claimed.
 
 Production screening qualification and sprint completion are not claimed.
