@@ -217,7 +217,6 @@ impl SlashCommand {
                 | SlashCommand::Docs
                 | SlashCommand::Mention
                 | SlashCommand::Status
-                | SlashCommand::Security
                 | SlashCommand::Usage
                 | SlashCommand::Ide
                 | SlashCommand::Providers
