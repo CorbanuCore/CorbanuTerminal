@@ -211,7 +211,8 @@ fn pf_30_s01_admitted_context_round_trips_through_each_real_provider_adapter() {
     };
     client.observe_native_ingress(std::slice::from_ref(&item));
     let candidate = client.pending_native_screening(&item).unwrap();
-    let screened = crate::security::ingress::tests::screen_binding(candidate.source(), candidate.normalized());
+    let screened =
+        crate::security::ingress::tests::screen_binding(candidate.source(), candidate.normalized());
     client.admit_native_screening(&item, screened).unwrap();
     assert!(client.pending_native_screening(&item).is_err());
     let prompt = Prompt {

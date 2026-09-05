@@ -58,7 +58,9 @@ pub(crate) struct PendingSource {
 
 impl std::fmt::Debug for PendingSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PendingSource").field("envelope", &self.envelope).finish_non_exhaustive()
+        f.debug_struct("PendingSource")
+            .field("envelope", &self.envelope)
+            .finish_non_exhaustive()
     }
 }
 
@@ -70,8 +72,12 @@ pub(crate) struct NativeScreeningCandidate {
 }
 
 impl NativeScreeningCandidate {
-    pub(crate) fn source(&self) -> SourceBinding { self.source }
-    pub(crate) fn normalized(&self) -> &str { &self.normalized }
+    pub(crate) fn source(&self) -> SourceBinding {
+        self.source
+    }
+    pub(crate) fn normalized(&self) -> &str {
+        &self.normalized
+    }
 }
 
 impl PendingSource {
@@ -136,7 +142,10 @@ impl PendingSource {
     }
 
     fn screening_candidate(&self) -> NativeScreeningCandidate {
-        NativeScreeningCandidate { source: self.screening_binding, normalized: self.normalized.clone() }
+        NativeScreeningCandidate {
+            source: self.screening_binding,
+            normalized: self.normalized.clone(),
+        }
     }
 
     /// An Allow verdict still only releases untrusted data. Match the exact

@@ -29,12 +29,8 @@ pub(crate) fn screen_binding(source: SourceBinding, text: &str) -> ScreenedConte
         digest,
     )
     .unwrap();
-    let target = ScreeningTarget::new(
-        ContentBinding::new(source, transformation),
-        digest,
-        1,
-    )
-    .unwrap();
+    let target =
+        ScreeningTarget::new(ContentBinding::new(source, transformation), digest, 1).unwrap();
     let model = ModelIdentity::new(
         ContractId::new("fixture").unwrap(),
         ContractId::new("v1").unwrap(),

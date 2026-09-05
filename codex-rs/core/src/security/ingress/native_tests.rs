@@ -89,7 +89,10 @@ fn pf_30_s01_native_mismatched_producer_result_consumes_pending_binding() {
     }
     let candidate = first.screening_candidate(&item).unwrap();
     let screened = super::super::tests::screen_binding(candidate.source(), candidate.normalized());
-    assert_eq!(second.admit_screened(&item, screened), Err(IngressError::BindingMismatch));
+    assert_eq!(
+        second.admit_screened(&item, screened),
+        Err(IngressError::BindingMismatch)
+    );
     assert!(second.screening_candidate(&item).is_err());
     assert!(second.project(&[item]).is_err());
 }
@@ -105,7 +108,10 @@ fn pf_30_s01_native_capacity_never_evicts_or_invalidates_repeat_observation() {
     ingress.observe(&[tool_item()], 1);
     let before = ingress.screening_candidate(&tool_item()).unwrap().source();
     ingress.observe(&[tool_item()], 99);
-    assert_eq!(ingress.screening_candidate(&tool_item()).unwrap().source(), before);
+    assert_eq!(
+        ingress.screening_candidate(&tool_item()).unwrap().source(),
+        before
+    );
     ingress.register_call("overflow", SourceKind::Tool);
     assert!(ingress.unavailable);
     assert_eq!(ingress.calls.len(), MAX_ADMITTED_ITEMS);

@@ -31,7 +31,9 @@ fn item_bytes(item: &ResponseItem) -> Result<Vec<u8>, IngressError> {
             self.0.extend_from_slice(bytes);
             Ok(bytes.len())
         }
-        fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
     }
     let mut writer = BoundedBytes(Vec::new());
     serde_json::to_writer(&mut writer, item).map_err(|_| IngressError::TooLarge)?;
@@ -129,10 +131,18 @@ impl NativeIngress {
     }
 
     /// Preserve the exact bounded payload and host identity for a producer.
-    pub(crate) fn screening_candidate(&self, item: &ResponseItem) -> Result<NativeScreeningCandidate, IngressError> {
-        if self.unavailable { return Err(IngressError::RegistryUnavailable); }
+    pub(crate) fn screening_candidate(
+        &self,
+        item: &ResponseItem,
+    ) -> Result<NativeScreeningCandidate, IngressError> {
+        if self.unavailable {
+            return Err(IngressError::RegistryUnavailable);
+        }
         let bytes = item_bytes(item)?;
-        self.pending.get(&ContentDigest::of(&bytes)).map(PendingSource::screening_candidate).ok_or(IngressError::NativeAdmissionUnavailable)
+        self.pending
+            .get(&ContentDigest::of(&bytes))
+            .map(PendingSource::screening_candidate)
+            .ok_or(IngressError::NativeAdmissionUnavailable)
     }
 
     /// Only a producer's complete matching screening result can advance pending
