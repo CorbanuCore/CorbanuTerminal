@@ -624,6 +624,11 @@ minimized shared audit schema. Native service/data-plane and all-OS qualificatio
 remain required; intermediate commits do not complete or activate the broker.
 PF-30 starts with immutable envelopes and trusted admission, then native ingress
 and provider seams; contract-only tests do not complete its existing checklist.
+Provenance also owns `codex-rs/core/src/session/session.rs` for the narrow client
+admission-policy builder hook and `codex-rs/core/src/client_tests.rs` for actual
+provider wire tests; no other lane owns these paths. Keep ResponseItem and
+provider-owned passthrough schemas unchanged. Missing protected admission or
+screening fails closed; configured intent does not establish effective readiness.
 PF-24 delivers observation-only requested/effective-state UX. No activation,
 grants or downgrade mutations are introduced; unavailable protection is explicit.
 
