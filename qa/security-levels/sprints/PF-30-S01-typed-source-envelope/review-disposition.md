@@ -1,6 +1,6 @@
 # Independent review ledger
 
-Limit: five invocations for this lane; three used so far. No runtime/model substitution or automatic rerun.
+Limit: five invocations for this lane; four used so far. No runtime/model substitution or automatic rerun.
 
 ## Review 1 — Astra High
 
@@ -27,3 +27,10 @@ Production screening qualification and sprint completion are not claimed.
 - Reviewer verified the realtime startup/live-operation/transcript-tail fix and both Astra fixes. One P2 remains, retained verbatim in `fable-review-3.json` and its TMUX transcript: `codex-memories-write::runtime::stream_stage_one_prompt` independently constructs an unbound ModelClient and streams rollout contents.
 - Caller verified at `memories/write/src/runtime.rs:251`, from `phase1.rs:323`, started by the app-server turn processor. The trace-summarize endpoint guard does not cover this separate stage-one route. Narrowed the README accordingly.
 - Scope classification: real adjacent alternate-route gap, outside this lane's literal write scope and across the Core public API/memory owner boundary. After two remediation cycles, the autoreview scope governor pauses code changes pending coordinator disposition. No speculative public API expansion or fourth review was started. This is not a clean overall review and does not qualify all memory paths.
+
+## Review 4 — Astra High, rolling segmentation continuation
+
+- Coordinator authorized this new bounded continuation after assigning the memory-dispatch follow-up to PF-30-S04 and transferring its Core file ownership. The five-invocation ledger was not reset.
+- Frozen HEAD `38e1d6e85`, base `72f5de657`; tested source `2a4fb5857`. Structured helper, app-bundled Codex CLI 0.153.1, model `gpt-6-astra`, effort `high`, and `segmentation-review-scope.md`; no nested reviews.
+- Exit 0, findings empty, patch correct (confidence 0.94). Exact JSON/text retained in `astra-review-4.*`. Reviewer verified complete-input source/digest/count, atomic refusal, original-index reassembly and unchanged provider shaping. It explicitly noted the unchanged potentially >1,000-token projection and did not qualify production screening or unfinished source coverage.
+- No source changes followed. This is a clean review of the segmentation delta, not completion of PF-30-S01 or erasure of earlier findings. Coordinator has authorized Fable 5.1 High external review 5 as the requested second-engine coverage; it has not been replaced by an extra Astra run.
