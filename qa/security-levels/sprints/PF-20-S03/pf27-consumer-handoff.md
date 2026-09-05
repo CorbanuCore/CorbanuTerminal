@@ -1,5 +1,10 @@
 # PF27 consumer handoff — staged Linux root dependency
 
+Coordinator accepted this exact staged composition after broker compatibility
+confirmation. It supersedes the historical nonlogin-controller proposal for this
+design only; actual privileged installation needs a revised manifest and explicit
+approval. There is no established same-process dual-namespace requirement.
+
 ## What PF20 supplies
 
 `codex-protected-state` is a leaf depending on existing config, audit and policy

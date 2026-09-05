@@ -57,11 +57,11 @@ updated: 2026-09-04
 - [x] Explicit one-time enrollment and authenticated Genesis; normal startup opens existing only. Lost/corrupt registry, head or key denies. Interrupted enrollment requires human reconciliation.
 - [x] Exact full-value CAS, checked monotone successor, process-wide exclusive ownership, no-follow directory-relative operations, sync file then atomic publication then directory sync before success.
 - [x] Fail closed on stale/foreign/overflow/torn state and unsupported Linux filesystem/kernel operations. Post-publication ambiguity latches unavailable; no blind retry or fallback to an older root.
-- [ ] Build narrow authenticated native client/service construction with actual post-exec peer and generation binding; root-ready witness is not full ProtectedModeAuthorization. Keep production entry gated until trusted composition exists.
+- [x] Build narrow authenticated native client/service construction with actual post-exec peer and generation binding; root-ready witness is not full ProtectedModeAuthorization. Production entry stays gated; coordinator accepted root-anchor/distinct-child composition only as a staged design, not deployment approval.
 - [x] Reuse PF41 journal root-last recovery and PF20 policy anchor-first recovery; implement thin adapters without changing their authority/persistence semantics.
 - [x] Prove restored/deleted agent data is rejected against intact controller state; document whole-controller snapshot rollback as excluded rather than a passing protection test (unprivileged real PF41 consumer and synthetic Core adapter tests, not privileged deployment).
 - [x] Test enrollment interruption, restart, competing processes, wrong identity, short writes/fsync/ENOSPC/ack loss, stale channels and inherited-socketpair negative control with synthetic data.
-- [ ] Produce exact PF27 consumer handoff and proposed privileged qualification requirements. No sudo, principal/ACL/service setup or real credentials under this allocation.
+- [x] Produce exact PF27 consumer handoff and proposed privileged qualification requirements. No sudo, principal/ACL/service setup or real credentials under this allocation. Broker and coordinator accepted the seam; revised privileged installation manifest remains unapproved.
 
 ## Verification
 

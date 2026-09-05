@@ -86,9 +86,14 @@ protected-session success is claimed by these text/actual-key fixtures.
 ## Outstanding gates
 
 Broker confirms the proposed root-anchor/two-root/distinct-child topology is
-consumable; root coordinator must accept that staged composition before freeze.
-It differs from the earlier nonlogin-controller installation proposal. No
-privileged installation permission is inferred. Astra High/Fable5.1 High reviews
-have not been invoked (new track0/5). Coordinator combined-tree qualification,
+consumable; root coordinator explicitly accepted it as the staged PF20 design.
+It supersedes the earlier nonlogin-controller proposal for this staged design
+only. Actual service installation remains unapproved and requires a revised
+exact privileged manifest. No same-process dual-domain requirement exists;
+no speculative endpoints were added. Idle ten-second expiry requires explicit
+rebootstrap and never retries an ambiguous CAS. Astra High review1 is authorized
+after this frozen, fully tested source; Fable5.1 High review2 follows if clean or
+verified scoped remediation. Neither has yet been invoked (new track0/5).
+Coordinator combined-tree qualification,
 eventual privileged two-principal qualification and release/human acceptance
 remain separate. Sprint stays in_progress.

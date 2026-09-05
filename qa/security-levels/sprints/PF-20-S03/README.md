@@ -115,12 +115,13 @@ Core17/17 passed again. No formatter delta remained. Immutable CLI
 Actual-key profiles2/2 and same-home process restart passed on that candidate;
 eleven final captures are committed under `tmux/`. See `verification.md` for
 commands, cache-path correction and evidence boundaries.
-Integration seam sign-off and Astra/Fable reviews remain pending.
+Integration seam is accepted by the coordinator as a staged root-anchor design;
+Astra/Fable reviews remain pending.
 Review budget: new PF20 track0/5; frozen PF30S01 remains5/5 and is not
-reviewed again. See `pf27-consumer-handoff.md`; proposed root-anchor composition
-must be resolved against the historical nonlogin-controller deployment design
-before final freeze. Broker confirms it is consumable with distinct authorized
-child roles; coordinator acceptance is pending. No installation permission is inferred.
+reviewed again. See `pf27-consumer-handoff.md`; staged root-anchor composition
+supersedes the historical nonlogin-controller proposal only for this design.
+Broker confirms it is consumable with distinct authorized child roles. Actual
+installation requires revised exact manifest approval; no installation permission is inferred.
 
 No elevated setup, principal/ACL/service modification, production Vault transfer
 or system factory invocation has been performed. Selected Linux filesystem
