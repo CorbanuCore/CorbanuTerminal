@@ -10,6 +10,14 @@ doctest = false
 [lints]
 workspace = true
 
+[dependencies]
+hmac = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+
 [dev-dependencies]
 chrono = { workspace = true }
 pretty_assertions = { workspace = true }
