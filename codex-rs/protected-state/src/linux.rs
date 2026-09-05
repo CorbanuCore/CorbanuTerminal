@@ -88,9 +88,16 @@ impl Directory {
             match component {
                 std::path::Component::RootDir => {}
                 std::path::Component::Normal(name) => {
-                    parent = open_at(parent.as_raw_fd(), name.to_str().ok_or(RootError::Invalid)?, libc::O_RDONLY | libc::O_DIRECTORY, 0)?;
+                    parent = open_at(
+                        parent.as_raw_fd(),
+                        name.to_str().ok_or(RootError::Invalid)?,
+                        libc::O_RDONLY | libc::O_DIRECTORY,
+                        0,
+                    )?;
                     let metadata = parent.metadata().map_err(|_| RootError::Unavailable)?;
-                    if metadata.uid() != 0 || metadata.mode() & 0o022 != 0 { return Err(RootError::Invalid); }
+                    if metadata.uid() != 0 || metadata.mode() & 0o022 != 0 {
+                        return Err(RootError::Invalid);
+                    }
                 }
                 _ => return Err(RootError::Invalid),
             }
@@ -129,6 +136,7 @@ impl Directory {
     }
 
     pub(crate) fn read(&self, name: &str) -> Result<Vec<u8>, RootError> {
+        private(&self.file, true)?;
         let file = open_at(self.file.as_raw_fd(), name, libc::O_RDONLY, 0)?;
         private(&file, false)?;
         let mut bytes = Vec::new();
@@ -142,6 +150,7 @@ impl Directory {
     }
 
     pub(crate) fn create(&self, name: &str, bytes: &[u8]) -> Result<(), RootError> {
+        private(&self.file, true)?;
         if bytes.len() > MAX_BYTES {
             return Err(RootError::Invalid);
         }
@@ -171,6 +180,7 @@ impl Directory {
     }
 
     pub(crate) fn lock(&self) -> Result<File, RootError> {
+        private(&self.file, true)?;
         // The inode is enrolled once and never replaced or recreated by open.
         let file = open_at(self.file.as_raw_fd(), "lock", libc::O_RDWR, 0)?;
         private(&file, false)?;
@@ -182,6 +192,7 @@ impl Directory {
     }
 
     pub(crate) fn publish(&self) -> Result<(), RootError> {
+        private(&self.file, true)?;
         // SAFETY: static NUL-terminated names and live directory descriptor.
         if unsafe {
             libc::renameat(
@@ -207,6 +218,7 @@ impl Directory {
     }
 
     pub(crate) fn has_pending(&self) -> Result<bool, RootError> {
+        private(&self.file, true)?;
         let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();
         // SAFETY: valid descriptor, static name and writable stat storage.
         let result = unsafe {

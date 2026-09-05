@@ -110,7 +110,13 @@ fn write<T: Serialize + ?Sized>(stream: &mut UnixStream, value: &T) -> Result<()
     let deadline = Instant::now() + Duration::from_secs(10);
     let mut remaining = frame.as_slice();
     while !remaining.is_empty() {
-        stream.set_write_timeout(Some(deadline.checked_duration_since(Instant::now()).ok_or(RootError::Unavailable)?)).map_err(|_| RootError::Unavailable)?;
+        stream
+            .set_write_timeout(Some(
+                deadline
+                    .checked_duration_since(Instant::now())
+                    .ok_or(RootError::Unavailable)?,
+            ))
+            .map_err(|_| RootError::Unavailable)?;
         match stream.write(remaining) {
             Ok(0) => return Err(RootError::Unavailable),
             Ok(count) => remaining = &remaining[count..],
@@ -121,9 +127,19 @@ fn write<T: Serialize + ?Sized>(stream: &mut UnixStream, value: &T) -> Result<()
     Ok(())
 }
 
-fn read_before(stream: &mut UnixStream, mut output: &mut [u8], deadline: Instant) -> Result<(), RootError> {
+fn read_before(
+    stream: &mut UnixStream,
+    mut output: &mut [u8],
+    deadline: Instant,
+) -> Result<(), RootError> {
     while !output.is_empty() {
-        stream.set_read_timeout(Some(deadline.checked_duration_since(Instant::now()).ok_or(RootError::Unavailable)?)).map_err(|_| RootError::Unavailable)?;
+        stream
+            .set_read_timeout(Some(
+                deadline
+                    .checked_duration_since(Instant::now())
+                    .ok_or(RootError::Unavailable)?,
+            ))
+            .map_err(|_| RootError::Unavailable)?;
         match stream.read(output) {
             Ok(0) => return Err(RootError::Unavailable),
             Ok(count) => output = &mut output[count..],
@@ -251,7 +267,13 @@ impl ControllerRoot {
                     }
                 }
             };
-            alive(&pidfd).map_err(|error| if matches!(reply, Reply::Stored) { RootError::Ambiguous } else { error })?;
+            alive(&pidfd).map_err(|error| {
+                if matches!(reply, Reply::Stored) {
+                    RootError::Ambiguous
+                } else {
+                    error
+                }
+            })?;
             channel
                 .send(&reply, b"corbanu-anchor-reply/v1")
                 .map_err(|_| RootError::Ambiguous)?;

@@ -118,14 +118,30 @@ fn pf20_s03_lost_reply_consumes_capability_without_retry() {
 fn pf20_s03_native_replay_cross_generation_and_oversized_frames_deny() {
     for different_key in [false, true] {
         let (server, client) = UnixStream::pair().unwrap();
-        let mut sender = Channel { stream: client, key: Zeroizing::new([1; 32]), sequence: 1 };
-        let mut receiver = Channel { stream: server, key: Zeroizing::new(if different_key { [2; 32] } else { [1; 32] }), sequence: if different_key { 1 } else { 2 } };
-        sender.send(&Request::LoadJournal, b"corbanu-anchor-request/v1").unwrap();
-        assert!(matches!(receiver.receive::<Request>(b"corbanu-anchor-request/v1"), Err(RootError::Invalid)));
+        let mut sender = Channel {
+            stream: client,
+            key: Zeroizing::new([1; 32]),
+            sequence: 1,
+        };
+        let mut receiver = Channel {
+            stream: server,
+            key: Zeroizing::new(if different_key { [2; 32] } else { [1; 32] }),
+            sequence: if different_key { 1 } else { 2 },
+        };
+        sender
+            .send(&Request::LoadJournal, b"corbanu-anchor-request/v1")
+            .unwrap();
+        assert!(matches!(
+            receiver.receive::<Request>(b"corbanu-anchor-request/v1"),
+            Err(RootError::Invalid)
+        ));
     }
     let (mut server, mut client) = UnixStream::pair().unwrap();
     client.write_all(&u32::MAX.to_be_bytes()).unwrap();
-    assert!(matches!(read::<Packet>(&mut server), Err(RootError::Invalid)));
+    assert!(matches!(
+        read::<Packet>(&mut server),
+        Err(RootError::Invalid)
+    ));
 }
 
 #[test]
@@ -133,14 +149,32 @@ fn pf20_s03_authenticated_definite_conflict_is_not_ambiguous() {
     let (mut server, client) = UnixStream::pair().unwrap();
     let thread = std::thread::spawn(move || {
         write(&mut server, &[3_u8; 32]).unwrap();
-        let mut channel = Channel { stream: server, key: Zeroizing::new([3; 32]), sequence: 1 };
+        let mut channel = Channel {
+            stream: server,
+            key: Zeroizing::new([3; 32]),
+            sequence: 1,
+        };
         let _: Request = channel.receive(b"corbanu-anchor-request/v1").unwrap();
-        channel.send(&Reply::Rejected(RootError::Conflict), b"corbanu-anchor-reply/v1").unwrap();
+        channel
+            .send(
+                &Reply::Rejected(RootError::Conflict),
+                b"corbanu-anchor-reply/v1",
+            )
+            .unwrap();
     });
     let client = NativeAnchorClient::from_authenticated_stream(client).unwrap();
     let owner = codex_config::AuthoritativeStateOwner::new("a".repeat(64), "fixture", 1).unwrap();
-    let next = PolicyCheckpoint { schema_version: 1, revision: 1, owner, state_sha256: "a".repeat(64), commit_sha256: "b".repeat(64) };
-    assert_eq!(crate::PolicyRootStore::compare_policy(&client, None, &next), Err(RootError::Conflict));
+    let next = PolicyCheckpoint {
+        schema_version: 1,
+        revision: 1,
+        owner,
+        state_sha256: "a".repeat(64),
+        commit_sha256: "b".repeat(64),
+    };
+    assert_eq!(
+        crate::PolicyRootStore::compare_policy(&client, None, &next),
+        Err(RootError::Conflict)
+    );
     assert_eq!(client.load(), Err(IntegrityRootError::Unavailable));
     thread.join().unwrap();
 }
@@ -151,6 +185,9 @@ fn pf20_s03_partial_frame_obeys_one_total_deadline() {
     client.write_all(&[1]).unwrap();
     let mut output = [0; 2];
     let start = Instant::now();
-    assert_eq!(read_before(&mut server, &mut output, start + Duration::from_millis(25)), Err(RootError::Unavailable));
+    assert_eq!(
+        read_before(&mut server, &mut output, start + Duration::from_millis(25)),
+        Err(RootError::Unavailable)
+    );
     assert!(start.elapsed() < Duration::from_secs(1));
 }

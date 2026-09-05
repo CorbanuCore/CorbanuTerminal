@@ -119,6 +119,17 @@ fn pf20_s03_foreign_binding_generation_and_sequence_never_commit() {
 }
 
 #[test]
+fn pf20_s03_open_directory_permission_drift_latches_unavailable() {
+    for name in ["registry", "storage"] {
+        let (temp, root) = fixture();
+        fs::set_permissions(temp.path().join(name), fs::Permissions::from_mode(0o750)).unwrap();
+        assert!(IntegrityRootStore::load(&root).is_err(), "{name}");
+        fs::set_permissions(temp.path().join(name), fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(IntegrityRootStore::load(&root).is_err(), "failure must latch");
+    }
+}
+
+#[test]
 fn pf20_s03_lost_corrupt_key_registry_head_and_partial_enrollment_deny() {
     for target in [
         "registry/enrollment",
