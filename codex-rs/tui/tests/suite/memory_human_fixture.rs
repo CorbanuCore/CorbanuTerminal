@@ -220,6 +220,16 @@ animations = false
         serde_json::to_string(&repo.display().to_string())?
     );
     fs::write(home.path().join("config.toml"), config)?;
+    // This disposable fixture has only two eligible synthetic routes. Keep
+    // unrelated built-in providers out of its replacement/model menus.
+    let catalog = codex_provider_auth::ProviderCatalog::from_runtime_providers(
+        &codex_model_provider_info::built_in_model_providers(None),
+    );
+    let mut eligibility = codex_provider_auth::ProviderEligibility::default();
+    for entry in catalog.entries() {
+        eligibility.set_policy(entry, codex_provider_auth::ProviderActivationPolicy::Inactive);
+    }
+    codex_provider_auth::ProviderEligibilityStore::new(home.path()).save(&eligibility)?;
     fs::write(
         home.path().join("auth.json"),
         r#"{"OPENAI_API_KEY":"synthetic-memory-test","tokens":null,"last_refresh":null}"#,
@@ -553,6 +563,9 @@ fn select_label(pane: &TmuxPane<'_>, label: &str, keys: &mut Vec<String>) -> Res
         if selected.contains(label) {
             pane.send_key(TmuxKey::Enter)?;
             keys.push(format!("key: Enter ({label})"));
+            pane.wait_stable_until("selection applied", READY, |next| {
+                !next.lines().any(|line| line == selected)
+            })?;
             return Ok(());
         }
         pane.send_key(TmuxKey::Down)?;
