@@ -24,11 +24,19 @@ pub(crate) fn screen_binding(source: SourceBinding, text: &str) -> ScreenedConte
     let (mut session, target, identity) = screening_fixture(source, text, segments.len() as u32);
     for (index, payload) in segments.enumerate() {
         session
-            .ingest(SegmentEnvelope::new(&target, index as u32, payload.to_vec()), 1)
+            .ingest(
+                SegmentEnvelope::new(&target, index as u32, payload.to_vec()),
+                1,
+            )
             .unwrap();
     }
     match session.finish(
-        Some(ClassifierVerdict::new(target, VerdictKind::Allow, identity, 1)),
+        Some(ClassifierVerdict::new(
+            target,
+            VerdictKind::Allow,
+            identity,
+            1,
+        )),
         2,
         2,
     ) {
@@ -51,7 +59,12 @@ pub(crate) fn screening_fixture(
         digest,
     )
     .unwrap();
-    let target = ScreeningTarget::new(ContentBinding::new(source, transformation), digest, segment_count).unwrap();
+    let target = ScreeningTarget::new(
+        ContentBinding::new(source, transformation),
+        digest,
+        segment_count,
+    )
+    .unwrap();
     let model = ModelIdentity::new(
         ContractId::new("fixture").unwrap(),
         ContractId::new("v1").unwrap(),

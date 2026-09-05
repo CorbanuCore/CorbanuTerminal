@@ -84,7 +84,9 @@ impl NativeScreeningCandidate {
     /// admissible fragments. Normalization happens before byte segmentation;
     /// even an escape split across pieces must be reassembled before screening.
     pub(crate) fn segments(&self) -> impl ExactSizeIterator<Item = &[u8]> {
-        self.normalized.as_bytes().chunks(MAX_SCREENING_SEGMENT_BYTES)
+        self.normalized
+            .as_bytes()
+            .chunks(MAX_SCREENING_SEGMENT_BYTES)
     }
 
     pub(crate) fn segment_count(&self) -> u32 {

@@ -50,22 +50,22 @@ updated: 2026-09-04
 
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 - [x] On 2026-09-02, product authority confirmed the recovered repository contains no surviving PF-30 branch, implementation commit, or handoff artifact; the absent `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-source-envelope` reservation was therefore released to draft.
-- [x] Round-five recovery checkpoints `9c53c0a03`, `abb97e254`, `e6b7b602a`, `ac34a8456`, and `c34da0a48` preserve envelope/admission, native sidecar/hooks, inherited policy floor and regression source. These are unqualified checkpoints; tests/reviews remain unchecked below pending serialized exports/build registration.
+- [x] Round-five envelope/admission, native sidecar/hooks, inherited policy floor and realtime guard reached tested source `e592cf75a`; the exact 22-Core/285-protocol evidence, baseline full-Core failures and three reviews are retained in QA. This is a qualified staged boundary, not completed production screening or a clean overall review.
+- [x] Define immutable source ID/type, origin, actor, retrieval time, untrusted authority, digest, transformations and taint lineage separately from content. Descriptive protocol deserialization cannot mint Core admission.
+- [x] Add named source/role/metadata and missing-source regressions, including a synthetic unknown route/tool variant; connect exact admitted input to the three real provider adapters with unchanged Permissive shaping.
+- [x] Rolling continuation implements complete-input screening transport segmentation within the existing 2,048-byte input bound: chunks at most 512 bytes, one exact source/digest/count, full reassembly and atomic admission. No prefix release or per-segment authority. RTX after scoped fix/full formatting: 27 Core provenance tests and 22 content-security contract tests pass, including split Unicode escapes, partial/duplicate/cross-source/swapped-content chunks and exact provider-wire replay stability. Source checkpoint `078342d85` plus synchronized remote formatting; final candidate/TMUX/review ledger is recorded in QA.
 
 ## Remaining
 
-- [ ] Rolling pipeline continuation prioritizes complete-input segmentation, missing/unknown source rejection, mixed-source and Unicode/forged-marker regressions and native screening-producer handoff within the existing allocated ingress/protocol/context/tool paths. No fabricated production Allow verdict or detector qualification. Core client.rs and session/mod.rs now belong exclusively to PF-30-S04; request any integration hook from the coordinator.
-
-- [ ] Add a synthetic newly introduced provider/tool/ingress variant absent from the registry and prove rejection or conservative untrusted handling before model admission. Missing registration, malformed envelopes and allow verdicts cannot manufacture authority.
+- [ ] Connect a real trusted screening producer to the completed candidate/segment handoff. `codex-content-security` currently provides the contract/reassembler, not a production classifier; the positive tests use an explicitly synthetic engine. A production verdict cannot be fabricated and PF-35 qualification cannot be bypassed. Core client.rs and session/mod.rs belong exclusively to PF-30-S04; request any additional integration hooks from the coordinator.
 
 - [ ] Port forged metadata/role/model-token and Unicode wrapper fixtures, including complete markers before a clipped marker. Host-generated authorization notices use a separate typed constructor; external labels and unsafe-hook switches cannot mint trust or bypass required screening.
 
-- [ ] Define immutable source ID/type, origin, actor, retrieval time, trust/authority, digest, transformations and taint lineage outside content-controlled fields.
 - [ ] Assign envelopes only at trusted ingress for web/search, files, transcripts, social/trollbox/email, MCP/tool/plugin/hook output and child messages; unknown origin is untrusted, never human authority.
-- [ ] Serialize separate data envelopes into each provider context adapter; normalize forged role delimiters, special tokens, bidi/zero-width markers and unsafe display metadata without promoting content.
+- [ ] Complete finer native producer identity and unsupported hosted/opaque ingress coverage. Generic tool/transcript origins remain conservative; producer names or source text cannot substitute for an observed host adapter. The three provider projections and escaping are implemented, but do not prove missing native source coverage.
 - [ ] Keep user-issued authority on an authenticated human event channel; quoted text inside a human message is not automatically a grant.
 - [ ] Test forged system/human markers, missing envelope, mixed-source chunks, Unicode confusables and provider round trips.
-- [ ] Add named `pf_30_s01` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
+- [ ] Finish whole-feature native/production qualification and record final-tree review/TMUX evidence; no archive based on fixture screening alone. Shared registrations remain coordinator-owned.
 
 ## Verification
 

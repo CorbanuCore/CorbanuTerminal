@@ -72,7 +72,10 @@ async fn pf_30_s01_native_permissive_turn_retains_original_text() -> anyhow::Res
     )
     .await;
     let test = test_codex().build_with_auto_env(&server).await?;
-    let text = format!("{} Preserve <markup> and 日本語 source-fixture-canary", "a".repeat(2500));
+    let text = format!(
+        "{} Preserve <markup> and 日本語 source-fixture-canary",
+        "a".repeat(2500)
+    );
     // submit_turn already waits for and consumes TurnComplete.
     test.submit_turn(&text).await?;
     assert!(

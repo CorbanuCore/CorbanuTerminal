@@ -21,6 +21,12 @@ Plan: `docs/plans/active/p0-security-levels.md`, feature PF-30, sprint PF-30-S01
   pending carrier. A producer can read that immutable candidate and return real
   `ScreenedContent` through the native client handoff. Reading is not admission;
   a mismatch consumes the pending candidate and never restores raw data.
+- Complete bounded inputs now expose at most 512-byte screening transport chunks.
+  The target must match the full source, reassembly digest and segment count;
+  partial, duplicate, altered-order or cross-source chunks cannot release a prefix.
+  Normalization precedes segmentation, so a split Unicode escape is reassembled
+  before screening. The 2,048-byte whole-input and 8,192-byte projection limits
+  and final provider payload shape have not increased or changed.
 - Native Responses, Chat Completions and Anthropic request constructors project
   only exactly bound admitted items and reject raw/legacy/forged inputs. Initial
   session creation and model-provider replacement enforce the maximum of
@@ -38,8 +44,8 @@ Plan: `docs/plans/active/p0-security-levels.md`, feature PF-30, sprint PF-30-S01
 
 ## Explicit remaining work
 
-Native producer observation and wire projection are connected; production
-screening capability delivery and complete-input segmentation are not. Tool-based
+Native producer observation, bounded complete-input segmentation and wire projection
+are connected; production screening capability delivery is not. Tool-based
 file/web/plugin output retains conservative tool provenance, and message-based
 hook/social/email content retains conservative transcript provenance rather than
 claiming unobserved finer origin. Native hosted web/search/opaque variants without
@@ -48,7 +54,9 @@ not prove native successful protected inference. Persistent
 resume/memory lineage remains PF-30-S02, post-taint enforcement PF-30-S03, and
 qualified detector delivery PF-35. Unknown or unavailable routes remain closed.
 
-Verification so far: all 22 focused Core provenance tests and all 285 protocol
+Verification so far: the rolling segmentation continuation passes all 27 focused
+Core provenance tests and all 22 content-security contract tests on RTX after fix
+and full formatting. Earlier source passed all 285 protocol
 tests pass on RTX. Full Core: 3,455 passes, five pre-existing request-permissions
 failures independently reproduced at allocation `4f263ca73`, eight skips.
 The existing actual-key TMUX `/status` and `/exit` smoke passed on `7b884e477`,
