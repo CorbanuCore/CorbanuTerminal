@@ -65,4 +65,10 @@ Evidence `remediated-2/qualification.log`, `rehearsal/`, `memory-policy/`,
 `remediated-2/candidate/all`, SHA256
 `dea1c0286c4c1e3cf23f3954a28cb6c9274939dd7d5e4033ca296ceb5e748673`.
 Product remains the immutableb12e32db3 candidate/hash above. Pinned ignored-entry
-startup/cancel outside lock is running; its result is not yet claimed.
+startup/cancel passed outside lock, exact `Ok(Complete)` / `Ok(Cancelled)`
+outcomes and owned home/socket removal. Evidence `remediated-2/pinned-entry.log`
+and `remediated-2/pinned-entry/{startup,cancel}`. No operator session remains.
+
+Review5 Astra High is now invoked on the narrow673c378b6-to-final lane delta,
+using the structured helper and bundled CLI, with review-5-scope.md. Five of
+five original memory invocations consumed; no sixth authorized. Result pending.
