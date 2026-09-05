@@ -329,3 +329,40 @@ async fn pf_30_s04_websocket_connect_race_denies_before_first_frame() {
     ));
     server.await.unwrap();
 }
+
+#[tokio::test]
+async fn pf_30_s04_owner_termination_cancels_pending_http_without_a_retry() {
+    let (mut session, context) = crate::session::tests::make_session_and_context().await;
+    session.services.agent_control = session.services.agent_control.clone()
+        .with_effective_security_policy(SecurityLevel::Permissive, session.thread_id, false).unwrap();
+    let owner = Arc::new(session);
+    let (terminate, terminated) = tokio::sync::oneshot::channel();
+    let mut client = StageOneMemoryClient::new(Arc::downgrade(&owner),
+        async move { let _ = terminated.await; }.boxed().shared(), owner.thread_id, &owner.provider().await).await.unwrap();
+    let server = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(30)))
+        .mount(&server).await;
+    let mut provider = owner.provider().await;
+    provider.base_url = Some(server.uri());
+    provider.requires_openai_auth = false;
+    provider.env_key = None;
+    provider.supports_websockets = false;
+    client.client = client.client.for_provider(&provider);
+    let task = tokio::spawn(async move {
+        let prompt = Prompt::default();
+        let metadata = CodexResponsesMetadata::new("fixture".into(), "fixture".into(), "fixture".into(), "fixture:0".into());
+        client.extract(StageOneMemoryRequest { prompt: &prompt, model_info: &context.model_info,
+            session_telemetry: &context.session_telemetry, reasoning_effort: None,
+            reasoning_summary: ReasoningSummary::default(), service_tier: None, responses_metadata: &metadata }).await
+    });
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while server.received_requests().await.unwrap().is_empty() {
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    }).await.unwrap();
+    terminate.send(()).unwrap();
+    let result = tokio::time::timeout(std::time::Duration::from_secs(1), task).await.unwrap().unwrap();
+    assert!(matches!(result, Err(StageOneMemoryError::Denied(StageOneMemoryDenial::OwnerTerminated))));
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+}

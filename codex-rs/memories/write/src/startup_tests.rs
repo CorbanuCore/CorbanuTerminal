@@ -746,6 +746,29 @@ async fn pf_30_s04_worker_eof_never_persists_partial_json() -> anyhow::Result<()
     Ok(())
 }
 
+#[tokio::test]
+async fn pf_30_s04_new_job_refreshes_provider_but_old_client_denies() -> anyhow::Result<()> {
+    let server = start_mock_server().await;
+    let home = Arc::new(TempDir::new()?);
+    let test = build_test_codex(&server, home).await?;
+    let provider = create_model_provider(test.config.model_provider.clone(), Some(test.thread_manager.auth_manager()));
+    let (context, config) = memory_startup_context_with_provider(&test, provider).await;
+    let old = context.stage_one_client(&config).await?;
+    core_test_support::submit_thread_settings(&test.codex, codex_protocol::protocol::ThreadSettingsOverrides {
+        model_provider: Some(codex_model_provider_info::ZAI_PROVIDER_ID.into()),
+        ..Default::default()
+    }).await?;
+    assert!(matches!(old.check_completion().await,
+        Err(codex_core::memory_stage_one::StageOneMemoryError::Denied(codex_core::memory_stage_one::StageOneMemoryDenial::ProviderChanged))));
+    let current = context.current_stage_one_config(&config).await?;
+    assert!(current.model_provider.is_zai());
+    assert_eq!(current.model_provider_id, codex_model_provider_info::ZAI_PROVIDER_ID);
+    assert!(context.stage_one_client(&current).await.is_ok());
+    assert!(server.received_requests().await.unwrap().is_empty());
+    shutdown_test_codex(&test).await?;
+    Ok(())
+}
+
 const MOCK_PROVIDER_PHASE_ONE_MODEL: &str = "mock.phase-one";
 const MOCK_PROVIDER_PHASE_TWO_MODEL: &str = "mock.phase-two";
 
