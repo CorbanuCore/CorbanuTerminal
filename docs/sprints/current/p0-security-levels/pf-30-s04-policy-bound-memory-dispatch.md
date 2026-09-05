@@ -43,11 +43,13 @@ updated: 2026-09-04
 - [x] Active plan and completed/archived PF-22-S02 runtime contract.
 - [x] User authorized rolling replacement lanes; coordinator records this genuine single-feature contract split without enabling protected memory.
 - [x] Exact branch/worktree/base and non-overlapping scope allocated.
-- [ ] Read root/Rust/Core/TUI policies and verify source/API assumptions before implementation.
+- [x] Read root/Rust/Core/TUI policies and verify source/API assumptions before implementation.
 
 ## Done
 
 - [x] Existing detached construction, lower-level retry risk and historical-source/runtime-owner distinction documented.
+- [x] Host-owned factory/opaque facade and per-attempt transport guard authored; first Core compile and binding tests passed on RTX. Worker routing/persistence and expanded canary/TMUX tests authored, final qualification still pending.
+- [x] [Versioned evidence and limitations](../../../../qa/security-levels/sprints/PF-30-S04/qualification.md) created; review invocation count 0/5.
 
 ## Remaining
 
