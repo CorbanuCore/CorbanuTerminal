@@ -125,7 +125,27 @@ fn pf20_s03_open_directory_permission_drift_latches_unavailable() {
         fs::set_permissions(temp.path().join(name), fs::Permissions::from_mode(0o750)).unwrap();
         assert!(IntegrityRootStore::load(&root).is_err(), "{name}");
         fs::set_permissions(temp.path().join(name), fs::Permissions::from_mode(0o700)).unwrap();
-        assert!(IntegrityRootStore::load(&root).is_err(), "failure must latch");
+        assert!(
+            IntegrityRootStore::load(&root).is_err(),
+            "failure must latch"
+        );
+    }
+}
+
+#[test]
+fn pf20_s03_successor_overflow_and_generation_regression_deny() {
+    let binding = Enrollment::journal(&owner()).0;
+    let old = Checkpoint::Journal(checkpoint(u64::MAX));
+    let next = Checkpoint::Journal(checkpoint(1));
+    assert_eq!(next.validate_successor(Some(&old), &binding), Err(RootError::Invalid));
+    let mut old = checkpoint(1);
+    old.policy_generation = 3;
+    old.run_generation = 4;
+    for (policy, run) in [(2, 4), (3, 3)] {
+        let mut next = checkpoint(2);
+        next.policy_generation = policy;
+        next.run_generation = run;
+        assert_eq!(Checkpoint::Journal(next).validate_successor(Some(&Checkpoint::Journal(old.clone())), &binding), Err(RootError::Invalid));
     }
 }
 

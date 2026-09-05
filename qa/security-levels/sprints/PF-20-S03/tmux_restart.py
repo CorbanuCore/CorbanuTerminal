@@ -29,7 +29,8 @@ def main():
         (home / "config.toml").write_text(config)
         (home / "auth.json").write_text(json.dumps({"OPENAI_API_KEY": "anchor-synthetic-fixture"}))
         socket = str(home / "tmux.sock")
-        env = dict(os.environ, CODEX_HOME=str(home), CORBANU_HOME=str(home), RUST_LOG="trace")
+        env = dict(os.environ, CODEX_HOME=str(home), CORBANU_HOME=str(home), RUST_LOG="trace",
+                   OPENAI_API_KEY="anchor-synthetic-fixture")
 
         def tmux(*arguments, check=True):
             return subprocess.run(["tmux", "-S", socket, *arguments], env=env,
