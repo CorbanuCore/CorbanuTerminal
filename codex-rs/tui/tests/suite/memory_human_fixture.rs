@@ -116,17 +116,32 @@ fn memory_human_pending_exit_rejects_unproven_lifecycle() {
 fn memory_human_pending_exit_only_allows_exact_owner_denial() {
     let source = ThreadId::new();
     let other = ThreadId::new();
-    let owner = format!("WARN Phase 1 job failed for thread {source}: stage-one memory owner terminated");
-    let provider = format!("WARN Phase 1 job failed for thread {source}: stage-one memory provider changed");
-    let unrelated = format!("WARN Phase 1 job failed for thread {source}: synthetic request failure");
-    pretty_assertions::assert_eq!(source_failure_reasons(&owner, source), vec!["owner_terminated"]);
+    let owner =
+        format!("WARN Phase 1 job failed for thread {source}: stage-one memory owner terminated");
+    let provider =
+        format!("WARN Phase 1 job failed for thread {source}: stage-one memory provider changed");
+    let unrelated =
+        format!("WARN Phase 1 job failed for thread {source}: synthetic request failure");
+    pretty_assertions::assert_eq!(
+        source_failure_reasons(&owner, source),
+        vec!["owner_terminated"]
+    );
     pretty_assertions::assert_eq!(source_failure_reasons(&owner, other), Vec::<&str>::new());
     for (log, expected) in [
         (provider.clone(), vec!["provider_changed"]),
         (unrelated.clone(), vec!["other_source_failure"]),
-        (format!("{owner}; synthetic failure"), vec!["other_source_failure"]),
-        (format!("{owner}\n{provider}"), vec!["owner_terminated", "provider_changed"]),
-        (format!("{owner}\n{unrelated}"), vec!["owner_terminated", "other_source_failure"]),
+        (
+            format!("{owner}; synthetic failure"),
+            vec!["other_source_failure"],
+        ),
+        (
+            format!("{owner}\n{provider}"),
+            vec!["owner_terminated", "provider_changed"],
+        ),
+        (
+            format!("{owner}\n{unrelated}"),
+            vec!["owner_terminated", "other_source_failure"],
+        ),
     ] {
         let reasons = source_failure_reasons(&log, source);
         pretty_assertions::assert_eq!(reasons, expected);
@@ -477,7 +492,10 @@ animations = false
                     outputs,
                     // Only exact expected owner termination may accompany a
                     // pending owner exit. Mixed/unrelated source failures deny.
-                    failed: denied || source_failures.iter().any(|reason| *reason != "owner_terminated"),
+                    failed: denied
+                        || source_failures
+                            .iter()
+                            .any(|reason| *reason != "owner_terminated"),
                 };
                 ensure!(
                     proof.is_pending(),

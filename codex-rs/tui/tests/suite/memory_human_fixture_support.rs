@@ -29,13 +29,14 @@ pub(super) fn source_failure_reasons(log: &str, source: ThreadId) -> Vec<&'stati
     let prefix = format!("Phase 1 job failed for thread {source}:");
     // Exact Display strings from core::memory_stage_one::StageOneMemoryDenial;
     // TUI integration tests deliberately do not depend directly on Core.
-    log.lines().filter_map(|line| line.split_once(&prefix)).map(|(_, reason)| {
-        match reason.trim() {
+    log.lines()
+        .filter_map(|line| line.split_once(&prefix))
+        .map(|(_, reason)| match reason.trim() {
             "stage-one memory owner terminated" => "owner_terminated",
             "stage-one memory provider changed" => "provider_changed",
             _ => "other_source_failure",
-        }
-    }).collect()
+        })
+        .collect()
 }
 
 impl Artifacts {
