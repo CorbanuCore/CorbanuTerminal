@@ -187,6 +187,27 @@ integration and handoff are finished.
 
 ## PF-35 external handoff
 
+### Freed-agent design allocation
+
+After PF-24-S01 archival, the user requested another lane for that agent.
+The coordinator checked every draft P0 sprint's archived dependencies: only
+PF-35-S01 is dependency-ready, and it remains the external campaign.
+No other complete implementation sprint can be dispatched without first
+finishing a dependency or explicitly restructuring the plan.
+
+The freed `/root/security_ui` agent is therefore running a bounded,
+read-only **memory-worker policy-binding design/allocation lane**, using
+source `62540ca1d` and the accepted PF-30 follow-up. Output:
+`.codex-work/security-round5-ui/memory-policy-binding-design.md` on CorbanuDrive.
+It must propose one minimal host-owned binding API, actual call path, exact
+scope, inherited/live policy semantics and fake-provider/TMUX regression plan.
+No source changes, additional reviews, builds or privileged setup are authorized
+by this design assignment. It does not consume a third executable sprint
+reservation or waive PF-30-S02's dependency on completed PF-30-S01.
+The coordinator will reconcile overlapping Core ownership and record the
+implementation allocation before any code changes. Existing review counts and
+the outstanding main-merge choice are unchanged.
+
 User explicitly removed PF-35 from the engineering main path.
 Its engineering reservation returns to draft under the existing sprint process.
 The external dataset campaign is independent and untouched; this is not a
