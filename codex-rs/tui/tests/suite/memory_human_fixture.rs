@@ -186,6 +186,7 @@ log_dir = {:?}
 [features]
 sqlite = true
 memories = true
+code_mode_host = false
 [memories]
 generate_memories = true
 min_rollout_idle_hours = 0
@@ -201,7 +202,7 @@ env_key = "MEMORY_FIXTURE_A_KEY"
 wire_api = "responses"
 request_max_retries = 0
 stream_max_retries = 0
-[model_providers.gpu-memory-b]
+[model_providers.memory-b]
 name = "Memory Fixture B"
 base_url = "{}/v1"
 env_key = "MEMORY_FIXTURE_B_KEY"
@@ -504,21 +505,36 @@ fn submit(pane: &TmuxPane<'_>, text: &str, keys: &mut Vec<String>) -> Result<()>
 }
 fn switch_provider(pane: &TmuxPane<'_>, root: &Path, keys: &mut Vec<String>) -> Result<()> {
     submit(pane, "/providers", keys)?;
-    pane.wait_stable_contains("Providers", READY)?;
+    pane.wait_stable_contains("Configure providers and control", READY)?;
+    select_label(pane, "Memory Fixture A", keys)?;
+    select_label(pane, "Deactivate", keys)?;
+    pane.wait_stable_contains("Choose replacement", READY)?;
+    select_label(pane, "Memory Fixture B — gpt-5.6-terra", keys)?;
+    pane.wait_stable_contains("Configure providers and control", READY)?;
+    fs::write(root.join("provider-replacement.txt"), pane.capture_viewport()?)?;
     pane.send_key(TmuxKey::Escape)?;
-    keys.push("key: Escape (provider catalog initialized)".into());
+    keys.push("key: Escape (provider replacement complete)".into());
     submit(pane, "/model", keys)?;
     pane.wait_stable_contains("Select Model", READY)?;
     for _ in 0..16 {
-        if pane.capture_viewport()?.contains("[Rented GPU]") {
+        if pane.capture_viewport()?.contains("[Other]") {
             break;
         }
         pane.send_key(TmuxKey::Right)?;
         keys.push("key: Right".into());
         std::thread::sleep(Duration::from_millis(150));
     }
-    pane.wait_stable_contains("[Rented GPU]", READY)?;
+    pane.wait_stable_contains("[Other]", READY)?;
     fs::write(root.join("model-picker.txt"), pane.capture_viewport()?)?;
+    select_label(pane, "GPT-5.6-Terra", keys)?;
+    pane.wait_stable_contains("Select Reasoning", READY)?;
+    pane.send_key(TmuxKey::Enter)?;
+    keys.push("key: Enter (default reasoning)".into());
+    pane.wait_stable_until("effort selected", READY, |capture| !capture.contains("Select Reasoning"))?;
+    Ok(())
+}
+
+fn select_label(pane: &TmuxPane<'_>, label: &str, keys: &mut Vec<String>) -> Result<()> {
     for _ in 0..64 {
         let capture = pane.capture_viewport()?;
         let selected = capture
@@ -534,16 +550,9 @@ fn switch_provider(pane: &TmuxPane<'_>, root: &Path, keys: &mut Vec<String>) -> 
             })
             .unwrap_or("")
             .to_owned();
-        if selected.contains("GPT-5.6-Terra") {
+        if selected.contains(label) {
             pane.send_key(TmuxKey::Enter)?;
-            keys.push("key: Enter (synthetic gpu-memory-b model)".into());
-            let selection = pane.wait_stable_until("model selected", READY, |capture| {
-                !capture.contains("Select Model")
-            })?;
-            if selection.contains("Select Reasoning") {
-                pane.send_key(TmuxKey::Enter)?;
-                keys.push("key: Enter (default reasoning)".into());
-            }
+            keys.push(format!("key: Enter ({label})"));
             return Ok(());
         }
         pane.send_key(TmuxKey::Down)?;
