@@ -89,3 +89,31 @@ memory success or failure and is not changed by this test-only support.
 No local builds, release benchmark, TensorCash/Isometric application workflow,
 or Mac shortcut update is part of this routine QA support. Product fixes and
 release acceptance stay with the coordinator.
+
+## Frozen RTX launch command
+
+Use this only when the coordinator arranges human testing. The executable
+interface was rehearsed automatically; independent review is still pending.
+Run as travis on RTX, from the preserved fixture source worktree. No build lock
+or Cargo invocation is needed. Model metadata is bundled in the pinned runner;
+the source worktree remains the explicitly trusted synthetic working directory.
+
+```bash
+cd /home/travis/worktrees/security-human-memory-fixture
+export TMPDIR=$(mktemp -d /home/travis/security-round5/memory-tmp/human.XXXXXX)
+export CARGO_BIN_EXE_codex=/home/travis/security-round5/evidence/integration/6a6bb029d/candidate/codex
+export CORBANU_MEMORY_CANDIDATE_SHA256=90d6a1f7f72c5397ff858583c038b2615c8fb034f57a890d6595d6b98afccd4f
+export CORBANU_MEMORY_HUMAN_OPT_IN=1 CORBANU_TMUX_REQUIRED=1 RUST_MIN_STACK=8388608
+export CORBANU_MEMORY_HUMAN_CASE=startup
+# Choose a NEW path; do not create it. The helper refuses an existing path.
+export CORBANU_MEMORY_HUMAN_EVIDENCE=/home/travis/security-round5/evidence/human-memory/operator-startup-1
+/home/travis/security-round5/evidence/human-memory/candidate-673c378b6/all \
+  --ignored --exact suite::memory_human_fixture::human_memory_fixture --nocapture
+```
+
+For the other cases change `CORBANU_MEMORY_HUMAN_CASE` to `provider-switch` or
+`pending-exit` and choose a fresh evidence directory. While the command runs,
+use another SSH terminal to run `bash <evidence>/attach.sh`. The runner hash is
+`dabbac2b5c54386424183f9fce9ee6e7df807f4ecaa3cc2ae3eebb82cb4d7ad1`.
+An existing path, missing opt-in or wrong product hash is not a completed check.
+Never replace the pinned candidate path with an arbitrary binary silently.

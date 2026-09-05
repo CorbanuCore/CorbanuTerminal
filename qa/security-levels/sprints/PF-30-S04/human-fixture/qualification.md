@@ -34,7 +34,7 @@ the coordinator deliberately arranges the human package.
       shared build lock during operator waits.
 - [x] Verify final diff contains only allocated tests/QA and root registration.
 - [ ] Review #3 Astra High and #4 Fable5.1High via Corbanu/private TMUX, reusing
-      existing memory budget 2/5. No review invoked for this support yet.
+      the original memory budget. Review3 findings are remediated; review4 pending.
 - [ ] Publish tested operator commands and exact evidence.
 
 ## Checkpoints
@@ -59,7 +59,7 @@ with custom loopback providers and explicit `/providers` catalog initialization
 before the real `/model` journey. Failed rehearsal status/captures persist before
 propagating the test error. Final qualification is still pending.
 
-## Final source qualification
+## Pre-review source qualification (superseded below)
 
 Runtime `77200387f` (test-only source): RTX source `a86de72bd` plus exact
 formatter delta, verified identical to the committed tree. Product remains
@@ -109,7 +109,7 @@ Original memory reviews1–2 remain counted. This support reuses, not resets, th
 budget. Review3 is now invoked against the frozen branch diff from `b64d7390d`:
 bundled CodexCLI `/Applications/ChatGPT.app/Contents/Resources/codex`, requested
 `gpt-6-astra` with High effort, structured autoreview helper, branch mode and
-review-scope.md. Result pending; no nested reviewer. Review4 Fable5.1High remains
+review-scope.md. Result recorded below; no nested reviewer. Review4 Fable5.1High remains
 conditional on disposition of review3. At most5 total absent continuing critical
 issues; the limit is not a target.
 
@@ -122,4 +122,35 @@ bundled catalog API; exact final cancellation outcome validation and negative
 Python regression; first observed exit proof before the delayed response
 deadline, with a conservative polling margin and source failure rejection.
 The new pending-proof test rejects missing/expired/failed/completed evidence.
-Final affected tests and pinned runner must be regenerated before review4.
+Final affected tests and pinned runner were regenerated as recorded below.
+
+## Remediated final source qualification
+
+Test-only runtime `673c378b6` equals RTX `a4ac1f072` plus the exact formatter
+delta. Scoped fix/fullfmt preceded the final tests. Python cancellation-outcome
+regressions passed2/2; nextest selected `test(suite::memory_human_fixture) |
+test(support::tmux::tests)` passed11/11, run
+`e12c8b9a-bff1-4e1f-ab49-193aab81b10f`,69.144seconds. The five actual-key
+scenarios passed, including provider replacement, cancellation/timeout cleanup
+and restart. Pending owner exit was proven at520ms against the30-second delayed
+response window, no source output/failure; `pending-exit.json` records the proof.
+The manual nextest profile parses and lists the ignored opt-in entry.
+
+RTX artifacts: `remediated.log`, `remediated-profile.json`,
+`rehearsal-remediated/{Startup,ProviderSwitch,PendingExit,Cancel,Timeout}` under
+the evidence root above. New runner `candidate-673c378b6/all` was copied while
+holding the shared build lock, after a nextest-manifest mtime comparison. SHA256:
+`dabbac2b5c54386424183f9fce9ee6e7df807f4ecaa3cc2ae3eebb82cb4d7ad1`.
+Product candidate/hash is unchanged. The regenerated frozen manual-entry
+rehearsal passed outside the build lock: exact `Ok(Complete)` startup and
+`Ok(Cancelled)` cancellation outcomes, owned home/socket removed. Evidence:
+`pinned-entry-673c378b6.log` and `pinned-entry-673c378b6/{startup,cancel}`.
+This supersedes the old
+runner for human testing, without erasing the original failed review evidence.
+
+Review4 is allocated and now being invoked against this frozen runtime using
+the structured helper in a private TMUX, approved Corbanu `review-fable-high`
+wrapper, requested `claude-fable-5-1-plan` / High. This is Corbanu exec under
+TMUX, not a claim of an interactive TUI model review. No nested reviewer;
+four of the original maximum five memory-track invocations consumed. Result
+pending; human acceptance remains unperformed.
