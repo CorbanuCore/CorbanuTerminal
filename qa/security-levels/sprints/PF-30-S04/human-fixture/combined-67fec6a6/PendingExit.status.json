@@ -1,0 +1,24 @@
+{
+  "case": "PendingExit",
+  "source": "01a0707a-927f-7c50-a18b-70926fc326e1",
+  "canary_requests": 1,
+  "source_outputs": 0,
+  "provider_change_denied": false,
+  "foreground_b": false,
+  "restarted": true,
+  "source_failure_reasons": [],
+  "pending_exit_elapsed_ms": 524,
+  "pending_window_remaining_seconds": 28,
+  "routes": [
+    {
+      "endpoint": "A",
+      "model": "memory-fixture-a",
+      "kind": "memory"
+    },
+    {
+      "endpoint": "A",
+      "model": "memory-fixture-a",
+      "kind": "foreground"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-# Combined human-memory fixture qualification — in progress
+# Combined human-memory fixture qualification — passed
 
 Exact merged source `67fec6a6a5d728f2fc9c17998301b41e9628ad92` in fresh RTX
 mirror `/home/travis/worktrees/security-human-combined-67fec6a6`. Earlier
@@ -17,11 +17,13 @@ mtimes and cargo-bin repo marker refreshed to prevent cross-worktree artifacts.
 Scoped `just fix -p codex-tui`, full `just fmt`, then `git diff --exit-code`
 before tests. Any source delta stops qualification for coordinator inspection.
 
-- [ ] Python exact pinned completion regressions2.
-- [ ] Fixture plus TMUX support11, existing memory-policy/security/slash4.
-- [ ] Manual nextest profile parse; freshly compiled runner pinned under lock.
-- [ ] Strict ignored manual-entry startup and cancellation outside lock.
-- [ ] Owned home/socket/process cleanup; exact runner/source/hash recorded.
+- [x] Python exact pinned completion regressions2.
+- [x] Fixture plus TMUX support12, existing memory-policy/security/slash4.
+- [x] Manual nextest profile parse; freshly compiled runner pinned under lock.
+- [x] Strict ignored manual-entry startup and cancellation outside lock.
+- [x] Owned home/socket/process cleanup; exact runner/source/hash recorded.
+- [x] Authorized Astra review5 returned clean after the narrow correction.
+- [ ] Named human acceptance21–23 (not performed by machine rehearsal).
 
 Evidence root:
 `/home/travis/security-round5/evidence/human-memory/combined-67fec6a6/`.
@@ -71,4 +73,58 @@ and `remediated-2/pinned-entry/{startup,cancel}`. No operator session remains.
 
 Review5 Astra High is now invoked on the narrow673c378b6-to-final lane delta,
 using the structured helper and bundled CLI, with review-5-scope.md. Five of
-five original memory invocations consumed; no sixth authorized. Result pending.
+five original memory invocations consumed; no sixth authorized. Review5 returned
+helper exit0, no findings, `patch is correct` with0.91 confidence. Original
+structured/text outputs are preserved here in `review-5-astra.*`. The review
+was read-only, did not run tests, and covered the narrow673c378b6..bc0b9c553
+delta. No additional review is needed. Review4's original finding remains
+preserved; the earlier deferral is superseded by this tested correction.
+
+The remote mirror is now clean at
+`c137c953d9ebe2223ab6b2ff0453c1cc8bca6aca`, exactly67fec6a6 plus cherry-picks of
+d03a4ac1c, f0cc34fd2 and ea158a210. This records the already-tested formatter
+delta without changing its bytes. Per-case final status copies are versioned
+alongside this report. Full actual keys/viewports remain under remote evidence:
+`rehearsal/<Case>/input-events.txt`, `worker.txt`, `restart.txt` where applicable.
+
+## Reproduction and operator handoff
+
+Automated command after scoped fix/fullfmt, on RTX with immutable candidate
+and synthetic-only environment described above:
+
+```sh
+python3 -B qa/security-levels/sprints/PF-30-S04/human-fixture/test_pinned_rehearsal.py
+cd codex-rs
+just test -p codex-tui --test all -E 'test(suite::memory_human_fixture) | test(support::tmux::tests) | test(suite::memory_stage_one_policy) | test(suite::security_profiles) | test(suite::slash_dispatch)' --retries 0 --test-threads 1
+```
+
+Actual keys: startup synthetic foreground prompt then separate Enter and
+`/exit`; provider case `/providers` → deactivate A → replace with B → Esc →
+`/model` → distinct Memory Fixture b model → effort → synthetic foreground
+prompt → `/exit`; pending case prompt → pending canary → `/exit` → explicit
+restart → `/status` → `/exit`. Cancel/timeout use only owned fixture signals.
+Existing policy test covers Permissive/protected sources and restarts; profile
+tests cover normal/narrow/inert Enter/cancel and invalid config; slash test
+covers single-Enter status dispatch and clean exit.
+
+When the coordinator arranges human testing (none left running now), use the
+**new combined runner and product**, superseding earlier standalone paths:
+
+```sh
+cd /home/travis/worktrees/security-human-combined-67fec6a6
+export TMPDIR=$(mktemp -d /home/travis/security-round5/memory-tmp/human.XXXXXX)
+export CARGO_BIN_EXE_codex=/home/travis/security-round5/evidence/anchor/combined-b12e32d/candidate/codex
+export CORBANU_MEMORY_CANDIDATE_SHA256=c567826ff5f15fccd71f8294c93210a158217a2ba31224c55d7d78269b1d2bea
+export CORBANU_MEMORY_HUMAN_OPT_IN=1 CORBANU_TMUX_REQUIRED=1 RUST_MIN_STACK=8388608
+export CORBANU_MEMORY_HUMAN_CASE=startup
+# New path, not an existing directory. Do not create it first.
+export CORBANU_MEMORY_HUMAN_EVIDENCE=/home/travis/security-round5/evidence/human-memory/operator-combined-startup-1
+/home/travis/security-round5/evidence/human-memory/combined-67fec6a6/remediated-2/candidate/all --ignored --exact suite::memory_human_fixture::human_memory_fixture --nocapture
+```
+
+No build lock or Cargo during human waiting. Use another SSH terminal for
+`bash <evidence>/attach.sh`; change case to `provider-switch` or `pending-exit`
+and choose a new evidence path for each subsequent case. The full operator
+journey is in the parent fixture README; the combined binary paths here take
+precedence. There is no named-human acceptance or Mac launcher update in this
+qualification. Direct `/model` custom-provider UX findings remain unpatched.

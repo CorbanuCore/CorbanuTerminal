@@ -1,0 +1,13 @@
+{
+  "case": "Cancel",
+  "source": "01a0707a-9e32-71b1-9637-10e7241b0721",
+  "canary_requests": 0,
+  "source_outputs": 0,
+  "provider_change_denied": false,
+  "foreground_b": false,
+  "restarted": false,
+  "source_failure_reasons": [],
+  "pending_exit_elapsed_ms": null,
+  "pending_window_remaining_seconds": null,
+  "routes": []
+}
