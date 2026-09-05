@@ -73,11 +73,59 @@ as required for this unqualified host/service path.
 All credentials in these fixtures are synthetic. Unit fixture authorization
 reports are explicitly synthetic and cannot count as platform qualification.
 
-## Pending gates
+## Independent review and remediation
 
-- Serialized Core/Vault/network-proxy registrations and their combined tests.
-- Numbered Astra High autoreview and Fable 5.1 High external TMUX review;
-  zero review invocations so far, maximum five per lane.
+Three of the maximum five review invocations have been consumed:
+
+1. Astra High via Codex CLI 0.145.0 failed before inference because the backend
+   required a newer CLI. No verdict exists for that attempt.
+2. Astra High via the app-bundled CLI 0.153.1 completed against
+   `4f263ca73..14b1aa73a`, finding one P1 and two P2s. All were verified against
+   real paths and fixed in `165ae1534`: observe socket disconnect concurrently
+   with dispatch, reject unresolvable mandate bindings, and require exact grant
+   correlation. The post-format suite passed **44/44**.
+3. Fable 5.1 High through Corbanu Terminal 0.1.38 `exec` inside private TMUX
+   reviewed `4f263ca73..bebc2abb3`, including the shared registrations. It
+   independently confirmed all three Astra fixes and found the pending shared
+   Cargo/Bazel lock update plus an overbroad five-second socket read timeout.
+   The timeout defect was fixed in `b6941d82e`: healthy idle/first-receipt waits
+   remain open, but a partial prefix/body has one absolute bounded deadline.
+   Final post-format tests pass **47/47**, including >5s idle/backend waits and
+   partial-prefix timeout. Shared locks remain integration-owner work.
+
+Fable's suggestion that same-run generation increments alone consume additional
+tracked-run map entries was rejected: the map replaces the generation under the
+same run key. The concrete idle/response timeout defect was accepted and fixed;
+the bounded run-history policy did not change.
+
+The native disconnect regression pauses a synthetic backend before its final
+cooperative fence check, signals full and half client closure, waits for actual
+session cancellation, and only then releases the backend. It proves a live
+cancellation fence, not interruption of arbitrary blocking syscalls or already
+sent external effects. No production HTTP upload implementation is claimed.
+
+Review outputs are preserved in `round5-astra-2.{txt,json}` and
+`round5-fable-3.{txt,json}`. Actual external route: structured helper through
+the Corbanu Claude Plan wrapper, model `claude-fable-5-1-plan`, high effort,
+private TMUX socket `corbanu-broker-review`, session `fable-high`. This is a
+review execution route, not an interactive product TUI test.
+
+After shared registrations, affected fix/format passed; full
+broker/Vault/network-proxy suites passed **335/335**, and focused Core
+broker-client/config tests passed **6/6** (2367 intentionally filtered out).
+Nextest IDs: `26d4f1d2-f2fe-4bca-82ca-03fc57a78df1` and
+`fabb33cc-cffb-43bf-b3d5-80f42fd46f96`. Log:
+`/home/travis/security-round5/evidence/broker/integrated-check.log`, SHA-256
+`560fc406c85bf1c7379868ade09fb14eb76673a8f922c25c548da2d0593d80b6`.
+Only subsequent production change is the scoped timeout correction, whose
+47-test run is `9a971fd5-12ba-4fc9-b098-bba1ed5505c5`; log
+`/home/travis/security-round5/evidence/broker/fable-remediation-tests.log`,
+SHA-256 `7d93595a6c5372bdd3d67599a14ffcc4ed1344a121601117211f31c07d083290`.
+
+## Remaining gates
+
+- Serialized Cargo/Bazel locks and final review of their integration plus the
+  timeout remediation; no clean overall review claimed yet.
 - Supporting candidate TMUX workflow and combined-tree affected suites.
 - Real dedicated-UID Linux service provisioning, macOS authenticated XPC/helper
   isolation, Windows service SID/AppContainer/named-pipe token isolation.
