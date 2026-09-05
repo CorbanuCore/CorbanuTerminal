@@ -452,11 +452,11 @@
 
     <section aria-labelledby="memory-acceptance-title" style="margin-top:42px">
       <h2 id="memory-acceptance-title">Memory-enabled session regression checks</h2>
-      <p>Use the exact RTX candidate above and a <strong>disposable session that already has memory enabled</strong>, with synthetic history only. Ask us to prepare that session if needed. Do not enable new settings or import private history just for this test. If memory is disabled or no eligible history exists, leave these checks unticked and note “not exercised”; ordinary chat alone does not prove the background worker ran.</p>
+      <p><strong>Checks 21–23 are queued, not ready to run yet.</strong> The existing automated fixture cannot pause for human use; an operator fixture is being prepared. Leave these unticked until its tested launch instructions are supplied. It will use the exact RTX candidate above, a disposable memory-enabled home and synthetic history only. Do not change your real settings or import private history. Ordinary chat or saved captures do not prove a human exercised the background job.</p>
       <div class="checklist">
         <label class="test"><input type="checkbox" data-check="memory-startup"><span>
           <h3>21. Start with memory enabled</h3>
-          <p>Launch the supplied disposable Permissive session. Allow its prepared background memory job to run, then send a harmless prompt.</p>
+          <p>Once the operator fixture is supplied, launch its disposable Permissive session and send the first harmless prompt. That nonempty turn triggers memory startup; only then wait for the prepared background job.</p>
           <p class="expected">Pass: chat remains responsive and the prepared job completes without authentication, policy-binding or startup errors. Record the job outcome supplied by the fixture, not just the chat answer.</p>
         </span></label>
         <label class="test"><input type="checkbox" data-check="memory-provider-switch"><span>

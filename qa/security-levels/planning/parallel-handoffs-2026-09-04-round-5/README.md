@@ -344,7 +344,41 @@ the new memory section layout and updated progress display; no user acceptance
 state was changed. Screenshots stay in .codex-work/security-round5.
 This documentation-only closeout does not change the qualified codex-rs tree.
 
-## PF-35 external campaign (unchanged)
+## Human memory fixture support — routine QA allocation
+
+The operator recipe audit found the existing automatic harness cannot pause for
+human use. Checks21–23 are now explicitly queued, and check21 sends a nonempty
+prompt before waiting for memory startup. [Recipe and support contract](../../sprints/PF-30-S04/human-fixture-recipe.md).
+Saved captures and Core provider-switch tests are not operator-model-picker proof.
+
+Class: routine test-only qualification tooling, not a new product feature or
+reactivation of archived PF30S04. Owner /root/security_ui; worktree
+/Volumes/CorbanuDrive/Corbanu/worktrees/security-human-memory-fixture;
+branch test/security-human-memory-fixture; base
+b64d7390d4ef86b9604d56536e095ac29450423b.
+Literal worker scope: codex-rs/tui/tests/suite/memory_human_fixture.rs,
+codex-rs/tui/tests/support/tmux.rs,
+codex-rs/tui/tests/support/tmux_tests.rs and
+qa/security-levels/sprints/PF-30-S04/human-fixture/.
+Root alone registers suite/mod.rs and the bounded manual nextest profile.
+No product Rust/config/schema changes, archived test rewrites, arbitrary target
+attachment, cleanup-watchdog disabling, credentials or elevated setup.
+
+Build and rehearse on RTX using the shared lock/fresh temp root. Use two
+synthetic loopback providers, fixed historical canary identity, bounded operator
+deadline, exact owned TMUX attachment, before/after routing and DB evidence, and
+normal owned cleanup. Pin a test runner artifact and release the build lock
+before human waiting. Default automated profiles remain unchanged.
+Final source scopes must prove no product-binary changes; run harness regressions
+and actual-key rehearsal of startup/provider-switch/exit/restart/timeout/cancel.
+Rehearsal is machine evidence, not human acceptance.
+
+Review allocation reuses the existing memory track's 2/5 ledger: #3 Astra High
+after consolidated proof, #4 Fable5.1 High via Corbanu TMUX after clean/remediated
+#3. Do not invent a fresh five-review budget for this support task. Root receives
+the fixture, verifies safe lifecycle and docs, then provides tested instructions.
+
+## PF-35 external campaign status
 
 User explicitly removed PF-35 from the engineering main path.
 Its engineering reservation returns to draft under the existing sprint process.
