@@ -13,6 +13,8 @@ mod provider_convergence;
 mod provider_management;
 mod resize_reflow;
 #[cfg(unix)]
+mod security_profiles;
+#[cfg(unix)]
 mod slash_dispatch;
 mod status_indicator;
 mod vt100_history;

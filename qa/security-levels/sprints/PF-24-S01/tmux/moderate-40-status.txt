@@ -1,0 +1,40 @@
+╭──────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.38)        │
+│                                      │
+│ model:     gpt-5.6-terra   /model t… │
+│ directory: ~/…/security-round5-ui    │
+╰──────────────────────────────────────╯
+
+/status
+
+╭──────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.38)       │
+│                                      │
+│ Visit                                │
+│ https://chatgpt.com/codex/settings/u │
+│ for up-to-date                       │
+│ information on rate limits and       │
+│ credits                              │
+│                                      │
+│  Model:                GPT-5.6-Terra │
+│  Directory:            ~/…/…ound5-ui │
+│  Permissions:          Workspace (As │
+│  Security:             Requested     │
+│                        Moderate;     │
+│                        effective     │
+│                        protection    │
+│                        unverified (/ │
+│                        security)     │
+│  Agents.md:            AGENTS.md     │
+│  Account:              OpenAI API ke │
+│  Collaboration mode:   Default       │
+│  Session:              01a06f03-0195 │
+│                                      │
+│  Token usage:          0 total  (0 i │
+│  Limits:               data not avai │
+╰──────────────────────────────────────╯
+
+
+› Improve documentation in @filename
+
+  GPT-5.6-Terra default · ~/worktrees/s…

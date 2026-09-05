@@ -5,7 +5,7 @@ expression: sanitized
 /status
 
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v0.1.31)                                              │
+│  >_ Corbanu Terminal (v0.1.38)                                              │
 │                                                                             │
 │  Remote:           unix:///tmp/codex-home/app-server-control/app-server-    │
 │                    control.sock (v0.133.0)                                  │
@@ -14,6 +14,8 @@ expression: sanitized
 │  Model provider:   Ambient                                                  │
 │  Directory: [[workspace]]                                                   │
 │  Permissions:      Custom (workspace with network access, Ask for approval) │
+│  Security:         Requested Permissive; effective protection unverified    │
+│                    (/security)                                              │
 │  Agents.md:        <none>                                                   │
 │                                                                             │
 │  Token usage:      750 total  (500 input + 250 output)                      │

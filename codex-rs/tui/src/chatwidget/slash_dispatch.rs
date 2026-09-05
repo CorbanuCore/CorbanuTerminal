@@ -358,6 +358,14 @@ impl ChatWidget {
                 self.open_permissions_popup();
                 self.defer_input_until_settings_applied();
             }
+            SlashCommand::Security => {
+                self.bottom_pane.show_view(Box::new(
+                    crate::bottom_pane::security_view::SecurityView::new(
+                        Some(self.config.security_level),
+                        self.bottom_pane.list_keymap(),
+                    ),
+                ));
+            }
             SlashCommand::Vim => {
                 self.toggle_vim_mode_and_notify();
             }
@@ -1438,6 +1446,7 @@ impl ChatWidget {
             | SlashCommand::Agent
             | SlashCommand::MultiAgents
             | SlashCommand::Permissions
+            | SlashCommand::Security
             | SlashCommand::ElevateSandbox
             | SlashCommand::SandboxReadRoot
             | SlashCommand::Experimental
