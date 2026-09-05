@@ -13,8 +13,8 @@ use crate::session::session::Session;
 use codex_features::Feature;
 use codex_http_client::HttpTransport;
 use codex_http_client::Request;
-use codex_http_client::Response;
 use codex_http_client::ReqwestTransport;
+use codex_http_client::Response;
 use codex_http_client::StreamResponse;
 use codex_http_client::TransportError;
 use codex_login::auth::AgentIdentityAuthPolicy;
@@ -106,35 +106,54 @@ impl StageOneMemoryBinding {
         if self.termination.clone().now_or_never().is_some() {
             return Err(StageOneMemoryDenial::OwnerTerminated);
         }
-        let owner = self.owner.upgrade().ok_or(StageOneMemoryDenial::OwnerTerminated)?;
-        let policy = owner.memory_stage_one_configuration(self.owner_id, &self.provider).await?;
+        let owner = self
+            .owner
+            .upgrade()
+            .ok_or(StageOneMemoryDenial::OwnerTerminated)?;
+        let policy = owner
+            .memory_stage_one_configuration(self.owner_id, &self.provider)
+            .await?;
         if policy.runtime_nonce != self.runtime_nonce || policy.session_id != self.session_id {
             return Err(StageOneMemoryDenial::OwnerMismatch);
         }
         if policy.kill_switch_active {
             return Err(StageOneMemoryDenial::KillSwitchActive);
         }
-        if self.floor.max(policy.config.security_level).max(policy.level) != SecurityLevel::Permissive {
+        if self
+            .floor
+            .max(policy.config.security_level)
+            .max(policy.level)
+            != SecurityLevel::Permissive
+        {
             return Err(StageOneMemoryDenial::ProtectedInputUnavailable);
         }
         Ok(())
     }
 
     pub(crate) async fn check(&self) -> Result<(), StageOneMemoryDenial> {
-        let previous = *self.denial.lock().map_err(|_| StageOneMemoryDenial::PolicyUnavailable)?;
+        let previous = *self
+            .denial
+            .lock()
+            .map_err(|_| StageOneMemoryDenial::PolicyUnavailable)?;
         if let Some(reason) = previous {
             return Err(reason);
         }
         let result = self.evaluate().await;
         if let Err(reason) = result {
-            *self.denial.lock().map_err(|_| StageOneMemoryDenial::PolicyUnavailable)? = Some(reason);
+            *self
+                .denial
+                .lock()
+                .map_err(|_| StageOneMemoryDenial::PolicyUnavailable)? = Some(reason);
         }
         result
     }
 
     fn request_error(&self, error: CodexErr) -> StageOneMemoryError {
         match self.denial.lock() {
-            Ok(reason) => reason.map_or(StageOneMemoryError::Request(error), StageOneMemoryError::Denied),
+            Ok(reason) => reason.map_or(
+                StageOneMemoryError::Request(error),
+                StageOneMemoryError::Denied,
+            ),
             Err(_) => StageOneMemoryDenial::PolicyUnavailable.into(),
         }
     }
@@ -147,25 +166,41 @@ impl StageOneMemoryClient {
         expected_owner: ThreadId,
         expected_provider: &ModelProviderInfo,
     ) -> Result<Self, StageOneMemoryError> {
-        let session = owner.upgrade().ok_or(StageOneMemoryDenial::OwnerTerminated)?;
-        let policy = session.memory_stage_one_configuration(expected_owner, expected_provider).await?;
+        let session = owner
+            .upgrade()
+            .ok_or(StageOneMemoryDenial::OwnerTerminated)?;
+        let policy = session
+            .memory_stage_one_configuration(expected_owner, expected_provider)
+            .await?;
         let config = policy.config;
         let snapshot = policy.thread;
         let binding = Arc::new(StageOneMemoryBinding {
-            owner, termination, owner_id: expected_owner, provider: expected_provider.clone(),
-            floor: config.security_level, runtime_nonce: policy.runtime_nonce,
-            session_id: policy.session_id, denial: Mutex::new(None),
+            owner,
+            termination,
+            owner_id: expected_owner,
+            provider: expected_provider.clone(),
+            floor: config.security_level,
+            runtime_nonce: policy.runtime_nonce,
+            session_id: policy.session_id,
+            denial: Mutex::new(None),
         });
         binding.check().await?;
         let client = ModelClient::new(
-            Some(Arc::clone(&session.services.auth_manager)), AgentIdentityAuthPolicy::JwtOnly,
-            expected_owner, config.model_provider.clone(), snapshot.session_source,
-            snapshot.originator, config.model_verbosity,
+            Some(Arc::clone(&session.services.auth_manager)),
+            AgentIdentityAuthPolicy::JwtOnly,
+            expected_owner,
+            config.model_provider.clone(),
+            snapshot.session_source,
+            snapshot.originator,
+            config.model_verbosity,
             config.features.enabled(Feature::EnableRequestCompression),
             config.features.enabled(Feature::RuntimeMetrics),
-            /*beta_features_header*/ None, /*concurrent_reasoning_summaries_enabled*/ false,
-            /*attestation_provider*/ None, config.http_client_factory(),
-        ).with_stage_one_memory_binding(Arc::clone(&binding));
+            /*beta_features_header*/ None,
+            /*concurrent_reasoning_summaries_enabled*/ false,
+            /*attestation_provider*/ None,
+            config.http_client_factory(),
+        )
+        .with_stage_one_memory_binding(Arc::clone(&binding));
         Ok(Self { client, binding })
     }
 
@@ -173,7 +208,10 @@ impl StageOneMemoryClient {
         self.binding.check().await.map_err(Into::into)
     }
 
-    pub async fn extract(&mut self, request: StageOneMemoryRequest<'_>) -> Result<StageOneMemoryOutput, StageOneMemoryError> {
+    pub async fn extract(
+        &mut self,
+        request: StageOneMemoryRequest<'_>,
+    ) -> Result<StageOneMemoryOutput, StageOneMemoryError> {
         self.check_completion().await?;
         let mut session = self.client.new_session();
         let trace = InferenceTraceContext::disabled();
@@ -190,16 +228,28 @@ impl StageOneMemoryClient {
                 _ = self.binding.termination.clone() => return Err(StageOneMemoryDenial::OwnerTerminated.into()),
                 event = stream.next() => event,
             };
-            match event.transpose().map_err(|error| self.binding.request_error(error))? {
+            match event
+                .transpose()
+                .map_err(|error| self.binding.request_error(error))?
+            {
                 Some(ResponseEvent::OutputTextDelta { delta, .. }) => text.push_str(&delta),
-                Some(ResponseEvent::OutputItemDone(codex_protocol::models::ResponseItem::Message { content, .. })) if text.is_empty() => {
-                    if let Some(output) = crate::content_items_to_text(&content) { text.push_str(&output); }
+                Some(ResponseEvent::OutputItemDone(
+                    codex_protocol::models::ResponseItem::Message { content, .. },
+                )) if text.is_empty() => {
+                    if let Some(output) = crate::content_items_to_text(&content) {
+                        text.push_str(&output);
+                    }
                 }
                 Some(ResponseEvent::Completed { token_usage, .. }) => {
                     self.check_completion().await?;
                     return Ok(StageOneMemoryOutput { text, token_usage });
                 }
-                None => return Err(CodexErr::Stream("stage-one memory stream ended before completion".into()).into()),
+                None => {
+                    return Err(CodexErr::Stream(
+                        "stage-one memory stream ended before completion".into(),
+                    )
+                    .into());
+                }
                 _ => {}
             }
         }
@@ -214,13 +264,19 @@ pub(crate) struct StageOneGuardedTransport {
 }
 
 impl StageOneGuardedTransport {
-    pub(crate) fn new(inner: ReqwestTransport, binding: Option<Arc<StageOneMemoryBinding>>) -> Self {
+    pub(crate) fn new(
+        inner: ReqwestTransport,
+        binding: Option<Arc<StageOneMemoryBinding>>,
+    ) -> Self {
         Self { inner, binding }
     }
 
     async fn check(&self) -> Result<(), TransportError> {
         if let Some(binding) = &self.binding {
-            binding.check().await.map_err(|reason| TransportError::Build(reason.to_string()))?;
+            binding
+                .check()
+                .await
+                .map_err(|reason| TransportError::Build(reason.to_string()))?;
         }
         Ok(())
     }

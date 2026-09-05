@@ -662,29 +662,53 @@ async fn memory_startup_context_with_provider(
 }
 
 #[tokio::test]
-async fn pf_30_s04_protected_worker_denies_canary_and_consumes_finite_retry() -> anyhow::Result<()> {
+async fn pf_30_s04_protected_worker_denies_canary_and_consumes_finite_retry() -> anyhow::Result<()>
+{
     for level in ["moderate", "aggressive"] {
         let server = start_mock_server().await;
         let home = Arc::new(TempDir::new()?);
-        let test = test_codex().with_home(Arc::clone(&home)).with_config(move |config| {
-            config.features.enable(Feature::Sqlite).unwrap();
-            config.memories = startup_test_memories_config();
-            config.security_level = serde_json::from_value(serde_json::json!(level)).unwrap();
-        }).build_with_auto_env(&server).await?;
+        let test = test_codex()
+            .with_home(Arc::clone(&home))
+            .with_config(move |config| {
+                config.features.enable(Feature::Sqlite).unwrap();
+                config.memories = startup_test_memories_config();
+                config.security_level = serde_json::from_value(serde_json::json!(level)).unwrap();
+            })
+            .build_with_auto_env(&server)
+            .await?;
         let db = test.codex.state_db().unwrap();
         let watermark = chrono::Utc::now() - chrono::Duration::hours(2);
-        let candidate = seed_stage1_candidate(&db, home.path(), watermark, "protected-canary").await?;
-        let provider = create_model_provider(test.config.model_provider.clone(), Some(test.thread_manager.auth_manager()));
+        let candidate =
+            seed_stage1_candidate(&db, home.path(), watermark, "protected-canary").await?;
+        let provider = create_model_provider(
+            test.config.model_provider.clone(),
+            Some(test.thread_manager.auth_manager()),
+        );
         let (context, config) = memory_startup_context_with_provider(&test, provider).await;
         assert!(!phase1::run(Arc::clone(&context), Arc::clone(&config)).await);
         assert!(server.received_requests().await.unwrap().is_empty());
-        assert!(db.memories().list_stage1_outputs_for_global(10).await?.is_empty());
+        assert!(
+            db.memories()
+                .list_stage1_outputs_for_global(10)
+                .await?
+                .is_empty()
+        );
         // A rejected claim is released with the normal backoff, not a success or
         // an immediately reclaimable busy loop.
-        let next = db.memories().try_claim_stage1_job(candidate, test.session_configured.thread_id,
-            watermark.timestamp(), crate::stage_one::JOB_LEASE_SECONDS,
-            crate::stage_one::CONCURRENCY_LIMIT).await?;
-        assert!(matches!(next, codex_state::Stage1JobClaimOutcome::SkippedRetryBackoff));
+        let next = db
+            .memories()
+            .try_claim_stage1_job(
+                candidate,
+                test.session_configured.thread_id,
+                watermark.timestamp(),
+                crate::stage_one::JOB_LEASE_SECONDS,
+                crate::stage_one::CONCURRENCY_LIMIT,
+            )
+            .await?;
+        assert!(matches!(
+            next,
+            codex_state::Stage1JobClaimOutcome::SkippedRetryBackoff
+        ));
         shutdown_test_codex(&test).await?;
     }
     Ok(())
@@ -696,14 +720,28 @@ async fn pf_30_s04_worker_eof_never_persists_partial_json() -> anyhow::Result<()
     let home = Arc::new(TempDir::new()?);
     let test = build_test_codex(&server, Arc::clone(&home)).await?;
     let db = test.codex.state_db().unwrap();
-    seed_stage1_candidate(&db, home.path(), chrono::Utc::now() - chrono::Duration::hours(2), "eof-canary").await?;
+    seed_stage1_candidate(
+        &db,
+        home.path(),
+        chrono::Utc::now() - chrono::Duration::hours(2),
+        "eof-canary",
+    )
+    .await?;
     let response = mount_sse_once(&server, sse(vec![ev_response_created("eof"), ev_assistant_message("partial",
         r#"{"raw_memory":"must not persist","rollout_summary":"partial","rollout_slug":null}"#)])).await;
-    let provider = create_model_provider(test.config.model_provider.clone(), Some(test.thread_manager.auth_manager()));
+    let provider = create_model_provider(
+        test.config.model_provider.clone(),
+        Some(test.thread_manager.auth_manager()),
+    );
     let (context, config) = memory_startup_context_with_provider(&test, provider).await;
     phase1::run(context, config).await;
     assert_eq!(response.requests().len(), 1);
-    assert!(db.memories().list_stage1_outputs_for_global(10).await?.is_empty());
+    assert!(
+        db.memories()
+            .list_stage1_outputs_for_global(10)
+            .await?
+            .is_empty()
+    );
     shutdown_test_codex(&test).await?;
     Ok(())
 }

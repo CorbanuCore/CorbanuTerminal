@@ -5,11 +5,11 @@ use codex_core::StartThreadOptions;
 use codex_core::ThreadManager;
 use codex_core::config::Config;
 use codex_core::detached_memory_responses_metadata;
-use codex_core::resolve_installation_id;
 use codex_core::memory_stage_one::StageOneMemoryClient;
-use codex_core::memory_stage_one::StageOneMemoryError;
 use codex_core::memory_stage_one::StageOneMemoryDenial;
+use codex_core::memory_stage_one::StageOneMemoryError;
 use codex_core::memory_stage_one::StageOneMemoryRequest;
+use codex_core::resolve_installation_id;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
 use codex_login::auth_env_telemetry::collect_auth_env_telemetry;
@@ -194,16 +194,25 @@ impl MemoryStartupContext {
         if self.provider.info() == &config.model_provider {
             Arc::clone(&self.provider)
         } else {
-            create_model_provider(config.model_provider.clone(), Some(Arc::clone(&self.auth_manager)))
+            create_model_provider(
+                config.model_provider.clone(),
+                Some(Arc::clone(&self.auth_manager)),
+            )
         }
     }
 
-    pub(crate) async fn current_stage_one_config(&self, config: &Config) -> Result<Arc<Config>, StageOneMemoryError> {
+    pub(crate) async fn current_stage_one_config(
+        &self,
+        config: &Config,
+    ) -> Result<Arc<Config>, StageOneMemoryError> {
         let snapshot = self.thread.config_snapshot().await;
         let mut current = config.clone();
         if snapshot.model_provider_id != config.model_provider_id {
-            current.model_provider = config.model_providers.get(&snapshot.model_provider_id)
-                .cloned().ok_or(StageOneMemoryDenial::ProviderChanged)?;
+            current.model_provider = config
+                .model_providers
+                .get(&snapshot.model_provider_id)
+                .cloned()
+                .ok_or(StageOneMemoryDenial::ProviderChanged)?;
             current.model_provider_id = snapshot.model_provider_id;
         }
         current.model = Some(snapshot.model);
@@ -263,7 +272,9 @@ impl MemoryStartupContext {
     ) -> Result<StageOneMemoryClient, StageOneMemoryError> {
         // These are assertions about this startup owner, not selectors. A provider
         // switch invalidates this run; the next startup obtains a fresh binding.
-        self.thread.stage_one_memory_client(self.thread_id, &config.model_provider).await
+        self.thread
+            .stage_one_memory_client(self.thread_id, &config.model_provider)
+            .await
     }
 
     pub(crate) async fn stream_stage_one_prompt(
@@ -289,15 +300,17 @@ impl MemoryStartupContext {
             /*sandbox*/ None,
         )
         .await;
-        let output = client.extract(StageOneMemoryRequest {
-            prompt,
-            model_info: &context.model_info,
-            session_telemetry: &context.session_telemetry,
-            reasoning_effort: context.reasoning_effort.clone(),
-            reasoning_summary: context.reasoning_summary,
-            service_tier: context.service_tier.clone(),
-            responses_metadata: &responses_metadata,
-        }).await?;
+        let output = client
+            .extract(StageOneMemoryRequest {
+                prompt,
+                model_info: &context.model_info,
+                session_telemetry: &context.session_telemetry,
+                reasoning_effort: context.reasoning_effort.clone(),
+                reasoning_summary: context.reasoning_summary,
+                service_tier: context.service_tier.clone(),
+                responses_metadata: &responses_metadata,
+            })
+            .await?;
         Ok((output.text, output.token_usage, client))
     }
 

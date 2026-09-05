@@ -1,8 +1,8 @@
 //! Host-side snapshots for the detached, denial-only memory worker.
 
 use super::session::Session;
-use crate::config::Config;
 use crate::codex_thread::ThreadConfigSnapshot;
+use crate::config::Config;
 use crate::memory_stage_one::StageOneMemoryDenial;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_protocol::ThreadId;
@@ -32,14 +32,19 @@ impl Session {
         if &configuration.provider != expected_provider {
             return Err(StageOneMemoryDenial::ProviderChanged);
         }
-        let policy = self.services.agent_control.effective_security_policy()
+        let policy = self
+            .services
+            .agent_control
+            .effective_security_policy()
             .snapshot_for_agent(self.thread_id)
             .map_err(|_| StageOneMemoryDenial::PolicyUnavailable)?;
         let mut config = (*configuration.original_config_do_not_use).clone();
         config.model_provider = configuration.provider.clone();
         Ok(MemoryStageOneConfiguration {
-            config: Arc::new(config), thread: configuration.thread_config_snapshot(),
-            level: policy.level, runtime_nonce: policy.runtime_nonce,
+            config: Arc::new(config),
+            thread: configuration.thread_config_snapshot(),
+            level: policy.level,
+            runtime_nonce: policy.runtime_nonce,
             session_id: policy.session_id.as_str().to_owned(),
             kill_switch_active: policy.kill_switch_active,
         })

@@ -103,15 +103,12 @@ pub async fn run(context: Arc<MemoryStartupContext>, config: Arc<Config>) -> boo
     }
 
     // 3. Run the parallel sampling.
-    let outcomes = run_jobs(
-        context,
-        config,
-        claimed_candidates,
-    )
-    .await;
+    let outcomes = run_jobs(context, config, claimed_candidates).await;
 
     // 4. Metrics and logs.
-    let policy_allowed = !outcomes.iter().any(|result| result.outcome == JobOutcome::PolicyDenied);
+    let policy_allowed = !outcomes
+        .iter()
+        .any(|result| result.outcome == JobOutcome::PolicyDenied);
     let counts = aggregate_stats(outcomes);
     emit_metrics(&stage_one_context, &counts);
     info!(
@@ -237,8 +234,12 @@ async fn run_jobs(
             let context = Arc::clone(&context);
             let config = Arc::clone(&config);
             async move {
-                let config = context.current_stage_one_config(&config).await.unwrap_or(config);
-                let stage_one_context = build_request_context(context.as_ref(), config.as_ref()).await;
+                let config = context
+                    .current_stage_one_config(&config)
+                    .await
+                    .unwrap_or(config);
+                let stage_one_context =
+                    build_request_context(context.as_ref(), config.as_ref()).await;
                 job::run(context.as_ref(), config.as_ref(), claim, &stage_one_context).await
             }
         })
@@ -276,7 +277,10 @@ mod job {
                 )
                 .await;
                 return JobResult {
-                    outcome: if matches!(reason.downcast_ref::<StageOneMemoryError>(), Some(StageOneMemoryError::Denied(_))) {
+                    outcome: if matches!(
+                        reason.downcast_ref::<StageOneMemoryError>(),
+                        Some(StageOneMemoryError::Denied(_))
+                    ) {
                         JobOutcome::PolicyDenied
                     } else {
                         JobOutcome::Failed
@@ -289,8 +293,17 @@ mod job {
         // The response may have completed before a live policy/provider change.
         // Never persist its output (including successful no-output) after denial.
         if let Err(reason) = client.check_completion().await {
-            result::failed(context, claimed_thread.id, &claim.ownership_token, &reason.to_string()).await;
-            return JobResult { outcome: JobOutcome::PolicyDenied, token_usage: None };
+            result::failed(
+                context,
+                claimed_thread.id,
+                &claim.ownership_token,
+                &reason.to_string(),
+            )
+            .await;
+            return JobResult {
+                outcome: JobOutcome::PolicyDenied,
+                token_usage: None,
+            };
         }
 
         if stage_one_output.raw_memory.is_empty() || stage_one_output.rollout_summary.is_empty() {

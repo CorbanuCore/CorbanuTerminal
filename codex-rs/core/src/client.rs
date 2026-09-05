@@ -3414,7 +3414,10 @@ impl ModelClientSession {
                     ))
                 })?;
             if let Some(binding) = &self.client.stage_one_memory_binding {
-                binding.check().await.map_err(|reason| CodexErr::InvalidRequest(reason.to_string()))?;
+                binding
+                    .check()
+                    .await
+                    .map_err(|reason| CodexErr::InvalidRequest(reason.to_string()))?;
             }
             let stream_result = websocket_connection
                 .stream_request(
