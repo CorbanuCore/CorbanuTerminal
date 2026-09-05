@@ -305,6 +305,7 @@ pub struct ModelClient {
     http_client_factory: HttpClientFactory,
     // Restrictive configured intent, not an assertion of protected readiness.
     ingress_level: codex_security_policy::SecurityLevel,
+    ingress_policy: Option<crate::security::ingress::BoundIngressPolicy>,
 }
 
 /// A turn-scoped streaming session created from a [`ModelClient`].
@@ -759,6 +760,7 @@ impl ModelClient {
             prompt_cache_key_override: None,
             http_client_factory,
             ingress_level: codex_security_policy::SecurityLevel::Permissive,
+            ingress_policy: None,
         }
     }
 
@@ -767,8 +769,24 @@ impl ModelClient {
         self
     }
 
+    pub(crate) fn with_ingress_policy(
+        mut self,
+        level: codex_security_policy::SecurityLevel,
+        policy: crate::security::EffectivePolicyView,
+    ) -> Self {
+        self.ingress_level = level;
+        self.ingress_policy = Some(crate::security::ingress::BoundIngressPolicy(policy));
+        self
+    }
+
     fn check_source_admission(&self, prompt: &Prompt) -> Result<()> {
-        crate::security::ingress::check_native_request(self.ingress_level, &prompt.input)
+        let mut level = self.ingress_level;
+        if let Some(policy) = &self.ingress_policy {
+            let snapshot = policy.0.snapshot_for_agent(self.state.thread_id)
+                .map_err(|_| CodexErr::InvalidRequest("source admission policy is unavailable".into()))?;
+            level = level.max(snapshot.level);
+        }
+        crate::security::ingress::check_native_request(level, &prompt.input)
             .map_err(|error| CodexErr::InvalidRequest(error.to_string()))
     }
 

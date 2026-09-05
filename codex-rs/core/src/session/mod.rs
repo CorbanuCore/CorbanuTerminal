@@ -1768,7 +1768,7 @@ impl Session {
             self.services.attestation_provider.clone(),
             config.http_client_factory(),
         )
-        .with_ingress_level(config.security_level)
+        .with_ingress_policy(config.security_level, self.services.agent_control.effective_security_policy())
         .with_prompt_cache_key_override(
             crate::guardian::prompt_cache_key_override_for_review_session(
                 &configuration.session_source,

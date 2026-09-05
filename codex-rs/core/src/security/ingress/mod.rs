@@ -21,6 +21,15 @@ use uuid::Uuid;
 pub(crate) const MAX_INGRESS_TEXT_BYTES: usize = 2_048;
 const MAX_PROJECTION_BYTES: usize = 8_192;
 
+#[derive(Clone)]
+pub(crate) struct BoundIngressPolicy(pub(crate) super::EffectivePolicyView);
+
+impl std::fmt::Debug for BoundIngressPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("BoundIngressPolicy")
+    }
+}
+
 /// Closed registry of producer contracts, not names supplied by tool content.
 fn route_kind(route: &str) -> Result<SourceKind, IngressError> {
     match route {
