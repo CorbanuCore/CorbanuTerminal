@@ -49,7 +49,7 @@ updated: 2026-09-04
 
 - [x] Existing detached construction, lower-level retry risk and historical-source/runtime-owner distinction documented.
 - [x] Host-owned factory/opaque facade and per-attempt transport guard authored; first Core compile and binding tests passed on RTX. Worker routing/persistence and expanded canary/TMUX tests authored, final qualification still pending.
-- [x] [Versioned evidence and limitations](../../../../qa/security-levels/sprints/PF-30-S04/qualification.md) created; review invocation count 0/5.
+- [x] [Versioned evidence and limitations](../../../../qa/security-levels/sprints/PF-30-S04/qualification.md) created; Astra review 1/5 found one P2, corrected and qualified with full memories-write 44/44 and actual-key TMUX. Fable review remains.
 
 - [x] Implement one host-owned opaque stage-one client factory; expected identity/provider are assertions, never authority selectors. Unknown/uninitialized/terminated/mismatched bindings deny.
 - [x] Preserve maximum configured/current/inherited policy floor; fail closed for all protected raw-rollout dispatch independently of admission/screening readiness.

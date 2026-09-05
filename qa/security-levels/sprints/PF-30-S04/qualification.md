@@ -98,14 +98,44 @@ This is a Linux candidate, not a rebuilt Mac app shortcut.
       canary requests and outputs; finite retry backoff; EOF cannot save JSON.
 - [x] Actual-key TMUX memory-enabled startup, foreground turn and exit/restart
       with isolated synthetic fixtures and recorded DB/provider outcomes.
-- [x] Scoped fix, full formatter, Core/memories-write/memories-read tests on the
-      authored runtime checkpoint; public integration/TMUX registration and
-      final combined-tree rerun remain required.
+- [x] Scoped fix, full formatter, Core/memories-write/memories-read tests and
+      registered public integration/TMUX qualification; coordinator final
+      combined-tree rerun remains required.
 - [ ] Astra High then Fable5.1High through Corbanu/private TMUX, parent allocated.
-- [ ] Exact immutable RTX candidate, hash, run IDs and capture paths.
+- [x] Exact immutable RTX candidate, hash, run IDs and capture paths.
 - [ ] Combined integration/governance and human handoff; human acceptance pending.
 
 ## Review ledger
 
-0 of maximum 5 invocations used. No independent review has been requested or run.
-Five is a ceiling, not a target. Parent allocates each numbered invocation.
+1 of maximum 5 invocations used. Five is a ceiling, not a target.
+
+1. Astra High (`gpt-6-astra`, high), bundled Codex CLI 0.153.1, reviewed full
+   `db141e9cb..9cba944ea`. [Original structured result](review-1-astra.json): one
+   accepted P2, new refreshed configuration mismatched consolidation's original
+   provider helper. Fixed in `4cb5c8ba0`: refresh remains a live policy gate but
+   phase two keeps its existing matched configuration/provider pair. A real
+   two-fake-endpoint startup regression verifies a provider switch cannot route
+   consolidation to the replacement endpoint. No protected inference is enabled.
+2. Fable 5.1 High external review is authorized after final corrected qualification;
+   not invoked yet.
+
+## Corrected candidate after review 1
+
+Source `343aae434`, remote mirror clean after scoped `just fix`, full `just fmt`
+and tests. Full memories-write **44/44**, nextest
+`63b8e561-0622-422a-8122-5a34e8ffd9c2`; memories-read **3/3**,
+`b6621d06-9334-487d-9b1b-d1303b743b3d`. Core source is unchanged from its recorded
+11/11 run. Initial new regression reached the correct endpoint but lacked valid
+consolidation output artifacts; the synthetic fixture was completed before the
+passing full run. No production guard was relaxed.
+
+Locked CLI rebuild and all four actual-key TMUX workflows plus four restarts pass,
+nextest `cbeef5c2-edac-41e3-a554-a4471e56f556` (1/1, 11.498s). Log:
+`/home/travis/security-round5/evidence/memory/review1-qualified.log`.
+Final immutable RTX candidate:
+`/home/travis/security-round5/evidence/memory/candidate-343aae434/codex`.
+SHA-256: `5369df69c9fc1a71736bfb4310b357e3017e8f1db5889b404697d02996bbbb0a`.
+Final key/capture/provider/DB evidence:
+`/home/travis/security-round5/evidence/memory/candidate-343aae434/tmux/`.
+The earlier committed captures show the same four outcomes; this rerun qualifies
+the corrected immutable binary, not the old candidate or Mac shortcut.
