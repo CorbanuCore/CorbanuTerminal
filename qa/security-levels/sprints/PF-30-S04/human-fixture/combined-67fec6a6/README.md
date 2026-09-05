@@ -40,5 +40,29 @@ log. Root authorized exact failure-reason classification and sanitized diagnosti
 retention, then new final proof and review5. Original source remains clean and
 failure evidence is preserved. Pin/manual steps were skipped on test failure;
 shared build lock released. This run is **not a qualification pass**.
-Review count remains4/5; coordinator accepted the documented nonblocking
-false-negative deferral. No additional review or human session is authorized.
+The initial deferral became impractical once combined proof failed. Coordinator
+authorized a narrow test-only correction and review5 after final tests; no
+sixth review or human session is authorized.
+
+## Corrected source proof
+
+Patch checkpoints `d03a4ac1c`, `f0cc34fd2`, `ea158a210` preserve the exact
+failure-reason distinction and formatter result. Remote source is67fec6a6 plus
+those patches (remote cherry-pick HEAD3b69e9b10 plus formatter), equivalent to
+the corresponding files at laneea158a210. SHA256 file checks matched both
+locations; no product change. First remediation compile failure (unavailable
+direct Core dependency) is preserved under `remediated/`; no manifests changed.
+
+Final fix/fullfmt preceded Python2/2 and **Rust16/16**, run
+`4456fa0a-28fc-43ef-b528-daeacf23ef4b`,91.980seconds. All five fixture cases
+passed, including pending owner exit/restart at524ms/30second window,1request
+and0outputs. Existing memory policy, normal/narrow security and invalid config,
+slash/status-exit, and all nine TMUX support/cleanup regressions passed.
+Exact/mixed owner failure regression and expiry/output rejection passed.
+
+Evidence `remediated-2/qualification.log`, `rehearsal/`, `memory-policy/`,
+`security-ui/`, `profile.json`. Newly compiled runner pinned under shared lock:
+`remediated-2/candidate/all`, SHA256
+`dea1c0286c4c1e3cf23f3954a28cb6c9274939dd7d5e4033ca296ceb5e748673`.
+Product remains the immutableb12e32db3 candidate/hash above. Pinned ignored-entry
+startup/cancel outside lock is running; its result is not yet claimed.
