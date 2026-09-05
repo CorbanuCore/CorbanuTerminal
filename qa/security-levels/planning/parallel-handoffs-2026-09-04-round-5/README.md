@@ -82,8 +82,8 @@ actual findings; exceed five only when critical findings continue.
 | Broker | 5 / 5 | Earlier #1–4 retained; new service tests pass at 6bdc84195. #5 Astra High completed clean, final evidence cd7457da7. #6 Fable coverage still awaits the user's explicit budget decision |
 | Provenance | 5 / 5 | Earlier #1–3 dispositions retained; bounded segmentation #4 Astra High and #5 Fable High both clean. Final lane e890ae4a9 integrated; no further review |
 | Security UI | 3 / 5 | #1 CLI rejected; #2 Astra High clean; #3 Fable High clean; no further review planned |
-| Memory dispatch (new PF-30-S04) | 2 / 5 | #1 Astra P2 provider/config mismatch fixed; #2 Fable confirms correctness with a documented non-blocking P3 snapshot-cloning cost. Final lane 1f86e81b3, tested runtime 343aae434; ready for combined integration |
-| Local controller (new PF-20-S03) | 0 / 5 | New native PF20 dependency; consolidate source/tests before requesting Astra #1 and Fable #2. No old-lane ledger reset |
+| Memory dispatch and human fixture support | 2 / 5 | Runtime integrated/qualified at 6a6bb029d and PF30S04 archived. Fixture support still rehearsing; #3 Astra/#4 Fable authorized only after final fixture proof. Existing P3 snapshot-cloning optimization deferred |
+| Local controller (PF-20-S03) | 2 / 5 | Astra #1 P2 blocking-connect issue fixed with nonblocking connect and real backlog regression. Fable #2 confirmed fix and found no code blockers; two P3 documentation/environment notes being closed. No extra review required for docs |
 
 Successful Astra runtime: installed app-bundled Codex 0.153.1; 0.145.0 was
 rejected by the backend before any review verdict. Keep these attempts visible.

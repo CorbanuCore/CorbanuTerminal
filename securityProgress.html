@@ -366,11 +366,11 @@
         </article>
 
         <article class="lane">
-          <span class="lane-order">Lane 2 · newly allocated dependency</span>
+          <span class="lane-order">Lane 2 · tested, closing review notes</span>
           <h3>Detect restored app data</h3>
           <a class="sprint-id" href="docs/sprints/current/p0-security-levels/pf-20-s03-local-controller-integrity-root.md">PF-20-S03</a>
           <p>A separately protected local controller checkpoint detects older Corbanu data being restored. Whole-machine snapshot rollback is outside the agreed scope; TPM or a second machine is not required.</p>
-          <p><strong>Evidence:</strong> Design and exact scope allocated; implementation and qualification pending. The previous provenance checkpoint is integrated and frozen with passing segmentation tests and reviews, but its production screening gates remain open.</p>
+          <p><strong>Evidence:</strong> Controller 18/18, Core adapter 17/17, audit 46/46, config 229/229 and TMUX/restart checks passed. Astra's blocking-connect finding is fixed; Fable found no code blockers and two minor documentation notes. Combined integration and native deployment qualification remain pending.</p>
           <div class="status-line">
             <div class="bar-row"><span>PF-20 archived sprints</span><strong>2 / 3 · 67%</strong></div>
             <div class="track" role="progressbar" aria-label="PF-20 archived completion" aria-valuenow="67" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:67%"></div></div>
@@ -497,7 +497,7 @@
       </div>
 
       <div class="footnote">
-        <strong>Scheduling conclusion:</strong> Memory dispatch is integrated, tested and archived. Its slot is available; no other unallocated sprint is dependency-ready outside the separate PF-35 campaign. PF-20-S03 is implementing the local controller root, while the broker awaits that dependency and a review-budget decision. Frozen provenance retains its production gates. Reviews used: broker 5/5, frozen provenance 5/5, completed UI 3/5, completed memory 2/5 and PF20 0/5. <a href="humanTest.html">Test the exact RTX candidate</a>. <a href="qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md">Coordination and evidence ledger</a>.
+        <strong>Scheduling conclusion:</strong> Memory dispatch is integrated, tested and archived; an agent is preparing its human-operated fixture. PF-20-S03 is closing review notes before combined integration, while the broker awaits that dependency and a review-budget decision. Frozen provenance retains its production gates; PF-35 remains external. Reviews used: broker 5/5, frozen provenance 5/5, completed UI 3/5, memory plus fixture 2/5 and PF20 2/5. <a href="humanTest.html">Test the exact RTX candidate</a>. <a href="qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md">Coordination and evidence ledger</a>.
       </div>
 
       <details>
