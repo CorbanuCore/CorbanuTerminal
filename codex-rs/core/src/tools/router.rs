@@ -282,9 +282,10 @@ impl ToolRouter {
             ..
         } = call;
 
-        session.services.model_client().register_native_tool_origin(
-            &call_id, codex_protocol::provenance::SourceKind::Tool,
-        );
+        session
+            .services
+            .model_client()
+            .register_native_tool_origin(&call_id, codex_protocol::provenance::SourceKind::Tool);
 
         // Keep the legacy ToolInvocation.turn field tied to the same request state until handlers migrate.
         let turn = Arc::clone(&step_context.turn);

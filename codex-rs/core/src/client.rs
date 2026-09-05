@@ -762,12 +762,17 @@ impl ModelClient {
             http_client_factory,
             ingress_level: codex_security_policy::SecurityLevel::Permissive,
             ingress_policy: None,
-            ingress_items: Arc::new(StdMutex::new(crate::security::ingress::NativeIngress::default())),
+            ingress_items: Arc::new(StdMutex::new(
+                crate::security::ingress::NativeIngress::default(),
+            )),
         }
     }
 
     #[cfg(test)]
-    pub(crate) fn with_ingress_level(mut self, level: codex_security_policy::SecurityLevel) -> Self {
+    pub(crate) fn with_ingress_level(
+        mut self,
+        level: codex_security_policy::SecurityLevel,
+    ) -> Self {
         self.ingress_level = level;
         self
     }
@@ -782,40 +787,113 @@ impl ModelClient {
         self
     }
 
+    /// Provider transport replacement is not a new conversation. Preserve the
+    /// host-held bindings only within the same thread, never across sessions
+    /// belonging to a different thread identity.
+    pub(crate) fn with_native_ingress_from(mut self, previous: &Self) -> Self {
+        if self.state.thread_id == previous.state.thread_id {
+            self.ingress_items = Arc::clone(&previous.ingress_items);
+        }
+        self
+    }
+
     fn source_admission_level(&self) -> Result<codex_security_policy::SecurityLevel> {
         let mut level = self.ingress_level;
         if let Some(policy) = &self.ingress_policy {
-            let snapshot = policy.0.snapshot_for_agent(self.state.thread_id)
-                .map_err(|_| CodexErr::InvalidRequest("source admission policy is unavailable".into()))?;
+            let snapshot = policy
+                .0
+                .snapshot_for_agent(self.state.thread_id)
+                .map_err(|_| {
+                    CodexErr::InvalidRequest("source admission policy is unavailable".into())
+                })?;
             level = level.max(snapshot.level);
         }
         Ok(level)
     }
 
     fn check_source_admission(&self, prompt: &Prompt) -> Result<()> {
-        crate::security::ingress::check_native_request(self.source_admission_level()?, &prompt.input)
-            .map_err(|error| CodexErr::InvalidRequest(error.to_string()))
+        crate::security::ingress::check_native_request(
+            self.source_admission_level()?,
+            &prompt.input,
+        )
+        .map_err(|error| CodexErr::InvalidRequest(error.to_string()))
     }
 
-    fn source_admitted_input(&self, prompt: &Prompt, use_responses_lite: bool) -> Result<Vec<ResponseItem>> {
+    fn source_admitted_input(
+        &self,
+        prompt: &Prompt,
+        use_responses_lite: bool,
+    ) -> Result<Vec<ResponseItem>> {
         if self.source_admission_level()? == codex_security_policy::SecurityLevel::Permissive {
             return Ok(prompt.get_formatted_input_for_request(use_responses_lite));
         }
-        self.ingress_items.lock().map_err(|_| CodexErr::InvalidRequest("source admission registry is unavailable".into()))?
-            .project(&prompt.input).map_err(|error| CodexErr::InvalidRequest(error.to_string()))
+        self.ingress_items
+            .lock()
+            .map_err(|_| {
+                CodexErr::InvalidRequest("source admission registry is unavailable".into())
+            })?
+            .project(&prompt.input)
+            .map_err(|error| CodexErr::InvalidRequest(error.to_string()))
     }
 
     pub(crate) fn observe_native_ingress(&self, items: &[ResponseItem]) {
-        if self.source_admission_level().is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive) { return; }
+        if self
+            .source_admission_level()
+            .is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive)
+        {
+            return;
+        }
         if let Ok(mut ingress) = self.ingress_items.lock() {
             let now = u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or_default();
             ingress.observe(items, now);
         }
     }
 
-    pub(crate) fn register_native_tool_origin(&self, call_id: &str, kind: codex_protocol::provenance::SourceKind) {
-        if self.source_admission_level().is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive) { return; }
-        if let Ok(mut ingress) = self.ingress_items.lock() { ingress.register_call(call_id, kind); }
+    /// Staged producer handoff: reading a candidate does not release its data.
+    #[allow(dead_code)]
+    pub(crate) fn pending_native_screening(
+        &self,
+        item: &ResponseItem,
+    ) -> Result<crate::security::ingress::NativeScreeningCandidate> {
+        self.ingress_items
+            .lock()
+            .map_err(|_| {
+                CodexErr::InvalidRequest("source admission registry is unavailable".into())
+            })?
+            .screening_candidate(item)
+            .map_err(|error| CodexErr::InvalidRequest(error.to_string()))
+    }
+
+    /// A complete screening result must match this exact host-observed item.
+    #[allow(dead_code)]
+    pub(crate) fn admit_native_screening(
+        &self,
+        item: &ResponseItem,
+        screened: codex_content_security::ScreenedContent,
+    ) -> Result<()> {
+        self.ingress_items
+            .lock()
+            .map_err(|_| {
+                CodexErr::InvalidRequest("source admission registry is unavailable".into())
+            })?
+            .admit_screened(item, screened)
+            .map_err(|error| CodexErr::InvalidRequest(error.to_string()))
+    }
+
+    pub(crate) fn register_native_tool_origin(
+        &self,
+        call_id: &str,
+        kind: codex_protocol::provenance::SourceKind,
+    ) {
+        if self
+            .source_admission_level()
+            .is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive)
+        {
+            return;
+        }
+        if let Ok(mut ingress) = self.ingress_items.lock() {
+            ingress.register_call(call_id, kind);
+        }
     }
 
     pub(crate) fn with_prompt_cache_key_override(
@@ -928,6 +1006,9 @@ impl ModelClient {
             agent_identity_policy: self.agent_identity_policy,
             prompt_cache_key_override: self.prompt_cache_key_override.clone(),
             http_client_factory: self.http_client_factory.clone(),
+            ingress_level: self.ingress_level,
+            ingress_policy: self.ingress_policy.clone(),
+            ingress_items: Arc::clone(&self.ingress_items),
         }
     }
 

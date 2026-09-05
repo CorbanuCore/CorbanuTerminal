@@ -116,9 +116,9 @@ pub(crate) async fn handle_mcp_tool_call(
     hook_tool_name: HookToolName,
     arguments: String,
 ) -> HandledMcpToolCall {
-    sess.services.model_client().register_native_tool_origin(
-        &call_id, codex_protocol::provenance::SourceKind::Mcp,
-    );
+    sess.services
+        .model_client()
+        .register_native_tool_origin(&call_id, codex_protocol::provenance::SourceKind::Mcp);
     let turn_context = &step_context.turn;
     // Parse the `arguments` as JSON. An empty string is OK, but invalid JSON
     // is not.
