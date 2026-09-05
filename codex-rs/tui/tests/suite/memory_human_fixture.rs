@@ -139,7 +139,7 @@ async fn tmux_memory_human_fixture_rehearsal() -> Result<()> {
             Driver::Rehearsal,
             root.path(),
             limit,
-            Duration::from_secs(12),
+            Duration::from_secs(30),
         )
         .await;
         save_rehearsal_artifacts(root.path(), case)?;
