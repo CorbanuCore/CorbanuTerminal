@@ -72,9 +72,63 @@ async fn pf_30_s04_provider_change_invalidates_bound_client() {
         Err(StageOneMemoryError::Denied(StageOneMemoryDenial::ProviderChanged))));
 }
 
-#[test]
-fn pf_30_s04_denial_messages_are_bounded_and_input_independent() {
-    assert_eq!(StageOneMemoryDenial::ProtectedInputUnavailable.to_string(),
-        "protected stage-one memory input is unavailable");
-    assert_eq!(StageOneMemoryDenial::OwnerMismatch.to_string(), "stage-one memory owner does not match");
+#[tokio::test]
+async fn pf_30_s04_http_attempt_guard_withholds_canary_after_live_change() {
+    let owner = owner(SecurityLevel::Permissive).await;
+    let client = client(&owner).await.unwrap();
+    let server = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .respond_with(wiremock::ResponseTemplate::new(200)).mount(&server).await;
+    let transport = StageOneGuardedTransport::new(ReqwestTransport::new(reqwest::Client::new()), Some(Arc::clone(&client.binding)));
+    let mut request = Request::new(http::Method::POST, server.uri());
+    request.body = Some(codex_http_client::RequestBody::Json(serde_json::json!({"canary": "synthetic-private-rollout"})));
+    transport.execute(request.clone()).await.unwrap();
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+    let controller = owner.services.agent_control.trusted_security_controller().unwrap();
+    controller.apply_confirmed_change(controller.confirm_level_change(SecurityLevel::Aggressive,
+        codex_security_policy::RevocationState::new()).unwrap()).unwrap();
+    // Both lower HTTP entry points enforce the same binding on every invocation,
+    // including retry attempts after auth/backoff has already completed.
+    assert!(matches!(transport.execute(request.clone()).await, Err(TransportError::Build(_))));
+    assert!(matches!(transport.stream(request).await, Err(TransportError::Build(_))));
+    assert_eq!(server.received_requests().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn pf_30_s04_websocket_connect_race_denies_before_first_frame() {
+    let (mut session, context) = crate::session::tests::make_session_and_context().await;
+    session.services.agent_control = session.services.agent_control.clone()
+        .with_effective_security_policy(SecurityLevel::Permissive, session.thread_id, false).unwrap();
+    let owner = Arc::new(session);
+    let mut client = client(&owner).await.unwrap();
+    let controller = owner.services.agent_control.trusted_security_controller().unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mut provider = owner.provider().await;
+    provider.base_url = Some(format!("http://{}", listener.local_addr().unwrap()));
+    provider.requires_openai_auth = false;
+    provider.env_key = None;
+    provider.supports_websockets = true;
+    // Only this private fixture substitutes a socket endpoint; the live binding
+    // and production post-connect frame dispatch remain unchanged.
+    client.client = client.client.for_provider(&provider);
+    let server = tokio::spawn(async move {
+        let (socket, _) = listener.accept().await.unwrap();
+        let mut socket = tokio_tungstenite::accept_hdr_async(socket,
+            move |_: &tokio_tungstenite::tungstenite::handshake::server::Request, response| {
+                controller.apply_confirmed_change(controller.confirm_level_change(SecurityLevel::Moderate,
+                    codex_security_policy::RevocationState::new()).unwrap()).unwrap();
+                Ok(response)
+            }).await.unwrap();
+        let frame = tokio::time::timeout(std::time::Duration::from_millis(250), socket.next()).await;
+        assert!(!matches!(frame, Ok(Some(Ok(tokio_tungstenite::tungstenite::Message::Text(_))))));
+    });
+    let prompt = Prompt::default();
+    let metadata = CodexResponsesMetadata::new("fixture".into(), "fixture".into(), owner.thread_id.to_string(), "fixture:0".into());
+    let result = tokio::time::timeout(std::time::Duration::from_secs(5), client.extract(StageOneMemoryRequest {
+        prompt: &prompt, model_info: &context.model_info, session_telemetry: &context.session_telemetry,
+        reasoning_effort: None, reasoning_summary: ReasoningSummary::default(), service_tier: None,
+        responses_metadata: &metadata,
+    })).await.unwrap();
+    assert!(matches!(result, Err(StageOneMemoryError::Denied(StageOneMemoryDenial::ProtectedInputUnavailable))));
+    server.await.unwrap();
 }

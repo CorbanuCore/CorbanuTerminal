@@ -74,12 +74,14 @@ pub fn start_memories_startup_task(
         }
 
         // Run phase 1.
-        if !phase1::run(Arc::clone(&context), Arc::clone(&config)).await
-            || context.stage_one_client(&config).await.is_err()
-        {
+        if !phase1::run(Arc::clone(&context), Arc::clone(&config)).await {
             context.counter(MEMORY_STARTUP, 1, &[("status", "skipped_policy")]);
             return;
         }
+        let Ok(config) = context.current_stage_one_config(&config).await else {
+            context.counter(MEMORY_STARTUP, 1, &[("status", "skipped_policy")]);
+            return;
+        };
         // Run phase 2.
         phase2::run(context, config, parent_permission_profile).await;
     });

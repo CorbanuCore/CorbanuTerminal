@@ -8,6 +8,7 @@ use codex_core::detached_memory_responses_metadata;
 use codex_core::resolve_installation_id;
 use codex_core::memory_stage_one::StageOneMemoryClient;
 use codex_core::memory_stage_one::StageOneMemoryError;
+use codex_core::memory_stage_one::StageOneMemoryDenial;
 use codex_core::memory_stage_one::StageOneMemoryRequest;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
@@ -187,6 +188,29 @@ impl MemoryStartupContext {
 
     pub(crate) fn provider(&self) -> &dyn ModelProvider {
         self.provider.as_ref()
+    }
+
+    pub(crate) fn stage_one_provider(&self, config: &Config) -> SharedModelProvider {
+        if self.provider.info() == &config.model_provider {
+            Arc::clone(&self.provider)
+        } else {
+            create_model_provider(config.model_provider.clone(), Some(Arc::clone(&self.auth_manager)))
+        }
+    }
+
+    pub(crate) async fn current_stage_one_config(&self, config: &Config) -> Result<Arc<Config>, StageOneMemoryError> {
+        let snapshot = self.thread.config_snapshot().await;
+        let mut current = config.clone();
+        if snapshot.model_provider_id != config.model_provider_id {
+            current.model_provider = config.model_providers.get(&snapshot.model_provider_id)
+                .cloned().ok_or(StageOneMemoryDenial::ProviderChanged)?;
+            current.model_provider_id = snapshot.model_provider_id;
+        }
+        current.model = Some(snapshot.model);
+        // The factory asserts this snapshot against the live host again. It is
+        // not a capability to choose an arbitrary replacement provider.
+        self.stage_one_client(&current).await?;
+        Ok(Arc::new(current))
     }
 
     pub(crate) fn counter(&self, name: &str, inc: i64, tags: &[(&str, &str)]) {

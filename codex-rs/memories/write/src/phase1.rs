@@ -72,6 +72,19 @@ struct StageOneOutput {
 /// 3) run stage-1 extraction jobs in parallel
 /// 4) emit metrics and logs
 pub async fn run(context: Arc<MemoryStartupContext>, config: Arc<Config>) -> bool {
+    // Refresh routing for a new startup run. An already-created client keeps its
+    // exact provider binding and fails closed if another switch races dispatch.
+    let config = match context.current_stage_one_config(&config).await {
+        Ok(config) => config,
+        Err(reason) => {
+            // Still claim and fail eligible jobs below for policy denials so the
+            // established finite backoff applies, rather than spinning startup.
+            if !matches!(reason, StageOneMemoryError::Denied(_)) {
+                return false;
+            }
+            config
+        }
+    };
     let stage_one_context = build_request_context(context.as_ref(), config.as_ref()).await;
     let _phase_one_e2e_timer = stage_one_context.start_timer(MEMORY_PHASE_ONE_E2E_MS);
 
@@ -196,12 +209,13 @@ async fn build_request_context(
     context: &MemoryStartupContext,
     config: &Config,
 ) -> StageOneRequestContext {
+    let provider = context.stage_one_provider(config);
     let model_name = config.memories.extract_model.clone().unwrap_or_else(|| {
-        let preferred = context.provider().memory_extraction_preferred_model();
+        let preferred = provider.memory_extraction_preferred_model();
         config.model.as_deref().map_or_else(
             || preferred.to_string(),
             |active_model| {
-                context.provider().resolve_background_helper_model(
+                provider.resolve_background_helper_model(
                     preferred,
                     DEFAULT_MEMORY_EXTRACTION_PREFERRED_MODEL,
                     active_model,
