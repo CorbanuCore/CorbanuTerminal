@@ -79,9 +79,9 @@ actual findings; exceed five only when critical findings continue.
 
 | Lane | Invocations | Evidence / next action |
 | --- | ---: | --- |
-| Broker | 2 / 5 | #1 rejected pre-inference (old CLI); #2 Astra High found disconnect/audit-correlation issues, scoped remediation running; #3 Fable High allocated after fixes |
-| Provenance | 0 / 5 | Shared registrations supplied; RTX compilation/fix underway before review |
-| Security UI | 2 / 5 | #1 rejected pre-inference (old CLI); #2 Astra High clean; #3 Fable High allocated and starting |
+| Broker | 4 / 5 | #1 CLI rejected; #2 Astra findings repaired; #3 Fable confirmed repairs and found timeout defect, now repaired; #4 Fable running with scoped locks |
+| Provenance | 2 / 5 | #1 Astra provider-switch/lock findings repaired; #2 Fable confirmed them and found direct realtime websocket guard omission; remedy and #3 Fable allocated |
+| Security UI | 3 / 5 | #1 CLI rejected; #2 Astra High clean; #3 Fable High clean; no further review planned |
 
 Successful Astra runtime: installed app-bundled Codex 0.153.1; 0.145.0 was
 rejected by the backend before any review verdict. Keep these attempts visible.
@@ -97,6 +97,29 @@ compile check in 14.66 seconds. Generated Cargo.lock adds only the intended
 13 dependency lines. Both just bazel-lock-update and just bazel-lock-check pass;
 MODULE.bazel.lock unchanged. Existing platforms/rules_cc version warnings remain.
 These are preliminary combined checks, not final post-review qualification.
+
+### Integration checkpoint and known test environment effects
+
+Current source candidate f60d15f16 includes all three lanes, scoped dependency
+locks, broker timeout fixes and provenance provider-switch fixes. Combined
+fix/format, affected crate suites and actual-key TMUX are underway remotely;
+the subsequent realtime guard remediation must be integrated and requalified.
+No merge to main or release is claimed.
+
+PF-30 full Core run using a fresh isolated temporary root: 3,455 passed,
+five request-permission grant cases failed, eight skipped. All five failures
+reproduce at allocation base 4f263ca73 (module: seven passed, five failed),
+with extra "Failed to create stream fd: Operation not permitted" output.
+They are existing failures, not a clean suite and not newly introduced passes.
+Missing test_stdio_server and shared temporary-root contamination caused earlier
+additional failures; required fixtures and a fresh per-run temporary root
+resolved those. Never delete shared leftover test data to conceal failures.
+
+Shared target caches also reused stale workspace artifacts across lane checkouts.
+Under the shared build lock, invalidate the affected source mtime and rebuild;
+if necessary clean only the identified generated workspace package, never the
+entire cache or source. Copy exact candidate binaries before releasing the lock.
+Use fresh TMPDIR roots outside /home/travis/security-round5/tmp for every run.
 
 ## Integration and follow-through
 
