@@ -83,6 +83,7 @@ members = [
     "network-proxy",
     "ollama",
     "process-hardening",
+    "protected-state",
     "provider-auth",
     "product-brand",
     "protocol",
@@ -241,6 +242,7 @@ codex-otel = { path = "otel" }
 codex-plugin = { path = "plugin" }
 codex-model-provider = { path = "model-provider" }
 codex-process-hardening = { path = "process-hardening" }
+codex-protected-state = { path = "protected-state" }
 codex-protocol = { path = "protocol" }
 codex-product-brand = { path = "product-brand" }
 codex-prompts = { path = "prompts" }

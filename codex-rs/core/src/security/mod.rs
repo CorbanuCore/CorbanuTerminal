@@ -5,6 +5,9 @@ pub(crate) mod credential_capability;
 pub(crate) mod aggressive;
 #[allow(dead_code)]
 pub(crate) mod authoritative_state;
+#[cfg(target_os = "linux")]
+#[allow(dead_code)]
+pub(crate) mod authoritative_state_anchor;
 pub(crate) mod broker_client;
 pub(crate) mod browser_isolation;
 pub(crate) mod confidentiality;
@@ -35,6 +38,10 @@ mod integration_tests;
 #[cfg(test)]
 #[path = "authoritative_state_tests.rs"]
 mod authoritative_state_tests;
+
+#[cfg(all(test, target_os = "linux"))]
+#[path = "authoritative_state_anchor_tests.rs"]
+mod authoritative_state_anchor_tests;
 
 #[cfg(test)]
 #[path = "protected_runtime_tests.rs"]
