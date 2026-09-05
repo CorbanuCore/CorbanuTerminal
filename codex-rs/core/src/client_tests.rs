@@ -181,7 +181,7 @@ fn pf_30_s01_live_policy_cannot_be_weakened_by_configured_floor() {
     assert_eq!(client.source_admission_level().unwrap(), SecurityLevel::Aggressive);
     let unbound = test_model_client(SessionSource::Cli).with_ingress_policy(SecurityLevel::Permissive, EffectivePolicyView::default());
     assert!(unbound.source_admission_level().is_err());
-    let switched = client.for_provider(&create_oss_provider_with_base_url("https://new-provider.invalid/v1", WireApi::ChatCompletions));
+    let switched = client.for_provider(&create_oss_provider_with_base_url("https://new-provider.invalid/v1", WireApi::Chat));
     assert_eq!(switched.source_admission_level().unwrap(), SecurityLevel::Aggressive);
     assert!(switched.check_source_admission(&Prompt::default()).is_err());
 }
