@@ -1,0 +1,47 @@
+╭──────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.38)        │
+│                                      │
+│ model:     gpt-5.6-terra   /model t… │
+│ directory: ~/…/security-local-anchor │
+╰──────────────────────────────────────╯
+
+/status
+
+╭──────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.38)       │
+│                                      │
+│ Visit                                │
+│ https://chatgpt.com/codex/settings/u │
+│ for up-to-date                       │
+│ information on rate limits and       │
+│ credits                              │
+│                                      │
+│  Model:                GPT-5.6-Terra │
+│  Directory:            ~/…/…l-anchor │
+│  Permissions:          Workspace (As │
+│  Security:             Requested     │
+│                        Moderate;     │
+│                        effective     │
+│                        protection    │
+│                        unverified (/ │
+│                        security)     │
+│  Agents.md:            AGENTS.md     │
+│  Account:              OpenAI API ke │
+│  Collaboration mode:   Default       │
+│  Session:              01a07012-dbcf │
+│                                      │
+│  Token usage:          0 total  (0 i │
+│  Limits:               data not avai │
+╰──────────────────────────────────────╯
+
+
+› Write tests for @filename
+
+  GPT-5.6-Terra default · ~/worktrees/s…
+
+
+
+
+
+
+

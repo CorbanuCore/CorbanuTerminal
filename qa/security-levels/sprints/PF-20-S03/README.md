@@ -25,7 +25,8 @@ necessary >800-line total including tests. Current recovery checkpoints are
 `2c6e27474`, `d9f346cbf`, `740ee0d8a`, `190114002`, `36f7b96cc` and `8939d5041`; they are not individually
 claimed as reviewed or final-qualified trees. Final size and exact evidence will
 be recorded after formatting. Current source/build delta is 16 files and 2,022
-added lines, including 670 test lines. Largest production module is 405 lines.
+added lines at the earlier checkpoint. Final candidate delta is 2,035 added lines,
+including 682 test lines. Largest production module is 405 lines.
 
 ### Root contract
 
@@ -107,14 +108,19 @@ the shared build lock. Initial missing Bazel PATH was corrected to the existing
 installation, without installing new tooling.
 
 Remote evidence root: `/home/travis/security-round5/evidence/anchor/`.
-Immutable CLI `candidate-8939/codex` SHA256:
-`42960f8888ac28fc45bcee805e1be701b0334239dacbc713474821318c547e1f`.
-This represents `8939d5041` plus synchronized formatter-only changes.
-Actual-key TMUX, integration seam agreement, and Astra/Fable reviews remain
-pending. Review budget: new PF20 track0/5; frozen PF30S01 remains5/5 and is not
+Final source `a0825d720` adds nonblocking malformed-FIFO rejection; leaf17/17 and
+Core17/17 passed again. No formatter delta remained. Immutable CLI
+`candidate-a0825/codex` SHA256:
+`449488d50c3f240ff0bee857f865577a3269f488f2742a94f37513498e2fd1c1`.
+Actual-key profiles2/2 and same-home process restart passed on that candidate;
+eleven final captures are committed under `tmux/`. See `verification.md` for
+commands, cache-path correction and evidence boundaries.
+Integration seam sign-off and Astra/Fable reviews remain pending.
+Review budget: new PF20 track0/5; frozen PF30S01 remains5/5 and is not
 reviewed again. See `pf27-consumer-handoff.md`; proposed root-anchor composition
 must be resolved against the historical nonlogin-controller deployment design
-before final freeze. No installation permission is inferred.
+before final freeze. Broker confirms it is consumable with distinct authorized
+child roles; coordinator acceptance is pending. No installation permission is inferred.
 
 No elevated setup, principal/ACL/service modification, production Vault transfer
 or system factory invocation has been performed. Selected Linux filesystem
