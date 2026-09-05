@@ -787,6 +787,16 @@ impl ModelClient {
         self
     }
 
+    /// Provider transport replacement is not a new conversation. Preserve the
+    /// host-held bindings only within the same thread, never across sessions
+    /// belonging to a different thread identity.
+    pub(crate) fn with_native_ingress_from(mut self, previous: &Self) -> Self {
+        if self.state.thread_id == previous.state.thread_id {
+            self.ingress_items = Arc::clone(&previous.ingress_items);
+        }
+        self
+    }
+
     fn source_admission_level(&self) -> Result<codex_security_policy::SecurityLevel> {
         let mut level = self.ingress_level;
         if let Some(policy) = &self.ingress_policy {

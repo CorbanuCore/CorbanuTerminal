@@ -1772,6 +1772,7 @@ impl Session {
             config.security_level,
             self.services.agent_control.effective_security_policy(),
         )
+        .with_native_ingress_from(&self.services.model_client())
         .with_prompt_cache_key_override(
             crate::guardian::prompt_cache_key_override_for_review_session(
                 &configuration.session_source,

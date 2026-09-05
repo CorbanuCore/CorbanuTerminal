@@ -305,6 +305,93 @@ fn pf_30_s01_live_policy_cannot_be_weakened_by_configured_floor() {
     assert!(switched.check_source_admission(&Prompt::default()).is_err());
 }
 
+#[tokio::test]
+async fn pf_30_s01_session_provider_update_preserves_native_admissions_and_pending_origins() {
+    let (session, _) = crate::session::tests::make_session_and_context().await;
+    let previous = session
+        .services
+        .model_client()
+        .as_ref()
+        .clone()
+        .with_ingress_level(codex_security_policy::SecurityLevel::Moderate);
+    let admitted_item = ResponseItem::Message {
+        id: None,
+        role: "user".into(),
+        content: vec![ContentItem::InputText {
+            text: "fixture data".into(),
+        }],
+        phase: None,
+        internal_chat_message_metadata_passthrough: None,
+    };
+    previous.observe_native_ingress(std::slice::from_ref(&admitted_item));
+    let candidate = previous.pending_native_screening(&admitted_item).unwrap();
+    let screened =
+        crate::security::ingress::tests::screen_binding(candidate.source(), candidate.normalized());
+    previous
+        .admit_native_screening(&admitted_item, screened)
+        .unwrap();
+    previous
+        .register_native_tool_origin("fixture-call", codex_protocol::provenance::SourceKind::Tool);
+    let pending_item = ResponseItem::FunctionCallOutput {
+        id: None,
+        call_id: "fixture-call".into(),
+        output: FunctionCallOutputPayload::from_text("pending data".into()),
+        internal_chat_message_metadata_passthrough: None,
+    };
+    previous.observe_native_ingress(std::slice::from_ref(&pending_item));
+    let pending_source = previous
+        .pending_native_screening(&pending_item)
+        .unwrap()
+        .source();
+    let projected = previous
+        .ingress_items
+        .lock()
+        .unwrap()
+        .project(std::slice::from_ref(&admitted_item))
+        .unwrap();
+    session.services.replace_model_client(previous.clone());
+    session
+        .update_settings(crate::session::SessionSettingsUpdate {
+            model_provider: Some(codex_model_provider_info::ZAI_PROVIDER_ID.into()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let replacement = session.services.model_client();
+    assert!(replacement.provider_info().is_zai());
+    assert!(Arc::ptr_eq(
+        &replacement.ingress_items,
+        &previous.ingress_items
+    ));
+    assert_eq!(
+        replacement
+            .pending_native_screening(&pending_item)
+            .unwrap()
+            .source(),
+        pending_source
+    );
+    assert_eq!(
+        replacement
+            .ingress_items
+            .lock()
+            .unwrap()
+            .project(&[admitted_item])
+            .unwrap(),
+        projected
+    );
+    let different_thread =
+        test_model_client(SessionSource::Cli).with_native_ingress_from(&previous);
+    assert!(!Arc::ptr_eq(
+        &different_thread.ingress_items,
+        &previous.ingress_items
+    ));
+    assert!(
+        different_thread
+            .pending_native_screening(&pending_item)
+            .is_err()
+    );
+}
+
 #[test]
 fn non_openai_responses_request_sends_only_current_dynamic_context() {
     let client = test_model_client(SessionSource::Cli);
