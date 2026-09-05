@@ -79,10 +79,10 @@ actual findings; exceed five only when critical findings continue.
 
 | Lane | Invocations | Evidence / next action |
 | --- | ---: | --- |
-| Broker | 4 / 5 | Earlier #1–4 retained; new service tests pass at 6bdc84195. #5 Astra High authorized within the existing cap; #6 Fable coverage still awaits the user's explicit budget decision |
+| Broker | 5 / 5 | Earlier #1–4 retained; new service tests pass at 6bdc84195. #5 Astra High completed clean, final evidence cd7457da7. #6 Fable coverage still awaits the user's explicit budget decision |
 | Provenance | 5 / 5 | Earlier #1–3 dispositions retained; bounded segmentation #4 Astra High and #5 Fable High both clean. Final lane e890ae4a9 integrated; no further review |
 | Security UI | 3 / 5 | #1 CLI rejected; #2 Astra High clean; #3 Fable High clean; no further review planned |
-| Memory dispatch (new PF-30-S04) | 0 / 5 | #1 Astra High conditionally authorized only after registered integration/TMUX proof; #2 Fable High authorized after a clean #1 on the same frozen runtime. No reviewer invoked yet |
+| Memory dispatch (new PF-30-S04) | 1 / 5 | #1 Astra High found a P2 phase-two config/provider pairing mismatch after a live switch. Scoped remediation and final-candidate tests/TMUX are running. #2 Fable High authorized after that verified fix; no second review invoked yet |
 
 Successful Astra runtime: installed app-bundled Codex 0.153.1; 0.145.0 was
 rejected by the backend before any review verdict. Keep these attempts visible.
@@ -181,7 +181,7 @@ at each handback. Combined-tree testing precedes any completion claim.
 Update humanTest.html and securityProgress.html with verified results, honest
 percentages and pending human/platform gates. No release is implied by dispatch.
 
-A thread heartbeat checks every 15 minutes, resumes actionable stalled work,
+A thread heartbeat checks every five minutes, resumes actionable stalled work,
 and reports meaningful progress, failure, completion or a needed user decision.
 No unchanged-status notifications. Pause the monitor when the requested
 integration and handoff are finished.
@@ -259,7 +259,33 @@ synthetic subprocess 6/6, broker/Vault/proxy 338/338 and Core 6/6, plus lock/Baz
 parity. It is not yet merged or externally qualified; production remains
 unavailable pending protected-root/bootstrap composition and measured isolation.
 
-## PF-35 external campaign
+## Latest rolling checkpoint — 2026-09-04 evening
+
+The current review ledger above supersedes the historical dispatch counts.
+Broker service Astra #5 is clean; Fable #6 remains unapproved. Memory Astra #1
+identified a phase-two provider/config pairing regression. Its agent is making
+the scoped correction and rerunning final-candidate automated and actual-key
+TMUX checks before authorized Fable #2. Neither stage is represented as a
+completed sprint or merged final candidate.
+
+Available agents are doing bounded coordination work: provenance identifies
+the next dependency-ready sprint, and broker prepares an exact synthetic Linux
+installation proposal. These are design assignments, not secretly activated
+implementation sprints or additional reviews. The initial dependency inventory
+found no unallocated ready security sprint outside the external PF-35 campaign.
+Do not weaken a prerequisite merely to occupy an implementation slot.
+
+The [protected audit-root proposal](protected-audit-root-design.md) records the
+missing native dependency, reuse of PF-20/PF-41 protocols, enrollment and durable
+CAS requirements, and qualification limits. It is not an approved allocation.
+A local controller can protect against worker-owned state rollback but cannot
+detect rollback of the entire controller disk. Product authority has been asked
+whether to investigate hardware-backed protection or build an explicitly staged
+local-only dependency while retaining the full protected-mode gate. No TPM
+state, privileged principals, permissions, services or real credentials were
+changed. Exact privileged actions require separate approval.
+
+## PF-35 external campaign (unchanged)
 
 User explicitly removed PF-35 from the engineering main path.
 Its engineering reservation returns to draft under the existing sprint process.
