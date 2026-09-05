@@ -105,6 +105,7 @@ mod plugins;
 mod prompt_cache_key;
 mod prompt_caching;
 mod prompt_debug_tests;
+mod provenance;
 mod quota_exceeded;
 mod realtime_conversation;
 mod realtime_initial_items;
