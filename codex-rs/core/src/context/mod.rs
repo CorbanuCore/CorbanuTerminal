@@ -69,6 +69,8 @@ pub use permissions_instructions::ApprovalPromptContext;
 pub use permissions_instructions::PermissionsInstructions;
 pub(crate) use personality_spec_instructions::PersonalitySpecInstructions;
 pub(crate) use plugin_instructions::PluginInstructions;
+// Authenticated transition adapters are staged; quoted content cannot emit this notice.
+#[allow(unused_imports)]
 pub(crate) use provenance::HostAuthorizationNotice;
 pub(crate) use provenance::ProvenanceContext;
 pub(crate) use realtime_delegation::RealtimeDelegation;
