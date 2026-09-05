@@ -137,7 +137,10 @@ fn pf20_s03_successor_overflow_and_generation_regression_deny() {
     let binding = Enrollment::journal(&owner()).0;
     let old = Checkpoint::Journal(checkpoint(u64::MAX));
     let next = Checkpoint::Journal(checkpoint(1));
-    assert_eq!(next.validate_successor(Some(&old), &binding), Err(RootError::Invalid));
+    assert_eq!(
+        next.validate_successor(Some(&old), &binding),
+        Err(RootError::Invalid)
+    );
     let mut old = checkpoint(1);
     old.policy_generation = 3;
     old.run_generation = 4;
@@ -145,7 +148,11 @@ fn pf20_s03_successor_overflow_and_generation_regression_deny() {
         let mut next = checkpoint(2);
         next.policy_generation = policy;
         next.run_generation = run;
-        assert_eq!(Checkpoint::Journal(next).validate_successor(Some(&Checkpoint::Journal(old.clone())), &binding), Err(RootError::Invalid));
+        assert_eq!(
+            Checkpoint::Journal(next)
+                .validate_successor(Some(&Checkpoint::Journal(old.clone())), &binding),
+            Err(RootError::Invalid)
+        );
     }
 }
 

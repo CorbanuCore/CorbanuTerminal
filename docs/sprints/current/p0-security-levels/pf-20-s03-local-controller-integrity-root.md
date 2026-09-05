@@ -45,7 +45,7 @@ updated: 2026-09-04
 - [x] Active plan; PF20S02, PF41S03 and PF27S03 archived.
 - [x] User authorized rolling allocations and resolved the local-data rollback threat model.
 - [x] Exact new worktree/base/branch reserved; PF30S01 returned to draft with frozen handoff, without claiming completion.
-- [ ] Inspect actual interfaces and required nested policies; verify leaf DAG before requesting shared registration.
+- [x] Inspect actual interfaces and required nested policies; verify leaf DAG before requesting shared registration (coordinator registration `695704d8e`).
 
 ## Done
 
@@ -53,20 +53,20 @@ updated: 2026-09-04
 
 ## Remaining
 
-- [ ] Implement bounded, owner/key/namespace-bound authenticated checkpoints using existing config/journal types where appropriate; no self-selected authority.
-- [ ] Explicit one-time enrollment and authenticated Genesis; normal startup opens existing only. Lost/corrupt registry, head or key denies. Interrupted enrollment requires human reconciliation.
-- [ ] Exact full-value CAS, checked monotone successor, process-wide exclusive ownership, no-follow directory-relative operations, sync file then atomic publication then directory sync before success.
-- [ ] Fail closed on stale/foreign/overflow/torn state and unsupported Linux filesystem/kernel operations. Post-publication ambiguity latches unavailable; no blind retry or fallback to an older root.
+- [x] Implement bounded, owner/key/namespace-bound authenticated checkpoints using existing config/journal types where appropriate; no self-selected authority.
+- [x] Explicit one-time enrollment and authenticated Genesis; normal startup opens existing only. Lost/corrupt registry, head or key denies. Interrupted enrollment requires human reconciliation.
+- [x] Exact full-value CAS, checked monotone successor, process-wide exclusive ownership, no-follow directory-relative operations, sync file then atomic publication then directory sync before success.
+- [x] Fail closed on stale/foreign/overflow/torn state and unsupported Linux filesystem/kernel operations. Post-publication ambiguity latches unavailable; no blind retry or fallback to an older root.
 - [ ] Build narrow authenticated native client/service construction with actual post-exec peer and generation binding; root-ready witness is not full ProtectedModeAuthorization. Keep production entry gated until trusted composition exists.
-- [ ] Reuse PF41 journal root-last recovery and PF20 policy anchor-first recovery; implement thin adapters without changing their authority/persistence semantics.
-- [ ] Prove restored/deleted agent data is rejected against intact controller state; document whole-controller snapshot rollback as excluded rather than a passing protection test.
-- [ ] Test enrollment interruption, restart, competing processes, wrong identity, short writes/fsync/ENOSPC/ack loss, stale channels and inherited-socketpair negative control with synthetic data.
+- [x] Reuse PF41 journal root-last recovery and PF20 policy anchor-first recovery; implement thin adapters without changing their authority/persistence semantics.
+- [x] Prove restored/deleted agent data is rejected against intact controller state; document whole-controller snapshot rollback as excluded rather than a passing protection test (unprivileged real PF41 consumer and synthetic Core adapter tests, not privileged deployment).
+- [x] Test enrollment interruption, restart, competing processes, wrong identity, short writes/fsync/ENOSPC/ack loss, stale channels and inherited-socketpair negative control with synthetic data.
 - [ ] Produce exact PF27 consumer handoff and proposed privileged qualification requirements. No sudo, principal/ACL/service setup or real credentials under this allocation.
 
 ## Verification
 
-- [ ] RTX only under shared build flock: scoped just fix, full just fmt, focused protected-state/config/security-audit/Core adapter suites; root serializes Cargo/Bazel changes.
-- [ ] Use unprivileged real subprocess tests plus fault injection; never claim separate-principal isolation from same-user fixtures.
+- [x] RTX only under shared build flock: scoped just fix, full just fmt, focused protected-state/config/security-audit/Core adapter suites; root serializes Cargo/Bazel changes. Current leaf16/Core17/audit46/config229 passed; Cargo/Bazel parity passed. Any subsequent source change must rerun affected gates.
+- [x] Use unprivileged real subprocess tests plus fault injection; never claim separate-principal isolation from same-user fixtures.
 - [ ] No new UI: supporting actual-key TMUX /security, /status, cancel/exit/restart must retain visible unavailable protected state; record immutable candidate/hash.
 - [ ] Astra High and Fable5.1 High via Corbanu/private TMUX; max five for this new track. No review-budget reset of frozen PF30S01 or PF27.
 - [ ] Coordinator combined-tree tests and lock/governance checks; native privileged qualification remains PF27 integration evidence.

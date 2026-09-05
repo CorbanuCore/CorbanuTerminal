@@ -22,9 +22,10 @@ expanding a central Core file: typed checkpoint/error contract; Linux descriptor
 operations; enrollment/durable store; native transport; thin Core adapter;
 separate failure/subprocess tests. The coordinator explicitly accepted the
 necessary >800-line total including tests. Current recovery checkpoints are
-`2c6e27474`, `d9f346cbf`, `740ee0d8a` and `190114002`; they are not individually
+`2c6e27474`, `d9f346cbf`, `740ee0d8a`, `190114002`, `36f7b96cc` and `8939d5041`; they are not individually
 claimed as reviewed or final-qualified trees. Final size and exact evidence will
-be recorded after formatting.
+be recorded after formatting. Current source/build delta is 16 files and 2,022
+added lines, including 670 test lines. Largest production module is 405 lines.
 
 ### Root contract
 
@@ -96,10 +97,24 @@ power-cut experiments. Same-user native fixtures prove protocol/process behavior
 not genuine worker denial of controller files/memory. Core's ordering fixture
 uses an explicitly synthetic platform report, never production readiness.
 
-Final source/tests, audit/config/Core suites, Cargo/Bazel parity, immutable CLI,
-actual-key TMUX, and Astra/Fable reviews remain pending until their exact
-artifacts are recorded. Review budget: new PF20 track 0/5; frozen PF30S01 remains
-5/5 and is not reviewed again.
+Consolidated RTX `final-proof.log` passed leaf15, Core17, audit46 and config229;
+the final overflow test brings `tmux-proof.log` leaf proof to16/16. Full formatter
+and scoped leaf/Core fixes passed. Existing unrelated Core dead-code warnings
+remain. The first new Core fixture failed its private-directory precondition,
+was corrected to explicit0700, and then passed; this was not a product bypass.
+Cargo/Bazel update/check passed with no MODULE delta; Bazel was shut down under
+the shared build lock. Initial missing Bazel PATH was corrected to the existing
+installation, without installing new tooling.
+
+Remote evidence root: `/home/travis/security-round5/evidence/anchor/`.
+Immutable CLI `candidate-8939/codex` SHA256:
+`42960f8888ac28fc45bcee805e1be701b0334239dacbc713474821318c547e1f`.
+This represents `8939d5041` plus synchronized formatter-only changes.
+Actual-key TMUX, integration seam agreement, and Astra/Fable reviews remain
+pending. Review budget: new PF20 track0/5; frozen PF30S01 remains5/5 and is not
+reviewed again. See `pf27-consumer-handoff.md`; proposed root-anchor composition
+must be resolved against the historical nonlogin-controller deployment design
+before final freeze. No installation permission is inferred.
 
 No elevated setup, principal/ACL/service modification, production Vault transfer
 or system factory invocation has been performed. Selected Linux filesystem
