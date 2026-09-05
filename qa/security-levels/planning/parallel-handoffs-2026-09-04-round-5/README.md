@@ -29,8 +29,13 @@ Final extracted fixture source `77200387f` subsequently passed10/10 in
 `82424229-36d7-49cc-859e-8de3e4d3b49b` (69.248s). Its frozen ignored manual entry
 passed startup and cancellation outside build.lock with normal owned cleanup.
 The proof still targets product `6a6bb029d`, not combined `b12e32db3`; root must
-requalify that pairing after review. Astra High review3 is now running; Fable4
-remains conditional on its disposition. Scope inventory contains only the
+requalify that pairing after review. Astra High review3 found three accepted P2
+fixture issues: unpinned catalog metadata, cancellation false positives and
+insufficient pending-exit proof. Agent checkpoint `a4ac1f072` is verified pushed,
+preserving the original verdict and WIP remediation `36c98ca93`; corrected final
+test/runner evidence is being collected before conditional Fable4.
+The earlier passes are not sufficient final qualification after these findings.
+Scope inventory contains only the
 allocated test helpers/QA and coordinator registrations, no product source.
 
 Source base: `07791288b6feeccfaee5a57c12452359cc666957`.
@@ -107,7 +112,7 @@ actual findings; exceed five only when critical findings continue.
 | Broker | 5 / 5 | Earlier #1–4 retained; new service tests pass at 6bdc84195. #5 Astra High completed clean, final evidence cd7457da7. #6 Fable coverage still awaits the user's explicit budget decision |
 | Provenance | 5 / 5 | Earlier #1–3 dispositions retained; bounded segmentation #4 Astra High and #5 Fable High both clean. Final lane e890ae4a9 integrated; no further review |
 | Security UI | 3 / 5 | #1 CLI rejected; #2 Astra High clean; #3 Fable High clean; no further review planned |
-| Memory dispatch and human fixture support | 3 / 5 | Runtime PF30S04 archived. Final fixture source77200387f passed10/10 plus pinned manual entry; #3 Astra High running, #4 Fable conditional on disposition. Combined candidate pairing remains pending. Existing P3 snapshot-cloning optimization deferred |
+| Memory dispatch and human fixture support | 3 / 5 | Runtime PF30S04 archived. #3 Astra found three fixture P2 pinning/false-positive issues; WIP fixes and original review pushed at a4ac1f072. Corrected final proof precedes #4 Fable. Combined candidate pairing remains pending. Existing P3 snapshot-cloning optimization deferred |
 | Local controller (PF-20-S03) | 2 / 5 | Astra #1 P2 blocking-connect issue fixed with nonblocking connect and real backlog regression. Fable #2 confirmed fix and found no code blockers; two P3 documentation/environment notes recorded and addressed. Combined b12e32db3 qualified and sprint archived; no extra review |
 
 Successful Astra runtime: installed app-bundled Codex 0.153.1; 0.145.0 was
