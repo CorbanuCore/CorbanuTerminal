@@ -68,7 +68,7 @@ struct StageOneOutput {
 
 /// Runs memory phase 1 in strict step order:
 /// 1) claim eligible rollout jobs
-/// 2) build one stage-1 request context
+/// 2) build metrics context and refresh each job's host routing
 /// 3) run stage-1 extraction jobs in parallel
 /// 4) emit metrics and logs
 pub async fn run(context: Arc<MemoryStartupContext>, config: Arc<Config>) -> bool {
@@ -107,7 +107,6 @@ pub async fn run(context: Arc<MemoryStartupContext>, config: Arc<Config>) -> boo
         context,
         config,
         claimed_candidates,
-        stage_one_context.clone(),
     )
     .await;
 
@@ -232,14 +231,14 @@ async fn run_jobs(
     context: Arc<MemoryStartupContext>,
     config: Arc<Config>,
     claimed_candidates: Vec<codex_state::Stage1JobClaim>,
-    stage_one_context: StageOneRequestContext,
 ) -> Vec<JobResult> {
     futures::stream::iter(claimed_candidates)
         .map(|claim| {
             let context = Arc::clone(&context);
             let config = Arc::clone(&config);
-            let stage_one_context = stage_one_context.clone();
             async move {
+                let config = context.current_stage_one_config(&config).await.unwrap_or(config);
+                let stage_one_context = build_request_context(context.as_ref(), config.as_ref()).await;
                 job::run(context.as_ref(), config.as_ref(), claim, &stage_one_context).await
             }
         })

@@ -73,13 +73,40 @@ async fn pf_30_s04_provider_change_invalidates_bound_client() {
 }
 
 #[tokio::test]
+async fn pf_30_s04_inherited_policy_is_not_weakened_by_permissive_worker_configuration() {
+    let parent = owner(SecurityLevel::Moderate).await;
+    let (mut child, _) = crate::session::tests::make_session_and_context().await;
+    child.services.agent_control = parent.services.agent_control.clone()
+        .with_effective_security_policy(SecurityLevel::Permissive, child.thread_id, false).unwrap();
+    assert!(matches!(client(&Arc::new(child)).await,
+        Err(StageOneMemoryError::Denied(StageOneMemoryDenial::ProtectedInputUnavailable))));
+}
+
+#[tokio::test]
+async fn pf_30_s04_kill_switch_denies_an_existing_worker_binding() {
+    use codex_security_policy::{PolicyPrincipal, PrincipalKind, RevocationEvent, RevocationReason, RevocationState, RevocationTarget};
+    let owner = owner(SecurityLevel::Permissive).await;
+    let client = client(&owner).await.unwrap();
+    let mut revocations = RevocationState::new();
+    revocations.apply(&RevocationEvent::new(PolicyPrincipal::new(PrincipalKind::Human, "fixture-human").unwrap(),
+        RevocationTarget::KillSwitch { active: true }, RevocationReason::KillSwitch, 1).unwrap()).unwrap();
+    let controller = owner.services.agent_control.trusted_security_controller().unwrap();
+    controller.apply_confirmed_change(controller.confirm_level_change(SecurityLevel::Permissive, revocations).unwrap()).unwrap();
+    assert!(matches!(client.check_completion().await,
+        Err(StageOneMemoryError::Denied(StageOneMemoryDenial::KillSwitchActive))));
+}
+
+#[tokio::test]
 async fn pf_30_s04_http_attempt_guard_withholds_canary_after_live_change() {
     let owner = owner(SecurityLevel::Permissive).await;
     let client = client(&owner).await.unwrap();
     let server = wiremock::MockServer::start().await;
     wiremock::Mock::given(wiremock::matchers::method("POST"))
         .respond_with(wiremock::ResponseTemplate::new(200)).mount(&server).await;
-    let transport = StageOneGuardedTransport::new(ReqwestTransport::new(reqwest::Client::new()), Some(Arc::clone(&client.binding)));
+    let http = codex_login::default_client::create_client_for_route(
+        &codex_http_client::HttpClientFactory::new(codex_http_client::OutboundProxyPolicy::ReqwestDefault),
+        &server.uri(), codex_http_client::ClientRouteClass::Api).unwrap();
+    let transport = StageOneGuardedTransport::new(ReqwestTransport::from_http_client(http), Some(Arc::clone(&client.binding)));
     let mut request = Request::new(http::Method::POST, server.uri());
     request.body = Some(codex_http_client::RequestBody::Json(serde_json::json!({"canary": "synthetic-private-rollout"})));
     transport.execute(request.clone()).await.unwrap();
