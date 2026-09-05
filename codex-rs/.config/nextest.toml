@@ -11,6 +11,19 @@ path = "junit.xml"
 [profile.local]
 inherits = "default"
 
+# Explicit opt-in only; the fixture itself stops at 600 seconds.
+[profile.human-memory]
+inherits = "local"
+retries = 0
+slow-timeout = { period = "60s", terminate-after = 11 }
+
+[[profile.default.overrides]]
+# Real-key rehearsal includes startup, switching, exit/restart and cleanup.
+filter = 'package(codex-tui) & test(tmux_memory_human_fixture_rehearsal)'
+test-group = 'provider_tui_journeys'
+retries = 0
+slow-timeout = { period = "60s", terminate-after = 3 }
+
 [test-groups.app_server_protocol_codegen]
 max-threads = 1
 

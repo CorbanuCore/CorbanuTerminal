@@ -1,0 +1,15 @@
+autoreview findings: 3
+[P2] Use the bundled model catalog in the frozen runner
+codex-rs/tui/tests/suite/memory_human_fixture.rs:165
+The frozen runner reads model metadata from its original source checkout at runtime. Removing that checkout breaks the operator fixture, while changing its catalog changes fixture behavior without changing either recorded artifact hash. The file is also not declared as runtime test data for Bazel. Use the existing `codex_models_manager::bundled_models_response()` API so this dependency is included in the pinned runner.
+
+[P2] Verify that cancellation produced the cancellation outcome
+qa/security-levels/sprints/PF-30-S04/human-fixture/rehearse-pinned.py:80
+The cancellation rehearsal accepts any nonzero exit provided cleanup occurred and `finished.json` exists. However, the Rust entry writes that file for every `run_case` error too. A capture, database, or other fixture failure after readiness can therefore be reported as successful cancellation. Parse `finished.json` and require `Ok(Cancelled)` for this case, alongside the existing cleanup checks.
+
+[P2] Require evidence that the job was pending when its owner exited
+codex-rs/tui/tests/suite/memory_human_fixture.rs:390
+One canary request and zero outputs do not establish that exit occurred during the pending window. If extraction finishes with an error or provider-change denial before the operator exits, these counts remain 1/0; the subsequent restart can still produce `Complete`. The pending timer is only displayed and never enforced. Record the first observed owner exit, require it to occur before the response deadline, and reject an already-failed or denied job so this case cannot qualify an exit that never interrupted pending extraction.
+
+overall: patch is incorrect (0.97)
+The fixture has an unpinned runtime dependency and two paths that can report successful qualification without proving the intended lifecycle outcome. These require small test-only corrections. Review used read-only inspection; no tests were run.

@@ -4,6 +4,8 @@ mod claude_auth;
 #[cfg(unix)]
 mod focus_palette;
 #[cfg(unix)]
+mod memory_human_fixture;
+#[cfg(unix)]
 mod memory_stage_one_policy;
 #[cfg(unix)]
 mod multi_provider_onboarding;
