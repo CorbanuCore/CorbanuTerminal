@@ -1,4 +1,19 @@
-# Security pipeline — paused for account switch
+# Security pipeline — account-switch checkpoint and resume
+
+## Resumed by user
+
+The user explicitly requested resumption after the account switch. The five-minute
+heartbeat is ACTIVE again. The human-memory fixture agent resumed its preserved
+worktree; the reviewed PF20 dependency was merged without conflicts into the
+integration branch at `b12e32db398c83854271e2e70f29e5290278af8b` for combined RTX
+qualification. This is not a main merge or a qualification claim. RTX SSH works;
+approximately 1.5 TiB disk and 82 GiB memory were available at the resume check.
+Existing review budgets, allocations and pending authority decisions are unchanged.
+
+The historical pause instructions below are retained as a recovery checkpoint;
+the explicit resume request satisfies their stop condition.
+
+## Historical pause record
 
 User requested a full pause on 2026-09-04 (Phoenix; 2026-09-05 UTC) to switch
 accounts. **Do not resume implementation, tests, reviews or the heartbeat until
