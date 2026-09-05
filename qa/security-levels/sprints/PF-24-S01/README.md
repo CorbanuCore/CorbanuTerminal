@@ -36,8 +36,8 @@ build lock. Remote evidence root:
 | `just fmt` | Complete pass with coordinator-supplied uv 0.11.3; exit 0 and no file changes (`fmt-complete.log`), so the final tested source is unchanged |
 | Focused TUI nextest | Final normal-mode 235/235 pass; run `36c926b9-7b0b-4c54-aa47-da1ce10471be`, `final-tests.log` |
 | Actual-key TMUX | Final 2/2 pass (three profile/configuration widths plus startup rejection); run `c5c6f41d-d93e-423a-8c7a-8495f677b760`, `final-tests.log` |
-| Astra High review | Attempt 1/5 exited 1 before evaluation: HTTP 400, installed Codex CLI 0.145.0 too old for `gpt-6-astra`; compatible-CLI retry pending, no verdict claimed |
-| Fable 5.1 High via Corbanu/TMUX | Not started; coordinator allocates numbered invocation |
+| Astra High review | Attempt 2/5 passed, exit 0, no findings, using app-bundled CLI 0.153.1; attempt 1 was a counted CLI compatibility failure before evaluation |
+| Fable 5.1 High via Corbanu/TMUX | Attempt 3/5 passed, exit 0, no findings; structured Corbanu exec review inside a private TMUX PTY |
 | Human acceptance | Pending; no human sign-off claimed |
 | PF-26 composed/live-repository release qualification | Pending; no protected mode or release qualification claimed |
 
@@ -75,6 +75,31 @@ structured autoreview helper with `/opt/homebrew/bin/codex`, explicit
 It failed solely on CLI/model compatibility; no model substitution or uncounted
 retry occurred. The coordinator owns subsequent numbered attempts and the
 five-invocation ceiling.
+
+Review 2 froze `14690ea818527b0bd1f35ffe9b09916cb2c7cf77` against the same
+allocation, replacing only the incompatible binary with
+`/Applications/ChatGPT.app/Contents/Resources/codex` (0.153.1). Requested model
+`gpt-6-astra` and effort `high` were retained. It returned `findings: []`,
+`patch is correct`, confidence 0.91 and exit 0. It explicitly checked the
+observation-only Enter/cancellation behavior, requested/effective distinction,
+layout, tests, snapshots and supplied TMUX evidence without modifying files.
+
+Review 3 froze `a08f28280c2386c53c9d4cd520b56f9ddc50a283`, differing only in
+pending verification metadata, against the same allocation. The structured
+autoreview helper ran inside private TMUX session `pf24-fable-high`, using the
+coordinator's `review-fable-high` Corbanu wrapper, explicit
+`--model claude-fable-5-1-plan --thinking high`. It returned `findings: []`,
+`patch is correct`, confidence 0.86 and exit 0. The captured PTY confirms the
+model, effort and result. This route is **Corbanu exec review in TMUX**, not an
+interactive-chat key test; product UX is independently covered by the actual-key
+typed harness above. The private review fixture was closed after capture.
+
+Both successful reviews have no findings to resolve. Three of five permitted
+attempts were used, including the compatibility failure; no further review was
+requested. No Rust changes followed the final tests or either clean review.
+Structured results and the external-review viewport are committed under
+[`reviews/`](reviews/); full logs remain in the external-drive evidence directory.
+Integration-owner combined-tree qualification remains outstanding.
 
 ## Human/interactive script
 

@@ -54,15 +54,15 @@ updated: 2026-09-04
 - [x] Support configured Up/Down equivalents, inert Enter inspection, and Esc cancellation without mutation.
 - [x] Keep 40-column terminals readable and expose the requested/unverified state in `/status`.
 - [x] Add focused behavior tests and reviewed snapshots for every profile, narrow width, and unknown-state error.
+- [x] Receive coordinator-numbered Astra High (#2) and Fable 5.1 High (#3) clean reviews; no findings or source changes, three of five attempts used including CLI compatibility failure #1.
 
 ## Remaining
 
-- [ ] Receive coordinator-numbered Astra High and Fable 5.1 High review and resolve any accepted findings.
 - [ ] Integration owner completes combined-tree gates and archive; full protected activation and PF-26 qualification remain separate.
 
 ## Verification
 
-- [ ] Complete coordinator-numbered Astra High and Fable 5.1 High independent reviews, with verified disposition and any required affected reruns.
+- [x] Complete coordinator-numbered Astra High and Fable 5.1 High independent reviews, both exit 0 with no findings; no source changes or affected reruns required.
 - [ ] Integration owner repeats the applicable standalone gates on the combined three-lane tree before completion/archive.
 - [x] Fix: `cd codex-rs && just fix -p codex-tui`; final source passed on RTX.
 - [x] Format: complete `just fmt` passed after coordinator supplied uv 0.11.3; no file changes and final tested source remains exact.
