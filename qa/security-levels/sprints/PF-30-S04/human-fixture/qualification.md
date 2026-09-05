@@ -50,10 +50,11 @@ a fresh custom provider B had no selectable model preset. Source inspection
 shows custom presets sync on provider-manager access; this is not a claim of a
 new product regression or authorization to modify product UX.
 
-`d70972fd3` uses established OpenAI and Z.ai catalog identities, both redirected
-to separate loopback fake endpoints with synthetic keys and an isolated child
-environment. The operator can select the visible Z.ai / GLM5.3 model. This also
-makes routing-model mismatches observable (foreground A gpt-5.6-terra versus B
-glm-5.3), unlike identical generic custom model labels. The archived memory
-tests remain unchanged. Failed rehearsal status/captures now persist before
-propagating the test error. Final qualification still pending.
+`d70972fd3` attempted to redirect established OpenAI/Z.ai catalog identities.
+The fixture exited before readiness (rehearsal failed; support tests 9/9 passed).
+Source inspection confirms built-in overrides accept retry/timeouts, not the
+endpoint/auth replacement this test requires. That attempt does not prove
+loopback routing or a usable operator flow. It has been replaced in `516ce8142`
+with custom loopback providers and explicit `/providers` catalog initialization
+before the real `/model` journey. Failed rehearsal status/captures persist before
+propagating the test error. Final qualification is still pending.

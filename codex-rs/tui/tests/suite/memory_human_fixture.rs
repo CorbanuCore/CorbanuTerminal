@@ -54,6 +54,21 @@ enum Outcome {
     TimedOut,
 }
 
+struct Artifacts {
+    binary: std::path::PathBuf,
+    identity: Value,
+}
+
+impl Artifacts {
+    fn load() -> Result<Self> {
+        let binary = codex_utils_cargo_bin::cargo_bin("codex")?;
+        let runner = std::env::current_exe()?;
+        let identity = json!({"candidate":binary, "candidate_sha256":digest(&binary)?,
+            "runner":runner, "runner_sha256":digest(&runner)?});
+        Ok(Self { binary, identity })
+    }
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "explicit operator opt-in; see QA human-fixture guide"]
 async fn human_memory_fixture() -> Result<()> {
@@ -72,10 +87,11 @@ async fn human_memory_fixture() -> Result<()> {
             .context("new evidence directory required")?,
     );
     fs::create_dir(&root).context("evidence directory must not already exist")?;
-    let binary = codex_utils_cargo_bin::cargo_bin("codex")?;
+    let artifacts = Artifacts::load()?;
     let expected = std::env::var("CORBANU_MEMORY_CANDIDATE_SHA256")?;
-    ensure!(digest(&binary)? == expected, "candidate hash mismatch");
+    ensure!(artifacts.identity["candidate_sha256"] == expected, "candidate hash mismatch");
     let result = run_case(
+        &artifacts,
         case,
         Driver::Human,
         &root,
@@ -100,6 +116,7 @@ async fn tmux_memory_human_fixture_rehearsal() -> Result<()> {
     if !TmuxServer::should_run("human memory rehearsal")? {
         return Ok(());
     }
+    let artifacts = Artifacts::load()?;
     for case in [
         Case::Startup,
         Case::ProviderSwitch,
@@ -114,6 +131,7 @@ async fn tmux_memory_human_fixture_rehearsal() -> Result<()> {
             Duration::from_secs(70)
         };
         let result = run_case(
+            &artifacts,
             case,
             Driver::Rehearsal,
             root.path(),
@@ -143,6 +161,7 @@ async fn tmux_memory_human_fixture_rehearsal() -> Result<()> {
 }
 
 async fn run_case(
+    artifacts: &Artifacts,
     case: Case,
     driver: Driver,
     root: &Path,
@@ -151,7 +170,7 @@ async fn run_case(
 ) -> Result<Outcome> {
     let home = tempdir()?;
     let repo = codex_utils_cargo_bin::repo_root()?;
-    let binary = codex_utils_cargo_bin::cargo_bin("codex")?;
+    let binary = &artifacts.binary;
     let a = fake_provider("A", case, delay).await;
     let b = fake_provider("B", case, delay).await;
     let config = format!(
@@ -261,7 +280,7 @@ animations = false
     session
         .primary_pane()
         .wait_stable_contains("Corbanu Terminal", READY)?;
-    publish_attachment(&session, root, home.path(), &binary)?;
+    publish_attachment(&session, root, home.path(), artifacts)?;
     let mut keys = Vec::new();
     let start = Instant::now();
     let mut pending = None;
@@ -352,7 +371,7 @@ animations = false
                 session
                     .primary_pane()
                     .wait_stable_contains("Corbanu Terminal", READY)?;
-                publish_attachment(&session, root, home.path(), &binary)?;
+                publish_attachment(&session, root, home.path(), artifacts)?;
                 if driver == Driver::Rehearsal {
                     submit(session.primary_pane(), "/status", &mut keys)?;
                     session
@@ -416,7 +435,7 @@ fn publish_attachment(
     session: &TmuxSession<'_>,
     root: &Path,
     home: &Path,
-    binary: &Path,
+    artifacts: &Artifacts,
 ) -> Result<()> {
     let command = session.attachment_command();
     let socket = command
@@ -438,13 +457,13 @@ fn publish_attachment(
             quote(socket)
         ),
     )?;
-    write_json(
-        root,
-        "ready.json",
-        &json!({"home":home, "socket_dir":socket.to_string_lossy(), "candidate":binary,
-        "candidate_sha256":digest(binary)?, "runner":std::env::current_exe()?, "runner_sha256":digest(&std::env::current_exe()?)?,
-        "attach":"Run: bash <evidence>/attach.sh", "restart":"After exit: touch <evidence>/restart", "cancel":"touch <evidence>/cancel"}),
-    )?;
+    let mut ready = artifacts.identity.clone();
+    ready["home"] = json!(home);
+    ready["socket_dir"] = json!(socket.to_string_lossy());
+    ready["attach"] = json!("Run: bash <evidence>/attach.sh");
+    ready["restart"] = json!("After exit: touch <evidence>/restart");
+    ready["cancel"] = json!("touch <evidence>/cancel");
+    write_json(root, "ready.json", &ready)?;
     eprintln!(
         "Human memory fixture ready: {} (bash {}/attach.sh)",
         root.display(),
@@ -507,9 +526,9 @@ fn switch_provider(pane: &TmuxPane<'_>, keys: &mut Vec<String>) -> Result<()> {
             })
             .unwrap_or("")
             .to_owned();
-        if selected.contains("fixture-model") && !selected.contains("current") {
+        if selected.contains("2. fixture-model") {
             pane.send_key(TmuxKey::Enter)?;
-            keys.push("key: Enter (non-current fake provider model)".into());
+            keys.push("key: Enter (second custom provider / memory-b)".into());
             let selection = pane.wait_stable_until("model selected", READY, |capture| {
                 !capture.contains("Select Model")
             })?;
@@ -525,7 +544,7 @@ fn switch_provider(pane: &TmuxPane<'_>, keys: &mut Vec<String>) -> Result<()> {
             !next.lines().any(|line| line == selected)
         })?;
     }
-    anyhow::bail!("fake provider B absent from model picker")
+    anyhow::bail!("fake provider B absent from model picker: {}", pane.capture_viewport()?)
 }
 
 fn save_rehearsal_artifacts(root: &Path, case: Case) -> Result<()> {
