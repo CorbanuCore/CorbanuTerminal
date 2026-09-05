@@ -24,6 +24,7 @@ use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
+use std::time::Instant;
 
 const MAX_RECEIPT_BYTES: usize = 512;
 const IO_DEADLINE: Duration = Duration::from_secs(5);
@@ -243,8 +244,7 @@ impl From<TypedOperationReceipt> for WireReceipt {
 }
 
 fn read_frame(stream: &mut UnixStream) -> Result<SignedBrokerFrame, BrokerDispatchError> {
-    let mut prefix = [0; 4];
-    stream.read_exact(&mut prefix).map_err(unavailable)?;
+    let (prefix, deadline) = read_prefix(stream)?;
     let length = usize::try_from(u32::from_be_bytes(prefix)).map_err(unavailable)?;
     // Frame includes a four-byte prefix and 32-byte authenticator. Check before allocation.
     if length > MAX_FRAME_BYTES - 36 {
@@ -255,23 +255,19 @@ fn read_frame(stream: &mut UnixStream) -> Result<SignedBrokerFrame, BrokerDispat
     let mut bytes = Vec::with_capacity(length + 36);
     bytes.extend_from_slice(&prefix);
     bytes.resize(length + 36, 0);
-    stream.read_exact(&mut bytes[4..]).map_err(unavailable)?;
+    read_before(stream, &mut bytes[4..], deadline)?;
     SignedBrokerFrame::from_bytes(bytes).map_err(BrokerDispatchError::from)
 }
 
 fn read_receipt(stream: &mut UnixStream) -> Result<TypedOperationReceipt, BrokerDispatchError> {
-    let mut prefix = [0; 4];
-    stream
-        .read_exact(&mut prefix)
-        .map_err(|_| BrokerDispatchError::OutcomeUnknown)?;
+    let (prefix, deadline) =
+        read_prefix(stream).map_err(|_| BrokerDispatchError::OutcomeUnknown)?;
     let length = usize::try_from(u32::from_be_bytes(prefix)).map_err(unavailable)?;
     if length > MAX_RECEIPT_BYTES {
         return Err(BrokerDispatchError::OutcomeUnknown);
     }
     let mut bytes = vec![0; length];
-    stream
-        .read_exact(&mut bytes)
-        .map_err(|_| BrokerDispatchError::OutcomeUnknown)?;
+    read_before(stream, &mut bytes, deadline).map_err(|_| BrokerDispatchError::OutcomeUnknown)?;
     let receipt: WireReceipt =
         serde_json::from_slice(&bytes).map_err(|_| BrokerDispatchError::OutcomeUnknown)?;
     if !(100..=599).contains(&receipt.response_status) {
@@ -297,12 +293,46 @@ fn write_receipt(
 }
 
 fn configure(stream: &UnixStream) -> Result<(), BrokerDispatchError> {
-    stream
-        .set_read_timeout(Some(IO_DEADLINE))
-        .map_err(unavailable)?;
+    stream.set_read_timeout(None).map_err(unavailable)?;
     stream
         .set_write_timeout(Some(IO_DEADLINE))
         .map_err(unavailable)
+}
+
+fn read_prefix(stream: &mut UnixStream) -> Result<([u8; 4], Instant), BrokerDispatchError> {
+    // An idle session or backend still working on a request is not a partial
+    // frame. Connection death/cancellation interrupts this first-byte wait;
+    // backend request deadlines belong to the trusted operation transport.
+    stream.set_read_timeout(None).map_err(unavailable)?;
+    let mut prefix = [0; 4];
+    stream.read_exact(&mut prefix[..1]).map_err(unavailable)?;
+    let deadline = Instant::now() + IO_DEADLINE;
+    read_before(stream, &mut prefix[1..], deadline)?;
+    Ok((prefix, deadline))
+}
+
+fn read_before(
+    stream: &mut UnixStream,
+    mut bytes: &mut [u8],
+    deadline: Instant,
+) -> Result<(), BrokerDispatchError> {
+    while !bytes.is_empty() {
+        let remaining = deadline
+            .checked_duration_since(Instant::now())
+            .ok_or(BrokerDispatchError::SessionUnavailable)?;
+        if remaining.is_zero() {
+            return Err(BrokerDispatchError::SessionUnavailable);
+        }
+        stream
+            .set_read_timeout(Some(remaining))
+            .map_err(unavailable)?;
+        let count = stream.read(bytes).map_err(unavailable)?;
+        if count == 0 {
+            return Err(BrokerDispatchError::SessionUnavailable);
+        }
+        bytes = &mut bytes[count..];
+    }
+    Ok(())
 }
 
 fn unavailable<T>(_: T) -> BrokerDispatchError {
