@@ -139,6 +139,8 @@ fn pf_30_s01_all_native_wire_builders_reject_missing_admission() {
 
 #[test]
 fn pf_30_s01_permissive_wire_payload_is_unchanged() {
+    let mut model = test_model_info();
+    model.max_output_tokens = Some(4096);
     let client = test_model_client(SessionSource::Cli);
     let explicit = client
         .clone()
@@ -170,7 +172,7 @@ fn pf_30_s01_permissive_wire_payload_is_unchanged() {
                     .build_responses_request(
                         &provider,
                         &prompt,
-                        &test_model_info(),
+                    &model,
                         None,
                         super::ReasoningSummaryConfig::None,
                         None,
@@ -181,13 +183,13 @@ fn pf_30_s01_permissive_wire_payload_is_unchanged() {
             .unwrap(),
             serde_json::to_value(
                 client
-                    .build_chat_completions_request(&prompt, &test_model_info(), None, &metadata)
+                    .build_chat_completions_request(&prompt, &model, None, &metadata)
                     .unwrap(),
             )
             .unwrap(),
             serde_json::to_value(
                 client
-                    .build_anthropic_messages_request(&prompt, &test_model_info(), None)
+                    .build_anthropic_messages_request(&prompt, &model, None)
                     .unwrap(),
             )
             .unwrap(),
@@ -198,6 +200,8 @@ fn pf_30_s01_permissive_wire_payload_is_unchanged() {
 
 #[test]
 fn pf_30_s01_admitted_context_round_trips_through_each_real_provider_adapter() {
+    let mut model = test_model_info();
+    model.max_output_tokens = Some(4096);
     let client = test_model_client(SessionSource::Cli)
         .with_ingress_level(codex_security_policy::SecurityLevel::Moderate);
     let item = ResponseItem::Message {
@@ -231,7 +235,7 @@ fn pf_30_s01_admitted_context_round_trips_through_each_real_provider_adapter() {
         .build_responses_request(
             &provider,
             &prompt,
-            &test_model_info(),
+            &model,
             None,
             super::ReasoningSummaryConfig::None,
             None,
@@ -239,10 +243,10 @@ fn pf_30_s01_admitted_context_round_trips_through_each_real_provider_adapter() {
         )
         .unwrap();
     let chat = client
-        .build_chat_completions_request(&prompt, &test_model_info(), None, &metadata)
+        .build_chat_completions_request(&prompt, &model, None, &metadata)
         .unwrap();
     let anthropic = client
-        .build_anthropic_messages_request(&prompt, &test_model_info(), None)
+        .build_anthropic_messages_request(&prompt, &model, None)
         .unwrap();
     for value in [
         serde_json::to_value(responses).unwrap(),
