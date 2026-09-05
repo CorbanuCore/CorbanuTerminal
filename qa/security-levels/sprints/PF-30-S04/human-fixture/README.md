@@ -93,7 +93,11 @@ release acceptance stay with the coordinator.
 ## Frozen RTX launch command
 
 Use this only when the coordinator arranges human testing. The executable
-interface was rehearsed automatically; independent review is still pending.
+interface was rehearsed automatically; independent reviews found no remaining
+landing blocker. A strict pending-exit check can fail closed if normal owner
+termination logs as a job failure; treat that run as not exercised and preserve
+its evidence, never bypass the check. Combined integration and named-human
+acceptance remain pending.
 Run as travis on RTX, from the preserved fixture source worktree. No build lock
 or Cargo invocation is needed. Model metadata is bundled in the pinned runner;
 the source worktree remains the explicitly trusted synthetic working directory.

@@ -1,4 +1,4 @@
-# Human memory fixture qualification — in progress
+# Human memory fixture qualification — ready for integration
 
 Routine QA allocation `9ceac3333`, base `b64d7390d`; branch
 `test/security-human-memory-fixture`. This does not reopen archived PF-30-S04 or
@@ -33,9 +33,11 @@ the coordinator deliberately arranges the human package.
 - [x] Pin test artifact and immutable product binary; runner operates without
       shared build lock during operator waits.
 - [x] Verify final diff contains only allocated tests/QA and root registration.
-- [ ] Review #3 Astra High and #4 Fable5.1High via Corbanu/private TMUX, reusing
-      the original memory budget. Review3 findings are remediated; review4 pending.
-- [ ] Publish tested operator commands and exact evidence.
+- [x] Review #3 Astra High and #4 Fable5.1High via Corbanu/private TMUX, reusing
+      the original memory budget. Review3 findings remediated; review4 P3 deferred below.
+- [x] Publish tested operator commands and exact evidence.
+- [ ] Integration owner requalifies helper against newer combined PF20 runtime.
+- [ ] Named human executes acceptance checks21–23; machine rehearsal is not acceptance.
 
 ## Checkpoints
 
@@ -162,5 +164,9 @@ The P3 is a potential fail-closed false negative: expected owner termination
 can be logged as a Phase1 job failure, which the strict pending proof rejects.
 Code-path inspection confirms that denial can reach the generic failure logger;
 the race was not observed in the passing actual-key qualification. It cannot
-produce a false pass. Integration-owner disposition requested; no source change
-or fifth review started.
+produce a false pass. Recommended disposition is deferred nonblocking test
+robustness: keep the stricter proof, preserve the passing final source, and
+report an affected operator run as not exercised rather than bypassing it.
+The integration owner has been notified and owns combined acceptance. No source
+change or fifth review started. Plan/sprint governance and `git diff --check`
+also passed. No fixture or reviewer process remains running after closeout.
