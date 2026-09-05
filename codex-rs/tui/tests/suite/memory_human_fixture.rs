@@ -177,7 +177,7 @@ async fn run_case(
     let a = fake_provider("A", case, delay).await;
     let b = fake_provider("B", case, delay).await;
     let config = format!(
-        r#"model = "fixture-model"
+        r#"model = "gpt-5.6-terra"
 model_provider = "memory-a"
 cli_auth_credentials_store = "file"
 check_for_update_on_startup = false
@@ -189,8 +189,8 @@ memories = true
 [memories]
 generate_memories = true
 min_rollout_idle_hours = 0
-extract_model = "fixture-model"
-consolidation_model = "fixture-model"
+extract_model = "gpt-5.6-terra"
+consolidation_model = "gpt-5.6-terra"
 [security]
 version = 1
 level = "permissive"
@@ -201,7 +201,7 @@ env_key = "MEMORY_FIXTURE_A_KEY"
 wire_api = "responses"
 request_max_retries = 0
 stream_max_retries = 0
-[model_providers.memory-b]
+[model_providers.gpu-memory-b]
 name = "Memory Fixture B"
 base_url = "{}/v1"
 env_key = "MEMORY_FIXTURE_B_KEY"
@@ -308,7 +308,7 @@ animations = false
         }
         let denied = log.contains("stage-one memory provider changed");
         let foreground_b = routes.iter().any(|r| {
-            r["endpoint"] == "B" && r["kind"] == "foreground" && r["model"] == "fixture-model"
+            r["endpoint"] == "B" && r["kind"] == "foreground" && r["model"] == "gpt-5.6-terra"
         });
         write_json(
             root,
@@ -510,14 +510,14 @@ fn switch_provider(pane: &TmuxPane<'_>, root: &Path, keys: &mut Vec<String>) -> 
     submit(pane, "/model", keys)?;
     pane.wait_stable_contains("Select Model", READY)?;
     for _ in 0..16 {
-        if pane.capture_viewport()?.contains("[Other]") {
+        if pane.capture_viewport()?.contains("[Rented GPU]") {
             break;
         }
         pane.send_key(TmuxKey::Right)?;
         keys.push("key: Right".into());
         std::thread::sleep(Duration::from_millis(150));
     }
-    pane.wait_stable_contains("[Other]", READY)?;
+    pane.wait_stable_contains("[Rented GPU]", READY)?;
     fs::write(root.join("model-picker.txt"), pane.capture_viewport()?)?;
     for _ in 0..64 {
         let capture = pane.capture_viewport()?;
@@ -534,9 +534,9 @@ fn switch_provider(pane: &TmuxPane<'_>, root: &Path, keys: &mut Vec<String>) -> 
             })
             .unwrap_or("")
             .to_owned();
-        if selected.contains("2. fixture-model") {
+        if selected.contains("GPT-5.6-Terra") {
             pane.send_key(TmuxKey::Enter)?;
-            keys.push("key: Enter (second custom provider / memory-b)".into());
+            keys.push("key: Enter (synthetic gpu-memory-b model)".into());
             let selection = pane.wait_stable_until("model selected", READY, |capture| {
                 !capture.contains("Select Model")
             })?;
