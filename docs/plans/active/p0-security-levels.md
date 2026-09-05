@@ -17,6 +17,9 @@ product_spec:
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-memory-dispatch"
+    branch: "feat/security-memory-dispatch"
+    base_commit: "526926934fa650b8eb6c4e6887d1f7461c26f38f"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-broker"
     branch: "feat/security-round5-broker"
     base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
@@ -657,6 +660,42 @@ Dispatch/evidence ledger:
 
 ### Code reference table
 
+### Rolling pipeline allocation — 2026-09-04
+
+The user authorized keeping freed agent slots occupied until a substantial
+human-testable checkpoint. PF-24-S01 is archived. Continue PF-27-S04 service
+composition and PF-30-S01 ingress completion, and allocate PF-30-S04 to the
+freed agent as a separate **denial-only stage-one memory dispatch boundary**.
+Its prerequisite is completed PF-22-S02, not an unfinished screening interface:
+all protected raw-rollout requests deny independently of PF-30-S01 admission.
+PF-30-S02 still owns full persisted lineage and retains its existing dependencies.
+No dependency is waived and PF-35 stays external.
+
+PF-30-S04 uses the exact new memory-dispatch coordinates in front matter.
+It exclusively owns core/src/client.rs and core/src/session/mod.rs under
+codex-rs, removed from PF-30-S01 before dispatch. Core lib/codex_thread factory
+exports and test registries are serialized by the coordinator. Other scopes
+remain disjoint. Adopt the host-owned opaque factory/typed denial design in
+qa/security-levels/sprints/PF-30-S04, including dispatch-time retries, identity,
+live policy and finite worker retry behavior; no public policy setter.
+
+PF-27-S04 additionally owns codex-rs/secret-broker-service/ for composition of
+broker/Vault/audit without a cycle. Trusted bootstrap handles and synthetic
+subprocess evidence are allowed. Creating principals, installing services,
+changing ownership/ACLs or transferring existing Vault material still requires
+separate explicit setup authority. Streaming/output qualification remains open.
+
+PF-30-S01 continues complete-input/unknown-source/mixed-source/provider envelope
+work only within its remaining scope. New shared hooks are proposed to root,
+not patched concurrently with PF-30-S04. Producer fixtures cannot manufacture
+production screening readiness.
+
+Current reservation owners: broker /root/broker, provenance /root/provenance,
+memory-dispatch /root/security_ui. The previous UI allocation is historical.
+New memory track review budget is five maximum; prior broker/provenance review
+ledgers remain visible and are not reset. Consolidate source and tests before
+requesting the coordinator's next numbered review.
+
 | Path or symbol | Why it matters |
 | --- | --- |
 | `codex-rs/tui/src/slash_command.rs::SlashCommand` | Adds `/security` to the command surface |
@@ -763,6 +802,10 @@ for design provenance; product scope remains in the specification.
 ### PF-30
 
 **Durable provenance and post-taint authority.** Trusted ingress assigns immutable source/authority/lineage envelopes. Propagate conservative taint through every provider serialization, summary, memory, cache/import/export, child/mailbox and resume path. Re-evaluate protected actions at use; neither a detector nor a summarizer creates authority.
+
+Rolling independent denial contract: [PF-30-S04 — policy-bound stage-one memory dispatch](../../sprints/current/p0-security-levels/pf-30-s04-policy-bound-memory-dispatch.md).
+Its completed runtime-policy prerequisite does not authorize positive protected
+memory; S01/S02/S03 keep their original source and persistence qualification gates.
 
 ### PF-31
 

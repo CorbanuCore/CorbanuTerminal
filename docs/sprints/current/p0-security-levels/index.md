@@ -1,7 +1,7 @@
 # P0 security-level execution sprints
 
 The active [P0 security plan](../../../plans/active/p0-security-levels.md) owns
-**50 current sprints** and **26 completed archives**.
+**51 current sprints** and **26 completed archives**.
 The integrated Sprint 13 branch completes PF-13-S02–S04 and the early PF-26-S01
 harness; PF-13-S05 is also completed and archived after its integrated Core and
 platform qualification. PF-13-S06 and PF-41-S03 are now also completed and
@@ -73,6 +73,14 @@ archived evidence proves only its recorded candidate and scope.
 | 76 | [PF-26-S03](pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | Human acceptance, finished docs, and release evidence | draft | PF-26-S02 |
 
 ## Machine checks
+
+| Order | Sprint | Outcome | Status | Depends on |
+| ---: | --- | --- | --- | --- |
+| 77 | [PF-30-S04](pf-30-s04-policy-bound-memory-dispatch.md) | Host-bound stage-one memory dispatch; protected raw input denies | in progress | PF-22-S02 |
+
+The rolling allocation adds this independent denial boundary after the original
+76-record map. Its topological number does not require unrelated earlier work
+to finish. It neither completes persistent lineage nor waives S01/S02 gates.
 
 ```bash
 python3 docs/plans/check.py

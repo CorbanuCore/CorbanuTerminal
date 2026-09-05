@@ -310,7 +310,7 @@
       <div class="snapshot">
         <span><strong>Snapshot:</strong> 4 September 2026 · round five</span>
         <span><strong>Candidate:</strong> <code>integration/security-round5-20260904</code> · not yet main</span>
-        <span><strong>Scope:</strong> 76 checked P0 sprint records</span>
+        <span><strong>Scope:</strong> 77 checked P0 sprint records, including the new memory-dispatch boundary</span>
         <span><strong>Deadline:</strong> 8 October 2026</span>
       </div>
     </header>
@@ -319,7 +319,7 @@
       <div class="metric primary">
         <div class="donut" role="img" aria-label="34 percent of planned security sprints are completed"></div>
         <div>
-          <span class="metric-number">26 of 76</span>
+          <span class="metric-number">26 of 77</span>
           <span class="metric-label">sprints completed and archived</span>
         </div>
       </div>
@@ -328,8 +328,8 @@
         <span class="metric-label">UI review pair clean: Astra High and Fable 5.1 High; final combined tests passed</span>
       </div>
       <div class="metric">
-        <span class="metric-number blue">2</span>
-        <span class="metric-label">unfinished engineering lanes; security-view sprint completed on RTX</span>
+        <span class="metric-number blue">3</span>
+        <span class="metric-label">rolling engineering lanes: broker, provenance and memory dispatch</span>
       </div>
       <div class="metric">
         <span class="metric-number amber">1</span>
@@ -372,7 +372,7 @@
           <p>Immutable envelopes, native ingress observation and three provider projections are implemented. Provider-switch and realtime bypasses are fixed. Review found an existing, separate memory-worker policy-binding gap; it remains an explicit follow-up, not a protected-memory pass.</p>
           <p><strong>Evidence:</strong> 88 provenance/realtime tests and all 285 protocol tests passed. Full Core: 3,455 pass, five failures reproduced on the unchanged base, eight skipped. Production screening and complete source coverage remain open.</p>
           <div class="status-line">
-            <div class="bar-row"><span>PF-30 archived sprints</span><strong>0 / 3 · 0%</strong></div>
+            <div class="bar-row"><span>PF-30 archived sprints</span><strong>0 / 4 · 0%</strong></div>
             <div class="track" role="progressbar" aria-label="PF-30 archived completion" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:0%"></div></div>
             <p class="subtle" style="margin:9px 0 0;font-size:.79rem">Tests of an admission fixture do not prove production screening readiness.</p>
           </div>
@@ -482,7 +482,7 @@
         <div class="phase">
           <div class="phase-name"><strong>Content, network and provenance</strong><small>PF-28 through PF-35</small></div>
           <div class="track" role="progressbar" aria-label="Content network and provenance" aria-valuenow="11" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:11%"></div></div>
-          <div class="phase-value"><strong>11%</strong><small>3 / 27</small></div>
+          <div class="phase-value"><strong>11%</strong><small>3 / 28</small></div>
         </div>
         <div class="phase">
           <div class="phase-name"><strong>Operator and protected workflows</strong><small>PF-23–25 and PF-36–41</small></div>
@@ -497,7 +497,7 @@
       </div>
 
       <div class="footnote">
-        <strong>Scheduling conclusion:</strong> PF-24-S01 is completed and archived. PF-27-S04 and PF-30-S01 remain staged, with production service/screening and memory-policy follow-ups explicit. The combined branch awaits the main-merge decision. PF-35 remains separate; its dependent features still wait for qualification. Reviews used: broker 4/5, provenance 3/5, UI 3/5. <a href="qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md">Coordination and evidence ledger</a>.
+        <strong>Scheduling conclusion:</strong> PF-24-S01 is completed and archived. Its freed agent now implements <a href="docs/sprints/current/p0-security-levels/pf-30-s04-policy-bound-memory-dispatch.md">PF-30-S04: policy-bound memory dispatch</a>, an independent deny-only boundary using the completed runtime policy. Broker service and provenance work continue. PF-35 remains separate, and protected positive inference is not enabled. Reviews used: broker 4/5, provenance 3/5, completed UI 3/5; new memory track 0/5. <a href="qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md">Coordination and evidence ledger</a>.
       </div>
 
       <details>

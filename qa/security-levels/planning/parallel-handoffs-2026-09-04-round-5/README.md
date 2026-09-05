@@ -206,7 +206,27 @@ The coordinator will reconcile overlapping Core ownership and record the
 implementation allocation before any code changes. Existing review counts and
 the outstanding main-merge choice are unchanged.
 
-## PF-35 external handoff
+## Rolling implementation dispatch
+
+The user's subsequent instruction authorizes filling agent slots continuously
+until a substantial human-testable checkpoint. The design-only assignment above
+has now graduated to PF-30-S04, a separate denial-only contract based solely on
+completed PF-22-S02. It rejects protected raw-rollout sends independently of
+unfinished ingress screening; S01/S02 full provenance gates remain unchanged.
+The plan and sprint record define its exact memory-dispatch worktree/base/scope.
+client.rs and session/mod.rs transfer exclusively from S01 to S04.
+
+Three current implementation reservations: PF-27-S04 broker service composition,
+PF-30-S01 remaining native ingress/segmentation, PF-30-S04 memory dispatch.
+Root owns shared registration, sequential builds and combined integration.
+Broker/provenance retain their prior review ledgers (4/5 and 3/5); do not
+silently reset them. Memory is a new scope baseline (0/5). Agents consolidate
+implementation/tests before requesting the next numbered review; if mandatory
+review coverage would exceed a remaining budget, report it before invocation.
+No privileged service installation or existing Vault migration is authorized.
+The main-merge choice remains pending; keep checkpoints pushed to scoped branches.
+
+## PF-35 external campaign
 
 User explicitly removed PF-35 from the engineering main path.
 Its engineering reservation returns to draft under the existing sprint process.
