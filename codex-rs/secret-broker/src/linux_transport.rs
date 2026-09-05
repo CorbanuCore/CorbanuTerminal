@@ -16,6 +16,8 @@ use std::io::Write;
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 const MAX_RECEIPT_BYTES: usize = 512;
@@ -64,7 +66,11 @@ pub fn serve_connection<H: LinuxBrokerHandler>(
 
 /// One peer-verified channel. Any ambiguous I/O permanently closes it, never
 /// reconnecting or replaying a possibly consumed frame on a new service boot.
-pub struct LinuxBrokerChannel(Mutex<Option<UnixStream>>);
+pub struct LinuxBrokerChannel {
+    state: Mutex<Option<UnixStream>>,
+    shutdown: UnixStream,
+    closed: AtomicBool,
+}
 
 impl LinuxBrokerChannel {
     pub fn new(stream: UnixStream, expected_server: &ObservedPeer) -> Result<Self, BrokerDispatchError> {
@@ -72,16 +78,20 @@ impl LinuxBrokerChannel {
         if &observed_peer(&stream)? != expected_server {
             return Err(BrokerDispatchError::WrongPeer);
         }
-        Ok(Self(Mutex::new(Some(stream))))
+        let shutdown = stream.try_clone().map_err(unavailable)?;
+        Ok(Self { state: Mutex::new(Some(stream)), shutdown, closed: AtomicBool::new(false) })
     }
 
     pub fn dispatch(&self, frame: &SignedBrokerFrame) -> Result<TypedOperationReceipt, BrokerDispatchError> {
-        let mut state = self.0.lock().map_err(unavailable)?;
+        let mut state = self.state.lock().map_err(unavailable)?;
+        if self.closed.load(Ordering::Acquire) { return Err(BrokerDispatchError::SessionUnavailable); }
         let stream = state.as_mut().ok_or(BrokerDispatchError::SessionUnavailable)?;
         let result = stream.write_all(frame.as_bytes())
             .map_err(|_| BrokerDispatchError::OutcomeUnknown)
             .and_then(|()| read_receipt(stream));
+        let result = if self.closed.load(Ordering::Acquire) { Err(BrokerDispatchError::OutcomeUnknown) } else { result };
         if result.is_err() {
+            self.closed.store(true, Ordering::Release);
             let _ = stream.shutdown(Shutdown::Both);
             *state = None;
         }
@@ -89,9 +99,10 @@ impl LinuxBrokerChannel {
     }
 
     pub fn close(&self) -> Result<(), BrokerDispatchError> {
-        if let Some(stream) = self.0.lock().map_err(unavailable)?.take() {
-            let _ = stream.shutdown(Shutdown::Both);
-        }
+        // Never wait for the dispatch mutex: shutting down the duplicate fd
+        // interrupts an in-flight read/write and rejects queued callers.
+        self.closed.store(true, Ordering::Release);
+        let _ = self.shutdown.shutdown(Shutdown::Both);
         Ok(())
     }
 }

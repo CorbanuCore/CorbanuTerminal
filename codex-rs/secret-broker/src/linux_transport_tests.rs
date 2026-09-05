@@ -35,6 +35,21 @@ impl LinuxBrokerHandler for Handler {
 }
 
 #[test]
+fn pf_27_s01_native_close_interrupts_inflight_read_and_queued_dispatch() {
+    let (client, mut server) = UnixStream::pair().unwrap();
+    let peer = observed_peer(&client).unwrap();
+    let channel = Arc::new(LinuxBrokerChannel::new(client, &peer).unwrap());
+    let dispatch_channel = channel.clone();
+    let dispatch = thread::spawn(move || dispatch_channel.dispatch(&frame()));
+    let _frame = read_frame(&mut server).unwrap();
+    let started = std::time::Instant::now();
+    channel.close().unwrap();
+    assert_eq!(dispatch.join().unwrap(), Err(BrokerDispatchError::OutcomeUnknown));
+    assert!(started.elapsed() < Duration::from_secs(2));
+    assert_eq!(channel.dispatch(&frame()), Err(BrokerDispatchError::SessionUnavailable));
+}
+
+#[test]
 fn pf_27_s01_native_peer_roundtrip_and_eof_cancels_session() {
     let (client, server) = UnixStream::pair().unwrap();
     let peer = observed_peer(&client).unwrap();
