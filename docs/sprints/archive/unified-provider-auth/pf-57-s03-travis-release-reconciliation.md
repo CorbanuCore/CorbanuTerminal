@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-57-S03"
 title: "Travis release-branch reconciliation"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-57"
 execution_order: 18
@@ -58,23 +58,30 @@ updated: 2026-09-05
 
 - [x] Fetched and identified the two-by-two divergence; main is already included.
 - [x] Allocated the sole serial sprint and recorded exact merge inputs.
+- [x] Merged both histories at `c37eb277d9f83ebcabe89e41cc81b9d3e92797a2`;
+  the two overlapping files preserve both sides without semantic repair.
+- [x] Completed source review and final Linux qualification; Astra found no new
+  P0/P1 in its bounded combined-source check.
 
 ## Remaining
 
-- [ ] Merge incoming history and audit semantic overlaps.
-- [ ] Verify combined provider, wallet, session, catalog and true-TUI behavior.
-- [ ] Record source/build identity, incoming versus final evidence, release limits.
+No sprint-scoped implementation or qualification remains. Release publication,
+broader release gates and the previously disclosed privacy/updater/site issues
+are separate from this bounded reconciliation.
 
 ## Verification
 
-- [ ] Run scoped fix/format and affected suites through `just test`.
-- [ ] Run real TMUX provider-login, Ambient selection and alias/legacy recovery cases.
-- [ ] Run `just codex` manual TUI with temporary home and trace logs; no live keys.
-- [ ] Run governance checks, portable-skill parity and `git diff --check`.
-- [ ] Inspect final ancestry/diff and distinguish local Linux qualification from
+- [x] Scoped fix/format, then 625 selected tests passed through `just test` with no retries.
+- [x] Real TMUX: 8 provider/catalog/alias application journeys plus 8 harness tests,
+  all passing in one no-retry run, including failed and successful Claude token save.
+- [x] Manual `just codex` startup/provider/token-entry/cancel/exit, temporary home,
+  explicit trace logs and synthetic auth only; captured exact process hash.
+- [x] Governance checks, portable-skill parity, installer/package tests and diff checks.
+- [x] Final ancestry/diff distinguishes local Linux qualification from
   cross-platform, live-repository, named-human and due benchmark release evidence.
 
 ## Exit evidence
 
-- [ ] Final source commit, commands/results and safe artifacts under `qa/release/0.1.38/`.
-- [ ] Completed bounded reconciliation archived; publication status explicit.
+- [x] Final source commit, command/results, binary hashes and artifact paths in
+  [reconciliation evidence](../../../../qa/release/0.1.38/travis-reconciliation.md).
+- [x] Completed bounded reconciliation archived; no tag or release publication.

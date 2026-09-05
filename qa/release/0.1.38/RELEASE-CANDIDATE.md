@@ -1,5 +1,25 @@
 # Corbanu Terminal 0.1.38 integration candidate
 
+## Latest reconciliation — September 5
+
+Current combined source: `c37eb277d9f83ebcabe89e41cc81b9d3e92797a2` on
+`integration/reconcile-release-0.1.38`. This preserves Travis/IridiumMaster's
+`07791288b6` integration tip and the two PF-57-S02 repair commits. Fork `main`
+through `6dd9ad646b` is already included. Claude token/login improvements and
+Ambient's GLM-only selection remain intact.
+
+Combined Linux evidence: 625 selected tests, 16 real-TMUX application/harness
+tests and a manual `just codex` flow passed. Astra's bounded combined-source
+review found no new P0/P1. [Exact evidence and limits](travis-reconciliation.md)
+include source/build identities and the unresolved debug credential-logging
+concern. No tag or release was published by this reconciliation.
+
+The sections below retain historical candidate evidence. Their build hashes,
+platform passes and publication statements are scoped to their original runs;
+they are not new qualification of this combined source.
+
+## Original candidate record
+
 Date: 2026-09-03 UTC
 
 Branch: `integration/reconcile-release-0.1.37`

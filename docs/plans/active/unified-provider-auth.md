@@ -267,7 +267,7 @@ are recorded in the sprint and `qa/release/0.1.38/astra-fixes.md`.
 | `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/archive/unified-provider-auth/pf-56-s01-final-qualification.md) | completed at `fd8a9c900e` |
 | `PF-57` | Latest-main integration, regression preservation, and credential-store liveness | [PF-57-S01](../../sprints/archive/unified-provider-auth/pf-57-s01-latest-main-integration.md) | completed at `a935e507b` |
 | `PF-57` | Reconciled release credential-lifecycle regressions | [PF-57-S02](../../sprints/archive/unified-provider-auth/pf-57-s02-reconciliation-auth-repairs.md) | completed; [Astra repair evidence](../../../qa/release/0.1.38/astra-fixes.md) |
-| `PF-57` | Reconcile Travis's provider UX/catalog changes with repaired release | [PF-57-S03](../../sprints/current/unified-provider-auth/pf-57-s03-travis-release-reconciliation.md) | in_progress; serial merge and combined-tree qualification |
+| `PF-57` | Reconcile Travis's provider UX/catalog changes with repaired release | [PF-57-S03](../../sprints/archive/unified-provider-auth/pf-57-s03-travis-release-reconciliation.md) | completed; [combined-tree evidence](../../../qa/release/0.1.38/travis-reconciliation.md) at `c37eb277d9` |
 
 ## Hard dependency graph
 
@@ -397,6 +397,14 @@ private daemon sockets and a loopback API with actual TUI input and restart.
 The older PF-56 live-repository results above are historical, not reruns on the
 2026-09-04 repair tree. Both live repositories, named-human acceptance and due
 benchmarks remain release-level gates, not claims made by PF-57-S02.
+
+PF-57-S03 follows the same bounded applicability: it preserves the incoming
+home-level auth and catalog behavior without changing project-editing or coding
+task execution. Its final Linux candidate passed 625 selected automated tests,
+16 true-TMUX tests and manual `just codex` token-entry/cancel checks. The user's
+Astra request received a bounded final combined-source review with no new
+P0/P1 findings. None of these results replaces the release-level gates above;
+see the [reconciliation evidence](../../../qa/release/0.1.38/travis-reconciliation.md).
 
 ## Human acceptance
 
