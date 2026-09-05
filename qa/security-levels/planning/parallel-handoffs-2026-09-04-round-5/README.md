@@ -54,9 +54,17 @@ Host: authorized RTX machine; login details stay outside tracked files.
 Preflight: 1.7 TB free disk, approximately 80 GiB available memory; no shutdown
 needed at dispatch. Existing remote worktrees/processes remain untouched.
 Each lane gets a new mirror worktree under /home/travis/worktrees/security-round5-*.
-The coordinator supplies the authenticated connection and exact toolchain/cache
-paths separately. No local compilation. Serialize heavy builds initially, reuse
-verified remote caches and never conflate artifacts from different candidates.
+Authenticated remote mirrors are created at allocation
+`4f263ca73a2860031be37945204f4676cbb347d4`. Toolchain 1.95.0, just 1.58.0 and
+nextest 0.9.143 are installed. Set PATH to include /home/travis/.cargo/bin,
+CARGO_TARGET_DIR=/home/travis/repos/CorbanuTerminal-harness/codex-rs/target,
+TMPDIR=/home/travis/security-round5/tmp and CARGO_BUILD_JOBS=8.
+Use `flock /home/travis/security-round5/locks/build.lock` around every
+compile/fix/fmt/test command. Push/fetch exact checkpoints into each clean
+disposable mirror; preserve other worktrees. Copy each tested binary into
+/home/travis/security-round5/evidence/<lane> before releasing the build lock.
+Bring intended remote formatting back with apply_patch before final tests.
+No local compilation; never conflate artifacts from different candidates.
 
 Run scoped fix and formatting before final affected tests. Use just test, not
 direct cargo test. Record version, commit, commands, counts, artifacts, actual
@@ -71,11 +79,99 @@ actual findings; exceed five only when critical findings continue.
 
 | Lane | Invocations | Evidence / next action |
 | --- | ---: | --- |
-| Broker | 0 / 5 | Implementation first; no review started |
-| Provenance | 0 / 5 | Implementation first; no review started |
-| Security UI | 0 / 5 | Implementation first; no review started |
+| Broker | 4 / 5 | #1 CLI rejected; #2 Astra findings repaired; #3 Fable timeout finding repaired; #4 no blockers, one deferred P3 EINTR robustness follow-up (helper exit 1, not a clean exit) |
+| Provenance | 3 / 5 | #1 Astra provider-switch/lock findings repaired; #2 Fable realtime omission repaired; #3 verifies fixes, accepts adjacent stage-one memory policy-binding gap as follow-up; no overall clean review |
+| Security UI | 3 / 5 | #1 CLI rejected; #2 Astra High clean; #3 Fable High clean; no further review planned |
+
+Successful Astra runtime: installed app-bundled Codex 0.153.1; 0.145.0 was
+rejected by the backend before any review verdict. Keep these attempts visible.
+Fable wrapper forces claude-fable-5-1-plan at High and runs via private TMUX;
+credentials never enter the committed packet.
+
+Remote formatter prerequisite: uv 0.11.3, installed in the broker lane's
+tools-venv and reused by all lanes. Bazel 9.0.0 matches .bazelversion; isolated
+remote install SHA-256 c44a93f25398c68f904fa1d19b61d321de6c0d2f09dca375d7bc0dc9b9428403,
+verified against releases.bazel.build's matching checksum.
+Combined registration source 71afdd426 passed a remote broker/network-proxy/Vault
+compile check in 14.66 seconds. Generated Cargo.lock adds only the intended
+13 dependency lines. Both just bazel-lock-update and just bazel-lock-check pass;
+MODULE.bazel.lock unchanged. Existing platforms/rules_cc version warnings remain.
+These are preliminary combined checks, not final post-review qualification.
+
+### Integration checkpoint and known test environment effects
+
+Source candidate dd2adb72b includes all three lanes, scoped dependency locks,
+broker timeout fixes, provenance provider-switch fixes and realtime guards.
+The earlier combined source f60d15f16 plus the committed module sort passed
+protocol 285/285, Core 26/26, broker/Vault/proxy 338/338, UI 235/235 and
+actual-key TMUX 3/3 after fix/format. Realtime lane source e592cf75a passed
+88/88 provenance/realtime cases and actual-key TMUX. The final combined
+affected-Core rerun passed 94/94 and all three actual-key TMUX journeys passed
+at dd2adb72b, after fix/full formatting with no changes. The immutable RTX
+candidate and exact run IDs are in [combined qualification](combined-qualification.md).
+No merge to main or release is claimed.
+The integration branch also contains the earlier, unmerged provider/onboarding
+reconciliation inherited at its source base. Main has no new divergence as of
+the final rerun dispatch. The coordinator has asked product authority whether
+to merge this combined staged branch or retain it for now; do not interpret
+successful tests as an answer or repeat the question on every heartbeat.
+
+The accepted memory finding is outside the current source allocation:
+memories/write stage one constructs an unbound ModelClient and serializes
+rollouts. The coordinator verified its caller in app-server and that neither
+path differs from the source base. It is an existing incomplete protection
+boundary, not a newly introduced permissive behavior. Defer to PF-30-S02's
+explicit inherited/live policy-binding contract; a configured-floor-only
+patch would not establish that contract. This disposition does not waive the
+finding or permit protected memory activation. PF-30-S01 stays in progress,
+and the source subset is not a completed provenance feature.
+
+Broker review 4's non-blocking EINTR robustness issue is recorded with its
+next-service substage, including signal-handler tests. No fifth review is
+needed without further source changes or blocking findings.
+
+PF-30 full Core run using a fresh isolated temporary root: 3,455 passed,
+five request-permission grant cases failed, eight skipped. All five failures
+reproduce at allocation base 4f263ca73 (module: seven passed, five failed),
+with extra "Failed to create stream fd: Operation not permitted" output.
+They are existing failures, not a clean suite and not newly introduced passes.
+Missing test_stdio_server and shared temporary-root contamination caused earlier
+additional failures; required fixtures and a fresh per-run temporary root
+resolved those. Never delete shared leftover test data to conceal failures.
+
+Shared target caches also reused stale workspace artifacts across lane checkouts.
+Under the shared build lock, invalidate the affected source mtime and rebuild;
+if necessary clean only the identified generated workspace package, never the
+entire cache or source. Copy exact candidate binaries before releasing the lock.
+Use fresh TMPDIR roots outside /home/travis/security-round5/tmp for every run.
+Run normal bazel shutdown before leaving a locked Bazel operation: its persistent
+server can inherit the lock descriptor. One such inherited lock was safely
+released this way; no process was forcibly killed.
 
 ## Integration and follow-through
+
+PF-24-S01 is completed and archived after the final combined run; 26/76 P0
+sprints are archived (34% rounded). The two other engineering sprints remain
+in progress, not silently completed from staged evidence. Worker tasks have
+finished their allocated checkpoints; none is still compiling or reviewing.
+Next broker service work and the provenance/memory follow-up require their
+recorded scope/contract decisions. PF-35 remains external.
+All current source and evidence are preserved on the integration branch.
+Main merge still awaits the already-asked product decision, including the
+inherited provider reconciliation. No additional reviews are running.
+
+Documentation closeout: plan/sprint checks pass (57 current and 114 archived
+across all plans; P0 alone is 50 current and 26 archived). Both HTML files pass
+unique-ID and local-link checks, and humanTest retains 20 independent checkboxes.
+An isolated browser profile visually verified the 34% progress display, three
+lane cards and RTX candidate instructions; no human test was marked accepted.
+Screenshots are retained on CorbanuDrive under
+`.codex-work/security-round5/security-progress-final.png`,
+`security-lanes-final.png` and `human-test-final.png`.
+
+Allocation is committed and pushed as 4f263ca73. All three workers were dispatched
+with implementation authority and remote build instructions. Broker's first
+recovery checkpoint 90ae3a0cf is pushed; this is not new final-tree qualification.
 
 Coordinator serializes shared Core/protocol/TUI exports, Cargo/Bazel/locks and
 navigation. Audit each actual diff against declared scope before handback.
@@ -89,7 +185,48 @@ and reports meaningful progress, failure, completion or a needed user decision.
 No unchanged-status notifications. Pause the monitor when the requested
 integration and handoff are finished.
 
-## PF-35 external handoff
+## Freed-agent design allocation
+
+After PF-24-S01 archival, the user requested another lane for that agent.
+The coordinator checked every draft P0 sprint's archived dependencies: only
+PF-35-S01 is dependency-ready, and it remains the external campaign.
+No other complete implementation sprint can be dispatched without first
+finishing a dependency or explicitly restructuring the plan.
+
+The freed `/root/security_ui` agent is therefore running a bounded,
+read-only **memory-worker policy-binding design/allocation lane**, using
+source `62540ca1d` and the accepted PF-30 follow-up. Output:
+`.codex-work/security-round5-ui/memory-policy-binding-design.md` on CorbanuDrive.
+It must propose one minimal host-owned binding API, actual call path, exact
+scope, inherited/live policy semantics and fake-provider/TMUX regression plan.
+No source changes, additional reviews, builds or privileged setup are authorized
+by this design assignment. It does not consume a third executable sprint
+reservation or waive PF-30-S02's dependency on completed PF-30-S01.
+The coordinator will reconcile overlapping Core ownership and record the
+implementation allocation before any code changes. Existing review counts and
+the outstanding main-merge choice are unchanged.
+
+## Rolling implementation dispatch
+
+The user's subsequent instruction authorizes filling agent slots continuously
+until a substantial human-testable checkpoint. The design-only assignment above
+has now graduated to PF-30-S04, a separate denial-only contract based solely on
+completed PF-22-S02. It rejects protected raw-rollout sends independently of
+unfinished ingress screening; S01/S02 full provenance gates remain unchanged.
+The plan and sprint record define its exact memory-dispatch worktree/base/scope.
+client.rs and session/mod.rs transfer exclusively from S01 to S04.
+
+Three current implementation reservations: PF-27-S04 broker service composition,
+PF-30-S01 remaining native ingress/segmentation, PF-30-S04 memory dispatch.
+Root owns shared registration, sequential builds and combined integration.
+Broker/provenance retain their prior review ledgers (4/5 and 3/5); do not
+silently reset them. Memory is a new scope baseline (0/5). Agents consolidate
+implementation/tests before requesting the next numbered review; if mandatory
+review coverage would exceed a remaining budget, report it before invocation.
+No privileged service installation or existing Vault migration is authorized.
+The main-merge choice remains pending; keep checkpoints pushed to scoped branches.
+
+## PF-35 external campaign
 
 User explicitly removed PF-35 from the engineering main path.
 Its engineering reservation returns to draft under the existing sprint process.

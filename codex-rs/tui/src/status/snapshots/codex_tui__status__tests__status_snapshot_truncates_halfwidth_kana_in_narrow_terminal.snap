@@ -5,12 +5,18 @@ expression: sanitized
 /status
 
 ╭────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v0.1.31)         │
+│  >_ Corbanu Terminal (v0.1.38)         │
 │                                        │
 │  Model:                ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞ  │
 │  Model provider:       Ambient         │
 │  Directory: [[workspace]]              │
 │  Permissions:          Custom (workspa │
+│  Security:             Requested       │
+│                        Permissive;     │
+│                        effective       │
+│                        protection      │
+│                        unverified (/   │
+│                        security)       │
 │  Agents.md:            <none>          │
 │  Account:              ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟ@ex │
 │  Thread name:          ｶﾞﾊﾟｶﾞﾊﾟｶﾞﾊﾟｶﾞ  │

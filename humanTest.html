@@ -201,8 +201,8 @@
   <main>
     <header>
       <p class="eyebrow">Corbanu Terminal · human QA</p>
-      <h1>Provider setup should feel boring now.</h1>
-      <p class="lede">A 35–45 minute human acceptance pass for the combined PF-48–PF-57 and 0.1.37 release-line candidate. Work from top to bottom using the Corbanu window opened for you. Stop at the first failure and record the exact visible message—never a credential.</p>
+      <h1>Provider and security acceptance</h1>
+      <p class="lede">Keep the existing 35–45 minute provider acceptance pass. Round five adds five read-only security checks below, to run only after its combined RTX candidate is supplied. Stop at the first failure and record the exact visible message—never a credential.</p>
       <div class="release-strip">
         <span><strong>Candidate:</strong> Corbanu 0.1.38</span>
         <span><strong>Combined lines:</strong> <code>a935e507b</code> + <code>rust-v0.1.37</code></span>
@@ -213,8 +213,8 @@
       <div class="actions">
         <button type="button" onclick="window.print()">Print / save PDF</button>
         <button type="button" id="reset">Reset checks</button>
-        <div class="progress-shell" id="progressShell" role="progressbar" aria-label="Test progress" aria-valuemin="0" aria-valuemax="15" aria-valuenow="0"><div class="progress-bar" id="progress"></div></div>
-        <span class="progress-label" id="progressLabel" aria-live="polite">0 / 15</span>
+        <div class="progress-shell" id="progressShell" role="progressbar" aria-label="Test progress" aria-valuemin="0" aria-valuemax="20" aria-valuenow="0"><div class="progress-bar" id="progress"></div></div>
+        <span class="progress-label" id="progressLabel" aria-live="polite">0 / 20</span>
       </div>
     </header>
 
@@ -399,6 +399,54 @@
           <p class="expected">Pass: API-key guidance identifies its environment variable and credential storage, and says it is never added to chat. The OpenAI link remains clickable when wrapped, and explains signing in from another device. No repeated keychain prompts appear during this pass.</p>
         </span></label>
       </div>
+    </section>
+
+    <section aria-labelledby="security-round5-title" style="margin-top:42px">
+      <h2 id="security-round5-title">Round five: understand your protection</h2>
+      <p><strong>Ready for read-only UX testing on RTX.</strong> The combined candidate passed its automated and actual-key TMUX gates.
+        The existing Mac Apps shortcut has not been changed by this security round.
+        Do not mistake its matching version number for the new build: record the supplied candidate commit and machine before checks 16–20.</p>
+      <p>Use <code>ssh travis@100.99.88.49</code>, then launch the exact candidate below from your intended test directory.
+        This is commit <code>dd2adb72b967602c6851bb4f4257eb34ad135459</code>, Corbanu <code>0.1.38</code>; it is not yet merged to main.</p>
+      <pre><code>/home/travis/security-round5/evidence/integration/dd2adb72b/candidate/codex</code></pre>
+      <details><summary>Candidate identity and automated evidence</summary>
+        <p>SHA-256: <code>6af243a3a249ddb44f3344a40aeeb5e21dbbc5e0b156167577db4d848c806ab3</code>.
+          Final combined Core 94/94 and actual-key TMUX 3/3 passed. Unchanged protocol 285/285, broker/Vault/proxy 338/338 and UI 235/235 evidence is explicitly reused.
+          <a href="qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/combined-qualification.md">Exact run IDs and evidence</a>.
+          Human checks below remain yours to perform; no human acceptance is implied.</p>
+      </details>
+      <p>This slice is observation-only. It cannot activate Moderate or Aggressive, grant permissions or downgrade protection.
+        Broker service isolation, production screening, the separate memory-worker policy binding and all-platform qualification remain unfinished.
+        <a href="securityProgress.html">See progress and remaining gates</a>.</p>
+      <div class="checklist">
+        <label class="test"><input type="checkbox" data-check="security-requested-effective"><span>
+          <h3>16. Read requested versus effective protection</h3>
+          <p>In the supplied round-five candidate, type <code>/security</code> and press Enter. Read the configured level and the effective-protection message.</p>
+          <p class="expected">Pass: the view clearly distinguishes requested configuration from unverified or unavailable protection. It never claims that a protected mode is working merely because it is selected or configured.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="security-inert-navigation"><span>
+          <h3>17. Explore the three profiles without changing policy</h3>
+          <p>Use Up and Down to explore Permissive, Moderate and Aggressive. Press Enter twice on a different profile.</p>
+          <p class="expected">Pass: explanations change with the highlight, but Enter does not apply a setting, grant access or claim activation. Existing permissions remain unchanged.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="security-cancel-reopen"><span>
+          <h3>18. Cancel, reopen and check status</h3>
+          <p>Press Escape. Open <code>/security</code> again, cancel, then open <code>/status</code>.</p>
+          <p class="expected">Pass: cancellation is clean; the configured request is unchanged. Status communicates the same unverified-protection boundary rather than a healthy Moderate/Aggressive badge.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="security-narrow"><span>
+          <h3>19. Shrink the terminal</h3>
+          <p>Resize to approximately 40 columns. Inspect <code>/security</code> and <code>/status</code>, then restore the normal width.</p>
+          <p class="expected">Pass: the requested/effective warning and profile descriptions remain readable. Navigation and Escape still work; no critical warning is silently truncated.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="security-permissive-regression"><span>
+          <h3>20. Continue your ordinary session</h3>
+          <p>In the normal Permissive test session, inspect <code>/permissions</code> and cancel without changing it. Use <code>/model</code> to switch between already-configured providers, send a harmless message, then restart and repeat <code>/security</code>.</p>
+          <p class="expected">Pass: ordinary provider, permission and session behavior is unchanged. Viewing profiles creates no policy change that survives restart. Do not edit your real config to manufacture a protected-mode test.</p>
+        </span></label>
+      </div>
+      <p><strong>Automated evidence, not human proof:</strong> isolated fixtures cover unknown-config rejection, protected-input withholding, forged source metadata, and broker peer/death/revocation cases.
+        This checklist does not certify those boundaries or the separate PF-35 detector campaign.</p>
     </section>
 
     <section aria-labelledby="evidence-title" style="margin-top:42px">

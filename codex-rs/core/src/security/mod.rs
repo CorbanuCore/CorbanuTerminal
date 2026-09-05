@@ -5,6 +5,7 @@ pub(crate) mod credential_capability;
 pub(crate) mod aggressive;
 #[allow(dead_code)]
 pub(crate) mod authoritative_state;
+pub(crate) mod broker_client;
 pub(crate) mod browser_isolation;
 pub(crate) mod confidentiality;
 mod effective_policy;

@@ -7,7 +7,7 @@ plan_feature: "PF-30"
 execution_order: 37
 owner: "/root/provenance"
 parallel_lane: "source-envelope"
-write_scope: "codex-rs/protocol/src/provenance.rs, codex-rs/protocol/src/provenance_tests.rs, codex-rs/core/src/security/ingress/, codex-rs/core/src/context/provenance.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/client_tests.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/client_common.rs, codex-rs/core/src/client.rs, codex-rs/core/src/realtime_conversation.rs, codex-rs/core/src/realtime_conversation_tests.rs, codex-rs/core/src/tools/router.rs, codex-rs/core/src/mcp_tool_call.rs, codex-rs/core/tests/suite/provenance.rs, qa/security-levels/sprints/PF-30-S01-typed-source-envelope/, docs/sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md"
+write_scope: "codex-rs/protocol/src/provenance.rs, codex-rs/protocol/src/provenance_tests.rs, codex-rs/core/src/security/ingress/, codex-rs/core/src/context/provenance.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/client_tests.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/client_common.rs, codex-rs/core/src/realtime_conversation.rs, codex-rs/core/src/realtime_conversation_tests.rs, codex-rs/core/src/tools/router.rs, codex-rs/core/src/mcp_tool_call.rs, codex-rs/core/tests/suite/provenance.rs, qa/security-levels/sprints/PF-30-S01-typed-source-envelope/, docs/sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md"
 integration_gate: "Codex /root owns protocol/context/test exports and shared Cargo/Bazel/lock registration, audits native ingress coverage without changing Permissive, reruns protocol/Core/governance plus actual TMUX on RTX and Astra High/Fable 5.1 High reviews (maximum five per lane). Contract-only evidence cannot complete this sprint."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-provenance"
 branch: "feat/security-round5-provenance"
@@ -53,6 +53,8 @@ updated: 2026-09-04
 - [x] Round-five recovery checkpoints `9c53c0a03`, `abb97e254`, `e6b7b602a`, `ac34a8456`, and `c34da0a48` preserve envelope/admission, native sidecar/hooks, inherited policy floor and regression source. These are unqualified checkpoints; tests/reviews remain unchecked below pending serialized exports/build registration.
 
 ## Remaining
+
+- [ ] Rolling pipeline continuation prioritizes complete-input segmentation, missing/unknown source rejection, mixed-source and Unicode/forged-marker regressions and native screening-producer handoff within the existing allocated ingress/protocol/context/tool paths. No fabricated production Allow verdict or detector qualification. Core client.rs and session/mod.rs now belong exclusively to PF-30-S04; request any integration hook from the coordinator.
 
 - [ ] Add a synthetic newly introduced provider/tool/ingress variant absent from the registry and prove rejection or conservative untrusted handling before model admission. Missing registration, malformed envelopes and allow verdicts cannot manufacture authority.
 

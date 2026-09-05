@@ -1,0 +1,17 @@
+---
+source: tui/src/bottom_pane/security_view_tests.rs
+expression: "snapshot(&view, 80)"
+---
+Security profiles — read only
+Requested: Permissive (configuration only)
+Effective protection: unverified. Live security status is unavailable.
+Protected modes are blocked; required controls are not qualified.
+
+> Permissive
+  Moderate
+  Aggressive
+
+No additional security controls. Existing approvals, sandbox, vault, wallet,
+tool, network and agent policies remain unchanged.
+
+↑/↓ explore · enter inspect · esc close

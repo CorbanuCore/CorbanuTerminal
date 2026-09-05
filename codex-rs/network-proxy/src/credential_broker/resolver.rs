@@ -70,17 +70,7 @@ impl ScopedCredentialRoute {
         authority: CredentialCapabilityRequest,
         resolver: Arc<dyn ScopedCredentialResolver>,
     ) -> Result<Self, ScopedCredentialRouteError> {
-        authority
-            .validate()
-            .map_err(|_| ScopedCredentialRouteError::InvalidAuthority)?;
-        if authority.method != CredentialHttpMethod::Post
-            || authority.destination.transport != CredentialTransport::Https
-            || authority.destination.host.as_str() != OPENAI_API_HOST
-            || authority.destination.port != OPENAI_API_PORT
-            || !authority.path.as_str().starts_with(OPENAI_API_PATH_PREFIX)
-        {
-            return Err(ScopedCredentialRouteError::UnsupportedAuthority);
-        }
+        validate_openai_authority(&authority)?;
         Ok(Self {
             capability_id,
             authority,
@@ -140,4 +130,92 @@ pub enum ScopedCredentialInjectionError {
     AlreadyUsed,
     #[error("scoped credential resolution failed")]
     ResolutionFailed,
+    #[error("credential request must be dispatched by the isolated broker")]
+    IsolatedBrokerRequired,
+}
+
+/// Secret-free result returned by the isolated broker transport.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IsolatedCredentialReceipt {
+    pub response_status: u16,
+    pub uploaded_bytes: u64,
+    pub downloaded_bytes: u64,
+}
+
+/// Exact request metadata admitted to the isolated broker.
+pub struct IsolatedCredentialUse<'a> {
+    pub scheme: &'a str,
+    pub host: &'a str,
+    pub port: u16,
+    pub method: &'a str,
+    pub path: &'a str,
+    pub capability_id: &'a CapabilityId,
+    pub authority: &'a CredentialCapabilityRequest,
+}
+
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+pub enum IsolatedCredentialDispatchError {
+    #[error("isolated credential broker is unavailable")]
+    Unavailable,
+    #[error("isolated credential request was denied")]
+    Denied,
+    #[error("isolated credential request was cancelled")]
+    Cancelled,
+    #[error("isolated credential outcome is unknown")]
+    OutcomeUnknown,
+}
+
+/// Client boundary for the separately constrained credential broker.
+pub trait IsolatedCredentialDispatcher: Send + Sync + 'static {
+    fn dispatch(
+        &self,
+        request: &IsolatedCredentialUse<'_>,
+    ) -> Result<IsolatedCredentialReceipt, IsolatedCredentialDispatchError>;
+}
+
+/// Secret-free OpenAI route whose implementation performs the request in the
+/// isolated broker rather than injecting a header into this process.
+#[derive(Clone)]
+pub struct IsolatedCredentialRoute {
+    pub(super) capability_id: CapabilityId,
+    pub(super) authority: CredentialCapabilityRequest,
+    pub(super) dispatcher: Arc<dyn IsolatedCredentialDispatcher>,
+}
+
+impl IsolatedCredentialRoute {
+    pub fn new(
+        capability_id: CapabilityId,
+        authority: CredentialCapabilityRequest,
+        dispatcher: Arc<dyn IsolatedCredentialDispatcher>,
+    ) -> Result<Self, ScopedCredentialRouteError> {
+        validate_openai_authority(&authority)?;
+        Ok(Self {
+            capability_id,
+            authority,
+            dispatcher,
+        })
+    }
+}
+
+impl fmt::Debug for IsolatedCredentialRoute {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("IsolatedCredentialRoute(<redacted>)")
+    }
+}
+
+fn validate_openai_authority(
+    authority: &CredentialCapabilityRequest,
+) -> Result<(), ScopedCredentialRouteError> {
+    authority
+        .validate()
+        .map_err(|_| ScopedCredentialRouteError::InvalidAuthority)?;
+    if authority.method != CredentialHttpMethod::Post
+        || authority.destination.transport != CredentialTransport::Https
+        || authority.destination.host.as_str() != OPENAI_API_HOST
+        || authority.destination.port != OPENAI_API_PORT
+        || !authority.path.as_str().starts_with(OPENAI_API_PATH_PREFIX)
+    {
+        return Err(ScopedCredentialRouteError::UnsupportedAuthority);
+    }
+    Ok(())
 }

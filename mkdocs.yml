@@ -111,7 +111,6 @@ nav:
                   - "PF-23-S02 — Aggressive deny and grant": sprints/current/p0-security-levels/pf-23-s02-aggressive-deny-and-grant-enforcement.md
                   - "PF-23-S03 — Downgrade and recovery": sprints/current/p0-security-levels/pf-23-s03-downgrade-restart-and-inheritance-enforcement.md
               - "Security TUI":
-                  - "PF-24-S01 — Command and profile view": sprints/current/p0-security-levels/pf-24-s01-security-command-and-profile-view.md
                   - "PF-24-S02 — Confirm, cancel, downgrade": sprints/current/p0-security-levels/pf-24-s02-security-confirm-cancel-and-downgrade.md
                   - "PF-25-S01 — Temporary grants": sprints/current/p0-security-levels/pf-25-s01-temporary-grant-tui.md
                   - "PF-25-S02 — Revocation and kill switch": sprints/current/p0-security-levels/pf-25-s02-revocation-and-kill-switch-tui.md
@@ -128,6 +127,7 @@ nav:
                   - "PF-30-S01 — Typed source envelope and trusted ingress": sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md
                   - "PF-30-S02 — Persistent taint across summaries and memory": sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md
                   - "PF-30-S03 — Post-taint authority checks": sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md
+                  - "PF-30-S04 — Policy-bound memory dispatch": sprints/current/p0-security-levels/pf-30-s04-policy-bound-memory-dispatch.md
               - "Isolated retrieval and downloads":
                   - "PF-31-S01 — Pinned retriever artifact and sandbox": sprints/current/p0-security-levels/pf-31-s01-pinned-retriever-isolation.md
                   - "PF-31-S02 — Bounded fetch adapter with no host fallback": sprints/current/p0-security-levels/pf-31-s02-bounded-fetch-no-fallback.md

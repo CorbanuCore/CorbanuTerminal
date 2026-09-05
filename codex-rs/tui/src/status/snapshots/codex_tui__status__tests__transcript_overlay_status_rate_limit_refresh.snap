@@ -7,19 +7,19 @@ before:
 /status
 
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v0.1.31)                                              │
+│  >_ Corbanu Terminal (v0.1.38)                                              │
 │                                                                             │
 │  Model:            gpt-5.1-codex-max                                        │
 │  Model provider:   Ambient                                                  │
 │  Directory: [[workspace]]                                                   │
 │  Permissions:      Custom (workspace with network access, Ask for approval) │
+│  Security:         Requested Permissive; effective protection unverified    │
+│                    (/security)                                              │
 │  Agents.md:        <none>                                                   │
 │                                                                             │
 │  Token usage:      0 total  (0 input + 0 output)                            │
 │  Limits:           refresh requested; run /status again shortly.            │
 ╰─────────────────────────────────────────────────────────────────────────────╯
-~
-~
 ~
 ~
 ~
@@ -39,12 +39,14 @@ after:
 /status
 
 ╭─────────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v0.1.31)                                              │
+│  >_ Corbanu Terminal (v0.1.38)                                              │
 │                                                                             │
 │  Model:            gpt-5.1-codex-max                                        │
 │  Model provider:   Ambient                                                  │
 │  Directory: [[workspace]]                                                   │
 │  Permissions:      Custom (workspace with network access, Ask for approval) │
+│  Security:         Requested Permissive; effective protection unverified    │
+│                    (/security)                                              │
 │  Agents.md:        <none>                                                   │
 │                                                                             │
 │  Token usage:      0 total  (0 input + 0 output)                            │
@@ -54,8 +56,6 @@ after:
 ╰─────────────────────────────────────────────────────────────────────────────╯
 
 next message
-~
-~
 ~
 ~
 ~
