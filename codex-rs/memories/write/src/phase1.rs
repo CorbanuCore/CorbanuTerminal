@@ -9,6 +9,8 @@ use codex_config::types::MemoriesConfig;
 use codex_core::Prompt;
 use codex_core::RolloutRecorder;
 use codex_core::config::Config;
+use codex_core::memory_stage_one::StageOneMemoryClient;
+use codex_core::memory_stage_one::StageOneMemoryError;
 use codex_model_provider::DEFAULT_MEMORY_EXTRACTION_PREFERRED_MODEL;
 use codex_protocol::error::CodexErr;
 use codex_protocol::models::BaseInstructions;
@@ -38,6 +40,7 @@ enum JobOutcome {
     SucceededWithOutput,
     SucceededNoOutput,
     Failed,
+    PolicyDenied,
 }
 
 struct Stats {
@@ -68,14 +71,14 @@ struct StageOneOutput {
 /// 2) build one stage-1 request context
 /// 3) run stage-1 extraction jobs in parallel
 /// 4) emit metrics and logs
-pub async fn run(context: Arc<MemoryStartupContext>, config: Arc<Config>) {
+pub async fn run(context: Arc<MemoryStartupContext>, config: Arc<Config>) -> bool {
     let stage_one_context = build_request_context(context.as_ref(), config.as_ref()).await;
     let _phase_one_e2e_timer = stage_one_context.start_timer(MEMORY_PHASE_ONE_E2E_MS);
 
     // 1. Claim startup job.
     let Some(claimed_candidates) = claim_startup_jobs(context.as_ref(), &config.memories).await
     else {
-        return;
+        return true;
     };
     if claimed_candidates.is_empty() {
         stage_one_context.counter(
@@ -83,7 +86,7 @@ pub async fn run(context: Arc<MemoryStartupContext>, config: Arc<Config>) {
             /*inc*/ 1,
             &[("status", "skipped_no_candidates")],
         );
-        return;
+        return true;
     }
 
     // 3. Run the parallel sampling.
@@ -96,6 +99,7 @@ pub async fn run(context: Arc<MemoryStartupContext>, config: Arc<Config>) {
     .await;
 
     // 4. Metrics and logs.
+    let policy_allowed = !outcomes.iter().any(|result| result.outcome == JobOutcome::PolicyDenied);
     let counts = aggregate_stats(outcomes);
     emit_metrics(&stage_one_context, &counts);
     info!(
@@ -106,6 +110,7 @@ pub async fn run(context: Arc<MemoryStartupContext>, config: Arc<Config>) {
         counts.succeeded_no_output,
         counts.failed
     );
+    policy_allowed
 }
 
 /// Prune old un-used "dead" raw memories.
@@ -239,7 +244,7 @@ mod job {
         stage_one_context: &StageOneRequestContext,
     ) -> JobResult {
         let claimed_thread = claim.thread;
-        let (stage_one_output, token_usage) = match sample(
+        let (stage_one_output, token_usage, client) = match sample(
             context,
             config,
             &claimed_thread.rollout_path,
@@ -258,11 +263,22 @@ mod job {
                 )
                 .await;
                 return JobResult {
-                    outcome: JobOutcome::Failed,
+                    outcome: if matches!(reason.downcast_ref::<StageOneMemoryError>(), Some(StageOneMemoryError::Denied(_))) {
+                        JobOutcome::PolicyDenied
+                    } else {
+                        JobOutcome::Failed
+                    },
                     token_usage: None,
                 };
             }
         };
+
+        // The response may have completed before a live policy/provider change.
+        // Never persist its output (including successful no-output) after denial.
+        if let Err(reason) = client.check_completion().await {
+            result::failed(context, claimed_thread.id, &claim.ownership_token, &reason.to_string()).await;
+            return JobResult { outcome: JobOutcome::PolicyDenied, token_usage: None };
+        }
 
         if stage_one_output.raw_memory.is_empty() || stage_one_output.rollout_summary.is_empty() {
             return JobResult {
@@ -294,7 +310,7 @@ mod job {
         rollout_path: &Path,
         rollout_cwd: &Path,
         stage_one_context: &StageOneRequestContext,
-    ) -> anyhow::Result<(StageOneOutput, Option<TokenUsage>)> {
+    ) -> anyhow::Result<(StageOneOutput, Option<TokenUsage>, StageOneMemoryClient)> {
         let (rollout_items, _, _) = RolloutRecorder::load_rollout_items(rollout_path).await?;
         let rollout_contents = serialize_filtered_rollout_response_items(&rollout_items)?;
 
@@ -319,7 +335,7 @@ mod job {
         prompt.output_schema = Some(output_schema());
         prompt.output_schema_strict = true;
 
-        let (result, token_usage) = context
+        let (result, token_usage, client) = context
             .stream_stage_one_prompt(config, &prompt, stage_one_context)
             .await?;
 
@@ -328,7 +344,7 @@ mod job {
         output.rollout_summary = redact_secrets(output.rollout_summary);
         output.rollout_slug = output.rollout_slug.map(redact_secrets);
 
-        Ok((output, token_usage))
+        Ok((output, token_usage, client))
     }
 
     mod result {
@@ -588,7 +604,7 @@ fn aggregate_stats(outcomes: Vec<JobResult>) -> Stats {
         match outcome.outcome {
             JobOutcome::SucceededWithOutput => succeeded_with_output += 1,
             JobOutcome::SucceededNoOutput => succeeded_no_output += 1,
-            JobOutcome::Failed => failed += 1,
+            JobOutcome::Failed | JobOutcome::PolicyDenied => failed += 1,
         }
 
         if let Some(token_usage) = outcome.token_usage {

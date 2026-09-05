@@ -1,5 +1,9 @@
 //! Thread-owned, denial-only dispatch for unscreened stage-one memory input.
 
+#[cfg(test)]
+#[path = "memory_stage_one_tests.rs"]
+mod tests;
+
 use crate::client::ModelClient;
 use crate::client_common::Prompt;
 use crate::client_common::ResponseEvent;
