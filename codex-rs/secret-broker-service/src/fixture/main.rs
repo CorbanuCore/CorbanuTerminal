@@ -1,11 +1,11 @@
 #![forbid(unsafe_code)]
 
 // Deliberately separate, opt-in fixture binary. Never installed as a service.
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "synthetic-fixture"))]
 mod synthetic;
 
 fn main() {
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "synthetic-fixture"))]
     {
         if synthetic::run().is_ok() {
             return;

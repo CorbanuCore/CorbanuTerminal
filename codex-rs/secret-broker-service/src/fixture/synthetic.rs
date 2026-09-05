@@ -101,6 +101,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let probe = "2".repeat(64);
     let platform = validate_protected_mode_report(&PlatformReport { contract_version: CONTRACT_VERSION, fixture_protocol: FIXTURE_PROTOCOL_VERSION, probe_sha256: &probe, target_id: &target, measured_at_unix_seconds: 100, expires_at_unix_seconds: 200, capabilities: &capabilities, protected_mode_eligible: true }, &target, &probe, 150).map_err(|_| "synthetic platform fixture invalid")?;
     let service = BrokerService::new(format!("{:064x}", std::process::id()), platform, backend, audit)?;
+    let peer = if std::env::args().nth(2).as_deref() == Some("--wrong-peer") {
+        ObservedPeer::from_os("uid:4294967294", peer.process_id())?
+    } else { peer };
     println!("synthetic-only ready");
     std::io::stdout().flush()?;
     let result = service.serve(TrustedSession { socket, expected_peer: peer, binding, channel_mac: BrokerChannelMac::from_secret(key), credential_grants: vec![BrokerCredentialGrant::expiring(reference, i64::MAX)?] });

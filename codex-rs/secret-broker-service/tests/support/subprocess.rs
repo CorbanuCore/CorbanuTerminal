@@ -20,12 +20,16 @@ struct ChildService {
 }
 impl ChildService {
     fn start(key: u8) -> Self {
+        Self::with_mode(key, "--normal-peer")
+    }
+    fn with_mode(key: u8, mode: &str) -> Self {
         let (mut client, server) = UnixStream::pair().unwrap();
         let peer = observed_peer(&client).unwrap();
         // Inherited socketpair peer is the creator, not the executed child.
         assert_eq!(peer.process_id(), std::process::id());
         let mut child = Command::new(codex_utils_cargo_bin::cargo_bin("codex-secret-broker-service-fixture").unwrap())
             .arg("--synthetic-inherited-socket")
+            .arg(mode)
             .stdin(Stdio::from(OwnedFd::from(server)))
             .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
         client.write_all(&[key; 32]).unwrap();
@@ -101,4 +105,14 @@ fn pf_27_s01_signal_during_partial_read_preserves_absolute_deadline() {
     assert!(start.elapsed() >= std::time::Duration::from_secs(4));
     assert!(start.elapsed() < std::time::Duration::from_secs(7));
     assert_eq!(output, "synthetic-only journal-records=0\n");
+}
+
+#[test]
+fn pf_27_s01_subprocess_peer_mismatch_denies_before_audit() {
+    let mut service = ChildService::with_mode(9, "--wrong-peer");
+    assert!(service.channel.dispatch(&frame(9, 1)).is_err());
+    let mut output = String::new();
+    service.output.read_to_string(&mut output).unwrap();
+    assert_eq!(output, "synthetic-only journal-records=0\n");
+    assert!(service.child.wait().unwrap().success());
 }
