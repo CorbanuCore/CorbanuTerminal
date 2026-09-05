@@ -52,8 +52,13 @@ updated: 2026-09-04
 - [x] Recovered reviewed broker leaves from `cdb821289` in provenance commit
   `90ae3a0cf`, without overwriting the current allocation or shared registrations.
 - [x] Implemented digest-bound PF-41 journal integration and bounded native Linux
-  peer/framing/channel teardown primitives; final post-format tests pass 42/42
-  on RTX. Reviews and production service qualification remain open;
+  peer/framing/channel teardown primitives, including concurrent disconnect
+  cancellation and bounded partial-frame deadlines without idle timeouts.
+  Final post-format remote suites pass 338/338 broker/Vault/proxy and 6/6
+  focused Core tests; Cargo/Bazel parity passes. Astra and Fable repairs are
+  verified; final Fable review has no blocking findings and one deferred P3
+  signal-interruption follow-up (helper exit 1). Four of five reviews used.
+  Production service, data-plane and all-OS qualification remain open;
   see `qa/security-levels/sprints/PF-27-S04/round5-evidence.md`.
 
 ## Remaining

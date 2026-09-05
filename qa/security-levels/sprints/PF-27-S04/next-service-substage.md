@@ -33,6 +33,13 @@ SO_PEERCRED. macOS still needs authenticated XPC/audit-token/helper containment;
 Windows still needs service SID/AppContainer/named-pipe token containment.
 Unavailable mechanisms keep protected activation unavailable.
 
+Before adding real service signal handlers, handle `EINTR` explicitly in the
+Linux disconnect poll and partial-frame read loops while preserving the one
+absolute frame deadline. Fable review 4 identified the current fail-closed
+session teardown on interruption as a non-blocking availability limitation.
+Add native signal-delivery regression proof with the actual service lifecycle;
+do not confuse a benign interrupted syscall with verified peer death.
+
 ## Keep provider streaming a separate reviewable step
 
 Current operations carry an exact path and return a secret-free status/counter

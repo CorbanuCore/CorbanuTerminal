@@ -75,7 +75,7 @@ reports are explicitly synthetic and cannot count as platform qualification.
 
 ## Independent review and remediation
 
-Three of the maximum five review invocations have been consumed:
+Four of the maximum five review invocations have been consumed:
 
 1. Astra High via Codex CLI 0.145.0 failed before inference because the backend
    required a newer CLI. No verdict exists for that attempt.
@@ -91,7 +91,16 @@ Three of the maximum five review invocations have been consumed:
    The timeout defect was fixed in `b6941d82e`: healthy idle/first-receipt waits
    remain open, but a partial prefix/body has one absolute bounded deadline.
    Final post-format tests pass **47/47**, including >5s idle/backend waits and
-   partial-prefix timeout. Shared locks remain integration-owner work.
+   partial-prefix timeout. The coordinator supplied exact Cargo lock parity in
+   `e93f3e37f`; the lane Bazel lock check subsequently passed without a delta.
+4. Fable 5.1 High reviewed the frozen `4f263ca73..e93f3e37f` diff through the
+   same private-TMUX route. It confirmed all prior repairs and lock parity,
+   reporting “patch is correct” with one explicitly non-blocking P3: interrupted
+   Linux `poll`/raw `read` calls currently close the session rather than retry
+   `EINTR`. This is a fail-closed availability limitation, not credential
+   disclosure. The helper exited **1**, not a finding-free success. The
+   coordinator approved deferral to the next real-service substage, with signal-handling tests;
+   no fifth review is spent merely to obtain a cleaner summary.
 
 Fable's suggestion that same-run generation increments alone consume additional
 tracked-run map entries was rejected: the map replaces the generation under the
@@ -104,8 +113,8 @@ session cancellation, and only then releases the backend. It proves a live
 cancellation fence, not interruption of arbitrary blocking syscalls or already
 sent external effects. No production HTTP upload implementation is claimed.
 
-Review outputs are preserved in `round5-astra-2.{txt,json}` and
-`round5-fable-3.{txt,json}`. Actual external route: structured helper through
+Review outputs are preserved in `round5-astra-2.{txt,json}`,
+`round5-fable-3.{txt,json}` and `round5-fable-4.{txt,json}`. Actual external route: structured helper through
 the Corbanu Claude Plan wrapper, model `claude-fable-5-1-plan`, high effort,
 private TMUX socket `corbanu-broker-review`, session `fable-high`. This is a
 review execution route, not an interactive product TUI test.
@@ -122,10 +131,49 @@ Only subsequent production change is the scoped timeout correction, whose
 `/home/travis/security-round5/evidence/broker/fable-remediation-tests.log`,
 SHA-256 `7d93595a6c5372bdd3d67599a14ffcc4ed1344a121601117211f31c07d083290`.
 
+## Final post-timeout and lock-parity proof
+
+At `e93f3e37f`, affected `just fix` and `just fmt` passed, followed by **338/338**
+broker/Vault/network-proxy tests, **6/6** focused Core adapter/config tests
+(2367 intentionally filtered out), and `just bazel-lock-check`. Bazel exited
+successfully with no `MODULE.bazel.lock` delta; it emitted existing root-versus-
+resolved `platforms` and `rules_cc` version warnings. Cargo lock remained clean.
+The only formatter output was the alphabetical Core module registration order,
+imported exactly with coordinator authorization; it matches the tested tree.
+
+- Full suite nextest: `98a7153c-9a3c-47a5-9125-3d49eca7bff4`.
+- Core nextest: `bd172c95-e6e7-43f3-99ab-423d20f4d2c1`.
+- Full suite log: `/home/travis/security-round5/evidence/broker/post-timeout-final.log`,
+  SHA-256 `294bb7e0fec17c631d7da6201a305fd81325086e2ff8644bf804182b2af1cc8c`.
+- Core/Bazel log: `/home/travis/security-round5/evidence/broker/post-timeout-core-bazel.log`,
+  SHA-256 `32bbf6fca6f23afdbdfbf8ccb3a23677159f0b8c0be6a0293b37b2584fc5742e`.
+- Fresh per-run temporary directories were `final-tmp.LtHRNT` and
+  `core-final-tmp.zF8cn9` beneath the broker evidence root, not the previously
+  contaminated shared temporary directory. Existing evidence was preserved.
+
+The first Core compile reused a stale cross-worktree network-proxy artifact and
+reported missing exports that were present in the source. Updating only the
+lane's `network-proxy/src/lib.rs` mtime under the build lock forced recompilation
+and all six tests passed. No source fix or cache deletion was needed. Future
+parallel scheduling should separate workspace-package caches by lane rather
+than relying solely on serialization. The failed first compile remains in the
+full log; it is not presented as a passing invocation.
+
+The persistent Bazel server inherited the build-lock file descriptor after its
+successful dependency check. Normal lane-local `bazel shutdown` released it;
+no process was force-killed. Future serialized Bazel scripts must shut down
+their persistent server before releasing the surrounding lock.
+
+Final source/evidence checkpoint `86f31a14b` is pushed and the remote mirror is
+clean at that commit. Remote `python3 docs/plans/check.py` passed (active 2/2),
+and `python3 docs/sprints/check.py` passed (58 current, 113 archived). These
+checks preserve PF-27-S04 as `in_progress`; they do not waive its remaining
+implementation or qualification gates.
+
 ## Remaining gates
 
-- Serialized Cargo/Bazel locks and final review of their integration plus the
-  timeout remediation; no clean overall review claimed yet.
+- Deferred non-blocking signal-interruption follow-up from review 4; no
+  finding-free helper exit is claimed.
 - Supporting candidate TMUX workflow and combined-tree affected suites.
 - Real dedicated-UID Linux service provisioning, macOS authenticated XPC/helper
   isolation, Windows service SID/AppContainer/named-pipe token isolation.
