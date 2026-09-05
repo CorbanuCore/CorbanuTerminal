@@ -26,13 +26,13 @@ the coordinator deliberately arranges the human package.
 
 ## Required final gates
 
-- [ ] Coordinator suite registration and bounded manual nextest profile.
-- [ ] RTX scoped fix/fullfmt, new support tests and existing TMUX regressions.
-- [ ] Actual-key rehearsal: startup, fake-provider switch, pending exit/restart.
-- [ ] Cancel and timeout remove owned home/socket and leave no server.
-- [ ] Pin test artifact and immutable product binary; runner operates without
+- [x] Coordinator suite registration and bounded manual nextest profile.
+- [x] RTX scoped fix/fullfmt, new support tests and existing TMUX regressions.
+- [x] Actual-key rehearsal: startup, fake-provider switch, pending exit/restart.
+- [x] Cancel and timeout remove owned home/socket and leave no server.
+- [x] Pin test artifact and immutable product binary; runner operates without
       shared build lock during operator waits.
-- [ ] Verify final diff contains only allocated tests/QA and root registration.
+- [x] Verify final diff contains only allocated tests/QA and root registration.
 - [ ] Review #3 Astra High and #4 Fable5.1High via Corbanu/private TMUX, reusing
       existing memory budget 2/5. No review invoked for this support yet.
 - [ ] Publish tested operator commands and exact evidence.
@@ -58,3 +58,57 @@ loopback routing or a usable operator flow. It has been replaced in `516ce8142`
 with custom loopback providers and explicit `/providers` catalog initialization
 before the real `/model` journey. Failed rehearsal status/captures persist before
 propagating the test error. Final qualification is still pending.
+
+## Final source qualification
+
+Runtime `77200387f` (test-only source): RTX source `a86de72bd` plus exact
+formatter delta, verified identical to the committed tree. Product remains
+`6a6bb029d` / codex0.1.38, not latest combined PF20 runtime; integration owner
+will requalify the combined candidate separately.
+
+Scoped `just fix -p codex-tui`, complete `just fmt`, then
+`just test -p codex-tui --test all -E 'test(memory_human_fixture_rehearsal) | test(support::tmux::tests)' --retries 0 --test-threads 1`:
+**10/10 passed**, run `82424229-36d7-49cc-859e-8de3e4d3b49b`,69.248seconds.
+The five-case actual-key fixture completed in65.708seconds. Supporting cleanup
+tests include abnormal child termination/watchdog cleanup. No local builds.
+
+Results: startup A request/output1/1; explicit `/providers` replacement then
+`/model` distinct synthetic B model/effort produced a foreground request at
+B/`memory-fixture-b`, old memory provider-change denial, source output0;
+pending owner exit/restart remained1/0; cancel/timeout removed home and socket.
+Previous monolithic source also passed10/10 at
+`00600edd-c1d6-43f3-810a-1358f6c44ea4`; final evidence is the extracted tree above.
+
+RTX evidence root `/home/travis/security-round5/evidence/human-memory/`:
+`final.log`, `rehearsal-final/{Startup,ProviderSwitch,PendingExit,Cancel,Timeout}`,
+and `manual-profile.json` (human-memory profile parses and lists ignored entry).
+No reviewer or named human has accepted this helper yet.
+
+Frozen test runner copied under shared build lock after checking it was not
+newer than the just-produced nextest manifest:
+`candidate-77200387f/all`, SHA256
+`8d0cd04d817b37b57db1d4641401239ef1b40b2d54a40dc85ed55944e0274ccd`.
+The product binary is
+`/home/travis/security-round5/evidence/integration/6a6bb029d/candidate/codex`, SHA256
+`90d6a1f7f72c5397ff858583c038b2615c8fb034f57a890d6595d6b98afccd4f`.
+Final main fixture519lines (including entries/rehearsal), support118lines;
+small TMUX accessor stage plus separate111line pinned-entry driver. Review
+stages and scope limits are explicit in review-scope.md.
+
+The frozen runner's ignored manual entry was exercised outside `build.lock`
+using `rehearse-pinned.py`: startup completed with actual keys, and a separate
+manual cancellation returned the expected nonzero/not-complete outcome. Both
+removed their exact disposable home and owned socket. Evidence:
+`pinned-entry-77200387f.log` and `pinned-entry-77200387f/{startup,cancel}`.
+`finished.json` reports `Ok(Complete)` / `Ok(Cancelled)` respectively, with
+`human_acceptance:false`. No fixture process was left for an operator.
+
+## Independent review ledger
+
+Original memory reviews1–2 remain counted. This support reuses, not resets, that
+budget. Review3 is now invoked against the frozen branch diff from `b64d7390d`:
+bundled CodexCLI `/Applications/ChatGPT.app/Contents/Resources/codex`, requested
+`gpt-6-astra` with High effort, structured autoreview helper, branch mode and
+review-scope.md. Result pending; no nested reviewer. Review4 Fable5.1High remains
+conditional on disposition of review3. At most5 total absent continuing critical
+issues; the limit is not a target.
