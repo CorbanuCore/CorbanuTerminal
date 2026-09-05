@@ -16,6 +16,7 @@ use std::io::Write;
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::sync::Mutex;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -37,6 +38,27 @@ pub trait LinuxBrokerHandler {
     fn dispatch(&self, peer: &ObservedPeer, frame: &SignedBrokerFrame)
     -> Result<TypedOperationReceipt, BrokerDispatchError>;
     fn close(&self);
+}
+
+/// Binds a service connection to one existing runtime registration. The handle
+/// is never deserialized from the client, and EOF cancels that exact session.
+pub struct LinuxBrokerSession<B, A> {
+    runtime: Arc<crate::BrokerRuntime<B, A>>,
+    handle: crate::BrokerSessionHandle,
+}
+
+impl<B, A> LinuxBrokerSession<B, A> {
+    pub fn new(runtime: Arc<crate::BrokerRuntime<B, A>>, handle: crate::BrokerSessionHandle) -> Self {
+        Self { runtime, handle }
+    }
+}
+
+impl<B: crate::TypedCredentialBackend, A: crate::DurableBrokerAudit> LinuxBrokerHandler for LinuxBrokerSession<B, A> {
+    fn dispatch(&self, peer: &ObservedPeer, frame: &SignedBrokerFrame) -> Result<TypedOperationReceipt, BrokerDispatchError> {
+        self.runtime.dispatch(&self.handle, peer, frame)
+    }
+
+    fn close(&self) { let _ = self.runtime.cancel_session(&self.handle); }
 }
 
 struct CloseGuard<'a, H: LinuxBrokerHandler>(&'a H);

@@ -18,6 +18,42 @@ const PROBE: &str = "22222222222222222222222222222222222222222222222222222222222
 const REFERENCE: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const OTHER_REFERENCE: &str = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
 
+#[cfg(target_os = "linux")]
+#[test]
+fn pf_27_s01_native_registered_connection_replacement_and_revocation() {
+    use crate::linux_transport::LinuxBrokerChannel;
+    use crate::linux_transport::LinuxBrokerSession;
+    use crate::linux_transport::observed_peer;
+    use crate::linux_transport::serve_connection;
+    use std::os::unix::net::UnixStream;
+
+    let backend = Arc::new(FakeBackend::default());
+    let runtime = Arc::new(runtime(INSTANCE, backend.clone(), Arc::new(FakeAudit::default())));
+    let (client, server) = UnixStream::pair().expect("socket pair");
+    let peer = observed_peer(&client).expect("OS peer");
+    let channel = LinuxBrokerChannel::new(client, &peer).expect("client");
+    let handle = register(&runtime, 1, peer.clone());
+    let handler = LinuxBrokerSession::new(runtime.clone(), handle);
+    let old_server = std::thread::spawn(move || serve_connection(server, &peer, &handler));
+    assert!(channel.dispatch(&frame(binding(1), 1)).is_ok());
+
+    // A fresh connection for the same run replaces the retained old session;
+    // neither an old open channel nor its cached binding can inherit the grant.
+    let (new_client, new_server) = UnixStream::pair().expect("new socket pair");
+    let peer = observed_peer(&new_client).expect("new OS peer");
+    let new_channel = LinuxBrokerChannel::new(new_client, &peer).expect("new client");
+    let handle = register(&runtime, 2, peer.clone());
+    let handler = LinuxBrokerSession::new(runtime.clone(), handle);
+    let new_server = std::thread::spawn(move || serve_connection(new_server, &peer, &handler));
+    assert!(channel.dispatch(&frame(binding(1), 2)).is_err());
+    assert!(old_server.join().expect("old server").is_err());
+    assert!(new_channel.dispatch(&frame(binding(2), 1)).is_ok());
+    runtime.revoke_run("controller-1", "run-1").expect("revoke");
+    assert!(new_channel.dispatch(&frame(binding(2), 2)).is_err());
+    assert!(new_server.join().expect("new server").is_err());
+    assert_eq!(backend.calls.load(Ordering::SeqCst), 2);
+}
+
 #[derive(Default)]
 struct FakeBackend {
     calls: AtomicUsize,
