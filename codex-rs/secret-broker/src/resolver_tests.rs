@@ -20,6 +20,85 @@ const OTHER_REFERENCE: &str = "ddddddddddddddddddddddddddddddddddddddddddddddddd
 
 #[cfg(target_os = "linux")]
 #[test]
+fn pf_27_s01_native_disconnect_cancels_backend_before_final_fence_check() {
+    use crate::linux_transport::LinuxBrokerChannel;
+    use crate::linux_transport::LinuxBrokerHandler;
+    use crate::linux_transport::LinuxBrokerSession;
+    use crate::linux_transport::observed_peer;
+    use crate::linux_transport::serve_connection;
+    use std::os::unix::net::UnixStream;
+    use std::time::Duration;
+
+    struct SignallingHandler {
+        session: LinuxBrokerSession<Arc<FakeBackend>, Arc<FakeAudit>>,
+        closed: std::sync::mpsc::Sender<()>,
+    }
+    impl LinuxBrokerHandler for SignallingHandler {
+        fn dispatch(
+            &self,
+            peer: &ObservedPeer,
+            frame: &SignedBrokerFrame,
+        ) -> Result<TypedOperationReceipt, BrokerDispatchError> {
+            self.session.dispatch(peer, frame)
+        }
+        fn close(&self) {
+            self.session.close();
+            let _ = self.closed.send(());
+        }
+    }
+
+    for half_close in [false, true] {
+        let entered = Arc::new(Barrier::new(2));
+        let release = Arc::new(Barrier::new(2));
+        let backend = Arc::new(FakeBackend {
+            calls: AtomicUsize::new(0),
+            entered: Some(entered.clone()),
+            release: Some(release.clone()),
+        });
+        let audit = Arc::new(FakeAudit::default());
+        let runtime = Arc::new(runtime(INSTANCE, backend, audit.clone()));
+        let (client, server) = UnixStream::pair().expect("socket pair");
+        let shutdown = client.try_clone().expect("shutdown handle");
+        let peer = observed_peer(&client).expect("OS peer");
+        let channel = Arc::new(LinuxBrokerChannel::new(client, &peer).expect("client"));
+        let (closed_tx, closed_rx) = std::sync::mpsc::channel();
+        let handle = register(&runtime, 1, peer.clone());
+        let handler = SignallingHandler {
+            session: LinuxBrokerSession::new(runtime, handle),
+            closed: closed_tx,
+        };
+        let server = std::thread::spawn(move || serve_connection(server, &peer, &handler));
+        let dispatch_channel = channel.clone();
+        let dispatch = std::thread::spawn(move || dispatch_channel.dispatch(&frame(binding(1), 1)));
+        entered.wait();
+        if half_close {
+            shutdown
+                .shutdown(std::net::Shutdown::Write)
+                .expect("half close");
+        } else {
+            channel.close().expect("close");
+        }
+        let cancellation = closed_rx.recv_timeout(Duration::from_secs(2));
+        // Always unblock the fixture even when the assertion would fail.
+        release.wait();
+        assert!(cancellation.is_ok());
+        assert_eq!(
+            server.join().expect("server"),
+            Err(BrokerDispatchError::Cancelled)
+        );
+        assert_eq!(
+            dispatch.join().expect("dispatch"),
+            Err(BrokerDispatchError::OutcomeUnknown)
+        );
+        assert_eq!(
+            *audit.resolutions.lock().expect("resolutions"),
+            vec![BrokerAuditResolution::Cancelled]
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn pf_27_s01_native_registered_connection_replacement_and_revocation() {
     use crate::linux_transport::LinuxBrokerChannel;
     use crate::linux_transport::LinuxBrokerSession;

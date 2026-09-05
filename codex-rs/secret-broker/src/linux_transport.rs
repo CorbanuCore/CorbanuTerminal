@@ -7,6 +7,9 @@ use crate::ObservedPeer;
 use crate::SignedBrokerFrame;
 use crate::TypedOperationReceipt;
 use crate::ipc::MAX_FRAME_BYTES;
+use nix::poll::PollFd;
+use nix::poll::PollFlags;
+use nix::poll::poll;
 use nix::sys::socket::getsockopt;
 use nix::sys::socket::sockopt::PeerCredentials;
 use serde::Deserialize;
@@ -14,6 +17,7 @@ use serde::Serialize;
 use std::io::Read;
 use std::io::Write;
 use std::net::Shutdown;
+use std::os::fd::AsFd;
 use std::os::unix::net::UnixStream;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -34,7 +38,7 @@ pub fn observed_peer(stream: &UnixStream) -> Result<ObservedPeer, BrokerDispatch
 
 /// The service adapter owns the registered session and must cancel it on any
 /// channel exit. `dispatch` must apply the runtime's generation/revocation fence.
-pub trait LinuxBrokerHandler {
+pub trait LinuxBrokerHandler: Sync {
     fn dispatch(
         &self,
         peer: &ObservedPeer,
@@ -75,10 +79,20 @@ impl<B: crate::TypedCredentialBackend, A: crate::DurableBrokerAudit> LinuxBroker
     }
 }
 
-struct CloseGuard<'a, H: LinuxBrokerHandler>(&'a H);
+struct CloseGuard<'a, H: LinuxBrokerHandler> {
+    handler: &'a H,
+    closed: AtomicBool,
+}
+impl<H: LinuxBrokerHandler> CloseGuard<'_, H> {
+    fn close(&self) {
+        if !self.closed.swap(true, Ordering::AcqRel) {
+            self.handler.close();
+        }
+    }
+}
 impl<H: LinuxBrokerHandler> Drop for CloseGuard<'_, H> {
     fn drop(&mut self) {
-        self.0.close();
+        self.close();
     }
 }
 
@@ -89,17 +103,55 @@ pub fn serve_connection<H: LinuxBrokerHandler>(
     expected_peer: &ObservedPeer,
     handler: &H,
 ) -> Result<(), BrokerDispatchError> {
-    let _guard = CloseGuard(handler);
+    let guard = CloseGuard {
+        handler,
+        closed: AtomicBool::new(false),
+    };
     configure(&stream)?;
     let peer = observed_peer(&stream)?;
     if &peer != expected_peer {
         return Err(BrokerDispatchError::WrongPeer);
     }
+    let monitor = stream.try_clone().map_err(unavailable)?;
+    std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .name("broker-disconnect".into())
+            .spawn_scoped(scope, || watch_disconnect(&monitor, &guard))
+            .map_err(unavailable)?;
+        let result = serve_frames(&mut stream, &peer, handler);
+        guard.close();
+        result
+    })
+}
+
+fn serve_frames<H: LinuxBrokerHandler>(
+    stream: &mut UnixStream,
+    peer: &ObservedPeer,
+    handler: &H,
+) -> Result<(), BrokerDispatchError> {
     loop {
-        let frame = read_frame(&mut stream)?;
-        match handler.dispatch(&peer, &frame) {
-            Ok(receipt) => write_receipt(&mut stream, &WireReceipt::from(receipt))?,
+        let frame = read_frame(stream)?;
+        match handler.dispatch(peer, &frame) {
+            Ok(receipt) => write_receipt(stream, &WireReceipt::from(receipt))?,
             Err(error) => return Err(error),
+        }
+    }
+}
+
+fn watch_disconnect<H: LinuxBrokerHandler>(stream: &UnixStream, guard: &CloseGuard<'_, H>) {
+    // Nix 0.30 does not name Linux POLLRDHUP. Retain the platform bit when
+    // requesting half-close notification; an unknown returned flag is treated
+    // as closure, never healthy. Do not consume queued authenticated frames.
+    let events = PollFlags::from_bits_retain(nix::libc::POLLRDHUP);
+    let mut fds = [PollFd::new(stream.as_fd(), events)];
+    while !guard.closed.load(Ordering::Acquire) {
+        match poll(&mut fds, 100_u16) {
+            Ok(0) => {}
+            Ok(_) | Err(_) => {
+                guard.close();
+                let _ = stream.shutdown(Shutdown::Both);
+                return;
+            }
         }
     }
 }
