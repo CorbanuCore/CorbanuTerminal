@@ -33,10 +33,10 @@ build lock. Remote evidence root:
 | Evidence | State |
 | --- | --- |
 | `just fix -p codex-tui` | Pass on final source tree; `fix-qualified.log` (existing warnings only) |
-| `just fmt` | Rust edits applied; complete formatter initially unavailable because `uv` was missing; final complete pass pending |
+| `just fmt` | Complete pass with coordinator-supplied uv 0.11.3; exit 0 and no file changes (`fmt-complete.log`), so the final tested source is unchanged |
 | Focused TUI nextest | Final normal-mode 235/235 pass; run `36c926b9-7b0b-4c54-aa47-da1ce10471be`, `final-tests.log` |
 | Actual-key TMUX | Final 2/2 pass (three profile/configuration widths plus startup rejection); run `c5c6f41d-d93e-423a-8c7a-8495f677b760`, `final-tests.log` |
-| Astra High review | Not started; coordinator allocates numbered invocation |
+| Astra High review | Attempt 1/5 exited 1 before evaluation: HTTP 400, installed Codex CLI 0.145.0 too old for `gpt-6-astra`; compatible-CLI retry pending, no verdict claimed |
 | Fable 5.1 High via Corbanu/TMUX | Not started; coordinator allocates numbered invocation |
 | Human acceptance | Pending; no human sign-off claimed |
 | PF-26 composed/live-repository release qualification | Pending; no protected mode or release qualification claimed |
@@ -67,6 +67,14 @@ Four new security-view snapshots and 21 affected status snapshots were inspected
 and accepted. Changes are the requested/readiness row, wrapping, corresponding
 card dimensions and the current 0.1.38 version (some inherited snapshots still
 contained 0.1.31). No unrelated provider/permission behavior is changed.
+
+Review 1 froze `51bc1b2f4` against allocation `4f263ca73`, used the global
+structured autoreview helper with `/opt/homebrew/bin/codex`, explicit
+`--model gpt-6-astra --thinking high`, and kept artifacts in
+`/Volumes/CorbanuDrive/Corbanu/.codex-work/security-round5-ui/review-1-astra.log`.
+It failed solely on CLI/model compatibility; no model substitution or uncounted
+retry occurred. The coordinator owns subsequent numbered attempts and the
+five-invocation ceiling.
 
 ## Human/interactive script
 

@@ -57,14 +57,13 @@ updated: 2026-09-04
 
 ## Remaining
 
-- [ ] Complete the whole-repository formatter after the coordinator supplies missing remote `uv`.
 - [ ] Receive coordinator-numbered Astra High and Fable 5.1 High review and resolve any accepted findings.
 - [ ] Integration owner completes combined-tree gates and archive; full protected activation and PF-26 qualification remain separate.
 
 ## Verification
 
 - [x] Fix: `cd codex-rs && just fix -p codex-tui`; final source passed on RTX.
-- [ ] Format: `cd codex-rs && just fmt`; then inspect the final diff.
+- [x] Format: complete `just fmt` passed after coordinator supplied uv 0.11.3; no file changes and final tested source remains exact.
 - [x] Final-tree focused TUI test: 235/235 security-view/status/slash-command cases passed; exact filter and run ID in lane evidence.
 - [x] Snapshot review: four new profile and 21 affected status snapshots inspected and accepted.
 - [x] Actual-key TMUX: 2/2 tests passed covering three configuration levels, 120/40/80 columns, inert Enter, Esc/reopen, unknown-state startup failure and `/status`; PF-26-S02 retains final composed qualification.
