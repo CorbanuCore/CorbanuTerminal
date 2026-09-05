@@ -1,0 +1,29 @@
+{
+  "findings": [
+    {
+      "title": "[P2] Update the lockfile for the new Core dependency",
+      "body": "The committed Cargo.lock still omits codex-content-security from codex-core's dependency list. This makes the existing Native Windows MSVC product build fail at `cargo build --locked`; unlocked Cargo commands instead modify the checkout and fail clean-worktree checks. Include the dependency-edge lockfile update with this manifest change.",
+      "priority": "P2",
+      "confidence": 0.99,
+      "category": "bug",
+      "code_location": {
+        "file_path": "codex-rs/core/Cargo.toml",
+        "line": 36
+      }
+    },
+    {
+      "title": "[P2] Preserve native admissions on the actual provider-replacement path",
+      "body": "Session::update_settings replaces the client through this constructor when the provider changes. ModelClient::new creates an empty NativeIngress, and with_ingress_policy preserves only policy, so this path discards all pending candidates, admitted bindings, and registered tool origins while retaining conversation history. Previously admitted history then fails projection, and its pending candidates cannot be retrieved for screening because existing history is not observed again. The for_provider test misses this separate replacement path. Carry the existing ingress registry into the replacement client so switching providers preserves exact bindings without weakening admission checks.",
+      "priority": "P2",
+      "confidence": 0.96,
+      "category": "regression",
+      "code_location": {
+        "file_path": "codex-rs/core/src/session/mod.rs",
+        "line": 1771
+      }
+    }
+  ],
+  "overall_correctness": "patch is incorrect",
+  "overall_explanation": "The staged admission boundary remains fail-closed, and the projection has an explicit size cap. However, the dependency lockfile is stale and the actual provider-replacement path loses host-held ingress bindings. Review used read-only inspection; no tests were run.",
+  "overall_confidence": 0.97
+}

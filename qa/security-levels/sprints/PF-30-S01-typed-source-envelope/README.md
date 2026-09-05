@@ -42,8 +42,13 @@ not prove native successful protected inference. Persistent
 resume/memory lineage remains PF-30-S02, post-taint enforcement PF-30-S03, and
 qualified detector delivery PF-35. Unknown or unavailable routes remain closed.
 
-No tests, independent reviews, TMUX, human acceptance, release or benchmark pass
-is claimed by this checkpoint. Builds/tests run only on the allocated RTX host.
+Verification so far: all 20 focused Core provenance tests and all 285 protocol
+tests pass on RTX. The existing actual-key TMUX `/status` and `/exit` smoke passed
+on `12e4a6f25`; final-candidate rerun remains pending after the review fix.
+The first Astra High review found two P2 issues; see [the disposition ledger](review-disposition.md).
+Full Core suite environment/baseline qualification and final independent review
+remain in progress. No human acceptance, release or benchmark pass is claimed.
+Builds/tests run only on the allocated RTX host.
 The pinned OpenClaw source checkout was lost; OC-4/OC-10 repository review records
 were consulted, not fresh source execution. Adversarial fixtures here are original
 Corbanu tests based on the recorded requirements, not copied implementation code.
