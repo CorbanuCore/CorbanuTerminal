@@ -1,0 +1,158 @@
+//! Bounded native Linux IPC primitives, not a service installer or containment
+//! claim. Trusted setup supplies an already connected socket and independently
+//! authenticated expected peer. Same-user sockets alone cannot enable protection.
+
+use crate::BrokerDispatchError;
+use crate::ObservedPeer;
+use crate::SignedBrokerFrame;
+use crate::TypedOperationReceipt;
+use crate::ipc::MAX_FRAME_BYTES;
+use nix::sys::socket::getsockopt;
+use nix::sys::socket::sockopt::PeerCredentials;
+use serde::Deserialize;
+use serde::Serialize;
+use std::io::Read;
+use std::io::Write;
+use std::net::Shutdown;
+use std::os::unix::net::UnixStream;
+use std::sync::Mutex;
+use std::time::Duration;
+
+const MAX_RECEIPT_BYTES: usize = 512;
+const IO_DEADLINE: Duration = Duration::from_secs(5);
+
+/// Observe the actual connected process; wire payloads never supply identity.
+pub fn observed_peer(stream: &UnixStream) -> Result<ObservedPeer, BrokerDispatchError> {
+    let credentials = getsockopt(stream, PeerCredentials).map_err(unavailable)?;
+    let pid = u32::try_from(credentials.pid()).map_err(unavailable)?;
+    ObservedPeer::from_os(format!("uid:{}", credentials.uid()), pid)
+        .map_err(BrokerDispatchError::from)
+}
+
+/// The service adapter owns the registered session and must cancel it on any
+/// channel exit. `dispatch` must apply the runtime's generation/revocation fence.
+pub trait LinuxBrokerHandler {
+    fn dispatch(&self, peer: &ObservedPeer, frame: &SignedBrokerFrame)
+    -> Result<TypedOperationReceipt, BrokerDispatchError>;
+    fn close(&self);
+}
+
+struct CloseGuard<'a, H: LinuxBrokerHandler>(&'a H);
+impl<H: LinuxBrokerHandler> Drop for CloseGuard<'_, H> {
+    fn drop(&mut self) { self.0.close(); }
+}
+
+/// Serve one bounded frame per iteration. EOF, wrong peer, malformed framing,
+/// timeout and handler rejection all close this registered generation.
+pub fn serve_connection<H: LinuxBrokerHandler>(
+    mut stream: UnixStream,
+    expected_peer: &ObservedPeer,
+    handler: &H,
+) -> Result<(), BrokerDispatchError> {
+    let _guard = CloseGuard(handler);
+    configure(&stream)?;
+    let peer = observed_peer(&stream)?;
+    if &peer != expected_peer { return Err(BrokerDispatchError::WrongPeer); }
+    loop {
+        let frame = read_frame(&mut stream)?;
+        match handler.dispatch(&peer, &frame) {
+            Ok(receipt) => write_receipt(&mut stream, &WireReceipt::from(receipt))?,
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+/// One peer-verified channel. Any ambiguous I/O permanently closes it, never
+/// reconnecting or replaying a possibly consumed frame on a new service boot.
+pub struct LinuxBrokerChannel(Mutex<Option<UnixStream>>);
+
+impl LinuxBrokerChannel {
+    pub fn new(stream: UnixStream, expected_server: &ObservedPeer) -> Result<Self, BrokerDispatchError> {
+        configure(&stream)?;
+        if &observed_peer(&stream)? != expected_server {
+            return Err(BrokerDispatchError::WrongPeer);
+        }
+        Ok(Self(Mutex::new(Some(stream))))
+    }
+
+    pub fn dispatch(&self, frame: &SignedBrokerFrame) -> Result<TypedOperationReceipt, BrokerDispatchError> {
+        let mut state = self.0.lock().map_err(unavailable)?;
+        let stream = state.as_mut().ok_or(BrokerDispatchError::SessionUnavailable)?;
+        let result = stream.write_all(frame.as_bytes())
+            .map_err(|_| BrokerDispatchError::OutcomeUnknown)
+            .and_then(|()| read_receipt(stream));
+        if result.is_err() {
+            let _ = stream.shutdown(Shutdown::Both);
+            *state = None;
+        }
+        result
+    }
+
+    pub fn close(&self) -> Result<(), BrokerDispatchError> {
+        if let Some(stream) = self.0.lock().map_err(unavailable)?.take() {
+            let _ = stream.shutdown(Shutdown::Both);
+        }
+        Ok(())
+    }
+}
+
+impl Drop for LinuxBrokerChannel {
+    fn drop(&mut self) { let _ = self.close(); }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WireReceipt {
+    response_status: u16,
+    uploaded_bytes: u64,
+    downloaded_bytes: u64,
+}
+
+impl From<TypedOperationReceipt> for WireReceipt {
+    fn from(receipt: TypedOperationReceipt) -> Self {
+        Self { response_status: receipt.response_status, uploaded_bytes: receipt.uploaded_bytes, downloaded_bytes: receipt.downloaded_bytes }
+    }
+}
+
+fn read_frame(stream: &mut UnixStream) -> Result<SignedBrokerFrame, BrokerDispatchError> {
+    let mut prefix = [0; 4];
+    stream.read_exact(&mut prefix).map_err(unavailable)?;
+    let length = usize::try_from(u32::from_be_bytes(prefix)).map_err(unavailable)?;
+    // Frame includes a four-byte prefix and 32-byte authenticator. Check before allocation.
+    if length > MAX_FRAME_BYTES - 36 { return Err(BrokerDispatchError::Frame(crate::ipc::BrokerFrameError::FrameTooLarge)); }
+    let mut bytes = Vec::with_capacity(length + 36);
+    bytes.extend_from_slice(&prefix);
+    bytes.resize(length + 36, 0);
+    stream.read_exact(&mut bytes[4..]).map_err(unavailable)?;
+    SignedBrokerFrame::from_bytes(bytes).map_err(BrokerDispatchError::from)
+}
+
+fn read_receipt(stream: &mut UnixStream) -> Result<TypedOperationReceipt, BrokerDispatchError> {
+    let mut prefix = [0; 4];
+    stream.read_exact(&mut prefix).map_err(|_| BrokerDispatchError::OutcomeUnknown)?;
+    let length = usize::try_from(u32::from_be_bytes(prefix)).map_err(unavailable)?;
+    if length > MAX_RECEIPT_BYTES { return Err(BrokerDispatchError::OutcomeUnknown); }
+    let mut bytes = vec![0; length];
+    stream.read_exact(&mut bytes).map_err(|_| BrokerDispatchError::OutcomeUnknown)?;
+    let receipt: WireReceipt = serde_json::from_slice(&bytes).map_err(|_| BrokerDispatchError::OutcomeUnknown)?;
+    if !(100..=599).contains(&receipt.response_status) { return Err(BrokerDispatchError::OutcomeUnknown); }
+    Ok(TypedOperationReceipt { response_status: receipt.response_status, uploaded_bytes: receipt.uploaded_bytes, downloaded_bytes: receipt.downloaded_bytes })
+}
+
+fn write_receipt(stream: &mut UnixStream, receipt: &WireReceipt) -> Result<(), BrokerDispatchError> {
+    let bytes = serde_json::to_vec(receipt).map_err(unavailable)?;
+    let length = u32::try_from(bytes.len()).map_err(unavailable)?;
+    stream.write_all(&length.to_be_bytes()).map_err(unavailable)?;
+    stream.write_all(&bytes).map_err(unavailable)
+}
+
+fn configure(stream: &UnixStream) -> Result<(), BrokerDispatchError> {
+    stream.set_read_timeout(Some(IO_DEADLINE)).map_err(unavailable)?;
+    stream.set_write_timeout(Some(IO_DEADLINE)).map_err(unavailable)
+}
+
+fn unavailable<T>(_: T) -> BrokerDispatchError { BrokerDispatchError::SessionUnavailable }
+
+#[cfg(test)]
+#[path = "linux_transport_tests.rs"]
+mod tests;
