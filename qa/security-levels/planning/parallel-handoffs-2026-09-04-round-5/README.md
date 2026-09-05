@@ -307,7 +307,18 @@ Memory source 343aae434 passed write 44/44, read 3/3 and actual-key TMUX
 four scenarios plus four restarts; unchanged Core source has 11/11 evidence.
 Astra's P2 is fixed and Fable confirmed it. The non-blocking P3 allocation cost
 is deferred without weakening per-event policy checks. Final pushed lane
-1f86e81b3 awaits combined-tree integration; no further review requested.
+1f86e81b3 is merged into integration source 6a6bb029d. Combined RTX qualification
+is running after scoped fix/full formatting with zero diff. Core 110/110,
+memory-write 44/44 and memory-read 3/3 have passed; immutable CLI and final
+actual-key TMUX/UI gates remain pending. No further review requested.
+
+PF20 shared registration is staged in its lane at 695704d8e: workspace member
+and alias, Core dependency and Linux-gated Core anchor/test modules. Root
+delegated only resulting Cargo.lock/MODULE.bazel.lock generation to the PF20
+worker under the shared RTX lock, including Bazel parity checks and shutdown.
+The implementation's coherent modules/checkpoints are staged for review; total
+diff size must be recorded honestly. This adds no review invocation or privileged
+deployment authority.
 
 ## PF-35 external campaign status
 
