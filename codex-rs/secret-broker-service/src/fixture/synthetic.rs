@@ -56,6 +56,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::args().nth(1).as_deref() != Some("--synthetic-inherited-socket") {
         return Err("explicit synthetic fixture mode required".into());
     }
+    // Test-only signal handler exercises EINTR without process-global changes
+    // in the test runner. Production service signal policy remains uninstalled.
+    let _signal = signal_hook::flag::register(signal_hook::consts::SIGUSR1, Arc::new(std::sync::atomic::AtomicBool::new(false)))?;
     let inherited = std::io::stdin().as_fd().try_clone_to_owned()?;
     let mut socket = UnixStream::from(inherited);
     // Parent-owned inherited socket capability; not a path or worker JSON.
@@ -86,7 +89,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let producer = PolicyPrincipal::new(PrincipalKind::Service, "synthetic-service")?;
     let root = Arc::new(VolatileFixtureRoot::default());
     let mut journal = ReferenceJournal::new(AbsolutePathBuf::from_absolute_path_checked(directory.path().join("journal"))?, JournalOwner::new(producer.clone(), 1, text("volatile-fixture-root")?)?, root.clone(), JournalConfig::default());
-    if journal.recover(1, 1, &revocations).state != RecoveryState::Ready {
+    if !matches!(journal.recover(1, 1, &revocations).state, RecoveryState::Empty | RecoveryState::Ready) {
         return Err("synthetic journal recovery denied".into());
     }
     let mut audit_request = request.authorization.clone();

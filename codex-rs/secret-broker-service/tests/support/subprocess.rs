@@ -16,6 +16,7 @@ struct ChildService {
     child: Child,
     channel: LinuxBrokerChannel,
     output: BufReader<ChildStdout>,
+    wire: UnixStream,
 }
 impl ChildService {
     fn start(key: u8) -> Self {
@@ -32,7 +33,8 @@ impl ChildService {
         let mut ready = String::new();
         output.read_line(&mut ready).unwrap();
         assert_eq!(ready, "synthetic-only ready\n");
-        Self { child, channel: LinuxBrokerChannel::new(client, &peer).unwrap(), output }
+        let wire = client.try_clone().unwrap();
+        Self { child, channel: LinuxBrokerChannel::new(client, &peer).unwrap(), output, wire }
     }
 }
 impl Drop for ChildService {
@@ -82,4 +84,21 @@ fn pf_27_s01_subprocess_replay_denies_without_second_audit_or_secret() {
     service.output.read_to_string(&mut output).unwrap();
     assert_eq!(output, "synthetic-only journal-records=2\n");
     assert_eq!(service.child.wait().unwrap().code(), Some(78));
+}
+
+#[test]
+fn pf_27_s01_signal_during_partial_read_preserves_absolute_deadline() {
+    let mut service = ChildService::start(9);
+    let start = std::time::Instant::now();
+    service.wire.write_all(&[0]).unwrap();
+    for _ in 0..4 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert!(Command::new("kill").arg("-USR1").arg(service.child.id().to_string()).status().unwrap().success());
+    }
+    let mut output = String::new();
+    service.output.read_to_string(&mut output).unwrap();
+    assert!(service.child.wait().unwrap().success());
+    assert!(start.elapsed() >= std::time::Duration::from_secs(4));
+    assert!(start.elapsed() < std::time::Duration::from_secs(7));
+    assert_eq!(output, "synthetic-only journal-records=0\n");
 }
