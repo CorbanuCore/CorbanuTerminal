@@ -68,9 +68,15 @@ default. Cancel before confirming the reasoning level to keep your selection.
 Astra uses the native OpenAI Responses route. Availability still depends on
 OpenAI's rollout and your account's permissions; a selector entry does not grant
 access. It is offered for explicit selection, not automatic agent allocation,
-whose account-usage economics are not yet configured. Model limits and supported
-reasoning levels follow the [official Astra model reference](https://developers.openai.com/api/docs/models/gpt-6-astra)
-and [migration guidance](https://developers.openai.com/api/docs/guides/latest-model#gpt-6-astra-update-api-and-model-parameters).
+whose account-usage economics are not yet configured. Corbanu uses Astra's native
+Codex configuration: Code Mode tools, Responses Lite, and a 272,000-token
+default context with an 872,000-token maximum. These native limits come from
+the [upstream Codex catalog](https://github.com/openai/codex/blob/rust-v0.153.4/codex-rs/models-manager/models.json),
+not the larger public API model configuration.
+
+The reconciled candidate fixes the older-client rejection and has passed live
+TUI file/tool, cancellation, restart and resume checks in both default test
+repositories. [Qualification and build identity](../../qa/release/0.1.38/astra-runtime.md).
 
 ### Claude Plan
 

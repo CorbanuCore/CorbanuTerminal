@@ -9,8 +9,10 @@ PF-57-S03 also completed and is archived: it reconciled those repairs with
 Travis's two subsequent integration-branch commits under the user's 2026-09-05
 mandate. PF-55-S02 is also completed and archived, adding the user's explicitly
 requested OpenAI Astra selector option without changing defaults or delegation.
-PF-55-S03 is now current: the user's live Astra rejection requires runtime
-compatibility repair and real TUI inference/tool qualification.
+PF-55-S03 is completed and archived: the native Astra repair passed real TUI
+inference/tool, cancel/recovery and same-thread resume in both default test
+repositories, and the exact qualified binary is installed for human testing.
+No executable sprint remains in this sequence.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
@@ -27,7 +29,7 @@ compatibility repair and real TUI inference/tool qualification.
 | 17 | [PF-57-S02](../../archive/unified-provider-auth/pf-57-s02-reconciliation-auth-repairs.md) | Reconciliation credential-lifecycle repairs | completed | PF-57-S01 |
 | 18 | [PF-57-S03](../../archive/unified-provider-auth/pf-57-s03-travis-release-reconciliation.md) | Travis/provider UX and release repair reconciliation | completed | PF-57-S02 |
 | 19 | [PF-55-S02](../../archive/unified-provider-auth/pf-55-s02-openai-astra-selector.md) | Explicit OpenAI Astra model selection | completed | PF-57-S03 |
-| 20 | [PF-55-S03](pf-55-s03-astra-runtime-compatibility.md) | Working live Astra runtime and TUI harness | in_progress | PF-55-S02 |
+| 20 | [PF-55-S03](../../archive/unified-provider-auth/pf-55-s03-astra-runtime-compatibility.md) | Working live Astra runtime and TUI harness | completed | PF-55-S02 |
 
 ## Delivery contract
 

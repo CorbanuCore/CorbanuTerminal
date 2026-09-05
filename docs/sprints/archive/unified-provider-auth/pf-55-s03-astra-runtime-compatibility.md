@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-55-S03"
 title: "Live Astra runtime compatibility and TUI harness"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-55"
 execution_order: 20
@@ -64,30 +64,32 @@ updated: 2026-09-05
   harness. Final affected Rust checks: 445/445; harness checks: 12/12.
 - [x] First live TensorCash diagnostic passed real Astra file/tool work,
   Escape cancellation/recovery and process restart/same-thread resume.
+- [x] Final installed binary passed both pinned disposable repositories: 18 real
+  Astra responses, 12 paired tool calls, cancellation/recovery and same-thread resume.
+- [x] Installed `corbanu-debug --yolo` with the approved normal profile; restarted
+  only `corbanu-test` and verified the running executable and Astra/medium footer.
+- [x] Committed and pushed runtime/harness source `f848954d7739da8eaa4962f0866c612dedbaf5bb`;
+  documented exact artifacts, compatibility disposition and remaining release limits.
 
 ## Remaining
 
-- [ ] Run actual Astra TUI responses and file/tool work, cancel/recovery,
-  process restart and same-thread resume, with exact binary and structured evidence.
-- [ ] Exercise both TensorCash and Isometric Game in disposable worktrees;
-  identify exact paths/base commits before testing. No trading/backtest work.
-- [ ] Update docs/qualification honestly, install the tested build, leave a
-  separate human-test session with the approved normal profile, commit and push.
+None. Named-human acceptance and unrelated release/benchmark gates are disclosed
+in the evidence record; they are not claimed as completed by this sprint.
 
 ## Verification
 
-- [ ] Model/provider/login/protocol and affected TUI regression checks pass.
-- [ ] Full Core checks if upstream adapter integration requires them; distinguish
-  unrelated failures from qualification and do not count skipped live tests as pass.
-- [ ] True TUI final-binary live Astra tool/cancel/restart/resume evidence passes.
-- [ ] Model identity and real response/tool events are asserted, not inferred
+- [x] Model/provider/login/protocol and affected TUI regression checks pass.
+- [x] Full Core run not applicable: no Core production adapter or serialized
+  schema changed. Filtered tests are disclosed, not counted as passes.
+- [x] True TUI final-binary live Astra tool/cancel/restart/resume evidence passes.
+- [x] Model identity and real response/tool events are asserted, not inferred
   from echoed prompts, picker labels or success strings in a mocked server.
-- [ ] Governance, portable skills and final diff checks pass.
+- [x] Governance, portable skills and final diff checks pass.
 
 ## Exit evidence
 
-- [ ] `qa/release/0.1.38/astra-runtime.md` records source/upstream disposition,
+- [x] `qa/release/0.1.38/astra-runtime.md` records source/upstream disposition,
   commands, hashes, actual runs and limitations. Prior selector evidence stays historical.
-- [ ] Human rejection resolved in installed candidate; named-human follow-up
+- [x] Reported client rejection resolved in installed candidate; named-human follow-up
   and unrelated release/benchmark/cross-platform gates remain honestly disclosed.
-- [ ] Completed sprint archived only after all live acceptance requirements pass.
+- [x] Completed sprint archived only after all live acceptance requirements pass.

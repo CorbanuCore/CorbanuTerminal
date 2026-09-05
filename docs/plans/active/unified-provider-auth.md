@@ -271,12 +271,14 @@ PF-55-S03 compares baseline `ba6cf9c69277caec51a4c12c5b7401a9920930e0` against
 official `rust-v0.153.4`, commit `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`.
 The native Astra catalog declares minimum client version `0.153.0`, Code Mode
 tools, Responses Lite, unified execution and model-owned instructions. The
-current fork still advertises `0.144.1` and has an API-doc-derived Astra entry
-that omits these native harness requirements. Audit each affected adapter before
-selective integration; expand the sprint's exact scopes before any broader
-upgrade. Preserve account identity, credential custody, non-OpenAI routes,
-permissions, history, cancellation, recovery and resume. Live inference is
-authorized through the user's existing profile; do not extract or copy tokens.
+pre-repair fork advertised `0.144.1` and had an API-doc-derived Astra entry
+that omitted these native harness requirements. The completed selective repair
+shares the native minimum across discovery/inference and installs the native
+model contract without replacing working Corbanu adapters. Account identity,
+credential custody, non-OpenAI routes, permissions and history are preserved.
+Both default repositories passed live Astra TUI file/tool, cancellation,
+recovery and same-thread restart/resume with the installed binary. Exact source,
+upstream disposition and evidence: [runtime qualification](../../../qa/release/0.1.38/astra-runtime.md).
 
 ## Sprint execution map
 
@@ -297,7 +299,7 @@ authorized through the user's existing profile; do not extract or copy tokens.
 | `PF-54` | Unified `/providers` management and eligibility controls | [PF-54-S01](../../sprints/archive/unified-provider-auth/pf-54-s01-provider-management.md) | completed |
 | `PF-55` | Startup, current-model, and custom-provider convergence | [PF-55-S01](../../sprints/archive/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | completed at `21cf3199f2` |
 | `PF-55` | Explicit OpenAI Astra model selection | [PF-55-S02](../../sprints/archive/unified-provider-auth/pf-55-s02-openai-astra-selector.md) | completed; [selector evidence](../../../qa/release/0.1.38/astra-selector.md) |
-| `PF-55` | Verified live Astra runtime and TUI harness | [PF-55-S03](../../sprints/current/unified-provider-auth/pf-55-s03-astra-runtime-compatibility.md) | in_progress; live 400 supersedes any Astra-ready claim |
+| `PF-55` | Verified live Astra runtime and TUI harness | [PF-55-S03](../../sprints/archive/unified-provider-auth/pf-55-s03-astra-runtime-compatibility.md) | completed; [real TUI qualification](../../../qa/release/0.1.38/astra-runtime.md) |
 | `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/archive/unified-provider-auth/pf-56-s01-final-qualification.md) | completed at `fd8a9c900e` |
 | `PF-57` | Latest-main integration, regression preservation, and credential-store liveness | [PF-57-S01](../../sprints/archive/unified-provider-auth/pf-57-s01-latest-main-integration.md) | completed at `a935e507b` |
 | `PF-57` | Reconciled release credential-lifecycle regressions | [PF-57-S02](../../sprints/archive/unified-provider-auth/pf-57-s02-reconciliation-auth-repairs.md) | completed; [Astra repair evidence](../../../qa/release/0.1.38/astra-fixes.md) |

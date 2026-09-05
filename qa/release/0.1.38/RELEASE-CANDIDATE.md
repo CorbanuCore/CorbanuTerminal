@@ -1,8 +1,20 @@
 # Corbanu Terminal 0.1.38 integration candidate
 
-## Latest addition — GPT-6 Astra, September 5
+## Latest repair — live GPT-6 Astra, September 5
 
-Current implementation source: `6b17a2630f31f5447d2c53fa8f6a29b60407b42a`
+Runtime source `6df2f2e2ed545506057e9e1aa7a76b9375aaea73`, harness/source tree
+`f848954d7739da8eaa4962f0866c612dedbaf5bb`. Fixed the real newer-client rejection
+and native Astra runtime metadata. **445 selected Rust/TUI tests and 12 harness
+tests pass**. The exact installed debug binary passed actual Astra file/tool,
+cancel/recovery, restart and same-thread resume in both TensorCash and Isometric
+Game: 18 responses and 12 paired tool calls. `corbanu-debug --yolo` and the
+separate `corbanu-test` session use that binary and the approved normal profile.
+[Exact evidence and limits](astra-runtime.md). No release was published; human
+follow-up, cross-platform qualification and competitor benchmarks remain separate.
+
+## Historical selector addition — GPT-6 Astra, September 5
+
+Selector-only implementation source: `6b17a2630f31f5447d2c53fa8f6a29b60407b42a`
 on `integration/reconcile-release-0.1.38`. GPT-6 Astra is selectable under
 OpenAI with its supported reasoning levels; existing Sol/current defaults and
 automatic allocation remain unchanged. Final affected tests passed **87/87**,

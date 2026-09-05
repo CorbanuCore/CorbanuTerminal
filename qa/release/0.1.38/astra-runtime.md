@@ -1,7 +1,7 @@
 # Astra native runtime qualification — September 5, 2026
 
-Status: implementation and first live diagnostic passed; final-tree qualification
-and installation are in progress. This is not a release authorization.
+Status: native runtime repair, final-tree regression checks, both live TUI runs,
+and the local human-test installation passed. This is not a release authorization.
 
 ## Failure and repair
 
@@ -104,7 +104,97 @@ runs below supersede these preliminary results.
 
 ## Final-tree evidence
 
-Pending final affected Rust/TUI tests, two-repository live rerun, exact installed
-binary, and separate human test session. Twelve harness regression tests pass
-before final formatting. No Linux/macOS/Windows release or competitor benchmark
-qualification is implied, and no named-human acceptance has yet been received.
+Runtime commit: `6df2f2e2ed545506057e9e1aa7a76b9375aaea73`.
+Final executable/harness source: `f848954d7739da8eaa4962f0866c612dedbaf5bb`.
+Subsequent commits change only documentation/evidence. Final `just fix` and
+`just fmt` preceded all qualifying checks; existing warnings remain warnings.
+
+- Rust: **445/445 passed**, nextest `c1d74cf3-7837-489a-8f83-c0b17c20695d`,
+  34.378 seconds. Scope: complete model-manager, provider-info and protocol
+  tests, login default-client tests, selected model/reasoning TUI snapshots,
+  and native Astra TMUX request/selection/cancel/restart test. The 5,784 filtered
+  tests were not run and are not claimed as passes. No new snapshot acceptance
+  was required. Log: `/tmp/corbanu-astra-runtime-final-tests-02.log`.
+- Harness: **12/12 passed**, including provider errors, reroutes, wrong model,
+  unmatched turns/tool outputs, echoed prompts, Code Mode JSON output parsing,
+  partial recorder writes, and no regex dependency.
+- Additional native TMUX repetition: **1/1 passed**, run
+  `8b431d4c-a6ed-4d03-a201-89872d5077bf`. Its existing Rust fixture resolves the
+  test-build binary at `codex-rs/target/debug/codex`, SHA-256
+  `dc541dd404100fa75eab7d2f3646a5984133bd6b0d2ba15ed319c38efeef729d`;
+  it does not honor `CARGO_BIN_EXE_corbanu`. This synthetic check is separate
+  from the exact installed-binary live runs below. Captures:
+  `/tmp/corbanu-astra-live-sj8Gtg/mock-artifacts-final-repeat/`.
+- No Core production adapter or serialized protocol schema was changed; a full
+  Core/workspace run was not required for this metadata/negotiation repair.
+  Existing Code Mode and streaming adapters were exercised by live TUI tools.
+- Governance, portable skill mirrors, diff checks and final source-tree identity
+  checks passed. No source changes occurred after the tested source commit.
+
+Final Rust command (from the recorded worktree):
+
+```sh
+CARGO_TARGET_DIR=/tmp/corbanu-astra-review-phGuUE/codex-rs/target \
+CORBANU_TEST_NO_NATIVE_KEYRING=1 CORBANU_TMUX_REQUIRED=1 \
+just test -p codex-wallet -p codex-wallet-daemon -p codex-tasknode-session \
+  -p codex-model-provider-info -p codex-provider-auth -p codex-keyring-store \
+  -p codex-models-manager -p codex-tui -p codex-cli -p codex-protocol -p codex-login \
+  --locked --offline --retries 0 --test-threads 4 \
+  -E 'package(codex-models-manager) | package(codex-model-provider-info) | package(codex-protocol) | (package(codex-login) & test(default_client)) | (package(codex-tui) & kind(lib) & (test(model_selection_popup) | test(model_picker) | test(astra) | test(model_reasoning))) | test(tmux_astra_selection_cancel_restart_and_request)'
+```
+
+Preceded by `just fix -p codex-models-manager -p codex-model-provider-info
+-p codex-protocol -p codex-tui --locked --offline` and `just fmt`.
+Fix/build logs: `/tmp/corbanu-astra-runtime-fix-final.log` and
+`/tmp/corbanu-astra-runtime-final-build.log`.
+
+### Exact installed-binary live matrix
+
+Both tests execute the installed `bin/corbanu`, SHA-256
+`749de8682e2a0628ff3bb1c3bebf9bb859a385aa4938382d4d26e594c07d687f`, with native
+authentication from `/home/pfrpc/.corbanu`, OpenAI / `gpt-6-astra` / medium / YOLO.
+The hash is checked before and after each run. The bundled Code Mode helper is
+the unchanged, working helper with SHA-256
+`43a88e88a3cf6728332d196bae4ffef9142f72ce81140e55a7aef0639aa68afb`.
+
+| Repository | Pinned base | Evidence | Result |
+| --- | --- | --- | --- |
+| TensorCash | `dd6e92024254090de0f596b090bd5c74c4d97b90` | `/tmp/corbanu-astra-live-sj8Gtg/tensorcash-final/` | pass: 9 responses, 6 paired tool calls, 3 successful turns, 1 deliberate abort |
+| Isometric Game | `59821b7a85524f186f946c4670480c7ee96483cb` | `/tmp/corbanu-astra-live-sj8Gtg/isometricgame-final/` | pass: 9 responses, 6 paired tool calls, 3 successful turns, 1 deliberate abort |
+
+Disposable worktrees are sibling `tensorcash/` and `isometricgame/` directories
+under that same evidence parent. Both read the real project's README and
+reported a concrete project fact, fixed only a synthetic Unicode/whitespace
+normalization fixture, and executed its unchanged seven-case test. Both then
+ran a benign delayed command, cancelled with Escape, recovered with another
+test run, exited via `/exit`, restarted with the same thread ID and successfully
+executed another history-dependent test request. No trading/backtests, external
+project changes or credential copying occurred.
+
+Durable [structured results](astra-runtime-results.json) retain response and
+tool IDs, exact repository paths/origins, thread IDs and fixture hashes. Raw
+terminal captures, keys and private logs remain in the evidence directories.
+TensorCash's configured origin is `postfiatorg/tensorcash`; the policy's
+`agtico/tensorcash` URL and configured URL both resolved to HEAD `9325ed67d23355170d6ad38ad58ea776d049ae4e`
+when checked. The recorded pinned base, not that newer HEAD, was tested.
+
+Summary hashes: TensorCash
+`28a6403976abc0c955e3069008b8723a5dca76ac9e348ff61ed880a8b05d09da`;
+Isometric Game `6c95b309fefec6d3ac377a4e0e6bc6bab1706418f39bbeec9d2b987251ff2220`.
+
+### Human handoff
+
+`corbanu-debug --yolo` now resolves to
+`/home/pfrpc/.local/share/corbanu-debug/0.1.38-astra-runtime-f848954d77/bin/corbanu`.
+Default-server session `corbanu-test`, pane `%20`, was restarted and visibly
+shows `gpt-6-astra medium`, YOLO, and `~/repos`. `/proc/2593387/exe` confirmed
+the exact installed executable. It uses the approved normal profile and did
+not show credential onboarding. Attach with `tmux attach -t corbanu-test`.
+
+Previous launcher is recoverable at
+`/home/pfrpc/.local/share/corbanu-debug/launcher-backup-yYKxdG/corbanu-debug`.
+The normal `corbanu` launcher and other tmux sessions are unchanged.
+No Linux/macOS/Windows release or competitor benchmark qualification is implied.
+No new tag/workflow/publication was triggered; named-human acceptance is still
+pending the user's test. Real account inference is tested here; a separate live
+API-key billing-route run and long-duration soak are not claimed.
