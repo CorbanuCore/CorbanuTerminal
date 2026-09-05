@@ -20,43 +20,16 @@ pub(crate) fn screen(pending: &PendingSource, text: &str) -> ScreenedContent {
 
 // Synthetic fixture engine, never a production classifier or qualification.
 pub(crate) fn screen_binding(source: SourceBinding, text: &str) -> ScreenedContent {
-    let digest = ContentDigest::of(text.as_bytes());
-    let transformation = TransformationBinding::new(
-        ContractId::new("fixture").unwrap(),
-        1,
-        digest,
-        digest,
-        digest,
-    )
-    .unwrap();
-    let target =
-        ScreeningTarget::new(ContentBinding::new(source, transformation), digest, 1).unwrap();
-    let model = ModelIdentity::new(
-        ContractId::new("fixture").unwrap(),
-        ContractId::new("v1").unwrap(),
-        digest,
-    )
-    .unwrap();
-    let threshold = ThresholdIdentity::new(ContractId::new("fixture").unwrap(), 1, digest).unwrap();
-    let identity = VerdictIdentity::new(model, threshold);
-    let mut session = ScreeningSession::new(
-        target.clone(),
-        ScreeningBudget {
-            max_content_bytes: 8192,
-            max_segment_bytes: 8192,
-            max_segments: 1,
-            max_elapsed_ms: 1000,
-            max_verdict_age_ms: 1000,
-        },
-        identity.clone(),
-    )
-    .unwrap();
-    session
-        .ingest(
-            SegmentEnvelope::new(&target, 0, text.as_bytes().to_vec()),
-            1,
-        )
-        .unwrap();
+    let segments = text.as_bytes().chunks(MAX_SCREENING_SEGMENT_BYTES);
+    let (mut session, target, identity) = screening_fixture(source, text, segments.len() as u32);
+    for (index, payload) in segments.enumerate() {
+        session
+            .ingest(
+                SegmentEnvelope::new(&target, index as u32, payload.to_vec()),
+                1,
+            )
+            .unwrap();
+    }
     match session.finish(
         Some(ClassifierVerdict::new(
             target,
@@ -70,6 +43,49 @@ pub(crate) fn screen_binding(source: SourceBinding, text: &str) -> ScreenedConte
         ScreeningDecision::Release(screened) => *screened,
         result => panic!("unexpected fixture verdict: {result:?}"),
     }
+}
+
+pub(crate) fn screening_fixture(
+    source: SourceBinding,
+    text: &str,
+    segment_count: u32,
+) -> (ScreeningSession, ScreeningTarget, VerdictIdentity) {
+    let digest = ContentDigest::of(text.as_bytes());
+    let transformation = TransformationBinding::new(
+        ContractId::new("fixture").unwrap(),
+        1,
+        digest,
+        digest,
+        digest,
+    )
+    .unwrap();
+    let target = ScreeningTarget::new(
+        ContentBinding::new(source, transformation),
+        digest,
+        segment_count,
+    )
+    .unwrap();
+    let model = ModelIdentity::new(
+        ContractId::new("fixture").unwrap(),
+        ContractId::new("v1").unwrap(),
+        digest,
+    )
+    .unwrap();
+    let threshold = ThresholdIdentity::new(ContractId::new("fixture").unwrap(), 1, digest).unwrap();
+    let identity = VerdictIdentity::new(model, threshold);
+    let session = ScreeningSession::new(
+        target.clone(),
+        ScreeningBudget {
+            max_content_bytes: 8192,
+            max_segment_bytes: MAX_SCREENING_SEGMENT_BYTES,
+            max_segments: (MAX_INGRESS_TEXT_BYTES / MAX_SCREENING_SEGMENT_BYTES) as u32,
+            max_elapsed_ms: 1000,
+            max_verdict_age_ms: 1000,
+        },
+        identity.clone(),
+    )
+    .unwrap();
+    (session, target, identity)
 }
 
 #[test]

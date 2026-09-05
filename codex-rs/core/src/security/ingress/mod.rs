@@ -19,6 +19,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 pub(crate) const MAX_INGRESS_TEXT_BYTES: usize = 2_048;
+pub(crate) const MAX_SCREENING_SEGMENT_BYTES: usize = 512;
 const MAX_PROJECTION_BYTES: usize = 8_192;
 
 #[derive(Clone)]
@@ -78,11 +79,25 @@ impl NativeScreeningCandidate {
     pub(crate) fn normalized(&self) -> &str {
         &self.normalized
     }
+
+    /// Bounded transport pieces of one complete input, never independently
+    /// admissible fragments. Normalization happens before byte segmentation;
+    /// even an escape split across pieces must be reassembled before screening.
+    pub(crate) fn segments(&self) -> impl ExactSizeIterator<Item = &[u8]> {
+        self.normalized
+            .as_bytes()
+            .chunks(MAX_SCREENING_SEGMENT_BYTES)
+    }
+
+    pub(crate) fn segment_count(&self) -> u32 {
+        // A private candidate is nonempty and bounded by MAX_INGRESS_TEXT_BYTES.
+        self.segments().len() as u32
+    }
 }
 
 impl PendingSource {
-    /// Prepare one complete bounded segment. Do not clip a prefix and admit it;
-    /// the owning producer must segment and screen complete input first.
+    /// Prepare one complete bounded input. Its screening transport segments do
+    /// not change its source identity, complete-input digest or wire projection.
     pub(crate) fn prepare(
         route: &str,
         mut descriptor: SourceDescriptor,
@@ -90,6 +105,9 @@ impl PendingSource {
         parents: &[SourceEnvelope],
     ) -> Result<(Self, String), IngressError> {
         descriptor.kind = route_kind(route)?;
+        if raw.is_empty() {
+            return Err(IngressError::InvalidEnvelope);
+        }
         if raw.len() > MAX_INGRESS_TEXT_BYTES {
             return Err(IngressError::TooLarge);
         }
@@ -153,6 +171,8 @@ impl PendingSource {
     pub(crate) fn admit(self, screened: ScreenedContent) -> Result<AdmittedSource, IngressError> {
         let bytes = screened.bytes().into_raw_untrusted();
         if screened.target().binding().source() != self.screening_binding
+            || screened.target().segment_count()
+                != self.normalized.len().div_ceil(MAX_SCREENING_SEGMENT_BYTES) as u32
             || ContentDigest::of(bytes).as_bytes() != &self.envelope.content_digest()
         {
             return Err(IngressError::BindingMismatch);
@@ -234,3 +254,7 @@ pub(crate) use native::NativeIngress;
 #[cfg(test)]
 #[path = "ingress_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "segmentation_tests.rs"]
+mod segmentation_tests;
