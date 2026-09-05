@@ -15,8 +15,15 @@ P0 counts:28/78 archived (36% rounded),50 current; PF27S04 is the sole remaining
 implementation reservation. Human-memory fixture remains routine QA in progress;
 humanTest21–23 remain queued. Its documented `/providers` switch is not a pass
 for the adjacent custom `/model` identity/label issues. Review budgets unchanged.
-Root-launcher manifest v2 is planning-only and awaits implementation pins and
+The [root-launcher manifest v2](linux-synthetic-root-launcher-proposal-v2.md) is planning-only and awaits implementation pins and
 explicit privileged approval; no deployment or main merge is claimed.
+
+Human fixture interim proof: all ten focused tests passed in run
+`00600edd-c1d6-43f3-810a-1358f6c44ea4` (69.404s), covering startup, explicit
+synthetic provider/model B routing with old-A denial, pending exit/restart,
+cancel and timeout cleanup. Final helper extraction, pinned manual-entry proof
+and allocated reviews3/4 remain pending. This is not final-tree qualification,
+real-provider picker parity or human acceptance; checks21–23 remain queued.
 
 Source base: `07791288b6feeccfaee5a57c12452359cc666957`.
 Coordinator branch: `integration/security-round5-20260904`, worktree:
