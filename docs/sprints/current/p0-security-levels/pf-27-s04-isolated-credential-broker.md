@@ -5,16 +5,16 @@ status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 28
-owner: "/root/pf27_isolated_broker"
+owner: "/root/broker"
 parallel_lane: "isolated-broker"
 write_scope: "codex-rs/secret-broker/, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/core/src/security/broker_client.rs, codex-rs/core/src/security/broker_client_tests.rs, codex-rs/core/src/config/network_proxy_credential.rs, codex-rs/core/src/config/network_proxy_credential_tests.rs, codex-rs/vault/src/capability.rs, codex-rs/vault/src/capability_tests.rs, qa/security-levels/sprints/PF-27-S04/, docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md"
-integration_gate: "After PF-22-S02 is integrated and archived, the Codex ingress/classifier integration owner rebases PF-27-S04, audits the literal scope, serializes Core module/Cargo/Bazel/lock registration, reruns secret-broker/network-proxy/Vault/Core/platform/governance suites, completes TMUX and Opus 5 Max closure, and pauses before final Linux/Windows qualification until the user confirms the tailnet switch."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-isolated-broker"
-branch: "feat/p0-security-isolated-broker"
-base_commit: "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4"
+integration_gate: "Codex /root serializes shared Core/Vault/network-proxy and Cargo/Bazel/lock registration, audits scope, reruns broker/network-proxy/Vault/Core and governance suites on RTX plus TMUX, Astra High and Fable 5.1 High reviews (maximum five per lane). Native service, provider data-plane and all-OS qualification remain mandatory for completion; intermediate leaves cannot enable protected activation."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-broker"
+branch: "feat/security-round5-broker"
+base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
 depends_on: "PF-27-S01, PF-13-S04, PF-27-S03, PF-41-S03"
 created: 2026-08-28
-updated: 2026-08-31
+updated: 2026-09-04
 ---
 
 # PF-27-S04 — Isolated credential broker process

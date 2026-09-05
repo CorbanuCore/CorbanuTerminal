@@ -1,20 +1,20 @@
 ---
 sprint_id: "PF-30-S01"
 title: "Typed source envelope and trusted ingress"
-status: draft
+status: in_progress
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-30"
 execution_order: 37
-owner: "UNALLOCATED"
-parallel_lane: "UNALLOCATED"
-write_scope: "UNALLOCATED"
-integration_gate: "UNALLOCATED"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "/root/provenance"
+parallel_lane: "source-envelope"
+write_scope: "codex-rs/protocol/src/provenance.rs, codex-rs/protocol/src/provenance_tests.rs, codex-rs/core/src/security/ingress/, codex-rs/core/src/context/provenance.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/client_common.rs, codex-rs/core/src/client.rs, codex-rs/core/src/tools/router.rs, codex-rs/core/src/mcp_tool_call.rs, codex-rs/core/tests/suite/provenance.rs, qa/security-levels/sprints/PF-30-S01-typed-source-envelope/, docs/sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md"
+integration_gate: "Codex /root owns protocol/context/test exports and shared Cargo/Bazel/lock registration, audits native ingress coverage without changing Permissive, reruns protocol/Core/governance plus actual TMUX on RTX and Astra High/Fable 5.1 High reviews (maximum five per lane). Contract-only evidence cannot complete this sprint."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-provenance"
+branch: "feat/security-round5-provenance"
+base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
 depends_on: "PF-22-S02"
 created: 2026-08-28
-updated: 2026-09-02
+updated: 2026-09-04
 ---
 
 # PF-30-S01 — Typed source envelope and trusted ingress
@@ -43,7 +43,7 @@ updated: 2026-09-02
 ## Preconditions
 
 - [x] Active plan; PF-22-S02 completed and archived at the exact recorded base.
-- [ ] Allocate a recoverable worktree, branch, base, owner, literal scope, and integration gate before returning this sprint to ready.
+- [x] Round-five allocation records a recoverable worktree, branch, base, owner, literal scope, and integration gate.
 - [ ] Read root and nearest implementation-path AGENTS.md; confirm source pins, provider request paths and fail-closed backend/API availability before code changes.
 
 ## Done

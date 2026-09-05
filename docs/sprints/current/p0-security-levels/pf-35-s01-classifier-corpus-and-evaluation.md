@@ -1,7 +1,8 @@
 ---
 sprint_id: "PF-35-S01"
 title: "Classifier corpus and leakage-free evaluation"
-status: in_progress
+status: draft
+external_qualification_state: "Independent external campaign pending; engineering reservation released, not completed"
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-35"
 execution_order: 20
@@ -15,12 +16,20 @@ base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
 allocation_commit: "e0c23fe95165636d621dae8c16a5366c4f7250ac"
 depends_on: "PF-34-S04"
 created: 2026-08-28
-updated: 2026-08-30
+updated: 2026-09-04
 ---
 
 # PF-35-S01 — Classifier corpus and leakage-free evaluation
 
 ## Execution mandate
+
+On 2026-09-04 the user removed PF-35 from the engineering main path.
+This record releases its engineering reservation to draft under the existing
+sprint process; the independent external corpus campaign is not stopped.
+Previously merged foundation and all remaining blind/signature/N100 gates
+are preserved. Reallocate before repository implementation resumes; PF-35
+consumers still require honest completion and archival. Handoff:
+`qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md`.
 
 - Deliver: Detector quality is measured on reproducible, licensed, leakage-free blind evidence, not handpicked prompts.
 - Excludes: adjacent feature implementation, Permissive policy changes, and unlisted integrations.

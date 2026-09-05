@@ -5,18 +5,27 @@ change_class: product-initiative
 priority: P0
 owner: "Jim Ricketts"
 parallel_sprint_limit: 3
-integration_owner: "Codex ingress/classifier lane"
+integration_owner: "Codex /root security round-five coordinator"
 activation_authority: "Product authority defined in the product specification"
 activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to reconcile the complete security program into this active plan."
 target_release: "TBD — candidate qualified by 2026-10-08"
 deadline: 2026-10-08
 created: 2026-08-23
-updated: 2026-09-02
+updated: 2026-09-04
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-broker"
+    branch: "feat/security-round5-broker"
+    base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-provenance"
+    branch: "feat/security-round5-provenance"
+    base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-ui"
+    branch: "feat/security-round5-ui"
+    base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-protected-runtime"
     branch: "feat/p0-security-protected-runtime"
     base_commit: "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4"
@@ -582,6 +591,60 @@ real TMUX smoke and read-only Claude Opus 5 Max review through Corbanu Terminal.
 PF-26 final true-TUI, live-repository and human acceptance remain separate.
 
 ## Useful code references
+
+## Round-five execution amendment — 2026-09-04
+
+The user authorized these three parallel agents and assigned integration to
+Codex /root. This amendment supersedes earlier dispatch and reviewer instructions
+for this round. The immutable source base is `07791288b6feeccfaee5a57c12452359cc666957`,
+including the reconciled provider UX. The separate committed allocation packet
+is applied before implementation; base is not a claim of qualification.
+
+PF-35-S01's engineering reservation is returned to draft with an external handoff,
+as permitted by the sprint process. Its independently operated corpus campaign
+remains pending/in progress externally, not cancelled or completed. Do not change
+that external checkout or relax PF-35-S02/S03 or protected-mode qualification gates.
+It is not a dependency of the three engineering lanes below.
+
+| Lane | Sprint | Owner | Worktree suffix / branch suffix |
+| --- | --- | --- | --- |
+| Broker | PF-27-S04 | /root/broker | security-round5-broker |
+| Provenance | PF-30-S01 | /root/provenance | security-round5-provenance |
+| Security view | PF-24-S01 | /root/security_ui | security-round5-ui |
+
+Exact coordinates are in front matter and literal scopes in each sprint.
+The coordinator owns shared module exports, Cargo/Bazel/lock registration,
+plan/navigation, humanTest.html, securityProgress.html and the review ledger.
+Worker-owned crate manifests are proposed by the worker; shared edges are
+serialized by the coordinator. No two agents edit the same checkout.
+
+PF-27 starts by recovering reviewed leaves, then implements the digest-bound
+PF-41 adapter and real Linux IPC evidence. Raw paths must not be added to the
+minimized shared audit schema. Native service/data-plane and all-OS qualification
+remain required; intermediate commits do not complete or activate the broker.
+PF-30 starts with immutable envelopes and trusted admission, then native ingress
+and provider seams; contract-only tests do not complete its existing checklist.
+PF-24 delivers observation-only requested/effective-state UX. No activation,
+grants or downgrade mutations are introduced; unavailable protection is explicit.
+
+Builds and compilation run only on the authorized RTX host. Mac storage stays on
+CorbanuDrive. Use actual-key TMUX tests for interactive changes and supporting
+TMUX smokes for the other lanes. Review engines are Astra High for autoreview
+and Fable 5.1 High through Corbanu Terminal's TMUX harness externally.
+Each lane has a maximum of five review invocations unless critical findings
+continue; normally one of each engine, with warranted remediation follow-ups.
+The coordinator allocates numbered reviews and retains immutable results.
+
+Reserve at least 35% of delivery capacity for integration and qualification.
+Existing broker/provenance midpoint estimates (12/7 days) remain uncertain
+historical inputs, not new completion promises. Reforecast from observed work
+and platform gaps at each handback; do not suppress outstanding evidence to fit
+a schedule. The coordinator monitors agent progress every 15 minutes.
+
+Dispatch/evidence ledger:
+`qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md`.
+
+### Code reference table
 
 | Path or symbol | Why it matters |
 | --- | --- |
