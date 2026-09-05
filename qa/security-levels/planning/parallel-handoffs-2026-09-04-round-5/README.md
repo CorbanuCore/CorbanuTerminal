@@ -108,6 +108,11 @@ actual-key TMUX 3/3 after fix/format. Realtime lane source e592cf75a passed
 88/88 provenance/realtime cases and actual-key TMUX. The final combined
 affected-Core and three-TMUX rerun is underway at dd2adb72b.
 No merge to main or release is claimed.
+The integration branch also contains the earlier, unmerged provider/onboarding
+reconciliation inherited at its source base. Main has no new divergence as of
+the final rerun dispatch. The coordinator has asked product authority whether
+to merge this combined staged branch or retain it for now; do not interpret
+successful tests as an answer or repeat the question on every heartbeat.
 
 The accepted memory finding is outside the current source allocation:
 memories/write stage one constructs an unbound ModelClient and serializes
