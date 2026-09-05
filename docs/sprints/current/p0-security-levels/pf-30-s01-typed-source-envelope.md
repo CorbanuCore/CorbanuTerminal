@@ -7,7 +7,7 @@ plan_feature: "PF-30"
 execution_order: 37
 owner: "/root/provenance"
 parallel_lane: "source-envelope"
-write_scope: "codex-rs/protocol/src/provenance.rs, codex-rs/protocol/src/provenance_tests.rs, codex-rs/core/src/security/ingress/, codex-rs/core/src/context/provenance.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/client_common.rs, codex-rs/core/src/client.rs, codex-rs/core/src/tools/router.rs, codex-rs/core/src/mcp_tool_call.rs, codex-rs/core/tests/suite/provenance.rs, qa/security-levels/sprints/PF-30-S01-typed-source-envelope/, docs/sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md"
+write_scope: "codex-rs/protocol/src/provenance.rs, codex-rs/protocol/src/provenance_tests.rs, codex-rs/core/src/security/ingress/, codex-rs/core/src/context/provenance.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/client_tests.rs, codex-rs/core/src/session/mod.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/client_common.rs, codex-rs/core/src/client.rs, codex-rs/core/src/tools/router.rs, codex-rs/core/src/mcp_tool_call.rs, codex-rs/core/tests/suite/provenance.rs, qa/security-levels/sprints/PF-30-S01-typed-source-envelope/, docs/sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md"
 integration_gate: "Codex /root owns protocol/context/test exports and shared Cargo/Bazel/lock registration, audits native ingress coverage without changing Permissive, reruns protocol/Core/governance plus actual TMUX on RTX and Astra High/Fable 5.1 High reviews (maximum five per lane). Contract-only evidence cannot complete this sprint."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-provenance"
 branch: "feat/security-round5-provenance"
