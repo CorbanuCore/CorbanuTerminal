@@ -135,6 +135,40 @@ async fn tmux_astra_selection_cancel_restart_and_request() -> Result<()> {
     for request in requests {
         let body: serde_json::Value = serde_json::from_slice(&request.body)?;
         ensure!(body["model"] == "gpt-6-astra" && body["reasoning"]["effort"] == "high");
+        ensure!(
+            request
+                .headers
+                .get("version")
+                .and_then(|value| value.to_str().ok())
+                == Some(codex_model_provider_info::OPENAI_CODEX_COMPAT_VERSION)
+        );
+        let version = request.headers["version"]
+            .to_str()?
+            .split('.')
+            .map(str::parse::<u32>)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        ensure!(
+            version >= vec![0, 153, 0],
+            "Astra requires native client 0.153.0 or newer"
+        );
+        ensure!(
+            request
+                .headers
+                .contains_key("x-openai-internal-codex-responses-lite")
+        );
+        ensure!(body.get("instructions").is_none());
+        ensure!(body.get("tools").is_none());
+        ensure!(body["parallel_tool_calls"] == false);
+        ensure!(
+            body["input"]
+                .as_array()
+                .context("native input")?
+                .iter()
+                .any(|item| item["type"] == "additional_tools"
+                    && item["tools"]
+                        .as_array()
+                        .is_some_and(|tools| tools.iter().any(|tool| tool["name"] == "exec")))
+        );
         for unsupported in [
             "temperature",
             "top_p",

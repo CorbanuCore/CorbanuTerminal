@@ -80,6 +80,12 @@ pub fn with_config_overrides(mut model: ModelInfo, config: &ModelsManagerConfig)
             }
         }
         if !config.personality_enabled {
+            // Newer native catalogs carry the complete instructions in the
+            // template and leave the legacy base empty. Disabling personality
+            // must not discard the model's entire operating contract.
+            if model.base_instructions.is_empty() {
+                model.base_instructions = model.get_model_instructions(Some(Personality::None));
+            }
             clear_instruction_messages(&mut model);
         }
     }

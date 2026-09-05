@@ -76,7 +76,7 @@ pub const OPENAI_PROVIDER_ID: &str = "openai";
 /// This is intentionally separate from Corbanu Terminal's product version. The OpenAI
 /// provider sends this value to first-party endpoints so fork-specific release
 /// numbering does not make the backend treat a compatible client as obsolete.
-pub const OPENAI_CODEX_COMPAT_VERSION: &str = "0.144.1";
+pub use codex_protocol::openai_models::OPENAI_CODEX_COMPAT_VERSION;
 pub const CHATGPT_CODEX_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
 const ANTHROPIC_PROVIDER_NAME: &str = "Anthropic";
 pub const ANTHROPIC_PROVIDER_ID: &str = "anthropic";

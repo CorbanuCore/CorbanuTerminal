@@ -34,6 +34,11 @@ use crate::protocol::MultiAgentVersion;
 const PERSONALITY_PLACEHOLDER: &str = "{{ personality }}";
 pub const SPEED_TIER_FAST: &str = "fast";
 
+/// OpenAI protocol compatibility, independent of Corbanu's product version.
+/// Shared by model discovery and inference so the backend negotiates one contract.
+/// Astra's native Responses Lite / Code Mode contract requires at least 0.153.0.
+pub const OPENAI_CODEX_COMPAT_VERSION: &str = "0.153.0";
+
 /// See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#get-started-with-reasoning
 #[derive(Debug, Default, Clone, PartialEq, Eq, TS, Hash)]
 #[ts(type = "string")]
