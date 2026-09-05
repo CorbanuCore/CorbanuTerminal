@@ -3207,6 +3207,7 @@ impl Session {
     ) {
         let items = self.prepare_conversation_items_for_history(turn_context, items);
         let items = items.as_ref();
+        self.services.model_client().observe_native_ingress(items);
         {
             let mut state = self.state.lock().await;
             state.current_time_reminder.note_recorded_items(items);

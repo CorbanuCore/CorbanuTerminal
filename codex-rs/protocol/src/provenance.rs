@@ -132,6 +132,10 @@ impl SourceEnvelope {
         self.content_digest
     }
 
+    pub fn raw_digest(&self) -> [u8; 32] {
+        self.raw_digest
+    }
+
     pub fn taint_lineage(&self) -> &[Uuid] {
         &self.taint_lineage
     }

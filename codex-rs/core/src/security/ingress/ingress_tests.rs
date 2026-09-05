@@ -9,7 +9,7 @@ fn descriptor() -> SourceDescriptor {
     SourceDescriptor { kind: SourceKind::Unknown, origin_id: "fixture".into(), actor_id: "adapter".into(), retrieved_at_unix_ms: 1 }
 }
 
-fn screen(pending: &PendingSource, text: &str) -> ScreenedContent {
+pub(crate) fn screen(pending: &PendingSource, text: &str) -> ScreenedContent {
     let digest = ContentDigest::of(text.as_bytes());
     let transformation = TransformationBinding::new(
         ContractId::new("fixture").unwrap(), 1, digest, digest, digest,

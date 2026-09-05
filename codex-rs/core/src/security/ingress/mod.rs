@@ -99,12 +99,13 @@ impl PendingSource {
         let projection = serde_json::to_string(&json!({ "source": self.envelope, "data": data }))
             .map_err(|_| IngressError::InvalidEnvelope)?;
         if projection.len() > MAX_PROJECTION_BYTES { return Err(IngressError::TooLarge); }
-        Ok(AdmittedSource { projection })
+        Ok(AdmittedSource { projection, raw_digest: self.envelope.raw_digest() })
     }
 }
 
 /// No constructor or Deserialize implementation outside this admission module.
-pub(crate) struct AdmittedSource { projection: String }
+#[derive(Clone)]
+pub(crate) struct AdmittedSource { projection: String, raw_digest: [u8; 32] }
 
 impl AdmittedSource {
     pub(crate) fn into_projection(self) -> String { self.projection }
@@ -148,8 +149,13 @@ pub(crate) enum IngressError {
     TooLarge,
     #[error("protected source admission is unavailable; external context was not sent")]
     NativeAdmissionUnavailable,
+    #[error("source admission registry is full or poisoned")]
+    RegistryUnavailable,
 }
+
+mod native;
+pub(crate) use native::NativeIngress;
 
 #[cfg(test)]
 #[path = "ingress_tests.rs"]
-mod tests;
+pub(crate) mod tests;
