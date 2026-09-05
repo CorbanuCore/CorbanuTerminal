@@ -816,6 +816,57 @@ async fn pf_30_s04_new_job_refreshes_provider_but_old_client_denies() -> anyhow:
     Ok(())
 }
 
+#[tokio::test]
+async fn pf_30_s04_live_provider_refresh_preserves_consolidation_pair() -> anyhow::Result<()> {
+    let original = start_mock_server().await;
+    let replacement = start_mock_server().await;
+    let home = Arc::new(TempDir::new()?);
+    let db = init_state_db(&home).await?;
+    seed_stage1_output(
+        db.as_ref(),
+        home.path(),
+        chrono::Utc::now() - chrono::Duration::hours(1),
+        "synthetic memory",
+        "synthetic summary",
+        "routing-regression",
+    )
+    .await?;
+    let replacement_url = format!("{}/v1", replacement.uri());
+    let test = test_codex()
+        .with_home(Arc::clone(&home))
+        .with_config(move |config| {
+            config.features.enable(Feature::Sqlite).unwrap();
+            config.memories = startup_test_memories_config();
+            let mut provider = config.model_provider.clone();
+            provider.name = "Synthetic replacement".into();
+            provider.base_url = Some(replacement_url);
+            config.model_providers.insert("replacement".into(), provider);
+        })
+        .build(&original)
+        .await?;
+    let response = sse(vec![
+        ev_response_created("routing-regression"),
+        ev_assistant_message("routing-message", "consolidated"),
+        ev_completed("routing-regression"),
+    ]);
+    let original_requests = mount_sse_once(&original, response.clone()).await;
+    let replacement_requests = mount_sse_once(&replacement, response).await;
+    core_test_support::submit_thread_settings(
+        &test.codex,
+        codex_protocol::protocol::ThreadSettingsOverrides {
+            model_provider: Some("replacement".into()),
+            ..Default::default()
+        },
+    )
+    .await?;
+    trigger_memories_startup(&test).await;
+    wait_for_single_request(&original_requests).await;
+    wait_for_phase2_workspace_reset(db.as_ref(), &home.path().join("memories")).await?;
+    assert!(replacement_requests.requests().is_empty());
+    shutdown_test_codex(&test).await?;
+    Ok(())
+}
+
 const MOCK_PROVIDER_PHASE_ONE_MODEL: &str = "mock.phase-one";
 const MOCK_PROVIDER_PHASE_TWO_MODEL: &str = "mock.phase-two";
 
