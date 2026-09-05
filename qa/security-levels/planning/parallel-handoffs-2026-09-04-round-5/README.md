@@ -12,11 +12,38 @@ Latest resumed checkpoint: PF20S03 is integrated and archived after exact combin
 RTX `b12e32db3` passed controller18/Core127/audit46/config229/memory44+3/UI235,
 actual-key TMUX4 and same-home restart. [Final evidence](../../sprints/PF-20-S03/combined-b12e32d/README.md).
 P0 counts:28/78 archived (36% rounded),50 current; PF27S04 is the sole remaining
-implementation reservation. Human-memory fixture remains routine QA in progress;
-humanTest21–23 remain queued. Its documented `/providers` switch is not a pass
-for the adjacent custom `/model` identity/label issues. Review budgets unchanged.
+implementation reservation. Human-memory fixture is now qualified and integrated;
+humanTest21–23 are ready for assisted testing, not human-accepted. Its documented
+`/providers` switch is not a pass for adjacent custom `/model` identity/label
+issues. Memory reviews are now5/5; other review budgets are unchanged.
 The [root-launcher manifest v2](linux-synthetic-root-launcher-proposal-v2.md) is planning-only and awaits implementation pins and
 explicit privileged approval; no deployment or main merge is claimed.
+
+Final fixture closeout: lane523c4c095 merged atf65f348f9. The entire codex-rs
+tree matches tested remote c137c953d exactly (Git tree
+05d47f03a951e0d716e6bc73ce37bced6f418aa2), and runtime source remains identical
+to qualifiedb12e32db3. Rust16/16, Python2/2, five actual-key cases, existing
+TMUX regressions and pinned startup/cancel passed. Review5 Astra is clean;
+original failed14/15 run and earlier Fable finding remain preserved. Both
+immutable executable hashes were independently rechecked on RTX.
+[Final evidence](../../sprints/PF-30-S04/human-fixture/combined-67fec6a6/README.md)
+and [operator guide](../../sprints/PF-30-S04/human-fixture/README.md).
+No redundant rebuild or sixth review. The following interim records are
+historical, superseded by this final closeout. No new human acceptance,
+benchmark/live-repository qualification, Mac launcher update or main merge.
+Monitor pauses after this pushed human checkpoint: no dependency-ready,
+authorized implementation remains outside the already-pending broker decisions.
+
+Coordinator closeout checks: plan validator passes (2/2 active), sprint validator
+passes (57 current,116 archived across all plans). Both HTML documents pass
+unique-ID and local-link validation; humanTest retains all23 checkbox keys in
+their original order. Isolated browser inspection confirms readable memory
+instructions, no horizontal overflow, zero preaccepted checks and progress36%
+(28/78). Screenshots remain under `.codex-work/security-round5/` as
+`human-memory-closeout.png` and `progress-human-closeout.png`; the isolated
+browser was closed without changing the user's stored acceptance state.
+This routine QA/documentation closeout does not change the active plan, sprint
+status, shipped product contract, release readiness or benchmark evidence.
 
 Human fixture interim proof: all ten focused tests passed in run
 `00600edd-c1d6-43f3-810a-1358f6c44ea4` (69.404s), covering startup, explicit
@@ -137,7 +164,7 @@ actual findings; exceed five only when critical findings continue.
 | Broker | 5 / 5 | Earlier #1–4 retained; new service tests pass at 6bdc84195. #5 Astra High completed clean, final evidence cd7457da7. #6 Fable coverage still awaits the user's explicit budget decision |
 | Provenance | 5 / 5 | Earlier #1–3 dispositions retained; bounded segmentation #4 Astra High and #5 Fable High both clean. Final lane e890ae4a9 integrated; no further review |
 | Security UI | 3 / 5 | #1 CLI rejected; #2 Astra High clean; #3 Fable High clean; no further review planned |
-| Memory dispatch and human fixture support | 4 / 5 | #3 Astra's three fixture P2s corrected at673c378b6, Python2/2 and nextest11/11 plus strict pinned entry pass. #4 Fable reports correct/no blockers, one documented P3 false-negative deferred. Merged67fec6a6a; combined candidate pairing running. No fifth review. Existing P3 snapshot-cloning optimization deferred |
+| Memory dispatch and human fixture support | 5 / 5 | #3 Astra's fixture P2s corrected. #4 Fable's owner-exit false-negative remediated after combined14/15 failure. Final combined Rust16/16, Python2/2 and strict pinned entry pass; #5 Astra clean. Integratedf65f348f9. No sixth authorized; existing P3 snapshot-cloning optimization deferred |
 | Local controller (PF-20-S03) | 2 / 5 | Astra #1 P2 blocking-connect issue fixed with nonblocking connect and real backlog regression. Fable #2 confirmed fix and found no code blockers; two P3 documentation/environment notes recorded and addressed. Combined b12e32db3 qualified and sprint archived; no extra review |
 
 Successful Astra runtime: installed app-bundled Codex 0.153.1; 0.145.0 was

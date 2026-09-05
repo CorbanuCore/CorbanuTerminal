@@ -1,11 +1,12 @@
-# Human memory fixture — qualification pending
+# Human memory fixture — ready for assisted testing
 
 This disposable test lets an operator observe actual background-memory requests
 without exposing private history or needing a provider account. Do not mark
-human checks21–23 passed until the operator has performed them. Final runner
-hash and qualification results will be recorded here before handoff.
+human checks21–23 passed until the operator has performed them. Combined
+qualification passed Rust16/16 and Python2/2, all five actual-key scenarios,
+pinned startup/cancel and final Astra review5. [Exact evidence](combined-67fec6a6/README.md).
 
-The product is the immutable RTX candidate `6a6bb029d`, not a newly built Mac
+The product is the immutable RTX candidate `b12e32db3`, not a newly built Mac
 shortcut. The test-only helper seeds synthetic history and runs two loopback
 fake providers. It clears inherited credentials for Corbanu and disables all
 unrelated providers only in the fresh disposable fixture home. “Rented GPU” is
@@ -94,30 +95,31 @@ release acceptance stay with the coordinator.
 
 Use this only when the coordinator arranges human testing. The executable
 interface was rehearsed automatically; independent reviews found no remaining
-landing blocker. A strict pending-exit check can fail closed if normal owner
-termination logs as a job failure; treat that run as not exercised and preserve
-its evidence, never bypass the check. Combined integration and named-human
-acceptance remain pending.
+landing blocker. The original owner-termination false-negative is corrected:
+only the exact expected owner-denial reason is exempt, while mixed/other
+failures, outputs and missed windows still deny. Preserve any failure evidence;
+never bypass a check. Combined integration is complete; named-human acceptance
+remains pending. No fixture is left waiting unattended.
 Run as travis on RTX, from the preserved fixture source worktree. No build lock
 or Cargo invocation is needed. Model metadata is bundled in the pinned runner;
 the source worktree remains the explicitly trusted synthetic working directory.
 
 ```bash
-cd /home/travis/worktrees/security-human-memory-fixture
+cd /home/travis/worktrees/security-human-combined-67fec6a6
 export TMPDIR=$(mktemp -d /home/travis/security-round5/memory-tmp/human.XXXXXX)
-export CARGO_BIN_EXE_codex=/home/travis/security-round5/evidence/integration/6a6bb029d/candidate/codex
-export CORBANU_MEMORY_CANDIDATE_SHA256=90d6a1f7f72c5397ff858583c038b2615c8fb034f57a890d6595d6b98afccd4f
+export CARGO_BIN_EXE_codex=/home/travis/security-round5/evidence/anchor/combined-b12e32d/candidate/codex
+export CORBANU_MEMORY_CANDIDATE_SHA256=c567826ff5f15fccd71f8294c93210a158217a2ba31224c55d7d78269b1d2bea
 export CORBANU_MEMORY_HUMAN_OPT_IN=1 CORBANU_TMUX_REQUIRED=1 RUST_MIN_STACK=8388608
 export CORBANU_MEMORY_HUMAN_CASE=startup
 # Choose a NEW path; do not create it. The helper refuses an existing path.
-export CORBANU_MEMORY_HUMAN_EVIDENCE=/home/travis/security-round5/evidence/human-memory/operator-startup-1
-/home/travis/security-round5/evidence/human-memory/candidate-673c378b6/all \
+export CORBANU_MEMORY_HUMAN_EVIDENCE=/home/travis/security-round5/evidence/human-memory/operator-combined-startup-1
+/home/travis/security-round5/evidence/human-memory/combined-67fec6a6/remediated-2/candidate/all \
   --ignored --exact suite::memory_human_fixture::human_memory_fixture --nocapture
 ```
 
 For the other cases change `CORBANU_MEMORY_HUMAN_CASE` to `provider-switch` or
 `pending-exit` and choose a fresh evidence directory. While the command runs,
 use another SSH terminal to run `bash <evidence>/attach.sh`. The runner hash is
-`dabbac2b5c54386424183f9fce9ee6e7df807f4ecaa3cc2ae3eebb82cb4d7ad1`.
+`dea1c0286c4c1e3cf23f3954a28cb6c9274939dd7d5e4033ca296ceb5e748673`.
 An existing path, missing opt-in or wrong product hash is not a completed check.
 Never replace the pinned candidate path with an arbitrary binary silently.

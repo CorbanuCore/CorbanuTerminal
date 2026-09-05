@@ -452,22 +452,23 @@
 
     <section aria-labelledby="memory-acceptance-title" style="margin-top:42px">
       <h2 id="memory-acceptance-title">Memory-enabled session regression checks</h2>
-      <p><strong>Checks 21–23 are queued, not ready to run yet.</strong> The existing automated fixture cannot pause for human use; an operator fixture is being prepared. Leave these unticked until its tested launch instructions are supplied. It will use the exact RTX candidate above, a disposable memory-enabled home and synthetic history only. Do not change your real settings or import private history. Ordinary chat or saved captures do not prove a human exercised the background job.</p>
+      <p><strong>Checks 21–23 are ready for assisted testing on RTX.</strong> Ask us to start a fresh disposable fixture for each check, then attach using its generated command. The <a href="qa/security-levels/sprints/PF-30-S04/human-fixture/README.md">tested operator guide and pinned launch command</a> use the exact RTX candidate above, synthetic history and two fake local providers. No provider account is needed. Each session allows ten minutes; switch/exit actions have a two-minute window. Leave checks unticked until you perform them. Do not change real settings or import private history.</p>
+      <p>Combined rehearsal passed <strong>16/16 Rust tests and 2/2 Python tests</strong>, including startup, provider replacement, exit/restart, cancellation and timeout. Final Astra review is clean; the memory track used all five reviews. <a href="qa/security-levels/sprints/PF-30-S04/human-fixture/combined-67fec6a6/README.md">Evidence and exact runner identity</a>. Automated rehearsal is not human acceptance.</p>
       <div class="checklist">
         <label class="test"><input type="checkbox" data-check="memory-startup"><span>
           <h3>21. Start with memory enabled</h3>
-          <p>Once the operator fixture is supplied, launch its disposable Permissive session and send the first harmless prompt. That nonempty turn triggers memory startup; only then wait for the prepared background job.</p>
-          <p class="expected">Pass: chat remains responsive and the prepared job completes without authentication, policy-binding or startup errors. Record the job outcome supplied by the fixture, not just the chat answer.</p>
+          <p>Attach to the prepared <code>startup</code> session. Type <code>HUMAN_FOREGROUND synthetic fixture</code>, then press Enter separately. That nonempty turn triggers memory startup. Wait for “A foreground complete” and the coordinator's job counters, then type <code>/exit</code>.</p>
+          <p class="expected">Pass: chat remains responsive, with one canary request and one successful source output. The fixture reports successful completion and cleans up. Record its outcome, not just the chat answer.</p>
         </span></label>
         <label class="test"><input type="checkbox" data-check="memory-provider-switch"><span>
           <h3>22. Change providers during the session</h3>
-          <p>With the prepared memory job running, use <code>/model</code> to choose another already-configured test provider. Send a harmless prompt. Do not add or remove credentials.</p>
-          <p class="expected">Pass: foreground model indicators agree and the prompt reaches the selected provider. Background work either retains its original matching provider/model pair or stops safely; it must not combine one provider's model with another provider's endpoint. Have us confirm the fixture's routing log.</p>
+          <p>In a new <code>provider-switch</code> fixture, send the same synthetic prompt and wait for one pending canary. Within two minutes: <code>/providers</code> → Memory Fixture A → Deactivate → choose Memory Fixture B as replacement. Escape to chat, then <code>/model</code> → Memory Fixture b model → confirm effort. Send the synthetic prompt again, observe “B foreground complete”, then <code>/exit</code>. These changes affect only the disposable fixture.</p>
+          <p class="expected">Pass: the new foreground request reaches endpoint B with model <code>memory-fixture-b</code>; the original memory job is denied for provider change and produces zero successful outputs. Have us confirm the routing log. This does not certify direct custom-provider switching through <code>/model</code>; <a href="qa/security-levels/sprints/PF-30-S04/human-fixture/adjacent-model-picker-findings.md">known picker issues remain separate</a>.</p>
         </span></label>
         <label class="test"><input type="checkbox" data-check="memory-owner-exit"><span>
           <h3>23. Exit while memory work is pending, then restart</h3>
-          <p>Use the prepared delayed-response case. Exit Corbanu normally while extraction is pending, then relaunch the same disposable home using the same candidate.</p>
-          <p class="expected">Pass: exit/restart does not hang or panic, and the abandoned job is not recorded as successfully completed. Have us confirm the fixture's output count. A request already sent before exit cannot be recalled.</p>
+          <p>In a new <code>pending-exit</code> fixture, send the synthetic prompt and wait for one pending canary with zero outputs. Type <code>/exit</code> within two minutes. Ask us to trigger its explicit same-home restart, attach again, run <code>/status</code>, then <code>/exit</code>. Do not send another ordinary prompt after restart.</p>
+          <p class="expected">Pass: exit/restart does not hang or panic. The source retains exactly one canary request and zero successful outputs, with successful fixture completion and cleanup. A missed window is not a pass; a request already sent before exit cannot be recalled.</p>
         </span></label>
       </div>
       <p><strong>Security limit:</strong> automated fake-provider tests prove zero raw-history requests and zero outputs for Moderate/Aggressive. These manual regression checks do not activate protected modes or certify missing isolation/classifier gates.</p>

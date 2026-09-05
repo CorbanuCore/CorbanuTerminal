@@ -1,5 +1,21 @@
 # Security pipeline — account-switch checkpoint and resume
 
+## Human-test checkpoint — 2026-09-05
+
+Final fixture lane523c4c095 is integrated atf65f348f9. Full codex-rs tree matches
+qualified RTXc137c953d; immutable product staysb12e32db3. Rust16/16, Python2/2,
+five actual-key cases and pinned startup/cancel pass. Final Astra5 is clean;
+memory/fixture budget5/5 exhausted. Current human guide21–23 is ready for
+assisted testing, not human-accepted. See the packet README and current fixture
+guide for exact executable paths/hashes; historical candidate/ledger entries
+below are not current instructions.
+
+The monitor pauses after this checkpoint is pushed. Agents are completed,
+branches preserved, no fixture/reviewer is left running. Resume on user request
+with the existing allocations and review ledgers. Main merge, broker review6
+exception, and privileged native installation remain unapproved; no other
+dependency-ready implementation was manufactured. PF35 stays external.
+
 ## Resumed by user
 
 The user explicitly requested resumption after the account switch. The five-minute

@@ -2,6 +2,13 @@
 
 ## Current answer
 
+The operator fixture is now implemented, reviewed and qualified against the
+combined RTX product `b12e32db3`. Use the [current operator guide](human-fixture/README.md)
+and its pinned runner, not the historical commands below. Human checks21–23
+are ready for assisted testing but are not marked accepted.
+
+## Historical preparation record — superseded by the qualified operator guide
+
 **The qualified binary is ready; a paused operator fixture is not yet implemented.**
 Do not tick checks 21–23 by launching ordinary chat or replaying saved captures.
 This preparation did not build, edit product/repository source, start services,
