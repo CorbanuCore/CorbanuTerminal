@@ -928,6 +928,9 @@ impl ModelClient {
             agent_identity_policy: self.agent_identity_policy,
             prompt_cache_key_override: self.prompt_cache_key_override.clone(),
             http_client_factory: self.http_client_factory.clone(),
+            ingress_level: self.ingress_level,
+            ingress_policy: self.ingress_policy.clone(),
+            ingress_items: Arc::clone(&self.ingress_items),
         }
     }
 
