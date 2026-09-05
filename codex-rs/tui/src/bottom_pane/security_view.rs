@@ -36,7 +36,10 @@ impl SecurityView {
     pub(crate) fn new(requested: Option<SecurityLevel>, keymap: ListKeymap) -> Self {
         Self {
             requested,
-            selected: PROFILES.iter().position(|level| Some(*level) == requested).unwrap_or(0),
+            selected: PROFILES
+                .iter()
+                .position(|level| Some(*level) == requested)
+                .unwrap_or(0),
             keymap,
             cancelled: false,
             inspected: false,
@@ -51,8 +54,11 @@ impl SecurityView {
             "Protected modes are blocked; required controls are not qualified.".to_string(),
         ];
         for paragraph in paragraphs {
-            lines.extend(textwrap::wrap(&paragraph, usize::from(width.max(1)))
-                .into_iter().map(|line| Line::from(line.into_owned())));
+            lines.extend(
+                textwrap::wrap(&paragraph, usize::from(width.max(1)))
+                    .into_iter()
+                    .map(|line| Line::from(line.into_owned())),
+            );
         }
         lines.push(Line::default());
         for (index, level) in PROFILES.iter().enumerate() {
@@ -64,20 +70,40 @@ impl SecurityView {
             });
         }
         lines.push(Line::default());
-        lines.extend(textwrap::wrap(profile_summary(PROFILES[self.selected]), usize::from(width.max(1)))
-            .into_iter().map(|line| Line::from(line.into_owned())));
+        lines.extend(
+            textwrap::wrap(
+                profile_summary(PROFILES[self.selected]),
+                usize::from(width.max(1)),
+            )
+            .into_iter()
+            .map(|line| Line::from(line.into_owned())),
+        );
         if self.inspected {
-            lines.extend(textwrap::wrap("Nothing changed. Applying profiles is not available in this build.", usize::from(width.max(1)))
-                .into_iter().map(|line| Line::from(line.into_owned()).cyan()));
+            lines.extend(
+                textwrap::wrap(
+                    "Nothing changed. Applying profiles is not available in this build.",
+                    usize::from(width.max(1)),
+                )
+                .into_iter()
+                .map(|line| Line::from(line.into_owned()).cyan()),
+            );
         }
         lines
     }
 
     fn footer(&self) -> String {
         let label = |bindings: &[key_hint::KeyBinding]| {
-            bindings.first().map(|key| key.display_label()).unwrap_or_else(|| "unbound".into())
+            bindings
+                .first()
+                .map(super::super::key_hint::KeyBinding::display_label)
+                .unwrap_or_else(|| "unbound".into())
         };
-        format!("{}/{} explore · {} inspect · esc close", label(&self.keymap.move_up), label(&self.keymap.move_down), label(&self.keymap.accept))
+        format!(
+            "{}/{} explore · {} inspect · esc close",
+            label(&self.keymap.move_up),
+            label(&self.keymap.move_down),
+            label(&self.keymap.accept)
+        )
     }
 }
 
@@ -96,7 +122,9 @@ impl BottomPaneView for SecurityView {
         }
     }
 
-    fn is_complete(&self) -> bool { self.cancelled }
+    fn is_complete(&self) -> bool {
+        self.cancelled
+    }
 
     fn completion(&self) -> Option<ViewCompletion> {
         self.cancelled.then_some(ViewCompletion::Cancelled)
@@ -107,25 +135,39 @@ impl BottomPaneView for SecurityView {
         CancellationEvent::Handled
     }
 
-    fn prefer_esc_to_handle_key_event(&self) -> bool { true }
+    fn prefer_esc_to_handle_key_event(&self) -> bool {
+        true
+    }
 }
 
 impl Renderable for SecurityView {
     fn desired_height(&self, width: u16) -> u16 {
-        self.lines(width).len() as u16 + textwrap::wrap(&self.footer(), usize::from(width.max(1))).len() as u16 + 1
+        self.lines(width).len() as u16
+            + textwrap::wrap(&self.footer(), usize::from(width.max(1))).len() as u16
+            + 1
     }
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
         Clear.render(area, buf);
         let footer = self.footer();
         let footer_lines: Vec<Line> = textwrap::wrap(&footer, usize::from(area.width.max(1)))
-            .into_iter().map(|line| Line::from(line.into_owned()).dim()).collect();
+            .into_iter()
+            .map(|line| Line::from(line.into_owned()).dim())
+            .collect();
         let footer_height = (footer_lines.len() as u16).min(area.height);
-        let body = Rect { height: area.height.saturating_sub(footer_height), ..area };
+        let body = Rect {
+            height: area.height.saturating_sub(footer_height),
+            ..area
+        };
         Paragraph::new(self.lines(area.width)).render(body, buf);
-        Paragraph::new(footer_lines).render(Rect {
-            y: area.bottom().saturating_sub(footer_height), height: footer_height, ..area
-        }, buf);
+        Paragraph::new(footer_lines).render(
+            Rect {
+                y: area.bottom().saturating_sub(footer_height),
+                height: footer_height,
+                ..area
+            },
+            buf,
+        );
     }
 }
 
