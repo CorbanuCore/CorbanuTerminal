@@ -6,6 +6,8 @@ mod focus_palette;
 #[cfg(unix)]
 mod memory_stage_one_policy;
 #[cfg(unix)]
+mod memory_human_fixture;
+#[cfg(unix)]
 mod multi_provider_onboarding;
 #[cfg(unix)]
 mod output_text_stream;
