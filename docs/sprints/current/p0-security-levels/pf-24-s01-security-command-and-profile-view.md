@@ -62,6 +62,8 @@ updated: 2026-09-04
 
 ## Verification
 
+- [ ] Complete coordinator-numbered Astra High and Fable 5.1 High independent reviews, with verified disposition and any required affected reruns.
+- [ ] Integration owner repeats the applicable standalone gates on the combined three-lane tree before completion/archive.
 - [x] Fix: `cd codex-rs && just fix -p codex-tui`; final source passed on RTX.
 - [x] Format: complete `just fmt` passed after coordinator supplied uv 0.11.3; no file changes and final tested source remains exact.
 - [x] Final-tree focused TUI test: 235/235 security-view/status/slash-command cases passed; exact filter and run ID in lane evidence.
