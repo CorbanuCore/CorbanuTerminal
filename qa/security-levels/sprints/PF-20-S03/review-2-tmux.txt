@@ -1,0 +1,48 @@
+review still running: codex elapsed=60s pid=758 cpu=1.0s/60s(2%) rss=145M state=S
+review still running: codex elapsed=120s pid=758 cpu=0.4s/60s(1%) rss=146M state=S
+review still running: codex elapsed=180s pid=758 cpu=0.5s/60s(1%) rss=146M state=S
+review still running: codex elapsed=240s pid=758 cpu=0.7s/60s(1%) rss=148M state=S
+review still running: codex elapsed=300s pid=758 cpu=0.1s/60s(0%) rss=148M state=S
+review still running: codex elapsed=360s pid=758 cpu=0.3s/60s(0%) rss=149M state=S
+review still running: codex elapsed=420s pid=758 cpu=0.4s/60s(1%) rss=149M state=S
+autoreview target: branch
+branch: feat/security-local-anchor
+engine: codex
+model: claude-fable-5-1-plan
+thinking: high
+tools: on
+web_search: on
+ref: 601602fa7e53fcb5b41753a0b3607addd45d4415
+bundle: 182060 chars
+autoreview findings: 2
+[P3] Round-5 ledger and progress page under-report PF-20-S03 review usage and state
+qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md:86
+`qa/security-levels/sprints/PF-20-S03/reviews.md` and `verification.md` record Astra review 1 (non-clean, one P2, remediated in `8d6967179`,
+ ledger 1/5), but the coordinator ledger table still says `Local controller (new PF-20-S03) | 0 / 5 | ... consolidate source/tests before re
+questing Astra #1`, and `securityProgress.html` (lines 373 and 500) still states "implementation and qualification pending" and "new PF20 tr
+ack 0/5". A non-clean review and a completed implementation are currently misrepresented as not-yet-started in the evidence ledger that rele
+ase/coordination reads. Update the table row and the two HTML sentences to match `reviews.md` (1/5 used, Astra P2 found and fixed, implement
+ation at `8d6967179`, Fable review 2 pending).
+
+[P3] Leaf tests hard-fail (RootError::Unsupported) when TMPDIR is tmpfs/btrfs instead of skipping
+codex-rs/protected-state/src/store_tests.rs:34
+`Directory::open` deliberately admits only ext-family (0xef53) and XFS (0x58465342). Every store/native test fixture builds its roots under
+`tempfile::tempdir()`, so on hosts whose `$TMPDIR`/`/tmp` is tmpfs (Fedora, Arch, many containers) or btrfs, all 16+ leaf tests fail with `U
+nsupported` before exercising anything, rather than being reported as skipped/unsupported. The RTX run only passed because a custom ext4 `TM
+PDIR` was exported. Either have the fixture probe the filesystem type and skip (with a visible message) when unsupported, or document the re
+quired `TMPDIR` in the crate/justfile so `just test -p codex-protected-state` is not a silent environment-dependent failure.
+
+overall: patch is correct (0.82)
+Reviewed the full base→HEAD diff read-only (no tests, no nested reviewers). The leaf crate honors the stated invariants: one-shot O_EXCL enr
+ollment fence with authenticated Genesis and complete owner/key/namespace/installation binding in the HMAC'd head; exact full-value CAS with
+ strict +1 successor and non-decreasing policy/run generations (matching PF-41 chain rules and Core's `validate_successor`); lifetime flock
++ process mutex; openat2 no-follow/no-magiclink/beneath/no-xdev descriptor-relative IO with private-mode, single-link, regular-file and 16 K
+iB bounds; file fsync → atomic renameat → directory fsync with pending/torn/permission-drift/ambiguous outcomes latching unavailable and nev
+er falling back. Native transport requires a live `Child`, pidfd liveness, SO_PEERCRED PID match (socketpair negative control), fresh per-ch
+annel key, direction+sequence HMAC, absolute frame deadlines, nonblocking fail-closed connect (Astra P2 remediation verified in code and bac
+klog test), and consumes the capability on any error; uncertain compare transport is mapped to Ambiguous→PF-41 Timeout, definite Conflict/In
+valid stay distinct. Production factories are euid-0/fixed-path only with root-owned non-writable ancestry; fixture constructors remain crat
+e-private. The Core adapter is a pure field copy plus error mapping and does not alter anchor-first ordering; PF-41 root-last is consumed un
+changed. Only non-blocking findings: stale review/progress ledgers and tmpfs-fragile leaf tests.
+
+Review 2 completed: exit 1. Press Enter to close this private fixture.

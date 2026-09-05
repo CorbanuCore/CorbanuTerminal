@@ -118,8 +118,11 @@ eleven final captures are committed under `tmux/`. See `verification.md` for
 commands, cache-path correction and evidence boundaries.
 Integration seam is accepted by the coordinator as a staged root-anchor design;
 Astra review1 returned one verified in-scope P2, now corrected and tested; it was
-not clean. Fable review2 is authorized next. Exact result/disposition is retained
-in `reviews.md`. Review budget: new PF20 track1/5; frozen PF30S01 remains5/5 and is not
+not clean. Fable review2 reports patch correct/no code blockers, with two
+nonblocking P3 notes (shared progress ledger refresh and clearer test TMPDIR
+documentation). Its helper exited1, not clean. The crate README addresses the
+TMPDIR note; root owns the final shared ledger update. Exact results/dispositions
+are retained in `reviews.md`. Review budget: new PF20 track2/5; frozen PF30S01 remains5/5 and is not
 reviewed again. See `pf27-consumer-handoff.md`; staged root-anchor composition
 supersedes the historical nonlogin-controller proposal only for this design.
 Broker confirms it is consumable with distinct authorized child roles. Actual

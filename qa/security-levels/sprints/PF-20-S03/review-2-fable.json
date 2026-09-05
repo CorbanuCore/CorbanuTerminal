@@ -1,0 +1,29 @@
+{
+  "findings": [
+    {
+      "title": "Round-5 ledger and progress page under-report PF-20-S03 review usage and state",
+      "body": "`qa/security-levels/sprints/PF-20-S03/reviews.md` and `verification.md` record Astra review 1 (non-clean, one P2, remediated in `8d6967179`, ledger 1/5), but the coordinator ledger table still says `Local controller (new PF-20-S03) | 0 / 5 | ... consolidate source/tests before requesting Astra #1`, and `securityProgress.html` (lines 373 and 500) still states \"implementation and qualification pending\" and \"new PF20 track 0/5\". A non-clean review and a completed implementation are currently misrepresented as not-yet-started in the evidence ledger that release/coordination reads. Update the table row and the two HTML sentences to match `reviews.md` (1/5 used, Astra P2 found and fixed, implementation at `8d6967179`, Fable review 2 pending).",
+      "priority": "P3",
+      "confidence": 0.85,
+      "category": "maintainability",
+      "code_location": {
+        "file_path": "qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md",
+        "line": 86
+      }
+    },
+    {
+      "title": "Leaf tests hard-fail (RootError::Unsupported) when TMPDIR is tmpfs/btrfs instead of skipping",
+      "body": "`Directory::open` deliberately admits only ext-family (0xef53) and XFS (0x58465342). Every store/native test fixture builds its roots under `tempfile::tempdir()`, so on hosts whose `$TMPDIR`/`/tmp` is tmpfs (Fedora, Arch, many containers) or btrfs, all 16+ leaf tests fail with `Unsupported` before exercising anything, rather than being reported as skipped/unsupported. The RTX run only passed because a custom ext4 `TMPDIR` was exported. Either have the fixture probe the filesystem type and skip (with a visible message) when unsupported, or document the required `TMPDIR` in the crate/justfile so `just test -p codex-protected-state` is not a silent environment-dependent failure.",
+      "priority": "P3",
+      "confidence": 0.55,
+      "category": "test_gap",
+      "code_location": {
+        "file_path": "codex-rs/protected-state/src/store_tests.rs",
+        "line": 34
+      }
+    }
+  ],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "Reviewed the full base\u2192HEAD diff read-only (no tests, no nested reviewers). The leaf crate honors the stated invariants: one-shot O_EXCL enrollment fence with authenticated Genesis and complete owner/key/namespace/installation binding in the HMAC'd head; exact full-value CAS with strict +1 successor and non-decreasing policy/run generations (matching PF-41 chain rules and Core's `validate_successor`); lifetime flock + process mutex; openat2 no-follow/no-magiclink/beneath/no-xdev descriptor-relative IO with private-mode, single-link, regular-file and 16 KiB bounds; file fsync \u2192 atomic renameat \u2192 directory fsync with pending/torn/permission-drift/ambiguous outcomes latching unavailable and never falling back. Native transport requires a live `Child`, pidfd liveness, SO_PEERCRED PID match (socketpair negative control), fresh per-channel key, direction+sequence HMAC, absolute frame deadlines, nonblocking fail-closed connect (Astra P2 remediation verified in code and backlog test), and consumes the capability on any error; uncertain compare transport is mapped to Ambiguous\u2192PF-41 Timeout, definite Conflict/Invalid stay distinct. Production factories are euid-0/fixed-path only with root-owned non-writable ancestry; fixture constructors remain crate-private. The Core adapter is a pure field copy plus error mapping and does not alter anchor-first ordering; PF-41 root-last is consumed unchanged. Only non-blocking findings: stale review/progress ledgers and tmpfs-fragile leaf tests.",
+  "overall_confidence": 0.82
+}

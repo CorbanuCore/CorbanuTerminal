@@ -95,8 +95,11 @@ exact privileged manifest. No same-process dual-domain requirement exists;
 no speculative endpoints were added. Idle ten-second expiry requires explicit
 rebootstrap and never retries an ambiguous CAS. Astra High review1 found one
 verified P2, corrected and tested in `8d6967179`; it was not a clean result.
-Fable5.1 High review2 is authorized following this scoped remediation but has not
-yet been invoked. Current ledger1/5; see `reviews.md` and retained structured result.
+Fable5.1 High review2 then reported patch correct/no code blockers, with two
+nonblocking P3 notes and helper exit1. The test TMPDIR requirement is now also
+documented in the crate README. Root owns the shared ledger/progress refresh.
+Current ledger2/5; see `reviews.md`, exact structured results and TMUX exit pane.
+No new source change or extra review followed documentation-only dispositions.
 Coordinator combined-tree qualification,
 eventual privileged two-principal qualification and release/human acceptance
 remain separate. Sprint stays in_progress.
