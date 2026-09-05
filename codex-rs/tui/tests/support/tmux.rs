@@ -41,6 +41,7 @@ impl TerminalSize {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TmuxKey {
     Down,
+    Right,
     Enter,
     Escape,
 }
@@ -49,6 +50,7 @@ impl TmuxKey {
     fn name(self) -> &'static str {
         match self {
             Self::Down => "Down",
+            Self::Right => "Right",
             Self::Enter => "Enter",
             Self::Escape => "Escape",
         }

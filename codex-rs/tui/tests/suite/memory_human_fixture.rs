@@ -120,7 +120,9 @@ async fn tmux_memory_human_fixture_rehearsal() -> Result<()> {
             limit,
             Duration::from_secs(12),
         )
-        .await?;
+        .await;
+        save_rehearsal_artifacts(root.path(), case)?;
+        let result = result?;
         let expected = match case {
             Case::Cancel => Outcome::Cancelled,
             Case::Timeout => Outcome::TimedOut,
@@ -136,16 +138,6 @@ async fn tmux_memory_human_fixture_rehearsal() -> Result<()> {
             !Path::new(ready["socket_dir"].as_str().unwrap()).exists(),
             "private TMUX leaked"
         );
-        if let Some(evidence) = std::env::var_os("CORBANU_MEMORY_REHEARSAL_EVIDENCE") {
-            let target = std::path::PathBuf::from(evidence).join(format!("{case:?}"));
-            fs::create_dir_all(&target)?;
-            for entry in fs::read_dir(root.path())? {
-                let entry = entry?;
-                if entry.file_type()?.is_file() {
-                    fs::copy(entry.path(), target.join(entry.file_name()))?;
-                }
-            }
-        }
     }
     Ok(())
 }
@@ -163,8 +155,8 @@ async fn run_case(
     let a = fake_provider("A", case, delay).await;
     let b = fake_provider("B", case, delay).await;
     let config = format!(
-        r#"model = "fixture-model"
-model_provider = "memory-a"
+        r#"model = "gpt-5.6-terra"
+model_provider = "openai"
 cli_auth_credentials_store = "file"
 check_for_update_on_startup = false
 suppress_unstable_features_warning = true
@@ -175,22 +167,22 @@ memories = true
 [memories]
 generate_memories = true
 min_rollout_idle_hours = 0
-extract_model = "fixture-model"
-consolidation_model = "fixture-model"
+extract_model = "gpt-5.6-terra"
+consolidation_model = "gpt-5.6-terra"
 [security]
 version = 1
 level = "permissive"
-[model_providers.memory-a]
+[model_providers.openai]
 name = "Memory Fixture A"
 base_url = "{}/v1"
-env_key = "MEMORY_FIXTURE_A_KEY"
+env_key = "OPENAI_API_KEY"
 wire_api = "responses"
 request_max_retries = 0
 stream_max_retries = 0
-[model_providers.memory-b]
+[model_providers.zai]
 name = "Memory Fixture B"
 base_url = "{}/v1"
-env_key = "MEMORY_FIXTURE_B_KEY"
+env_key = "ZAI_API_KEY"
 wire_api = "responses"
 request_max_retries = 0
 stream_max_retries = 0
@@ -213,7 +205,7 @@ animations = false
         codex_state::SqliteConfig::new_for_testing(
             codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path())?,
         ),
-        "memory-a".into(),
+        "openai".into(),
     )
     .await?;
     db.mark_backfill_complete(None).await?;
@@ -237,7 +229,7 @@ animations = false
     let mut metadata =
         codex_state::ThreadMetadataBuilder::new(source, rollout, timestamp, SessionSource::Cli);
     metadata.cwd = repo.clone();
-    let mut metadata = metadata.build("memory-a");
+    let mut metadata = metadata.build("openai");
     metadata.preview = Some(CANARY.into());
     metadata.first_user_message = Some(CANARY.into());
     db.upsert_thread(&metadata).await?;
@@ -255,8 +247,8 @@ animations = false
                 .arg(format!("CODEX_HOME={}", home.path().display()))
                 .arg(format!("CORBANU_HOME={}", home.path().display()))
                 .arg("CORBANU_TEST_NO_NATIVE_KEYRING=1")
-                .arg("MEMORY_FIXTURE_A_KEY=synthetic-a")
-                .arg("MEMORY_FIXTURE_B_KEY=synthetic-b")
+                .arg("OPENAI_API_KEY=synthetic-a")
+                .arg("ZAI_API_KEY=synthetic-b")
                 .arg("RUST_LOG=trace")
                 .arg(&binary)
                 .arg("--no-alt-screen")
@@ -294,7 +286,7 @@ animations = false
         }
         let denied = log.contains("stage-one memory provider changed");
         let foreground_b = routes.iter().any(|r| {
-            r["endpoint"] == "B" && r["kind"] == "foreground" && r["model"] == "fixture-model"
+            r["endpoint"] == "B" && r["kind"] == "foreground" && r["model"] == "glm-5.3"
         });
         write_json(
             root,
@@ -491,6 +483,13 @@ fn submit(pane: &TmuxPane<'_>, text: &str, keys: &mut Vec<String>) -> Result<()>
 fn switch_provider(pane: &TmuxPane<'_>, keys: &mut Vec<String>) -> Result<()> {
     submit(pane, "/model", keys)?;
     pane.wait_stable_contains("Select Model", READY)?;
+    for _ in 0..16 {
+        if pane.capture_viewport()?.contains("[Z.AI]") { break; }
+        pane.send_key(TmuxKey::Right)?;
+        keys.push("key: Right".into());
+        std::thread::sleep(Duration::from_millis(150));
+    }
+    pane.wait_stable_contains("[Z.AI]", READY)?;
     for _ in 0..64 {
         let capture = pane.capture_viewport()?;
         let selected = capture
@@ -498,9 +497,14 @@ fn switch_provider(pane: &TmuxPane<'_>, keys: &mut Vec<String>) -> Result<()> {
             .find(|line| line.trim().starts_with('>') || line.trim().starts_with('›'))
             .unwrap_or("")
             .to_owned();
-        if selected.contains("Memory Fixture B") {
+        if selected.contains("GLM 5.3") && !selected.contains("Flash") {
             pane.send_key(TmuxKey::Enter)?;
-            keys.push("key: Enter (Memory Fixture B)".into());
+            keys.push("key: Enter (GLM 5.3 / fake Z.ai)".into());
+            let selection = pane.wait_stable_until("model selected", READY, |capture| !capture.contains("Select Model"))?;
+            if selection.contains("Select Reasoning") {
+                pane.send_key(TmuxKey::Enter)?;
+                keys.push("key: Enter (default reasoning)".into());
+            }
             return Ok(());
         }
         pane.send_key(TmuxKey::Down)?;
@@ -510,4 +514,16 @@ fn switch_provider(pane: &TmuxPane<'_>, keys: &mut Vec<String>) -> Result<()> {
         })?;
     }
     anyhow::bail!("fake provider B absent from model picker")
+}
+
+fn save_rehearsal_artifacts(root: &Path, case: Case) -> Result<()> {
+    if let Some(evidence) = std::env::var_os("CORBANU_MEMORY_REHEARSAL_EVIDENCE") {
+        let target = std::path::PathBuf::from(evidence).join(format!("{case:?}"));
+        fs::create_dir_all(&target)?;
+        for entry in fs::read_dir(root)? {
+            let entry = entry?;
+            if entry.file_type()?.is_file() { fs::copy(entry.path(), target.join(entry.file_name()))?; }
+        }
+    }
+    Ok(())
 }
