@@ -123,10 +123,9 @@ fn normalize(raw: &str) -> String {
     normalized
 }
 
-/// Final native request gate shared by every provider wire adapter. Configured
-/// intent is only a restrictive floor, not proof that protected mode is ready.
-/// There is no native admitted-context carrier yet: raw/legacy history, forged
-/// wrapper text and new provider/tool variants must all fail before networking.
+/// Alternate native APIs (memory/realtime) have no admitted-context carrier yet.
+/// Configured intent is only a restrictive floor, not proof of readiness: these
+/// routes must fail before networking, never bypass the three wire adapters.
 pub(crate) fn check_native_request(
     level: SecurityLevel,
     _items: &[ResponseItem],

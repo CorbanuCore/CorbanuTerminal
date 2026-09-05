@@ -34,8 +34,8 @@ impl std::fmt::Debug for NativeIngress {
 impl NativeIngress {
     /// Invoked by the host tool dispatcher, never by source labels in output.
     pub(crate) fn register_call(&mut self, call_id: &str, kind: SourceKind) {
-        if self.calls.len() >= MAX_ADMITTED_ITEMS { self.unavailable = true; return; }
         let key = ContentDigest::of(call_id.as_bytes());
+        if self.calls.len() >= MAX_ADMITTED_ITEMS && !self.calls.contains_key(&key) { self.unavailable = true; return; }
         match self.calls.get(&key) {
             // The MCP adapter refines the generic router's observed tool route.
             Some(SourceKind::Tool) if kind == SourceKind::Mcp => { self.calls.insert(key, kind); }
@@ -49,10 +49,10 @@ impl NativeIngress {
     /// No body or role label can supply an admission capability here.
     pub(crate) fn observe(&mut self, items: &[ResponseItem], retrieved_at_unix_ms: u64) {
         for item in items {
-            if self.pending.len() + self.admitted.len() >= MAX_ADMITTED_ITEMS { self.unavailable = true; return; }
             let Ok(bytes) = serde_json::to_vec(item) else { self.unavailable = true; return; };
             let key = ContentDigest::of(&bytes);
             if self.pending.contains_key(&key) || self.admitted.contains_key(&key) { continue; }
+            if self.pending.len() + self.admitted.len() >= MAX_ADMITTED_ITEMS { self.unavailable = true; return; }
             let route = match item {
                 ResponseItem::Message { .. } => "transcript",
                 ResponseItem::AgentMessage { .. } => "child",
