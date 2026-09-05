@@ -282,3 +282,36 @@ fn pf_27_s01_audit_all_terminal_outcomes_are_durable() {
         );
     }
 }
+
+#[test]
+fn pf_27_s01_audit_rejects_unsettleable_or_mismatched_authority() {
+    for invalid in 0..3 {
+        let fixture = Fixture::new();
+        let audit = fixture.adapter(/*recover*/ true);
+        let mut bound = binding();
+        match invalid {
+            0 => {
+                bound.authority = AuthorityIdentity::Mandate {
+                    mandate_id: text("mandate-1"),
+                }
+            }
+            1 => {
+                bound.authority = AuthorityIdentity::Grant {
+                    grant_id: text("other-grant"),
+                }
+            }
+            2 => bound.request.context.grant_id = None,
+            _ => unreachable!(),
+        }
+        assert!(
+            JournalBrokerAudit::new(
+                audit.journal.into_inner().unwrap(),
+                bound,
+                audit.context,
+                FixedClock,
+            )
+            .is_err()
+        );
+        assert_eq!(*fixture.root.checkpoint.lock().unwrap(), None);
+    }
+}

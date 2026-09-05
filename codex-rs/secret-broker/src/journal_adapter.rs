@@ -72,6 +72,14 @@ impl<C: BrokerJournalClock> JournalBrokerAudit<C> {
     ) -> Result<Self, BrokerAuditError> {
         binding.binding.validate().map_err(unavailable)?;
         binding.request.validate().map_err(unavailable)?;
+        // This receipt-only adapter cannot settle a mandate: PF-41 requires
+        // its validated ActionReceipt, which this bounded operation lacks.
+        let AuthorityIdentity::Grant { grant_id } = &binding.authority else {
+            return Err(BrokerAuditError::Unavailable);
+        };
+        if binding.request.context.grant_id.as_ref() != Some(grant_id) {
+            return Err(BrokerAuditError::Unavailable);
+        }
         if context.run_generation != binding.binding.run_generation
             || binding.request.context.session_id.as_str() != binding.binding.session_id
             || binding.request.context.task_id.as_str() != binding.binding.task_id

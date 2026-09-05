@@ -51,6 +51,64 @@ impl LinuxBrokerHandler for Handler {
 }
 
 #[test]
+fn pf_27_s01_native_idle_session_survives_partial_frame_deadline() {
+    let (client, server) = UnixStream::pair().unwrap();
+    let peer = observed_peer(&client).unwrap();
+    let channel = LinuxBrokerChannel::new(client, &peer).unwrap();
+    let closed = Arc::new(AtomicUsize::new(0));
+    let handler = Handler(closed.clone());
+    let server = thread::spawn(move || serve_connection(server, &peer, &handler));
+    assert!(channel.dispatch(&frame()).is_ok());
+    thread::sleep(IO_DEADLINE + Duration::from_millis(250));
+    assert!(channel.dispatch(&frame()).is_ok());
+    channel.close().unwrap();
+    assert!(server.join().unwrap().is_err());
+    assert_eq!(closed.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn pf_27_s01_native_receipt_wait_does_not_timeout_healthy_backend() {
+    struct SlowHandler;
+    impl LinuxBrokerHandler for SlowHandler {
+        fn dispatch(
+            &self,
+            _: &ObservedPeer,
+            _: &SignedBrokerFrame,
+        ) -> Result<TypedOperationReceipt, BrokerDispatchError> {
+            thread::sleep(IO_DEADLINE + Duration::from_millis(250));
+            Ok(TypedOperationReceipt {
+                response_status: 200,
+                uploaded_bytes: 11,
+                downloaded_bytes: 22,
+            })
+        }
+        fn close(&self) {}
+    }
+    let (client, server) = UnixStream::pair().unwrap();
+    let peer = observed_peer(&client).unwrap();
+    let channel = LinuxBrokerChannel::new(client, &peer).unwrap();
+    let server = thread::spawn(move || serve_connection(server, &peer, &SlowHandler));
+    assert!(channel.dispatch(&frame()).is_ok());
+    channel.close().unwrap();
+    assert!(server.join().unwrap().is_err());
+}
+
+#[test]
+fn pf_27_s01_native_partial_prefix_still_has_bounded_deadline() {
+    let (mut client, server) = UnixStream::pair().unwrap();
+    let peer = observed_peer(&client).unwrap();
+    let closed = Arc::new(AtomicUsize::new(0));
+    let handler = Handler(closed.clone());
+    let server = thread::spawn(move || serve_connection(server, &peer, &handler));
+    client.write_all(&[0]).unwrap();
+    assert_eq!(
+        server.join().unwrap(),
+        Err(BrokerDispatchError::SessionUnavailable)
+    );
+    assert_eq!(closed.load(Ordering::SeqCst), 1);
+}
+
+#[test]
 fn pf_27_s01_native_close_interrupts_inflight_read_and_queued_dispatch() {
     let (client, mut server) = UnixStream::pair().unwrap();
     let peer = observed_peer(&client).unwrap();

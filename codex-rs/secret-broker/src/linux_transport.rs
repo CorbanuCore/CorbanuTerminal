@@ -7,6 +7,9 @@ use crate::ObservedPeer;
 use crate::SignedBrokerFrame;
 use crate::TypedOperationReceipt;
 use crate::ipc::MAX_FRAME_BYTES;
+use nix::poll::PollFd;
+use nix::poll::PollFlags;
+use nix::poll::poll;
 use nix::sys::socket::getsockopt;
 use nix::sys::socket::sockopt::PeerCredentials;
 use serde::Deserialize;
@@ -14,12 +17,14 @@ use serde::Serialize;
 use std::io::Read;
 use std::io::Write;
 use std::net::Shutdown;
+use std::os::fd::AsFd;
 use std::os::unix::net::UnixStream;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
+use std::time::Instant;
 
 const MAX_RECEIPT_BYTES: usize = 512;
 const IO_DEADLINE: Duration = Duration::from_secs(5);
@@ -34,7 +39,7 @@ pub fn observed_peer(stream: &UnixStream) -> Result<ObservedPeer, BrokerDispatch
 
 /// The service adapter owns the registered session and must cancel it on any
 /// channel exit. `dispatch` must apply the runtime's generation/revocation fence.
-pub trait LinuxBrokerHandler {
+pub trait LinuxBrokerHandler: Sync {
     fn dispatch(
         &self,
         peer: &ObservedPeer,
@@ -75,10 +80,20 @@ impl<B: crate::TypedCredentialBackend, A: crate::DurableBrokerAudit> LinuxBroker
     }
 }
 
-struct CloseGuard<'a, H: LinuxBrokerHandler>(&'a H);
+struct CloseGuard<'a, H: LinuxBrokerHandler> {
+    handler: &'a H,
+    closed: AtomicBool,
+}
+impl<H: LinuxBrokerHandler> CloseGuard<'_, H> {
+    fn close(&self) {
+        if !self.closed.swap(true, Ordering::AcqRel) {
+            self.handler.close();
+        }
+    }
+}
 impl<H: LinuxBrokerHandler> Drop for CloseGuard<'_, H> {
     fn drop(&mut self) {
-        self.0.close();
+        self.close();
     }
 }
 
@@ -89,17 +104,55 @@ pub fn serve_connection<H: LinuxBrokerHandler>(
     expected_peer: &ObservedPeer,
     handler: &H,
 ) -> Result<(), BrokerDispatchError> {
-    let _guard = CloseGuard(handler);
+    let guard = CloseGuard {
+        handler,
+        closed: AtomicBool::new(false),
+    };
     configure(&stream)?;
     let peer = observed_peer(&stream)?;
     if &peer != expected_peer {
         return Err(BrokerDispatchError::WrongPeer);
     }
+    let monitor = stream.try_clone().map_err(unavailable)?;
+    std::thread::scope(|scope| {
+        std::thread::Builder::new()
+            .name("broker-disconnect".into())
+            .spawn_scoped(scope, || watch_disconnect(&monitor, &guard))
+            .map_err(unavailable)?;
+        let result = serve_frames(&mut stream, &peer, handler);
+        guard.close();
+        result
+    })
+}
+
+fn serve_frames<H: LinuxBrokerHandler>(
+    stream: &mut UnixStream,
+    peer: &ObservedPeer,
+    handler: &H,
+) -> Result<(), BrokerDispatchError> {
     loop {
-        let frame = read_frame(&mut stream)?;
-        match handler.dispatch(&peer, &frame) {
-            Ok(receipt) => write_receipt(&mut stream, &WireReceipt::from(receipt))?,
+        let frame = read_frame(stream)?;
+        match handler.dispatch(peer, &frame) {
+            Ok(receipt) => write_receipt(stream, &WireReceipt::from(receipt))?,
             Err(error) => return Err(error),
+        }
+    }
+}
+
+fn watch_disconnect<H: LinuxBrokerHandler>(stream: &UnixStream, guard: &CloseGuard<'_, H>) {
+    // Nix 0.30 does not name Linux POLLRDHUP. Retain the platform bit when
+    // requesting half-close notification; an unknown returned flag is treated
+    // as closure, never healthy. Do not consume queued authenticated frames.
+    let events = PollFlags::from_bits_retain(nix::libc::POLLRDHUP);
+    let mut fds = [PollFd::new(stream.as_fd(), events)];
+    while !guard.closed.load(Ordering::Acquire) {
+        match poll(&mut fds, 100_u16) {
+            Ok(0) => {}
+            Ok(_) | Err(_) => {
+                guard.close();
+                let _ = stream.shutdown(Shutdown::Both);
+                return;
+            }
         }
     }
 }
@@ -191,8 +244,7 @@ impl From<TypedOperationReceipt> for WireReceipt {
 }
 
 fn read_frame(stream: &mut UnixStream) -> Result<SignedBrokerFrame, BrokerDispatchError> {
-    let mut prefix = [0; 4];
-    stream.read_exact(&mut prefix).map_err(unavailable)?;
+    let (prefix, deadline) = read_prefix(stream)?;
     let length = usize::try_from(u32::from_be_bytes(prefix)).map_err(unavailable)?;
     // Frame includes a four-byte prefix and 32-byte authenticator. Check before allocation.
     if length > MAX_FRAME_BYTES - 36 {
@@ -203,23 +255,19 @@ fn read_frame(stream: &mut UnixStream) -> Result<SignedBrokerFrame, BrokerDispat
     let mut bytes = Vec::with_capacity(length + 36);
     bytes.extend_from_slice(&prefix);
     bytes.resize(length + 36, 0);
-    stream.read_exact(&mut bytes[4..]).map_err(unavailable)?;
+    read_before(stream, &mut bytes[4..], deadline)?;
     SignedBrokerFrame::from_bytes(bytes).map_err(BrokerDispatchError::from)
 }
 
 fn read_receipt(stream: &mut UnixStream) -> Result<TypedOperationReceipt, BrokerDispatchError> {
-    let mut prefix = [0; 4];
-    stream
-        .read_exact(&mut prefix)
-        .map_err(|_| BrokerDispatchError::OutcomeUnknown)?;
+    let (prefix, deadline) =
+        read_prefix(stream).map_err(|_| BrokerDispatchError::OutcomeUnknown)?;
     let length = usize::try_from(u32::from_be_bytes(prefix)).map_err(unavailable)?;
     if length > MAX_RECEIPT_BYTES {
         return Err(BrokerDispatchError::OutcomeUnknown);
     }
     let mut bytes = vec![0; length];
-    stream
-        .read_exact(&mut bytes)
-        .map_err(|_| BrokerDispatchError::OutcomeUnknown)?;
+    read_before(stream, &mut bytes, deadline).map_err(|_| BrokerDispatchError::OutcomeUnknown)?;
     let receipt: WireReceipt =
         serde_json::from_slice(&bytes).map_err(|_| BrokerDispatchError::OutcomeUnknown)?;
     if !(100..=599).contains(&receipt.response_status) {
@@ -245,12 +293,46 @@ fn write_receipt(
 }
 
 fn configure(stream: &UnixStream) -> Result<(), BrokerDispatchError> {
-    stream
-        .set_read_timeout(Some(IO_DEADLINE))
-        .map_err(unavailable)?;
+    stream.set_read_timeout(None).map_err(unavailable)?;
     stream
         .set_write_timeout(Some(IO_DEADLINE))
         .map_err(unavailable)
+}
+
+fn read_prefix(stream: &mut UnixStream) -> Result<([u8; 4], Instant), BrokerDispatchError> {
+    // An idle session or backend still working on a request is not a partial
+    // frame. Connection death/cancellation interrupts this first-byte wait;
+    // backend request deadlines belong to the trusted operation transport.
+    stream.set_read_timeout(None).map_err(unavailable)?;
+    let mut prefix = [0; 4];
+    stream.read_exact(&mut prefix[..1]).map_err(unavailable)?;
+    let deadline = Instant::now() + IO_DEADLINE;
+    read_before(stream, &mut prefix[1..], deadline)?;
+    Ok((prefix, deadline))
+}
+
+fn read_before(
+    stream: &mut UnixStream,
+    mut bytes: &mut [u8],
+    deadline: Instant,
+) -> Result<(), BrokerDispatchError> {
+    while !bytes.is_empty() {
+        let remaining = deadline
+            .checked_duration_since(Instant::now())
+            .ok_or(BrokerDispatchError::SessionUnavailable)?;
+        if remaining.is_zero() {
+            return Err(BrokerDispatchError::SessionUnavailable);
+        }
+        stream
+            .set_read_timeout(Some(remaining))
+            .map_err(unavailable)?;
+        let count = stream.read(bytes).map_err(unavailable)?;
+        if count == 0 {
+            return Err(BrokerDispatchError::SessionUnavailable);
+        }
+        bytes = &mut bytes[count..];
+    }
+    Ok(())
 }
 
 fn unavailable<T>(_: T) -> BrokerDispatchError {
