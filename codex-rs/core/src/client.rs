@@ -811,7 +811,7 @@ impl ModelClient {
         Ok(level)
     }
 
-    fn check_source_admission(&self, prompt: &Prompt) -> Result<()> {
+    pub(crate) fn check_source_admission(&self, prompt: &Prompt) -> Result<()> {
         crate::security::ingress::check_native_request(
             self.source_admission_level()?,
             &prompt.input,

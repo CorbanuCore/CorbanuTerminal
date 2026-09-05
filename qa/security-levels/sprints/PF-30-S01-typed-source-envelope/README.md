@@ -25,7 +25,13 @@ Plan: `docs/plans/active/p0-security-levels.md`, feature PF-30, sprint PF-30-S01
   only exactly bound admitted items and reject raw/legacy/forged inputs. Initial
   session creation and model-provider replacement enforce the maximum of
   configured intent and live inherited policy. Unavailable policy fails closed.
-  Memory and realtime alternate input routes also fail closed.
+  The memory trace-summarize endpoint and both realtime transport startups also
+  fail closed. The separately constructed `codex-memories-write` stage-one client
+  is not covered; review 3 identified that remaining unbound path. Running realtime
+  tasks recheck after each dequeued input/event and before a sideband connection,
+  and suppress transcript-tail re-entry after policy denial. This is per-operation
+  admission, not retroactive revocation of frames already sent or immediate
+  closure of an idle socket.
 - Host authorization notices require the separately held human controller and
   an exact validated confirmation. They explicitly do not apply policy changes.
 - Permissive request behavior is unchanged; no protected mode is activated.
@@ -42,12 +48,19 @@ not prove native successful protected inference. Persistent
 resume/memory lineage remains PF-30-S02, post-taint enforcement PF-30-S03, and
 qualified detector delivery PF-35. Unknown or unavailable routes remain closed.
 
-Verification so far: all 20 focused Core provenance tests and all 285 protocol
-tests pass on RTX. The existing actual-key TMUX `/status` and `/exit` smoke passed
-on `12e4a6f25`; final-candidate rerun remains pending after the review fix.
-The first Astra High review found two P2 issues; see [the disposition ledger](review-disposition.md).
-Full Core suite environment/baseline qualification and final independent review
-remain in progress. No human acceptance, release or benchmark pass is claimed.
+Verification so far: all 22 focused Core provenance tests and all 285 protocol
+tests pass on RTX. Full Core: 3,455 passes, five pre-existing request-permissions
+failures independently reproduced at allocation `4f263ca73`, eight skips.
+The existing actual-key TMUX `/status` and `/exit` smoke passed on `7b884e477`,
+alongside locked CLI build, formatter check and plan/sprint governance.
+The second remediation passed scoped fix/full formatting and 88 combined Core
+provenance/realtime tests (22 provenance plus 66 other realtime tests), before
+commit. Both independent reviews are recorded in [the disposition ledger](review-disposition.md);
+the realtime fix passed final actual-key TMUX and was verified by review 3.
+Review 3 found an out-of-allocation memory stage-one caller that still creates an
+unbound client. Its verbatim finding is retained and escalated for scope disposition.
+No clean overall review,
+human acceptance, release or benchmark pass is claimed.
 Builds/tests run only on the allocated RTX host.
 The pinned OpenClaw source checkout was lost; OC-4/OC-10 repository review records
 were consulted, not fresh source execution. Adversarial fixtures here are original
