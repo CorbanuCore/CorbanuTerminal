@@ -12,7 +12,8 @@ requested OpenAI Astra selector option without changing defaults or delegation.
 PF-55-S03 is completed and archived: the native Astra repair passed real TUI
 inference/tool, cancel/recovery and same-thread resume in both default test
 repositories, and the exact qualified binary is installed for human testing.
-No executable sprint remains in this sequence.
+PF-55-S04 is the current serial sprint for the user's broken Luna/Kimi K3
+subagent runtime discovery and launch report.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
@@ -30,6 +31,7 @@ No executable sprint remains in this sequence.
 | 18 | [PF-57-S03](../../archive/unified-provider-auth/pf-57-s03-travis-release-reconciliation.md) | Travis/provider UX and release repair reconciliation | completed | PF-57-S02 |
 | 19 | [PF-55-S02](../../archive/unified-provider-auth/pf-55-s02-openai-astra-selector.md) | Explicit OpenAI Astra model selection | completed | PF-57-S03 |
 | 20 | [PF-55-S03](../../archive/unified-provider-auth/pf-55-s03-astra-runtime-compatibility.md) | Working live Astra runtime and TUI harness | completed | PF-55-S02 |
+| 21 | [PF-55-S04](pf-55-s04-subagent-runtime-convergence.md) | Mixed-model native subagent runtime convergence | in_progress | PF-55-S03 |
 
 ## Delivery contract
 

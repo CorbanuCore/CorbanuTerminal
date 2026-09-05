@@ -1,11 +1,9 @@
 use super::multi_agents_common::MAX_SPAWN_AGENT_MODEL_OVERRIDES;
-use super::multi_agents_common::model_supports_multi_agent_backend;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelBilling;
 use codex_protocol::openai_models::ModelCapabilityTier;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiNamespace;
 use codex_tools::ResponsesApiNamespaceTool;
@@ -37,7 +35,6 @@ pub struct SpawnAgentToolOptions {
     pub expose_agent_type: bool,
     pub hide_agent_type_model_reasoning: bool,
     pub expose_spawn_agent_model_overrides: bool,
-    pub multi_agent_version: MultiAgentVersion,
     pub usage_hint_text: Option<String>,
 }
 
@@ -58,7 +55,6 @@ impl Default for SpawnAgentToolOptions {
             expose_agent_type: true,
             hide_agent_type_model_reasoning: false,
             expose_spawn_agent_model_overrides: false,
-            multi_agent_version: MultiAgentVersion::Disabled,
             usage_hint_text: None,
         }
     }
@@ -85,7 +81,6 @@ pub fn create_spawn_agent_tool_v1(options: SpawnAgentToolOptions) -> ToolSpec {
     let available_models_description = (!options.hide_agent_type_model_reasoning).then(|| {
         spawn_agent_models_description(
             &options.available_models,
-            options.multi_agent_version,
             options.inherited_runtime.as_ref(),
         )
     });
@@ -124,7 +119,6 @@ pub fn create_spawn_agent_tool_v2(options: SpawnAgentToolOptions) -> ToolSpec {
     let available_models_description = options.expose_spawn_agent_model_overrides.then(|| {
         spawn_agent_models_description(
             &options.available_models,
-            options.multi_agent_version,
             options.inherited_runtime.as_ref(),
         )
     });
@@ -1098,7 +1092,6 @@ Note that passing `fork_turns="none"` will not pass any surrounding context to t
 
 fn spawn_agent_models_description(
     models: &[ModelPreset],
-    multi_agent_version: MultiAgentVersion,
     inherited_runtime: Option<&SpawnAgentRuntime>,
 ) -> String {
     let inherited_runtime = inherited_runtime.map_or_else(
@@ -1118,10 +1111,11 @@ fn spawn_agent_models_description(
             )
         },
     );
+    // Provider authorization and orchestration eligibility were resolved by the
+    // caller. A model's preferred engine version is not a child-runtime allowlist.
     let visible_models: Vec<&ModelPreset> = models
         .iter()
         .filter(|model| model.show_in_picker)
-        .filter(|model| model_supports_multi_agent_backend(model, multi_agent_version))
         .take(MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION)
         .collect();
     if visible_models.is_empty() {

@@ -1955,10 +1955,11 @@ async fn multi_agent_v2_openai_plan_uses_reserved_collaboration_schemas() {
             None,
             "{adapter_name} must provide plaintext cross-provider transport"
         );
+        assert!(adapter.description.contains("Plaintext adapter"));
         assert!(
             adapter
                 .description
-                .contains("Cross-provider plaintext adapter")
+                .contains("It supports OpenAI recipients too.")
         );
     }
     assert_eq!(

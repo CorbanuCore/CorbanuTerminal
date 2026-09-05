@@ -17,20 +17,129 @@ use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
 use codex_protocol::openai_models::TruncationPolicyConfig;
 use codex_protocol::openai_models::default_input_modalities;
+use codex_protocol::protocol::MultiAgentVersion;
+use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
+use core_test_support::responses::ev_function_call;
 use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_models_once;
 use core_test_support::responses::mount_sse_once;
+use core_test_support::responses::mount_sse_once_match;
 use core_test_support::responses::namespace_child_tool;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::test_codex::test_codex;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
+use serde_json::json;
 use std::time::Duration;
 use std::time::Instant;
 use test_case::test_case;
 use tokio::time::sleep;
+
+#[test_case(false; "model-only selection")]
+#[test_case(true; "exact provider and model selection")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn plaintext_spawn_dispatches_selected_openai_child_with_legacy_model_preference(
+    explicit_provider: bool,
+) -> Result<()> {
+    let server = start_mock_server().await;
+    let mut args = json!({"task_name": "worker", "message": "Report one fact", "fork_turns": "none", "model": "gpt-5.6-luna", "reasoning_effort": "medium"});
+    if explicit_provider {
+        args["model_provider"] = json!("openai");
+    }
+    mount_sse_once_match(
+        &server,
+        wiremock::matchers::body_partial_json(json!({"model": "gpt-5.4"})),
+        sse(vec![
+            ev_response_created("root-1"),
+            ev_function_call("spawn-mixed", "spawn_agent_plaintext", &args.to_string()),
+            ev_completed("root-1"),
+        ]),
+    )
+    .await;
+    let child = mount_sse_once_match(
+        &server,
+        wiremock::matchers::body_partial_json(json!({"model": "gpt-5.6-luna"})),
+        sse(vec![
+            ev_response_created("child-1"),
+            ev_assistant_message("child-result", "Verified child fact"),
+            ev_completed("child-1"),
+        ]),
+    )
+    .await;
+    let parent = mount_sse_once_match(
+        &server,
+        |request: &wiremock::Request| {
+            request.body_json::<Value>().ok().is_some_and(|body| {
+                body["model"] == "gpt-5.4"
+                    && body["input"].as_array().is_some_and(|items| {
+                        items.iter().any(|item| {
+                            item["type"] == "function_call_output"
+                                && item["call_id"] == "spawn-mixed"
+                        })
+                    })
+            })
+        },
+        sse(vec![
+            ev_response_created("root-2"),
+            ev_assistant_message("root-result", "Spawn inspected"),
+            ev_completed("root-2"),
+        ]),
+    )
+    .await;
+    let test = test_codex()
+        .with_model_info_override("gpt-5.6-luna", |model| {
+            model.multi_agent_version = Some(MultiAgentVersion::V1);
+            model.tool_mode = None;
+            model.use_responses_lite = false;
+        })
+        .with_model("gpt-5.4")
+        .with_config(|config| {
+            config
+                .features
+                .enable(Feature::MultiAgentV2)
+                .expect("feature update");
+            config
+                .model_providers
+                .insert("openai".to_string(), config.model_provider.clone());
+            config.multi_agent_v2.expose_spawn_agent_model_overrides = true;
+            config.multi_agent_v2.hide_spawn_agent_metadata = false;
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    test.submit_turn("Spawn the requested Luna child").await?;
+    let output: Value = serde_json::from_str(
+        &parent
+            .function_call_output_text("spawn-mixed")
+            .expect("spawn result"),
+    )?;
+    assert_eq!(
+        (output["model_provider"].as_str(), output["model"].as_str()),
+        (Some("openai"), Some("gpt-5.6-luna"))
+    );
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !child
+        .requests()
+        .iter()
+        .any(|request| request.body_json()["model"] == "gpt-5.6-luna")
+        && Instant::now() < deadline
+    {
+        sleep(Duration::from_millis(25)).await;
+    }
+    // Match helpers also observe requests while evaluating a non-matching route.
+    let request = child
+        .requests()
+        .into_iter()
+        .map(|request| request.body_json())
+        .find(|body| body["model"] == "gpt-5.6-luna")
+        .expect("selected child request");
+    assert!(
+        namespace_child_tool(&request, MULTI_AGENT_V2_NAMESPACE, SPAWN_AGENT_TOOL_NAME).is_some(),
+        "selected child must retain the V2 runtime"
+    );
+    Ok(())
+}
 
 const MULTI_AGENT_V1_NAMESPACE: &str = "multi_agent_v1";
 const MULTI_AGENT_V2_NAMESPACE: &str = "collaboration";
@@ -348,6 +457,79 @@ async fn openai_reserved_spawn_schema_is_not_mutated_by_pf_role_configuration(
             "cross-provider adapter must send an ordinary plaintext message field"
         );
     }
+    Ok(())
+}
+
+#[test_case(None; "all configured providers")]
+#[test_case(Some(vec!["openai".to_string()]); "explicit openai-only policy")]
+#[test_case(Some(Vec::new()); "explicit deny-all policy")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spawn_agent_v2_catalog_respects_provider_policy_with_mixed_model_defaults(
+    allowlist: Option<Vec<String>>,
+) -> Result<()> {
+    let server = start_mock_server().await;
+    let response = mount_sse_once(
+        &server,
+        sse(vec![ev_response_created("resp1"), ev_completed("resp1")]),
+    )
+    .await;
+    let expected_openai = allowlist
+        .as_ref()
+        .is_none_or(|ids| ids.iter().any(|id| id == "openai"));
+    let expected_kimi = allowlist.is_none();
+    let test = test_codex()
+        // Reproduce the account catalog's Luna preference without overriding it in
+        // production. The bundled Kimi model has no multi-agent version preference.
+        .with_model_info_override("gpt-5.6-luna", |model| {
+            model.multi_agent_version = Some(MultiAgentVersion::V1);
+        })
+        .with_model("gpt-5.4")
+        .with_config(move |config| {
+            config
+                .features
+                .enable(Feature::MultiAgentV2)
+                .expect("feature update");
+            config.agent_provider_allowlist = allowlist;
+            config.multi_agent_v2.expose_spawn_agent_model_overrides = true;
+        })
+        .build_with_auto_env(&server)
+        .await?;
+    test.submit_turn("Which exact child runtimes can I request?")
+        .await?;
+    let body = response.single_request().body_json();
+    let native = namespace_child_tool(&body, MULTI_AGENT_V2_NAMESPACE, SPAWN_AGENT_TOOL_NAME)
+        .expect("native spawn tool");
+    let plaintext = body["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "spawn_agent_plaintext")
+        .expect("cross-provider plaintext adapter");
+    // The reserved native tool cannot select overrides; the plaintext adapter owns
+    // the actionable catalog and exact provider/model parameters on OpenAI.
+    let description = plaintext["description"].as_str().unwrap();
+    assert_eq!(
+        (
+            description.contains("`openai` / `gpt-5.6-luna`"),
+            description.contains("`kimi-code` / `k3`")
+        ),
+        (expected_openai, expected_kimi),
+        "the effective provider policy, not a model's engine preference, owns the catalog: {description}"
+    );
+    assert!(
+        plaintext
+            .pointer("/parameters/properties/model_provider")
+            .is_some()
+    );
+    assert!(plaintext.pointer("/parameters/properties/model").is_some());
+    assert_eq!(
+        native.pointer("/parameters/properties/message/encrypted"),
+        Some(&Value::Bool(true))
+    );
+    assert_eq!(
+        plaintext.pointer("/parameters/properties/message/encrypted"),
+        None
+    );
     Ok(())
 }
 

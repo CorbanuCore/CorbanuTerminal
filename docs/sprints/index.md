@@ -88,7 +88,7 @@ owner must compare actual diffs to scope and record final combined-tree evidence
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
 | [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [51 current sprints](current/p0-security-levels/index.md), 25 completed archives | PF-22-S02 is integrated and archived; PF-27-S04 retains serialized integration, PF-30-S01 returned to unallocated draft after its unrecoverable worktree loss, and PF-35-S01 continues external qualification |
-| [Unified provider onboarding and management](../plans/active/unified-provider-auth.md) | Active | [0 current sprints](current/unified-provider-auth/index.md) | PF-55-S03 is completed and archived with real Astra TUI tool/cancel/restart/resume evidence in both default repositories |
+| [Unified provider onboarding and management](../plans/active/unified-provider-auth.md) | Active | [1 current sprint](current/unified-provider-auth/index.md) | PF-55-S04 repairs mixed-model native child runtime discovery/selection; PF-55-S03 parent-only Astra evidence remains historical |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
 | [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | Historical 72-sprint decomposition remains cancelled; every record maps into the active P0 plan's current work |
 

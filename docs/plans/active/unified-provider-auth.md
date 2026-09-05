@@ -19,7 +19,7 @@ product_spec:
 implementation_worktrees:
   - path: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.38-reconcile"
     branch: "integration/reconcile-release-0.1.38"
-    base_commit: "de26f9f3ccff5748b12633b995ada52570a9e161"
+    base_commit: "43f4f187ba585e231b0bafed2bbcd9d9b4bffa54"
   - path: "/home/pfrpc/repos/worktrees/corbanu-reconcile-release-fixes"
     branch: "fix/reconcile-release-0.1.37-review"
     base_commit: "f03e95f7a65609bb442764d6306682d5fe43f6bb"
@@ -59,6 +59,13 @@ contracts, represent their unclosed release gates as passed, or consume a third
 active-plan slot.
 
 ## User pain
+
+The user's 2026-09-05 Luna/Kimi K3 delegation attempt was refused because the
+generated authorized-runtime list exposed only Sol and Terra. PF-55-S04 repairs
+the native child-runtime catalog/selection boundary under the existing PF-55
+provider convergence feature. Preserve explicit provider policy, credential
+custody, encrypted-message routing, and exact requested model identity. Prove
+real child launches and results in TUI; prior Astra parent tests are not proof.
 
 The user's live Astra test on 2026-09-05 failed with OpenAI's newer-Codex
 requirement. PF-55-S02 proved only the selector and loopback transport, not live
@@ -172,6 +179,15 @@ requires the user to choose a usable replacement first.
   and explicit opt-in live TUI harnesses, then install the verified candidate
   in the existing separate `corbanu-test` session using the user-approved normal
   profile. Test real Astra responses, tool execution, cancellation and resume.
+- PF-55-S04: make authorized child runtime discovery and selection agree with
+  the effective orchestration runtime, including V1 and unset model defaults;
+  preserve operator allowlists and cross-provider plaintext adapters. Qualify
+  Luna and Kimi K3 child results, failure/recovery and resume in disposable
+  TensorCash and Isometric worktrees using the approved normal profile.
+  The first live run exposed a second boundary defect: the exact-runtime
+  plaintext adapter rejects OpenAI, whose reserved native schema cannot express
+  model overrides. Support explicitly plaintext task briefs on that same-provider
+  route without converting native ciphertext or widening provider authorization.
 
 ### Out
 
@@ -280,6 +296,11 @@ Both default repositories passed live Astra TUI file/tool, cancellation,
 recovery and same-thread restart/resume with the installed binary. Exact source,
 upstream disposition and evidence: [runtime qualification](../../../qa/release/0.1.38/astra-runtime.md).
 
+PF-55-S04 retains that upstream baseline and the native V2 interfaces. The
+product-owned adapter must distinguish a model's preferred orchestration version
+from the engine version inherited by a child. No remote model metadata, reserved
+OpenAI schema, provider authorization or credential format is rewritten.
+
 ## Sprint execution map
 
 | Feature ID | Plan feature | Sprint record | State |
@@ -300,6 +321,7 @@ upstream disposition and evidence: [runtime qualification](../../../qa/release/0
 | `PF-55` | Startup, current-model, and custom-provider convergence | [PF-55-S01](../../sprints/archive/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | completed at `21cf3199f2` |
 | `PF-55` | Explicit OpenAI Astra model selection | [PF-55-S02](../../sprints/archive/unified-provider-auth/pf-55-s02-openai-astra-selector.md) | completed; [selector evidence](../../../qa/release/0.1.38/astra-selector.md) |
 | `PF-55` | Verified live Astra runtime and TUI harness | [PF-55-S03](../../sprints/archive/unified-provider-auth/pf-55-s03-astra-runtime-compatibility.md) | completed; [real TUI qualification](../../../qa/release/0.1.38/astra-runtime.md) |
+| `PF-55` | Mixed-model native subagent runtime convergence | [PF-55-S04](../../sprints/current/unified-provider-auth/pf-55-s04-subagent-runtime-convergence.md) | in_progress; exact launch and live child-result evidence pending |
 | `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/archive/unified-provider-auth/pf-56-s01-final-qualification.md) | completed at `fd8a9c900e` |
 | `PF-57` | Latest-main integration, regression preservation, and credential-store liveness | [PF-57-S01](../../sprints/archive/unified-provider-auth/pf-57-s01-latest-main-integration.md) | completed at `a935e507b` |
 | `PF-57` | Reconciled release credential-lifecycle regressions | [PF-57-S02](../../sprints/archive/unified-provider-auth/pf-57-s02-reconciliation-auth-repairs.md) | completed; [Astra repair evidence](../../../qa/release/0.1.38/astra-fixes.md) |

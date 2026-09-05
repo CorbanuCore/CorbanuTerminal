@@ -7,6 +7,7 @@ use codex_protocol::openai_models::ModelServiceTier;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
 use codex_protocol::openai_models::WeekdaySet;
+use codex_protocol::protocol::MultiAgentVersion;
 use codex_tools::JsonSchemaPrimitiveType;
 use codex_tools::JsonSchemaType;
 use pretty_assertions::assert_eq;
@@ -67,22 +68,24 @@ fn scheduled_billing_renders_weekday_and_legacy_daily_contracts() {
 
 #[test]
 fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
-    let mut incompatible = model_preset("incompatible", /*show_in_picker*/ true);
-    incompatible.multi_agent_version = Some(MultiAgentVersion::V1);
+    let mut legacy = model_preset("legacy", /*show_in_picker*/ true);
+    legacy.multi_agent_version = Some(MultiAgentVersion::V1);
+    let mut unspecified = model_preset("unspecified", /*show_in_picker*/ true);
+    unspecified.multi_agent_version = None;
     let mut visible = model_preset("visible", /*show_in_picker*/ true);
     visible.provider_id = Some("example-provider".to_string());
     let tool = create_spawn_agent_tool_v2(SpawnAgentToolOptions {
         available_models: vec![
             visible,
             model_preset("hidden", /*show_in_picker*/ false),
-            incompatible,
+            legacy,
+            unspecified,
         ],
         inherited_runtime: None,
         agent_type_description: "role help".to_string(),
         expose_agent_type: true,
         hide_agent_type_model_reasoning: false,
         expose_spawn_agent_model_overrides: true,
-        multi_agent_version: MultiAgentVersion::V2,
         usage_hint_text: None,
     });
 
@@ -116,7 +119,8 @@ fn spawn_agent_tool_v2_requires_task_name_and_lists_visible_models() {
         "- `example-provider` / `visible-model`; text-only; efforts: xhigh (default); tiers: priority"
     ));
     assert!(!description.contains("hidden-model"));
-    assert!(!description.contains("incompatible-model"));
+    assert!(description.contains("legacy-model"));
+    assert!(description.contains("unspecified-model"));
     assert!(properties.contains_key("task_name"));
     assert!(properties.contains_key("message"));
     assert_eq!(
@@ -192,8 +196,7 @@ fn spawn_agent_catalog_exposes_parent_runtime_and_frontier_effort_policy() {
         service_tier: None,
     };
 
-    let description =
-        spawn_agent_models_description(&[sol], MultiAgentVersion::V2, Some(&inherited_runtime));
+    let description = spawn_agent_models_description(&[sol], Some(&inherited_runtime));
 
     assert!(
         description.contains(
@@ -224,7 +227,6 @@ fn spawn_agent_tool_v1_keeps_legacy_fork_context_field() {
         expose_agent_type: true,
         hide_agent_type_model_reasoning: false,
         expose_spawn_agent_model_overrides: true,
-        multi_agent_version: MultiAgentVersion::V1,
         usage_hint_text: None,
     });
 
@@ -290,7 +292,6 @@ fn spawn_agent_tool_caps_visible_model_summaries() {
         expose_agent_type: true,
         hide_agent_type_model_reasoning: false,
         expose_spawn_agent_model_overrides: true,
-        multi_agent_version: MultiAgentVersion::V2,
         usage_hint_text: None,
     });
 
@@ -317,11 +318,7 @@ fn spawn_agent_tool_caps_reasoning_effort_value_length() {
         description: "Model-defined".to_string(),
     }];
 
-    let description = spawn_agent_models_description(
-        &[model],
-        MultiAgentVersion::V2,
-        /*inherited_runtime*/ None,
-    );
+    let description = spawn_agent_models_description(&[model], /*inherited_runtime*/ None);
     let capped_effort = "é".repeat(MAX_REASONING_EFFORT_CHARS_IN_SPAWN_AGENT_DESCRIPTION);
 
     assert!(description.contains("Current inherited runtime: unavailable."));
@@ -339,7 +336,6 @@ fn spawn_agent_tool_keeps_model_controls_when_spawn_metadata_is_hidden() {
         expose_agent_type: false,
         hide_agent_type_model_reasoning: true,
         expose_spawn_agent_model_overrides: true,
-        multi_agent_version: MultiAgentVersion::V2,
         usage_hint_text: None,
     });
 
@@ -373,7 +369,6 @@ fn spawn_agent_tool_hides_model_controls_without_override_exposure() {
         expose_agent_type: false,
         hide_agent_type_model_reasoning: true,
         expose_spawn_agent_model_overrides: false,
-        multi_agent_version: MultiAgentVersion::V2,
         usage_hint_text: None,
     });
 
@@ -607,7 +602,6 @@ fn openai_reserved_collaboration_profile_restores_pinned_argument_contracts() {
             expose_agent_type: true,
             hide_agent_type_model_reasoning: false,
             expose_spawn_agent_model_overrides: true,
-            multi_agent_version: MultiAgentVersion::V2,
             usage_hint_text: None,
         },
     ));
