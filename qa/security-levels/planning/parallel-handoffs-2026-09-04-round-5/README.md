@@ -52,6 +52,17 @@ qualifies the combined runner against that newer immutable product, including
 existing actual-key regressions and pinned manual entry outside build.lock.
 No operator session left running or human acceptance; checks21–23 still queued.
 
+Combined `67fec6a6a` result: Python2/2, Rust14/15; the five-case human fixture
+stopped at PendingExit, so its later cancel/timeout cases were not reached.
+Existing memory/security/slash and support tests passed. One canary, zero outputs,
+no provider-change denial and29s remaining are consistent with the deferred P3,
+but its exact log cause is unconfirmed because RAII cleanup removed the source
+log. No false success or complete qualification is claimed; pin/manual steps
+were skipped. Coordinator authorizes only fixture diagnostic retention and exact
+expected-owner-denial classification with negative/mixed-failure regressions.
+Preserve original failure; fix/fullfmt and final combined tests precede allocated
+review5 Astra High on this narrow delta. No sixth review without new authority.
+
 Source base: `07791288b6feeccfaee5a57c12452359cc666957`.
 Coordinator branch: `integration/security-round5-20260904`, worktree:
 `/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-20260904`.
