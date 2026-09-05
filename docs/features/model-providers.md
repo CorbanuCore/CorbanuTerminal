@@ -52,6 +52,16 @@ medium. No fallback model is substituted when an exact request fails.
 
 Both runtimes have passed real TUI repository work and follow-up on the same
 child threads after a parent restart. [Candidate evidence](../../qa/release/0.1.38/subagent-runtime.md).
+
+Astra (`gpt-6-astra`) is also advertised as an explicit subagent choice. Ask
+“Use Astra as a subagent” or let a child inherit an Astra parent's runtime.
+Missing allocation prices do not hide a selectable model: these entries are
+marked **explicit-choice only**, so they are not automatically selected by cost.
+The catalog is a bounded discovery list, not an exhaustive authorization list.
+Explicit and inherited Astra children have both passed real tool work and
+same-child follow-up after a parent restart in both test repositories.
+[Astra child evidence](../../qa/release/0.1.38/astra-subagents.md).
+
 This implements **Shipping MVP — LIVE**, “model-aware delegation, durable
 mailboxes, supervision, resume, and recovery.”
 

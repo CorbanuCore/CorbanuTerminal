@@ -1,6 +1,19 @@
 # Corbanu Terminal 0.1.38 integration candidate
 
-## Latest repair — native Luna/Kimi subagents, September 5
+## Latest repair — explicit Astra subagents, September 5
+
+Source `51185a24d404f98ce7f0dd5fc67e516deabee000` separates explicit runtime
+discovery from automatic-allocation economics. Astra is now advertised as an
+explicit choice without inventing prices or changing spawn authorization.
+183 focused Core tests and 22 harness tests pass; an intermittent existing
+resume-fixture timeout on another run is disclosed in the evidence.
+Four actual Astra children passed tool work, cancellation/recovery and same-child
+cold resume across both default repositories: 20 child responses and 12 paired
+tool calls. `corbanu-debug` uses the verified installed build; the fresh human
+session is `corbanu-astra-agents`. [Exact evidence and limits](astra-subagents.md).
+No release was published; older user sessions are unchanged.
+
+## Historical repair — native Luna/Kimi subagents, September 5
 
 Runtime source `e7cdb94359a7bdedeb6b0abdf2f17f09823d08e1` repairs the mixed-model
 catalog filter, V2 child inheritance and exact OpenAI-runtime adapter dead end.
