@@ -176,9 +176,22 @@ async fn run_case(
     let binary = &artifacts.binary;
     let a = fake_provider("A", case, delay).await;
     let b = fake_provider("B", case, delay).await;
+    let models: Value = serde_json::from_slice(&fs::read(repo.join("codex-rs/models-manager/models.json"))?)?;
+    let template = models["models"].as_array().context("model catalog")?.iter()
+        .find(|model| model["slug"] == "gpt-5.6-terra").context("fixture metadata template")?;
+    let synthetic = ["a", "b"].map(|id| {
+        let mut model = template.clone();
+        model["slug"] = json!(format!("memory-fixture-{id}"));
+        model["display_name"] = json!(format!("Memory Fixture {id} model"));
+        model["orchestration"] = json!({"status":"disabled", "provider_id":format!("memory-{id}"),
+            "capability":"balanced", "reason":"Synthetic manual fixture; no delegation"});
+        model
+    });
+    write_json(home.path(), "fixture-models.json", &json!({"models":synthetic}))?;
     let config = format!(
-        r#"model = "gpt-5.6-terra"
+        r#"model = "memory-fixture-a"
 model_provider = "memory-a"
+model_catalog_json = {:?}
 cli_auth_credentials_store = "file"
 check_for_update_on_startup = false
 suppress_unstable_features_warning = true
@@ -190,8 +203,8 @@ code_mode_host = false
 [memories]
 generate_memories = true
 min_rollout_idle_hours = 0
-extract_model = "gpt-5.6-terra"
-consolidation_model = "gpt-5.6-terra"
+extract_model = "memory-fixture-a"
+consolidation_model = "memory-fixture-a"
 [security]
 version = 1
 level = "permissive"
@@ -214,6 +227,7 @@ trust_level = "trusted"
 [tui]
 animations = false
 "#,
+        home.path().join("fixture-models.json"),
         home.path().join("logs"),
         a.uri(),
         b.uri(),
@@ -322,7 +336,7 @@ animations = false
         }
         let denied = log.contains("stage-one memory provider changed");
         let foreground_b = routes.iter().any(|r| {
-            r["endpoint"] == "B" && r["kind"] == "foreground" && r["model"] == "gpt-5.6-terra"
+            r["endpoint"] == "B" && r["kind"] == "foreground" && r["model"] == "memory-fixture-b"
         });
         write_json(
             root,
@@ -522,7 +536,7 @@ fn switch_provider(pane: &TmuxPane<'_>, root: &Path, keys: &mut Vec<String>) -> 
     select_label(pane, "Memory Fixture A", keys)?;
     select_label(pane, "Deactivate", keys)?;
     pane.wait_stable_contains("Choose replacement", READY)?;
-    select_label(pane, "Memory Fixture B — gpt-5.6-terra", keys)?;
+    select_label(pane, "Memory Fixture B — memory-fixture-a", keys)?;
     pane.wait_stable_contains("Configure providers and control", READY)?;
     fs::write(
         root.join("provider-replacement.txt"),
@@ -533,7 +547,7 @@ fn switch_provider(pane: &TmuxPane<'_>, root: &Path, keys: &mut Vec<String>) -> 
     submit(pane, "/model", keys)?;
     pane.wait_stable_contains("Select Model", READY)?;
     fs::write(root.join("model-picker.txt"), pane.capture_viewport()?)?;
-    select_label(pane, "GPT-5.6-Terra", keys)?;
+    select_label(pane, "Memory Fixture b model", keys)?;
     pane.wait_stable_contains("Select Reasoning", READY)?;
     pane.send_key(TmuxKey::Enter)?;
     keys.push("key: Enter (default reasoning)".into());
