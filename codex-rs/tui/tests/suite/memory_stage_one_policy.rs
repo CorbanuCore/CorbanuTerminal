@@ -40,7 +40,7 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
                     .set_body_string(responses::sse(vec![responses::ev_response_created("fixture"),
                         responses::ev_assistant_message("fixture-message", text), responses::ev_completed("fixture")]))
             }).mount(&server).await;
-        let config = format!("model = \"gpt-5.4\"\nmodel_provider = \"openai\"\nopenai_base_url = \"{}/v1\"\ncli_auth_credentials_store = \"file\"\ncheck_for_update_on_startup = false\nsuppress_unstable_features_warning = true\nlog_dir = {:?}\n[features]\nsqlite = true\nmemory_tool = true\n[memories]\ngenerate_memories = true\nmin_rollout_idle_hours = 0\n[security]\nversion = 1\nlevel = \"{level}\"\n[projects.{}]\ntrust_level = \"trusted\"\n[tui]\nanimations = false\n",
+        let config = format!("model = \"gpt-5.4\"\nmodel_provider = \"openai\"\nopenai_base_url = \"{}/v1\"\ncli_auth_credentials_store = \"file\"\ncheck_for_update_on_startup = false\nsuppress_unstable_features_warning = true\nlog_dir = {:?}\n[features]\nsqlite = true\nmemories = true\n[memories]\ngenerate_memories = true\nmin_rollout_idle_hours = 0\n[security]\nversion = 1\nlevel = \"{level}\"\n[projects.{}]\ntrust_level = \"trusted\"\n[tui]\nanimations = false\n",
             server.uri(), home.path().join("logs"), serde_json::to_string(&repo.display().to_string())?);
         fs::write(home.path().join("config.toml"), config)?;
         fs::write(home.path().join("auth.json"), r#"{"OPENAI_API_KEY":"synthetic-memory-test","tokens":null,"last_refresh":null}"#)?;
@@ -93,6 +93,23 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
         pane.wait_stable_contains("/exit", TIMEOUT)?;
         pane.send_key(TmuxKey::Enter)?;
         session.wait_for_exit(TIMEOUT)?;
+        let restarted = tmux.new_session(SessionSpec::new("restart", TerminalSize::new(120, 42),
+            CommandSpec::new(&binary).env("CODEX_HOME", home.path()).env("CORBANU_HOME", home.path())
+                .env("OPENAI_API_KEY", "synthetic-memory-test").env("RUST_LOG", "trace")
+                .arg("--no-alt-screen").arg("-C").arg(&repo)).current_dir(&repo))?;
+        let pane = restarted.primary_pane();
+        pane.wait_stable_contains("Corbanu Terminal", TIMEOUT)?;
+        pane.send_literal("/status")?;
+        pane.wait_stable_contains("/status", TIMEOUT)?;
+        pane.send_key(TmuxKey::Enter)?;
+        pane.wait_stable_contains("Security:", TIMEOUT)?;
+        let after_restart = server.received_requests().await.unwrap();
+        ensure!(after_restart.iter().filter(|r| String::from_utf8_lossy(&r.body).contains(CANARY)).count() == canaries,
+            "restart unexpectedly dispatched a raw rollout");
+        pane.send_literal("/exit")?;
+        pane.wait_stable_contains("/exit", TIMEOUT)?;
+        pane.send_key(TmuxKey::Enter)?;
+        restarted.wait_for_exit(TIMEOUT)?;
     }
     Ok(())
 }

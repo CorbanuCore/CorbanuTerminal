@@ -50,18 +50,30 @@ output schema or cache-key format is added or rewritten.
 - Intermediate `just fix` at `b3c92c094` stopped on a fixture-only missing direct
   reqwest dependency. Corrected by using the existing route-aware HTTP factory;
   no dependency added. This is not final qualification evidence.
+- `d85a3515d` plus RTX formatter (synced back): scoped Core/memories-write fix and
+  complete formatter passed. Core policy tests **10/10**, nextest
+  `3b6a30c5-2f3f-494d-9943-34a1c6e0e3f0`; full memories-write **43/43**,
+  `3194d479-9c70-4ae5-a72f-ad0798866e55`; full memories-read **3/3**,
+  `a9480ea8-1f04-4fa1-8cc2-c957fddfc4ad`; `tests-4.log`.
+  Tests include real pending-HTTP owner cancellation, post-connect WS policy
+  change, live HTTP execute/stream barrier, inherited level, kill switch, provider
+  replacement/new-job refresh, protected worker finite backoff and EOF rejection.
+  Public Core integration and typed TMUX modules are authored but not yet
+  registered by the coordinator; they are not counted among these passes.
 
 ## Required final matrix
 
-- [ ] Configured Moderate/Aggressive, inherited stronger floor and live increase.
-- [ ] Missing policy, wrong owner, terminated/dropped owner, live kill switch.
-- [ ] Same owner exact provider replacement; new-job current routing.
-- [ ] HTTP execute/stream attempt barrier and WebSocket connect-time barrier.
-- [ ] Real worker synthetic output persistence in Permissive; zero protected
+- [x] Configured Moderate/Aggressive, inherited stronger floor and live increase.
+- [x] Missing policy, wrong owner, terminated/dropped owner, live kill switch.
+- [x] Same owner exact provider replacement; new-job current routing.
+- [x] HTTP execute/stream attempt barrier and WebSocket connect-time barrier.
+- [x] Real worker synthetic output persistence in Permissive; zero protected
       canary requests and outputs; finite retry backoff; EOF cannot save JSON.
 - [ ] Actual-key TMUX memory-enabled startup, foreground turn and exit/restart
       with isolated synthetic fixtures and recorded DB/provider outcomes.
-- [ ] Final scoped fix, full formatter, Core/memories-write/memories-read tests.
+- [x] Scoped fix, full formatter, Core/memories-write/memories-read tests on the
+      authored runtime checkpoint; public integration/TMUX registration and
+      final combined-tree rerun remain required.
 - [ ] Astra High then Fable5.1High through Corbanu/private TMUX, parent allocated.
 - [ ] Exact immutable RTX candidate, hash, run IDs and capture paths.
 - [ ] Combined integration/governance and human handoff; human acceptance pending.
