@@ -4208,6 +4208,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-secret-broker-service"
+version = "0.1.38"
+dependencies = [
+ "codex-keyring-store",
+ "codex-secret-broker",
+ "codex-security-audit",
+ "codex-security-policy",
+ "codex-utils-absolute-path",
+ "codex-utils-cargo-bin",
+ "codex-vault",
+ "nix 0.30.1",
+ "pretty_assertions",
+ "signal-hook",
+ "tempfile",
+]
+
+[[package]]
 name = "codex-secrets"
 version = "0.1.38"
 dependencies = [
