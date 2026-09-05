@@ -862,9 +862,10 @@ impl HistoryCell for StatusHistoryCell {
         let mut security_lines = textwrap::wrap(&self.security, value_width.max(1)).into_iter();
         if let Some(first) = security_lines.next() {
             lines.push(formatter.line("Security", vec![Span::from(first.into_owned())]));
-            lines.extend(security_lines.map(|line| {
-                formatter.continuation(vec![Span::from(line.into_owned())])
-            }));
+            lines.extend(
+                security_lines
+                    .map(|line| formatter.continuation(vec![Span::from(line.into_owned())])),
+            );
         }
         lines.push(formatter.line("Agents.md", vec![Span::from(agents_summary)]));
 
