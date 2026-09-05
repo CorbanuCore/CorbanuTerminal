@@ -77,3 +77,38 @@ fn pf_30_s01_native_transcript_metadata_is_host_owned_and_stable() {
         codex_protocol::provenance::SourceAuthority::Untrusted
     );
 }
+
+#[test]
+fn pf_30_s01_native_mismatched_producer_result_consumes_pending_binding() {
+    let item = tool_item();
+    let mut first = NativeIngress::default();
+    let mut second = NativeIngress::default();
+    for ingress in [&mut first, &mut second] {
+        ingress.register_call("call-1", SourceKind::Tool);
+        ingress.observe(std::slice::from_ref(&item), 1);
+    }
+    let candidate = first.screening_candidate(&item).unwrap();
+    let screened = super::super::tests::screen_binding(candidate.source(), candidate.normalized());
+    assert_eq!(second.admit_screened(&item, screened), Err(IngressError::BindingMismatch));
+    assert!(second.screening_candidate(&item).is_err());
+    assert!(second.project(&[item]).is_err());
+}
+
+#[test]
+fn pf_30_s01_native_capacity_never_evicts_or_invalidates_repeat_observation() {
+    let mut ingress = NativeIngress::default();
+    for index in 0..MAX_ADMITTED_ITEMS {
+        ingress.register_call(&format!("call-{index}"), SourceKind::Tool);
+    }
+    ingress.register_call("call-1", SourceKind::Tool);
+    assert!(!ingress.unavailable);
+    ingress.observe(&[tool_item()], 1);
+    let before = ingress.screening_candidate(&tool_item()).unwrap().source();
+    ingress.observe(&[tool_item()], 99);
+    assert_eq!(ingress.screening_candidate(&tool_item()).unwrap().source(), before);
+    ingress.register_call("overflow", SourceKind::Tool);
+    assert!(ingress.unavailable);
+    assert_eq!(ingress.calls.len(), MAX_ADMITTED_ITEMS);
+    assert!(ingress.screening_candidate(&tool_item()).is_err());
+    assert!(ingress.project(&[tool_item()]).is_err());
+}
