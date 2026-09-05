@@ -378,7 +378,32 @@ after consolidated proof, #4 Fable5.1 High via Corbanu TMUX after clean/remediat
 #3. Do not invent a fresh five-review budget for this support task. Root receives
 the fixture, verifies safe lifecycle and docs, then provides tested instructions.
 
-## PF-35 external campaign status
+## Native composition and fixture registration checkpoint
+
+The coordinator accepts the [actual PF20/PF27 composition contract](pf20-pf27-consumer-contract.md)
+as staged source design: minimal root anchor/launcher, journal/policy roots and
+distinct trusted child roles chosen before serve_child. No same-process
+dual-domain requirement has been established; no speculative routing APIs are
+added. This supersedes the old nonlogin-controller proposal, not deployment
+authorization. Root installation and revised exact manifests still need explicit
+approval. Ten-second idle expiry requires explicit fencing/rebootstrap and
+durable recovery, never transparent ambiguous-write retry.
+
+PF20 is fixing a malformed FIFO open that could block before metadata
+validation; O_NONBLOCK and a real FIFO negative fixture are within its mandate.
+Final tests and exact-worktree TMUX rerun precede review #1 Astra, then #2 Fable
+if clean or scoped findings are verified fixed. No reviewer has run yet.
+
+Routine human-fixture registrations are committed in its lane at 2f4c2bf1a:
+Unix test module, explicit human-memory profile with zero retries/660-second
+outer timeout and focused automated rehearsal with zero retries/180 seconds.
+The helper owns a shorter600-second deadline; normal unrelated test behavior
+is unchanged. Worker may include formatter-only ordering of that registration.
+Optional sibling memory_human_fixture_support.rs is allowed only to split the
+new helper if needed; no archived test refactor. Reuse memory review slots3/4,
+not a fresh five-review budget.
+
+## PF-35 external campaign (unchanged)
 
 User explicitly removed PF-35 from the engineering main path.
 Its engineering reservation returns to draft under the existing sprint process.
