@@ -1,6 +1,6 @@
 # Independent review ledger
 
-Limit: five invocations for this lane; four used so far. No runtime/model substitution or automatic rerun.
+Limit: five invocations for this lane; all five used. No runtime/model substitution or automatic rerun. Both requested engines are clean on the final bounded segmentation delta; no sixth review is planned.
 
 ## Review 1 — Astra High
 
@@ -34,3 +34,11 @@ Production screening qualification and sprint completion are not claimed.
 - Frozen HEAD `38e1d6e85`, base `72f5de657`; tested source `2a4fb5857`. Structured helper, app-bundled Codex CLI 0.153.1, model `gpt-6-astra`, effort `high`, and `segmentation-review-scope.md`; no nested reviews.
 - Exit 0, findings empty, patch correct (confidence 0.94). Exact JSON/text retained in `astra-review-4.*`. Reviewer verified complete-input source/digest/count, atomic refusal, original-index reassembly and unchanged provider shaping. It explicitly noted the unchanged potentially >1,000-token projection and did not qualify production screening or unfinished source coverage.
 - No source changes followed. This is a clean review of the segmentation delta, not completion of PF-30-S01 or erasure of earlier findings. Coordinator has authorized Fable 5.1 High external review 5 as the requested second-engine coverage; it has not been replaced by an extra Astra run.
+
+## Review 5 — Fable 5.1 High, external segmentation closeout
+
+- Frozen HEAD `ae699a7e9`, base `72f5de657`; source remains tested `2a4fb5857`. The only addition since review 4 was its QA evidence. Structured autoreview through the approved Corbanu wrapper in private TMUX session `pf30-fable-high`, model `claude-fable-5-1-plan`, effort `high`, with `segmentation-review-scope.md`. This is structured exec review inside TMUX, not an interactive slash-command review.
+- Invocation: `python3 /Users/Neo/.codex/skills/autoreview/scripts/autoreview --engine codex --codex-bin /Volumes/CorbanuDrive/Corbanu/.codex-work/security-round5/review-fable-high --model claude-fable-5-1-plan --thinking high --mode branch --base 72f5de657 --prompt-file qa/security-levels/sprints/PF-30-S01-typed-source-envelope/segmentation-review-scope.md`, plus the frozen-source/limits prompt and output paths. No nested reviewers.
+- Exit 0, findings empty, patch correct (confidence 0.90). Exact JSON/text and completed private TMUX capture retained in `fable-review-5.*` and `fable-review-5-tmux.txt`; the fixture was closed with Enter after capture.
+- Reviewer inspected the actual native callers and ScreeningSession contract and confirmed complete-source/digest/count admission, original-index reassembly, atomic withholding and stable provider bytes. It explicitly relied on recorded RTX test results rather than rerunning tests, excluded production classifier qualification, and retained the unchanged >1,000-token projection warning.
+- No findings to accept or reject, and no source changes after review. All five invocations remain recorded; PF-30-S01 stays `in_progress`, with production producer/finer-origin coverage unfinished and the earlier memory-dispatch finding separately owned by PF-30-S04. These two clean continuation reviews do not qualify the whole sprint or a release.

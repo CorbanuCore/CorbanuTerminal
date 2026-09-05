@@ -91,5 +91,13 @@ The memory-dispatch follow-up is separately owned by PF-30-S04. Earlier Fable
 findings and disposition remain visible. The review ledger is still three of
 five used at the test checkpoint. Authorized Astra High review 4 subsequently
 returned no actionable findings on `38e1d6e85`; source/tests stayed unchanged.
-External Fable 5.1 High review 5 is separately authorized and pending. The entire
-ledger is preserved in `review-disposition.md`; no whole-sprint or release claim.
+External Fable 5.1 High review 5 returned no actionable findings on `ae699a7e9`
+through the structured Corbanu helper in private TMUX (exit 0, confidence 0.90).
+It inspected native callers and the reassembler contract, confirmed the bounded
+source/count/digest and byte-shaping invariants, and explicitly did not qualify
+production screening. Source/tests remained `2a4fb5857` throughout both reviews;
+only QA evidence was added. Exact output and the completed TMUX capture are
+retained in `fable-review-5.*` and `fable-review-5-tmux.txt`.
+
+All five invocations are now used and preserved in `review-disposition.md`.
+No additional review or whole-sprint/release claim follows these clean results.
