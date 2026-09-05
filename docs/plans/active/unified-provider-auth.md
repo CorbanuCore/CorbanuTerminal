@@ -272,7 +272,7 @@ are recorded in the sprint and `qa/release/0.1.38/astra-fixes.md`.
 | `PF-53` | Multi-provider onboarding and deferred Corbanu Plan flow | [PF-53-S01](../../sprints/archive/unified-provider-auth/pf-53-s01-multi-provider-onboarding.md) | completed at `30b595034b` |
 | `PF-54` | Unified `/providers` management and eligibility controls | [PF-54-S01](../../sprints/archive/unified-provider-auth/pf-54-s01-provider-management.md) | completed |
 | `PF-55` | Startup, current-model, and custom-provider convergence | [PF-55-S01](../../sprints/archive/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | completed at `21cf3199f2` |
-| `PF-55` | Explicit OpenAI Astra model selection | [PF-55-S02](../../sprints/current/unified-provider-auth/pf-55-s02-openai-astra-selector.md) | in_progress; user-authorized catalog addition |
+| `PF-55` | Explicit OpenAI Astra model selection | [PF-55-S02](../../sprints/archive/unified-provider-auth/pf-55-s02-openai-astra-selector.md) | completed; [selector evidence](../../../qa/release/0.1.38/astra-selector.md) |
 | `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/archive/unified-provider-auth/pf-56-s01-final-qualification.md) | completed at `fd8a9c900e` |
 | `PF-57` | Latest-main integration, regression preservation, and credential-store liveness | [PF-57-S01](../../sprints/archive/unified-provider-auth/pf-57-s01-latest-main-integration.md) | completed at `a935e507b` |
 | `PF-57` | Reconciled release credential-lifecycle regressions | [PF-57-S02](../../sprints/archive/unified-provider-auth/pf-57-s02-reconciliation-auth-repairs.md) | completed; [Astra repair evidence](../../../qa/release/0.1.38/astra-fixes.md) |

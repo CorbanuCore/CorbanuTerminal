@@ -1,8 +1,22 @@
 # Corbanu Terminal 0.1.38 integration candidate
 
+## Latest addition — GPT-6 Astra, September 5
+
+Current implementation source: `6b17a2630f31f5447d2c53fa8f6a29b60407b42a`
+on `integration/reconcile-release-0.1.38`. GPT-6 Astra is selectable under
+OpenAI with its supported reasoning levels; existing Sol/current defaults and
+automatic allocation remain unchanged. Final affected tests passed **87/87**,
+including real-TMUX cancellation, selection, restart and loopback Responses
+request checks. Manual `just codex` selection also passed.
+
+[Astra selector evidence](astra-selector.md) records exact sources, binaries,
+commands, account-access limitations and test-fixture corrections. This is not
+live Astra inference or new cross-platform/release qualification. No release
+workflow, tag or publication was started by this addition.
+
 ## Latest reconciliation — September 5
 
-Current combined source: `c37eb277d9f83ebcabe89e41cc81b9d3e92797a2` on
+Reconciled baseline source: `c37eb277d9f83ebcabe89e41cc81b9d3e92797a2` on
 `integration/reconcile-release-0.1.38`. This preserves Travis/IridiumMaster's
 `07791288b6` integration tip and the two PF-57-S02 repair commits. Fork `main`
 through `6dd9ad646b` is already included. Claude token/login improvements and

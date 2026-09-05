@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-55-S02"
 title: "OpenAI Astra model selector"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/unified-provider-auth.md"
 plan_feature: "PF-55"
 execution_order: 19
@@ -54,24 +54,31 @@ updated: 2026-09-05
 ## Done
 
 - [x] Confirmed missing bundled Astra entry and existing generic OpenAI route mapping.
+- [x] Added sourced catalog entry and regression/snapshot/TMUX coverage.
+- [x] Final scoped fix/format and 87 selected tests pass without retries.
+- [x] Manual `just codex` verified Astra, Max, cancellation and saved High selection.
+- [x] User documentation and exact source/binary/test evidence recorded.
 
 ## Remaining
 
-- [ ] Add the catalog entry and regression/snapshot/TMUX coverage.
-- [ ] Format and run final affected automated and interactive checks.
-- [ ] Record tested source, documentation, access limitations and handoff.
+None within PF-55-S02. Real account entitlement and broader release gates are
+separate, explicitly disclosed in the evidence record.
 
 ## Verification
 
-- [ ] Scoped fix/format, model-manager tests and relevant TUI snapshots pass.
-- [ ] Real TMUX selection/cancel/restart and exact loopback model/effort request pass.
-- [ ] Manual `just codex` with temporary home, explicit trace log directory and fake auth.
-- [ ] Governance, portable-skill parity and final diff checks pass.
+- [x] Scoped fix/format, model-manager tests and relevant TUI snapshots pass.
+- [x] Real TMUX selection/cancel/restart and exact loopback model/effort request pass.
+- [x] Manual `just codex` with temporary home, explicit trace log directory and fake auth.
+- [x] Governance, portable-skill parity and final diff checks pass.
 
 ## Exit evidence
 
-- [ ] Source/docs and test commands/results in `qa/release/0.1.38/astra-selector.md`.
-- [ ] TensorCash/Isometric applicability: not a project coding-logic change; isolated
+- [x] Source/docs and test commands/results in `qa/release/0.1.38/astra-selector.md`.
+- [x] TensorCash/Isometric applicability: not a project coding-logic change; isolated
   selection/persistence/loopback routing proves this feature. Broader release-level
   live-repository, benchmark, cross-platform and named-human gates remain separate.
-- [ ] Completed sprint archived and pushed; no release or paid access claim.
+- [x] Completed sprint archived for integration handoff; no release or paid access claim.
+
+Implementation commit: `6b17a2630f31f5447d2c53fa8f6a29b60407b42a`.
+Final nextest run: `a6f3821f-aa09-49d0-a435-210c7c210586`, 87/87 passed.
+[Evidence](../../../../qa/release/0.1.38/astra-selector.md).
