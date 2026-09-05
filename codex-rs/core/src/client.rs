@@ -306,6 +306,7 @@ pub struct ModelClient {
     // Restrictive configured intent, not an assertion of protected readiness.
     ingress_level: codex_security_policy::SecurityLevel,
     ingress_policy: Option<crate::security::ingress::BoundIngressPolicy>,
+    stage_one_memory_binding: Option<Arc<crate::memory_stage_one::StageOneMemoryBinding>>,
     ingress_items: Arc<StdMutex<crate::security::ingress::NativeIngress>>,
 }
 
@@ -762,10 +763,19 @@ impl ModelClient {
             http_client_factory,
             ingress_level: codex_security_policy::SecurityLevel::Permissive,
             ingress_policy: None,
+            stage_one_memory_binding: None,
             ingress_items: Arc::new(StdMutex::new(
                 crate::security::ingress::NativeIngress::default(),
             )),
         }
+    }
+
+    pub(crate) fn with_stage_one_memory_binding(
+        mut self,
+        binding: Arc<crate::memory_stage_one::StageOneMemoryBinding>,
+    ) -> Self {
+        self.stage_one_memory_binding = Some(binding);
+        self
     }
 
     #[cfg(test)]
@@ -1008,6 +1018,7 @@ impl ModelClient {
             http_client_factory: self.http_client_factory.clone(),
             ingress_level: self.ingress_level,
             ingress_policy: self.ingress_policy.clone(),
+            stage_one_memory_binding: self.stage_one_memory_binding.clone(),
             ingress_items: Arc::clone(&self.ingress_items),
         }
     }
@@ -2123,7 +2134,7 @@ impl ModelClient {
         &self,
         api_provider: &ApiProvider,
         endpoint: &str,
-    ) -> Result<ReqwestTransport> {
+    ) -> Result<crate::memory_stage_one::StageOneGuardedTransport> {
         let request_url = api_provider.url_for_path(endpoint);
         let client = create_client_for_route(
             &self.http_client_factory,
@@ -2131,7 +2142,10 @@ impl ModelClient {
             ClientRouteClass::Api,
         )
         .map_err(std::io::Error::from)?;
-        Ok(ReqwestTransport::from_http_client(client))
+        Ok(crate::memory_stage_one::StageOneGuardedTransport::new(
+            ReqwestTransport::from_http_client(client),
+            self.stage_one_memory_binding.clone(),
+        ))
     }
 
     pub(crate) async fn prewarm_auth(&self) -> Result<()> {
@@ -3399,6 +3413,9 @@ impl ModelClientSession {
                         "websocket connection is unavailable".to_string(),
                     ))
                 })?;
+            if let Some(binding) = &self.client.stage_one_memory_binding {
+                binding.check().await.map_err(|reason| CodexErr::InvalidRequest(reason.to_string()))?;
+            }
             let stream_result = websocket_connection
                 .stream_request(
                     ws_request,
