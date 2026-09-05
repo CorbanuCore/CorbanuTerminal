@@ -66,6 +66,23 @@ fn server_or_skip(scenario: &str) -> Result<Option<TmuxServer>> {
 }
 
 #[test]
+fn attachment_hint_targets_only_owned_session_and_preserves_cleanup() -> Result<()> {
+    let Some(server) = server_or_skip("attachment")? else { return Ok(()); };
+    let socket_root = server.socket_root();
+    let session = server.new_session(SessionSpec::new("owned", TerminalSize::new(40, 8),
+        command_for_shell("printf ready; sleep 30")))?;
+    let command = session.attachment_command();
+    pretty_assertions::assert_eq!(command.get_args().collect::<Vec<_>>(),
+        vec![OsStr::new("-L"), OsStr::new(&server.socket_name), OsStr::new("attach-session"), OsStr::new("-t"), OsStr::new(&session.name)]);
+    assert!(command.get_envs().any(|(key, value)| key == "TMUX_TMPDIR" && value == Some(socket_root.as_os_str())));
+    assert!(session.is_running());
+    drop(session);
+    drop(server);
+    assert!(!socket_root.exists());
+    Ok(())
+}
+
+#[test]
 fn servers_are_isolated_and_cleanup_their_private_sessions() -> Result<()> {
     let Some(first) = server_or_skip("servers_are_isolated")? else {
         return Ok(());

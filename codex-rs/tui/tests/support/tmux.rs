@@ -312,6 +312,17 @@ pub(crate) struct TmuxSession<'a> {
 }
 
 impl<'a> TmuxSession<'a> {
+    /// Attachment targets only this owned private fixture; callers must keep it alive.
+    pub(crate) fn attachment_command(&self) -> Command {
+        let mut command = self.server.command();
+        command.args(["attach-session", "-t", &self.name]);
+        command
+    }
+
+    pub(crate) fn is_running(&self) -> bool {
+        self.server.has_session(&self.name) || process_is_running(self.primary_pane.pid)
+    }
+
     pub(crate) fn primary_pane(&self) -> &TmuxPane<'a> {
         &self.primary_pane
     }
