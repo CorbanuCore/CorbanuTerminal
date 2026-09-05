@@ -30,7 +30,12 @@ The workflow creates `rust-v0.1.38` and publishes only after its required jobs
 succeed. Expected assets: five platform packages, two macOS DMGs, their checksum
 manifests, and Unix/PowerShell installer scripts.
 
-Status: authorized; dispatch and its exact run identity will be recorded below.
+Status: dispatched and in progress, not yet published.
+Run: [33977446493](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/33977446493).
+Exact captured build SHA: `32ff7bf8741351019f0543c837c396f5de32a049`.
+Input validation passed and all five platform build jobs started. The run uses
+fresh artifacts only. A terminal release result and asset verification are not
+yet available and are not claimed as passed.
 
 ## Evidence and disclosed gaps
 
