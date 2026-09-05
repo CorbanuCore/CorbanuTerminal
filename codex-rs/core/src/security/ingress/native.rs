@@ -3,6 +3,7 @@
 
 use super::AdmittedSource;
 use super::IngressError;
+use super::MAX_INGRESS_TEXT_BYTES;
 use super::NativeScreeningCandidate;
 use super::PendingSource;
 use crate::context::ContextualUserFragment;
@@ -17,6 +18,25 @@ use codex_protocol::provenance::SourceKind;
 use std::collections::HashMap;
 
 const MAX_ADMITTED_ITEMS: usize = 256;
+
+// Enforce the raw bound while serializing, before allocating a whole oversized
+// history item merely to discover that it cannot enter this bounded carrier.
+fn item_bytes(item: &ResponseItem) -> Result<Vec<u8>, IngressError> {
+    struct BoundedBytes(Vec<u8>);
+    impl std::io::Write for BoundedBytes {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            if bytes.len() > MAX_INGRESS_TEXT_BYTES.saturating_sub(self.0.len()) {
+                return Err(std::io::Error::other("source item exceeds admission bound"));
+            }
+            self.0.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+    }
+    let mut writer = BoundedBytes(Vec::new());
+    serde_json::to_writer(&mut writer, item).map_err(|_| IngressError::TooLarge)?;
+    Ok(writer.0)
+}
 
 #[derive(Default)]
 pub(crate) struct NativeIngress {
@@ -61,7 +81,7 @@ impl NativeIngress {
     /// No body or role label can supply an admission capability here.
     pub(crate) fn observe(&mut self, items: &[ResponseItem], retrieved_at_unix_ms: u64) {
         for item in items {
-            let Ok(bytes) = serde_json::to_vec(item) else {
+            let Ok(bytes) = item_bytes(item) else {
                 self.unavailable = true;
                 return;
             };
@@ -111,7 +131,7 @@ impl NativeIngress {
     /// Preserve the exact bounded payload and host identity for a producer.
     pub(crate) fn screening_candidate(&self, item: &ResponseItem) -> Result<NativeScreeningCandidate, IngressError> {
         if self.unavailable { return Err(IngressError::RegistryUnavailable); }
-        let bytes = serde_json::to_vec(item).map_err(|_| IngressError::InvalidEnvelope)?;
+        let bytes = item_bytes(item)?;
         self.pending.get(&ContentDigest::of(&bytes)).map(PendingSource::screening_candidate).ok_or(IngressError::NativeAdmissionUnavailable)
     }
 
@@ -122,7 +142,7 @@ impl NativeIngress {
         item: &ResponseItem,
         screened: ScreenedContent,
     ) -> Result<(), IngressError> {
-        let bytes = serde_json::to_vec(item).map_err(|_| IngressError::InvalidEnvelope)?;
+        let bytes = item_bytes(item)?;
         let pending = self
             .pending
             .remove(&ContentDigest::of(&bytes))
@@ -138,7 +158,7 @@ impl NativeIngress {
         item: &ResponseItem,
         source: AdmittedSource,
     ) -> Result<(), IngressError> {
-        let bytes = serde_json::to_vec(item).map_err(|_| IngressError::InvalidEnvelope)?;
+        let bytes = item_bytes(item)?;
         let digest = ContentDigest::of(&bytes);
         if digest.as_bytes() != &source.raw_digest {
             return Err(IngressError::BindingMismatch);
@@ -166,7 +186,7 @@ impl NativeIngress {
         items
             .iter()
             .map(|item| {
-                let bytes = serde_json::to_vec(item).map_err(|_| IngressError::InvalidEnvelope)?;
+                let bytes = item_bytes(item)?;
                 let source = self
                     .admitted
                     .get(&ContentDigest::of(&bytes))

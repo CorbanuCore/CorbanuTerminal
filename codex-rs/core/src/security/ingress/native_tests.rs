@@ -112,3 +112,19 @@ fn pf_30_s01_native_capacity_never_evicts_or_invalidates_repeat_observation() {
     assert!(ingress.screening_candidate(&tool_item()).is_err());
     assert!(ingress.project(&[tool_item()]).is_err());
 }
+
+#[test]
+fn pf_30_s01_native_serialization_bound_withholds_complete_oversized_item() {
+    let item = ResponseItem::FunctionCallOutput {
+        id: None,
+        call_id: "call-1".into(),
+        output: FunctionCallOutputPayload::from_text("x".repeat(MAX_INGRESS_TEXT_BYTES + 1)),
+        internal_chat_message_metadata_passthrough: None,
+    };
+    assert_eq!(item_bytes(&item), Err(IngressError::TooLarge));
+    let mut ingress = NativeIngress::default();
+    ingress.register_call("call-1", SourceKind::Tool);
+    ingress.observe(&[item], 1);
+    assert!(ingress.unavailable);
+    assert!(ingress.pending.is_empty());
+}
