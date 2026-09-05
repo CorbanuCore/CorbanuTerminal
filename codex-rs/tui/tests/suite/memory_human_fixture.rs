@@ -337,7 +337,7 @@ animations = false
             }
             if driver == Driver::Rehearsal {
                 if case == Case::ProviderSwitch && canaries == 1 && !switched {
-                    switch_provider(pane, &mut keys)?;
+                    switch_provider(pane, root, &mut keys)?;
                     switched = true;
                     submit(pane, FOREGROUND, &mut keys)?;
                 }
@@ -499,7 +499,7 @@ fn submit(pane: &TmuxPane<'_>, text: &str, keys: &mut Vec<String>) -> Result<()>
     keys.push("key: Enter".into());
     Ok(())
 }
-fn switch_provider(pane: &TmuxPane<'_>, keys: &mut Vec<String>) -> Result<()> {
+fn switch_provider(pane: &TmuxPane<'_>, root: &Path, keys: &mut Vec<String>) -> Result<()> {
     submit(pane, "/providers", keys)?;
     pane.wait_stable_contains("Providers", READY)?;
     pane.send_key(TmuxKey::Escape)?;
@@ -515,6 +515,7 @@ fn switch_provider(pane: &TmuxPane<'_>, keys: &mut Vec<String>) -> Result<()> {
         std::thread::sleep(Duration::from_millis(150));
     }
     pane.wait_stable_contains("[Other]", READY)?;
+    fs::write(root.join("model-picker.txt"), pane.capture_viewport()?)?;
     for _ in 0..64 {
         let capture = pane.capture_viewport()?;
         let selected = capture
