@@ -719,7 +719,7 @@ requesting the coordinator's next numbered review.
 
 ## Sprint execution map
 
-This map covers **52 current and 24 completed archived sprints**.
+This map currently covers **51 current and 27 completed archived sprints**.
 The [ordered execution index](../../sprints/current/p0-security-levels/index.md)
 is dependency-correct; feature IDs are not execution order. Archive orders 1–9
 stay unchanged and current orders start at 10. Existing allocation coordinates
@@ -829,7 +829,10 @@ for design provenance; product scope remains in the specification.
 
 **Durable provenance and post-taint authority.** Trusted ingress assigns immutable source/authority/lineage envelopes. Propagate conservative taint through every provider serialization, summary, memory, cache/import/export, child/mailbox and resume path. Re-evaluate protected actions at use; neither a detector nor a summarizer creates authority.
 
-Rolling independent denial contract: [PF-30-S04 — policy-bound stage-one memory dispatch](../../sprints/current/p0-security-levels/pf-30-s04-policy-bound-memory-dispatch.md).
+Completed independent denial contract: [PF-30-S04 combined qualification](../../../qa/security-levels/sprints/PF-30-S04/combined-qualification.md).
+Merged source 6a6bb029d passed Core110, memory44+3, UI235 and four actual-key
+TMUX tests on RTX after clean fix/format. The sprint is archived; full persistent
+provenance and positive protected inference remain incomplete under S01/S02.
 Its completed runtime-policy prerequisite does not authorize positive protected
 memory; S01/S02/S03 keep their original source and persistence qualification gates.
 

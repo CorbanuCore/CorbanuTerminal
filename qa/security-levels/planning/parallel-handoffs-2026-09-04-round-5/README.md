@@ -320,7 +320,31 @@ The implementation's coherent modules/checkpoints are staged for review; total
 diff size must be recorded honestly. This adds no review invocation or privileged
 deployment authority.
 
-## PF-35 external campaign status
+## Completed memory checkpoint and human-test handoff
+
+PF30S04 is completed and archived after exact combined source 6a6bb029d passed
+Core110/110, memory-write44/44, read3/3, UI235/235 and actual-key TMUX4/4.
+The latter contains four memory scenarios plus four restarts and the security/
+status journeys. Scoped fix/fullfmt, immutable binary hash, governance and clean
+source checks passed; [final combined evidence](../../sprints/PF-30-S04/combined-qualification.md)
+records the run IDs and synthetic request/output counts.
+
+humanTest.html now points to the exact RTX binary and retains all previous
+checkbox keys, adding checks21–23 for assisted disposable memory sessions.
+Those fixtures need preparation before human testing; ordinary chat is not
+background-memory proof. No human check is marked accepted. The Mac Apps
+shortcut and earlier provider baseline are explicitly distinguished.
+securityProgress.html reports27/78 archived (35% rounded), two active
+reservations and the completed memory lane. The freed slot has no currently
+eligible new implementation; PF20 proceeds while broker waits its root and
+the already-asked review-budget choice.
+
+Browser QA used an isolated external-drive profile, verified23 checkboxes,
+the new memory section layout and updated progress display; no user acceptance
+state was changed. Screenshots stay in .codex-work/security-round5.
+This documentation-only closeout does not change the qualified codex-rs tree.
+
+## PF-35 external campaign (unchanged)
 
 User explicitly removed PF-35 from the engineering main path.
 Its engineering reservation returns to draft under the existing sprint process.

@@ -115,7 +115,7 @@
       height: 110px;
       place-items: center;
       border-radius: 50%;
-      background: conic-gradient(var(--complete) 0 33%, var(--line) 33% 100%);
+      background: conic-gradient(var(--complete) 0 35%, var(--line) 35% 100%);
     }
     .donut::after {
       display: grid;
@@ -125,7 +125,7 @@
       border-radius: 50%;
       background: var(--surface);
       color: var(--text);
-      content: "33%";
+      content: "35%";
       font-size: 1.45rem;
       font-weight: 750;
     }
@@ -317,9 +317,9 @@
 
     <section class="hero-grid" aria-label="Program summary">
       <div class="metric primary">
-        <div class="donut" role="img" aria-label="33 percent of planned security sprints are completed"></div>
+        <div class="donut" role="img" aria-label="35 percent of planned security sprints are completed"></div>
         <div>
-          <span class="metric-number">26 of 78</span>
+          <span class="metric-number">27 of 78</span>
           <span class="metric-label">sprints completed and archived</span>
         </div>
       </div>
@@ -328,8 +328,8 @@
         <span class="metric-label">UI review pair clean: Astra High and Fable 5.1 High; final combined tests passed</span>
       </div>
       <div class="metric">
-        <span class="metric-number blue">3</span>
-        <span class="metric-label">rolling engineering lanes: broker, local controller and memory integration</span>
+        <span class="metric-number blue">2</span>
+        <span class="metric-label">open implementation reservations: broker and local controller; memory is now archived</span>
       </div>
       <div class="metric">
         <span class="metric-number amber">1</span>
@@ -341,7 +341,7 @@
       <div class="section-head">
         <div>
           <p class="eyebrow">Round-five implementation and qualification</p>
-          <h2 id="next-title">Three parallel workstreams</h2>
+          <h2 id="next-title">Rolling workstreams and the latest completion</h2>
         </div>
         <div class="legend" aria-label="Status legend">
           <span><i class="swatch complete"></i>Complete</span>
@@ -379,14 +379,14 @@
         </article>
 
         <article class="lane">
-          <span class="lane-order">Lane 3 · reviewed, awaiting integration</span>
+          <span class="lane-order">Latest completion · integrated and qualified</span>
           <h3>Keep memory jobs policy-bound</h3>
-          <a class="sprint-id" href="docs/sprints/current/p0-security-levels/pf-30-s04-policy-bound-memory-dispatch.md">PF-30-S04</a>
+          <a class="sprint-id" href="qa/security-levels/sprints/PF-30-S04/combined-qualification.md">PF-30-S04 · complete</a>
           <p>Bind each background memory request to its owning session and current policy, including retries and provider changes. Unsupported protected requests must stop before rollout content is sent.</p>
-          <p><strong>Evidence:</strong> Core 11/11, memory-write 44/44, read 3/3 and four TMUX scenarios plus four restarts passed. Astra's provider-switch finding is fixed; Fable confirmed correctness. Combined-tree qualification remains. This is deny-only, not positive protected inference.</p>
+          <p><strong>Evidence:</strong> Final combined Core 110/110, memory-write 44/44, read 3/3, UI 235/235 and TMUX 4/4 passed, including four memory scenarios and restarts. Astra's finding is fixed; Fable confirmed correctness. Archived after integration. This is deny-only, not positive protected inference.</p>
           <div class="status-line">
-            <div class="bar-row"><span>New memory-dispatch sprint</span><strong>0 / 1 · 0%</strong></div>
-            <div class="track" role="progressbar" aria-label="Memory dispatch completion" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:0%"></div></div>
+            <div class="bar-row"><span>Memory-dispatch sprint</span><strong>1 / 1 · 100%</strong></div>
+            <div class="track" role="progressbar" aria-label="Memory dispatch completion" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"><div class="fill complete" style="width:100%"></div></div>
           </div>
         </article>
       </div>
@@ -481,8 +481,8 @@
         </div>
         <div class="phase">
           <div class="phase-name"><strong>Content, network and provenance</strong><small>PF-28 through PF-35</small></div>
-          <div class="track" role="progressbar" aria-label="Content network and provenance" aria-valuenow="11" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:11%"></div></div>
-          <div class="phase-value"><strong>11%</strong><small>3 / 28</small></div>
+          <div class="track" role="progressbar" aria-label="Content network and provenance" aria-valuenow="14" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:14%"></div></div>
+          <div class="phase-value"><strong>14%</strong><small>4 / 28</small></div>
         </div>
         <div class="phase">
           <div class="phase-name"><strong>Operator and protected workflows</strong><small>PF-23–25 and PF-36–41</small></div>
@@ -497,7 +497,7 @@
       </div>
 
       <div class="footnote">
-        <strong>Scheduling conclusion:</strong> Memory dispatch is reviewed and ready for combined integration. The provenance agent moves to PF-20-S03, the local controller root; the incomplete provenance sprint retains its remaining gates. PF-35 remains separate. Reviews used: broker 5/5, frozen provenance 5/5, completed UI 3/5, memory 2/5 and new PF20 track 0/5. The total percentage changed because one newly allocated sprint increased the denominator, not because completed work was lost. <a href="qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md">Coordination and evidence ledger</a>.
+        <strong>Scheduling conclusion:</strong> Memory dispatch is integrated, tested and archived. Its slot is available; no other unallocated sprint is dependency-ready outside the separate PF-35 campaign. PF-20-S03 is implementing the local controller root, while the broker awaits that dependency and a review-budget decision. Frozen provenance retains its production gates. Reviews used: broker 5/5, frozen provenance 5/5, completed UI 3/5, completed memory 2/5 and PF20 0/5. <a href="humanTest.html">Test the exact RTX candidate</a>. <a href="qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md">Coordination and evidence ledger</a>.
       </div>
 
       <details>

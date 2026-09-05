@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-30-S04"
 title: "Policy-bound stage-one memory dispatch"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-30"
 execution_order: 77
@@ -48,7 +48,7 @@ updated: 2026-09-04
 ## Done
 
 - [x] Existing detached construction, lower-level retry risk and historical-source/runtime-owner distinction documented.
-- [x] Host-owned factory/opaque facade and per-attempt transport guard authored; first Core compile and binding tests passed on RTX. Worker routing/persistence and expanded canary/TMUX tests authored, final qualification still pending.
+- [x] Host-owned factory/opaque facade, per-attempt guard, worker routing/persistence and expanded canary/TMUX tests implemented and qualified on RTX.
 - [x] [Versioned evidence and limitations](../../../../qa/security-levels/sprints/PF-30-S04/qualification.md) created; Astra P2 corrected and qualified with full memories-write 44/44 and actual-key TMUX. Fable confirms correctness with one documented non-blocking P3 optimization; 2/5 reviews used.
 
 - [x] Implement one host-owned opaque stage-one client factory; expected identity/provider are assertions, never authority selectors. Unknown/uninitialized/terminated/mismatched bindings deny.
@@ -62,7 +62,7 @@ updated: 2026-09-04
 
 ## Remaining
 
-- [ ] Complete coordinator combined-tree qualification, final evidence and archival.
+- [x] Coordinator merged at 6a6bb029d and completed [combined qualification](../../../../qa/security-levels/sprints/PF-30-S04/combined-qualification.md): Core110, write44, read3, UI235, actual-key TMUX4 all passed; immutable hash recorded. Archived after final-tree gates.
 
 ## Verification
 
@@ -70,10 +70,10 @@ updated: 2026-09-04
 - [x] Fake providers and synthetic fixtures only; prove zero canary-bearing requests under protected/unavailable policy and unchanged Permissive success.
 - [x] Actual-key TMUX startup/turn/cancel/restart with memory-enabled isolated home and recorded fake-provider/DB outcomes; text and Enter separately.
 - [x] Astra High and Fable 5.1 High review via Corbanu/private TMUX with exact frozen source; 2/5 invocations, no redundant reviews.
-- [ ] Coordinator exports/registries, lock parity if needed, combined-tree and governance checks.
+- [x] Coordinator exports/registries, unchanged locks, combined-tree and governance checks passed; scoped fix/fullfmt produced no diff.
 
 ## Exit evidence
 
 - [x] Commit, immutable RTX binary hash, tests, keys/captures and review dispositions recorded under the new QA directory.
 - [x] Denial-only boundary and remaining persistence/positive-screening limitations explicit; no human, cross-platform or release pass inferred.
-- [ ] Done/Remaining reflect reality; archive only after all required final-tree evidence.
+- [x] Done/Remaining reflect reality; archived with exact combined evidence. No whole-feature memory provenance or positive protected inference claim.

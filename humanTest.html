@@ -202,19 +202,20 @@
     <header>
       <p class="eyebrow">Corbanu Terminal · human QA</p>
       <h1>Provider and security acceptance</h1>
-      <p class="lede">Keep the existing 35–45 minute provider acceptance pass. Round five adds five read-only security checks below, to run only after its combined RTX candidate is supplied. Stop at the first failure and record the exact visible message—never a credential.</p>
+      <p class="lede">Keep the existing 35–45 minute provider acceptance pass. Round five adds five read-only security checks and three assisted memory checks on the exact RTX candidate below. Stop at the first failure and record the visible message—never a credential.</p>
       <div class="release-strip">
         <span><strong>Candidate:</strong> Corbanu 0.1.38</span>
         <span><strong>Combined lines:</strong> <code>a935e507b</code> + <code>rust-v0.1.37</code></span>
         <span><strong>Integration base:</strong> <code>6dd9ad646</code></span>
         <span><strong>UX parity follow-up:</strong> 4 Sep 2026 (Phoenix)</span>
-        <span><strong>Runtime:</strong> stable release build on CorbanuDrive</span>
+        <span><strong>Provider baseline:</strong> Mac launcher unchanged</span>
+        <span><strong>Security/memory runtime:</strong> RTX <code>6a6bb029d</code> · instructions below</span>
       </div>
       <div class="actions">
         <button type="button" onclick="window.print()">Print / save PDF</button>
         <button type="button" id="reset">Reset checks</button>
-        <div class="progress-shell" id="progressShell" role="progressbar" aria-label="Test progress" aria-valuemin="0" aria-valuemax="20" aria-valuenow="0"><div class="progress-bar" id="progress"></div></div>
-        <span class="progress-label" id="progressLabel" aria-live="polite">0 / 20</span>
+        <div class="progress-shell" id="progressShell" role="progressbar" aria-label="Test progress" aria-valuemin="0" aria-valuemax="23" aria-valuenow="0"><div class="progress-bar" id="progress"></div></div>
+        <span class="progress-label" id="progressLabel" aria-live="polite">0 / 23</span>
       </div>
     </header>
 
@@ -405,18 +406,18 @@
       <h2 id="security-round5-title">Round five: understand your protection</h2>
       <p><strong>Ready for read-only UX testing on RTX.</strong> The combined candidate passed its automated and actual-key TMUX gates.
         The existing Mac Apps shortcut has not been changed by this security round.
-        Do not mistake its matching version number for the new build: record the supplied candidate commit and machine before checks 16–20.</p>
+        Do not mistake its matching version number for the new build: record the supplied candidate commit and machine before checks 16–23.</p>
       <p>Use <code>ssh travis@100.99.88.49</code>, then launch the exact candidate below from your intended test directory.
-        This is commit <code>dd2adb72b967602c6851bb4f4257eb34ad135459</code>, Corbanu <code>0.1.38</code>; it is not yet merged to main.</p>
-      <pre><code>/home/travis/security-round5/evidence/integration/dd2adb72b/candidate/codex</code></pre>
+        This is commit <code>6a6bb029d8f3e0c16653ce335d252f45b4d7326f</code>, Corbanu <code>0.1.38</code>; it is not yet merged to main.</p>
+      <pre><code>/home/travis/security-round5/evidence/integration/6a6bb029d/candidate/codex</code></pre>
       <details><summary>Candidate identity and automated evidence</summary>
-        <p>SHA-256: <code>6af243a3a249ddb44f3344a40aeeb5e21dbbc5e0b156167577db4d848c806ab3</code>.
-          Final combined Core 94/94 and actual-key TMUX 3/3 passed. Unchanged protocol 285/285, broker/Vault/proxy 338/338 and UI 235/235 evidence is explicitly reused.
-          <a href="qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/combined-qualification.md">Exact run IDs and evidence</a>.
+        <p>SHA-256: <code>90d6a1f7f72c5397ff858583c038b2615c8fb034f57a890d6595d6b98afccd4f</code>.
+          Final combined Core 110/110, memory-write 44/44, memory-read 3/3, UI 235/235 and actual-key TMUX 4/4 passed, including four memory scenarios and four restarts.
+          <a href="qa/security-levels/sprints/PF-30-S04/combined-qualification.md">Exact run IDs and evidence</a>.
           Human checks below remain yours to perform; no human acceptance is implied.</p>
       </details>
       <p>This slice is observation-only. It cannot activate Moderate or Aggressive, grant permissions or downgrade protection.
-        Broker service isolation, production screening, the separate memory-worker policy binding and all-platform qualification remain unfinished.
+        Memory-worker policy binding is now qualified as a denial-only boundary. Broker service isolation, production screening, full persisted memory provenance and all-platform qualification remain unfinished.
         <a href="securityProgress.html">See progress and remaining gates</a>.</p>
       <div class="checklist">
         <label class="test"><input type="checkbox" data-check="security-requested-effective"><span>
@@ -447,6 +448,29 @@
       </div>
       <p><strong>Automated evidence, not human proof:</strong> isolated fixtures cover unknown-config rejection, protected-input withholding, forged source metadata, and broker peer/death/revocation cases.
         This checklist does not certify those boundaries or the separate PF-35 detector campaign.</p>
+    </section>
+
+    <section aria-labelledby="memory-acceptance-title" style="margin-top:42px">
+      <h2 id="memory-acceptance-title">Memory-enabled session regression checks</h2>
+      <p>Use the exact RTX candidate above and a <strong>disposable session that already has memory enabled</strong>, with synthetic history only. Ask us to prepare that session if needed. Do not enable new settings or import private history just for this test. If memory is disabled or no eligible history exists, leave these checks unticked and note “not exercised”; ordinary chat alone does not prove the background worker ran.</p>
+      <div class="checklist">
+        <label class="test"><input type="checkbox" data-check="memory-startup"><span>
+          <h3>21. Start with memory enabled</h3>
+          <p>Launch the supplied disposable Permissive session. Allow its prepared background memory job to run, then send a harmless prompt.</p>
+          <p class="expected">Pass: chat remains responsive and the prepared job completes without authentication, policy-binding or startup errors. Record the job outcome supplied by the fixture, not just the chat answer.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="memory-provider-switch"><span>
+          <h3>22. Change providers during the session</h3>
+          <p>With the prepared memory job running, use <code>/model</code> to choose another already-configured test provider. Send a harmless prompt. Do not add or remove credentials.</p>
+          <p class="expected">Pass: foreground model indicators agree and the prompt reaches the selected provider. Background work either retains its original matching provider/model pair or stops safely; it must not combine one provider's model with another provider's endpoint. Have us confirm the fixture's routing log.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="memory-owner-exit"><span>
+          <h3>23. Exit while memory work is pending, then restart</h3>
+          <p>Use the prepared delayed-response case. Exit Corbanu normally while extraction is pending, then relaunch the same disposable home using the same candidate.</p>
+          <p class="expected">Pass: exit/restart does not hang or panic, and the abandoned job is not recorded as successfully completed. Have us confirm the fixture's output count. A request already sent before exit cannot be recalled.</p>
+        </span></label>
+      </div>
+      <p><strong>Security limit:</strong> automated fake-provider tests prove zero raw-history requests and zero outputs for Moderate/Aggressive. These manual regression checks do not activate protected modes or certify missing isolation/classifier gates.</p>
     </section>
 
     <section aria-labelledby="evidence-title" style="margin-top:42px">

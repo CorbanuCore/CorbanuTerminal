@@ -127,7 +127,7 @@ nav:
                   - "PF-30-S01 — Typed source envelope and trusted ingress": sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md
                   - "PF-30-S02 — Persistent taint across summaries and memory": sprints/current/p0-security-levels/pf-30-s02-persistent-taint-and-memory.md
                   - "PF-30-S03 — Post-taint authority checks": sprints/current/p0-security-levels/pf-30-s03-post-taint-authority-checks.md
-                  - "PF-30-S04 — Policy-bound memory dispatch": sprints/current/p0-security-levels/pf-30-s04-policy-bound-memory-dispatch.md
+                  - "PF-20-S03 — Local controller integrity root": sprints/current/p0-security-levels/pf-20-s03-local-controller-integrity-root.md
               - "Isolated retrieval and downloads":
                   - "PF-31-S01 — Pinned retriever artifact and sandbox": sprints/current/p0-security-levels/pf-31-s01-pinned-retriever-isolation.md
                   - "PF-31-S02 — Bounded fetch adapter with no host fallback": sprints/current/p0-security-levels/pf-31-s02-bounded-fetch-no-fallback.md
