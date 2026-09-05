@@ -41,3 +41,19 @@ the coordinator deliberately arranges the human package.
 
 `0ca14bb8d`: first synthetic fixture, owned attachment and cleanup assertion.
 Not qualified; no tests/build/review have run at this checkpoint.
+
+`69bd039d3` plus final formatter: registered fixture compiled after correcting
+one OsStr reference comparison in the attachment helper. Nine existing/new
+TMUX support tests passed (including abnormal child termination and owned socket
+cleanup). First full rehearsal completed startup but stopped at provider switch:
+a fresh custom provider B had no selectable model preset. Source inspection
+shows custom presets sync on provider-manager access; this is not a claim of a
+new product regression or authorization to modify product UX.
+
+`d70972fd3` uses established OpenAI and Z.ai catalog identities, both redirected
+to separate loopback fake endpoints with synthetic keys and an isolated child
+environment. The operator can select the visible Z.ai / GLM5.3 model. This also
+makes routing-model mismatches observable (foreground A gpt-5.6-terra versus B
+glm-5.3), unlike identical generic custom model labels. The archived memory
+tests remain unchanged. Failed rehearsal status/captures now persist before
+propagating the test error. Final qualification still pending.

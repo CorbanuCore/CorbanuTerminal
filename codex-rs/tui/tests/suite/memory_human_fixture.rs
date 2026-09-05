@@ -155,8 +155,8 @@ async fn run_case(
     let a = fake_provider("A", case, delay).await;
     let b = fake_provider("B", case, delay).await;
     let config = format!(
-        r#"model = "gpt-5.6-terra"
-model_provider = "openai"
+        r#"model = "fixture-model"
+model_provider = "memory-a"
 cli_auth_credentials_store = "file"
 check_for_update_on_startup = false
 suppress_unstable_features_warning = true
@@ -167,22 +167,22 @@ memories = true
 [memories]
 generate_memories = true
 min_rollout_idle_hours = 0
-extract_model = "gpt-5.6-terra"
-consolidation_model = "gpt-5.6-terra"
+extract_model = "fixture-model"
+consolidation_model = "fixture-model"
 [security]
 version = 1
 level = "permissive"
-[model_providers.openai]
+[model_providers.memory-a]
 name = "Memory Fixture A"
 base_url = "{}/v1"
-env_key = "OPENAI_API_KEY"
+env_key = "MEMORY_FIXTURE_A_KEY"
 wire_api = "responses"
 request_max_retries = 0
 stream_max_retries = 0
-[model_providers.zai]
+[model_providers.memory-b]
 name = "Memory Fixture B"
 base_url = "{}/v1"
-env_key = "ZAI_API_KEY"
+env_key = "MEMORY_FIXTURE_B_KEY"
 wire_api = "responses"
 request_max_retries = 0
 stream_max_retries = 0
@@ -205,7 +205,7 @@ animations = false
         codex_state::SqliteConfig::new_for_testing(
             codex_utils_absolute_path::AbsolutePathBuf::try_from(home.path())?,
         ),
-        "openai".into(),
+        "memory-a".into(),
     )
     .await?;
     db.mark_backfill_complete(None).await?;
@@ -247,8 +247,8 @@ animations = false
                 .arg(format!("CODEX_HOME={}", home.path().display()))
                 .arg(format!("CORBANU_HOME={}", home.path().display()))
                 .arg("CORBANU_TEST_NO_NATIVE_KEYRING=1")
-                .arg("OPENAI_API_KEY=synthetic-a")
-                .arg("ZAI_API_KEY=synthetic-b")
+                .arg("MEMORY_FIXTURE_A_KEY=synthetic-a")
+                .arg("MEMORY_FIXTURE_B_KEY=synthetic-b")
                 .arg("RUST_LOG=trace")
                 .arg(&binary)
                 .arg("--no-alt-screen")
@@ -285,9 +285,9 @@ animations = false
             pending = Some(Instant::now());
         }
         let denied = log.contains("stage-one memory provider changed");
-        let foreground_b = routes.iter().any(|r| {
-            r["endpoint"] == "B" && r["kind"] == "foreground" && r["model"] == "glm-5.3"
-        });
+        let foreground_b = routes
+            .iter()
+            .any(|r| r["endpoint"] == "B" && r["kind"] == "foreground" && r["model"] == "fixture-model");
         write_json(
             root,
             "status.json",
@@ -481,26 +481,38 @@ fn submit(pane: &TmuxPane<'_>, text: &str, keys: &mut Vec<String>) -> Result<()>
     Ok(())
 }
 fn switch_provider(pane: &TmuxPane<'_>, keys: &mut Vec<String>) -> Result<()> {
+    submit(pane, "/providers", keys)?;
+    pane.wait_stable_contains("Providers", READY)?;
+    pane.send_key(TmuxKey::Escape)?;
+    keys.push("key: Escape (provider catalog initialized)".into());
     submit(pane, "/model", keys)?;
     pane.wait_stable_contains("Select Model", READY)?;
     for _ in 0..16 {
-        if pane.capture_viewport()?.contains("[Z.AI]") { break; }
+        if pane.capture_viewport()?.contains("[Other]") {
+            break;
+        }
         pane.send_key(TmuxKey::Right)?;
         keys.push("key: Right".into());
         std::thread::sleep(Duration::from_millis(150));
     }
-    pane.wait_stable_contains("[Z.AI]", READY)?;
+    pane.wait_stable_contains("[Other]", READY)?;
     for _ in 0..64 {
         let capture = pane.capture_viewport()?;
         let selected = capture
             .lines()
-            .find(|line| line.trim().starts_with('>') || line.trim().starts_with('›'))
+            .find(|line| {
+                let line = line.trim();
+                (line.starts_with('>') || line.starts_with('›'))
+                    && line.chars().skip(1).find(|c| !c.is_whitespace()).is_some_and(|c| c.is_ascii_digit())
+            })
             .unwrap_or("")
             .to_owned();
-        if selected.contains("GLM 5.3") && !selected.contains("Flash") {
+        if selected.contains("fixture-model") && !selected.contains("current") {
             pane.send_key(TmuxKey::Enter)?;
-            keys.push("key: Enter (GLM 5.3 / fake Z.ai)".into());
-            let selection = pane.wait_stable_until("model selected", READY, |capture| !capture.contains("Select Model"))?;
+            keys.push("key: Enter (non-current fake provider model)".into());
+            let selection = pane.wait_stable_until("model selected", READY, |capture| {
+                !capture.contains("Select Model")
+            })?;
             if selection.contains("Select Reasoning") {
                 pane.send_key(TmuxKey::Enter)?;
                 keys.push("key: Enter (default reasoning)".into());
@@ -522,7 +534,9 @@ fn save_rehearsal_artifacts(root: &Path, case: Case) -> Result<()> {
         fs::create_dir_all(&target)?;
         for entry in fs::read_dir(root)? {
             let entry = entry?;
-            if entry.file_type()?.is_file() { fs::copy(entry.path(), target.join(entry.file_name()))?; }
+            if entry.file_type()?.is_file() {
+                fs::copy(entry.path(), target.join(entry.file_name()))?;
+            }
         }
     }
     Ok(())
