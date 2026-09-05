@@ -37,7 +37,7 @@ impl ContextualUserFragment for ProvenanceContext {
 /// verdict or a data envelope alone cannot call this constructor: it requires
 /// the controller capability that Core keeps off the model/tool channel.
 #[derive(Debug)]
-pub(crate) struct HostAuthorizationNotice;
+pub(crate) struct HostAuthorizationNotice { _private: () }
 
 impl HostAuthorizationNotice {
     pub(crate) fn from_human_confirmation(
@@ -47,7 +47,7 @@ impl HostAuthorizationNotice {
     ) -> Result<Self, crate::security::SecurityPolicyError> {
         let confirmation = controller.confirm_security_request(request, now_unix_seconds)?;
         controller.consume_security_confirmation(confirmation)?;
-        Ok(Self)
+        Ok(Self { _private: () })
     }
 }
 

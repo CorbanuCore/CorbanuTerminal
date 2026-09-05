@@ -88,3 +88,23 @@ fn pf_30_s01_native_protected_requests_fail_closed_without_admitted_carrier() {
         assert_eq!(check_native_request(level, &[ResponseItem::Other]), Err(IngressError::NativeAdmissionUnavailable));
     }
 }
+
+#[test]
+fn pf_30_s01_host_notice_requires_live_controller_confirmation() {
+    use crate::context::HostAuthorizationNotice;
+    use crate::security::{EffectivePolicyInitialization, EffectivePolicyView, PersistedHumanSecurityState, TrustedSecurityController};
+    use codex_protocol::{SessionId, ThreadId};
+    use codex_protocol::security::{SecurityControlAction, SecurityControlRequest};
+    use codex_security_policy::{AuthorityEpoch, PolicyPrincipal, PrincipalKind, RevocationState, SecuritySettings};
+    let view = EffectivePolicyView::default();
+    let thread = ThreadId::new();
+    let state = PersistedHumanSecurityState::new(SecuritySettings::new(SecurityLevel::Permissive), PolicyPrincipal::new(PrincipalKind::Human, "fixture-human").unwrap(), RevocationState::new()).unwrap();
+    let controller = TrustedSecurityController::initialize(&view, state, thread, SessionId::from(thread), EffectivePolicyInitialization::Root).unwrap();
+    let snapshot = view.snapshot_for_agent(thread).unwrap();
+    let epoch = AuthorityEpoch::new(snapshot.runtime_nonce, snapshot.epoch, snapshot.revocation_generation).unwrap();
+    let request = SecurityControlRequest::new(epoch, SecurityControlAction::SetLevel { level: SecurityLevel::Moderate }).unwrap();
+    let notice = HostAuthorizationNotice::from_human_confirmation(&controller, request.clone(), 1).unwrap();
+    assert!(notice.body().contains("has not been applied"));
+    assert_eq!(view.snapshot_for_agent(thread).unwrap(), snapshot);
+    assert!(HostAuthorizationNotice::from_human_confirmation(&controller, request, -1).is_err());
+}
