@@ -526,15 +526,6 @@ fn switch_provider(pane: &TmuxPane<'_>, root: &Path, keys: &mut Vec<String>) -> 
     keys.push("key: Escape (provider replacement complete)".into());
     submit(pane, "/model", keys)?;
     pane.wait_stable_contains("Select Model", READY)?;
-    for _ in 0..16 {
-        if pane.capture_viewport()?.contains("[Other]") {
-            break;
-        }
-        pane.send_key(TmuxKey::Right)?;
-        keys.push("key: Right".into());
-        std::thread::sleep(Duration::from_millis(150));
-    }
-    pane.wait_stable_contains("[Other]", READY)?;
     fs::write(root.join("model-picker.txt"), pane.capture_viewport()?)?;
     select_label(pane, "GPT-5.6-Terra", keys)?;
     pane.wait_stable_contains("Select Reasoning", READY)?;
