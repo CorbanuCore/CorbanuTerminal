@@ -242,6 +242,27 @@ impl CodexThread {
         self.io.submit(op).await
     }
 
+    /// Creates a stage-one memory client bound to this owning session.
+    ///
+    /// Expected identity and provider are consistency checks, not authority
+    /// selectors. The opaque client rechecks host policy at dispatch.
+    pub async fn stage_one_memory_client(
+        &self,
+        expected_owner: ThreadId,
+        expected_provider: &codex_model_provider_info::ModelProviderInfo,
+    ) -> Result<
+        crate::memory_stage_one::StageOneMemoryClient,
+        crate::memory_stage_one::StageOneMemoryError,
+    > {
+        crate::memory_stage_one::StageOneMemoryClient::new(
+            Arc::downgrade(&self.session),
+            self.io.session_loop_termination.clone(),
+            expected_owner,
+            expected_provider,
+        )
+        .await
+    }
+
     /// Returns the session telemetry handle for thread-scoped production instrumentation.
     pub fn session_telemetry(&self) -> SessionTelemetry {
         self.session.services.session_telemetry.clone()

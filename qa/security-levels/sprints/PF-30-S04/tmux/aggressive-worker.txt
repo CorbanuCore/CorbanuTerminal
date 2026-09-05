@@ -1,0 +1,17 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.38)                   │
+│                                                 │
+│ model:     gpt-5.4   /model to change           │
+│ directory: ~/worktrees/security-memory-dispatch │
+╰─────────────────────────────────────────────────╯
+
+
+› Run the synthetic foreground fixture.
+
+
+Working (0s • esc to interrupt)
+
+
+› Improve documentation in @filename
+
+  gpt-5.4 default · ~/worktrees/security-memory-dispatch · Corbanu Terminal · TPS: -- tok/s

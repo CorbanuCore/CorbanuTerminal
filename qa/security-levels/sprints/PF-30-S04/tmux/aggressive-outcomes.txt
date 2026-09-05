@@ -1,0 +1,2 @@
+canary_requests=0
+stage1_outputs=0
