@@ -1,7 +1,7 @@
 # P0 security-level execution sprints
 
 The active [P0 security plan](../../../plans/active/p0-security-levels.md) owns
-**51 current sprints** and **26 completed archives**.
+**52 current sprints** and **26 completed archives**.
 The integrated Sprint 13 branch completes PF-13-S02–S04 and the early PF-26-S01
 harness; PF-13-S05 is also completed and archived after its integrated Core and
 platform qualification. PF-13-S06 and PF-41-S03 are now also completed and
@@ -31,7 +31,7 @@ archived evidence proves only its recorded candidate and scope.
 | 33 | [PF-33-S02](pf-33-s02-connection-pinning-and-bypass.md) | Connection pinning and alternate-egress denial | draft | PF-33-S01 |
 | 35 | [PF-29-S01](pf-29-s01-protected-mode-inventory.md) | Protected-mode inventory and activation preflight | draft | PF-28-S02, PF-20-S02 |
 | 36 | [PF-29-S02](pf-29-s02-human-secret-migration.md) | Human-reviewed credential migration and recovery | draft | PF-29-S01, PF-24-S01 |
-| 37 | [PF-30-S01](pf-30-s01-typed-source-envelope.md) | Typed source envelope and trusted ingress | in progress — fresh round-five worktree | PF-22-S02 |
+| 37 | [PF-30-S01](pf-30-s01-typed-source-envelope.md) | Typed source envelope and trusted ingress | draft — staged source/evidence frozen; production gates open | PF-22-S02 |
 | 38 | [PF-30-S02](pf-30-s02-persistent-taint-and-memory.md) | Persistent taint across summaries and memory | draft | PF-30-S01 |
 | 39 | [PF-30-S03](pf-30-s03-post-taint-authority-checks.md) | Post-taint authority checks | draft | PF-30-S02, PF-13-S05 |
 | 40 | [PF-23-S01](pf-23-s01-moderate-ingress-and-disclosure-enforcement.md) | Moderate ingress and disclosure enforcement | draft | PF-13-S05, PF-22-S02, PF-30-S03 |
@@ -77,10 +77,14 @@ archived evidence proves only its recorded candidate and scope.
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
 | 77 | [PF-30-S04](pf-30-s04-policy-bound-memory-dispatch.md) | Host-bound stage-one memory dispatch; protected raw input denies | in progress | PF-22-S02 |
+| 78 | [PF-20-S03](pf-20-s03-local-controller-integrity-root.md) | Linux local controller root detects restored agent data | in progress | PF-20-S02, PF-41-S03, PF-27-S03 |
 
 The rolling allocation adds this independent denial boundary after the original
 76-record map. Its topological number does not require unrelated earlier work
 to finish. It neither completes persistent lineage nor waives S01/S02 gates.
+PF20S03 is the next independently scoped native root dependency. PF30S01's
+frozen incomplete handoff releases its reservation; current lanes are PF27S04,
+PF30S04 and PF20S03. Whole-machine rollback is outside the user-approved scope.
 
 ```bash
 python3 docs/plans/check.py

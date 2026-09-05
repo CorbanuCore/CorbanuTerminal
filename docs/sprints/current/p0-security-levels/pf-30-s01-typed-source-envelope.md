@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-30-S01"
 title: "Typed source envelope and trusted ingress"
-status: in_progress
+status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-30"
 execution_order: 37
@@ -79,7 +79,12 @@ remediation are tracked in the QA ledger. Final realtime actual-key TMUX passed;
 review 3 verified those fixes and identified a separate unbound stage-one memory
 worker outside the allocation. That finding is retained and escalated; no overall
 clean review or complete memory-path protection is claimed.
-Keep this sprint `in_progress` until the remaining production criteria are met.
+2026-09-04: returned incomplete to draft, releasing its slot for PF-20-S03.
+Coordinates/scope are historical, not current write authority. Frozen handoff:
+source `2a4fb5857`, evidence `e890ae4a9`, integrated `0266c2db9`;
+envelope/admission/segmentation contracts unchanged. Core 27/27, content-security
+22/22, actual-key TMUX and clean Astra/Fable reviews; budget 5/5. Earlier baseline
+failures and all remaining production/coverage gates persist; no dependency unlocks.
 
 - [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
 - [ ] Focused: `cd codex-rs && just test -p codex-protocol pf_30_s01 && just test -p codex-core pf_30_s01`; confirm tests actually ran.

@@ -17,6 +17,9 @@ product_spec:
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-local-anchor"
+    branch: "feat/security-local-anchor"
+    base_commit: "601602fa7e53fcb5b41753a0b3607addd45d4415"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-memory-dispatch"
     branch: "feat/security-memory-dispatch"
     base_commit: "526926934fa650b8eb6c4e6887d1f7461c26f38f"
@@ -735,7 +738,7 @@ document original scope, not new passes.
 | `PF-17` | Bounded grants and delegation | [PF-17-S01](../../sprints/archive/p0-security-levels/pf-17-s01-bounded-delegation-grants.md) | S01 completed and archived |
 | `PF-18` | Human mandates and secret-free receipts | [PF-18-S01](../../sprints/archive/p0-security-levels/pf-18-s01-human-mandates-and-receipts.md) | S01 completed and archived |
 | `PF-19` | Revocation and invalidation contract | [PF-19-S01](../../sprints/archive/p0-security-levels/pf-19-s01-revocation-contract.md), [PF-19-S02](../../sprints/archive/p0-security-levels/pf-19-s02-dispatch-revocation-fence.md) | S01/S02 completed and archived |
-| `PF-20` | Versioned security persistence | [PF-20-S01](../../sprints/archive/p0-security-levels/pf-20-s01-versioned-security-persistence.md), [PF-20-S02](../../sprints/archive/p0-security-levels/pf-20-s02-protected-authoritative-state.md) | S01/S02 completed and archived; protected activation blocked |
+| `PF-20` | Versioned security persistence | [PF-20-S01](../../sprints/archive/p0-security-levels/pf-20-s01-versioned-security-persistence.md), [PF-20-S02](../../sprints/archive/p0-security-levels/pf-20-s02-protected-authoritative-state.md), [PF-20-S03](../../sprints/current/p0-security-levels/pf-20-s03-local-controller-integrity-root.md) | S01/S02 archived; S03 local controller implementation allocated; protected activation blocked |
 | `PF-21` | Frozen Permissive compatibility | [PF-21-S01](../../sprints/archive/p0-security-levels/pf-21-s01-permissive-compatibility-baseline.md), [PF-21-S02](../../sprints/archive/p0-security-levels/pf-21-s02-expanded-compatibility-and-upstream-drift.md) | S01/S02 completed and archived |
 | `PF-22` | Effective runtime policy and agent inheritance | [PF-22-S01](../../sprints/archive/p0-security-levels/pf-22-s01-runtime-policy-and-agent-inheritance.md), [PF-22-S02](../../sprints/archive/p0-security-levels/pf-22-s02-protected-runtime-and-upstream-seams.md) | S01/S02 completed and archived; PF-23/PF-24 retain authenticated adapter provenance |
 | `PF-13` | Vault-backed exact-host credential boundary | [S01](../../sprints/archive/p0-security-levels/pf-13-s01-vault-backed-exact-host-credential-substitution.md), [S02](../../sprints/archive/p0-security-levels/pf-13-s02-scoped-vault-resolver.md), [S03](../../sprints/archive/p0-security-levels/pf-13-s03-openai-exact-host-proxy-substitution.md), [S04](../../sprints/archive/p0-security-levels/pf-13-s04-authority-lifecycle-and-raw-secret-bypass.md), [S05](../../sprints/archive/p0-security-levels/pf-13-s05-credential-boundary-adversarial-qualification.md), [S06](../../sprints/archive/p0-security-levels/pf-13-s06-credential-usage-reservations.md), [S07](../../sprints/current/p0-security-levels/pf-13-s07-integrated-credential-boundary-qualification.md) | S01–S06 completed; S07 draft |
@@ -758,6 +761,29 @@ document original scope, not new passes.
 | `PF-39` | Derived financial views and disclosure control | [S01](../../sprints/current/p0-security-levels/pf-39-s01-protected-financial-derived-views.md), [S02](../../sprints/current/p0-security-levels/pf-39-s02-outbound-disclosure-controls.md) | draft |
 | `PF-40` | Agent Sweep and safe recovery | [S01](../../sprints/current/p0-security-levels/pf-40-s01-sweep-events-and-rules.md), [S02](../../sprints/current/p0-security-levels/pf-40-s02-isolated-sweep-reviewer.md), [S03](../../sprints/current/p0-security-levels/pf-40-s03-sweep-alerts-and-recovery.md) | draft |
 | `PF-41` | Effective security inspector and audit | [S01](../../sprints/current/p0-security-levels/pf-41-s01-effective-security-inspector.md), [S02](../../sprints/current/p0-security-levels/pf-41-s02-tamper-evident-security-audit.md), [S03](../../sprints/archive/p0-security-levels/pf-41-s03-durable-security-event-foundation.md) | S03 completed; S01/S02 draft |
+
+### Rolling local-root allocation — 2026-09-04
+
+Product authority selected data-rollback protection, excluding whole-machine
+snapshot rollback; see the product specification's **Data-rollback scope
+decision — 2026-09-04**. Implement the Linux local-controller root proposed in
+[the design](../../../qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/protected-audit-root-design.md)
+under [PF-20-S03](../../sprints/current/p0-security-levels/pf-20-s03-local-controller-integrity-root.md).
+This is a genuine missing PF20 native dependency, not an unfinished PF27 bypass.
+Prerequisites PF20S02, PF41S03 and PF27S03 are archived; PF27S04 will consume
+the adapter at its separate protected bootstrap/containment gate.
+
+The provenance agent transfers to the exact security-local-anchor coordinates
+in front matter. PF30S01 returns to draft, preserving source 2a4fb5857, final
+evidence e890ae4a9, integrated 0266c2db9 and its exhausted 5/5 review ledger.
+Remaining producer/screening coverage is not completed and no downstream
+dependency unlocks. The three current reservations are PF27S04, PF30S04 and
+PF20S03. Root owns shared Core exports and workspace Cargo/Bazel/locks; the new
+leaf crate, narrow Core anchor adapters and QA are allocated only to PF20S03.
+PF27 retains broker/platform access controls and privileged deployment.
+No TPM/off-host implementation is needed. No elevated installation or real
+Vault migration is authorized by the scope choice; missing protected state
+continues to fail closed.
 
 ### PF-13 integration contract
 

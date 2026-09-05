@@ -115,7 +115,7 @@
       height: 110px;
       place-items: center;
       border-radius: 50%;
-      background: conic-gradient(var(--complete) 0 34%, var(--line) 34% 100%);
+      background: conic-gradient(var(--complete) 0 33%, var(--line) 33% 100%);
     }
     .donut::after {
       display: grid;
@@ -125,7 +125,7 @@
       border-radius: 50%;
       background: var(--surface);
       color: var(--text);
-      content: "34%";
+      content: "33%";
       font-size: 1.45rem;
       font-weight: 750;
     }
@@ -310,16 +310,16 @@
       <div class="snapshot">
         <span><strong>Snapshot:</strong> 4 September 2026 · round five</span>
         <span><strong>Candidate:</strong> <code>integration/security-round5-20260904</code> · not yet main</span>
-        <span><strong>Scope:</strong> 77 checked P0 sprint records, including the new memory-dispatch boundary</span>
+        <span><strong>Scope:</strong> 78 checked P0 sprint records, including memory dispatch and the local controller root</span>
         <span><strong>Deadline:</strong> 8 October 2026</span>
       </div>
     </header>
 
     <section class="hero-grid" aria-label="Program summary">
       <div class="metric primary">
-        <div class="donut" role="img" aria-label="34 percent of planned security sprints are completed"></div>
+        <div class="donut" role="img" aria-label="33 percent of planned security sprints are completed"></div>
         <div>
-          <span class="metric-number">26 of 77</span>
+          <span class="metric-number">26 of 78</span>
           <span class="metric-label">sprints completed and archived</span>
         </div>
       </div>
@@ -329,7 +329,7 @@
       </div>
       <div class="metric">
         <span class="metric-number blue">3</span>
-        <span class="metric-label">rolling engineering lanes: broker, provenance and memory dispatch</span>
+        <span class="metric-label">rolling engineering lanes: broker, local controller and memory integration</span>
       </div>
       <div class="metric">
         <span class="metric-number amber">1</span>
@@ -356,8 +356,8 @@
           <span class="lane-order">Lane 1 · staged, production gates open</span>
           <h3>Isolated credential broker</h3>
           <a class="sprint-id" href="docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md">PF-27-S04</a>
-          <p>Recovered broker code, durable audit binding and Linux peer/framing tests are implemented. Disconnect, audit-correlation and timeout fixes passed review. The real isolated service and streaming integration are still to be built.</p>
-          <p><strong>Evidence:</strong> Final broker/Vault/proxy 338/338, focused Core 6/6 and Bazel checks passed. Four reviews used; one low-priority signal-handling follow-up remains. Production service, streaming and all-OS qualification remain open.</p>
+          <p>Broker code, durable audit binding, Linux transport and staged service composition are implemented. Production startup still refuses until the protected root and native isolation are qualified.</p>
+          <p><strong>Evidence:</strong> Broker/Vault/proxy 338/338, Core 6/6, subprocess 6/6 and Bazel checks passed. Astra service review is clean; five reviews used. Fresh external service review needs a budget decision. Streaming and all-OS qualification remain open.</p>
           <div class="status-line">
             <div class="bar-row"><span>PF-27 archived sprints</span><strong>2 / 4 · 50%</strong></div>
             <div class="track" role="progressbar" aria-label="PF-27 archived completion" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:50%"></div></div>
@@ -366,24 +366,24 @@
         </article>
 
         <article class="lane">
-          <span class="lane-order">Lane 2 · provenance qualification</span>
-          <h3>Trusted source provenance</h3>
-          <a class="sprint-id" href="docs/sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md">PF-30-S01</a>
-          <p>Immutable envelopes, native ingress observation and three provider projections are implemented. Provider-switch and realtime bypasses are fixed. Review found an existing, separate memory-worker policy-binding gap; it remains an explicit follow-up, not a protected-memory pass.</p>
-          <p><strong>Evidence:</strong> Segmentation passed 27 provenance and 22 content-security tests, actual-key TMUX, and clean Astra/Fable reviews; merged into the integration branch. Earlier full Core had five baseline failures. Production screening and complete source coverage remain open.</p>
+          <span class="lane-order">Lane 2 · newly allocated dependency</span>
+          <h3>Detect restored app data</h3>
+          <a class="sprint-id" href="docs/sprints/current/p0-security-levels/pf-20-s03-local-controller-integrity-root.md">PF-20-S03</a>
+          <p>A separately protected local controller checkpoint detects older Corbanu data being restored. Whole-machine snapshot rollback is outside the agreed scope; TPM or a second machine is not required.</p>
+          <p><strong>Evidence:</strong> Design and exact scope allocated; implementation and qualification pending. The previous provenance checkpoint is integrated and frozen with passing segmentation tests and reviews, but its production screening gates remain open.</p>
           <div class="status-line">
-            <div class="bar-row"><span>PF-30 archived sprints</span><strong>0 / 4 · 0%</strong></div>
-            <div class="track" role="progressbar" aria-label="PF-30 archived completion" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:0%"></div></div>
-            <p class="subtle" style="margin:9px 0 0;font-size:.79rem">Tests of an admission fixture do not prove production screening readiness.</p>
+            <div class="bar-row"><span>PF-20 archived sprints</span><strong>2 / 3 · 67%</strong></div>
+            <div class="track" role="progressbar" aria-label="PF-20 archived completion" aria-valuenow="67" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:67%"></div></div>
+            <p class="subtle" style="margin:9px 0 0;font-size:.79rem">Privileged installation needs separate approval. Missing protected state must deny.</p>
           </div>
         </article>
 
         <article class="lane">
-          <span class="lane-order">Lane 3 · newly allocated implementation</span>
+          <span class="lane-order">Lane 3 · reviewed, awaiting integration</span>
           <h3>Keep memory jobs policy-bound</h3>
           <a class="sprint-id" href="docs/sprints/current/p0-security-levels/pf-30-s04-policy-bound-memory-dispatch.md">PF-30-S04</a>
           <p>Bind each background memory request to its owning session and current policy, including retries and provider changes. Unsupported protected requests must stop before rollout content is sent.</p>
-          <p><strong>Evidence:</strong> Design and disjoint scope allocated; implementation and tests are pending. This is a deny-only boundary, not completed memory provenance or positive protected inference.</p>
+          <p><strong>Evidence:</strong> Core 11/11, memory-write 44/44, read 3/3 and four TMUX scenarios plus four restarts passed. Astra's provider-switch finding is fixed; Fable confirmed correctness. Combined-tree qualification remains. This is deny-only, not positive protected inference.</p>
           <div class="status-line">
             <div class="bar-row"><span>New memory-dispatch sprint</span><strong>0 / 1 · 0%</strong></div>
             <div class="track" role="progressbar" aria-label="Memory dispatch completion" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:0%"></div></div>
@@ -405,7 +405,7 @@
         <div class="flow">
           <div class="node complete"><strong>PF-20-S02 + PF-22-S02</strong><small>Authoritative state and protected runtime foundations archived</small></div>
           <div class="flow-arrow" aria-hidden="true">→</div>
-          <div class="node next"><strong>PF-30-S01 in progress</strong><small>PF-24-S01 observation-only view completed; provenance still staged</small></div>
+          <div class="node queued"><strong>PF-30-S01 frozen draft</strong><small>Staged source integrated; production screening and coverage still pending</small></div>
           <div class="flow-arrow" aria-hidden="true">→</div>
           <div class="node queued"><strong>Later protected workflows</strong><small>Full provenance, enforcement, migration and confirmed transitions remain gated</small></div>
         </div>
@@ -466,8 +466,8 @@
       <div class="phases">
         <div class="phase">
           <div class="phase-name"><strong>Core policy foundations</strong><small>PF-15 through PF-21</small></div>
-          <div class="track" role="progressbar" aria-label="Core policy foundations" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"><div class="fill complete" style="width:100%"></div></div>
-          <div class="phase-value"><strong class="green">100%</strong><small>10 / 10</small></div>
+          <div class="track" role="progressbar" aria-label="Core policy foundations" aria-valuenow="91" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:91%"></div></div>
+          <div class="phase-value"><strong>91%</strong><small>10 / 11</small></div>
         </div>
         <div class="phase">
           <div class="phase-name"><strong>Credential boundary</strong><small>PF-13</small></div>
@@ -497,7 +497,7 @@
       </div>
 
       <div class="footnote">
-        <strong>Scheduling conclusion:</strong> PF-24-S01 is completed and archived. Its freed agent now implements <a href="docs/sprints/current/p0-security-levels/pf-30-s04-policy-bound-memory-dispatch.md">PF-30-S04: policy-bound memory dispatch</a>, an independent deny-only boundary using the completed runtime policy. Broker service and provenance work continue. PF-35 remains separate, and protected positive inference is not enabled. Reviews used: broker 4/5, provenance 3/5, completed UI 3/5; new memory track 0/5. <a href="qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md">Coordination and evidence ledger</a>.
+        <strong>Scheduling conclusion:</strong> Memory dispatch is reviewed and ready for combined integration. The provenance agent moves to PF-20-S03, the local controller root; the incomplete provenance sprint retains its remaining gates. PF-35 remains separate. Reviews used: broker 5/5, frozen provenance 5/5, completed UI 3/5, memory 2/5 and new PF20 track 0/5. The total percentage changed because one newly allocated sprint increased the denominator, not because completed work was lost. <a href="qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md">Coordination and evidence ledger</a>.
       </div>
 
       <details>

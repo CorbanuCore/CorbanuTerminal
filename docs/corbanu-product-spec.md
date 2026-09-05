@@ -294,6 +294,21 @@ an implied secretless guarantee.
 
 ## Required adversarial tests
 
+### Data-rollback scope decision — 2026-09-04
+
+Travis Good confirmed that rollback protection must cover restoration of older
+Corbanu data, not restoration of an entire machine snapshot. A separately
+protected local controller checkpoint is an acceptable authority: restoring,
+deleting or replacing agent-accessible policy/journal data must not restore
+authority while that checkpoint survives. The trusted operating system,
+administrator and controller storage remain outside the untrusted-agent boundary.
+Whole-machine rollback resistance, TPM monotonic state and an off-host anchor
+are not required for this scope. Missing or corrupt protected state still fails
+closed; this decision does not authorize automatic reset, privileged deployment
+or real credential migration.
+
+### Attack coverage
+
 The release suite must cover:
 
 - direct and indirect prompt injection;

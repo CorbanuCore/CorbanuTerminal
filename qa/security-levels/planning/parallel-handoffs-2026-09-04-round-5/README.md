@@ -82,7 +82,8 @@ actual findings; exceed five only when critical findings continue.
 | Broker | 5 / 5 | Earlier #1–4 retained; new service tests pass at 6bdc84195. #5 Astra High completed clean, final evidence cd7457da7. #6 Fable coverage still awaits the user's explicit budget decision |
 | Provenance | 5 / 5 | Earlier #1–3 dispositions retained; bounded segmentation #4 Astra High and #5 Fable High both clean. Final lane e890ae4a9 integrated; no further review |
 | Security UI | 3 / 5 | #1 CLI rejected; #2 Astra High clean; #3 Fable High clean; no further review planned |
-| Memory dispatch (new PF-30-S04) | 1 / 5 | #1 Astra High found a P2 phase-two config/provider pairing mismatch after a live switch. Scoped remediation and final-candidate tests/TMUX are running. #2 Fable High authorized after that verified fix; no second review invoked yet |
+| Memory dispatch (new PF-30-S04) | 2 / 5 | #1 Astra P2 provider/config mismatch fixed; #2 Fable confirms correctness with a documented non-blocking P3 snapshot-cloning cost. Final lane 1f86e81b3, tested runtime 343aae434; ready for combined integration |
+| Local controller (new PF-20-S03) | 0 / 5 | New native PF20 dependency; consolidate source/tests before requesting Astra #1 and Fable #2. No old-lane ledger reset |
 
 Successful Astra runtime: installed app-bundled Codex 0.153.1; 0.145.0 was
 rejected by the backend before any review verdict. Keep these attempts visible.
@@ -285,7 +286,30 @@ local-only dependency while retaining the full protected-mode gate. No TPM
 state, privileged principals, permissions, services or real credentials were
 changed. Exact privileged actions require separate approval.
 
-## PF-35 external campaign (unchanged)
+## Resolved local-data rollback scope and refill
+
+Travis Good selected protection against restored Corbanu data, not restoration
+of an entire machine. The product specification and architecture acceptance now
+record that decision. A separately protected local controller checkpoint is the
+selected root; no TPM/off-host witness is required. Loss/corruption still denies,
+and privileged setup/real credential migration require separate authority.
+
+PF20S03 is allocated to /root/provenance at
+/Volumes/CorbanuDrive/Corbanu/worktrees/security-local-anchor on
+feat/security-local-anchor, base 601602fa7e53fcb5b41753a0b3607addd45d4415.
+PF30S01 returns to draft with frozen integrated source, remaining gates and
+5/5 review ledger retained. This is not completion or a prerequisite waiver.
+The new sprint owns protected-state and narrow Core anchor adapters only;
+root owns workspace/export registration, PF27 owns native broker composition.
+All builds remain on RTX under the shared lock.
+
+Memory source 343aae434 passed write 44/44, read 3/3 and actual-key TMUX
+four scenarios plus four restarts; unchanged Core source has 11/11 evidence.
+Astra's P2 is fixed and Fable confirmed it. The non-blocking P3 allocation cost
+is deferred without weakening per-event policy checks. Final pushed lane
+1f86e81b3 awaits combined-tree integration; no further review requested.
+
+## PF-35 external campaign status
 
 User explicitly removed PF-35 from the engineering main path.
 Its engineering reservation returns to draft under the existing sprint process.

@@ -6,6 +6,14 @@ frozen at `2a4fb5857`, final evidence `e890ae4a9`, review ledger 5/5 unchanged.
 
 ## Recommendation and the decision that cannot be hidden
 
+**Resolved by Travis Good, 2026-09-04:** protect against restored older Corbanu
+data; whole-machine snapshot rollback is not required. The local controller
+design below is selected under its explicit trusted-host assumptions.
+PF-20-S03 allocates implementation separately. Missing/corrupt protected state
+still denies; elevated deployment and destructive recovery are not authorized.
+The options/questions below remain historical design rationale, not open
+product blockers or a requirement to add TPM/off-host machinery.
+
 Implement a Linux-only **controller-owned anchor service plus authenticated
 client capability**, not a file-backed `IntegrityRootStore::new(path, uid)`.
 The service is separate from the broker/worker and owns the durable checkpoint
@@ -309,4 +317,3 @@ Expected deliverable is a real native durable-root capability for the approved
 Linux threat model, tested as a broker dependency, not “protected mode enabled.”
 Remaining network/worker/bootstrap/platform/screening gates stay visible. No new
 source, builds, reviews, setup or production acceptance resulted from this design.
-

@@ -105,6 +105,16 @@ authority. Missing state after a protected installation cannot masquerade as a
 new legacy Permissive install. PF-20 owns persistence; PF-27 owns process access
 controls; PF-13-S05 tests the composed actual agent context on every target OS.
 
+Product authority clarified on 2026-09-04 that the rollback target is older
+Corbanu data, not an entire-machine snapshot. A protected local controller
+checkpoint may therefore supply the independent authority, under a trusted
+kernel/administrator/controller-store assumption. Restoration or deletion of
+agent-accessible state must be rejected against the surviving checkpoint;
+restoration of the whole trusted controller and its disk is outside this scope.
+TPM/off-host monotonic witnesses are not required. Missing enrollment, root or
+key must still fail closed, never trigger automatic reenrollment. See the
+product specification's **Data-rollback scope decision — 2026-09-04**.
+
 Early contract probes and production containment evidence are separate. Protected
 activation remains unavailable if required identity, migration, broker, audit,
 network, retriever or local screening readiness is absent or stale. Runtime
