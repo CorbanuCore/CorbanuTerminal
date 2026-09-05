@@ -164,6 +164,12 @@ successful dependency check. Normal lane-local `bazel shutdown` released it;
 no process was force-killed. Future serialized Bazel scripts must shut down
 their persistent server before releasing the surrounding lock.
 
+Final source/evidence checkpoint `86f31a14b` is pushed and the remote mirror is
+clean at that commit. Remote `python3 docs/plans/check.py` passed (active 2/2),
+and `python3 docs/sprints/check.py` passed (58 current, 113 archived). These
+checks preserve PF-27-S04 as `in_progress`; they do not waive its remaining
+implementation or qualification gates.
+
 ## Remaining gates
 
 - Deferred non-blocking signal-interruption follow-up from review 4; no
