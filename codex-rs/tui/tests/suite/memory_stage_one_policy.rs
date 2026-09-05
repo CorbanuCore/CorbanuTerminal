@@ -122,10 +122,11 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
             if done {
                 break;
             }
-            ensure!(
-                tokio::time::Instant::now() < deadline,
-                "memory worker did not finish {case}"
-            );
+            if tokio::time::Instant::now() >= deadline {
+                let viewport = pane.capture_viewport()?;
+                let retained = home.keep();
+                anyhow::bail!("memory worker did not finish {case}; retained fixture: {}; viewport:\n{viewport}", retained.display());
+            }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
         let requests = server.received_requests().await.unwrap();
