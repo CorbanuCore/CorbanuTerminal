@@ -185,9 +185,7 @@ and reports meaningful progress, failure, completion or a needed user decision.
 No unchanged-status notifications. Pause the monitor when the requested
 integration and handoff are finished.
 
-## PF-35 external handoff
-
-### Freed-agent design allocation
+## Freed-agent design allocation
 
 After PF-24-S01 archival, the user requested another lane for that agent.
 The coordinator checked every draft P0 sprint's archived dependencies: only
@@ -207,6 +205,8 @@ reservation or waive PF-30-S02's dependency on completed PF-30-S01.
 The coordinator will reconcile overlapping Core ownership and record the
 implementation allocation before any code changes. Existing review counts and
 the outstanding main-merge choice are unchanged.
+
+## PF-35 external handoff
 
 User explicitly removed PF-35 from the engineering main path.
 Its engineering reservation returns to draft under the existing sprint process.
