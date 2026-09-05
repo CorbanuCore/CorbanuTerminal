@@ -79,8 +79,8 @@ actual findings; exceed five only when critical findings continue.
 
 | Lane | Invocations | Evidence / next action |
 | --- | ---: | --- |
-| Broker | 4 / 5 | #1 CLI rejected; #2 Astra findings repaired; #3 Fable timeout finding repaired; #4 no blockers, one deferred P3 EINTR robustness follow-up (helper exit 1, not a clean exit) |
-| Provenance | 4 / 5 | Earlier #1–3 findings/dispositions retained; segmentation #4 Astra High clean at 38e1d6e85 against 72f5de657; final #5 Fable High authorized for the same bounded segmentation delta |
+| Broker | 4 / 5 | Earlier #1–4 retained; new service tests pass at 6bdc84195. #5 Astra High authorized within the existing cap; #6 Fable coverage still awaits the user's explicit budget decision |
+| Provenance | 5 / 5 | Earlier #1–3 dispositions retained; bounded segmentation #4 Astra High and #5 Fable High both clean. Final lane e890ae4a9 integrated; no further review |
 | Security UI | 3 / 5 | #1 CLI rejected; #2 Astra High clean; #3 Fable High clean; no further review planned |
 | Memory dispatch (new PF-30-S04) | 0 / 5 | #1 Astra High conditionally authorized only after registered integration/TMUX proof; #2 Fable High authorized after a clean #1 on the same frozen runtime. No reviewer invoked yet |
 
@@ -244,6 +244,20 @@ a slot opens; privileged setup remains a distinct approval.
 
 The heartbeat now runs every five minutes to service shared-registration and
 handoff requests promptly. Unchanged non-actionable status stays quiet.
+
+Segmentation integrated and pushed at 0266c2db9. Its entire codex-rs tree is
+identical to tested source 2a4fb5857 (git diff exit 0); no new compilation was
+needed just for this merge. Latest scoped proof: Core provenance 27/27,
+content-security 22/22, locked CLI/full formatting and actual-key smoke 1/1.
+These results do not claim a fresh full-Core run or production classifier.
+The freed provenance agent now prepares the protected audit-root design
+read-only, including real PF20 anchor reuse and native ownership requirements;
+no new implementation allocation or privileged actions yet.
+
+Broker service source 6bdc84195 separately passes default denial 1/1, actual
+synthetic subprocess 6/6, broker/Vault/proxy 338/338 and Core 6/6, plus lock/Bazel
+parity. It is not yet merged or externally qualified; production remains
+unavailable pending protected-root/bootstrap composition and measured isolation.
 
 ## PF-35 external campaign
 
