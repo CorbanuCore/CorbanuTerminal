@@ -25,6 +25,20 @@ before tests. Any source delta stops qualification for coordinator inspection.
 
 Evidence root:
 `/home/travis/security-round5/evidence/human-memory/combined-67fec6a6/`.
-`qualification.log` is live. No result inferred before completion.
+Initial run completed: Python2/2, nextest14/15, run
+`644abb53-b14b-4bb3-a77c-d48f7bd17af0`,89.022seconds. No source delta.
+Only five-case fixture failed at PendingExit: `exit missed pending window or
+job already failed; not exercised`. Earlier Startup/ProviderSwitch completed;
+later Cancel/Timeout in that loop were not reached. Existing memory-policy,
+security2, slash1, support9 and pending-proof unit passed.
+
+Saved status: one canary request, zero source output, provider_change_denied
+false,29seconds remaining, actual `/exit` keys. This is consistent with the
+deferred expected-owner-denial race, but the raw reason cannot be confirmed
+retrospectively: prior helper retained viewport/status/keys, not its disposable
+log. Root authorized exact failure-reason classification and sanitized diagnostic
+retention, then new final proof and review5. Original source remains clean and
+failure evidence is preserved. Pin/manual steps were skipped on test failure;
+shared build lock released. This run is **not a qualification pass**.
 Review count remains4/5; coordinator accepted the documented nonblocking
 false-negative deferral. No additional review or human session is authorized.
