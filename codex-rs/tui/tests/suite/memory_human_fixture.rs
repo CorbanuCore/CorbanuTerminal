@@ -89,7 +89,10 @@ async fn human_memory_fixture() -> Result<()> {
     fs::create_dir(&root).context("evidence directory must not already exist")?;
     let artifacts = Artifacts::load()?;
     let expected = std::env::var("CORBANU_MEMORY_CANDIDATE_SHA256")?;
-    ensure!(artifacts.identity["candidate_sha256"] == expected, "candidate hash mismatch");
+    ensure!(
+        artifacts.identity["candidate_sha256"] == expected,
+        "candidate hash mismatch"
+    );
     let result = run_case(
         &artifacts,
         case,
@@ -269,7 +272,7 @@ animations = false
                 .arg("MEMORY_FIXTURE_A_KEY=synthetic-a")
                 .arg("MEMORY_FIXTURE_B_KEY=synthetic-b")
                 .arg("RUST_LOG=trace")
-                .arg(&binary)
+                .arg(binary)
                 .arg("--no-alt-screen")
                 .arg("-C")
                 .arg(&repo),
@@ -304,9 +307,9 @@ animations = false
             pending = Some(Instant::now());
         }
         let denied = log.contains("stage-one memory provider changed");
-        let foreground_b = routes
-            .iter()
-            .any(|r| r["endpoint"] == "B" && r["kind"] == "foreground" && r["model"] == "fixture-model");
+        let foreground_b = routes.iter().any(|r| {
+            r["endpoint"] == "B" && r["kind"] == "foreground" && r["model"] == "fixture-model"
+        });
         write_json(
             root,
             "status.json",
@@ -523,7 +526,11 @@ fn switch_provider(pane: &TmuxPane<'_>, root: &Path, keys: &mut Vec<String>) -> 
             .find(|line| {
                 let line = line.trim();
                 (line.starts_with('>') || line.starts_with('›'))
-                    && line.chars().skip(1).find(|c| !c.is_whitespace()).is_some_and(|c| c.is_ascii_digit())
+                    && line
+                        .chars()
+                        .skip(1)
+                        .find(|c| !c.is_whitespace())
+                        .is_some_and(|c| c.is_ascii_digit())
             })
             .unwrap_or("")
             .to_owned();
@@ -545,7 +552,10 @@ fn switch_provider(pane: &TmuxPane<'_>, root: &Path, keys: &mut Vec<String>) -> 
             !next.lines().any(|line| line == selected)
         })?;
     }
-    anyhow::bail!("fake provider B absent from model picker: {}", pane.capture_viewport()?)
+    anyhow::bail!(
+        "fake provider B absent from model picker: {}",
+        pane.capture_viewport()?
+    )
 }
 
 fn save_rehearsal_artifacts(root: &Path, case: Case) -> Result<()> {
