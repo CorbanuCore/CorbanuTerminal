@@ -20,14 +20,14 @@
 │  Agents.md:            AGENTS.md                                                         │
 │  Account:              OpenAI API key configured (run corbanu login to use ChatGPT)      │
 │  Collaboration mode:   Default                                                           │
-│  Session:              01a07012-cdfa-7dd2-b526-81ff0a9cf5cd                              │
+│  Session:              01a0701e-98ac-7281-a271-82e7b8d282d3                              │
 │                                                                                          │
 │  Token usage:          0 total  (0 input + 0 output)                                     │
 │  Limits:               data not available yet                                            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────╯
 
 
-› Find and fix a bug in @filename
+› Use /skills to list available skills
 
   GPT-5.6-Terra default · ~/worktrees/security-local-anchor · Corbanu Terminal · TPS: -- tok/s
 

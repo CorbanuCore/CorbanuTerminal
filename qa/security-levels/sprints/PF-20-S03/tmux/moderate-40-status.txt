@@ -28,14 +28,14 @@
 │  Agents.md:            AGENTS.md     │
 │  Account:              OpenAI API ke │
 │  Collaboration mode:   Default       │
-│  Session:              01a07012-dbcf │
+│  Session:              01a0701e-a694 │
 │                                      │
 │  Token usage:          0 total  (0 i │
 │  Limits:               data not avai │
 ╰──────────────────────────────────────╯
 
 
-› Write tests for @filename
+› Implement {feature}
 
   GPT-5.6-Terra default · ~/worktrees/s…
 

@@ -65,9 +65,9 @@ updated: 2026-09-04
 
 ## Verification
 
-- [x] RTX only under shared build flock: scoped just fix, full just fmt, focused protected-state/config/security-audit/Core adapter suites; root serializes Cargo/Bazel changes. Final leaf17/Core17/audit46/config229 passed; Cargo/Bazel parity passed. Any subsequent source change must rerun affected gates.
+- [x] RTX only under shared build flock: scoped just fix, full just fmt, focused protected-state/config/security-audit/Core adapter suites; root serializes Cargo/Bazel changes. Final leaf18/Core17/audit46/config229 passed; Cargo/Bazel parity passed. Any subsequent source change must rerun affected gates.
 - [x] Use unprivileged real subprocess tests plus fault injection; never claim separate-principal isolation from same-user fixtures.
-- [x] No new UI: supporting actual-key TMUX /security, /status, cancel/exit/restart retained visible unavailable protected state. Final source `a0825d720`; immutable CLI SHA256 `449488d50c3f240ff0bee857f865577a3269f488f2742a94f37513498e2fd1c1`; eleven captures and exact commands in PF20S03 QA.
+- [x] No new UI: supporting actual-key TMUX /security, /status, cancel/exit/restart retained visible unavailable protected state. Final source `8d6967179`; immutable CLI SHA256 `42fe2d0168a4f9079f6faa4f4a7b6aa41deabe6f1322d0e921b8c40b4cfc4076`; eleven captures and exact commands in PF20S03 QA.
 - [ ] Astra High and Fable5.1 High via Corbanu/private TMUX; max five for this new track. No review-budget reset of frozen PF30S01 or PF27.
 - [ ] Coordinator combined-tree tests and lock/governance checks; native privileged qualification remains PF27 integration evidence.
 

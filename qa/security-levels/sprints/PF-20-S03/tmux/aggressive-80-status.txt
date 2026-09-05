@@ -21,7 +21,7 @@
 │  Agents.md:            AGENTS.md                                             │
 │  Account:              OpenAI API key configured (run corbanu login to use C │
 │  Collaboration mode:   Default                                               │
-│  Session:              01a07012-e8df-7933-8d49-738ed1e53ace                  │
+│  Session:              01a0701e-b45d-7a53-ac42-6f784471d4af                  │
 │                                                                              │
 │  Token usage:          0 total  (0 input + 0 output)                         │
 │  Limits:               data not available yet                                │

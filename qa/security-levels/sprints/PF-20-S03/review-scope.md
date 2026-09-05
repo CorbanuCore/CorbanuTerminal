@@ -42,7 +42,7 @@ synthetic. Do not treat it as separate-principal qualification. No physical powe
 cut, real Vault migration, protected activation or non-Linux adapter is claimed.
 Owner/key rotation is rejected pending a separately authorized migration contract.
 
-Diff baseline is 16 Rust/build files, 2,035 added lines including 682 test lines,
+Diff baseline is 16 Rust/build files, 2,107 added lines including 707 test lines,
 plus allocation/design/QA documentation; cohesive production modules are each
 below 500 lines. The coordinator approved this staged leaf total exceeding the
 usual 800-line guidance. Preserve exact owner boundaries: no broker or Core

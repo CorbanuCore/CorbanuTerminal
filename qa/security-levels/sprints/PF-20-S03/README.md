@@ -25,8 +25,8 @@ necessary >800-line total including tests. Current recovery checkpoints are
 `2c6e27474`, `d9f346cbf`, `740ee0d8a`, `190114002`, `36f7b96cc` and `8939d5041`; they are not individually
 claimed as reviewed or final-qualified trees. Final size and exact evidence will
 be recorded after formatting. Current source/build delta is 16 files and 2,022
-added lines at the earlier checkpoint. Final candidate delta is 2,035 added lines,
-including 682 test lines. Largest production module is 405 lines.
+added lines at the earlier checkpoint. Remediated candidate delta is 2,107 added
+lines, including 707 test lines. Largest production module is 452 lines.
 
 ### Root contract
 
@@ -108,16 +108,18 @@ the shared build lock. Initial missing Bazel PATH was corrected to the existing
 installation, without installing new tooling.
 
 Remote evidence root: `/home/travis/security-round5/evidence/anchor/`.
-Final source `a0825d720` adds nonblocking malformed-FIFO rejection; leaf17/17 and
-Core17/17 passed again. No formatter delta remained. Immutable CLI
-`candidate-a0825/codex` SHA256:
-`449488d50c3f240ff0bee857f865577a3269f488f2742a94f37513498e2fd1c1`.
+Source `a0825d720` adds nonblocking malformed-FIFO rejection. Final remediation
+`8d6967179` also makes full-backlog connection establishment fail immediately;
+leaf18/18 and Core17/17 passed. Remote formatter changes were synchronized exactly.
+Immutable CLI `candidate-review1/codex` SHA256:
+`42fe2d0168a4f9079f6faa4f4a7b6aa41deabe6f1322d0e921b8c40b4cfc4076`.
 Actual-key profiles2/2 and same-home process restart passed on that candidate;
 eleven final captures are committed under `tmux/`. See `verification.md` for
 commands, cache-path correction and evidence boundaries.
 Integration seam is accepted by the coordinator as a staged root-anchor design;
-Astra/Fable reviews remain pending.
-Review budget: new PF20 track0/5; frozen PF30S01 remains5/5 and is not
+Astra review1 returned one verified in-scope P2, now corrected and tested; it was
+not clean. Fable review2 is authorized next. Exact result/disposition is retained
+in `reviews.md`. Review budget: new PF20 track1/5; frozen PF30S01 remains5/5 and is not
 reviewed again. See `pf27-consumer-handoff.md`; staged root-anchor composition
 supersedes the historical nonlogin-controller proposal only for this design.
 Broker confirms it is consumable with distinct authorized child roles. Actual
