@@ -1,6 +1,6 @@
 # Independent review ledger
 
-Limit: five invocations for this lane; two used so far. No runtime/model substitution or automatic rerun.
+Limit: five invocations for this lane; three used so far. No runtime/model substitution or automatic rerun.
 
 ## Review 1 — Astra High
 
@@ -19,3 +19,11 @@ Limit: five invocations for this lane; two used so far. No runtime/model substit
 - Classified as the same in-scope alternate-transport admission bug. The coordinator approved the exact realtime implementation/test files in `03ec8a6f1` (lane `112878848`) before editing. The second review-remediation cycle adds the shared effective-policy guard before both realtime transports, per-operation live-policy checks, and no transcript-tail flush after denial. Focused remote proof and review 3 are pending; no clean overall review is claimed.
 
 Production screening qualification and sprint completion are not claimed.
+
+## Review 3 — Fable 5.1 High
+
+- Frozen candidate: `4f263ca73..e592cf75a`, same structured Corbanu/TMUX route and model/effort as review 2. Private fixture exited only after its output was captured.
+- Scoped fix/full formatting and all 88 combined Core provenance/realtime tests passed before the remediation commit. Final locked CLI build, formatter check, actual-key TMUX `/status`/`/exit`, and plan/sprint checks then passed.
+- Reviewer verified the realtime startup/live-operation/transcript-tail fix and both Astra fixes. One P2 remains, retained verbatim in `fable-review-3.json` and its TMUX transcript: `codex-memories-write::runtime::stream_stage_one_prompt` independently constructs an unbound ModelClient and streams rollout contents.
+- Caller verified at `memories/write/src/runtime.rs:251`, from `phase1.rs:323`, started by the app-server turn processor. The trace-summarize endpoint guard does not cover this separate stage-one route. Narrowed the README accordingly.
+- Scope classification: real adjacent alternate-route gap, outside this lane's literal write scope and across the Core public API/memory owner boundary. After two remediation cycles, the autoreview scope governor pauses code changes pending coordinator disposition. No speculative public API expansion or fourth review was started. This is not a clean overall review and does not qualify all memory paths.

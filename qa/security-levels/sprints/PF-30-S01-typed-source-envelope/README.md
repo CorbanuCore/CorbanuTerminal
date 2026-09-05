@@ -25,7 +25,9 @@ Plan: `docs/plans/active/p0-security-levels.md`, feature PF-30, sprint PF-30-S01
   only exactly bound admitted items and reject raw/legacy/forged inputs. Initial
   session creation and model-provider replacement enforce the maximum of
   configured intent and live inherited policy. Unavailable policy fails closed.
-  Memory and both realtime transport startups also fail closed. Running realtime
+  The memory trace-summarize endpoint and both realtime transport startups also
+  fail closed. The separately constructed `codex-memories-write` stage-one client
+  is not covered; review 3 identified that remaining unbound path. Running realtime
   tasks recheck after each dequeued input/event and before a sideband connection,
   and suppress transcript-tail re-entry after policy denial. This is per-operation
   admission, not retroactive revocation of frames already sent or immediate
@@ -54,7 +56,10 @@ alongside locked CLI build, formatter check and plan/sprint governance.
 The second remediation passed scoped fix/full formatting and 88 combined Core
 provenance/realtime tests (22 provenance plus 66 other realtime tests), before
 commit. Both independent reviews are recorded in [the disposition ledger](review-disposition.md);
-the realtime fix awaits final TMUX and authorized review 3. No clean overall review,
+the realtime fix passed final actual-key TMUX and was verified by review 3.
+Review 3 found an out-of-allocation memory stage-one caller that still creates an
+unbound client. Its verbatim finding is retained and escalated for scope disposition.
+No clean overall review,
 human acceptance, release or benchmark pass is claimed.
 Builds/tests run only on the allocated RTX host.
 The pinned OpenClaw source checkout was lost; OC-4/OC-10 repository review records

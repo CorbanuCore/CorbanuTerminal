@@ -73,7 +73,10 @@ claiming production screening or complete source coverage. RTX focused protocol:
 285/285; latest combined Core provenance/realtime: 88/88 (22 provenance tests).
 Full Core: 3,455 passed, five request-permissions failures reproduced on the
 allocation baseline, eight skips. Astra review 1 fixes and Fable review 2 realtime
-remediation are tracked in the QA ledger; final realtime TMUX/review 3 are pending.
+remediation are tracked in the QA ledger. Final realtime actual-key TMUX passed;
+review 3 verified those fixes and identified a separate unbound stage-one memory
+worker outside the allocation. That finding is retained and escalated; no overall
+clean review or complete memory-path protection is claimed.
 Keep this sprint `in_progress` until the remaining production criteria are met.
 
 - [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
