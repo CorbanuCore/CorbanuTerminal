@@ -1,5 +1,12 @@
 # Corbanu Terminal 0.1.38 integration candidate
 
+## Authorized publication — September 5
+
+The repository operator explicitly requested the release after the Astra
+subagent fix. [Publication authority, execution and disclosed gaps](PUBLICATION.md)
+supersede earlier historical statements that publication was not authorized.
+Qualification gaps remain disclosed; authorization does not turn them into passes.
+
 ## Latest repair — explicit Astra subagents, September 5
 
 Source `51185a24d404f98ce7f0dd5fc67e516deabee000` separates explicit runtime

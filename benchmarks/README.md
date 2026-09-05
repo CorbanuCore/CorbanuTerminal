@@ -123,7 +123,7 @@ independent publication veto over an explicitly authorized release.
 
 | Release | Releases since qualifying cycle | Required | Owner | Live repo/task | Corbanu/Hermes/Kilo | Coding catalog/model set | Runtime | Spend | Verdict | Evidence |
 | --- | ---: | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Next release after policy adoption | baseline pending | yes | Release owner named in release record | pending | pending | full catalog; models pending | pending | pending | **Pending—must be disclosed** | pending |
+| 0.1.38 (publication authorized) | 1 on publication; baseline pending | yes | Requesting repository operator | not frozen or run | incomplete | full catalog required; model set not frozen | unknown | unknown | **Incomplete—explicit release authorization; no qualifying-cycle reset** | [Publication disclosure](../qa/release/0.1.38/PUBLICATION.md) |
 
 ## Evidence package
 
