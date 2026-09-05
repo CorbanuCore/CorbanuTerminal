@@ -30,8 +30,17 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
     }
     let repo = codex_utils_cargo_bin::repo_root()?;
     let binary = codex_utils_cargo_bin::cargo_bin("codex")?;
-    for (level, cancel_pending) in [("permissive", false), ("moderate", false), ("aggressive", false), ("permissive", true)] {
-        let case = if cancel_pending { "cancel-pending" } else { level };
+    for (level, cancel_pending) in [
+        ("permissive", false),
+        ("moderate", false),
+        ("aggressive", false),
+        ("permissive", true),
+    ] {
+        let case = if cancel_pending {
+            "cancel-pending"
+        } else {
+            level
+        };
         let mut input_events = Vec::new();
         let home = tempdir()?;
         let server = MockServer::start().await;
@@ -111,14 +120,23 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
         )?;
         let pane = session.primary_pane();
         pane.wait_stable_contains("Corbanu Terminal", TIMEOUT)?;
-        submit(pane, "Run the synthetic foreground fixture.", &mut input_events)?;
+        submit(
+            pane,
+            "Run the synthetic foreground fixture.",
+            &mut input_events,
+        )?;
         let deadline = tokio::time::Instant::now() + TIMEOUT;
         loop {
             let outputs = db.memories().list_stage1_outputs_for_global(10).await?;
             let log =
                 fs::read_to_string(home.path().join("logs/codex-tui.log")).unwrap_or_default();
             let done = if cancel_pending {
-                server.received_requests().await.unwrap().iter().any(|r| String::from_utf8_lossy(&r.body).contains(CANARY))
+                server
+                    .received_requests()
+                    .await
+                    .unwrap()
+                    .iter()
+                    .any(|r| String::from_utf8_lossy(&r.body).contains(CANARY))
             } else if level == "permissive" {
                 outputs.iter().any(|out| out.thread_id == source)
             } else {
@@ -130,7 +148,10 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
             if tokio::time::Instant::now() >= deadline {
                 let viewport = pane.capture_viewport()?;
                 let retained = home.keep();
-                anyhow::bail!("memory worker did not finish {case}; retained fixture: {}; viewport:\n{viewport}", retained.display());
+                anyhow::bail!(
+                    "memory worker did not finish {case}; retained fixture: {}; viewport:\n{viewport}",
+                    retained.display()
+                );
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
@@ -164,11 +185,19 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
                 format!("canary_requests={canaries}\n"),
             )?;
         }
-        if level == "permissive" { pane.wait_stable_contains("foreground fixture complete", TIMEOUT)?; }
+        if level == "permissive" {
+            pane.wait_stable_contains("foreground fixture complete", TIMEOUT)?;
+        }
         submit(pane, "/exit", &mut input_events)?;
         session.wait_for_exit(TIMEOUT)?;
         if cancel_pending {
-            ensure!(db.memories().list_stage1_outputs_for_global(10).await?.is_empty(), "cancelled memory output persisted");
+            ensure!(
+                db.memories()
+                    .list_stage1_outputs_for_global(10)
+                    .await?
+                    .is_empty(),
+                "cancelled memory output persisted"
+            );
         }
         let restarted = tmux.new_session(
             SessionSpec::new(
@@ -200,15 +229,33 @@ async fn tmux_memory_worker_policy_canary_permissive_and_protected() -> Result<(
         );
         if let Some(root) = std::env::var_os("CORBANU_MEMORY_EVIDENCE") {
             let root = std::path::PathBuf::from(root);
-            fs::write(root.join(format!("{case}-restart.txt")), pane.capture_viewport()?)?;
+            fs::write(
+                root.join(format!("{case}-restart.txt")),
+                pane.capture_viewport()?,
+            )?;
         }
         submit(pane, "/exit", &mut input_events)?;
         restarted.wait_for_exit(TIMEOUT)?;
         if let Some(root) = std::env::var_os("CORBANU_MEMORY_EVIDENCE") {
             let root = std::path::PathBuf::from(root);
-            fs::write(root.join(format!("{case}-input-events.txt")), input_events.join("\n"))?;
-            fs::write(root.join(format!("{case}-outcomes.txt")), format!("canary_requests={canaries}\nstage1_outputs={}\n", db.memories().list_stage1_outputs_for_global(10).await?.len()))?;
-            fs::copy(home.path().join("logs/codex-tui.log"), root.join(format!("{case}-trace.log")))?;
+            fs::write(
+                root.join(format!("{case}-input-events.txt")),
+                input_events.join("\n"),
+            )?;
+            fs::write(
+                root.join(format!("{case}-outcomes.txt")),
+                format!(
+                    "canary_requests={canaries}\nstage1_outputs={}\n",
+                    db.memories()
+                        .list_stage1_outputs_for_global(10)
+                        .await?
+                        .len()
+                ),
+            )?;
+            fs::copy(
+                home.path().join("logs/codex-tui.log"),
+                root.join(format!("{case}-trace.log")),
+            )?;
         }
     }
     Ok(())
