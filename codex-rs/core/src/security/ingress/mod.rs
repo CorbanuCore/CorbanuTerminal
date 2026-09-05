@@ -66,27 +66,55 @@ impl PendingSource {
         parents: &[SourceEnvelope],
     ) -> Result<(Self, String), IngressError> {
         descriptor.kind = route_kind(route)?;
-        if raw.len() > MAX_INGRESS_TEXT_BYTES { return Err(IngressError::TooLarge); }
+        if raw.len() > MAX_INGRESS_TEXT_BYTES {
+            return Err(IngressError::TooLarge);
+        }
         let normalized = normalize(raw);
-        if normalized.len() > MAX_INGRESS_TEXT_BYTES { return Err(IngressError::TooLarge); }
+        if normalized.len() > MAX_INGRESS_TEXT_BYTES {
+            return Err(IngressError::TooLarge);
+        }
         let raw_digest = *ContentDigest::of(raw.as_bytes()).as_bytes();
         let content_digest = *ContentDigest::of(normalized.as_bytes()).as_bytes();
-        let mut lineage: Vec<_> = parents.iter().flat_map(|parent| parent.taint_lineage().iter().copied()).collect();
+        let mut lineage: Vec<_> = parents
+            .iter()
+            .flat_map(|parent| parent.taint_lineage().iter().copied())
+            .collect();
         lineage.sort_unstable();
         lineage.dedup();
         let envelope = SourceEnvelope::new(
-            Uuid::new_v4(), descriptor, raw_digest,
-            vec![SourceTransformation { id: "model-data-escape-v1".into(), input_digest: raw_digest, output_digest: content_digest }],
+            Uuid::new_v4(),
+            descriptor,
+            raw_digest,
+            vec![SourceTransformation {
+                id: "model-data-escape-v1".into(),
+                input_digest: raw_digest,
+                output_digest: content_digest,
+            }],
             lineage,
-        ).map_err(|_| IngressError::InvalidEnvelope)?;
-        let envelope_bytes = serde_json::to_vec(&envelope).map_err(|_| IngressError::InvalidEnvelope)?;
-        let screening_binding = SourceBinding::from_trusted_provenance(ContentDigest::of(&envelope_bytes), SOURCE_ENVELOPE_VERSION)
-            .map_err(|_| IngressError::InvalidEnvelope)?;
-        Ok((Self { envelope, screening_binding }, normalized))
+        )
+        .map_err(|_| IngressError::InvalidEnvelope)?;
+        let envelope_bytes =
+            serde_json::to_vec(&envelope).map_err(|_| IngressError::InvalidEnvelope)?;
+        let screening_binding = SourceBinding::from_trusted_provenance(
+            ContentDigest::of(&envelope_bytes),
+            SOURCE_ENVELOPE_VERSION,
+        )
+        .map_err(|_| IngressError::InvalidEnvelope)?;
+        Ok((
+            Self {
+                envelope,
+                screening_binding,
+            },
+            normalized,
+        ))
     }
 
-    pub(crate) fn envelope(&self) -> &SourceEnvelope { &self.envelope }
-    pub(crate) fn screening_binding(&self) -> SourceBinding { self.screening_binding }
+    pub(crate) fn envelope(&self) -> &SourceEnvelope {
+        &self.envelope
+    }
+    pub(crate) fn screening_binding(&self) -> SourceBinding {
+        self.screening_binding
+    }
 
     /// An Allow verdict still only releases untrusted data. Match the exact
     /// host-issued source identity AND content, not a self-reported wire label.
@@ -94,21 +122,33 @@ impl PendingSource {
         let bytes = screened.bytes().into_raw_untrusted();
         if screened.target().binding().source() != self.screening_binding
             || ContentDigest::of(bytes).as_bytes() != &self.envelope.content_digest()
-        { return Err(IngressError::BindingMismatch); }
+        {
+            return Err(IngressError::BindingMismatch);
+        }
         let data = std::str::from_utf8(bytes).map_err(|_| IngressError::InvalidEnvelope)?;
         let projection = serde_json::to_string(&json!({ "source": self.envelope, "data": data }))
             .map_err(|_| IngressError::InvalidEnvelope)?;
-        if projection.len() > MAX_PROJECTION_BYTES { return Err(IngressError::TooLarge); }
-        Ok(AdmittedSource { projection, raw_digest: self.envelope.raw_digest() })
+        if projection.len() > MAX_PROJECTION_BYTES {
+            return Err(IngressError::TooLarge);
+        }
+        Ok(AdmittedSource {
+            projection,
+            raw_digest: self.envelope.raw_digest(),
+        })
     }
 }
 
 /// No constructor or Deserialize implementation outside this admission module.
 #[derive(Clone)]
-pub(crate) struct AdmittedSource { projection: String, raw_digest: [u8; 32] }
+pub(crate) struct AdmittedSource {
+    projection: String,
+    raw_digest: [u8; 32],
+}
 
 impl AdmittedSource {
-    pub(crate) fn into_projection(self) -> String { self.projection }
+    pub(crate) fn into_projection(self) -> String {
+        self.projection
+    }
 }
 
 // Escape complete text before any caller performs truncation. Escaping all
@@ -118,7 +158,9 @@ fn normalize(raw: &str) -> String {
     for ch in raw.chars() {
         if !ch.is_ascii() || ch.is_control() || matches!(ch, '<' | '>') {
             let _ = write!(normalized, "\\u{{{:x}}}", u32::from(ch));
-        } else { normalized.push(ch); }
+        } else {
+            normalized.push(ch);
+        }
     }
     normalized
 }
@@ -132,7 +174,9 @@ pub(crate) fn check_native_request(
 ) -> Result<(), IngressError> {
     match level {
         SecurityLevel::Permissive => Ok(()),
-        SecurityLevel::Moderate | SecurityLevel::Aggressive => Err(IngressError::NativeAdmissionUnavailable),
+        SecurityLevel::Moderate | SecurityLevel::Aggressive => {
+            Err(IngressError::NativeAdmissionUnavailable)
+        }
     }
 }
 

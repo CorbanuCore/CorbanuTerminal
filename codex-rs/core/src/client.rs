@@ -762,12 +762,17 @@ impl ModelClient {
             http_client_factory,
             ingress_level: codex_security_policy::SecurityLevel::Permissive,
             ingress_policy: None,
-            ingress_items: Arc::new(StdMutex::new(crate::security::ingress::NativeIngress::default())),
+            ingress_items: Arc::new(StdMutex::new(
+                crate::security::ingress::NativeIngress::default(),
+            )),
         }
     }
 
     #[cfg(test)]
-    pub(crate) fn with_ingress_level(mut self, level: codex_security_policy::SecurityLevel) -> Self {
+    pub(crate) fn with_ingress_level(
+        mut self,
+        level: codex_security_policy::SecurityLevel,
+    ) -> Self {
         self.ingress_level = level;
         self
     }
@@ -785,37 +790,69 @@ impl ModelClient {
     fn source_admission_level(&self) -> Result<codex_security_policy::SecurityLevel> {
         let mut level = self.ingress_level;
         if let Some(policy) = &self.ingress_policy {
-            let snapshot = policy.0.snapshot_for_agent(self.state.thread_id)
-                .map_err(|_| CodexErr::InvalidRequest("source admission policy is unavailable".into()))?;
+            let snapshot = policy
+                .0
+                .snapshot_for_agent(self.state.thread_id)
+                .map_err(|_| {
+                    CodexErr::InvalidRequest("source admission policy is unavailable".into())
+                })?;
             level = level.max(snapshot.level);
         }
         Ok(level)
     }
 
     fn check_source_admission(&self, prompt: &Prompt) -> Result<()> {
-        crate::security::ingress::check_native_request(self.source_admission_level()?, &prompt.input)
-            .map_err(|error| CodexErr::InvalidRequest(error.to_string()))
+        crate::security::ingress::check_native_request(
+            self.source_admission_level()?,
+            &prompt.input,
+        )
+        .map_err(|error| CodexErr::InvalidRequest(error.to_string()))
     }
 
-    fn source_admitted_input(&self, prompt: &Prompt, use_responses_lite: bool) -> Result<Vec<ResponseItem>> {
+    fn source_admitted_input(
+        &self,
+        prompt: &Prompt,
+        use_responses_lite: bool,
+    ) -> Result<Vec<ResponseItem>> {
         if self.source_admission_level()? == codex_security_policy::SecurityLevel::Permissive {
             return Ok(prompt.get_formatted_input_for_request(use_responses_lite));
         }
-        self.ingress_items.lock().map_err(|_| CodexErr::InvalidRequest("source admission registry is unavailable".into()))?
-            .project(&prompt.input).map_err(|error| CodexErr::InvalidRequest(error.to_string()))
+        self.ingress_items
+            .lock()
+            .map_err(|_| {
+                CodexErr::InvalidRequest("source admission registry is unavailable".into())
+            })?
+            .project(&prompt.input)
+            .map_err(|error| CodexErr::InvalidRequest(error.to_string()))
     }
 
     pub(crate) fn observe_native_ingress(&self, items: &[ResponseItem]) {
-        if self.source_admission_level().is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive) { return; }
+        if self
+            .source_admission_level()
+            .is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive)
+        {
+            return;
+        }
         if let Ok(mut ingress) = self.ingress_items.lock() {
             let now = u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or_default();
             ingress.observe(items, now);
         }
     }
 
-    pub(crate) fn register_native_tool_origin(&self, call_id: &str, kind: codex_protocol::provenance::SourceKind) {
-        if self.source_admission_level().is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive) { return; }
-        if let Ok(mut ingress) = self.ingress_items.lock() { ingress.register_call(call_id, kind); }
+    pub(crate) fn register_native_tool_origin(
+        &self,
+        call_id: &str,
+        kind: codex_protocol::provenance::SourceKind,
+    ) {
+        if self
+            .source_admission_level()
+            .is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive)
+        {
+            return;
+        }
+        if let Ok(mut ingress) = self.ingress_items.lock() {
+            ingress.register_call(call_id, kind);
+        }
     }
 
     pub(crate) fn with_prompt_cache_key_override(
