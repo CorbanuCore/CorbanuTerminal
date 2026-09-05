@@ -49,6 +49,12 @@ updated: 2026-09-04
 ## Done
 
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
+- [x] Recovered reviewed broker leaves from `cdb821289` in provenance commit
+  `90ae3a0cf`, without overwriting the current allocation or shared registrations.
+- [x] Implemented digest-bound PF-41 journal integration and bounded native Linux
+  peer/framing/channel teardown primitives; final post-format tests pass 42/42
+  on RTX. Reviews and production service qualification remain open;
+  see `qa/security-levels/sprints/PF-27-S04/round5-evidence.md`.
 
 ## Remaining
 
