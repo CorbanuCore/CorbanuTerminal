@@ -227,7 +227,10 @@ animations = false
     );
     let mut eligibility = codex_provider_auth::ProviderEligibility::default();
     for entry in catalog.entries() {
-        eligibility.set_policy(entry, codex_provider_auth::ProviderActivationPolicy::Inactive);
+        eligibility.set_policy(
+            entry,
+            codex_provider_auth::ProviderActivationPolicy::Inactive,
+        );
     }
     codex_provider_auth::ProviderEligibilityStore::new(home.path()).save(&eligibility)?;
     fs::write(
@@ -521,7 +524,10 @@ fn switch_provider(pane: &TmuxPane<'_>, root: &Path, keys: &mut Vec<String>) -> 
     pane.wait_stable_contains("Choose replacement", READY)?;
     select_label(pane, "Memory Fixture B — gpt-5.6-terra", keys)?;
     pane.wait_stable_contains("Configure providers and control", READY)?;
-    fs::write(root.join("provider-replacement.txt"), pane.capture_viewport()?)?;
+    fs::write(
+        root.join("provider-replacement.txt"),
+        pane.capture_viewport()?,
+    )?;
     pane.send_key(TmuxKey::Escape)?;
     keys.push("key: Escape (provider replacement complete)".into());
     submit(pane, "/model", keys)?;
@@ -531,7 +537,9 @@ fn switch_provider(pane: &TmuxPane<'_>, root: &Path, keys: &mut Vec<String>) -> 
     pane.wait_stable_contains("Select Reasoning", READY)?;
     pane.send_key(TmuxKey::Enter)?;
     keys.push("key: Enter (default reasoning)".into());
-    pane.wait_stable_until("effort selected", READY, |capture| !capture.contains("Select Reasoning"))?;
+    pane.wait_stable_until("effort selected", READY, |capture| {
+        !capture.contains("Select Reasoning")
+    })?;
     Ok(())
 }
 
