@@ -28,6 +28,7 @@ use fixture_support::Artifacts;
 use fixture_support::fake_provider;
 use fixture_support::publish_attachment;
 use fixture_support::routing;
+use fixture_support::source_failure_reasons;
 use fixture_support::write_json;
 
 const CANARY: &str = "PF30S04_SYNTHETIC_ROLLOUT_CANARY";
@@ -108,6 +109,43 @@ fn memory_human_pending_exit_rejects_unproven_lifecycle() {
         },
     ] {
         assert!(!invalid.is_pending());
+    }
+}
+
+#[test]
+fn memory_human_pending_exit_only_allows_exact_owner_denial() {
+    let source = ThreadId::new();
+    let other = ThreadId::new();
+    let owner =
+        format!("WARN Phase 1 job failed for thread {source}: stage-one memory owner terminated");
+    let provider =
+        format!("WARN Phase 1 job failed for thread {source}: stage-one memory provider changed");
+    let unrelated =
+        format!("WARN Phase 1 job failed for thread {source}: synthetic request failure");
+    pretty_assertions::assert_eq!(
+        source_failure_reasons(&owner, source),
+        vec!["owner_terminated"]
+    );
+    pretty_assertions::assert_eq!(source_failure_reasons(&owner, other), Vec::<&str>::new());
+    for (log, expected) in [
+        (provider.clone(), vec!["provider_changed"]),
+        (unrelated.clone(), vec!["other_source_failure"]),
+        (
+            format!("{owner}; synthetic failure"),
+            vec!["other_source_failure"],
+        ),
+        (
+            format!("{owner}\n{provider}"),
+            vec!["owner_terminated", "provider_changed"],
+        ),
+        (
+            format!("{owner}\n{unrelated}"),
+            vec!["owner_terminated", "other_source_failure"],
+        ),
+    ] {
+        let reasons = source_failure_reasons(&log, source);
+        pretty_assertions::assert_eq!(reasons, expected);
+        assert!(reasons.iter().any(|reason| *reason != "owner_terminated"));
     }
 }
 
@@ -386,6 +424,7 @@ animations = false
             pending = Some(Instant::now());
         }
         let denied = log.contains("stage-one memory provider changed");
+        let source_failures = source_failure_reasons(&log, source);
         let foreground_b = routes.iter().any(|r| {
             r["endpoint"] == "B" && r["kind"] == "foreground" && r["model"] == "memory-fixture-b"
         });
@@ -394,6 +433,7 @@ animations = false
             "status.json",
             &json!({"case":format!("{case:?}"), "source":source.to_string(), "canary_requests":canaries, "source_outputs":outputs,
             "provider_change_denied":denied, "foreground_b":foreground_b, "restarted":restarted,
+            "source_failure_reasons":source_failures,
             "pending_exit_elapsed_ms":pending_exit_elapsed,
             "pending_window_remaining_seconds":pending.map(|time| delay.saturating_sub(time.elapsed()).as_secs()), "routes":routes}),
         )?;
@@ -450,8 +490,12 @@ animations = false
                     window: delay,
                     canaries,
                     outputs,
+                    // Only exact expected owner termination may accompany a
+                    // pending owner exit. Mixed/unrelated source failures deny.
                     failed: denied
-                        || log.contains(&format!("Phase 1 job failed for thread {source}:")),
+                        || source_failures
+                            .iter()
+                            .any(|reason| *reason != "owner_terminated"),
                 };
                 ensure!(
                     proof.is_pending(),

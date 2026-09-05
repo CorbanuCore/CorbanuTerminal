@@ -5,6 +5,7 @@ use super::FOREGROUND;
 use crate::support::tmux::TmuxSession;
 use anyhow::Context;
 use anyhow::Result;
+use codex_protocol::ThreadId;
 use core_test_support::responses;
 use serde_json::Value;
 use serde_json::json;
@@ -21,6 +22,21 @@ use wiremock::ResponseTemplate;
 pub(super) struct Artifacts {
     pub(super) binary: std::path::PathBuf,
     pub(super) identity: Value,
+}
+
+/// Retain only bounded reason labels for this fixture's source, never raw log text.
+pub(super) fn source_failure_reasons(log: &str, source: ThreadId) -> Vec<&'static str> {
+    let prefix = format!("Phase 1 job failed for thread {source}:");
+    // Exact Display strings from core::memory_stage_one::StageOneMemoryDenial;
+    // TUI integration tests deliberately do not depend directly on Core.
+    log.lines()
+        .filter_map(|line| line.split_once(&prefix))
+        .map(|(_, reason)| match reason.trim() {
+            "stage-one memory owner terminated" => "owner_terminated",
+            "stage-one memory provider changed" => "provider_changed",
+            _ => "other_source_failure",
+        })
+        .collect()
 }
 
 impl Artifacts {
