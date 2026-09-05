@@ -11,12 +11,15 @@ activation_basis: "The user's 2026-09-01 P1 decision to supersede the remaining 
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-08-30
-updated: 2026-09-04
+updated: 2026-09-05
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Shipping MVP — LIVE"
   requirement_excerpt: "Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat."
 implementation_worktrees:
+  - path: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.38-reconcile"
+    branch: "integration/reconcile-release-0.1.38"
+    base_commit: "c9680a41e7940e20c8816201db37b32d001a1a6b"
   - path: "/home/pfrpc/repos/worktrees/corbanu-reconcile-release-fixes"
     branch: "fix/reconcile-release-0.1.37-review"
     base_commit: "f03e95f7a65609bb442764d6306682d5fe43f6bb"
@@ -56,6 +59,14 @@ contracts, represent their unclosed release gates as passed, or consume a third
 active-plan slot.
 
 ## User pain
+
+The user's 2026-09-05 instruction authorizes PF-57-S03 to reconcile those repairs
+with IridiumMaster/Travis's updated `integration/reconcile-release-0.1.37` branch
+at `07791288b6feeccfaee5a57c12452359cc666957`. Preserve the provider-login UX,
+long-lived Claude token workflow and Ambient's GLM-only catalog change, and
+qualify the combined candidate. `origin/main` at `6dd9ad646beb4a7407521439411f436f21ea4af1`
+is already an ancestor of that branch. Publication is a separate release action;
+the user has been asked whether to publish or hand back the reconciled candidate.
 
 The user's 2026-09-04 instruction authorizes repairing Astra's reconciliation
 findings under PF-57: wallet daemon upgrade compatibility, durable Task Node
@@ -145,7 +156,9 @@ requires the user to choose a usable replacement first.
 
 ### Out
 
-- Changing provider wire protocols, pricing, subscriptions, or model catalogs.
+- Changing provider wire protocols, pricing, subscriptions, or model catalogs,
+  except preserving the user's explicitly requested incoming Ambient GLM-only
+  change in PF-57-S03; no additional catalog policy is introduced.
 - Automatically importing, copying, or deleting provider-owned credentials.
 - Interactive enrollment for a custom command-auth provider without a supported
   typed setup adapter; it remains visible with metadata/status and recovery copy.
@@ -254,6 +267,7 @@ are recorded in the sprint and `qa/release/0.1.38/astra-fixes.md`.
 | `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/archive/unified-provider-auth/pf-56-s01-final-qualification.md) | completed at `fd8a9c900e` |
 | `PF-57` | Latest-main integration, regression preservation, and credential-store liveness | [PF-57-S01](../../sprints/archive/unified-provider-auth/pf-57-s01-latest-main-integration.md) | completed at `a935e507b` |
 | `PF-57` | Reconciled release credential-lifecycle regressions | [PF-57-S02](../../sprints/archive/unified-provider-auth/pf-57-s02-reconciliation-auth-repairs.md) | completed; [Astra repair evidence](../../../qa/release/0.1.38/astra-fixes.md) |
+| `PF-57` | Reconcile Travis's provider UX/catalog changes with repaired release | [PF-57-S03](../../sprints/current/unified-provider-auth/pf-57-s03-travis-release-reconciliation.md) | in_progress; serial merge and combined-tree qualification |
 
 ## Hard dependency graph
 

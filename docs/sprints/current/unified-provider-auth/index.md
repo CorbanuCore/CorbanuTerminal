@@ -5,6 +5,8 @@ allows one serial sprint. PF-42 through PF-47 are the merged Claude-auth
 foundation. PF-48 through PF-57 are completed and archived; no implementation
 sprint from that sequence remains open. PF-57-S02 also completed the user's
 2026-09-04 Astra reconciliation repairs in its isolated serial worktree.
+PF-57-S03 is the sole current sprint, reconciling those repairs with Travis's
+two subsequent integration-branch commits under the user's 2026-09-05 mandate.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
@@ -19,6 +21,7 @@ sprint from that sequence remains open. PF-57-S02 also completed the user's
 | 15 | [PF-56-S01](../../archive/unified-provider-auth/pf-56-s01-final-qualification.md) | Final automated, TMUX, review, documentation, and release evidence | completed | PF-55-S01 |
 | 16 | [PF-57-S01](../../archive/unified-provider-auth/pf-57-s01-latest-main-integration.md) | Latest-main integration and credential-store liveness | completed | PF-56-S01 |
 | 17 | [PF-57-S02](../../archive/unified-provider-auth/pf-57-s02-reconciliation-auth-repairs.md) | Reconciliation credential-lifecycle repairs | completed | PF-57-S01 |
+| 18 | [PF-57-S03](pf-57-s03-travis-release-reconciliation.md) | Travis/provider UX and release repair reconciliation | in_progress | PF-57-S02 |
 
 ## Delivery contract
 
