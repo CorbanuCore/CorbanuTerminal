@@ -636,6 +636,7 @@ impl Session {
             config.current_time_reminder.as_ref(),
             external_time_provider,
         )?;
+        let ingress_policy = agent_control.effective_security_policy();
         let selected_capability_roots =
             match thread_extension_init.get::<Vec<SelectedCapabilityRoot>>() {
                 Some(roots) => roots.as_ref().clone(),
@@ -1200,6 +1201,7 @@ impl Session {
                     attestation_provider,
                     config.http_client_factory(),
                 )
+                .with_ingress_policy(config.security_level, ingress_policy)
                 .with_prompt_cache_key_override(
                     crate::guardian::prompt_cache_key_override_for_review_session(
                         &session_configuration.session_source,

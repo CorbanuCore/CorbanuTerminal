@@ -303,6 +303,10 @@ pub struct ModelClient {
     agent_identity_policy: AgentIdentityAuthPolicy,
     prompt_cache_key_override: Option<String>,
     http_client_factory: HttpClientFactory,
+    // Restrictive configured intent, not an assertion of protected readiness.
+    ingress_level: codex_security_policy::SecurityLevel,
+    ingress_policy: Option<crate::security::ingress::BoundIngressPolicy>,
+    ingress_items: Arc<StdMutex<crate::security::ingress::NativeIngress>>,
 }
 
 /// A turn-scoped streaming session created from a [`ModelClient`].
@@ -756,7 +760,62 @@ impl ModelClient {
             agent_identity_policy,
             prompt_cache_key_override: None,
             http_client_factory,
+            ingress_level: codex_security_policy::SecurityLevel::Permissive,
+            ingress_policy: None,
+            ingress_items: Arc::new(StdMutex::new(crate::security::ingress::NativeIngress::default())),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_ingress_level(mut self, level: codex_security_policy::SecurityLevel) -> Self {
+        self.ingress_level = level;
+        self
+    }
+
+    pub(crate) fn with_ingress_policy(
+        mut self,
+        level: codex_security_policy::SecurityLevel,
+        policy: crate::security::EffectivePolicyView,
+    ) -> Self {
+        self.ingress_level = level;
+        self.ingress_policy = Some(crate::security::ingress::BoundIngressPolicy(policy));
+        self
+    }
+
+    fn source_admission_level(&self) -> Result<codex_security_policy::SecurityLevel> {
+        let mut level = self.ingress_level;
+        if let Some(policy) = &self.ingress_policy {
+            let snapshot = policy.0.snapshot_for_agent(self.state.thread_id)
+                .map_err(|_| CodexErr::InvalidRequest("source admission policy is unavailable".into()))?;
+            level = level.max(snapshot.level);
+        }
+        Ok(level)
+    }
+
+    fn check_source_admission(&self, prompt: &Prompt) -> Result<()> {
+        crate::security::ingress::check_native_request(self.source_admission_level()?, &prompt.input)
+            .map_err(|error| CodexErr::InvalidRequest(error.to_string()))
+    }
+
+    fn source_admitted_input(&self, prompt: &Prompt, use_responses_lite: bool) -> Result<Vec<ResponseItem>> {
+        if self.source_admission_level()? == codex_security_policy::SecurityLevel::Permissive {
+            return Ok(prompt.get_formatted_input_for_request(use_responses_lite));
+        }
+        self.ingress_items.lock().map_err(|_| CodexErr::InvalidRequest("source admission registry is unavailable".into()))?
+            .project(&prompt.input).map_err(|error| CodexErr::InvalidRequest(error.to_string()))
+    }
+
+    pub(crate) fn observe_native_ingress(&self, items: &[ResponseItem]) {
+        if self.source_admission_level().is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive) { return; }
+        if let Ok(mut ingress) = self.ingress_items.lock() {
+            let now = u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or_default();
+            ingress.observe(items, now);
+        }
+    }
+
+    pub(crate) fn register_native_tool_origin(&self, call_id: &str, kind: codex_protocol::provenance::SourceKind) {
+        if self.source_admission_level().is_ok_and(|level| level == codex_security_policy::SecurityLevel::Permissive) { return; }
+        if let Ok(mut ingress) = self.ingress_items.lock() { ingress.register_call(call_id, kind); }
     }
 
     pub(crate) fn with_prompt_cache_key_override(
@@ -1044,6 +1103,7 @@ impl ModelClient {
         mut extra_headers: ApiHeaderMap,
         api_provider_override: Option<ApiProvider>,
     ) -> Result<RealtimeWebrtcCallStart> {
+        self.check_source_admission(&Prompt::default())?;
         // Create the media call over HTTP first, then retain matching auth so realtime can attach
         // the server-side control WebSocket to the call id from that HTTP response.
         let client_setup = self.current_client_setup().await?;
@@ -1083,6 +1143,8 @@ impl ModelClient {
         if raw_memories.is_empty() {
             return Ok(Vec::new());
         }
+
+        self.check_source_admission(&Prompt::default())?;
 
         let client_setup = self.current_client_setup().await?;
         let transport =
@@ -1470,7 +1532,7 @@ impl ModelClient {
         service_tier: Option<String>,
         responses_metadata: &CodexResponsesMetadata,
     ) -> Result<ResponsesApiRequest> {
-        let mut input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
+        let mut input = self.source_admitted_input(prompt, model_info.use_responses_lite)?;
         let is_openai = self.state.provider.info().is_openai();
         if !is_openai {
             retain_latest_contextual_developer_fragments(&mut input);
@@ -1622,7 +1684,7 @@ impl ModelClient {
             });
         }
 
-        let mut input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
+        let mut input = self.source_admitted_input(prompt, model_info.use_responses_lite)?;
         if !self.state.provider.info().is_openai() {
             retain_latest_contextual_developer_fragments(&mut input);
         }
@@ -1808,7 +1870,7 @@ impl ModelClient {
         }
         apply_anthropic_cache_control_to_last_system_block(&mut system, &cache_control);
 
-        let mut input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
+        let mut input = self.source_admitted_input(prompt, model_info.use_responses_lite)?;
         if !self.state.provider.info().is_openai() {
             retain_latest_contextual_developer_fragments(&mut input);
         }

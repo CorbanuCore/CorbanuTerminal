@@ -44,12 +44,13 @@ updated: 2026-09-04
 
 - [x] Active plan; PF-22-S02 completed and archived at the exact recorded base.
 - [x] Round-five allocation records a recoverable worktree, branch, base, owner, literal scope, and integration gate.
-- [ ] Read root and nearest implementation-path AGENTS.md; confirm source pins, provider request paths and fail-closed backend/API availability before code changes.
+- [x] Read root/Rust/Core policies, product citation and the recorded OC-4/OC-10 source review; inspected native session/MCP/tool and all three provider request paths. The lost pinned source checkout was not represented as a fresh source inspection. Protected screening readiness remains unavailable and fail closed.
 
 ## Done
 
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 - [x] On 2026-09-02, product authority confirmed the recovered repository contains no surviving PF-30 branch, implementation commit, or handoff artifact; the absent `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-source-envelope` reservation was therefore released to draft.
+- [x] Round-five recovery checkpoints `9c53c0a03`, `abb97e254`, `e6b7b602a`, `ac34a8456`, and `c34da0a48` preserve envelope/admission, native sidecar/hooks, inherited policy floor and regression source. These are unqualified checkpoints; tests/reviews remain unchecked below pending serialized exports/build registration.
 
 ## Remaining
 
