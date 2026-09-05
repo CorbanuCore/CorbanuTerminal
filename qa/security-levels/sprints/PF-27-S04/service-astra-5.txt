@@ -1,0 +1,3 @@
+autoreview clean: no accepted/actionable findings reported
+overall: patch is correct (0.9)
+No actionable defects found in the scoped service composition and EINTR changes. Trusted peer validation precedes registration, existing runtime and transport guards preserve cancellation and replay denial, and interrupted reads retain the absolute deadline. Synthetic behavior remains feature-gated; production execution still exits 78. This was read-only inspection, not independent test execution or interactive TUI proof.

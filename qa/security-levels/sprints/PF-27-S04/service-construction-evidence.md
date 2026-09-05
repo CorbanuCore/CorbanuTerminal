@@ -1,7 +1,7 @@
 # Broker service construction checkpoint
 
-Status: scoped construction and remote tests passed; independent service-stage
-review remains pending. PF-27-S04 stays `in_progress`. Allocation `db141e9cb`;
+Status: scoped construction, remote tests and Astra High review passed; fresh
+Fable service-stage review awaits budget authorization. PF-27-S04 stays `in_progress`. Allocation `db141e9cb`;
 formatted source checkpoint `6bdc84195` is pushed on `feat/security-round5-broker`
 and mirrored cleanly on the authorized RTX host. No production service or
 protected eligibility is claimed.
@@ -53,11 +53,20 @@ holding the build lock to
 - `codex-secret-broker-service-fixture`: SHA-256
   `dc2cd318f005f92cb7cbd1678fbd14017d6e618bd986bbd01acbc9a61f9e4d32`.
 
-Four prior reviews remain recorded without resetting the ledger. The
-coordinator allocated review **5, Astra High**, after this immutable evidence
-checkpoint, against the service diff from `db141e9cb`. It has not yet returned
-a verdict. A sixth invocation is not authorized; fresh Fable service-stage
-coverage awaits the user's budget decision.
+Four prior reviews remain recorded without resetting the ledger. Review **5,
+Astra High**, completed against `db141e9cb..6ca940226` after immutable source and
+evidence pinning. The structured helper exited **0** with no accepted/actionable
+findings. It confirmed trusted peer checks precede registration, runtime and
+transport guards preserve cancellation/replay denial, EINTR preserves the
+absolute deadline, and synthetic execution stays feature-gated while production
+exits 78. Outputs are `service-astra-5.{txt,json}`. Route: Python autoreview
+helper, app-bundled Codex CLI 0.153.1, `--model gpt-6-astra --thinking high`,
+`--mode branch --base db141e9cb`; no nested reviewer or local build.
+
+Five of five currently authorized invocations are consumed. No redundant clean
+review was run. A sixth invocation is not authorized; fresh Fable service-stage
+coverage awaits the user's budget decision. Existing Fable review 4 covers the
+earlier broker stage, not this subsequent service construction.
 
 See `service-qualification-boundary.md` for the absent production integrity-root
 adapter, native bootstrap/privileged setup boundary and unimplemented streaming
