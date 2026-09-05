@@ -1,20 +1,34 @@
 //! Opt-in, bounded synthetic operator fixtures. Never point these at a personal home.
-use crate::support::tmux::{
-    CommandSpec, SessionSpec, TerminalSize, TmuxKey, TmuxPane, TmuxServer, TmuxSession,
-};
-use anyhow::{Context, Result, ensure};
+use crate::support::tmux::CommandSpec;
+use crate::support::tmux::SessionSpec;
+use crate::support::tmux::TerminalSize;
+use crate::support::tmux::TmuxKey;
+use crate::support::tmux::TmuxPane;
+use crate::support::tmux::TmuxServer;
+use crate::support::tmux::TmuxSession;
+use anyhow::Context;
+use anyhow::Result;
+use anyhow::ensure;
 use codex_protocol::ThreadId;
-use codex_protocol::models::{ContentItem, ResponseItem};
-use codex_protocol::protocol::{RolloutItem, RolloutLine, SessionSource};
+use codex_protocol::models::ContentItem;
+use codex_protocol::models::ResponseItem;
+use codex_protocol::protocol::RolloutItem;
+use codex_protocol::protocol::RolloutLine;
+use codex_protocol::protocol::SessionSource;
 use core_test_support::responses;
-use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
+use serde_json::Value;
+use serde_json::json;
+use sha2::Digest;
+use sha2::Sha256;
 use std::fs;
 use std::io::Read;
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use std::time::Instant;
 use tempfile::tempdir;
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::Mock;
+use wiremock::MockServer;
+use wiremock::ResponseTemplate;
 
 const CANARY: &str = "PF30S04_SYNTHETIC_ROLLOUT_CANARY";
 const FOREGROUND: &str = "HUMAN_FOREGROUND synthetic fixture";
