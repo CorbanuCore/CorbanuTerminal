@@ -79,8 +79,8 @@ actual findings; exceed five only when critical findings continue.
 
 | Lane | Invocations | Evidence / next action |
 | --- | ---: | --- |
-| Broker | 4 / 5 | #1 CLI rejected; #2 Astra findings repaired; #3 Fable confirmed repairs and found timeout defect, now repaired; #4 Fable running with scoped locks |
-| Provenance | 2 / 5 | #1 Astra provider-switch/lock findings repaired; #2 Fable confirmed them and found direct realtime websocket guard omission; remedy and #3 Fable allocated |
+| Broker | 4 / 5 | #1 CLI rejected; #2 Astra findings repaired; #3 Fable timeout finding repaired; #4 no blockers, one deferred P3 EINTR robustness follow-up (helper exit 1, not a clean exit) |
+| Provenance | 3 / 5 | #1 Astra provider-switch/lock findings repaired; #2 Fable realtime omission repaired; #3 verifies fixes, accepts adjacent stage-one memory policy-binding gap as follow-up; no overall clean review |
 | Security UI | 3 / 5 | #1 CLI rejected; #2 Astra High clean; #3 Fable High clean; no further review planned |
 
 Successful Astra runtime: installed app-bundled Codex 0.153.1; 0.145.0 was
@@ -100,11 +100,28 @@ These are preliminary combined checks, not final post-review qualification.
 
 ### Integration checkpoint and known test environment effects
 
-Current source candidate f60d15f16 includes all three lanes, scoped dependency
-locks, broker timeout fixes and provenance provider-switch fixes. Combined
-fix/format, affected crate suites and actual-key TMUX are underway remotely;
-the subsequent realtime guard remediation must be integrated and requalified.
+Source candidate dd2adb72b includes all three lanes, scoped dependency locks,
+broker timeout fixes, provenance provider-switch fixes and realtime guards.
+The earlier combined source f60d15f16 plus the committed module sort passed
+protocol 285/285, Core 26/26, broker/Vault/proxy 338/338, UI 235/235 and
+actual-key TMUX 3/3 after fix/format. Realtime lane source e592cf75a passed
+88/88 provenance/realtime cases and actual-key TMUX. The final combined
+affected-Core and three-TMUX rerun is underway at dd2adb72b.
 No merge to main or release is claimed.
+
+The accepted memory finding is outside the current source allocation:
+memories/write stage one constructs an unbound ModelClient and serializes
+rollouts. The coordinator verified its caller in app-server and that neither
+path differs from the source base. It is an existing incomplete protection
+boundary, not a newly introduced permissive behavior. Defer to PF-30-S02's
+explicit inherited/live policy-binding contract; a configured-floor-only
+patch would not establish that contract. This disposition does not waive the
+finding or permit protected memory activation. PF-30-S01 stays in progress,
+and the source subset is not a completed provenance feature.
+
+Broker review 4's non-blocking EINTR robustness issue is recorded with its
+next-service substage, including signal-handler tests. No fifth review is
+needed without further source changes or blocking findings.
 
 PF-30 full Core run using a fresh isolated temporary root: 3,455 passed,
 five request-permission grant cases failed, eight skipped. All five failures
@@ -120,6 +137,9 @@ Under the shared build lock, invalidate the affected source mtime and rebuild;
 if necessary clean only the identified generated workspace package, never the
 entire cache or source. Copy exact candidate binaries before releasing the lock.
 Use fresh TMPDIR roots outside /home/travis/security-round5/tmp for every run.
+Run normal bazel shutdown before leaving a locked Bazel operation: its persistent
+server can inherit the lock descriptor. One such inherited lock was safely
+released this way; no process was forcibly killed.
 
 ## Integration and follow-through
 

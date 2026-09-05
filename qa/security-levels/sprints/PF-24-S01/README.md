@@ -36,8 +36,8 @@ build lock. Remote evidence root:
 | `just fmt` | Complete pass with coordinator-supplied uv 0.11.3; exit 0 and no file changes (`fmt-complete.log`), so the final tested source is unchanged |
 | Focused TUI nextest | Final normal-mode 235/235 pass; run `36c926b9-7b0b-4c54-aa47-da1ce10471be`, `final-tests.log` |
 | Actual-key TMUX | Final 2/2 pass (three profile/configuration widths plus startup rejection); run `c5c6f41d-d93e-423a-8c7a-8495f677b760`, `final-tests.log` |
-| Astra High review | Attempt 1/5 exited 1 before evaluation: HTTP 400, installed Codex CLI 0.145.0 too old for `gpt-6-astra`; compatible-CLI retry pending, no verdict claimed |
-| Fable 5.1 High via Corbanu/TMUX | Not started; coordinator allocates numbered invocation |
+| Astra High review | Attempt 1/5 was rejected before evaluation by old CLI 0.145.0. Attempt 2/5 with app-bundled 0.153.1 passed: no findings, helper exit 0; `review-2-astra.json` and `.txt` preserve the verdict |
+| Fable 5.1 High via Corbanu/TMUX | Attempt 3/5 passed: no findings, helper exit 0; `review-3-fable.json` and `.txt` preserve the verdict. No further UI review planned |
 | Human acceptance | Pending; no human sign-off claimed |
 | PF-26 composed/live-repository release qualification | Pending; no protected mode or release qualification claimed |
 
@@ -75,6 +75,15 @@ structured autoreview helper with `/opt/homebrew/bin/codex`, explicit
 It failed solely on CLI/model compatibility; no model substitution or uncounted
 retry occurred. The coordinator owns subsequent numbered attempts and the
 five-invocation ceiling.
+
+Coordinator review 2 used the same structured helper with app-bundled
+Codex 0.153.1, `--model gpt-6-astra --thinking high --mode branch --base 4f263ca73`.
+Review 3 used the Corbanu wrapper with `--model claude-fable-5-1-plan --thinking high`
+through private TMUX. These were code reviews, not substitutes for the actual-key
+TUI tests. Both verified the observation-only boundary and reported no findings.
+The combined source f60d15f16 plus module sort subsequently passed UI 235/235
+and all three actual-key workflows; final combined rerun after the independent
+realtime source fix is pending before coordinator archival.
 
 ## Human/interactive script
 
