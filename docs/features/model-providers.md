@@ -58,6 +58,20 @@ Corbanu Terminal feature.
 
 The same route is available from first-run onboarding or `corbanu login`.
 
+#### GPT-6 Astra
+
+Run `/model`, choose OpenAI, then **GPT-6 Astra** (`gpt-6-astra`). Choose Low,
+Medium, High, Extra high, or **More reasoning… → Max**. Medium is Astra's picker
+default; adding Astra does not replace your selected model or the existing Sol
+default. Cancel before confirming the reasoning level to keep your selection.
+
+Astra uses the native OpenAI Responses route. Availability still depends on
+OpenAI's rollout and your account's permissions; a selector entry does not grant
+access. It is offered for explicit selection, not automatic agent allocation,
+whose account-usage economics are not yet configured. Model limits and supported
+reasoning levels follow the [official Astra model reference](https://developers.openai.com/api/docs/models/gpt-6-astra)
+and [migration guidance](https://developers.openai.com/api/docs/guides/latest-model#gpt-6-astra-update-api-and-model-parameters).
+
 ### Claude Plan
 
 Claude Code must be installed for this account route.

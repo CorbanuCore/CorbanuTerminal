@@ -821,7 +821,7 @@ async fn refresh_available_models_preserves_bundled_catalog_for_empty_chatgpt_re
 }
 
 #[tokio::test]
-async fn chatgpt_catalog_keeps_verified_gpt_5_6_models_when_remote_omits_them() {
+async fn chatgpt_catalog_keeps_bundled_openai_models_when_remote_omits_them() {
     let codex_home = tempdir().expect("temp dir");
     let endpoint = TestModelsEndpoint::new(vec![Vec::new()]);
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
@@ -831,11 +831,16 @@ async fn chatgpt_catalog_keeps_verified_gpt_5_6_models_when_remote_omits_them() 
         .await;
     let picker_visibility = available
         .iter()
-        .filter(|model| model.model.starts_with("gpt-5.6-"))
+        .filter(|model| model.provider_id.as_deref() == Some("openai"))
         .map(|model| (model.model.as_str(), model.show_in_picker))
         .collect::<Vec<_>>();
 
-    for slug in ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] {
+    for slug in [
+        "gpt-6-astra",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+    ] {
         assert!(
             picker_visibility.contains(&(slug, true)),
             "{slug} should remain available unless the server explicitly hides it"
@@ -851,12 +856,12 @@ async fn chatgpt_catalog_keeps_verified_gpt_5_6_models_when_remote_omits_them() 
 }
 
 #[tokio::test]
-async fn chatgpt_catalog_honors_explicit_remote_hiding_for_gpt_5_6_models() {
+async fn chatgpt_catalog_honors_explicit_remote_hiding_for_current_openai_models() {
     let mut remote_models = crate::bundled_models_response()
         .expect("bundled models should parse")
         .models
         .into_iter()
-        .filter(|model| model.slug.starts_with("gpt-5.6-"))
+        .filter(|model| model.slug == "gpt-6-astra" || model.slug.starts_with("gpt-5.6-"))
         .collect::<Vec<_>>();
     for model in &mut remote_models {
         model.visibility = ModelVisibility::Hide;
@@ -872,10 +877,46 @@ async fn chatgpt_catalog_honors_explicit_remote_hiding_for_gpt_5_6_models() {
     assert!(
         available
             .iter()
-            .filter(|model| model.model.starts_with("gpt-5.6-"))
+            .filter(|model| model.model == "gpt-6-astra" || model.model.starts_with("gpt-5.6-"))
             .all(|model| !model.show_in_picker),
         "an explicit hidden response must override bundled visibility"
     );
+}
+
+#[tokio::test]
+async fn astra_remote_overlay_keeps_manual_policy_and_supported_efforts() {
+    let bundled = crate::bundled_models_response()
+        .expect("bundled catalog")
+        .models
+        .into_iter()
+        .find(|model| model.slug == "gpt-6-astra")
+        .expect("Astra catalog entry");
+    let mut remote = bundled.clone();
+    remote.supported_reasoning_levels = vec![ReasoningEffortPreset {
+        effort: ReasoningEffort::None,
+        description: "unsupported remote effort".to_string(),
+    }];
+    remote.default_reasoning_level = Some(ReasoningEffort::None);
+    remote.orchestration = None;
+    remote.max_output_tokens = None;
+    let codex_home = tempdir().expect("temp dir");
+    let manager = openai_manager_for_tests(
+        codex_home.path().to_path_buf(),
+        TestModelsEndpoint::new(vec![vec![remote]]),
+    );
+    let available = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
+    let actual = available
+        .into_iter()
+        .find(|model| model.model == "gpt-6-astra")
+        .expect("Astra remains selectable");
+    assert_eq!(actual, ModelPreset::from(bundled.clone()));
+    let resolved = manager
+        .get_model_info("gpt-6-astra", &ModelsManagerConfig::default())
+        .await;
+    assert_eq!(resolved.max_output_tokens, bundled.max_output_tokens);
+    assert!(!resolved.used_fallback_model_metadata);
 }
 
 #[tokio::test]

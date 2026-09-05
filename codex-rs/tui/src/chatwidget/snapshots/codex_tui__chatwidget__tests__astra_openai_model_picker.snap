@@ -3,7 +3,7 @@ source: tui/src/chatwidget/tests/popups_and_settings.rs
 expression: popup
 ---
   Select Model and Effort
-  Corbanu Terminal Nazgul pane - OpenAI Codex plan
+  OpenAI Codex plan
 
   [OpenAI]  Ambient  Kimi Code  Z.AI  DeepSeek  Claude Plan  Anthropic  Meta  Vercel  Baseten
   OpenRouter
