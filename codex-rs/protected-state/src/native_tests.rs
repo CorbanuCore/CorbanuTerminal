@@ -54,8 +54,10 @@ fn pf20_s03_post_exec_child_native_cas_recovery() {
 #[ignore = "invoked by real subprocess fixture"]
 fn native_child() {
     let path = std::env::var_os("CORBANU_ANCHOR_NATIVE_FIXTURE").unwrap();
-    let client =
-        NativeAnchorClient::from_authenticated_stream(UnixStream::connect(path).unwrap()).unwrap();
+    let client = NativeAnchorClient::from_authenticated_stream(
+        connect_without_waiting(Path::new(&path)).unwrap(),
+    )
+    .unwrap();
     assert_eq!(client.load(), Ok(None));
     let checkpoint = IntegrityCheckpoint {
         schema_version: 1,
@@ -85,6 +87,29 @@ fn pf20_s03_inherited_socketpair_does_not_prove_child_identity() {
         Err(RootError::Invalid)
     );
     child.wait().unwrap();
+}
+
+#[test]
+fn pf20_s03_saturated_native_backlog_fails_without_waiting() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("full.sock");
+    let listener = UnixListener::bind(&path).unwrap();
+    // SAFETY: live listening Unix socket; narrow the queue for this fixture.
+    assert_eq!(unsafe { libc::listen(listener.as_raw_fd(), 1) }, 0);
+    let mut held = Vec::new();
+    let started = Instant::now();
+    for _ in 0..8 {
+        match connect_without_waiting(&path) {
+            Ok(stream) => held.push(stream),
+            Err(error) => {
+                assert_eq!(error, RootError::Unavailable);
+                assert!(!held.is_empty());
+                assert!(started.elapsed() < Duration::from_secs(3));
+                return;
+            }
+        }
+    }
+    panic!("fixture did not reach the saturated backlog");
 }
 
 #[test]

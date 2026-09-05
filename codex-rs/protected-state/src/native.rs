@@ -19,8 +19,10 @@ use std::io::Read;
 use std::io::Write;
 use std::os::fd::AsRawFd;
 use std::os::fd::FromRawFd;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::net::UnixStream;
+use std::path::Path;
 use std::process::Child;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -28,6 +30,51 @@ use std::time::Instant;
 use zeroize::Zeroizing;
 
 const SOCKET: &str = "/run/corbanu-protected-state.sock";
+
+fn connect_without_waiting(path: &Path) -> Result<UnixStream, RootError> {
+    let bytes = path.as_os_str().as_bytes();
+    // SAFETY: zero is valid for sockaddr_un's integer fields and path array.
+    let mut address: libc::sockaddr_un = unsafe { std::mem::zeroed() };
+    if !path.is_absolute() || bytes.contains(&0) || bytes.len() >= address.sun_path.len() {
+        return Err(RootError::Invalid);
+    }
+    address.sun_family = libc::AF_UNIX as libc::sa_family_t;
+    for (target, byte) in address.sun_path.iter_mut().zip(bytes) {
+        *target = *byte as libc::c_char;
+    }
+    // Nonblocking must be set before connect: a full Unix listener backlog can
+    // otherwise wait forever before the authenticated frame deadline starts.
+    // SAFETY: valid socket domain/type and protocol; no pointer arguments.
+    let raw = unsafe {
+        libc::socket(
+            libc::AF_UNIX,
+            libc::SOCK_STREAM | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
+            0,
+        )
+    };
+    if raw < 0 {
+        return Err(RootError::Unavailable);
+    }
+    // SAFETY: socket returned a newly owned Unix stream descriptor.
+    let stream = unsafe { UnixStream::from_raw_fd(raw) };
+    let length = std::mem::offset_of!(libc::sockaddr_un, sun_path) + bytes.len() + 1;
+    // SAFETY: initialized sockaddr_un with a bounded, NUL-terminated pathname.
+    if unsafe {
+        libc::connect(
+            stream.as_raw_fd(),
+            (&raw const address).cast(),
+            length as libc::socklen_t,
+        )
+    } != 0
+    {
+        // Includes pending/full-backlog: drop the socket, do not retry/reconnect.
+        return Err(RootError::Unavailable);
+    }
+    stream
+        .set_nonblocking(false)
+        .map_err(|_| RootError::Unavailable)?;
+    Ok(stream)
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -302,7 +349,7 @@ impl NativeAnchorClient {
         if metadata.uid() != 0 || metadata.file_type().is_symlink() {
             return Err(RootError::Invalid);
         }
-        let stream = UnixStream::connect(SOCKET).map_err(|_| RootError::Unavailable)?;
+        let stream = connect_without_waiting(Path::new(SOCKET))?;
         if peer(&stream)?.uid != 0 {
             return Err(RootError::Invalid);
         }
