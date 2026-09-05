@@ -153,4 +153,14 @@ the structured helper in a private TMUX, approved Corbanu `review-fable-high`
 wrapper, requested `claude-fable-5-1-plan` / High. This is Corbanu exec under
 TMUX, not a claim of an interactive TUI model review. No nested reviewer;
 four of the original maximum five memory-track invocations consumed. Result
-pending; human acceptance remains unperformed.
+recorded below; human acceptance remains unperformed.
+
+Review4 completed with overall `patch is correct`, one P3, no landing blockers.
+Original JSON/text preserved in `review-4-fable.*`; helper exited1 because it
+emits nonzero for any finding. This is not a zero-finding clean result.
+The P3 is a potential fail-closed false negative: expected owner termination
+can be logged as a Phase1 job failure, which the strict pending proof rejects.
+Code-path inspection confirms that denial can reach the generic failure logger;
+the race was not observed in the passing actual-key qualification. It cannot
+produce a false pass. Integration-owner disposition requested; no source change
+or fifth review started.
