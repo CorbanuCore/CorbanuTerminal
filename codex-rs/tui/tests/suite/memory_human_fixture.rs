@@ -415,7 +415,7 @@ fn publish_attachment(
     let command = session.attachment_command();
     let socket = command
         .get_envs()
-        .find(|(key, _)| key == "TMUX_TMPDIR")
+        .find(|(key, _)| *key == "TMUX_TMPDIR")
         .and_then(|(_, value)| value)
         .context("owned socket env")?;
     let quote =
