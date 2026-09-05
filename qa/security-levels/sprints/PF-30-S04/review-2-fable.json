@@ -1,0 +1,18 @@
+{
+  "findings": [
+    {
+      "title": "Per-event policy recheck clones the full Config under the session state lock",
+      "body": "`extract` calls `check_completion()` before every streamed event (memory_stage_one.rs:226), and each check runs `Session::memory_stage_one_configuration`, which takes the session `state` tokio mutex and clones the entire `Config` (`(*configuration.original_config_do_not_use).clone()` at session/memory_stage_one.rs:41) plus a `ThreadConfigSnapshot`, only to read `security_level`. A stage-one response streams hundreds to thousands of `OutputTextDelta` events, and up to `CONCURRENCY_LIMIT` workers run in parallel, so this produces a large allocation churn and repeatedly contends the owning thread's state lock with the foreground turn. Functionally correct and fail-closed, so not a blocker; smallest ownership-bound fix is to have the recheck path (`StageOneMemoryBinding::evaluate`) use a light snapshot that returns provider equality, config `security_level`, and the policy snapshot without cloning `Config`, reserving the full configuration clone for `StageOneMemoryClient::new`.",
+      "priority": "P3",
+      "confidence": 0.7,
+      "category": "maintainability",
+      "code_location": {
+        "file_path": "codex-rs/core/src/memory_stage_one.rs",
+        "line": 226
+      }
+    }
+  ],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "Verified the boundary read-only: the detached `ModelClient::new` in memories-write is removed and replaced by `CodexThread::stage_one_memory_client`, whose binding is a `Weak<Session>` plus the live `session_loop_termination` handle (production only ever uses the real join-handle variant). `build_api_transport` is the single HTTP transport constructor used by responses, chat completions, Anthropic, compact, memories-summarize and realtime paths, so `StageOneGuardedTransport` rechecks on every `execute`/`stream` attempt after auth/backoff; `TransportError::Build` is not retried by `RetryOn::should_retry`, and `api_bridge` maps it to `CodexErr::Stream`, which `request_error` converts back into the sticky typed denial. The WebSocket check sits inside the attempt loop after the connection is obtained and immediately before `stream_request` (covering the warmup path that also carries `input`). Denial is sticky and evaluates max(construction floor, current config level, effective agent level incl. inherited minimum) plus nonce/session/kill-switch, matching `snapshot_for_agent`. Worker side: `stage_one_client` runs before any request; job outcomes classify typed denials via `downcast_ref`, EOF/termination cannot reach persistence, `check_completion` gates both success and no-output writes, and phase 2 keeps the original config/provider pair (review-1 fix confirmed in start.rs). Foreground clients carry `None` binding so no regression there. Remaining concern is a non-blocking perf/contention issue from full `Config` clones per streamed event; policy-denial consuming finite retries is an explicitly accepted design choice, not reported. No human or cross-platform acceptance inferred; no tests or builds were run locally.",
+  "overall_confidence": 0.82
+}

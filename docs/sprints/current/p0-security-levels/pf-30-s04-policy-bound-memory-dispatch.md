@@ -49,7 +49,7 @@ updated: 2026-09-04
 
 - [x] Existing detached construction, lower-level retry risk and historical-source/runtime-owner distinction documented.
 - [x] Host-owned factory/opaque facade and per-attempt transport guard authored; first Core compile and binding tests passed on RTX. Worker routing/persistence and expanded canary/TMUX tests authored, final qualification still pending.
-- [x] [Versioned evidence and limitations](../../../../qa/security-levels/sprints/PF-30-S04/qualification.md) created; Astra review 1/5 found one P2, corrected and qualified with full memories-write 44/44 and actual-key TMUX. Fable review remains.
+- [x] [Versioned evidence and limitations](../../../../qa/security-levels/sprints/PF-30-S04/qualification.md) created; Astra P2 corrected and qualified with full memories-write 44/44 and actual-key TMUX. Fable confirms correctness with one documented non-blocking P3 optimization; 2/5 reviews used.
 
 - [x] Implement one host-owned opaque stage-one client factory; expected identity/provider are assertions, never authority selectors. Unknown/uninitialized/terminated/mismatched bindings deny.
 - [x] Preserve maximum configured/current/inherited policy floor; fail closed for all protected raw-rollout dispatch independently of admission/screening readiness.
@@ -58,9 +58,10 @@ updated: 2026-09-04
 - [x] Preserve feature-disabled, ephemeral, non-root and unavailable-DB skips; no new model traffic or memory activation.
 - [x] Cover real worker canary paths, wrong owner, live increase barriers, provider replacement, HTTP/WS retry, restart/cancel and legacy/mixed/forged sources. Historical rollout IDs remain data, not runtime owner IDs.
 
+- [x] Complete the allocated independent reviews and disposition findings: corrected P2, documented deferred P3 allocation/contention optimization without weakening checks.
+
 ## Remaining
 
-- [ ] Complete the allocated independent reviews and disposition actionable findings.
 - [ ] Complete coordinator combined-tree qualification, final evidence and archival.
 
 ## Verification
@@ -68,11 +69,11 @@ updated: 2026-09-04
 - [x] RTX only: scoped just fix, full just fmt, affected Core and full memories-write suites; relevant memories-read regression suite.
 - [x] Fake providers and synthetic fixtures only; prove zero canary-bearing requests under protected/unavailable policy and unchanged Permissive success.
 - [x] Actual-key TMUX startup/turn/cancel/restart with memory-enabled isolated home and recorded fake-provider/DB outcomes; text and Enter separately.
-- [ ] Astra High and Fable 5.1 High review via Corbanu/private TMUX with exact frozen source; maximum five invocations, no redundant reviews.
+- [x] Astra High and Fable 5.1 High review via Corbanu/private TMUX with exact frozen source; 2/5 invocations, no redundant reviews.
 - [ ] Coordinator exports/registries, lock parity if needed, combined-tree and governance checks.
 
 ## Exit evidence
 
-- [ ] Commit, immutable RTX binary hash, tests, keys/captures and review dispositions recorded under the new QA directory.
-- [ ] Denial-only boundary and remaining persistence/positive-screening limitations explicit; no human, cross-platform or release pass inferred.
+- [x] Commit, immutable RTX binary hash, tests, keys/captures and review dispositions recorded under the new QA directory.
+- [x] Denial-only boundary and remaining persistence/positive-screening limitations explicit; no human, cross-platform or release pass inferred.
 - [ ] Done/Remaining reflect reality; archive only after all required final-tree evidence.

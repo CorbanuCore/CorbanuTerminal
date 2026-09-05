@@ -101,13 +101,14 @@ This is a Linux candidate, not a rebuilt Mac app shortcut.
 - [x] Scoped fix, full formatter, Core/memories-write/memories-read tests and
       registered public integration/TMUX qualification; coordinator final
       combined-tree rerun remains required.
-- [ ] Astra High then Fable5.1High through Corbanu/private TMUX, parent allocated.
+- [x] Astra High then Fable5.1High through Corbanu/private TMUX, parent allocated.
 - [x] Exact immutable RTX candidate, hash, run IDs and capture paths.
 - [ ] Combined integration/governance and human handoff; human acceptance pending.
 
 ## Review ledger
 
-1 of maximum 5 invocations used. Five is a ceiling, not a target.
+2 of maximum 5 invocations used. Five is a ceiling, not a target; no further
+review invocation is needed for wording or a clean-line repetition.
 
 1. Astra High (`gpt-6-astra`, high), bundled Codex CLI 0.153.1, reviewed full
    `db141e9cb..9cba944ea`. [Original structured result](review-1-astra.json): one
@@ -116,8 +117,23 @@ This is a Linux candidate, not a rebuilt Mac app shortcut.
    phase two keeps its existing matched configuration/provider pair. A real
    two-fake-endpoint startup regression verifies a provider switch cannot route
    consolidation to the replacement endpoint. No protected inference is enabled.
-2. Fable 5.1 High external review is authorized after final corrected qualification;
-   not invoked yet.
+2. Fable 5.1 High reviewed the complete `db141e9cb..00acb0da7` boundary through
+   the coordinator-approved Corbanu wrapper and autoreview helper inside private
+   TMUX. Requested `claude-fable-5-1-plan`, effort `high`; server reported the
+   underlying `claude-fable-5-1` model. This is an exec review under TMUX, not a
+   substitute for the separately recorded actual-key feature tests.
+   [Original structured result](review-2-fable.json): **patch correct**, no
+   P0/P1/P2; review-1 correction explicitly confirmed. One verified non-blocking
+   P3: per-event policy checks clone the full host configuration and snapshot
+   under the owner state lock. Potential allocation/contention is not yet
+   benchmarked. Defer a lightweight recheck snapshot to measured optimization;
+   preserve all policy fields and check frequency. No fail-open behavior was
+   identified and the qualified runtime remains unchanged.
+
+Both original structured results are committed. Full subprocess logs remain on
+CorbanuDrive under `.codex-work/security-memory-dispatch/reviews/`; the private
+Fable run is `run-fable-2.sh` / `fable2.sock`. Neither review ran local builds,
+modified credentials or launched nested reviewers.
 
 ## Corrected candidate after review 1
 
