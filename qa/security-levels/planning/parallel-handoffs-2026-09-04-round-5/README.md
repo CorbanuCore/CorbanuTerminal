@@ -80,8 +80,9 @@ actual findings; exceed five only when critical findings continue.
 | Lane | Invocations | Evidence / next action |
 | --- | ---: | --- |
 | Broker | 4 / 5 | #1 CLI rejected; #2 Astra findings repaired; #3 Fable timeout finding repaired; #4 no blockers, one deferred P3 EINTR robustness follow-up (helper exit 1, not a clean exit) |
-| Provenance | 3 / 5 | #1 Astra provider-switch/lock findings repaired; #2 Fable realtime omission repaired; #3 verifies fixes, accepts adjacent stage-one memory policy-binding gap as follow-up; no overall clean review |
+| Provenance | 4 / 5 | Earlier #1–3 findings/dispositions retained; segmentation #4 Astra High clean at 38e1d6e85 against 72f5de657; final #5 Fable High authorized for the same bounded segmentation delta |
 | Security UI | 3 / 5 | #1 CLI rejected; #2 Astra High clean; #3 Fable High clean; no further review planned |
+| Memory dispatch (new PF-30-S04) | 0 / 5 | #1 Astra High conditionally authorized only after registered integration/TMUX proof; #2 Fable High authorized after a clean #1 on the same frozen runtime. No reviewer invoked yet |
 
 Successful Astra runtime: installed app-bundled Codex 0.153.1; 0.145.0 was
 rejected by the backend before any review verdict. Keep these attempts visible.
@@ -225,6 +226,24 @@ implementation/tests before requesting the next numbered review; if mandatory
 review coverage would exceed a remaining budget, report it before invocation.
 No privileged service installation or existing Vault migration is authorized.
 The main-merge choice remains pending; keep checkpoints pushed to scoped branches.
+
+Rolling coordination checkpoint: root registered the broker service workspace
+in lane commit 2a6cfb3d0 and the memory public-host/TMUX suites in 72c210c5f.
+Both workers resumed RTX qualification. The broker's new service stage needs
+fresh review coverage while its original ledger has only one slot; a specific
+request for two reviews (six total across both broker stages) is awaiting the
+user. Do not exceed the existing cap without an answer. Tests proceed meanwhile.
+
+Next queued technical boundary is the PF-20-owned durable IntegrityRootStore
+and authenticated native bootstrap adapter. Current production implementations
+are absent. A bare already-open File is not enough to establish controller
+ownership, first install versus lost state, rollback rejection and durable CAS.
+Do not hide this as a PF-27 fixture extension. Allocate it separately after
+its exact native ownership/storage contract and dependencies are verified and
+a slot opens; privileged setup remains a distinct approval.
+
+The heartbeat now runs every five minutes to service shared-registration and
+handoff requests promptly. Unchanged non-actionable status stays quiet.
 
 ## PF-35 external campaign
 
