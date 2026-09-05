@@ -40,34 +40,37 @@ updated: 2026-09-04
 
 ## Preconditions
 
-- [ ] PF-20-S02 and PF-22-S02 are completed and archived.
-- [ ] Read root, `codex-rs/AGENTS.md`, `codex-rs/tui/AGENTS.md`, and `tui/styles.md`.
-- [ ] Exact worktree coordinates match the active plan.
+- [x] PF-20-S02 and PF-22-S02 are completed and archived.
+- [x] Read root, `codex-rs/AGENTS.md`, `codex-rs/tui/AGENTS.md`, and `tui/styles.md`.
+- [x] Exact worktree coordinates match the active plan.
 
 ## Done
 
 - [x] Sprint record is linked only to PF-24.
 
+- [x] Distinguish requested configuration from unavailable effective protection; no healthy protected badge is manufactured. PF-41 owns authenticated detailed runtime inspection.
+- [x] Register and route `/security` without changing `/permissions`.
+- [x] Render requested level, concise profile summaries, and Permissive/Moderate/Aggressive exploration.
+- [x] Support configured Up/Down equivalents, inert Enter inspection, and Esc cancellation without mutation.
+- [x] Keep 40-column terminals readable and expose the requested/unverified state in `/status`.
+- [x] Add focused behavior tests and reviewed snapshots for every profile, narrow width, and unknown-state error.
+
 ## Remaining
 
-- [ ] Distinguish requested level from effective readiness; unfinished/degraded protected subsystems show blocked status, not a healthy Moderate/Aggressive badge. PF-41 owns detailed runtime inspection.
-
-- [ ] Register and route `/security` without changing `/permissions`.
-- [ ] Render current level, concise protection summary, and Permissive/Moderate/Aggressive choices using existing TUI patterns.
-- [ ] Support Up/Down or equivalent configured keys, Enter intent, and Esc cancel with no mutation in this slice.
-- [ ] Keep narrow terminals readable and expose the level in session status.
-- [ ] Add focused behavior tests and reviewed snapshots for default, each level, narrow width, and unknown-state error.
+- [ ] Complete the whole-repository formatter after the coordinator supplies missing remote `uv`.
+- [ ] Receive coordinator-numbered Astra High and Fable 5.1 High review and resolve any accepted findings.
+- [ ] Integration owner completes combined-tree gates and archive; full protected activation and PF-26 qualification remain separate.
 
 ## Verification
 
-- [ ] Fix: `cd codex-rs && just fix -p codex-tui`.
+- [x] Fix: `cd codex-rs && just fix -p codex-tui`; final source passed on RTX.
 - [ ] Format: `cd codex-rs && just fmt`; then inspect the final diff.
-- [ ] Final-tree test: `cd codex-rs && just test -p codex-tui security_view`.
-- [ ] Snapshot review: inspect every `*.snap.new`; accept only intended output.
-- [ ] Actual-key TMUX: open, explore profiles, inert Enter, Esc, narrow/error states and /status on the final RTX candidate; PF-26-S02 retains final composed qualification.
+- [x] Final-tree focused TUI test: 235/235 security-view/status/slash-command cases passed; exact filter and run ID in lane evidence.
+- [x] Snapshot review: four new profile and 21 affected status snapshots inspected and accepted.
+- [x] Actual-key TMUX: 2/2 tests passed covering three configuration levels, 120/40/80 columns, inert Enter, Esc/reopen, unknown-state startup failure and `/status`; PF-26-S02 retains final composed qualification.
 
 ## Exit evidence
 
-- [ ] Commit, snapshots, changed paths, and deferred key script recorded.
-- [ ] Test output linked under `qa/security-levels/sprints/PF-24-S01/`.
+- [x] Source commit `0ecb19969`, snapshots, candidate hash, changed paths and actual key script recorded.
+- [x] Test output and safe captures linked under `qa/security-levels/sprints/PF-24-S01/`.
 - [ ] Ledgers reflect reality and the completed record is archived.

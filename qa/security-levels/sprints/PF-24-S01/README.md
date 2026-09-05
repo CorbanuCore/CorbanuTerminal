@@ -32,10 +32,10 @@ build lock. Remote evidence root:
 
 | Evidence | State |
 | --- | --- |
-| `just fix -p codex-tui` | Pass on intermediate tree; final rerun pending |
+| `just fix -p codex-tui` | Pass on final source tree; `fix-qualified.log` (existing warnings only) |
 | `just fmt` | Rust edits applied; complete formatter initially unavailable because `uv` was missing; final complete pass pending |
-| Focused TUI nextest | Initial 235 cases: 212 pass; intentional snapshots and the side-conversation allowance were corrected. Snapshot-generation run: 235/235; final normal-mode rerun pending |
-| Actual-key TMUX | 2/2 pass on `6ed694c86`, run `9baff18c-db43-44fe-8b12-8dfb455d81a0`; final rerun/hash pending |
+| Focused TUI nextest | Final normal-mode 235/235 pass; run `36c926b9-7b0b-4c54-aa47-da1ce10471be`, `final-tests.log` |
+| Actual-key TMUX | Final 2/2 pass (three profile/configuration widths plus startup rejection); run `c5c6f41d-d93e-423a-8c7a-8495f677b760`, `final-tests.log` |
 | Astra High review | Not started; coordinator allocates numbered invocation |
 | Fable 5.1 High via Corbanu/TMUX | Not started; coordinator allocates numbered invocation |
 | Human acceptance | Pending; no human sign-off claimed |
@@ -46,6 +46,27 @@ The typed harness uses isolated temporary homes and synthetic authentication,
 Success captures go to the explicit `CORBANU_SECURITY_UI_EVIDENCE` directory;
 failure bundles use `CORBANU_TMUX_ARTIFACT_DIR`. Raw authentication is not part
 of committed evidence.
+
+Final tested source: `0ecb19969`. The remote run started at `a56027455` plus
+the exact Rust formatter patch subsequently committed as `0ecb19969`; the
+remote mirror was fast-forwarded to that commit and is clean. Candidate:
+`/home/travis/security-round5/evidence/ui/candidate/codex`, `corbanu 0.1.38`,
+SHA-256 `7eebcd43caf33dfeb76a3c3460889b3637799ed64263fb4d17e36b3a05f9fbd8`.
+It was copied while holding the build lock, before any other lane could replace
+the shared cache binary. Final rendered captures are in [`tmux/`](tmux/).
+
+Commands after Rust fix/formatting (no `INSTA_UPDATE` on these final runs):
+
+```sh
+just test -p codex-tui --lib -E 'test(security_view) | test(status::tests) | test(slash_command)' --retries 0
+cargo build -p codex-cli --bin codex
+just test -p codex-tui --test all -E 'test(security_profiles)' --retries 0
+```
+
+Four new security-view snapshots and 21 affected status snapshots were inspected
+and accepted. Changes are the requested/readiness row, wrapping, corresponding
+card dimensions and the current 0.1.38 version (some inherited snapshots still
+contained 0.1.31). No unrelated provider/permission behavior is changed.
 
 ## Human/interactive script
 
