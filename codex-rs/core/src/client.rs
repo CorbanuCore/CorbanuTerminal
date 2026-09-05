@@ -303,6 +303,8 @@ pub struct ModelClient {
     agent_identity_policy: AgentIdentityAuthPolicy,
     prompt_cache_key_override: Option<String>,
     http_client_factory: HttpClientFactory,
+    // Restrictive configured intent, not an assertion of protected readiness.
+    ingress_level: codex_security_policy::SecurityLevel,
 }
 
 /// A turn-scoped streaming session created from a [`ModelClient`].
@@ -756,7 +758,18 @@ impl ModelClient {
             agent_identity_policy,
             prompt_cache_key_override: None,
             http_client_factory,
+            ingress_level: codex_security_policy::SecurityLevel::Permissive,
         }
+    }
+
+    pub(crate) fn with_ingress_level(mut self, level: codex_security_policy::SecurityLevel) -> Self {
+        self.ingress_level = level;
+        self
+    }
+
+    fn check_source_admission(&self, prompt: &Prompt) -> Result<()> {
+        crate::security::ingress::check_native_request(self.ingress_level, &prompt.input)
+            .map_err(|error| CodexErr::InvalidRequest(error.to_string()))
     }
 
     pub(crate) fn with_prompt_cache_key_override(
@@ -1044,6 +1057,7 @@ impl ModelClient {
         mut extra_headers: ApiHeaderMap,
         api_provider_override: Option<ApiProvider>,
     ) -> Result<RealtimeWebrtcCallStart> {
+        self.check_source_admission(&Prompt::default())?;
         // Create the media call over HTTP first, then retain matching auth so realtime can attach
         // the server-side control WebSocket to the call id from that HTTP response.
         let client_setup = self.current_client_setup().await?;
@@ -1083,6 +1097,8 @@ impl ModelClient {
         if raw_memories.is_empty() {
             return Ok(Vec::new());
         }
+
+        self.check_source_admission(&Prompt::default())?;
 
         let client_setup = self.current_client_setup().await?;
         let transport =
@@ -1470,6 +1486,7 @@ impl ModelClient {
         service_tier: Option<String>,
         responses_metadata: &CodexResponsesMetadata,
     ) -> Result<ResponsesApiRequest> {
+        self.check_source_admission(prompt)?;
         let mut input = prompt.get_formatted_input_for_request(model_info.use_responses_lite);
         let is_openai = self.state.provider.info().is_openai();
         if !is_openai {
@@ -1610,6 +1627,7 @@ impl ModelClient {
         effort: Option<ReasoningEffortConfig>,
         responses_metadata: &CodexResponsesMetadata,
     ) -> Result<ChatCompletionsRequest> {
+        self.check_source_admission(prompt)?;
         let mut messages = Vec::new();
         let instructions = prompt.base_instructions.text.trim();
         if !instructions.is_empty() {
@@ -1789,6 +1807,7 @@ impl ModelClient {
         effort: Option<ReasoningEffortConfig>,
         repair_incomplete_latest_assistant: bool,
     ) -> Result<AnthropicMessagesRequest> {
+        self.check_source_admission(prompt)?;
         let mut system = Vec::new();
         let instructions = prompt.base_instructions.text.trim();
         let is_claude_plan = is_claude_plan_model_slug(&model_info.slug);
