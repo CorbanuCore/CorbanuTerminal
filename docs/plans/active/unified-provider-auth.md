@@ -11,12 +11,15 @@ activation_basis: "The user's 2026-09-01 P1 decision to supersede the remaining 
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-08-30
-updated: 2026-09-03
+updated: 2026-09-05
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Shipping MVP — LIVE"
   requirement_excerpt: "Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
+    branch: "feat/provider-reauth-health"
+    base_commit: "1b6921112d73217e1e2a78b5adc43e8ce24764ab"
   - path: "/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0"
     branch: "feat/unified-provider-auth"
     base_commit: "f7356a94e032234022a462d65b576a7de2854859"
@@ -53,6 +56,30 @@ contracts, represent their unclosed release gates as passed, or consume a third
 active-plan slot.
 
 ## User pain
+
+2026-09-05 user amendment: identify the credential rejected by `codex_apps`
+and generalize actionable reauthentication across providers. PF-58 owns this
+follow-up; it does not reopen completed PF-48–PF-57 or activate protected modes.
+An enabled provider is not necessarily authenticated. Show credential-specific
+health separately from activation/current selection, and offer keyboard recovery
+using the existing typed setup adapter. Recoverable expiry should refresh before
+requesting human sign-in; rejected refresh requires explicit recovery. Environment,
+command, AWS and no-auth/local sources need truthful source-specific guidance,
+not an invented browser-login flow. Never silently switch credential, account,
+provider, model or billing context. Transient network/rate/permission failures
+are not credential revocation. Clear a failure only after matching recovery or
+validated success, rejecting stale results from an older credential/turn.
+
+The affected RTX process used its saved ChatGPT account: no connector-token,
+OpenAI API-key or Codex API-key environment override was present. Metadata-only
+inspection found access-token expiry 2026-09-02T21:01:56Z and a refresh token.
+No raw token, account identifier or private response is recorded in this plan.
+
+PF-58 owner/integrator is Codex /root in the newly listed worktree, with RTX-only
+builds and a separate receiving integration boundary. Review allocation for this
+new feature is an initial Astra High plus Fable5.1 High Corbanu/TMUX pair,
+at most five total, superseding historical PF-56 model choices for PF-58 only.
+The security monitor remains paused; no main merge is authorized by this amendment.
 
 First-run onboarding and `/providers` currently maintain separate provider
 lists, status rules, persistence decisions, event routes, and completion
@@ -235,6 +262,7 @@ user work and integrate rather than revert concurrent changes.
 | `PF-55` | Startup, current-model, and custom-provider convergence | [PF-55-S01](../../sprints/archive/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | completed at `21cf3199f2` |
 | `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/archive/unified-provider-auth/pf-56-s01-final-qualification.md) | completed at `fd8a9c900e` |
 | `PF-57` | Latest-main integration, regression preservation, and credential-store liveness | [PF-57-S01](../../sprints/archive/unified-provider-auth/pf-57-s01-latest-main-integration.md) | completed at `a935e507b` |
+| `PF-58` | Credential-scoped runtime health and keyboard reauthentication | [PF-58-S01](../../sprints/current/unified-provider-auth/pf-58-s01-credential-health-and-reauth.md) | in_progress; user-authorized recovery follow-up |
 
 ## Hard dependency graph
 
