@@ -31,11 +31,11 @@ use crate::provider_status_host::ProviderStatusHost;
 pub(crate) enum ProviderAccountPresentation {
     Pending(ProviderAccountCancelKind),
     OpenAiChallenge { challenge: OpenAiAccountChallenge },
-    ClaudeMethodChoice,
+    ClaudeMethodChoice { recovery: Option<&'static str> },
     ClaudeManagedTokenEntry,
     ClaudeChallenge { challenge: ClaudeCodeChallenge },
     Completion(ProviderAuthCompletion),
-    Failed,
+    Failed(crate::provider_account_feedback::AccountFailure),
 }
 
 #[derive(Clone, Copy)]
@@ -95,7 +95,23 @@ impl ProviderAccountAuthHost {
         &mut self,
         action: ProviderAuthAction,
     ) -> Vec<ProviderAccountPresentation> {
+        let claude_retry = matches!(
+            &action,
+            ProviderAuthAction::ClaudeAccount(ClaudeAccountAction::Retry)
+        );
         let transition = self.controller.dispatch(action);
+        if claude_retry
+            && matches!(
+                &transition.snapshot,
+                ProviderAuthFlowSnapshot::ClaudeAccount(
+                    ClaudeAccountSnapshot::ReadyClaudeCodeLogin { .. }
+                )
+            )
+        {
+            self.app_event_tx.send(AppEvent::SharedProviderAuthAction(
+                ClaudeAccountAction::Submit.into(),
+            ));
+        }
         let mut presentations = transition
             .effects
             .into_iter()
@@ -117,11 +133,21 @@ impl ProviderAccountAuthHost {
             ProviderAuthFlowSnapshot::ClaudeAccount(snapshot)
                 if presents_claude_method_choice(snapshot) =>
             {
-                presentations.push(ProviderAccountPresentation::ClaudeMethodChoice)
+                let recovery =
+                    if let ClaudeAccountSnapshot::RecoveryRequired { reason, .. } = snapshot {
+                        Some(crate::provider_account_feedback::claude_recovery_message(
+                            *reason,
+                        ))
+                    } else {
+                        None
+                    };
+                presentations.push(ProviderAccountPresentation::ClaudeMethodChoice { recovery })
             }
-            ProviderAuthFlowSnapshot::ClaudeAccount(
-                ClaudeAccountSnapshot::EnteringManagedToken { .. },
-            ) => presentations.push(ProviderAccountPresentation::ClaudeManagedTokenEntry),
+            ProviderAuthFlowSnapshot::ClaudeAccount(snapshot)
+                if presents_claude_token_entry(snapshot) =>
+            {
+                presentations.push(ProviderAccountPresentation::ClaudeManagedTokenEntry)
+            }
             ProviderAuthFlowSnapshot::OpenAiAccount(
                 codex_provider_auth::OpenAiAccountSnapshot::Failed { .. }
                 | codex_provider_auth::OpenAiAccountSnapshot::RecoveryRequired { .. }
@@ -129,7 +155,13 @@ impl ProviderAccountAuthHost {
             )
             | ProviderAuthFlowSnapshot::ClaudeAccount(
                 ClaudeAccountSnapshot::Failed { .. } | ClaudeAccountSnapshot::Blocked { .. },
-            ) => presentations.push(ProviderAccountPresentation::Failed),
+            ) => {
+                if let Some(failure) =
+                    crate::provider_account_feedback::account_failure(&transition.snapshot)
+                {
+                    presentations.push(ProviderAccountPresentation::Failed(failure));
+                }
+            }
             _ => {}
         }
         presentations
@@ -161,9 +193,7 @@ impl ProviderAccountAuthHost {
             }
             ProviderAuthEffect::PersistApiKey { .. }
             | ProviderAuthEffect::ScheduleTimeout { .. }
-            | ProviderAuthEffect::RefreshProviderStatus { .. } => {
-                Some(ProviderAccountPresentation::Failed)
-            }
+            | ProviderAuthEffect::RefreshProviderStatus { .. } => None,
         }
     }
 
@@ -308,6 +338,18 @@ impl ProviderAccountAuthHost {
             }
         });
     }
+}
+
+fn presents_claude_token_entry(snapshot: &ClaudeAccountSnapshot) -> bool {
+    // SetManagedToken only transfers input to the reducer. Reopening the form
+    // here would leave an empty modal over the result of the following Submit.
+    matches!(
+        snapshot,
+        ClaudeAccountSnapshot::EnteringManagedToken {
+            has_input: false,
+            ..
+        }
+    )
 }
 
 fn presents_claude_method_choice(snapshot: &ClaudeAccountSnapshot) -> bool {

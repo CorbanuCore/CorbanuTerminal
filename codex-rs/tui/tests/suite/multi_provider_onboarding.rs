@@ -30,6 +30,183 @@ use crate::support::tmux::TmuxServer;
 const READY_TIMEOUT: Duration = Duration::from_secs(45);
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_corbanu_env_aliases_restart_account_read_and_legacy_daemon_recovery() -> Result<()> {
+    corbanu_env_alias_restart(/*index*/ 0).await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_corbanu_env_plan_alias_restart_and_account_read() -> Result<()> {
+    corbanu_env_alias_restart(/*index*/ 1).await
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_corbanu_env_legacy_alias_restart_and_account_read() -> Result<()> {
+    corbanu_env_alias_restart(/*index*/ 2).await
+}
+
+async fn corbanu_env_alias_restart(index: usize) -> Result<()> {
+    use tokio::io::AsyncBufReadExt;
+    use tokio::io::AsyncWriteExt;
+    use tokio::io::BufReader;
+
+    if !TmuxServer::should_run("PF-57 Corbanu environment aliases and daemon recovery")? {
+        return Ok(());
+    }
+    let repo_root = codex_utils_cargo_bin::repo_root()?;
+    let binary = codex_binary(&repo_root)?;
+    let alias = codex_model_provider_info::CORBANU_API_KEY_ENV_VARS[index];
+    let home = tempdir()?;
+    let server = MockServer::start().await;
+    mount_corbanu_api_gateway(&server).await;
+    let canary = synthetic_canary("environment-alias");
+    Mock::given(method("GET"))
+        .and(path("/v1/account"))
+        .and(wiremock::matchers::header(
+            "authorization",
+            format!("Bearer {canary}"),
+        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "walletAddress": "fixture-wallet",
+            "corbanuApi": {
+                "balanceMicrousd": "12200000", "reservedMicrousd": "0",
+                "availableMicrousd": "12200000", "balanceUsd": "12.20",
+                "reservedUsd": "0", "availableUsd": "12.20"
+            }
+        })))
+        .mount(&server)
+        .await;
+    write_config(home.path(), &repo_root, &server.uri())?;
+    let config_path = home.path().join("config.toml");
+    let config = fs::read_to_string(&config_path)?
+        .replace("model = \"gpt-5.4\"", "model = \"corbanu/glm-5.3-flash\"")
+        .replace(
+            "model_provider = \"openai\"",
+            "model_provider = \"pfterminal-plan\"",
+        );
+    fs::write(config_path, config)?;
+
+    // No wallet, RPC, signing or payment: only the private socket's read-only
+    // status and revocation boundary is mocked for this UI regression.
+    let run_dir = home.path().join("wallet/run");
+    fs::create_dir_all(&run_dir)?;
+    let listener = tokio::net::UnixListener::bind(run_dir.join("walletd.sock"))?;
+    let compatible = Arc::new(std::sync::atomic::AtomicBool::new(index != 0));
+    let locks = Arc::new(AtomicUsize::new(0));
+    let mock_daemon = tokio::spawn({
+        let compatible = Arc::clone(&compatible);
+        let locks = Arc::clone(&locks);
+        async move {
+            loop {
+                let (stream, _) = listener.accept().await.unwrap();
+                let (read, mut write) = tokio::io::split(stream);
+                let mut line = String::new();
+                BufReader::new(read).read_line(&mut line).await.unwrap();
+                let request: serde_json::Value = serde_json::from_str(&line).unwrap();
+                let response = match request["type"].as_str() {
+                    Some("ping") => serde_json::json!({"type": "pong"}),
+                    Some("protocol_version") if compatible.load(Ordering::SeqCst) => {
+                        serde_json::json!({"type": "protocol_version", "version": 1})
+                    }
+                    Some("lock") => {
+                        locks.fetch_add(1, Ordering::SeqCst);
+                        serde_json::json!({"type": "locked"})
+                    }
+                    Some("status") => serde_json::json!({
+                            "type": "status", "wallet_exists": true, "address": "fixture-wallet",
+                        "network": null, "locked": true, "busy": false, "expires_in_seconds": null
+                    }),
+                    _ => {
+                        serde_json::json!({"type": "error", "code": "invalid_request", "message": "request was malformed"})
+                    }
+                };
+                write
+                    .write_all(format!("{response}\n").as_bytes())
+                    .await
+                    .unwrap();
+            }
+        }
+    });
+    let tmux = TmuxServer::start(&format!("pf57_env_alias_{index}"))?;
+    register_evidence(&tmux, home.path(), &binary)?;
+    for restart in [false, true] {
+        let mut command = CommandSpec::new(&binary)
+            .env("CODEX_HOME", home.path())
+            .env("CORBANU_HOME", home.path())
+            .env("PFTERMINAL_HOME", home.path())
+            .env("RUST_LOG", "trace")
+            .env("PFTERMINAL_PLAN_GATEWAY_URL", server.uri())
+            .env("CORBANU_API_BASE_URL", format!("{}/v1", server.uri()));
+        for name in codex_model_provider_info::CORBANU_API_KEY_ENV_VARS {
+            command = command.env(name, if name == alias { canary.as_str() } else { " " });
+        }
+        let session = tmux.new_session(
+            SessionSpec::new(
+                "env-alias",
+                TerminalSize::new(160, 50),
+                command
+                    .arg("-c")
+                    .arg("analytics.enabled=false")
+                    .arg("-c")
+                    .arg("tui.animations=false")
+                    .arg("--no-alt-screen")
+                    .arg("-C")
+                    .arg(&repo_root),
+            )
+            .current_dir(&repo_root),
+        )?;
+        let pane = session.primary_pane();
+        wait_chat_ready(pane)?;
+        ensure!(
+            !pane
+                .capture_viewport()?
+                .contains("Choose a provider account"),
+            "environment-only Corbanu account was incorrectly sent to onboarding"
+        );
+        pane.send_literal("/wallet")?;
+        pane.send_key(TmuxKey::Enter)?;
+        if index == 0 && !restart {
+            pane.wait_stable_contains("daemon_upgrade_required", READY_TIMEOUT)?;
+            pane.send_key(TmuxKey::Escape)?;
+            pane.send_literal("/wallet lock")?;
+            pane.send_key(TmuxKey::Enter)?;
+            pane.wait_stable_contains(
+                "Wallet locked in every Corbanu Terminal process",
+                READY_TIMEOUT,
+            )?;
+            ensure!(
+                locks.load(Ordering::SeqCst) > 0,
+                "TUI revocation did not reach the legacy daemon"
+            );
+            compatible.store(true, Ordering::SeqCst);
+            select_label(pane, "Retry")?;
+        }
+        pane.wait_stable_contains("Corbanu API", READY_TIMEOUT)?;
+        select_label(pane, "Corbanu API")?;
+        pane.wait_stable_contains("$12.20 available", READY_TIMEOUT)?;
+        capture_success_evidence(
+            &format!("env-alias-{index}-restart-{restart}"),
+            &binary,
+            home.path(),
+            pane,
+            &server,
+            &[&canary],
+        )
+        .await?;
+        pane.send_key(TmuxKey::Escape)?;
+        pane.send_key(TmuxKey::Escape)?;
+        wait_chat_ready(pane)?;
+        exit_tui(pane)?;
+        session.wait_for_exit(READY_TIMEOUT)?;
+    }
+    ensure!(
+        !home.path().join("provider_auth.json").exists(),
+        "environment credentials must not be persisted"
+    );
+    mock_daemon.abort();
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tmux_configure_many_preserves_first_default_restart_and_request() -> Result<()> {
     if !TmuxServer::should_run("PF-53 configure-many default restart request")? {
         return Ok(());
@@ -110,8 +287,8 @@ async fn tmux_configure_many_preserves_first_default_restart_and_request() -> Re
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn tmux_deferred_plan_cancel_with_fallback_continues_to_chat() -> Result<()> {
-    if !TmuxServer::should_run("PF-53 deferred Plan fallback cancellation")? {
+async fn tmux_deferred_corbanu_api_cancel_with_fallback_continues_to_chat() -> Result<()> {
+    if !TmuxServer::should_run("PF-53 deferred Corbanu API fallback cancellation")? {
         return Ok(());
     }
     let repo_root = codex_utils_cargo_bin::repo_root()?;
@@ -133,8 +310,8 @@ async fn tmux_deferred_plan_cancel_with_fallback_continues_to_chat() -> Result<(
     let fallback_canary = synthetic_canary("fallback");
     configure_api_key(pane, "Provider: Ambient API Key", &fallback_canary)?;
     pane.wait_stable_contains("Configured · active · ready", READY_TIMEOUT)?;
-    select_label(pane, "Corbanu Plan")?;
-    pane.wait_stable_contains("Corbanu Plan (queued)", READY_TIMEOUT)?;
+    select_label(pane, "Corbanu API")?;
+    pane.wait_stable_contains("Corbanu API (queued)", READY_TIMEOUT)?;
     select_label(pane, "Done")?;
     pane.wait_stable_contains("Create Solana wallet", READY_TIMEOUT)?;
     pane.send_key(TmuxKey::Escape)?;
@@ -159,8 +336,8 @@ async fn tmux_deferred_plan_cancel_with_fallback_continues_to_chat() -> Result<(
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn tmux_only_plan_cancel_returns_to_shared_provider_list() -> Result<()> {
-    if !TmuxServer::should_run("PF-53 only-Plan cancellation return")? {
+async fn tmux_only_corbanu_api_cancel_returns_to_shared_provider_list() -> Result<()> {
+    if !TmuxServer::should_run("PF-53 only-Corbanu-API cancellation return")? {
         return Ok(());
     }
     let repo_root = codex_utils_cargo_bin::repo_root()?;
@@ -181,11 +358,11 @@ async fn tmux_only_plan_cancel_returns_to_shared_provider_list() -> Result<()> {
     pane.wait_stable_contains("Provider: OpenAI Codex Account", READY_TIMEOUT)?;
 
     select_label(pane, "Provider: Ambient API Key")?;
-    pane.wait_stable_contains("Paste or type your API key below.", READY_TIMEOUT)?;
+    pane.wait_stable_contains("never adds it to chat.", READY_TIMEOUT)?;
     pane.send_key(TmuxKey::Escape)?;
     pane.wait_stable_contains("Provider: Ambient API Key", READY_TIMEOUT)?;
-    select_label(pane, "Corbanu Plan")?;
-    pane.wait_stable_contains("Corbanu Plan (queued)", READY_TIMEOUT)?;
+    select_label(pane, "Corbanu API")?;
+    pane.wait_stable_contains("Corbanu API (queued)", READY_TIMEOUT)?;
     select_label(pane, "Done")?;
     pane.wait_stable_contains("Create Solana wallet", READY_TIMEOUT)?;
     pane.send_key(TmuxKey::Escape)?;
@@ -199,34 +376,125 @@ async fn tmux_only_plan_cancel_returns_to_shared_provider_list() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn tmux_fresh_wallet_plan_success_preserves_existing_current_provider() -> Result<()> {
-    if !TmuxServer::should_run("PF-53 fresh wallet Plan success")? {
+async fn tmux_fresh_wallet_api_handoff_preserves_existing_current_provider() -> Result<()> {
+    if !TmuxServer::should_run("PF-53 fresh wallet Corbanu API handoff")? {
         return Ok(());
     }
-    fresh_wallet_plan_success(/*has_fallback*/ true).await
+    fresh_wallet_api_handoff(/*has_fallback*/ true).await
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn tmux_fresh_wallet_plan_without_fallback_selects_plan_in_session() -> Result<()> {
-    if !TmuxServer::should_run("PF-56 fresh wallet Plan no-fallback selection")? {
+async fn tmux_fresh_wallet_api_cancel_without_fallback_returns_to_setup() -> Result<()> {
+    if !TmuxServer::should_run("PF-56 fresh wallet Corbanu API no-fallback cancellation")? {
         return Ok(());
     }
-    fresh_wallet_plan_success(/*has_fallback*/ false).await
+    fresh_wallet_api_handoff(/*has_fallback*/ false).await
 }
 
-async fn fresh_wallet_plan_success(has_fallback: bool) -> Result<()> {
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_fresh_wallet_api_key_success_activates_without_restart() -> Result<()> {
+    if !TmuxServer::should_run("PF-56 Corbanu API key success and in-session activation")? {
+        return Ok(());
+    }
     let repo_root = codex_utils_cargo_bin::repo_root()?;
     let binary = codex_binary(&repo_root)?;
     let home = tempdir()?;
     let server = MockServer::start().await;
-    let plan_key = synthetic_canary("plan-key");
-    mount_plan_gateway(&server, &plan_key, /*flaky_plans*/ false).await;
+    mount_corbanu_api_gateway(&server).await;
+    write_config(home.path(), &repo_root, &server.uri())?;
+
+    let tmux = TmuxServer::start("pf56_fresh_wallet_api_key_success")?;
+    register_evidence(&tmux, home.path(), &binary)?;
+    let session = tmux.new_session(session_spec_with_gateway(
+        "fresh-wallet-api-key-success",
+        &binary,
+        &repo_root,
+        home.path(),
+        &server.uri(),
+    ))?;
+    let pane = session.primary_pane();
+    pane.wait_stable_contains("Provider: OpenAI Codex Account", READY_TIMEOUT)?;
+    select_label(pane, "Corbanu API")?;
+    select_label(pane, "Done")?;
+
+    let passphrase = synthetic_canary("wallet-key-success-passphrase");
+    pane.wait_stable_contains("Create Solana wallet", READY_TIMEOUT)?;
+    pane.send_secret_literal(&passphrase)?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Confirm the value", READY_TIMEOUT)?;
+    pane.send_secret_literal(&passphrase)?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Wallet recovery — secure view", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Unlock wallet", READY_TIMEOUT)?;
+    pane.send_secret_literal(&passphrase)?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Create API key", READY_TIMEOUT)?;
+    let before_key_creation = pane.capture_scrollback_tail(4_000)?;
+    ensure!(
+        !before_key_creation.contains("inactive or unavailable"),
+        "deferred Corbanu setup attempted model selection before key creation:\n{before_key_creation}"
+    );
+    select_label(pane, "Create API key")?;
+    pane.wait_stable_contains("Corbanu API cbn_live_pf53 — shown once", READY_TIMEOUT)?;
+    pane.wait_stable_contains("cbn_live_pf53_success_key", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Enter)?;
+    wait_chat_ready(pane)?;
+
+    let config = wait_for_config_values(
+        home.path(),
+        &[
+            "model_provider = \"pfterminal-plan\"",
+            "model = \"corbanu/glm-5.3-flash\"",
+        ],
+    )
+    .await?;
+    let scrollback = pane.capture_scrollback_tail(4_000)?;
+    ensure!(
+        !scrollback.contains("inactive or unavailable"),
+        "newly stored Corbanu API key was not activated in the current process:\n{config}\nredacted terminal scrollback:\n{scrollback}"
+    );
+    ensure!(
+        scrollback.contains("Model changed to corbanu/glm-5.3-flash via Corbanu API"),
+        "successful Corbanu API activation did not use the product label:\n{scrollback}"
+    );
+    let provider_auth = codex_login::provider_api_key_from_auth_storage(
+        home.path(),
+        codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR,
+        codex_config::types::AuthCredentialsStoreMode::File,
+        codex_config::types::AuthKeyringBackendKind::default(),
+    )?;
+    ensure!(
+        provider_auth.as_deref() == Some("cbn_live_pf53_success_key"),
+        "one-time Corbanu API key was not stored in provider custody"
+    );
+
+    capture_success_evidence(
+        "fresh-wallet-api-key-success",
+        &binary,
+        home.path(),
+        pane,
+        &server,
+        &[passphrase.as_str()],
+    )
+    .await?;
+    exit_tui(pane)?;
+    session.wait_for_exit(READY_TIMEOUT)?;
+    Ok(())
+}
+
+async fn fresh_wallet_api_handoff(has_fallback: bool) -> Result<()> {
+    let repo_root = codex_utils_cargo_bin::repo_root()?;
+    let binary = codex_binary(&repo_root)?;
+    let home = tempdir()?;
+    let server = MockServer::start().await;
+    mount_corbanu_api_gateway(&server).await;
     write_config(home.path(), &repo_root, &server.uri())?;
 
     let scenario = if has_fallback {
-        "fresh-wallet-plan-success"
+        "fresh-wallet-api-handoff"
     } else {
-        "fresh-wallet-plan-no-fallback"
+        "fresh-wallet-api-no-fallback"
     };
     let tmux = TmuxServer::start(&format!("pf56_{scenario}"))?;
     register_evidence(&tmux, home.path(), &binary)?;
@@ -243,7 +511,7 @@ async fn fresh_wallet_plan_success(has_fallback: bool) -> Result<()> {
     if let Some(canary) = ambient_canary.as_deref() {
         configure_api_key(pane, "Provider: Ambient API Key", canary)?;
     }
-    select_label(pane, "Corbanu Plan")?;
+    select_label(pane, "Corbanu API")?;
     select_label(pane, "Done")?;
 
     let passphrase = synthetic_canary("wallet-passphrase");
@@ -254,70 +522,52 @@ async fn fresh_wallet_plan_success(has_fallback: bool) -> Result<()> {
     pane.send_secret_literal(&passphrase)?;
     pane.send_key(TmuxKey::Enter)?;
     pane.wait_stable_contains("Wallet recovery — secure view", READY_TIMEOUT)?;
-    wait_for_rpc_method(&server, "getTokenAccountsByOwner").await?;
     pane.send_key(TmuxKey::Enter)?;
     pane.wait_stable_contains("Unlock wallet", READY_TIMEOUT)?;
     pane.send_secret_literal(&passphrase)?;
     pane.send_key(TmuxKey::Enter)?;
-    pane.wait_stable_contains("affordable with", READY_TIMEOUT)?;
-    select_label(pane, "Starter — 1.00 USDC")?;
-    pane.wait_stable_contains("Confirm Starter plan", READY_TIMEOUT)?;
-    select_label(pane, "Pay 1.00 USDC")?;
-    if let Err(error) = pane.wait_stable_contains("Payment confirmed", READY_TIMEOUT) {
-        let transcript = redacted_request_transcript(&server).await;
-        anyhow::bail!("{error}\nredacted loopback request transcript:\n{transcript}");
-    }
-    wait_for_request_path(&server, "/v1/account").await?;
-    pane.wait_stable_contains(
-        "Active 2026-09-01T00:00:00Z through 2026-10-01T00:00:00Z",
-        READY_TIMEOUT,
-    )?;
-    select_label(pane, "Done")?;
-    pane.wait_stable_contains("Receive", READY_TIMEOUT)?;
+    pane.wait_stable_contains("Corbanu API", READY_TIMEOUT)?;
+    pane.wait_stable_contains("Top up balance", READY_TIMEOUT)?;
     pane.send_key(TmuxKey::Escape)?;
-    wait_chat_ready(pane)?;
-    pane.wait_stable_contains("Payment confirmed:", READY_TIMEOUT)?;
 
     let config = fs::read_to_string(home.path().join("config.toml"))?;
     if has_fallback {
+        wait_chat_ready(pane)?;
         ensure!(
             config.contains("model_provider = \"ambient\""),
-            "reconciled deferred Plan overrode the usable existing current provider:\n{config}"
-        );
-        ensure!(
-            !pane
-                .capture_scrollback_tail(4_000)?
-                .contains("via Corbanu Plan standard"),
-            "deferred fallback receipt reconciliation selected the Plan provider"
+            "cancelled deferred Corbanu API setup overrode the usable provider:\n{config}"
         );
     } else {
+        pane.wait_stable_contains("Set up providers", READY_TIMEOUT)?;
         ensure!(
-            config.contains("model_provider = \"pfterminal-plan\""),
-            "deferred Plan without a fallback was not selected:\n{config}"
+            !config.contains("model_provider = \"pfterminal-plan\""),
+            "cancelled Corbanu API setup selected a provider without a key:\n{config}"
         );
-        pane.wait_stable_contains("via Corbanu Plan standard", READY_TIMEOUT)?;
     }
-    let mut canaries = vec![passphrase.as_str(), plan_key.as_str()];
+    let mut canaries = vec![passphrase.as_str()];
     if let Some(canary) = ambient_canary.as_deref() {
         canaries.insert(0, canary);
     }
     capture_success_evidence(scenario, &binary, home.path(), pane, &server, &canaries).await?;
-    exit_tui(pane)?;
-    session.wait_for_exit(READY_TIMEOUT)?;
+    if has_fallback {
+        exit_tui(pane)?;
+        session.wait_for_exit(READY_TIMEOUT)?;
+    } else {
+        drop(session);
+    }
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn tmux_locked_wallet_plan_load_failure_retries_and_cancels() -> Result<()> {
-    if !TmuxServer::should_run("PF-53 locked wallet failure retry")? {
+async fn tmux_locked_wallet_api_unlocks_and_cancels() -> Result<()> {
+    if !TmuxServer::should_run("PF-53 locked wallet Corbanu API handoff")? {
         return Ok(());
     }
     let repo_root = codex_utils_cargo_bin::repo_root()?;
     let binary = codex_binary(&repo_root)?;
     let home = tempdir()?;
     let server = MockServer::start().await;
-    let plan_key = synthetic_canary("unused-plan-key");
-    mount_plan_gateway(&server, &plan_key, /*flaky_plans*/ true).await;
+    mount_corbanu_api_gateway(&server).await;
     write_config(home.path(), &repo_root, &server.uri())?;
     let passphrase = synthetic_canary("locked-wallet-passphrase");
     codex_wallet::Wallet::new(home.path().to_path_buf())
@@ -337,16 +587,26 @@ async fn tmux_locked_wallet_plan_load_failure_retries_and_cancels() -> Result<()
     pane.wait_stable_contains("Provider: OpenAI Codex Account", READY_TIMEOUT)?;
     let ambient_canary = synthetic_canary("locked-fallback");
     configure_api_key(pane, "Provider: Ambient API Key", &ambient_canary)?;
-    select_label(pane, "Corbanu Plan")?;
+    select_label(pane, "Corbanu API")?;
     select_label(pane, "Done")?;
+    pane.wait_stable_contains("Unlock wallet", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Escape)?;
+    wait_chat_ready(pane)?;
+    pane.send_literal("/wallet")?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Corbanu API", READY_TIMEOUT)?;
+    select_label(pane, "Corbanu API")?;
+    pane.wait_stable_contains("Manage API keys", READY_TIMEOUT)?;
+    select_label(pane, "Manage API keys")?;
     pane.wait_stable_contains("Unlock wallet", READY_TIMEOUT)?;
     pane.send_secret_literal(&passphrase)?;
     pane.send_key(TmuxKey::Enter)?;
-    pane.wait_stable_contains("Retry loading plans", READY_TIMEOUT)?;
-    select_label(pane, "Retry loading plans")?;
-    pane.wait_stable_contains("Starter — 1.00 USDC", READY_TIMEOUT)?;
+    pane.wait_stable_contains("Corbanu API", READY_TIMEOUT)?;
+    pane.wait_stable_contains("Top up balance", READY_TIMEOUT)?;
     pane.send_key(TmuxKey::Escape)?;
-    pane.wait_stable_contains("Corbanu Terminal", READY_TIMEOUT)?;
+    pane.wait_stable_contains("Wallet", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Escape)?;
+    wait_chat_ready(pane)?;
     capture_success_evidence(
         "locked-wallet-failure-retry",
         &binary,
@@ -363,7 +623,7 @@ async fn tmux_locked_wallet_plan_load_failure_retries_and_cancels() -> Result<()
 
 fn configure_api_key(pane: &TmuxPane<'_>, label: &str, secret: &str) -> Result<()> {
     select_label(pane, label)?;
-    pane.wait_stable_contains("Paste or type your API key below.", READY_TIMEOUT)?;
+    pane.wait_stable_contains("never adds it to chat.", READY_TIMEOUT)?;
     pane.send_secret_literal(secret)?;
     pane.send_key(TmuxKey::Enter)?;
     pane.wait_stable_contains("API key configured", READY_TIMEOUT)?;
@@ -436,17 +696,14 @@ fn selected_title_matches(title: &str, requested: &str) -> bool {
 
 #[test]
 fn selected_title_strips_only_the_cursor_and_numeric_prefix() {
-    assert_eq!(
-        selected_title("  > 12. Corbanu Plan  "),
-        Some("Corbanu Plan")
-    );
+    assert_eq!(selected_title("  > 12. Corbanu API  "), Some("Corbanu API"));
     assert_eq!(
         selected_title("  › 1. Starter — 1.00 USDC  1,000 tokens/week  "),
         Some("Starter — 1.00 USDC  1,000 tokens/week")
     );
     assert_eq!(
-        selected_title("> 3. Provider: Corbanu Plan API Key"),
-        Some("Provider: Corbanu Plan API Key")
+        selected_title("> 3. Provider: Corbanu API Key"),
+        Some("Provider: Corbanu API Key")
     );
     assert_eq!(
         selected_title("› Cancel  Return to provider setup"),
@@ -457,8 +714,8 @@ fn selected_title_strips_only_the_cursor_and_numeric_prefix() {
         Some("Pay 1.00 USDC  Purchase Starter")
     );
     assert_eq!(selected_title(">_ Corbanu Terminal"), None);
-    assert_eq!(selected_title("  12. Corbanu Plan"), None);
-    assert_eq!(selected_title("> Corbanu Plan"), Some("Corbanu Plan"));
+    assert_eq!(selected_title("  12. Corbanu API"), None);
+    assert_eq!(selected_title("> Corbanu API"), Some("Corbanu API"));
 }
 
 #[test]
@@ -476,14 +733,14 @@ fn selected_row_accepts_provider_and_plan_cursors_but_rejects_header_marker() {
 
 #[test]
 fn selected_title_match_allows_only_exact_or_inline_column_metadata() {
-    assert!(selected_title_matches("Corbanu Plan", "Corbanu Plan"));
+    assert!(selected_title_matches("Corbanu API", "Corbanu API"));
     assert!(selected_title_matches(
         "Starter — 1.00 USDC  1,000 tokens/week",
         "Starter — 1.00 USDC",
     ));
     assert!(!selected_title_matches(
-        "Provider: Corbanu Plan API Key",
-        "Corbanu Plan",
+        "Provider: Corbanu API Key",
+        "Corbanu API",
     ));
     assert!(!selected_title_matches(
         "Starter — 1.00 USDC extra",
@@ -522,6 +779,8 @@ fn wait_chat_ready(pane: &TmuxPane<'_>) -> Result<()> {
         |capture| {
             capture.contains("/model to change")
                 && !capture.contains("Press enter to confirm or esc to go back")
+                && !capture.contains("Vault credential — secure view")
+                && !capture.contains("Press Enter or Esc to clear")
         },
     )?;
     Ok(())
@@ -586,6 +845,7 @@ fn session_spec_with_gateway(
     .current_dir(repo_root)
 }
 
+#[allow(dead_code)]
 async fn mount_plan_gateway(server: &MockServer, plan_key: &str, flaky_plans: bool) {
     let plan_requests = Arc::new(AtomicUsize::new(0));
     Mock::given(method("GET"))
@@ -698,6 +958,7 @@ async fn mount_plan_gateway(server: &MockServer, plan_key: &str, flaky_plans: bo
         .await;
 }
 
+#[allow(dead_code)]
 async fn redacted_request_transcript(server: &MockServer) -> String {
     server
         .received_requests()
@@ -723,6 +984,7 @@ async fn redacted_request_transcript(server: &MockServer) -> String {
         .join("\n")
 }
 
+#[allow(dead_code)]
 async fn wait_for_request_path(server: &MockServer, expected_path: &str) -> Result<()> {
     let deadline = std::time::Instant::now() + READY_TIMEOUT;
     while std::time::Instant::now() < deadline {
@@ -741,6 +1003,7 @@ async fn wait_for_request_path(server: &MockServer, expected_path: &str) -> Resu
     )
 }
 
+#[allow(dead_code)]
 async fn wait_for_rpc_method(server: &MockServer, method_name: &str) -> Result<()> {
     let deadline = std::time::Instant::now() + READY_TIMEOUT;
     while std::time::Instant::now() < deadline {
@@ -789,7 +1052,7 @@ trust_level = "trusted"
 }
 
 fn register_evidence(tmux: &TmuxServer, home: &Path, binary: &Path) -> Result<()> {
-    let hash = format!("{:x}", Sha256::digest(fs::read(binary)?));
+    let hash = binary_sha256(binary)?;
     fs::write(
         home.join("binary.sha256"),
         format!("{hash}  {}\n", binary.display()),
@@ -798,6 +1061,120 @@ fn register_evidence(tmux: &TmuxServer, home: &Path, binary: &Path) -> Result<()
     tmux.register_artifact("config.toml", home.join("config.toml"));
     tmux.register_artifact("codex-tui.log", home.join("log/codex-tui.log"));
     Ok(())
+}
+
+fn binary_sha256(binary: &Path) -> Result<String> {
+    // Debug binaries can exceed a gigabyte. Use a streaming system hash instead
+    // of loading the whole binary and hashing it in unoptimized test code.
+    for (program, arguments) in [("sha256sum", &[][..]), ("shasum", &["-a", "256"][..])] {
+        let output = match std::process::Command::new(program)
+            .args(arguments)
+            .arg(binary)
+            .output()
+        {
+            Ok(output) if output.status.success() => output,
+            _ => continue,
+        };
+        if let Some(hash) = std::str::from_utf8(&output.stdout)
+            .ok()
+            .and_then(|text| text.split_whitespace().next())
+            && hash.len() == 64
+            && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+        {
+            return Ok(hash.to_string());
+        }
+    }
+    Ok(format!("{:x}", Sha256::digest(fs::read(binary)?)))
+}
+
+async fn mount_corbanu_api_gateway(server: &MockServer) {
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "data": [{
+                "id": "corbanu/glm-5.3-flash",
+                "displayName": "GLM 5.3 Flash",
+                "recommended": true,
+                "balanceRate": "standard",
+                "privacy": "corbanu-controlled",
+                "pricing": {
+                    "inputUsd": "0.10",
+                    "outputUsd": "0.30",
+                    "cacheReadUsd": "0.01",
+                    "cacheWriteUsd": "0.10",
+                    "version": "pf53-test"
+                }
+            }]
+        })))
+        .mount(server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/wallet/challenge"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(serde_json::json!({"challenge":"pf53-api-account"})),
+        )
+        .mount(server)
+        .await;
+    Mock::given(method("POST"))
+        .and(path("/v1/wallet/execute"))
+        .respond_with(|request: &wiremock::Request| {
+            let operation = serde_json::from_slice::<serde_json::Value>(&request.body)
+                .ok()
+                .and_then(|body| body.pointer("/operation/kind").cloned())
+                .and_then(|kind| kind.as_str().map(str::to_owned));
+            if operation.as_deref() == Some("create_key") {
+                return ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "id": "pf53-success-key-id",
+                    "key": "cbn_live_pf53_success_key",
+                    "displayPrefix": "cbn_live_pf53"
+                }));
+            }
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "balance": {
+                    "balanceMicrousd": "0",
+                    "reservedMicrousd": "0",
+                    "availableMicrousd": "0",
+                    "balanceUsd": "0",
+                    "reservedUsd": "0",
+                    "availableUsd": "0"
+                },
+                "keys": [],
+                "models": [{
+                    "id": "corbanu/glm-5.3-flash",
+                    "displayName": "GLM 5.3 Flash",
+                    "recommended": true,
+                    "balanceRate": "standard",
+                    "privacy": "corbanu-controlled",
+                    "pricing": {
+                        "inputUsd": "0.10",
+                        "outputUsd": "0.30",
+                        "cacheReadUsd": "0.01",
+                        "cacheWriteUsd": "0.10",
+                        "version": "pf53-test"
+                    }
+                }]
+            }))
+        })
+        .mount(server)
+        .await;
+}
+
+async fn wait_for_config_values(home: &Path, expected: &[&str]) -> Result<String> {
+    let path = home.join("config.toml");
+    let deadline = std::time::Instant::now() + READY_TIMEOUT;
+    loop {
+        let config = fs::read_to_string(&path)?;
+        if expected.iter().all(|value| config.contains(value)) {
+            return Ok(config);
+        }
+        if std::time::Instant::now() >= deadline {
+            anyhow::bail!(
+                "timed out waiting for config values {expected:?}; final config:\n{config}"
+            );
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
 }
 
 async fn capture_success_evidence(
@@ -814,7 +1191,7 @@ async fn capture_success_evidence(
     fs::create_dir_all(&directory)?;
     fs::write(directory.join("viewport.txt"), &viewport)?;
     fs::write(directory.join("scrollback.txt"), &scrollback)?;
-    let binary_hash = format!("{:x}", Sha256::digest(fs::read(binary)?));
+    let binary_hash = binary_sha256(binary)?;
     fs::write(
         directory.join("binary.sha256"),
         format!("{binary_hash}  {}\n", binary.display()),
@@ -895,12 +1272,14 @@ fn response(text: &str) -> String {
 }
 
 fn codex_binary(repo_root: &Path) -> Result<PathBuf> {
-    for name in ["codex", "corbanu", "pfterminal"] {
+    // These scenarios qualify the branded product. Prefer its freshly built binary instead of a
+    // potentially stale upstream `codex` sibling left in the shared target directory.
+    for name in ["corbanu", "pfterminal", "codex"] {
         if let Ok(binary) = codex_utils_cargo_bin::cargo_bin(name) {
             return Ok(binary);
         }
     }
-    for name in ["codex", "corbanu", "pfterminal"] {
+    for name in ["corbanu", "pfterminal", "codex"] {
         let binary = repo_root.join("codex-rs/target/debug").join(name);
         if binary.is_file() {
             return Ok(binary);

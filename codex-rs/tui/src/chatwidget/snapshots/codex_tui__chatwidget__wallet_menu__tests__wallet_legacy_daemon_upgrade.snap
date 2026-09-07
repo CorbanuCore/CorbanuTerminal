@@ -1,0 +1,16 @@
+---
+source: tui/src/chatwidget/wallet_menu.rs
+expression: rendered
+---
+  Wallet
+  Unavailable: wallet daemon refused the request (daemon_upgrade_required): A wallet daemon from a
+  different Corbanu Terminal release is still running. No new wallet operation was sent. Let any
+  existing payment finish and verify its outcome; then close Terminal sessions for this home and
+  stop only the pfterminal-walletd (or corbanu-walletd) process whose --codex-home is [home] using
+  your operating system's process manager. Reopen Terminal to start the matching daemon.
+  Restarting only the TUI does not stop the daemon. Do not delete the wallet directory, socket or
+  ownership lock, and do not repeat a payment whose outcome is unknown.
+
+› 1. Retry
+
+  Press enter to confirm or esc to go back

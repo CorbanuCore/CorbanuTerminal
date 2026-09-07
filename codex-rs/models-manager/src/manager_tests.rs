@@ -512,6 +512,41 @@ async fn get_model_info_rejects_multi_segment_namespace_suffix_matching() {
 }
 
 #[tokio::test]
+async fn corbanu_api_public_models_inherit_exact_catalog_metadata() {
+    let codex_home = tempdir().expect("temp dir");
+    let config = ModelsManagerConfig::default();
+    let manager = openai_manager_for_tests(
+        codex_home.path().to_path_buf(),
+        TestModelsEndpoint::new(Vec::new()),
+    );
+
+    for (public_model, catalog_model) in [
+        ("corbanu/glm-5.3-flash", "zai/glm-5.3-flash"),
+        ("corbanu/glm-5.3", "zai/glm-5.3"),
+        ("corbanu/gpt-5.6-luna", "gpt-5.6-luna"),
+        ("corbanu/gpt-5.6-sol", "gpt-5.6-sol"),
+        ("corbanu/kimi-k3", "vercel/moonshotai/kimi-k3"),
+        ("corbanu/deepseek-v4-pro", "deepseek-v4-pro"),
+    ] {
+        let public_info = manager.get_model_info(public_model, &config).await;
+        let catalog_info = manager.get_model_info(catalog_model, &config).await;
+
+        assert_eq!(public_info.slug, public_model);
+        assert!(!public_info.used_fallback_model_metadata);
+        assert_eq!(public_info.context_window, catalog_info.context_window);
+        assert_eq!(
+            public_info.max_output_tokens,
+            catalog_info.max_output_tokens
+        );
+        assert_eq!(public_info.input_modalities, catalog_info.input_modalities);
+        assert_eq!(
+            public_info.supported_reasoning_levels,
+            catalog_info.supported_reasoning_levels
+        );
+    }
+}
+
+#[tokio::test]
 async fn refresh_available_models_sorts_by_priority() {
     let remote_models = vec![
         remote_model("priority-low", "Low", /*priority*/ 1),
@@ -655,6 +690,31 @@ async fn chatgpt_cache_does_not_evict_pfterminal_provider_models() {
 }
 
 #[tokio::test]
+async fn remote_overlay_keeps_retired_ambient_model_out_of_picker() {
+    let endpoint = TestModelsEndpoint::new(vec![vec![remote_model(
+        "moonshotai/kimi-k2.7-code",
+        "Old cached Ambient Kimi",
+        /*priority*/ 0,
+    )]]);
+    let codex_home = tempdir().expect("temp dir");
+    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+    let models = manager
+        .list_models(
+            RefreshStrategy::OnlineIfUncached,
+            DEFAULT_HTTP_CLIENT_FACTORY,
+        )
+        .await;
+    assert_eq!(
+        models
+            .iter()
+            .filter(|model| model.provider_id.as_deref() == Some("ambient") && model.show_in_picker)
+            .map(|model| model.model.as_str())
+            .collect::<Vec<_>>(),
+        vec!["z-ai/glm-5.2"]
+    );
+}
+
+#[tokio::test]
 async fn remote_model_overlay_preserves_bundled_orchestration_metadata() {
     let mut remote_models = vec![remote_model(
         "gpt-5.6-sol",
@@ -761,7 +821,7 @@ async fn refresh_available_models_preserves_bundled_catalog_for_empty_chatgpt_re
 }
 
 #[tokio::test]
-async fn chatgpt_catalog_keeps_verified_gpt_5_6_models_when_remote_omits_them() {
+async fn chatgpt_catalog_keeps_bundled_openai_models_when_remote_omits_them() {
     let codex_home = tempdir().expect("temp dir");
     let endpoint = TestModelsEndpoint::new(vec![Vec::new()]);
     let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
@@ -771,11 +831,16 @@ async fn chatgpt_catalog_keeps_verified_gpt_5_6_models_when_remote_omits_them() 
         .await;
     let picker_visibility = available
         .iter()
-        .filter(|model| model.model.starts_with("gpt-5.6-"))
+        .filter(|model| model.provider_id.as_deref() == Some("openai"))
         .map(|model| (model.model.as_str(), model.show_in_picker))
         .collect::<Vec<_>>();
 
-    for slug in ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] {
+    for slug in [
+        "gpt-6-astra",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+    ] {
         assert!(
             picker_visibility.contains(&(slug, true)),
             "{slug} should remain available unless the server explicitly hides it"
@@ -791,12 +856,12 @@ async fn chatgpt_catalog_keeps_verified_gpt_5_6_models_when_remote_omits_them() 
 }
 
 #[tokio::test]
-async fn chatgpt_catalog_honors_explicit_remote_hiding_for_gpt_5_6_models() {
+async fn chatgpt_catalog_honors_explicit_remote_hiding_for_current_openai_models() {
     let mut remote_models = crate::bundled_models_response()
         .expect("bundled models should parse")
         .models
         .into_iter()
-        .filter(|model| model.slug.starts_with("gpt-5.6-"))
+        .filter(|model| model.slug == "gpt-6-astra" || model.slug.starts_with("gpt-5.6-"))
         .collect::<Vec<_>>();
     for model in &mut remote_models {
         model.visibility = ModelVisibility::Hide;
@@ -812,10 +877,46 @@ async fn chatgpt_catalog_honors_explicit_remote_hiding_for_gpt_5_6_models() {
     assert!(
         available
             .iter()
-            .filter(|model| model.model.starts_with("gpt-5.6-"))
+            .filter(|model| model.model == "gpt-6-astra" || model.model.starts_with("gpt-5.6-"))
             .all(|model| !model.show_in_picker),
         "an explicit hidden response must override bundled visibility"
     );
+}
+
+#[tokio::test]
+async fn astra_remote_overlay_keeps_manual_policy_and_supported_efforts() {
+    let bundled = crate::bundled_models_response()
+        .expect("bundled catalog")
+        .models
+        .into_iter()
+        .find(|model| model.slug == "gpt-6-astra")
+        .expect("Astra catalog entry");
+    let mut remote = bundled.clone();
+    remote.supported_reasoning_levels = vec![ReasoningEffortPreset {
+        effort: ReasoningEffort::None,
+        description: "unsupported remote effort".to_string(),
+    }];
+    remote.default_reasoning_level = Some(ReasoningEffort::None);
+    remote.orchestration = None;
+    remote.max_output_tokens = None;
+    let codex_home = tempdir().expect("temp dir");
+    let manager = openai_manager_for_tests(
+        codex_home.path().to_path_buf(),
+        TestModelsEndpoint::new(vec![vec![remote]]),
+    );
+    let available = manager
+        .list_models(RefreshStrategy::Online, DEFAULT_HTTP_CLIENT_FACTORY)
+        .await;
+    let actual = available
+        .into_iter()
+        .find(|model| model.model == "gpt-6-astra")
+        .expect("Astra remains selectable");
+    assert_eq!(actual, ModelPreset::from(bundled.clone()));
+    let resolved = manager
+        .get_model_info("gpt-6-astra", &ModelsManagerConfig::default())
+        .await;
+    assert_eq!(resolved.max_output_tokens, bundled.max_output_tokens);
+    assert!(!resolved.used_fallback_model_metadata);
 }
 
 #[tokio::test]
@@ -1494,7 +1595,7 @@ fn bundled_models_json_tracks_verified_image_capabilities() {
 
 #[test]
 fn bundled_claude_5_models_have_provider_reported_output_limits() {
-    // Verified against Anthropic's authenticated `/v1/models/{model_id}` responses on 2026-08-01.
+    // Fable 5.1 keeps the existing Fable family request ceiling on the Claude Plan wire.
     let response = crate::bundled_models_response()
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
 
@@ -1860,7 +1961,7 @@ fn bundled_models_json_contains_ambient_and_zai_models() {
             .collect::<Vec<_>>(),
         vec![ReasoningEffort::Medium, ReasoningEffort::XHigh]
     );
-    assert_eq!(ambient_kimi.visibility, ModelVisibility::List);
+    assert_eq!(ambient_kimi.visibility, ModelVisibility::Hide);
     assert!(ambient_kimi.supports_parallel_tool_calls);
     assert_standard_base(&ambient_kimi.base_instructions);
     assert!(!ambient_kimi.used_fallback_model_metadata);
@@ -1889,6 +1990,10 @@ fn bundled_models_json_routes_standard_base_without_clobbering_gpt55() {
         "moonshotai/kimi-k2.7-code",
         "zai/glm-5.2",
         "zai/glm-5.2-fast",
+        "zai/glm-5.3-flash",
+        "zai/glm-5.3",
+        "vercel/moonshotai/kimi-k3",
+        "vercel/deepseek/deepseek-v4-pro",
         "zai-org/GLM-5.2",
         "ambient/large",
         "glm-5.2",
@@ -2236,62 +2341,63 @@ fn bundled_models_json_contains_openrouter_models() {
 
     for (slug, display_name, description) in [
         (
+            "claude-fable-5-plan",
+            "Claude Fable 5 Plan",
+            "Claude Fable 5 through Claude Code subscription auth in Corbanu Terminal.",
+        ),
+        (
             "claude-fable-5-1-plan",
             "Claude Fable 5.1 Plan",
             "Claude Fable 5.1 through Claude Code subscription auth in Corbanu Terminal.",
         ),
-        (
-            "claude-fable-5-1",
-            "Claude Fable 5.1",
-            "Claude Fable 5.1 through the Anthropic Messages API.",
-        ),
     ] {
-        let model = response
+        let claude_fable_plan = response
             .models
             .iter()
             .find(|model| model.slug == slug)
             .unwrap_or_else(|| panic!("bundled models.json should include {display_name}"));
+
+        assert_eq!(claude_fable_plan.display_name, display_name);
+        assert_eq!(claude_fable_plan.description.as_deref(), Some(description));
+        assert_eq!(claude_fable_plan.context_window, Some(1_000_000));
         assert_eq!(
-            (
-                model.display_name.as_str(),
-                model.description.as_deref(),
-                model.visibility,
-            ),
-            (display_name, Some(description), ModelVisibility::List,)
+            claude_fable_plan.default_reasoning_level,
+            Some(ReasoningEffort::High)
         );
+        assert_eq!(
+            claude_fable_plan
+                .supported_reasoning_levels
+                .iter()
+                .map(|level| level.effort.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                ReasoningEffort::Low,
+                ReasoningEffort::Medium,
+                ReasoningEffort::High,
+                ReasoningEffort::XHigh,
+                ReasoningEffort::Max,
+            ]
+        );
+        assert_eq!(claude_fable_plan.visibility, ModelVisibility::List);
     }
 
-    let claude_fable_plan = response
+    let claude_fable_5_1 = response
         .models
         .iter()
-        .find(|model| model.slug == "claude-fable-5-plan")
-        .expect("bundled models.json should include Claude Fable 5 Plan");
-
-    assert_eq!(claude_fable_plan.display_name, "Claude Fable 5 Plan");
+        .find(|model| model.slug == "claude-fable-5-1")
+        .expect("bundled models.json should include Claude Fable 5.1");
     assert_eq!(
-        claude_fable_plan.description.as_deref(),
-        Some("Claude Fable 5 through Claude Code subscription auth in Corbanu Terminal.")
+        (
+            claude_fable_5_1.display_name.as_str(),
+            claude_fable_5_1.description.as_deref(),
+            claude_fable_5_1.visibility,
+        ),
+        (
+            "Claude Fable 5.1",
+            Some("Claude Fable 5.1 through the Anthropic Messages API."),
+            ModelVisibility::List,
+        )
     );
-    assert_eq!(claude_fable_plan.context_window, Some(1_000_000));
-    assert_eq!(
-        claude_fable_plan.default_reasoning_level,
-        Some(ReasoningEffort::High)
-    );
-    assert_eq!(
-        claude_fable_plan
-            .supported_reasoning_levels
-            .iter()
-            .map(|level| level.effort.clone())
-            .collect::<Vec<_>>(),
-        vec![
-            ReasoningEffort::Low,
-            ReasoningEffort::Medium,
-            ReasoningEffort::High,
-            ReasoningEffort::XHigh,
-            ReasoningEffort::Max,
-        ]
-    );
-    assert_eq!(claude_fable_plan.visibility, ModelVisibility::List);
 
     let claude_fable = response
         .models
@@ -2403,6 +2509,45 @@ fn bundled_models_json_contains_openrouter_models() {
             .unwrap_or_default()
             .contains("$2.10/M input, $0.21/M cached input, $6.60/M output")
     );
+
+    for (slug, display_name, context_window, max_output_tokens) in [
+        (
+            "zai/glm-5.3-flash",
+            "Vercel GLM 5.3 Flash",
+            1_000_000,
+            131_000,
+        ),
+        ("zai/glm-5.3", "Vercel GLM 5.3", 1_000_000, 1_000_000),
+        (
+            "vercel/moonshotai/kimi-k3",
+            "Vercel Kimi K3",
+            1_000_000,
+            128_000,
+        ),
+        (
+            "vercel/deepseek/deepseek-v4-pro",
+            "Vercel DeepSeek V4 Pro",
+            1_000_000,
+            384_000,
+        ),
+    ] {
+        let model = response
+            .models
+            .iter()
+            .find(|model| model.slug == slug)
+            .unwrap_or_else(|| panic!("bundled models.json should include {slug}"));
+        assert_eq!(model.display_name, display_name);
+        assert_eq!(model.context_window, Some(context_window));
+        assert_eq!(model.max_output_tokens, Some(max_output_tokens));
+        assert_eq!(
+            model
+                .orchestration
+                .as_ref()
+                .map(codex_protocol::openai_models::ModelOrchestrationMetadata::provider_id),
+            Some("vercel")
+        );
+        assert_eq!(model.visibility, ModelVisibility::List);
+    }
 
     let openrouter_gemini = response
         .models

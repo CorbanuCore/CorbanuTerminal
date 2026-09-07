@@ -963,7 +963,6 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                     .config
                     .multi_agent_v2
                     .expose_spawn_agent_model_overrides,
-                multi_agent_version: turn_context.multi_agent_version,
                 usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
             };
             registry.register_trusted(override_tool_exposure(
@@ -1036,7 +1035,6 @@ fn add_collaboration_tools(context: &CoreToolPlanContext<'_>, registry: &mut Too
                 expose_agent_type: true,
                 hide_agent_type_model_reasoning: false,
                 expose_spawn_agent_model_overrides: true,
-                multi_agent_version: turn_context.multi_agent_version,
                 usage_hint_text: turn_context.config.multi_agent_v2.usage_hint_text.clone(),
             };
             registry.add_with_exposure(SpawnAgentHandler::new(spawn_options.clone()), exposure);
@@ -1213,10 +1211,13 @@ fn spawn_agent_available_models(
                 .is_some_and(|provider| allowlist.contains(provider))
         });
     }
+    // Explicit runtime discovery follows configured providers, not automatic-allocation
+    // economics. Missing billing metadata does not make a requested model unavailable.
     models.retain(|model| {
-        model.orchestration.as_ref().is_some_and(
-            codex_protocol::openai_models::ModelOrchestrationMetadata::is_spawn_eligible,
-        )
+        model
+            .provider_id
+            .as_ref()
+            .is_some_and(|provider| turn_context.config.model_providers.contains_key(provider))
     });
     models
 }

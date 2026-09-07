@@ -33,6 +33,207 @@ const MANAGED_PROVIDER: &str = "pf54-managed";
 const ENV_PROVIDER: &str = "pf54-environment";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_astra_selection_cancel_restart_and_request() -> Result<()> {
+    if !TmuxServer::should_run("Astra OpenAI selection, cancel, restart and request")? {
+        return Ok(());
+    }
+    let fixture = Fixture::new("astra-selector", /*openai_auth*/ true).await?;
+    let config_path = fixture.home.path().join("config.toml");
+    let mut config: toml::Value = toml::from_str(&fs::read_to_string(&config_path)?)?;
+    let settings = config.as_table_mut().context("fixture config is a table")?;
+    settings.insert("model".into(), "gpt-5.6-sol".into());
+    settings.insert("model_provider".into(), "openai".into());
+    settings.insert("model_reasoning_effort".into(), "low".into());
+    settings.insert("check_for_update_on_startup".into(), false.into());
+    fs::write(&config_path, toml::to_string(&config)?)?;
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_raw(
+                    response("astra selector request succeeded"),
+                    "text/event-stream",
+                ),
+        )
+        .mount(&fixture.server)
+        .await;
+    let tmux = fixture.tmux()?;
+    for restart in [false, true] {
+        let session = tmux.new_session(SessionSpec::new(
+            "astra-selector",
+            TerminalSize::new(140, 44),
+            CommandSpec::new(&fixture.binary)
+                .env("CODEX_HOME", fixture.home.path())
+                .env("CORBANU_HOME", fixture.home.path())
+                .env("PFTERMINAL_HOME", fixture.home.path())
+                .env("RUST_LOG", "trace")
+                .arg("-c")
+                .arg(format!("openai_base_url=\"{}/v1\"", fixture.server.uri()))
+                .arg("-c")
+                .arg("analytics.enabled=false")
+                .arg("-c")
+                .arg("tui.animations=false")
+                .arg("-c")
+                .arg(format!("log_dir={:?}", fixture.home.path().join("log")))
+                .arg("--no-alt-screen")
+                .arg("-C")
+                .arg(&fixture.repo_root),
+        ))?;
+        let pane = session.primary_pane();
+        wait_chat_ready(pane)?;
+        if !restart {
+            let before = fs::read_to_string(&config_path)?;
+            open_model_picker(pane)?;
+            pane.wait_stable_contains("GPT-5.6-Sol", READY_TIMEOUT)?;
+            select_label(pane, "GPT-6 Astra")?;
+            pane.wait_stable_contains("Select Reasoning Level for GPT-6 Astra", READY_TIMEOUT)?;
+            capture_success("astra-reasoning-cancel", &fixture, pane, &[])?;
+            pane.send_key(TmuxKey::Escape)?;
+            // Returning from effort selection may reveal its parent picker.
+            close_manager(pane)?;
+            ensure!(
+                fs::read_to_string(&config_path)? == before,
+                "cancel changed selection"
+            );
+            open_model_picker(pane)?;
+            select_label(pane, "GPT-6 Astra")?;
+            pane.wait_stable_contains("Select Reasoning Level for GPT-6 Astra", READY_TIMEOUT)?;
+            select_label(pane, "High")?;
+            wait_chat_ready(pane)?;
+            pane.wait_stable_contains("GPT-6 Astra", READY_TIMEOUT)?;
+        }
+        let selected: toml::Value = toml::from_str(&fs::read_to_string(&config_path)?)?;
+        ensure!(
+            (
+                selected["model"].as_str(),
+                selected["model_provider"].as_str(),
+                selected["model_reasoning_effort"].as_str()
+            ) == (Some("gpt-6-astra"), Some("openai"), Some("high")),
+            "Astra model/provider/effort did not persist"
+        );
+        submit_and_wait(
+            pane,
+            "Check the selected model.",
+            "astra selector request succeeded",
+        )?;
+        capture_success(
+            &format!("astra-selected-restart-{restart}"),
+            &fixture,
+            pane,
+            &[],
+        )?;
+        exit_tui(pane)?;
+        session.wait_for_exit(READY_TIMEOUT)?;
+    }
+    let requests = fixture.server.received_requests().await.unwrap_or_default();
+    let requests = requests
+        .iter()
+        .filter(|request| request.url.path() == "/v1/responses")
+        .collect::<Vec<_>>();
+    ensure!(requests.len() == 2, "expected one request per process");
+    for request in requests {
+        let body: serde_json::Value = serde_json::from_slice(&request.body)?;
+        ensure!(body["model"] == "gpt-6-astra" && body["reasoning"]["effort"] == "high");
+        ensure!(
+            request
+                .headers
+                .get("version")
+                .and_then(|value| value.to_str().ok())
+                == Some(codex_model_provider_info::OPENAI_CODEX_COMPAT_VERSION)
+        );
+        let version = request.headers["version"]
+            .to_str()?
+            .split('.')
+            .map(str::parse::<u32>)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        ensure!(
+            version >= vec![0, 153, 0],
+            "Astra requires native client 0.153.0 or newer"
+        );
+        ensure!(
+            request
+                .headers
+                .contains_key("x-openai-internal-codex-responses-lite")
+        );
+        ensure!(body.get("instructions").is_none());
+        ensure!(body.get("tools").is_none());
+        ensure!(body["parallel_tool_calls"] == false);
+        ensure!(
+            body["input"]
+                .as_array()
+                .context("native input")?
+                .iter()
+                .any(|item| item["type"] == "additional_tools"
+                    && item["tools"]
+                        .as_array()
+                        .is_some_and(|tools| tools.iter().any(|tool| tool["name"] == "exec")))
+        );
+        for unsupported in [
+            "temperature",
+            "top_p",
+            "top_logprobs",
+            "logprobs",
+            "prompt_cache_retention",
+        ] {
+            ensure!(
+                body.get(unsupported).is_none(),
+                "unsupported Astra parameter {unsupported}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_ambient_model_picker_offers_only_glm() -> Result<()> {
+    if !TmuxServer::should_run("Ambient GLM-only picker")? {
+        return Ok(());
+    }
+    let fixture = Fixture::new("ambient-glm-only", /*openai_auth*/ true).await?;
+    let tmux = fixture.tmux()?;
+    let session = tmux.new_session(SessionSpec::new(
+        "ambient-glm-only",
+        TerminalSize::new(140, 44),
+        CommandSpec::new(&fixture.binary)
+            .env("CODEX_HOME", fixture.home.path())
+            .env("CORBANU_HOME", fixture.home.path())
+            .env("AMBIENT_API_KEY", "ambient-picker-synthetic-fixture")
+            .env("RUST_LOG", "trace")
+            .arg("-c")
+            .arg("tui.animations=false")
+            .arg("-c")
+            .arg("model_provider=\"ambient\"")
+            .arg("-m")
+            .arg("z-ai/glm-5.2")
+            .arg("-c")
+            .arg(format!("log_dir={:?}", fixture.home.path().join("logs")))
+            .arg("--no-alt-screen")
+            .arg("-C")
+            .arg(&fixture.repo_root),
+    ))?;
+    let pane = session.primary_pane();
+    wait_chat_ready(pane)?;
+    for _ in 0..2 {
+        open_model_picker(pane)?;
+        pane.wait_stable_contains("[Ambient]", READY_TIMEOUT)?;
+        let capture = pane.wait_stable_contains("Ambient GLM 5.2", READY_TIMEOUT)?;
+        ensure!(
+            !capture.contains("Kimi K2.7"),
+            "retired Ambient option is visible"
+        );
+        capture_success("ambient-glm-only", &fixture, pane, &[])?;
+        pane.send_key(TmuxKey::Escape)?;
+        pane.wait_stable_until("model picker cancelled", READY_TIMEOUT, |capture| {
+            !capture.contains("Select Model")
+        })?;
+    }
+    exit_tui(pane)?;
+    session.wait_for_exit(READY_TIMEOUT)?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tmux_shared_and_custom_catalog_have_management_status_parity() -> Result<()> {
     if !TmuxServer::should_run("PF-54 shared/custom catalog parity")? {
         return Ok(());
@@ -74,6 +275,7 @@ async fn tmux_pf50_api_key_setup_and_recovery_are_reused() -> Result<()> {
     pane.wait_stable_contains("Not configured", READY_TIMEOUT)?;
     select_label(pane, "Set up with API key")?;
     pane.wait_stable_contains("API key — masked", READY_TIMEOUT)?;
+    pane.wait_stable_contains("encrypted vault", READY_TIMEOUT)?;
     pane.send_secret_literal(&canary)?;
     pane.send_key(TmuxKey::Enter)?;
     wait_manager_row(pane, fixture.home.path(), "PF54 Managed", "Active")?;
@@ -112,6 +314,24 @@ async fn tmux_pf51_openai_account_cancel_and_retry_are_correlated() -> Result<()
     pane.wait_stable_contains("OpenAI account login", READY_TIMEOUT)?;
     cancel_account_auth(pane)?;
 
+    fixture.server.reset().await;
+    Mock::given(method("POST"))
+        .and(path("/api/accounts/deviceauth/usercode"))
+        .respond_with(ResponseTemplate::new(400))
+        .mount(&fixture.server)
+        .await;
+    open_manager(pane)?;
+    select_label(pane, "OpenAI")?;
+    select_label(pane, "Set up with OpenAI account")?;
+    pane.wait_stable_contains("Authentication needs attention", READY_TIMEOUT)?;
+    pane.wait_stable_contains("OpenAI could not start login", READY_TIMEOUT)?;
+    fixture.server.reset().await;
+    mock_openai_device_code(&fixture.server).await;
+    select_label(pane, "Retry authentication")?;
+    pane.wait_stable_contains("OpenAI account login", READY_TIMEOUT)?;
+    pane.wait_stable_contains("remote or headless", READY_TIMEOUT)?;
+    cancel_account_auth(pane)?;
+
     capture_success("openai-cancel-retry", &fixture, pane, &[])?;
     exit_tui(pane)?;
     session.wait_for_exit(READY_TIMEOUT)?;
@@ -136,6 +356,9 @@ async fn tmux_pf52_claude_recovery_cancel_and_retry_are_reused() -> Result<()> {
     let pane = session.primary_pane();
     wait_chat_ready(pane)?;
     let canary = synthetic_canary("claude-managed-token");
+    // The local token format check accepts arbitrary whitespace-free strings;
+    // embedded whitespace makes this a deterministic rejection before storage.
+    let invalid_canary = format!("invalid {canary}");
 
     open_manager(pane)?;
     focus_label(pane, "Claude Account")?;
@@ -144,7 +367,7 @@ async fn tmux_pf52_claude_recovery_cancel_and_retry_are_reused() -> Result<()> {
     })?;
     pane.send_key(TmuxKey::Enter)?;
     select_label(pane, "Recover with Claude account")?;
-    pane.wait_stable_contains("Claude account method", READY_TIMEOUT)?;
+    pane.wait_stable_contains("Claude Plan authentication", READY_TIMEOUT)?;
     pane.send_key(TmuxKey::Escape)?;
     pane.wait_stable_contains("Configure providers and control", READY_TIMEOUT)?;
     close_manager(pane)?;
@@ -156,14 +379,59 @@ async fn tmux_pf52_claude_recovery_cancel_and_retry_are_reused() -> Result<()> {
     })?;
     pane.send_key(TmuxKey::Enter)?;
     select_label(pane, "Recover with Claude account")?;
-    pane.wait_stable_contains("Claude account method", READY_TIMEOUT)?;
-    select_label(pane, "Managed subscription token")?;
-    pane.wait_stable_contains("Token — masked", READY_TIMEOUT)?;
+    pane.wait_stable_contains("Claude Plan authentication", READY_TIMEOUT)?;
+    pane.wait_stable_contains("claude setup-token", READY_TIMEOUT)?;
+    select_label(pane, "Long-lived subscription token (Recommended)")?;
+    pane.wait_stable_contains("Long-lived token — masked", READY_TIMEOUT)?;
+    pane.wait_stable_contains("claude setup-token", READY_TIMEOUT)?;
     pane.send_secret_literal(&canary)?;
     pane.send_key(TmuxKey::Escape)?;
     pane.wait_stable_contains("Configure providers and control", READY_TIMEOUT)?;
 
-    capture_success("claude-recovery-cancel", &fixture, pane, &[&canary])?;
+    // A rejected token must remain visibly recoverable without leaking its value.
+    close_manager(pane)?;
+    open_manager(pane)?;
+    select_label(pane, "Claude Account")?;
+    select_label(pane, "Recover with Claude account")?;
+    select_label(pane, "Long-lived subscription token (Recommended)")?;
+    pane.wait_stable_contains("Long-lived token — masked", READY_TIMEOUT)?;
+    pane.send_secret_literal(&invalid_canary)?;
+    pane.wait_stable_contains(
+        &format!("••••••• {}", "•".repeat(canary.chars().count())),
+        READY_TIMEOUT,
+    )?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Authentication needs attention", READY_TIMEOUT)?;
+    pane.wait_stable_contains("subscription token was not accepted", READY_TIMEOUT)?;
+    select_label(pane, "Retry authentication")?;
+    pane.wait_stable_contains("Long-lived token — masked", READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Escape)?;
+    pane.wait_stable_contains("Configure providers and control", READY_TIMEOUT)?;
+
+    // A successful local save must return to the manager, not reopen a blank
+    // token form. This synthetic value never makes a live inference request.
+    close_manager(pane)?;
+    open_manager(pane)?;
+    select_label(pane, "Claude Account")?;
+    select_label(pane, "Recover with Claude account")?;
+    select_label(pane, "Long-lived subscription token (Recommended)")?;
+    pane.wait_stable_contains("Long-lived token — masked", READY_TIMEOUT)?;
+    pane.send_secret_literal(&canary)?;
+    pane.wait_stable_contains(&"•".repeat(canary.chars().count()), READY_TIMEOUT)?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Configure providers and control", READY_TIMEOUT)?;
+    ensure!(
+        !pane
+            .capture_viewport()?
+            .contains("Save Claude subscription token")
+    );
+
+    capture_success(
+        "claude-recovery-cancel",
+        &fixture,
+        pane,
+        &[&canary, &invalid_canary],
+    )?;
     close_overlay_and_exit(pane)?;
     session.wait_for_exit(READY_TIMEOUT)?;
     Ok(())

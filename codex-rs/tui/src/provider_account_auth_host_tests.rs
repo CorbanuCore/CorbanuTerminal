@@ -55,3 +55,36 @@ fn claude_recovery_snapshot_presents_the_method_choice() {
 
     assert!(presents_claude_method_choice(&snapshot));
 }
+
+#[test]
+fn submitted_claude_token_does_not_reopen_the_entry_form() {
+    use codex_provider_auth::claude_account_flow::ClaudeAccountFlow;
+    use codex_provider_auth::claude_account_flow::ClaudeAccountIntent;
+    use codex_provider_auth::claude_account_flow::ClaudeAccountTarget;
+
+    let catalog = codex_provider_auth::ProviderCatalog::from_runtime_providers(
+        &codex_model_provider_info::built_in_model_providers(None),
+    );
+    let target = ClaudeAccountTarget::from_catalog_entry(
+        catalog
+            .get(codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID)
+            .expect("Claude Account catalog entry"),
+    )
+    .expect("Claude Account target");
+    let flow = ClaudeAccountFlow {
+        target,
+        intent: ClaudeAccountIntent::Replace,
+    };
+    assert!(presents_claude_token_entry(
+        &ClaudeAccountSnapshot::EnteringManagedToken {
+            flow: flow.clone(),
+            has_input: false,
+        }
+    ));
+    assert!(!presents_claude_token_entry(
+        &ClaudeAccountSnapshot::EnteringManagedToken {
+            flow,
+            has_input: true,
+        }
+    ));
+}

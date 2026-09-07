@@ -45,3 +45,43 @@ fn new_one_action_request_is_accepted_by_the_legacy_wire_shape() {
         ("test-passcode", 300)
     );
 }
+
+#[test]
+fn corbanu_api_operations_round_trip_without_erasing_the_operation_boundary() {
+    let operations = [
+        codex_wallet::CorbanuApiOperation::Account,
+        codex_wallet::CorbanuApiOperation::TopUpIntent {
+            amount_usd: "7.25".to_string(),
+        },
+        codex_wallet::CorbanuApiOperation::CreateKey,
+        codex_wallet::CorbanuApiOperation::RevokeKey {
+            key_id: "2f9350c1-0cf6-4af1-bb90-cc693c923bb3".to_string(),
+        },
+    ];
+    for operation in operations {
+        let request = Request::CorbanuApiOperation {
+            capability: "secret-capability".to_string(),
+            gateway_origin: "https://api.corbanu.example".to_string(),
+            operation: operation.clone(),
+        };
+        let encoded = serde_json::to_value(&request).expect("serialize operation request");
+        let decoded: Request =
+            serde_json::from_value(encoded).expect("deserialize operation request");
+        let Request::CorbanuApiOperation {
+            capability,
+            gateway_origin,
+            operation: decoded_operation,
+        } = decoded
+        else {
+            panic!("expected Corbanu API operation");
+        };
+        assert_eq!(
+            (capability, gateway_origin, decoded_operation),
+            (
+                "secret-capability".to_string(),
+                "https://api.corbanu.example".to_string(),
+                operation,
+            )
+        );
+    }
+}

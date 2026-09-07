@@ -27,7 +27,7 @@ impl ChatWidget {
             format!("provider:{}", target.provider_id),
             format!("Add {display_name}"),
             "API key — masked".to_string(),
-            "Stored through the selected provider credential backend".to_string(),
+            crate::provider_auth_presentation::api_key_guidance(&target.storage),
             Box::new(move |_label, secret| {
                 tx.send(AppEvent::SaveProviderManagerApiKey {
                     attempt_id,
@@ -282,7 +282,7 @@ fn setup_description(capability: &ProviderSetupCapability) -> String {
         ProviderSetupCapability::OpenAiAccount => "OpenAI account".to_string(),
         ProviderSetupCapability::ApiKey { .. } => "API key".to_string(),
         ProviderSetupCapability::ClaudeAccount => "Claude account".to_string(),
-        ProviderSetupCapability::CorbanuPlan => "Corbanu Plan".to_string(),
+        ProviderSetupCapability::CorbanuPlan => "Corbanu API".to_string(),
         ProviderSetupCapability::Local { .. } => "local provider".to_string(),
         ProviderSetupCapability::CommandAuth { .. } => "external command".to_string(),
         ProviderSetupCapability::StatusOnly { .. } => "external configuration".to_string(),

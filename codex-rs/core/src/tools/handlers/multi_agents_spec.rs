@@ -1,11 +1,9 @@
 use super::multi_agents_common::MAX_SPAWN_AGENT_MODEL_OVERRIDES;
-use super::multi_agents_common::model_supports_multi_agent_backend;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelBilling;
 use codex_protocol::openai_models::ModelCapabilityTier;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::MultiAgentVersion;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiNamespace;
 use codex_tools::ResponsesApiNamespaceTool;
@@ -37,7 +35,6 @@ pub struct SpawnAgentToolOptions {
     pub expose_agent_type: bool,
     pub hide_agent_type_model_reasoning: bool,
     pub expose_spawn_agent_model_overrides: bool,
-    pub multi_agent_version: MultiAgentVersion,
     pub usage_hint_text: Option<String>,
 }
 
@@ -58,7 +55,6 @@ impl Default for SpawnAgentToolOptions {
             expose_agent_type: true,
             hide_agent_type_model_reasoning: false,
             expose_spawn_agent_model_overrides: false,
-            multi_agent_version: MultiAgentVersion::Disabled,
             usage_hint_text: None,
         }
     }
@@ -85,7 +81,6 @@ pub fn create_spawn_agent_tool_v1(options: SpawnAgentToolOptions) -> ToolSpec {
     let available_models_description = (!options.hide_agent_type_model_reasoning).then(|| {
         spawn_agent_models_description(
             &options.available_models,
-            options.multi_agent_version,
             options.inherited_runtime.as_ref(),
         )
     });
@@ -124,7 +119,6 @@ pub fn create_spawn_agent_tool_v2(options: SpawnAgentToolOptions) -> ToolSpec {
     let available_models_description = options.expose_spawn_agent_model_overrides.then(|| {
         spawn_agent_models_description(
             &options.available_models,
-            options.multi_agent_version,
             options.inherited_runtime.as_ref(),
         )
     });
@@ -1098,7 +1092,6 @@ Note that passing `fork_turns="none"` will not pass any surrounding context to t
 
 fn spawn_agent_models_description(
     models: &[ModelPreset],
-    multi_agent_version: MultiAgentVersion,
     inherited_runtime: Option<&SpawnAgentRuntime>,
 ) -> String {
     let inherited_runtime = inherited_runtime.map_or_else(
@@ -1118,10 +1111,11 @@ fn spawn_agent_models_description(
             )
         },
     );
+    // Provider authorization was resolved by the caller. Picker visibility controls
+    // discovery; allocation economics and engine preference are not spawn allowlists.
     let visible_models: Vec<&ModelPreset> = models
         .iter()
         .filter(|model| model.show_in_picker)
-        .filter(|model| model_supports_multi_agent_backend(model, multi_agent_version))
         .take(MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION)
         .collect();
     if visible_models.is_empty() {
@@ -1179,7 +1173,7 @@ fn spawn_agent_models_description(
                 .orchestration
                 .as_ref()
                 .and_then(|metadata| metadata.billing().map(|billing| (metadata, billing)))
-                .map_or_else(String::new, |(metadata, billing)| {
+                .map_or_else(|| " explicit-choice only; allocation economics unavailable;".to_string(), |(metadata, billing)| {
                     let billing = format_model_billing(billing);
                     format!(" {billing}, {};", metadata.capability())
                 });
@@ -1230,7 +1224,7 @@ fn spawn_agent_models_description(
     format!(
         "{inherited_runtime}\n\
 Available authorized exact runtime overrides (optional; omit both fields to inherit the current runtime). Pass the provider as `model_provider` and the model as `model`.\n\
-Default allocation policy: compare the task with this catalogue before every spawn. Prefer an authorized `plan` runtime over a `metered` runtime when both can do the work, then choose the lowest-burn capable plan runtime. Use `fast` for mechanical or tightly specified work, `balanced` for ordinary engineering, and `frontier` only for genuinely hard reasoning, planning, or review. For frontier models with `max` or `ultra`, reserve those efforts for frontier work; `ultra` is the orchestration setting when automatic delegation is actually needed. Vision work requires a `vision` runtime; never send images to `text-only`. Plan capacity is finite, not free. If the user names a provider or model, treat it as an exact constraint: if it is unavailable or unauthorized, report that failure and do not substitute another runtime without the user's explicit consent.\n{model_descriptions}"
+Default allocation policy: compare the task with this catalogue before every spawn. Models marked `explicit-choice only` support user-requested selection or parent inheritance, but must not be chosen for automatic cost-based allocation. Prefer an authorized `plan` runtime over a `metered` runtime when both can do the work, then choose the lowest-burn capable plan runtime. Use `fast` for mechanical or tightly specified work, `balanced` for ordinary engineering, and `frontier` only for genuinely hard reasoning, planning, or review. For frontier models with `max` or `ultra`, reserve those efforts for frontier work; `ultra` is the orchestration setting when automatic delegation is actually needed. Vision work requires a `vision` runtime; never send images to `text-only`. Plan capacity is finite, not free. If the user names a provider or model, treat it as an exact constraint: if it is unavailable or unauthorized, report that failure and do not substitute another runtime without the user's explicit consent. This list is capped at {MAX_MODEL_OVERRIDES_IN_SPAWN_AGENT_DESCRIPTION} entries, not an exhaustive allowlist; an unlisted exact configured runtime can still be requested.\n{model_descriptions}"
     )
 }
 

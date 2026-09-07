@@ -10,8 +10,8 @@ use codex_api::RetryConfig as ApiRetryConfig;
 use codex_api::is_azure_responses_provider;
 use codex_product_brand::PLAN_NAME;
 
-/// Display name for the plan's Anthropic-wire non-private Fable route.
-const PLAN_ANTHROPIC_NAME: &str = "Corbanu Plan (Fable, non-private)";
+/// Provider-neutral display name for Corbanu API's Messages-wire routes.
+const PLAN_ANTHROPIC_NAME: &str = "Corbanu API";
 use codex_protocol::auth::AuthMode;
 use codex_protocol::config_types::ModelProviderAuthInfo;
 use codex_protocol::error::CodexErr;
@@ -76,7 +76,7 @@ pub const OPENAI_PROVIDER_ID: &str = "openai";
 /// This is intentionally separate from Corbanu Terminal's product version. The OpenAI
 /// provider sends this value to first-party endpoints so fork-specific release
 /// numbering does not make the backend treat a compatible client as obsolete.
-pub const OPENAI_CODEX_COMPAT_VERSION: &str = "0.144.1";
+pub use codex_protocol::openai_models::OPENAI_CODEX_COMPAT_VERSION;
 pub const CHATGPT_CODEX_BASE_URL: &str = "https://chatgpt.com/backend-api/codex";
 const ANTHROPIC_PROVIDER_NAME: &str = "Anthropic";
 pub const ANTHROPIC_PROVIDER_ID: &str = "anthropic";
@@ -115,10 +115,21 @@ pub const AMBIENT_API_KEY_ENV_VAR: &str = "AMBIENT_API_KEY";
 pub const CORBANU_PLAN_PROVIDER_ID: &str = "corbanu-plan";
 pub const CORBANU_TERMINAL_PLAN_PROVIDER_ID: &str = "corbanu-terminal-plan";
 pub const CORBANU_PLAN_API_KEY_ENV_VAR: &str = "CORBANU_PLAN_API_KEY";
+pub const CORBANU_API_KEY_ENV_VAR: &str = "CORBANU_API_KEY";
+pub const CORBANU_API_BASE_URL_ENV_VAR: &str = "CORBANU_API_BASE_URL";
+pub const CORBANU_API_GLM_5_3_FLASH_MODEL: &str = "corbanu/glm-5.3-flash";
+pub const CORBANU_API_GLM_5_3_MODEL: &str = "corbanu/glm-5.3";
+pub const CORBANU_API_GPT_5_6_LUNA_MODEL: &str = "corbanu/gpt-5.6-luna";
+pub const CORBANU_API_GPT_5_6_SOL_MODEL: &str = "corbanu/gpt-5.6-sol";
+/// Retired public route retained only so persisted pre-cutover sessions can be
+/// decoded and reported accurately. It is not part of the active catalog.
+pub const CORBANU_API_CLAUDE_FABLE_5_MODEL: &str = "corbanu/claude-fable-5";
+pub const CORBANU_API_KIMI_K3_MODEL: &str = "corbanu/kimi-k3";
+pub const CORBANU_API_DEEPSEEK_V4_PRO_MODEL: &str = "corbanu/deepseek-v4-pro";
 pub const PFTERMINAL_PLAN_PROVIDER_ID: &str = "pfterminal-plan";
 /// Anthropic-wire sibling of the Corbanu Plan provider. Same gateway, same
-/// customer key; serves the plan's non-private `claude-fable-5` and
-/// `claude-fable-5-1` routes.
+/// customer key; serves the plan's non-private Fable routes and Corbanu API
+/// models exposed through the Messages API.
 pub const PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID: &str = "pfterminal-plan-anthropic";
 pub const CORBANU_PLAN_ANTHROPIC_PROVIDER_ID: &str = "corbanu-plan-anthropic";
 /// Context reliably served by the SkyAPI Fable route used by Corbanu Plan.
@@ -128,6 +139,27 @@ pub const PFTERMINAL_PLAN_FABLE_MAX_OUTPUT_TOKENS: i64 = 32_768;
 pub const PFTERMINAL_PLAN_GATEWAY_ORIGIN: &str = "https://api.corbanu.com";
 pub const PFTERMINAL_PLAN_DEFAULT_BASE_URL: &str = "https://api.corbanu.com/v1";
 pub const PFTERMINAL_PLAN_API_KEY_ENV_VAR: &str = "PFTERMINAL_PLAN_API_KEY";
+
+/// Ordered public and compatibility aliases, shared by transport and UI status.
+pub const CORBANU_API_KEY_ENV_VARS: [&str; 3] = [
+    CORBANU_API_KEY_ENV_VAR,
+    CORBANU_PLAN_API_KEY_ENV_VAR,
+    PFTERMINAL_PLAN_API_KEY_ENV_VAR,
+];
+
+/// Read the same non-blank environment credential used by Corbanu transports.
+pub fn corbanu_api_key_from_env() -> Option<String> {
+    api_key_from_environment(&CORBANU_API_KEY_ENV_VARS, |name| std::env::var(name).ok())
+}
+
+fn api_key_from_environment(
+    names: &[&str],
+    read: impl Fn(&str) -> Option<String>,
+) -> Option<String> {
+    names
+        .iter()
+        .find_map(|name| read(name).filter(|value| !value.trim().is_empty()))
+}
 
 /// Normalize public provider aliases to the stable identifier used by existing
 /// configuration and credential storage.
@@ -205,7 +237,43 @@ const VERCEL_ANTHROPIC_FAST_PROVIDER_NAME: &str = "Vercel Anthropic Fast";
 pub const VERCEL_ANTHROPIC_FAST_PROVIDER_ID: &str = "vercel-anthropic-fast";
 pub const VERCEL_DEFAULT_MODEL: &str = "zai/glm-5.2";
 pub const VERCEL_GLM_5_2_FAST_MODEL: &str = "zai/glm-5.2-fast";
+pub const VERCEL_GLM_5_3_FLASH_MODEL: &str = "zai/glm-5.3-flash";
+pub const VERCEL_GLM_5_3_MODEL: &str = "zai/glm-5.3";
+/// Provider-qualified catalog identity for Vercel's Kimi K3 route.
+///
+/// The upstream slug is also catalogued for OpenRouter, so a distinct local
+/// identity is required to preserve the provider/model pair through picker,
+/// persistence, resume, and orchestration paths.
+pub const VERCEL_KIMI_K3_MODEL: &str = "vercel/moonshotai/kimi-k3";
+pub const VERCEL_KIMI_K3_UPSTREAM_MODEL: &str = "moonshotai/kimi-k3";
+/// Provider-qualified catalog identity for Vercel's DeepSeek V4 Pro route.
+pub const VERCEL_DEEPSEEK_V4_PRO_MODEL: &str = "vercel/deepseek/deepseek-v4-pro";
+pub const VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL: &str = "deepseek/deepseek-v4-pro";
 pub const VERCEL_API_KEY_ENV_VAR: &str = "AI_GATEWAY_API_KEY";
+
+pub fn vercel_gateway_upstream_model(model: &str) -> &str {
+    match model.trim() {
+        VERCEL_KIMI_K3_MODEL => VERCEL_KIMI_K3_UPSTREAM_MODEL,
+        VERCEL_DEEPSEEK_V4_PRO_MODEL => VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL,
+        _ => model,
+    }
+}
+
+fn is_vercel_catalog_model(model: &str) -> bool {
+    matches!(
+        model.trim(),
+        VERCEL_DEFAULT_MODEL
+            | VERCEL_GLM_5_2_FAST_MODEL
+            | VERCEL_GLM_5_3_FLASH_MODEL
+            | VERCEL_GLM_5_3_MODEL
+            | VERCEL_KIMI_K3_MODEL
+            | VERCEL_DEEPSEEK_V4_PRO_MODEL
+            // Accept official gateway slugs when users provide an explicit
+            // Vercel provider/model pair on the command line.
+            | VERCEL_KIMI_K3_UPSTREAM_MODEL
+            | VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL
+    )
+}
 
 /// Built-in catalog providers eligible for impossible-pair correction. User-defined providers
 /// (e.g. a private Azure deployment) are never second-guessed.
@@ -247,6 +315,15 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     let model = model.trim();
     if model.is_empty() {
         return None;
+    }
+    if matches!(
+        model,
+        CORBANU_API_CLAUDE_FABLE_5_MODEL | CORBANU_API_KIMI_K3_MODEL
+    ) {
+        return Some(PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID);
+    }
+    if model.starts_with("corbanu/") {
+        return Some(PFTERMINAL_PLAN_PROVIDER_ID);
     }
     if model == BASETEN_DEFAULT_MODEL {
         return Some(BASETEN_PROVIDER_ID);
@@ -303,7 +380,14 @@ pub fn canonical_catalog_provider(model: &str) -> Option<&'static str> {
     if model == VERCEL_GLM_5_2_FAST_MODEL {
         return Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID);
     }
-    if model == VERCEL_DEFAULT_MODEL {
+    if matches!(
+        model,
+        VERCEL_DEFAULT_MODEL
+            | VERCEL_GLM_5_3_FLASH_MODEL
+            | VERCEL_GLM_5_3_MODEL
+            | VERCEL_KIMI_K3_MODEL
+            | VERCEL_DEEPSEEK_V4_PRO_MODEL
+    ) {
         return Some(VERCEL_PROVIDER_ID);
     }
     if matches!(
@@ -345,8 +429,28 @@ pub fn corrected_catalog_provider(model: &str, provider: &str) -> Option<&'stati
     {
         return None;
     }
+    if model.starts_with("corbanu/") {
+        let expected = if matches!(
+            model,
+            CORBANU_API_CLAUDE_FABLE_5_MODEL | CORBANU_API_KIMI_K3_MODEL
+        ) {
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID
+        } else {
+            PFTERMINAL_PLAN_PROVIDER_ID
+        };
+        return (provider != expected).then_some(expected);
+    }
     if model.starts_with("zai/") && !VERCEL_FAMILY_PROVIDERS.contains(&provider) {
-        return Some(VERCEL_ANTHROPIC_FAST_PROVIDER_ID);
+        return Some(if model == VERCEL_GLM_5_2_FAST_MODEL {
+            VERCEL_ANTHROPIC_FAST_PROVIDER_ID
+        } else {
+            VERCEL_PROVIDER_ID
+        });
+    }
+    if matches!(model, VERCEL_KIMI_K3_MODEL | VERCEL_DEEPSEEK_V4_PRO_MODEL)
+        && !VERCEL_FAMILY_PROVIDERS.contains(&provider)
+    {
+        return Some(VERCEL_PROVIDER_ID);
     }
     if matches!(
         model,
@@ -393,9 +497,15 @@ pub fn resolve_model_for_provider(
     match model_provider_id {
         PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID => match model {
             Some(model)
-                if matches!(model.trim(), CLAUDE_FABLE_5_1_MODEL | CLAUDE_FABLE_5_MODEL) =>
+                if matches!(
+                    model.trim(),
+                    CLAUDE_FABLE_5_1_MODEL | CLAUDE_FABLE_5_MODEL | CORBANU_API_KIMI_K3_MODEL
+                ) =>
             {
                 Some(model)
+            }
+            Some(model) if model.trim() == CORBANU_API_CLAUDE_FABLE_5_MODEL => {
+                Some(CORBANU_API_KIMI_K3_MODEL.to_string())
             }
             _ => Some(CLAUDE_FABLE_5_MODEL.to_string()),
         },
@@ -403,6 +513,13 @@ pub fn resolve_model_for_provider(
             if model.as_deref().map(str::trim) == Some(DEEPSEEK_PRO_MODEL) =>
         {
             Some(DEEPSEEK_PRO_MODEL.to_string())
+        }
+        PFTERMINAL_PLAN_PROVIDER_ID
+            if model
+                .as_deref()
+                .is_some_and(|model| model.trim().starts_with("corbanu/")) =>
+        {
+            model
         }
         AMBIENT_PROVIDER_ID | PFTERMINAL_PLAN_PROVIDER_ID => match model {
             Some(model) if model.trim() == AMBIENT_LEGACY_GLM_5_2_FP8_MODEL => {
@@ -484,14 +601,7 @@ pub fn resolve_model_for_provider(
             _ => Some(BASETEN_DEFAULT_MODEL.to_string()),
         },
         VERCEL_PROVIDER_ID | VERCEL_ANTHROPIC_PROVIDER_ID => match model {
-            Some(model)
-                if matches!(
-                    model.trim(),
-                    VERCEL_DEFAULT_MODEL | VERCEL_GLM_5_2_FAST_MODEL
-                ) =>
-            {
-                Some(model)
-            }
+            Some(model) if is_vercel_catalog_model(&model) => Some(model),
             _ => Some(VERCEL_DEFAULT_MODEL.to_string()),
         },
         VERCEL_ANTHROPIC_FAST_PROVIDER_ID => match model {
@@ -934,16 +1044,15 @@ impl ModelProviderInfo {
     pub fn api_key(&self) -> CodexResult<Option<String>> {
         match &self.env_key {
             Some(env_key) => {
-                let api_key = self
-                    .api_key_env_vars()
-                    .into_iter()
-                    .find_map(|name| std::env::var(name).ok().filter(|v| !v.trim().is_empty()))
-                    .ok_or_else(|| {
-                        CodexErr::EnvVar(EnvVarError {
-                            var: env_key.clone(),
-                            instructions: self.env_key_instructions.clone(),
-                        })
-                    })?;
+                let api_key = api_key_from_environment(&self.api_key_env_vars(), |name| {
+                    std::env::var(name).ok()
+                })
+                .ok_or_else(|| {
+                    CodexErr::EnvVar(EnvVarError {
+                        var: env_key.clone(),
+                        instructions: self.env_key_instructions.clone(),
+                    })
+                })?;
                 Ok(Some(api_key))
             }
             None => Ok(None),
@@ -954,10 +1063,7 @@ impl ModelProviderInfo {
     /// current public name to compatibility fallbacks.
     pub fn api_key_env_vars(&self) -> Vec<&str> {
         match self.env_key.as_deref() {
-            Some(PFTERMINAL_PLAN_API_KEY_ENV_VAR) => vec![
-                CORBANU_PLAN_API_KEY_ENV_VAR,
-                PFTERMINAL_PLAN_API_KEY_ENV_VAR,
-            ],
+            Some(PFTERMINAL_PLAN_API_KEY_ENV_VAR) => CORBANU_API_KEY_ENV_VARS.to_vec(),
             Some(env_key) => vec![env_key],
             None => Vec::new(),
         }
@@ -1165,7 +1271,8 @@ impl ModelProviderInfo {
         ModelProviderInfo {
             name: PLAN_NAME.into(),
             base_url: Some(
-                std::env::var("PFTERMINAL_PLAN_BASE_URL")
+                std::env::var(CORBANU_API_BASE_URL_ENV_VAR)
+                    .or_else(|_| std::env::var("PFTERMINAL_PLAN_BASE_URL"))
                     .unwrap_or_else(|_| PFTERMINAL_PLAN_DEFAULT_BASE_URL.to_string()),
             ),
             env_key: Some(PFTERMINAL_PLAN_API_KEY_ENV_VAR.into()),

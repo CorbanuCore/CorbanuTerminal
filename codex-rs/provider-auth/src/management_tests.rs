@@ -26,9 +26,8 @@ fn newly_configured_defaults_active_but_recovery_preserves_explicit_inactivity()
             })
             .applied
     );
-    let recovered = session.dispatch(ProviderManagementAction::AuthenticationConfigured {
-        provider_id: provider_id,
-    });
+    let recovered =
+        session.dispatch(ProviderManagementAction::AuthenticationConfigured { provider_id });
     assert_eq!(recovered.phase, ProviderManagementPhase::Browsing);
     assert_eq!(recovered.effects, vec![ProviderManagementEffect::Refresh]);
 

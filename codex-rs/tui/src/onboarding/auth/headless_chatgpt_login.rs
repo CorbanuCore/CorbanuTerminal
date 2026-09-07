@@ -114,7 +114,13 @@ pub(super) fn render_device_code_login(
     let verification_url = if let (Some(verification_url), Some(user_code)) =
         (&state.verification_url, &state.user_code)
     {
-        lines.push("  1. Open this link in your browser and sign in".into());
+        lines.push(
+            format!(
+                "  1. {}",
+                crate::provider_auth_presentation::OPENAI_DEVICE_GUIDANCE
+            )
+            .into(),
+        );
         lines.push("".into());
         lines.push(Line::from(vec![
             "  ".into(),

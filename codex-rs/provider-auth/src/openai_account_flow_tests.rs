@@ -4,6 +4,61 @@ use super::*;
 use crate::*;
 
 #[test]
+fn settled_openai_failures_offer_working_retry_and_cancel() {
+    for recovery in [false, true] {
+        for retry in [false, true] {
+            let (mut controller, attempt_id, _) = started(
+                OpenAiAccountMethod::DeviceCode,
+                OpenAiAccountLoginContext::ProviderEnrollment,
+                status(AccountState::NotConfigured),
+            );
+            controller.dispatch(
+                OpenAiAccountAction::StartFinished {
+                    attempt_id,
+                    result: if recovery {
+                        OpenAiAccountStartResult::TransportLost
+                    } else {
+                        OpenAiAccountStartResult::Rejected
+                    },
+                }
+                .into(),
+            );
+            if recovery {
+                controller.dispatch(
+                    OpenAiAccountAction::StatusResolved {
+                        attempt_id,
+                        status: status(AccountState::NotConfigured),
+                    }
+                    .into(),
+                );
+            }
+            let result = controller.dispatch(
+                if retry {
+                    OpenAiAccountAction::Retry
+                } else {
+                    OpenAiAccountAction::Cancel
+                }
+                .into(),
+            );
+            if retry {
+                assert!(
+                    matches!(result.snapshot, ProviderAuthFlowSnapshot::OpenAiAccount(OpenAiAccountSnapshot::Starting { attempt_id: next, .. }) if next != attempt_id)
+                );
+            } else {
+                assert!(matches!(
+                    result.effects.as_slice(),
+                    [ProviderAuthEffect::Complete(
+                        ProviderAuthCompletion::OpenAiAccount(
+                            OpenAiAccountCompletion::Cancelled { .. }
+                        )
+                    )]
+                ));
+            }
+        }
+    }
+}
+
+#[test]
 fn account_target_and_start_policy_freeze_account_specific_capability() {
     let entry = openai_entry();
     assert_eq!(

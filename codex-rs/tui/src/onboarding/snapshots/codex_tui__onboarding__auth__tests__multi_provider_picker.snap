@@ -14,8 +14,8 @@ expression: visible
      Use Claude subscription access; long-lived token recommended or Claude Code
 login
 
-  4. Corbanu Plan
-     Queue protected wallet setup; it runs after Done
+  4. Corbanu API
+     Queue protected wallet and API-key setup; it runs after Done
 
   5. Provider: Ambient API Key
      Use a key stored as AMBIENT_API_KEY

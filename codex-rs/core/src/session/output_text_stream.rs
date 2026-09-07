@@ -31,8 +31,7 @@ impl PendingOutputText {
             .ok_or_else(|| "pending output text length overflowed".to_string())?;
         if next_len > MAX_PENDING_OUTPUT_TEXT_BYTES {
             return Err(format!(
-                "output text arrived before its item and exceeded the {} byte recovery limit",
-                MAX_PENDING_OUTPUT_TEXT_BYTES
+                "output text arrived before its item and exceeded the {MAX_PENDING_OUTPUT_TEXT_BYTES} byte recovery limit"
             ));
         }
         self.text.push_str(&delta);

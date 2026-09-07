@@ -1,0 +1,248 @@
+{
+  "source_commit": "f848954d7739da8eaa4962f0866c612dedbaf5bb",
+  "branch": "integration/reconcile-release-0.1.38",
+  "live_runs": [
+    {
+      "repository": "tensorcash",
+      "base_commit": "dd6e92024254090de0f596b090bd5c74c4d97b90",
+      "configured_origin": "https://github.com/postfiatorg/tensorcash.git",
+      "status": "passed",
+      "binary": "/home/pfrpc/.local/share/corbanu-debug/0.1.38-astra-runtime-f848954d77/bin/corbanu",
+      "sha256": "749de8682e2a0628ff3bb1c3bebf9bb859a385aa4938382d4d26e594c07d687f",
+      "worktree": "/tmp/corbanu-astra-live-sj8Gtg/tensorcash",
+      "fixture": "/tmp/corbanu-astra-live-sj8Gtg/tensorcash/astra-acceptance-77dc10dd74",
+      "fixture_sha256": "6f3fe96cd0befc581c27df94a2c9a6fd7ad8032ddb9d2c27d861b32475983628",
+      "rollout": "/home/pfrpc/.corbanu/sessions/2026/09/05/rollout-2026-09-05T03-02-53-01a06f84-dc87-7a22-bf92-45339b290b73.jsonl",
+      "evidence": {
+        "responses": [
+          {
+            "turn_id": "01a06f84-e120-79c2-b6b4-3afad1b022ed",
+            "response_id": "resp_0f746dc1b16a146a016a9b865f732087d1915a603c70a8dbf5",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f84-e120-79c2-b6b4-3afad1b022ed",
+            "response_id": "resp_0f746dc1b16a146a016a9b8663acf887d1876bccc323075a65",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f84-e120-79c2-b6b4-3afad1b022ed",
+            "response_id": "resp_0f746dc1b16a146a016a9b86672e4c87d19d1a3aa5cc3723f1",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f84-e120-79c2-b6b4-3afad1b022ed",
+            "response_id": "resp_0f746dc1b16a146a016a9b866bd54c87d1952dad91814e1e4c",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f85-2928-7213-bfd1-a071b562eb5c",
+            "response_id": "resp_0f746dc1b16a146a016a9b86715ae487d19a6ad6d59069427a",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f85-3df6-7920-a637-0bec581f4aa6",
+            "response_id": "resp_0f746dc1b16a146a016a9b8676c90487d1ae45f030f9de2416",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f85-3df6-7920-a637-0bec581f4aa6",
+            "response_id": "resp_0f746dc1b16a146a016a9b867d6ec887d18de2b9c2676dfa13",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f85-7b59-7e21-865a-e6eeae4e1e20",
+            "response_id": "resp_0f746dc1b16a146a016a9b8687579087d18f3c34d2f45408f5",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f85-7b59-7e21-865a-e6eeae4e1e20",
+            "response_id": "resp_0f746dc1b16a146a016a9b868e8d6887d1b358792d4dc71834",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          }
+        ],
+        "completed": [
+          "01a06f84-e120-79c2-b6b4-3afad1b022ed",
+          "01a06f85-3df6-7920-a637-0bec581f4aa6",
+          "01a06f85-7b59-7e21-865a-e6eeae4e1e20"
+        ],
+        "aborted": [
+          "01a06f85-2928-7213-bfd1-a071b562eb5c"
+        ],
+        "exec_ok": [
+          "call_UILHnV519sLEGmezVdMFXOfe",
+          "call_vejXlPmJfHRaiReU3LdlfB9s",
+          "call_UP7i6Uua0NqjQHY9BrN99l77",
+          "call_crkb9kDxCmdP3HoITmZ5DfFN",
+          "call_eRbet329Id58CnqsCtoyiDG9"
+        ],
+        "calls": [
+          "call_UILHnV519sLEGmezVdMFXOfe",
+          "call_vejXlPmJfHRaiReU3LdlfB9s",
+          "call_UP7i6Uua0NqjQHY9BrN99l77",
+          "call_FV0R35JZx79xTfQkpSPNhB2f",
+          "call_crkb9kDxCmdP3HoITmZ5DfFN",
+          "call_eRbet329Id58CnqsCtoyiDG9"
+        ],
+        "outputs": [
+          "call_UILHnV519sLEGmezVdMFXOfe",
+          "call_vejXlPmJfHRaiReU3LdlfB9s",
+          "call_UP7i6Uua0NqjQHY9BrN99l77",
+          "call_FV0R35JZx79xTfQkpSPNhB2f",
+          "call_crkb9kDxCmdP3HoITmZ5DfFN",
+          "call_eRbet329Id58CnqsCtoyiDG9"
+        ],
+        "models": [
+          "gpt-6-astra",
+          "gpt-6-astra",
+          "gpt-6-astra",
+          "gpt-6-astra"
+        ],
+        "thread_id": "01a06f84-dc87-7a22-bf92-45339b290b73",
+        "successful_turns": [
+          "01a06f84-e120-79c2-b6b4-3afad1b022ed",
+          "01a06f85-3df6-7920-a637-0bec581f4aa6",
+          "01a06f85-7b59-7e21-865a-e6eeae4e1e20"
+        ],
+        "paired_tool_calls": [
+          "call_FV0R35JZx79xTfQkpSPNhB2f",
+          "call_UILHnV519sLEGmezVdMFXOfe",
+          "call_UP7i6Uua0NqjQHY9BrN99l77",
+          "call_crkb9kDxCmdP3HoITmZ5DfFN",
+          "call_eRbet329Id58CnqsCtoyiDG9",
+          "call_vejXlPmJfHRaiReU3LdlfB9s"
+        ]
+      }
+    },
+    {
+      "repository": "isometricgame",
+      "base_commit": "59821b7a85524f186f946c4670480c7ee96483cb",
+      "configured_origin": "https://github.com/goodalexander/isometricgame.git",
+      "status": "passed",
+      "binary": "/home/pfrpc/.local/share/corbanu-debug/0.1.38-astra-runtime-f848954d77/bin/corbanu",
+      "sha256": "749de8682e2a0628ff3bb1c3bebf9bb859a385aa4938382d4d26e594c07d687f",
+      "worktree": "/tmp/corbanu-astra-live-sj8Gtg/isometricgame",
+      "fixture": "/tmp/corbanu-astra-live-sj8Gtg/isometricgame/astra-acceptance-46fa1df33d",
+      "fixture_sha256": "6f3fe96cd0befc581c27df94a2c9a6fd7ad8032ddb9d2c27d861b32475983628",
+      "rollout": "/home/pfrpc/.corbanu/sessions/2026/09/05/rollout-2026-09-05T03-03-52-01a06f85-c412-7400-a031-767fa34af59a.jsonl",
+      "evidence": {
+        "responses": [
+          {
+            "turn_id": "01a06f85-c690-7da0-adf3-b8133e3d2f00",
+            "response_id": "resp_0fe5c088fd469569016a9b869a94ac87d1bd2fa4510321b8e1",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f85-c690-7da0-adf3-b8133e3d2f00",
+            "response_id": "resp_0fe5c088fd469569016a9b869f632887d1be952cb67d0165c9",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f85-c690-7da0-adf3-b8133e3d2f00",
+            "response_id": "resp_0fe5c088fd469569016a9b86a337a487d1b8141d675d8f9280",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f85-c690-7da0-adf3-b8133e3d2f00",
+            "response_id": "resp_0fe5c088fd469569016a9b86a7b3c487d1bccabdd2c2f33d83",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f86-1823-71d0-85d6-294f0651d393",
+            "response_id": "resp_0fe5c088fd469569016a9b86ae7e4887d1ba8375e3f491d423",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f86-2cf1-7761-8fd1-809b4fb88e77",
+            "response_id": "resp_0fe5c088fd469569016a9b86b3ca8c87d185531652f1476899",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f86-2cf1-7761-8fd1-809b4fb88e77",
+            "response_id": "resp_0fe5c088fd469569016a9b86b98fd087d19e36faf7892df78b",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f86-5e94-74e2-bb77-770deaa06ade",
+            "response_id": "resp_0fe5c088fd469569016a9b86c1eac887d18ff5bbc87f99204a",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          },
+          {
+            "turn_id": "01a06f86-5e94-74e2-bb77-770deaa06ade",
+            "response_id": "resp_0fe5c088fd469569016a9b86c6b57487d18ab9309f2b25d0d9",
+            "model": "gpt-6-astra",
+            "model_provider_id": "openai"
+          }
+        ],
+        "completed": [
+          "01a06f85-c690-7da0-adf3-b8133e3d2f00",
+          "01a06f86-2cf1-7761-8fd1-809b4fb88e77",
+          "01a06f86-5e94-74e2-bb77-770deaa06ade"
+        ],
+        "aborted": [
+          "01a06f86-1823-71d0-85d6-294f0651d393"
+        ],
+        "exec_ok": [
+          "call_ZA5FtsFRaclvDmaD8wWbDhp6",
+          "call_tIHDi9n3kepnshgP9nnwMPtG",
+          "call_FRRTXsCSm9wzMVvoTo40Vd04",
+          "call_SVcxCIxWFTawGMKUBJvSuqBB",
+          "call_TFU7WEfOAiSbpI58pKgoCgzW"
+        ],
+        "calls": [
+          "call_ZA5FtsFRaclvDmaD8wWbDhp6",
+          "call_tIHDi9n3kepnshgP9nnwMPtG",
+          "call_FRRTXsCSm9wzMVvoTo40Vd04",
+          "call_nWQlLG74a0ReX3AcfwUw6ZWo",
+          "call_SVcxCIxWFTawGMKUBJvSuqBB",
+          "call_TFU7WEfOAiSbpI58pKgoCgzW"
+        ],
+        "outputs": [
+          "call_ZA5FtsFRaclvDmaD8wWbDhp6",
+          "call_tIHDi9n3kepnshgP9nnwMPtG",
+          "call_FRRTXsCSm9wzMVvoTo40Vd04",
+          "call_nWQlLG74a0ReX3AcfwUw6ZWo",
+          "call_SVcxCIxWFTawGMKUBJvSuqBB",
+          "call_TFU7WEfOAiSbpI58pKgoCgzW"
+        ],
+        "models": [
+          "gpt-6-astra",
+          "gpt-6-astra",
+          "gpt-6-astra",
+          "gpt-6-astra"
+        ],
+        "thread_id": "01a06f85-c412-7400-a031-767fa34af59a",
+        "successful_turns": [
+          "01a06f85-c690-7da0-adf3-b8133e3d2f00",
+          "01a06f86-2cf1-7761-8fd1-809b4fb88e77",
+          "01a06f86-5e94-74e2-bb77-770deaa06ade"
+        ],
+        "paired_tool_calls": [
+          "call_FRRTXsCSm9wzMVvoTo40Vd04",
+          "call_SVcxCIxWFTawGMKUBJvSuqBB",
+          "call_TFU7WEfOAiSbpI58pKgoCgzW",
+          "call_ZA5FtsFRaclvDmaD8wWbDhp6",
+          "call_nWQlLG74a0ReX3AcfwUw6ZWo",
+          "call_tIHDi9n3kepnshgP9nnwMPtG"
+        ]
+      }
+    }
+  ]
+}

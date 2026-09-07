@@ -172,7 +172,6 @@ impl ClaudeProviderProfileKind {
     pub(crate) fn creation_options() -> &'static [Self] {
         &[
             Self::AmbientGlm52,
-            Self::AmbientKimiK27,
             Self::ZaiGlm52,
             Self::BasetenGlm52,
             Self::OpenRouterGlm52,
@@ -180,5 +179,13 @@ impl ClaudeProviderProfileKind {
             Self::VercelGlm52Fast,
             Self::ClaudePlan,
         ]
+    }
+
+    /// Saved panes may still use a profile retired from the creation menu.
+    pub(crate) fn restoration_options() -> impl Iterator<Item = Self> {
+        Self::creation_options()
+            .iter()
+            .copied()
+            .chain(std::iter::once(Self::AmbientKimiK27))
     }
 }

@@ -125,7 +125,11 @@ impl ProviderAuthController {
                     login_id,
                 })
             }
-            OpenAiAccountSnapshot::Blocked { flow, .. } => self.cancelled_openai(flow.target),
+            OpenAiAccountSnapshot::Blocked { flow, .. }
+            | OpenAiAccountSnapshot::Failed { flow, .. }
+            | OpenAiAccountSnapshot::RecoveryRequired { flow, .. } => {
+                self.cancelled_openai(flow.target)
+            }
             state if state.is_in_flight() => {
                 rejected(ProviderAuthRejectionReason::CommitInProgress)
             }
@@ -134,8 +138,10 @@ impl ProviderAuthController {
     }
 
     fn retry_openai_account(&mut self) -> Reduction {
-        let ProviderAuthFlowSnapshot::OpenAiAccount(OpenAiAccountSnapshot::Failed { flow, .. }) =
-            &self.snapshot
+        let ProviderAuthFlowSnapshot::OpenAiAccount(
+            OpenAiAccountSnapshot::Failed { flow, .. }
+            | OpenAiAccountSnapshot::RecoveryRequired { flow, .. },
+        ) = &self.snapshot
         else {
             return rejected_for_openai(&self.snapshot);
         };

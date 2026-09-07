@@ -7493,6 +7493,14 @@ async fn standard_crew_quick_start_uses_the_expected_role_picker_label() {
     // 3 Orcs), without restoring the old demo-task behavior.
     let mut app = make_test_app().await;
     app.open_spawn_role_picker();
+    let popup = render_bottom_popup(&app.chat_widget, /*width*/ 120);
+    assert_app_snapshot!("spawn_role_picker_with_corbanu_api_crew", popup);
+    assert!(
+        popup.contains("Create standard crew: Nazgul + Troll + 3 Orcs")
+            && popup
+                .contains("Create Corbanu API crew: Kimi K3 Nazgul + Luna Troll + 3 Flash Orcs"),
+        "both built-in crew choices must remain visible:\n{popup}"
+    );
     // The picker is rendered into the chat widget; assert the role-picker path doesn't error and
     // the standard crew constants resolve to the intended models/providers.
     assert_eq!(App::STANDARD_NAZGUL_MODEL, CLAUDE_FABLE_5_PLAN_MODEL);
@@ -7871,6 +7879,48 @@ fn install_runtime_provider_policy(
             codex_provider_auth::ProviderRuntimeAuthorizations::default(),
         ),
     );
+}
+
+#[tokio::test]
+async fn stored_corbanu_key_can_refresh_the_current_runtime_policy_in_process() {
+    let app = make_test_app().await;
+    install_runtime_provider_policy(
+        &app,
+        crate::provider_status_host::ProviderAccountMetadata::default(),
+    );
+    let policy = app
+        .model_catalog
+        .provider_policy()
+        .expect("test app should install a provider policy");
+    let host = policy.host();
+    codex_login::login_with_provider_api_key(
+        &app.config.codex_home,
+        codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR,
+        "corbanu-refresh-test-key",
+        app.config.cli_auth_credentials_store_mode,
+        app.config.auth_keyring_backend_kind(),
+    )
+    .expect("store Corbanu API key");
+    assert!(host.activate(codex_model_provider_info::CORBANU_PLAN_PROVIDER_ID));
+    app.model_catalog.refresh_provider_policy();
+
+    assert!(app.model_catalog.provider_is_selectable(
+        codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID,
+        "corbanu/glm-5.3-flash",
+    ));
+
+    assert!(
+        codex_login::delete_provider_api_key(
+            &app.config.codex_home,
+            codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR,
+        )
+        .expect("delete Corbanu API key")
+    );
+    app.model_catalog.refresh_provider_policy();
+    assert!(!app.model_catalog.provider_is_selectable(
+        codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID,
+        "corbanu/glm-5.3-flash",
+    ));
 }
 
 #[tokio::test]
@@ -14332,7 +14382,7 @@ async fn side_backtrack_rejection_reports_unavailable_message_snapshot() {
     );
 }
 #[tokio::test]
-async fn provider_manager_open_preserves_command_authorization_with_unchecked_fallback() {
+async fn provider_manager_open_preserves_lazy_command_authorization_without_shared_state() {
     let home = tempfile::tempdir().unwrap();
     let mut config = ConfigBuilder::default()
         .codex_home(home.path().to_path_buf())
@@ -14372,7 +14422,7 @@ async fn provider_manager_open_preserves_command_authorization_with_unchecked_fa
     let fallback = super::provider_management_status::provider_manager_status_host(&config, None);
     assert_eq!(
         fallback.resolve_provider("command").unwrap().availability,
-        codex_provider_auth::ProviderAvailabilityState::StatusOnly
+        codex_provider_auth::ProviderAvailabilityState::Ready
     );
 }
 

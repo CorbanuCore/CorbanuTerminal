@@ -1,11 +1,10 @@
 ---
 source: tui/src/chatwidget/wallet_menu.rs
-assertion_line: 1092
 expression: rendered
 ---
 Remove wallet from this device
 Wallet: 3speRmS…JRwV5r
 Funds stay on Solana. Corbanu Terminal cannot recover them without your recovery material.
-This also disconnects the local Corbanu Plan credential. It does not cancel or refund the paid period.
+This also removes the stored Corbanu API credential. Your on-chain funds and dollar balance remain unchanged.
 Cancel — Keep the wallet on this device
 Remove wallet — I have saved the recovery material

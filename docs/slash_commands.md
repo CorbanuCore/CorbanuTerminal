@@ -24,7 +24,7 @@ workflows. Use the command picker in the TUI for the complete active list.
 | `/vault list`           | List credential labels and metadata without values                |
 | `/vault show <label>`   | Inspect metadata for one credential                               |
 | `/vault credential add` | Open masked credential entry                                      |
-| `/wallet`               | Manage wallet custody, balances, backup/restore, and Corbanu Plan |
+| `/wallet`               | Manage wallet custody, balances, backup/restore, and Corbanu API  |
 | `/wallet status`        | Show wallet lock, address, balance, and Plan state                |
 | `/gpu`                  | Rent, inspect, stop, or terminate Vast.ai and RunPod capacity     |
 | `/gpu status`           | Reconcile rental, endpoint, readiness, and spend state            |

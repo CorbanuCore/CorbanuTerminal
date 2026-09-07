@@ -38,7 +38,12 @@ use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::ModelProviderInfo;
+use codex_model_provider_info::VERCEL_DEEPSEEK_V4_PRO_MODEL;
+use codex_model_provider_info::VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL;
 use codex_model_provider_info::VERCEL_DEFAULT_MODEL;
+use codex_model_provider_info::VERCEL_GLM_5_3_FLASH_MODEL;
+use codex_model_provider_info::VERCEL_KIMI_K3_MODEL;
+use codex_model_provider_info::VERCEL_KIMI_K3_UPSTREAM_MODEL;
 use codex_model_provider_info::WireApi;
 use codex_model_provider_info::create_oss_provider_with_base_url;
 use codex_otel::SessionTelemetry;
@@ -569,6 +574,17 @@ fn anthropic_api_request_repairs_tool_result_after_trailing_assistant_text() {
 }
 
 #[test]
+fn claude_plan_fable_versions_use_exact_upstream_slugs() {
+    for (plan_model, upstream_model) in [
+        (CLAUDE_FABLE_5_PLAN_MODEL, CLAUDE_FABLE_5_MODEL),
+        (CLAUDE_FABLE_5_1_PLAN_MODEL, CLAUDE_FABLE_5_1_MODEL),
+    ] {
+        assert_eq!(super::anthropic_upstream_model(plan_model), upstream_model);
+        assert!(super::is_claude_plan_model_slug(plan_model));
+    }
+}
+
+#[test]
 fn anthropic_fable_request_repairs_live_tool_then_commentary_history_shape() {
     let prompt = super::Prompt {
         input: vec![
@@ -749,6 +765,14 @@ fn test_model_client_with_thread_id(
     session_source: SessionSource,
 ) -> ModelClient {
     let provider = create_oss_provider_with_base_url("https://example.com/v1", WireApi::Responses);
+    test_model_client_with_provider(thread_id, session_source, provider)
+}
+
+fn test_model_client_with_provider(
+    thread_id: ThreadId,
+    session_source: SessionSource,
+    provider: ModelProviderInfo,
+) -> ModelClient {
     ModelClient::new(
         /*auth_manager*/ None,
         AgentIdentityAuthPolicy::JwtOnly,
@@ -1322,6 +1346,200 @@ fn test_vercel_model_info() -> ModelInfo {
         "experimental_supported_tools": []
     }))
     .expect("deserialize Vercel test model info")
+}
+
+fn test_vercel_kimi_model_info() -> ModelInfo {
+    let mut model = test_vercel_model_info();
+    model.slug = VERCEL_KIMI_K3_MODEL.to_string();
+    model.display_name = "Vercel Kimi K3".to_string();
+    model.default_reasoning_level = Some(ReasoningEffort::High);
+    model.supported_reasoning_levels = serde_json::from_value(json!([
+        {"effort": "high", "description": "High"},
+        {"effort": "xhigh", "description": "Extra high"}
+    ]))
+    .expect("deserialize Vercel Kimi reasoning levels");
+    model.max_output_tokens = Some(131_072);
+    model
+}
+
+#[test]
+fn vercel_provider_qualified_models_use_official_wire_slugs_without_forced_upstreams() {
+    let provider = ModelProviderInfo::create_vercel_provider();
+    for (catalog_model, upstream_model) in [
+        (VERCEL_KIMI_K3_MODEL, VERCEL_KIMI_K3_UPSTREAM_MODEL),
+        (
+            VERCEL_DEEPSEEK_V4_PRO_MODEL,
+            VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL,
+        ),
+    ] {
+        let wire_model = super::chat_completions_upstream_model(catalog_model, &provider);
+        assert_eq!(wire_model, upstream_model);
+        assert_eq!(super::vercel_gateway_vendor_pin(wire_model), None);
+    }
+
+    assert_eq!(
+        super::vercel_gateway_vendor_pin(VERCEL_GLM_5_3_FLASH_MODEL),
+        Some("zai")
+    );
+}
+
+#[test]
+fn new_vercel_models_preserve_selected_reasoning_effort() {
+    let mut model = test_vercel_model_info();
+    model.slug = VERCEL_GLM_5_3_FLASH_MODEL.to_string();
+    model.default_reasoning_level = Some(ReasoningEffort::Low);
+    model.supported_reasoning_levels = serde_json::from_value(json!([
+        {"effort": "low", "description": "Low"},
+        {"effort": "high", "description": "High"},
+        {"effort": "xhigh", "description": "Extra high"}
+    ]))
+    .expect("deserialize Vercel GLM reasoning levels");
+    assert_eq!(
+        ModelClient::vercel_reasoning_effort(&model, None).expect("default effort"),
+        ReasoningEffort::Low
+    );
+    assert_eq!(
+        ModelClient::vercel_reasoning_effort(&model, Some(&ReasoningEffort::High))
+            .expect("high effort"),
+        ReasoningEffort::High
+    );
+    assert_eq!(
+        ModelClient::vercel_reasoning_effort(&model, Some(&ReasoningEffort::Max))
+            .expect("max effort"),
+        ReasoningEffort::XHigh
+    );
+    assert_eq!(
+        ModelClient::vercel_reasoning_effort(
+            &model,
+            Some(&ReasoningEffort::Custom("deep".to_string())),
+        )
+        .expect("legacy deep effort"),
+        ReasoningEffort::XHigh
+    );
+
+    let legacy = test_vercel_model_info();
+    assert_eq!(
+        ModelClient::vercel_reasoning_effort(&legacy, Some(&ReasoningEffort::Medium))
+            .expect("legacy standard effort"),
+        ReasoningEffort::None
+    );
+    assert_eq!(
+        ModelClient::vercel_reasoning_effort(&legacy, Some(&ReasoningEffort::XHigh))
+            .expect("legacy deep effort"),
+        ReasoningEffort::XHigh
+    );
+}
+
+#[test]
+fn vercel_responses_request_translates_slug_and_rejects_unsupported_effort() {
+    let client = test_model_client_with_provider(
+        ThreadId::new(),
+        SessionSource::Cli,
+        ModelProviderInfo::create_vercel_provider(),
+    );
+    let provider = client
+        .state
+        .provider
+        .info()
+        .to_api_provider(/*auth_mode*/ None)
+        .expect("Vercel API provider");
+    let prompt = Prompt {
+        input: vec![ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![ContentItem::InputText {
+                text: "Inspect the repository.".to_string(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        ..Default::default()
+    };
+    let metadata = test_responses_metadata_for_client(
+        &client,
+        /*turn_id*/ None,
+        format!("{}:0", client.state.thread_id),
+        /*parent_thread_id*/ None,
+        TestCodexResponsesRequestKind::Turn,
+    );
+    let model = test_vercel_kimi_model_info();
+
+    let request = client
+        .build_responses_request(
+            &provider,
+            &prompt,
+            &model,
+            /*effort*/ None,
+            super::ReasoningSummaryConfig::None,
+            /*service_tier*/ None,
+            &metadata,
+        )
+        .expect("Vercel Kimi Responses request");
+    assert_eq!(request.model, VERCEL_KIMI_K3_UPSTREAM_MODEL);
+    assert_eq!(
+        request.reasoning.and_then(|reasoning| reasoning.effort),
+        Some(ReasoningEffort::High)
+    );
+
+    let error = client
+        .build_responses_request(
+            &provider,
+            &prompt,
+            &model,
+            Some(ReasoningEffort::Custom("unsupported".to_string())),
+            super::ReasoningSummaryConfig::None,
+            /*service_tier*/ None,
+            &metadata,
+        )
+        .expect_err("unsupported Vercel effort must fail before the wire");
+    assert!(error.to_string().contains("use high, xhigh"));
+}
+
+#[test]
+fn vercel_anthropic_requests_translate_provider_qualified_model_slugs() {
+    let client = test_model_client_with_provider(
+        ThreadId::new(),
+        SessionSource::Cli,
+        ModelProviderInfo::create_vercel_anthropic_provider(),
+    );
+    let prompt = Prompt {
+        input: vec![ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![ContentItem::InputText {
+                text: "Inspect the repository.".to_string(),
+            }],
+            phase: None,
+            internal_chat_message_metadata_passthrough: None,
+        }],
+        ..Default::default()
+    };
+    let kimi = test_vercel_kimi_model_info();
+    let mut deepseek = kimi.clone();
+    deepseek.slug = VERCEL_DEEPSEEK_V4_PRO_MODEL.to_string();
+    deepseek.display_name = "Vercel DeepSeek V4 Pro".to_string();
+    deepseek.max_output_tokens = Some(384_000);
+
+    let requests = [kimi, deepseek]
+        .iter()
+        .map(|model| {
+            client
+                .build_anthropic_messages_request(&prompt, model, /*effort*/ None)
+                .expect("Vercel Anthropic request")
+        })
+        .map(|request| (request.model, request.provider_options, request.thinking))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        requests,
+        vec![
+            (VERCEL_KIMI_K3_UPSTREAM_MODEL.to_string(), None, None),
+            (
+                VERCEL_DEEPSEEK_V4_PRO_UPSTREAM_MODEL.to_string(),
+                None,
+                None,
+            ),
+        ]
+    );
 }
 
 fn test_openrouter_gemini_model_info() -> ModelInfo {

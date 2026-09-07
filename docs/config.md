@@ -35,14 +35,14 @@ These providers are compiled into Corbanu Terminal:
 | `meta`           | Meta           | `https://api.meta.ai/v1`                | `MODEL_API_KEY`      | Responses        |
 | `baseten`        | Baseten        | `https://inference.baseten.co/v1`       | `BASETEN_API_KEY`    | Chat Completions |
 | `vercel`         | Vercel         | `https://ai-gateway.vercel.sh/v1`       | `AI_GATEWAY_API_KEY` | Responses        |
-| `corbanu-plan`   | Corbanu Plan   | Corbanu Plan gateway                    | Plan credential      | Multiple         |
+| `corbanu-plan`   | Corbanu API    | Corbanu API gateway                     | API credential       | Multiple         |
 | `amazon-bedrock` | Amazon Bedrock | AWS Bedrock endpoint                    | AWS or Bedrock auth  | Responses        |
 | `ollama`         | Ollama         | Configured local endpoint               | None                 | Responses        |
 | `lmstudio`       | LM Studio      | Configured local endpoint               | None                 | Responses        |
 
 OpenAI uses Codex account login from `/providers` or `corbanu login`.
 Provider API keys should normally be stored through onboarding, `/providers`,
-or `/vault`. Corbanu Plan is activated or recovered through `/wallet`.
+or `/vault`. Corbanu API is funded and its keys are managed through `/wallet`.
 Amazon Bedrock uses cloud authentication, while Ollama and LM Studio use local
 servers. Environment variables remain supported for temporary sessions and
 automation.
@@ -116,6 +116,22 @@ Vercel GLM Fast:
 ```toml
 model_provider = "vercel"
 model = "zai/glm-5.2-fast"
+```
+
+Current Vercel AI Gateway models can use the same provider:
+
+```toml
+model_provider = "vercel"
+model = "zai/glm-5.3-flash" # or zai/glm-5.3
+```
+
+The Vercel Kimi K3 and DeepSeek V4 Pro picker entries use provider-qualified
+catalog identities so they remain distinct from the same slugs on OpenRouter:
+
+```toml
+model_provider = "vercel"
+model = "vercel/moonshotai/kimi-k3"
+# model = "vercel/deepseek/deepseek-v4-pro"
 ```
 
 You can also select a model per run:

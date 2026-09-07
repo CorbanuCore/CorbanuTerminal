@@ -569,7 +569,7 @@ fn display_name(catalog_id: &str, provider: &ModelProviderInfo) -> String {
     match catalog_id {
         OPENAI_PROVIDER_ID => "OpenAI".to_string(),
         CLAUDE_PLAN_PROVIDER_ID => "Claude Account".to_string(),
-        CORBANU_PLAN_PROVIDER_ID => "Corbanu Plan".to_string(),
+        CORBANU_PLAN_PROVIDER_ID => "Corbanu API".to_string(),
         OLLAMA_OSS_PROVIDER_ID => "Ollama".to_string(),
         LMSTUDIO_OSS_PROVIDER_ID => "LM Studio".to_string(),
         _ => {

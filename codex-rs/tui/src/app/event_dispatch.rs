@@ -6,6 +6,7 @@
 use super::resize_reflow::trailing_run_start;
 use super::session_lifecycle::ThreadAttachPresentation;
 use super::*;
+use crate::app_event::WalletUnlockContinuation;
 use crate::app_server_session::ForkGoalContinuation;
 use crate::config_update::format_config_error;
 use crate::external_agent_config_migration::flow::ExternalAgentConfigMigrationFlowOutcome;
@@ -48,6 +49,26 @@ fn refresh_shared_provider_session_if_idle(
     }
     let statuses = resolve();
     session.refresh_from_statuses(&statuses)
+}
+
+fn wallet_unlock_continuation_is_current(
+    active: Option<&crate::onboarding::provider_setup::DeferredProviderSetup>,
+    continuation: &WalletUnlockContinuation,
+) -> bool {
+    match continuation {
+        WalletUnlockContinuation::OpenCorbanuApi { deferred }
+        | WalletUnlockContinuation::CorbanuApiOperation { deferred, .. } => {
+            active == deferred.as_ref()
+        }
+        _ => true,
+    }
+}
+
+fn corbanu_api_continuation_is_current(
+    active: Option<&crate::onboarding::provider_setup::DeferredProviderSetup>,
+    deferred: Option<&crate::onboarding::provider_setup::DeferredProviderSetup>,
+) -> bool {
+    active == deferred
 }
 
 const RESERVED_PANE_DISPLAY_NAMES: &[&str] = &[
@@ -646,8 +667,8 @@ impl App {
                 crate::provider_account_auth_host::ProviderAccountPresentation::OpenAiChallenge {
                     challenge,
                 } => self.chat_widget.open_shared_openai_challenge(challenge),
-                crate::provider_account_auth_host::ProviderAccountPresentation::ClaudeMethodChoice => {
-                    self.chat_widget.open_shared_claude_method_choice();
+                crate::provider_account_auth_host::ProviderAccountPresentation::ClaudeMethodChoice { recovery } => {
+                    self.chat_widget.open_shared_claude_method_choice(recovery);
                 }
                 crate::provider_account_auth_host::ProviderAccountPresentation::ClaudeManagedTokenEntry => {
                     self.chat_widget.open_shared_claude_managed_token_entry();
@@ -658,13 +679,8 @@ impl App {
                 crate::provider_account_auth_host::ProviderAccountPresentation::Completion(
                     completion,
                 ) => self.apply_shared_account_completion(completion),
-                crate::provider_account_auth_host::ProviderAccountPresentation::Failed => {
-                    if let Some(session) = self.shared_provider_setup_session.as_mut() {
-                        session.dispatch(
-                            crate::onboarding::provider_setup::ProviderSetupAction::AuthFailed,
-                        );
-                    }
-                    self.render_shared_provider_setup();
+                crate::provider_account_auth_host::ProviderAccountPresentation::Failed(failure) => {
+                    self.chat_widget.open_shared_account_failure(failure);
                 }
             }
         }
@@ -1912,10 +1928,20 @@ impl App {
                     .model_catalog
                     .provider_is_selectable(selected_provider, &model)
                 {
-                    self.chat_widget.add_error_message(format!(
-                        "Model provider `{selected_provider}` is inactive or unavailable. Repair or reactivate it in /providers."
-                    ));
-                    return Ok(AppRunControl::Continue);
+                    // Selection events can be queued behind credential-entry or secure-reveal
+                    // overlays. Re-resolve the provider snapshot once before rejecting them so a
+                    // credential that was stored and activated earlier in this event batch is
+                    // immediately usable without a restart.
+                    self.model_catalog.refresh_provider_policy();
+                    if !self
+                        .model_catalog
+                        .provider_is_selectable(selected_provider, &model)
+                    {
+                        self.chat_widget.add_error_message(format!(
+                            "Model provider `{selected_provider}` is inactive or unavailable. Repair or reactivate it in /providers."
+                        ));
+                        return Ok(AppRunControl::Continue);
+                    }
                 }
                 if let Some(model_provider) = provider.as_ref() {
                     let Some(provider_info) =
@@ -3153,22 +3179,37 @@ impl App {
                 policy,
                 continuation,
             } => {
-                self.chat_widget.open_wallet_unlock(policy, continuation);
+                if wallet_unlock_continuation_is_current(
+                    self.active_deferred_provider_setup.as_ref(),
+                    &continuation,
+                ) {
+                    self.chat_widget.open_wallet_unlock(policy, continuation);
+                }
             }
             AppEvent::WalletUnlockPreflightFinished {
                 policy,
                 continuation,
                 result,
             } => {
-                self.chat_widget
-                    .on_wallet_unlock_preflight_finished(policy, continuation, result);
+                if wallet_unlock_continuation_is_current(
+                    self.active_deferred_provider_setup.as_ref(),
+                    &continuation,
+                ) {
+                    self.chat_widget
+                        .on_wallet_unlock_preflight_finished(policy, continuation, result);
+                }
             }
             AppEvent::OpenWalletCustomUnlock {
                 validation_error,
                 continuation,
             } => {
-                self.chat_widget
-                    .open_wallet_custom_unlock(validation_error, continuation);
+                if wallet_unlock_continuation_is_current(
+                    self.active_deferred_provider_setup.as_ref(),
+                    &continuation,
+                ) {
+                    self.chat_widget
+                        .open_wallet_custom_unlock(validation_error, continuation);
+                }
             }
             AppEvent::WalletLockRequested => {
                 self.chat_widget.lock_wallet();
@@ -3194,6 +3235,134 @@ impl App {
             AppEvent::WalletStatusReady { generation, result } => {
                 self.chat_widget.on_wallet_status_ready(generation, result);
             }
+            AppEvent::OpenCorbanuApi { deferred } => {
+                if corbanu_api_continuation_is_current(
+                    self.active_deferred_provider_setup.as_ref(),
+                    deferred.as_ref(),
+                ) {
+                    if let Some(deferred) = deferred {
+                        self.chat_widget.open_corbanu_api_for_deferred(deferred);
+                    } else {
+                        self.chat_widget.open_corbanu_api();
+                    }
+                }
+            }
+            AppEvent::CorbanuApiLoaded { result, deferred } => {
+                if corbanu_api_continuation_is_current(
+                    self.active_deferred_provider_setup.as_ref(),
+                    deferred.as_ref(),
+                ) {
+                    self.chat_widget
+                        .on_corbanu_api_loaded_with_deferred(result, deferred);
+                }
+            }
+            AppEvent::OpenCorbanuApiTopUp { deferred } => {
+                if corbanu_api_continuation_is_current(
+                    self.active_deferred_provider_setup.as_ref(),
+                    deferred.as_ref(),
+                ) {
+                    self.chat_widget.open_corbanu_api_top_up(deferred);
+                }
+            }
+            AppEvent::ConfirmCorbanuApiTopUp {
+                amount_usd,
+                deferred,
+            } => {
+                if corbanu_api_continuation_is_current(
+                    self.active_deferred_provider_setup.as_ref(),
+                    deferred.as_ref(),
+                ) {
+                    self.chat_widget
+                        .confirm_corbanu_api_top_up(amount_usd, deferred);
+                }
+            }
+            AppEvent::ConfirmCorbanuApiKeyRevocation {
+                key_id,
+                display_prefix,
+                deferred,
+            } => {
+                if corbanu_api_continuation_is_current(
+                    self.active_deferred_provider_setup.as_ref(),
+                    deferred.as_ref(),
+                ) {
+                    self.chat_widget.confirm_corbanu_api_key_revocation(
+                        key_id,
+                        display_prefix,
+                        deferred,
+                    );
+                }
+            }
+            AppEvent::CorbanuApiOperationRequested {
+                operation,
+                deferred,
+            } => {
+                if corbanu_api_continuation_is_current(
+                    self.active_deferred_provider_setup.as_ref(),
+                    deferred.as_ref(),
+                ) {
+                    self.chat_widget
+                        .request_corbanu_api_operation(operation, deferred);
+                }
+            }
+            AppEvent::CorbanuApiOperationFinished { result, deferred } => {
+                // A submitted wallet operation cannot be cancelled. Always surface its result so a
+                // one-time generated key is stored and revealed instead of being lost. A stale
+                // deferred continuation is stripped below, which prevents provider activation and
+                // model selection.
+                let was_deferred = deferred.is_some();
+                let active_deferred = deferred.filter(|deferred| {
+                    self.active_deferred_provider_setup.as_ref() == Some(deferred)
+                });
+                let ordinary_operation_is_current =
+                    !was_deferred && self.active_deferred_provider_setup.is_none();
+                let refresh_surface = ordinary_operation_is_current || active_deferred.is_some();
+                let configured = self
+                    .chat_widget
+                    .on_corbanu_api_operation_finished(
+                        result,
+                        active_deferred.clone(),
+                        refresh_surface,
+                    );
+                if configured && ordinary_operation_is_current {
+                    // The credential write is synchronous. Activate the still-current ordinary
+                    // operation, then rebuild the policy from durable storage before queueing its
+                    // model selection. Deferred activation remains owned by the exact deferred
+                    // continuation below; stale submitted completions only store/reveal their key.
+                    let activated = if let Some(policy) = self.model_catalog.provider_policy() {
+                        let host = policy.host();
+                        if !host.activate(codex_model_provider_info::CORBANU_PLAN_PROVIDER_ID) {
+                            self.chat_widget.add_error_message(
+                                "Corbanu API key was stored, but provider activation could not be persisted."
+                                    .to_string(),
+                            );
+                            false
+                        } else {
+                            true
+                        }
+                    } else {
+                        true
+                    };
+                    self.model_catalog.refresh_provider_policy();
+                    if activated {
+                        let model = "corbanu/glm-5.3-flash";
+                        if self.model_catalog.provider_is_selectable(
+                            codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID,
+                            model,
+                        ) {
+                            self.chat_widget.select_corbanu_api_model(model);
+                        } else {
+                            self.chat_widget.add_error_message(
+                                "Corbanu API key was stored, but provider status reconciliation is still incomplete."
+                                    .to_string(),
+                            );
+                        }
+                    }
+                }
+                if configured && let Some(deferred) = active_deferred {
+                    self.app_event_tx
+                        .send(AppEvent::DeferredCorbanuPlanConfigured { deferred });
+                }
+            }
             AppEvent::WalletCreateFinished { operation, result } => {
                 if let Some(deferred) = self.pending_wallet_create_deferred.take() {
                     self.chat_widget
@@ -3208,6 +3377,12 @@ impl App {
                 continuation,
                 result,
             } => {
+                if !wallet_unlock_continuation_is_current(
+                    self.active_deferred_provider_setup.as_ref(),
+                    &continuation,
+                ) {
+                    return Ok(AppRunControl::Continue);
+                }
                 self.chat_widget
                     .on_wallet_unlock_finished(policy, continuation, result);
             }
@@ -3219,11 +3394,7 @@ impl App {
                     return Ok(AppRunControl::Continue);
                 }
                 if self.chat_widget.has_wallet_signing_capability() {
-                    self.app_event_tx.send(AppEvent::OpenWalletPlans {
-                        mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode::Onboarding {
-                            deferred,
-                        },
-                    });
+                    self.chat_widget.open_corbanu_api_for_deferred(deferred);
                 } else {
                     let home = self.config.codex_home.to_path_buf();
                     let tx = self.app_event_tx.clone();
@@ -3260,11 +3431,10 @@ impl App {
                             policy: codex_wallet_daemon::UnlockPolicy::Timed {
                                 duration_seconds: 300,
                             },
-                            continuation: crate::app_event::WalletUnlockContinuation::OpenPlans {
-                                mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode::Onboarding {
-                                    deferred,
+                            continuation:
+                                crate::app_event::WalletUnlockContinuation::OpenCorbanuApi {
+                                    deferred: Some(deferred),
                                 },
-                            },
                         });
                     }
                     Err(error) => {
@@ -3352,6 +3522,7 @@ impl App {
                                 },
                             );
                         }
+                        self.chat_widget.dismiss_deferred_wallet_plan_views();
                         self.active_deferred_provider_setup = None;
                         self.shared_provider_setup_session = None;
                         self.shared_provider_status_host = None;
@@ -4179,10 +4350,18 @@ impl App {
                     .model_catalog
                     .provider_is_selectable(selected_provider, &model)
                 {
-                    self.chat_widget.add_error_message(format!(
-                        "Cannot save `{model}` because provider `{selected_provider}` is inactive or unavailable."
-                    ));
-                    return Ok(AppRunControl::Continue);
+                    // Match the in-session update path above. A queued persistence event must not
+                    // retain the snapshot from before its provider credential was stored.
+                    self.model_catalog.refresh_provider_policy();
+                    if !self
+                        .model_catalog
+                        .provider_is_selectable(selected_provider, &model)
+                    {
+                        self.chat_widget.add_error_message(format!(
+                            "Cannot save `{model}` because provider `{selected_provider}` is inactive or unavailable."
+                        ));
+                        return Ok(AppRunControl::Continue);
+                    }
                 }
                 if self.model_catalog.take_session_recovery_only() {
                     self.chat_widget.add_info_message(
@@ -4223,12 +4402,18 @@ impl App {
                             .filter(|display_name| !display_name.trim().is_empty())
                             .unwrap_or_else(|| model.clone());
                         let provider_label = provider.as_deref().map(|provider_id| {
-                            self.config
-                                .model_providers
-                                .get(provider_id)
-                                .map(|provider| provider.name.clone())
-                                .filter(|name| !name.trim().is_empty())
-                                .unwrap_or_else(|| provider_id.to_string())
+                            if provider_id
+                                == codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID
+                            {
+                                "Corbanu API".to_string()
+                            } else {
+                                self.config
+                                    .model_providers
+                                    .get(provider_id)
+                                    .map(|provider| provider.name.clone())
+                                    .filter(|name| !name.trim().is_empty())
+                                    .unwrap_or_else(|| provider_id.to_string())
+                            }
                         });
                         let mut message = if let Some(provider_label) = provider_label {
                             format!("Model changed to {model_label} via {provider_label}")
@@ -4833,6 +5018,30 @@ impl App {
                         );
                         self.chat_widget
                             .add_error_message(format!("Failed to create standard crew: {err:#}"));
+                    }
+                }
+            }
+            AppEvent::CreateSpawnCorbanuApiCrew => {
+                match self.create_spawn_corbanu_api_crew(app_server).await {
+                    Ok((nazgul_thread_id, troll_thread_id)) => {
+                        self.open_spawn_status();
+                        self.chat_widget.add_info_message(
+                            "Created Corbanu API crew: Kimi K3 Nazgul + Luna Troll + 3 Flash Orcs."
+                                .to_string(),
+                            Some(format!(
+                                "Nazgul: {nazgul_thread_id}. Troll: {troll_thread_id}. No task was started. Send work explicitly from /spawn status or by dispatch block."
+                            )),
+                        );
+                    }
+                    Err(err) => {
+                        tracing::error!(
+                            error = ?err,
+                            error_chain = %format!("{err:#}"),
+                            "Corbanu API crew spawn failed; keeping all live panes available"
+                        );
+                        self.chat_widget.add_error_message(format!(
+                            "Failed to create Corbanu API crew: {err:#}"
+                        ));
                     }
                 }
             }
@@ -6142,10 +6351,14 @@ mod gpu_notification_tests {
     use codex_model_provider_info::ModelProviderInfo;
     use codex_provider_auth::ProviderCatalog;
 
+    use super::corbanu_api_continuation_is_current;
     use super::failed_gpu_notification;
     use super::refresh_shared_provider_session_if_idle;
     use super::resolve_shared_provider_selection_model;
+    use super::wallet_unlock_continuation_is_current;
+    use crate::app_event::WalletUnlockContinuation;
     use crate::onboarding::provider_setup::ProviderSetupAction;
+    use crate::onboarding::provider_setup::ProviderSetupEffect;
     use crate::onboarding::provider_setup::ProviderSetupSession;
 
     #[test]
@@ -6196,5 +6409,44 @@ mod gpu_notification_tests {
             resolve_shared_provider_selection_model(None, "", "custom"),
             None
         );
+    }
+
+    #[test]
+    fn deferred_wallet_unlock_events_require_the_exact_active_continuation() {
+        let mut session = ProviderSetupSession::from_statuses(&[]);
+        session.dispatch(ProviderSetupAction::QueueCorbanu(true));
+        let deferred = session
+            .dispatch(ProviderSetupAction::Done)
+            .effects
+            .into_iter()
+            .find_map(|effect| match effect {
+                ProviderSetupEffect::BeginDeferred(deferred) => Some(deferred),
+                _ => None,
+            })
+            .expect("queued Corbanu setup should defer");
+        let continuation = WalletUnlockContinuation::OpenCorbanuApi {
+            deferred: Some(deferred.clone()),
+        };
+
+        assert!(wallet_unlock_continuation_is_current(
+            Some(&deferred),
+            &continuation
+        ));
+        assert!(!wallet_unlock_continuation_is_current(None, &continuation));
+        assert!(corbanu_api_continuation_is_current(
+            Some(&deferred),
+            Some(&deferred)
+        ));
+        assert!(!corbanu_api_continuation_is_current(Some(&deferred), None));
+        assert!(corbanu_api_continuation_is_current(None, None));
+        let ordinary_continuation = WalletUnlockContinuation::OpenCorbanuApi { deferred: None };
+        assert!(!wallet_unlock_continuation_is_current(
+            Some(&deferred),
+            &ordinary_continuation
+        ));
+        assert!(wallet_unlock_continuation_is_current(
+            None,
+            &ordinary_continuation
+        ));
     }
 }

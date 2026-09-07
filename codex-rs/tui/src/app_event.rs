@@ -312,8 +312,15 @@ pub(crate) struct WalletUnlockedResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WalletUnlockContinuation {
     WalletMenu,
+    OpenCorbanuApi {
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    },
     OpenPlans {
         mode: crate::chatwidget::wallet_menu::WalletPlanPurchaseMode,
+    },
+    CorbanuApiOperation {
+        operation: codex_wallet::CorbanuApiOperation,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     },
 }
 
@@ -438,6 +445,8 @@ pub(crate) enum AppEvent {
     },
     /// Create the standard persistent crew: Nazgul (root) -> Troll -> 3 Orcs. No task is started.
     CreateSpawnStandardCrew,
+    /// Create the Corbanu API persistent crew: Kimi K3 Nazgul -> Luna Troll -> 3 Flash Orcs.
+    CreateSpawnCorbanuApiCrew,
     /// Open a prompt that sends work to an existing spawned-agent pane.
     OpenSpawnAgentTaskPrompt {
         thread_id: codex_protocol::ThreadId,
@@ -1818,6 +1827,33 @@ pub(crate) enum AppEvent {
     WalletStatusReady {
         generation: u64,
         result: Result<crate::chatwidget::wallet_menu::WalletOverview, String>,
+    },
+    OpenCorbanuApi {
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    },
+    CorbanuApiLoaded {
+        result: Result<crate::chatwidget::wallet_api::CorbanuApiView, String>,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    },
+    OpenCorbanuApiTopUp {
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    },
+    ConfirmCorbanuApiTopUp {
+        amount_usd: String,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    },
+    ConfirmCorbanuApiKeyRevocation {
+        key_id: String,
+        display_prefix: String,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    },
+    CorbanuApiOperationRequested {
+        operation: codex_wallet::CorbanuApiOperation,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
+    },
+    CorbanuApiOperationFinished {
+        result: Result<codex_wallet::CorbanuApiOperationResult, String>,
+        deferred: Option<crate::onboarding::provider_setup::DeferredProviderSetup>,
     },
     WalletCreateFinished {
         operation: WalletPersistenceOperation,

@@ -1,8 +1,13 @@
+use codex_wallet::CorbanuApiOperation;
+use codex_wallet::CorbanuApiOperationResult;
 use codex_wallet::GatewayKey;
 use codex_wallet::PlanPurchaseIntent;
 use codex_wallet::ProvisionedPlan;
 use serde::Deserialize;
 use serde::Serialize;
+
+/// Increment when client operations or wire semantics become incompatible.
+pub(crate) const PROTOCOL_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -15,6 +20,7 @@ pub enum UnlockPolicy {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum Request {
     Ping,
+    ProtocolVersion,
     Status,
     Unlock {
         passcode: String,
@@ -39,12 +45,20 @@ pub(crate) enum Request {
         capability: String,
         gateway_origin: String,
     },
+    CorbanuApiOperation {
+        capability: String,
+        gateway_origin: String,
+        operation: CorbanuApiOperation,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum Response {
     Pong,
+    ProtocolVersion {
+        version: u32,
+    },
     Status(DaemonStatus),
     Unlocked {
         capability: String,
@@ -57,6 +71,7 @@ pub(crate) enum Response {
     },
     PlanProvisioned(ProvisionedPlan),
     GatewayKeyIssued(GatewayKey),
+    CorbanuApiOperationCompleted(CorbanuApiOperationResult),
     Error {
         code: String,
         message: String,

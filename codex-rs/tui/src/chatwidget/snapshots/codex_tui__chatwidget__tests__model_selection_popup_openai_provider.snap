@@ -12,9 +12,11 @@ expression: popup
                             model.
   2. GPT-5.5                Model: gpt-5.5. Frontier model for complex coding,
                             research, and real-world work.
-  3. GPT-5.6-Terra          Model: gpt-5.6-terra. Balanced agentic coding
+  3. GPT-6 Astra            Model: gpt-6-astra. Advanced reasoning and coding.
+                            Requires eligible OpenAI account access.
+  4. GPT-5.6-Terra          Model: gpt-5.6-terra. Balanced agentic coding
                             model for everyday work.
-  4. GPT-5.6-Luna           Model: gpt-5.6-luna. Fast and affordable agentic
+  5. GPT-5.6-Luna           Model: gpt-5.6-luna. Fast and affordable agentic
                             coding model.
 
   Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

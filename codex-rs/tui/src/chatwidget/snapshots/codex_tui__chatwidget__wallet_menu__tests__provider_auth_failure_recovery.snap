@@ -1,0 +1,13 @@
+---
+source: tui/src/chatwidget/wallet_menu.rs
+expression: rendered
+---
+
+  Authentication needs attention
+  The subscription token was not accepted. Run claude setup-token in a
+  private terminal, then retry with its token.
+
+› 1. Retry authentication
+  2. Back to providers
+
+  Press enter to confirm or esc to go back

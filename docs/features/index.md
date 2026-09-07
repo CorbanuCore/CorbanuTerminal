@@ -31,7 +31,7 @@ Exact product-spec heading: **Shipping MVP — LIVE**
 | `/panes`, `/agent`, `/subagents`, `/ps`, `/stop` | Create, switch, inspect, and safely distinguish panes, threads, and terminals. | [`/panes` and workspaces](workspaces.md) |
 | `/spawn` | Create or bind the Nazgul, Troll, and Orc hierarchy. | [`/spawn` hierarchy](spawn-orchestration.md) |
 | `/orchestrate` | Attach and control persistent Manager → Worker supervision. | [`/orchestrate` supervision](orchestrate.md) |
-| `/wallet` | Manage custody, balances, backup/restore, and Corbanu Plan. | [`/wallet` and Corbanu Plan](wallet-plan.md) |
+| `/wallet` | Manage custody, balances, backup/restore, and Corbanu API. | [`/wallet` and Corbanu API](wallet-plan.md) |
 | `/gpu` | Rent, inspect, stop, and terminate third-party GPU capacity. | [`/gpu` rentals](gpu-rentals.md) |
 | `/tasknode` | Use tasks, evidence, verification, rewards, context, and linked identity. | [`/tasknode` and identity](tasknode.md) |
 | `/telegram` | Configure and operate bounded remote control. | [`/telegram` remote control](telegram.md) |
@@ -41,15 +41,19 @@ Exact product-spec heading: **Shipping MVP — LIVE**
 The [slash command reference](../slash_commands.md) provides the complete
 repeatable syntax.
 
-## Corbanu Plan inventory
+## Wallet-funded inference transition
 
-Exact product-spec heading: **Corbanu Plan — LIVE**
+The 0.1.38 integration candidate implements the later **Corbanu API — TO
+BUILD** decision. It removes new plan sales and legacy entitlement surfaces in
+favor of an arbitrary dollar balance and wallet-owned API keys. Human acceptance
+and release authorization are still pending; the older Plan heading remains in
+the product specification as historical/deprecation context.
 
-| Capability | Status | Requirement excerpt | Canonical documentation |
-| --- | --- | --- | --- |
-| Wallet-native prepaid inference | **LIVE** | “Corbanu Plan is wallet-native, one-calendar-month prepaid inference purchased through x402, normally using canonical USDC on Solana.” | [Wallet and Corbanu Plan](wallet-plan.md) |
-| Plan model routing | **LIVE** | “GLM 5.2, Kimi K2.7 Code” use Ambient; “DeepSeek V4 Pro, Claude Fable 5” use xAPI. | [Wallet and Corbanu Plan](wallet-plan.md) |
-| Tier allowance | **LIVE** | “Every tier uses the same model catalog and differs by allowance.” | [Models and providers](model-providers.md) |
+| Capability | Candidate status | Canonical documentation |
+| --- | --- | --- |
+| Wallet-funded dollar balance | **INTEGRATION CANDIDATE** | [Wallet and Corbanu API](wallet-plan.md) |
+| One-time API-key reveal and key lifecycle | **INTEGRATION CANDIDATE** | [Wallet and Corbanu API](wallet-plan.md) |
+| Explicit per-model prices and privacy labels | **INTEGRATION CANDIDATE** | [Models and providers](model-providers.md) |
 
 ## Detailed feature references
 

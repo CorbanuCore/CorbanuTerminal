@@ -29,6 +29,7 @@ impl CommandSpec {
     }
 
     pub(super) fn append_to(self, command: &mut Command) {
+        command.arg("env").arg("CORBANU_TEST_NO_NATIVE_KEYRING=1");
         if !self.env.is_empty() {
             command.arg("env");
             for (key, value) in self.env {

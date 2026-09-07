@@ -32,7 +32,7 @@ fn built_ins_expose_multi_method_openai_and_branded_corbanu_identity() {
             }),
             Some(&ProviderCatalogEntry {
                 id: ProviderCatalogId(CORBANU_PLAN_PROVIDER_ID.to_string()),
-                display_name: "Corbanu Plan".to_string(),
+                display_name: "Corbanu API".to_string(),
                 runtime_provider_ids: vec![
                     ProviderRuntimeId(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
                     ProviderRuntimeId(PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID.to_string()),
@@ -207,7 +207,7 @@ fn corbanu_runtime_aliases_deduplicate_without_leaking_legacy_catalog_identity()
         ProviderCatalog {
             entries: vec![ProviderCatalogEntry {
                 id: ProviderCatalogId(CORBANU_PLAN_PROVIDER_ID.to_string()),
-                display_name: "Corbanu Plan".to_string(),
+                display_name: "Corbanu API".to_string(),
                 runtime_provider_ids: vec![
                     ProviderRuntimeId(CORBANU_PLAN_PROVIDER_ID.to_string()),
                     ProviderRuntimeId(CORBANU_PLAN_ANTHROPIC_PROVIDER_ID.to_string()),

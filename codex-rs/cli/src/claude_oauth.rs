@@ -707,6 +707,8 @@ async fn preferred_platform_store(
             Err(_) => return Ok(PlatformCredentialStore::MacosKeychain),
         }
     }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (config_dir, security);
     Ok(CURRENT_PLATFORM_STORE)
 }
 
@@ -856,6 +858,12 @@ async fn read_macos_keychain_credentials(
     config_dir: &Path,
     security: Option<&Path>,
 ) -> Result<Zeroizing<Vec<u8>>> {
+    if cfg!(debug_assertions)
+        && security.is_none()
+        && std::env::var_os("CORBANU_TEST_NO_NATIVE_KEYRING").is_some()
+    {
+        return Err(MissingMacosKeychainCredential.into());
+    }
     let account = std::env::var("USER")
         .ok()
         .map(|value| value.trim().to_string())
@@ -903,6 +911,12 @@ async fn probe_macos_keychain_credential_presence(
     config_dir: &Path,
     security: Option<&Path>,
 ) -> Result<MacosKeychainCredentialPresence> {
+    if cfg!(debug_assertions)
+        && security.is_none()
+        && std::env::var_os("CORBANU_TEST_NO_NATIVE_KEYRING").is_some()
+    {
+        return Ok(MacosKeychainCredentialPresence::Absent);
+    }
     let account = std::env::var("USER")
         .ok()
         .map(|value| value.trim().to_string())

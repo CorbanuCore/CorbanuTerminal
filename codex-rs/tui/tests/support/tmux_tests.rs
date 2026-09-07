@@ -5,6 +5,59 @@ use anyhow::Result;
 
 use super::*;
 
+#[test]
+fn interrupted_test_process_does_not_orphan_tmux() -> Result<()> {
+    const CHILD_ENV: &str = "CORBANU_TMUX_WATCHDOG_CHILD";
+    if let Some(report) = std::env::var_os(CHILD_ENV) {
+        let server = TmuxServer::start("watchdog-child")?;
+        let session = server.new_session(SessionSpec::new(
+            "watchdog",
+            TerminalSize::new(40, 8),
+            command_for_shell("trap '' HUP TERM; printf 'ready'; while :; do sleep 1; done"),
+        ))?;
+        session
+            .primary_pane()
+            .wait_stable_contains("ready", Duration::from_secs(3))?;
+        std::fs::write(
+            report,
+            format!(
+                "{}\n{}",
+                server.socket_root().display(),
+                session.primary_pane().pid
+            ),
+        )?;
+        loop {
+            std::thread::sleep(Duration::from_secs(1));
+        }
+    }
+    if !TmuxServer::should_run("interrupted test watchdog")? {
+        return Ok(());
+    }
+    let dir = tempfile::tempdir()?;
+    let report = dir.path().join("child");
+    let mut child = Command::new(std::env::current_exe()?)
+        .args([
+            "--exact",
+            "support::tmux::tests::interrupted_test_process_does_not_orphan_tmux",
+        ])
+        .env(CHILD_ENV, &report)
+        .spawn()?;
+    let deadline = Instant::now() + Duration::from_secs(8);
+    while !report.exists() && Instant::now() < deadline {
+        sleep(Duration::from_millis(50));
+    }
+    child.kill()?;
+    child.wait()?;
+    let report = std::fs::read_to_string(report)?;
+    let pid: u32 = report.lines().nth(1).context("pane pid")?.parse()?;
+    wait_for_process_exit(pid, Duration::from_secs(5));
+    assert!(
+        !process_is_running(pid),
+        "watchdog must terminate a pane that ignores HUP and TERM"
+    );
+    Ok(())
+}
+
 fn server_or_skip(scenario: &str) -> Result<Option<TmuxServer>> {
     if !TmuxServer::should_run(scenario)? {
         return Ok(None);

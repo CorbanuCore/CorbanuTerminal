@@ -11,11 +11,10 @@ use crate::app_event::WalletSecret;
 use crate::chatwidget::wallet_http::gateway_client;
 use crate::chatwidget::wallet_http::gateway_origin;
 use crate::chatwidget::wallet_receipt::WalletPlanReceipt;
-use crate::chatwidget::wallet_receipt::latest_plan_receipt;
 use crate::chatwidget::wallet_receipt::reconcile_plan_receipt;
 use crate::chatwidget::wallet_render::WalletTextStyle;
 use crate::chatwidget::wallet_render::push_wallet_text;
-use codex_model_provider_info::AMBIENT_DEFAULT_MODEL;
+use crate::chatwidget::wallet_unlock::wallet_capability_for_request;
 use codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR;
 use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_wallet::BalanceClient;
@@ -83,11 +82,7 @@ pub(crate) struct WalletOverview {
     pub(crate) daemon: DaemonStatus,
     pub(crate) balances: Option<WalletBalances>,
     pub(crate) balance_error: Option<String>,
-    pub(crate) plan: Option<WalletPlanStatus>,
-    pub(crate) linked_plan_for_other_wallet: Option<WalletPlanStatus>,
-    pub(crate) plan_error: Option<String>,
     pub(crate) plan_credential_present: bool,
-    pub(crate) plan_prices_usdc: std::collections::BTreeMap<String, String>,
 }
 
 fn wallet_balance_endpoint(
@@ -265,7 +260,7 @@ impl ChatWidget {
             description: Some(if can_finish {
                 "Finish provider setup".to_string()
             } else {
-                "Configure a usable provider or queue Corbanu Plan".to_string()
+                "Configure a usable provider or queue Corbanu API".to_string()
             }),
             is_disabled: !can_finish,
             actions: vec![Box::new(|tx| tx.send(AppEvent::SharedProviderSetupDone))],
@@ -300,7 +295,7 @@ impl ChatWidget {
             format!("provider:{}", target.provider_id),
             format!("Add {display_name}"),
             "API key — masked".to_string(),
-            "Stored through the selected provider credential backend".to_string(),
+            crate::provider_auth_presentation::api_key_guidance(&target.storage),
             Box::new(move |_label, secret| {
                 tx.send(AppEvent::SaveSharedProviderApiKey {
                     target: target.clone(),
@@ -315,16 +310,10 @@ impl ChatWidget {
         &mut self,
         challenge: codex_provider_auth::OpenAiAccountChallenge,
     ) {
-        let mut header = ColumnRenderable::new();
-        header.push(Line::from("OpenAI account login".bold()));
-        if let Some((verification_url, user_code)) = challenge.device_code_values() {
-            header.push(Line::from(format!("Open: {verification_url}")));
-            header.push(Line::from(format!("Code: {user_code}").cyan().bold()));
-        } else if let Some(auth_url) = challenge.browser_auth_url() {
-            header.push(Line::from(format!("Open: {auth_url}")));
-        }
         self.show_shared_account_auth_selection(SelectionViewParams {
-            header: Box::new(header),
+            header: Box::new(
+                crate::provider_auth_presentation::OpenAiChallengeHeader::new(challenge),
+            ),
             items: vec![SelectionItem {
                 name: "Cancel login".to_string(),
                 actions: vec![Box::new(|tx| {
@@ -365,11 +354,59 @@ impl ChatWidget {
         });
     }
 
-    pub(crate) fn open_shared_claude_method_choice(&mut self) {
+    pub(crate) fn open_shared_account_failure(
+        &mut self,
+        failure: crate::provider_account_feedback::AccountFailure,
+    ) {
+        let kind = failure.kind;
+        let mut items = Vec::new();
+        if failure.retry {
+            items.push(SelectionItem {
+                name: "Retry authentication".into(),
+                actions: vec![Box::new(move |tx| {
+                    let action = match kind {
+                        crate::provider_account_auth_host::ProviderAccountCancelKind::OpenAi => {
+                            codex_provider_auth::OpenAiAccountAction::Retry.into()
+                        }
+                        crate::provider_account_auth_host::ProviderAccountCancelKind::Claude => {
+                            codex_provider_auth::claude_account_flow::ClaudeAccountAction::Retry
+                                .into()
+                        }
+                    };
+                    tx.send(AppEvent::SharedProviderAuthAction(action));
+                })],
+                ..Default::default()
+            });
+        }
+        items.push(SelectionItem {
+            name: "Back to providers".into(),
+            actions: vec![Box::new(move |tx| {
+                tx.send(AppEvent::SharedProviderAuthAction(kind.action()))
+            })],
+            ..Default::default()
+        });
+        self.show_shared_account_auth_selection(SelectionViewParams {
+            header: Box::new(
+                ratatui::widgets::Paragraph::new(vec![
+                    Line::from("Authentication needs attention".bold()),
+                    Line::from(failure.message),
+                ])
+                .wrap(ratatui::widgets::Wrap { trim: false }),
+            ),
+            items,
+            on_cancel: Some(Box::new(move |tx| {
+                tx.send(AppEvent::SharedProviderAuthAction(kind.action()))
+            })),
+            ..Default::default()
+        });
+    }
+
+    pub(crate) fn open_shared_claude_method_choice(&mut self, recovery: Option<&str>) {
         use codex_provider_auth::claude_account_flow::ClaudeAccountAction;
         use codex_provider_auth::claude_account_flow::ClaudeAccountMethod;
-        let method_item = |name: &str, method| SelectionItem {
+        let method_item = |name: &str, description: &str, method| SelectionItem {
             name: name.to_string(),
+            description: Some(description.to_string()),
             actions: vec![Box::new(move |tx: &AppEventSender| {
                 tx.send(AppEvent::SharedProviderAuthAction(
                     ClaudeAccountAction::ChooseMethod(method).into(),
@@ -382,14 +419,18 @@ impl ChatWidget {
             })],
             ..Default::default()
         };
-        self.show_shared_account_auth_selection(SelectionViewParams {
-            title: Some("Claude account method".to_string()),
+        let mut params = SelectionViewParams {
             items: vec![
                 method_item(
-                    "Managed subscription token",
+                    super::claude_auth_presentation::MANAGED_TOKEN_METHOD_NAME,
+                    super::claude_auth_presentation::MANAGED_TOKEN_METHOD_DESCRIPTION,
                     ClaudeAccountMethod::ManagedToken,
                 ),
-                method_item("Claude Code login", ClaudeAccountMethod::ClaudeCodeLogin),
+                method_item(
+                    super::claude_auth_presentation::CLAUDE_CODE_LOGIN_METHOD_NAME,
+                    super::claude_auth_presentation::CLAUDE_CODE_LOGIN_METHOD_DESCRIPTION,
+                    ClaudeAccountMethod::ClaudeCodeLogin,
+                ),
             ],
             on_cancel: Some(Box::new(|tx| {
                 tx.send(AppEvent::SharedProviderAuthAction(
@@ -397,7 +438,21 @@ impl ChatWidget {
                 ));
             })),
             ..Default::default()
-        });
+        };
+        super::claude_auth_presentation::apply_method_choice_copy(&mut params);
+        if let Some(message) = recovery {
+            params.title = None;
+            params.subtitle = None;
+            params.header = Box::new(
+                ratatui::widgets::Paragraph::new(vec![
+                    Line::from(super::claude_auth_presentation::METHOD_TITLE.bold()),
+                    Line::from(message.to_owned()),
+                    Line::from(super::claude_auth_presentation::METHOD_SUBTITLE),
+                ])
+                .wrap(ratatui::widgets::Wrap { trim: false }),
+            );
+        }
+        self.show_shared_account_auth_selection(params);
     }
 
     pub(crate) fn open_shared_claude_managed_token_entry(&mut self) {
@@ -408,9 +463,9 @@ impl ChatWidget {
         let cancel_tx = self.app_event_tx.clone();
         let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret_with_cancel(
             "claude-managed-token".into(),
-            "Claude managed subscription token".into(),
-            "Token — masked".into(),
-            "Paste the long-lived subscription token".into(),
+            super::claude_auth_presentation::MANAGED_TOKEN_ENTRY_TITLE.into(),
+            super::claude_auth_presentation::MANAGED_TOKEN_ENTRY_LABEL.into(),
+            super::claude_auth_presentation::MANAGED_TOKEN_ENTRY_GUIDANCE.into(),
             Box::new(move |_, secret| {
                 tx.send(AppEvent::SharedProviderAuthAction(
                     ClaudeAccountAction::SetManagedToken(
@@ -509,62 +564,10 @@ impl ChatWidget {
                     .status()
                     .await
                     .map_err(|error| error.to_string())?;
-                let plan_request = async {
-                    if let Some(key) = plan_key {
-                        let gateway = match gateway_client() {
-                            Ok(gateway) => gateway,
-                            Err(error) => {
-                                return (None, Some(format!("plan status unavailable: {error}")));
-                            }
-                        };
-                        match gateway
-                            .client
-                            .get(format!("{}/v1/account", gateway.origin))
-                            .bearer_auth(key.as_str())
-                            .send()
-                            .await
-                        {
-                            Ok(response) if response.status().is_success() => {
-                                match response.json::<WalletPlanStatus>().await {
-                                    Ok(status) => (Some(status), None),
-                                    Err(error) => {
-                                        (None, Some(format!("plan status was malformed: {error}")))
-                                    }
-                                }
-                            }
-                            Ok(response) => (
-                                None,
-                                Some(format!("plan status returned HTTP {}", response.status())),
-                            ),
-                            Err(error) => (None, Some(format!("plan status unavailable: {error}"))),
-                        }
-                    } else {
-                        (None, None)
-                    }
-                };
-                let catalog_request = async {
-                    let Ok(gateway) = gateway_client() else {
-                        return None;
-                    };
-                    match gateway
-                        .client
-                        .get(format!("{}/v1/plans", gateway.origin))
-                        .send()
-                        .await
-                    {
-                        Ok(response) if response.status().is_success() => {
-                            response.json::<WalletPlanCatalog>().await.ok()
-                        }
-                        _ => None,
-                    }
-                };
-                let ((plan, plan_error), catalog) = tokio::join!(plan_request, catalog_request);
-                let (plan, linked_plan_for_other_wallet) =
-                    separate_plan_for_local_wallet(plan, daemon.address.as_deref());
                 let (balances, balance_error) = if let (Some(address), Some(network)) =
                     (daemon.address.as_deref(), daemon.network.as_deref())
                 {
-                    let (rpc, network) = wallet_balance_endpoint(network, catalog.as_ref());
+                    let (rpc, network) = wallet_balance_endpoint(network, /*catalog*/ None);
                     match BalanceClient::new(rpc, network) {
                         Ok(client) => match client.balances(address).await {
                             Ok(value) => (Some(value), None),
@@ -575,24 +578,11 @@ impl ChatWidget {
                 } else {
                     (None, None)
                 };
-                let plan_prices_usdc = catalog
-                    .map(|catalog| {
-                        catalog
-                            .plans
-                            .into_iter()
-                            .map(|plan| (plan.id, plan.price_usdc))
-                            .collect()
-                    })
-                    .unwrap_or_default();
                 Ok(WalletOverview {
                     daemon,
                     balances,
                     balance_error,
-                    plan,
-                    linked_plan_for_other_wallet,
-                    plan_error,
                     plan_credential_present,
-                    plan_prices_usdc,
                 })
             }
             .await;
@@ -792,9 +782,10 @@ impl ChatWidget {
                             policy: codex_wallet_daemon::UnlockPolicy::Timed {
                                 duration_seconds: 300,
                             },
-                            continuation: crate::app_event::WalletUnlockContinuation::OpenPlans {
-                                mode: WalletPlanPurchaseMode::Onboarding { deferred: next },
-                            },
+                            continuation:
+                                crate::app_event::WalletUnlockContinuation::OpenCorbanuApi {
+                                    deferred: Some(next.clone()),
+                                },
                         });
                     }))
                     .with_cancellation(Box::new(move || {
@@ -822,7 +813,7 @@ impl ChatWidget {
         let retry = deferred.clone();
         let cancel = deferred.clone();
         self.show_selection_view(SelectionViewParams {
-            title: Some("Continue Corbanu Plan setup".to_string()),
+            title: Some("Continue Corbanu API setup".to_string()),
             items: vec![
                 SelectionItem {
                     name: "Retry wallet setup".to_string(),
@@ -913,26 +904,20 @@ impl ChatWidget {
 
     pub(crate) fn lock_wallet(&mut self) {
         self.wallet_capability = None;
+        self.wallet_capability_policy = None;
         let home = self.config.codex_home.as_path().to_path_buf();
         let tx = self.app_event_tx.clone();
         tokio::spawn(async move {
             let client = WalletDaemonClient::new(home);
-            let cell: Box<dyn HistoryCell> = match client.status().await {
-                Ok(status) if !status.wallet_exists => Box::new(history_cell::new_info_event(
-                    "No local wallet exists; there is nothing to lock.".to_string(),
+            // Revocation must work even when a legacy daemon fails the new
+            // protocol preflight. Lock is also harmless without a local wallet.
+            let cell: Box<dyn HistoryCell> = match client.lock().await {
+                Ok(()) => Box::new(history_cell::new_info_event(
+                    "Wallet locked in every Corbanu Terminal process.".to_string(),
                     /*hint*/ None,
                 )),
-                Ok(_) => match client.lock().await {
-                    Ok(()) => Box::new(history_cell::new_info_event(
-                        "Wallet locked in every Corbanu Terminal process.".to_string(),
-                        /*hint*/ None,
-                    )),
-                    Err(error) => Box::new(history_cell::new_error_event(format!(
-                        "Wallet lock failed: {error}"
-                    ))),
-                },
                 Err(error) => Box::new(history_cell::new_error_event(format!(
-                    "Wallet lock failed while checking wallet state: {error}"
+                    "Wallet lock failed: {error}"
                 ))),
             };
             tx.send(AppEvent::InsertHistoryCell(cell));
@@ -1248,8 +1233,10 @@ impl ChatWidget {
 
     pub(crate) fn purchase_wallet_plan(&mut self, plan: WalletPlanChoice) {
         let deferred_setup = plan.deferred_setup.clone();
-        let Some(capability) = wallet_capability_for_request(self.wallet_capability.as_ref())
-        else {
+        let Some(capability) = wallet_capability_for_request(
+            &mut self.wallet_capability,
+            self.wallet_capability_policy,
+        ) else {
             self.add_error_message(
                 "Unlock the wallet from /wallet before confirming a purchase.".to_string(),
             );
@@ -1307,6 +1294,7 @@ impl ChatWidget {
 
     pub(crate) fn dismiss_deferred_wallet_plan_views(&mut self) {
         for view_id in [
+            crate::chatwidget::wallet_api::CORBANU_API_VIEW_ID,
             crate::chatwidget::wallet_receipt::WALLET_PLAN_RECEIPT_VIEW_ID,
             WALLET_PLAN_CONFIRM_VIEW_ID,
             WALLET_PLANS_VIEW_ID,
@@ -1504,8 +1492,10 @@ impl ChatWidget {
     }
 
     pub(crate) fn recover_wallet_plan_access(&mut self) {
-        let Some(capability) = wallet_capability_for_request(self.wallet_capability.as_ref())
-        else {
+        let Some(capability) = wallet_capability_for_request(
+            &mut self.wallet_capability,
+            self.wallet_capability_policy,
+        ) else {
             self.open_wallet_plan_recovery_unlock();
             return;
         };
@@ -1573,11 +1563,11 @@ impl ChatWidget {
 
     pub(super) fn select_pfterminal_plan_provider(&self) {
         self.app_event_tx.send(AppEvent::UpdateModelSelection {
-            model: AMBIENT_DEFAULT_MODEL.to_string(),
+            model: "corbanu/glm-5.3-flash".to_string(),
             provider: Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
         });
         self.app_event_tx.send(AppEvent::PersistModelSelection {
-            model: AMBIENT_DEFAULT_MODEL.to_string(),
+            model: "corbanu/glm-5.3-flash".to_string(),
             provider: Some(PFTERMINAL_PLAN_PROVIDER_ID.to_string()),
             effort: None,
         });
@@ -1599,7 +1589,7 @@ impl ChatWidget {
         );
         if !host.activate(codex_model_provider_info::CORBANU_PLAN_PROVIDER_ID) {
             self.add_error_message(
-                "Corbanu Plan was stored, but activation could not be persisted.".to_string(),
+                "Corbanu API was stored, but activation could not be persisted.".to_string(),
             );
             self.show_deferred_plan_activation_retry(deferred.clone());
             return Err(DeferredPlanActivationError::Persistence);
@@ -1613,7 +1603,7 @@ impl ChatWidget {
             });
         if !reconciled {
             self.add_error_message(
-                "Corbanu Plan was stored, but status reconciliation is still incomplete."
+                "Corbanu API was stored, but status reconciliation is still incomplete."
                     .to_string(),
             );
             self.show_deferred_plan_activation_retry(deferred.clone());
@@ -1632,7 +1622,7 @@ impl ChatWidget {
         let retry = deferred.clone();
         let cancel = deferred.clone();
         self.show_selection_view(SelectionViewParams {
-            title: Some("Finish Corbanu Plan setup".to_string()),
+            title: Some("Finish Corbanu API setup".to_string()),
             items: vec![
                 SelectionItem {
                     name: "Retry activation".to_string(),
@@ -1676,7 +1666,7 @@ fn shared_provider_method_label(
         codex_provider_auth::ProviderSetupCapability::OpenAiAccount => "account",
         codex_provider_auth::ProviderSetupCapability::ApiKey { .. } => "API key",
         codex_provider_auth::ProviderSetupCapability::ClaudeAccount => "account",
-        codex_provider_auth::ProviderSetupCapability::CorbanuPlan => "Plan",
+        codex_provider_auth::ProviderSetupCapability::CorbanuPlan => "API",
         codex_provider_auth::ProviderSetupCapability::Local { .. } => "local runtime",
         codex_provider_auth::ProviderSetupCapability::CommandAuth { .. } => "external command",
         codex_provider_auth::ProviderSetupCapability::StatusOnly { .. } => "status only",
@@ -1711,21 +1701,6 @@ fn shared_provider_status_description(
         (Configuration::Checking, _, _) => "Checking".to_string(),
         (Configuration::Unavailable, _, _) => "Status unavailable".to_string(),
         (Configuration::Configured, _, _) => "Configured · status unavailable".to_string(),
-    }
-}
-
-fn separate_plan_for_local_wallet(
-    plan: Option<WalletPlanStatus>,
-    local_wallet_address: Option<&str>,
-) -> (Option<WalletPlanStatus>, Option<WalletPlanStatus>) {
-    match plan {
-        Some(plan)
-            if local_wallet_address.is_some_and(|address| address == plan.wallet_address) =>
-        {
-            (Some(plan), None)
-        }
-        Some(plan) => (None, Some(plan)),
-        None => (None, None),
     }
 }
 
@@ -1795,7 +1770,11 @@ fn wallet_params(
             }]
         }
         Some(Err(error)) => {
-            header.push(Line::from(format!("Unavailable: {error}").red()));
+            push_wallet_text(
+                &mut header,
+                &format!("Unavailable: {error}"),
+                WalletTextStyle::Danger,
+            );
             vec![SelectionItem {
                 name: "Retry".to_string(),
                 actions: vec![Box::new(|tx| tx.send(AppEvent::OpenWallet))],
@@ -1838,10 +1817,6 @@ fn wallet_items(
         .address
         .clone()
         .unwrap_or_else(|| "unavailable".to_string());
-    let latest_receipt = overview
-        .plan
-        .as_ref()
-        .map(|status| latest_plan_receipt(status, overview.balances, &overview.plan_prices_usdc));
     let can_sign = client_can_sign && !overview.daemon.locked && !overview.daemon.busy;
     let lock = if overview.daemon.busy {
         "signing operation in progress"
@@ -1870,44 +1845,8 @@ fn wallet_items(
     if let Some(error) = overview.balance_error {
         header.push(Line::from(format!("Balance unavailable: {error}").red()));
     }
-    if let Some(linked_plan) = &overview.linked_plan_for_other_wallet {
-        push_wallet_line(
-            header,
-            &format!(
-                "Corbanu Plan · {} linked to another wallet",
-                title_case_plan(&linked_plan.period.plan_id),
-            ),
-            /*dimmed*/ false,
-        );
-        push_wallet_line(
-            header,
-            &linked_plan_owner_description(linked_plan),
-            /*dimmed*/ false,
-        );
-    }
     if !overview.plan_credential_present {
-        push_wallet_line(
-            header,
-            "Corbanu Plan · not connected",
-            /*dimmed*/ false,
-        );
-    }
-    let upgrade_mode = overview.plan.as_ref().map(|plan| {
-        let (current_plan_id, starts_at) = plan
-            .queued_periods
-            .last()
-            .map(|queued| (queued.plan_id.clone(), queued.ends_at.clone()))
-            .unwrap_or_else(|| (plan.period.plan_id.clone(), plan.period.ends_at.clone()));
-        WalletPlanPurchaseMode::Upgrade {
-            current_plan_id,
-            starts_at,
-        }
-    });
-    if let Some(plan) = &overview.plan {
-        push_wallet_line(header, &wallet_plan_summary(plan), /*dimmed*/ false);
-    }
-    if let Some(error) = overview.plan_error {
-        header.push(Line::from(format!("Plan status: {error}").red()));
+        push_wallet_line(header, "Corbanu API · no stored key", /*dimmed*/ false);
     }
     let receive_address = address.clone();
     let mut items = vec![SelectionItem {
@@ -1923,55 +1862,11 @@ fn wallet_items(
         })],
         ..Default::default()
     }];
-    if overview.plan_credential_present {
-        items.push(item(
-            "Plan details",
-            "View prepaid spend, token usage, limits, reset dates, and queued periods",
-            || AppEvent::OpenWalletPlanUsage,
-        ));
-    }
-    if let Some(receipt) = latest_receipt {
-        let receipt_for_action = receipt.clone();
-        items.push(item(
-            "View latest plan receipt",
-            &format!(
-                "{} plan · Solana payment confirmation",
-                title_case_plan(&receipt.plan_id)
-            ),
-            move || AppEvent::OpenWalletPlanReceipt {
-                receipt: receipt_for_action.clone(),
-            },
-        ));
-    }
-    if !overview.plan_credential_present && !overview.daemon.busy {
-        if can_sign {
-            items.push(item(
-                "Buy Corbanu Plan",
-                "Choose a plan and confirm the exact USDC payment",
-                || AppEvent::OpenWalletPlans {
-                    mode: WalletPlanPurchaseMode::New,
-                },
-            ));
-        } else {
-            items.push(item(
-                "Buy Corbanu Plan",
-                "Unlock, choose a plan, and confirm the exact USDC payment",
-                || AppEvent::OpenWalletUnlock {
-                    policy: UnlockPolicy::Timed {
-                        duration_seconds: 300,
-                    },
-                    continuation: crate::app_event::WalletUnlockContinuation::OpenPlans {
-                        mode: WalletPlanPurchaseMode::New,
-                    },
-                },
-            ));
-        }
-        items.push(item(
-            "Recover existing plan",
-            "Only for a wallet that previously purchased a plan; sends no USDC",
-            || AppEvent::WalletRecoverPlanRequested,
-        ));
-    }
+    items.push(item(
+        "Corbanu API",
+        "View dollar balance, at-cost model prices, top up, and manage API keys",
+        || AppEvent::OpenCorbanuApi { deferred: None },
+    ));
     if !can_sign && !overview.daemon.busy {
         for (name, policy) in [
             ("Unlock for one signing action", UnlockPolicy::OneAction),
@@ -2022,55 +1917,10 @@ fn wallet_items(
             || AppEvent::WalletLockRequested,
         ));
     }
-    if can_sign {
-        if let Some(mode) = upgrade_mode {
-            let starts_at = match &mode {
-                WalletPlanPurchaseMode::Upgrade { starts_at, .. } => starts_at.clone(),
-                WalletPlanPurchaseMode::New | WalletPlanPurchaseMode::Onboarding { .. } => {
-                    unreachable!()
-                }
-            };
-            items.push(item(
-                "Upgrade Corbanu Plan",
-                &format!("Choose a higher tier for the period starting {starts_at}"),
-                move || AppEvent::OpenWalletPlans { mode: mode.clone() },
-            ));
-        } else if overview.plan_credential_present {
-            items.push(item(
-                "Buy a Corbanu Plan",
-                "Pay once with USDC and activate metered inference",
-                || AppEvent::OpenWalletPlans {
-                    mode: WalletPlanPurchaseMode::New,
-                },
-            ));
-        }
-        if overview.plan_credential_present {
-            items.push(item(
-                "Recover plan access",
-                "Issue a replacement key for an already-paid wallet without another payment",
-                || AppEvent::WalletRecoverPlanRequested,
-            ));
-        }
-    } else if !overview.daemon.busy
-        && let Some(mode) = upgrade_mode
-    {
-        items.push(item(
-            "Upgrade Corbanu Plan",
-            "Unlock for 5 minutes, then choose a higher tier",
-            move || AppEvent::OpenWalletUnlock {
-                policy: UnlockPolicy::Timed {
-                    duration_seconds: 300,
-                },
-                continuation: crate::app_event::WalletUnlockContinuation::OpenPlans {
-                    mode: mode.clone(),
-                },
-            },
-        ));
-    }
     if overview.plan_credential_present {
         items.push(item(
-            "Disconnect Corbanu Plan",
-            "Remove the plan credential; keep the wallet and paid period",
+            "Disconnect Corbanu API",
+            "Remove the stored API credential; keep the wallet and dollar balance",
             || AppEvent::ConfirmWalletPlanDisconnect,
         ));
     }
@@ -2091,24 +1941,6 @@ fn wallet_items(
         AppEvent::OpenWallet
     }));
     items
-}
-
-fn linked_plan_owner_description(plan: &WalletPlanStatus) -> String {
-    format!(
-        "Purchased by {} · not this local wallet",
-        short_address(&plan.wallet_address)
-    )
-}
-
-fn wallet_plan_summary(plan: &WalletPlanStatus) -> String {
-    let mut summary = format!(
-        "Corbanu Plan · {} active",
-        title_case_plan(&plan.period.plan_id)
-    );
-    if let Some(next) = plan.queued_periods.first() {
-        summary.push_str(&format!(" · {} next", title_case_plan(&next.plan_id)));
-    }
-    summary
 }
 
 pub(super) fn item<F>(name: &str, description: &str, event: F) -> SelectionItem
@@ -2179,12 +2011,6 @@ fn provisional_plan_receipt(
     }
 }
 
-fn wallet_capability_for_request(
-    capability: Option<&Zeroizing<String>>,
-) -> Option<Zeroizing<String>> {
-    capability.map(|value| Zeroizing::new(value.to_string()))
-}
-
 fn format_token_count(value: u64) -> String {
     let digits = value.to_string();
     let mut output = String::with_capacity(digits.len() + digits.len() / 3);
@@ -2210,6 +2036,23 @@ fn format_usdc_atomic(value: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn render_bottom_pane(chat: &ChatWidget, width: u16) -> String {
+        let height = chat.bottom_pane.desired_height(width);
+        let area = ratatui::layout::Rect::new(0, 0, width, height);
+        let mut buffer = ratatui::buffer::Buffer::empty(area);
+        chat.bottom_pane.render(area, &mut buffer);
+        (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
 
     #[tokio::test]
     async fn shared_provider_setup_can_select_a_noninteractive_runtime() {
@@ -2270,7 +2113,7 @@ mod tests {
         chat.open_shared_account_pending(
             crate::provider_account_auth_host::ProviderAccountCancelKind::Claude,
         );
-        chat.open_shared_claude_method_choice();
+        chat.open_shared_claude_method_choice(None);
         chat.open_shared_claude_managed_token_entry();
         assert_ne!(
             chat.bottom_pane.active_view_id(),
@@ -2280,6 +2123,68 @@ mod tests {
             !chat
                 .bottom_pane
                 .dismiss_view_by_id(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID)
+        );
+    }
+
+    #[tokio::test]
+    async fn shared_claude_method_choice_matches_established_presentation() {
+        let (mut chat, _rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+
+        chat.open_shared_claude_method_choice(None);
+
+        insta::assert_snapshot!(render_bottom_pane(&chat, 76));
+    }
+
+    #[tokio::test]
+    async fn shared_claude_managed_token_entry_matches_established_presentation() {
+        let (mut chat, _rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+
+        chat.open_shared_claude_managed_token_entry();
+
+        insta::assert_snapshot!(render_bottom_pane(&chat, 76));
+    }
+
+    #[tokio::test]
+    async fn provider_auth_guidance_wraps_and_failures_remain_actionable() {
+        let (mut chat, _rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+        chat.open_shared_claude_managed_token_entry();
+        for width in [40, 76, 120] {
+            let rendered = render_bottom_pane(&chat, width);
+            assert!(
+                rendered.contains("chat."),
+                "privacy guidance must remain visible"
+            );
+            insta::assert_snapshot!(format!("claude_token_guidance_{width}"), rendered);
+        }
+        chat.open_shared_account_failure(crate::provider_account_feedback::AccountFailure {
+            message: "The subscription token was not accepted. Run claude setup-token in a private terminal, then retry with its token.",
+            kind: crate::provider_account_auth_host::ProviderAccountCancelKind::Claude,
+            retry: true,
+        });
+        let rendered = render_bottom_pane(&chat, 76);
+        assert!(rendered.contains("then retry with its token."));
+        insta::assert_snapshot!("provider_auth_failure_recovery", rendered);
+    }
+
+    #[tokio::test]
+    async fn openai_challenge_wraps_as_one_clickable_url() {
+        let (mut chat, _rx, _op_rx) =
+            crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
+        let url = "https://example.com/device/very-long-authentication-link";
+        chat.open_shared_openai_challenge(
+            codex_provider_auth::OpenAiAccountChallenge::device_code(url, "TEST-CODE"),
+        );
+        let rendered = render_bottom_pane(&chat, 40);
+        assert!(
+            rendered.contains(&format!("\u{1b}]8;;{url}")),
+            "the wrapped URL must carry OSC8 metadata"
+        );
+        insta::assert_snapshot!(
+            "openai_provider_challenge_narrow",
+            crate::terminal_hyperlinks::strip_osc8(&rendered)
         );
     }
 
@@ -2400,7 +2305,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn deferred_cancellation_removes_every_wallet_plan_view() {
+    async fn deferred_cancellation_removes_every_corbanu_api_and_wallet_plan_view() {
         let (mut chat, _rx, _op_rx) =
             crate::chatwidget::tests::helpers::make_chatwidget_manual(None).await;
         for view_id in [
@@ -2408,6 +2313,8 @@ mod tests {
             WALLET_PLANS_VIEW_ID,
             WALLET_PLANS_VIEW_ID,
             WALLET_PLAN_CONFIRM_VIEW_ID,
+            crate::chatwidget::wallet_api::CORBANU_API_VIEW_ID,
+            crate::chatwidget::wallet_api::CORBANU_API_VIEW_ID,
         ] {
             chat.show_selection_view(SelectionViewParams {
                 view_id: Some(view_id),
@@ -2597,11 +2504,7 @@ mod tests {
                 usdc_atomic: 5_000_000,
             }),
             balance_error: None,
-            plan: None,
-            linked_plan_for_other_wallet: None,
-            plan_error: None,
             plan_credential_present: false,
-            plan_prices_usdc: std::collections::BTreeMap::new(),
         }
     }
 
@@ -2613,116 +2516,10 @@ mod tests {
             .collect()
     }
 
-    fn starter_plan() -> WalletPlanStatus {
-        WalletPlanStatus {
-            wallet_address: "EpUYgzi88BYbsGoyiNghPppd3J9ASbARq7UjBCCUnk2i".to_string(),
-            period: WalletPlanPeriod {
-                transaction: "starter-transaction".to_string(),
-                plan_id: "starter".to_string(),
-                starts_at: "2026-07-19T00:35:20Z".to_string(),
-                ends_at: "2026-08-19T00:35:20Z".to_string(),
-                monthly_limit_tokens: 1_000_000,
-                monthly_used_tokens: 20_996,
-                monthly_reserved_tokens: 0,
-            },
-            weekly: WalletUsageWindow {
-                ends_at: "2026-07-26T00:35:20Z".to_string(),
-                limit_tokens: 250_000,
-                used_tokens: 20_996,
-                reserved_tokens: 0,
-            },
-            monthly_remaining_tokens: 979_004,
-            weekly_remaining_tokens: 229_004,
-            queued_periods: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn wallet_summary_keeps_usage_and_dates_out_of_the_header() {
-        let mut plan = starter_plan();
-        plan.queued_periods.push(WalletQueuedPlanPeriod {
-            transaction: "basic-transaction".to_string(),
-            plan_id: "basic".to_string(),
-            starts_at: "2026-08-19T00:35:20Z".to_string(),
-            ends_at: "2026-09-19T00:35:20Z".to_string(),
-        });
-
-        let summary = wallet_plan_summary(&plan);
-        assert_eq!(summary, "Corbanu Plan · Starter active · Basic next");
-        assert!(!summary.contains("token"));
-        assert!(!summary.contains("2026-"));
-        assert!(!summary.contains("USDC"));
-    }
-
-    #[test]
-    fn connected_plan_exposes_dedicated_details_view() {
-        let mut active = overview(/*locked*/ true);
-        active.plan = Some(starter_plan());
-        active.plan_credential_present = true;
-        let mut header = ColumnRenderable::new();
-        let items = wallet_items(&mut header, active, /*client_can_sign*/ false);
-        let details = items
-            .iter()
-            .position(|item| item.name == "Plan details")
-            .expect("plan details action");
-
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let sender = crate::app_event_sender::AppEventSender::new(tx);
-        (items[details].actions[0])(&sender);
-        assert!(matches!(rx.try_recv(), Ok(AppEvent::OpenWalletPlanUsage)));
-    }
-
-    #[test]
-    fn linked_plan_for_another_wallet_is_not_presented_as_local_plan() {
-        let local_address = "EpUYgzi88BYbsGoyiNghPppd3J9ASbARq7UjBCCUnk2i";
-        let mut linked = starter_plan();
-        linked.wallet_address = "2YYwro8tH3LzkwqCyHqZvBZt9KBsQwgtu9E6b1dBhbB5".to_string();
-
-        let (local, other) =
-            separate_plan_for_local_wallet(Some(linked.clone()), Some(local_address));
-        assert!(local.is_none());
-        assert_eq!(
-            other.as_ref().map(|plan| &plan.wallet_address),
-            Some(&linked.wallet_address)
-        );
-
-        let mut overview = overview(/*locked*/ false);
-        overview.linked_plan_for_other_wallet = other;
-        overview.plan_credential_present = true;
-        let mut header = ColumnRenderable::new();
-        let names = wallet_items(&mut header, overview, /*client_can_sign*/ true)
-            .into_iter()
-            .map(|item| item.name)
-            .collect::<Vec<_>>();
-        assert!(names.iter().any(|name| name == "Buy a Corbanu Plan"));
-        assert!(names.iter().any(|name| name == "Disconnect Corbanu Plan"));
-        assert!(!names.iter().any(|name| name == "Upgrade Corbanu Plan"));
-        assert!(!names.iter().any(|name| name == "View latest plan receipt"));
-        assert_eq!(
-            linked_plan_owner_description(&linked),
-            "Purchased by 2YYwro8…dBhbB5 · not this local wallet"
-        );
-    }
-
-    #[test]
-    fn matching_plan_wallet_remains_the_local_upgrade_account() {
-        let linked = starter_plan();
-        let address = linked.wallet_address.clone();
-
-        let (local, other) = separate_plan_for_local_wallet(Some(linked), Some(&address));
-
-        assert_eq!(
-            local.as_ref().map(|plan| plan.period.plan_id.as_str()),
-            Some("starter")
-        );
-        assert!(other.is_none());
-    }
-
     #[test]
     fn unlocked_daemon_without_this_tui_capability_requires_unlock_again() {
         let items = names(/*locked*/ false, /*client_can_sign*/ false);
-        assert!(items.iter().any(|name| name == "Buy Corbanu Plan"));
-        assert!(items.iter().any(|name| name == "Recover existing plan"));
+        assert!(items.iter().any(|name| name == "Corbanu API"));
         assert!(
             items
                 .iter()
@@ -2738,51 +2535,74 @@ mod tests {
         insta::assert_snapshot!("wallet_locked_action_names", items.join("\n"));
     }
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn legacy_daemon_upgrade_guidance_is_visible_in_wallet_surface() {
+        use tokio::io::AsyncBufReadExt;
+        use tokio::io::AsyncWriteExt;
+        use tokio::io::BufReader;
+
+        let home = tempfile::tempdir().unwrap();
+        let run_dir = home.path().join("wallet/run");
+        std::fs::create_dir_all(&run_dir).unwrap();
+        let listener = tokio::net::UnixListener::bind(run_dir.join("walletd.sock")).unwrap();
+        let server = tokio::spawn(async move {
+            for response in [
+                "{\"type\":\"pong\"}\n",
+                "{\"type\":\"error\",\"code\":\"invalid_request\",\"message\":\"request was malformed\"}\n",
+            ] {
+                let (stream, _) = listener.accept().await.unwrap();
+                let (read, mut write) = tokio::io::split(stream);
+                let mut line = String::new();
+                BufReader::new(read).read_line(&mut line).await.unwrap();
+                write.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let error = WalletDaemonClient::new(home.path().to_path_buf())
+            .status()
+            .await
+            .unwrap_err()
+            .to_string()
+            .replace(home.path().to_str().unwrap(), "[home]");
+        server.await.unwrap();
+        let (mut chat, _, _, _) =
+            crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+        chat.show_selection_view(wallet_params(Some(Err(error)), false));
+        let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 100);
+        assert!(rendered.contains("daemon_upgrade_required"));
+        assert!(rendered.contains("pfterminal-walletd"));
+        assert!(rendered.contains("outcome is unknown"));
+        assert!(rendered.contains("Retry"));
+        insta::assert_snapshot!("wallet_legacy_daemon_upgrade", rendered);
+    }
+
     #[test]
     fn scoped_capability_enables_spending_actions_only_in_owning_tui() {
         let items = names(/*locked*/ false, /*client_can_sign*/ true);
-        assert!(items.iter().any(|name| name == "Buy Corbanu Plan"));
-        assert!(items.iter().any(|name| name == "Recover existing plan"));
+        assert!(items.iter().any(|name| name == "Corbanu API"));
         assert!(!items.iter().any(|name| name.starts_with("Unlock for")));
     }
 
     #[test]
-    fn fresh_locked_wallet_leads_with_purchase_and_keeps_recovery_secondary() {
+    fn fresh_locked_wallet_leads_with_corbanu_api() {
         let mut header = ColumnRenderable::new();
         let items = wallet_items(
             &mut header,
             overview(/*locked*/ true),
             /*client_can_sign*/ false,
         );
-        let purchase = items
+        let api = items
             .iter()
-            .position(|item| item.name == "Buy Corbanu Plan")
-            .expect("fresh wallet purchase action");
-        let recovery = items
-            .iter()
-            .position(|item| item.name == "Recover existing plan")
-            .expect("existing-plan recovery action");
-        assert_eq!(purchase, 1, "purchase should follow Receive");
-        assert_eq!(recovery, 2, "recovery should follow purchase");
+            .position(|item| item.name == "Corbanu API")
+            .expect("Corbanu API action");
+        assert_eq!(api, 1, "Corbanu API should follow Receive");
 
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = crate::app_event_sender::AppEventSender::new(tx);
-        (items[purchase].actions[0])(&sender);
+        (items[api].actions[0])(&sender);
         assert!(matches!(
             rx.try_recv(),
-            Ok(AppEvent::OpenWalletUnlock {
-                policy: UnlockPolicy::Timed {
-                    duration_seconds: 300
-                },
-                continuation: crate::app_event::WalletUnlockContinuation::OpenPlans {
-                    mode: WalletPlanPurchaseMode::New
-                }
-            })
-        ));
-        (items[recovery].actions[0])(&sender);
-        assert!(matches!(
-            rx.try_recv(),
-            Ok(AppEvent::WalletRecoverPlanRequested)
+            Ok(AppEvent::OpenCorbanuApi { deferred: None })
         ));
     }
 
@@ -2805,145 +2625,7 @@ mod tests {
     }
 
     #[test]
-    fn active_plan_exposes_upgrade_before_and_after_unlock() {
-        let mut locked_overview = overview(/*locked*/ true);
-        locked_overview.plan = Some(starter_plan());
-        let mut header = ColumnRenderable::new();
-        let locked_items =
-            wallet_items(&mut header, locked_overview, /*client_can_sign*/ false);
-        let locked_upgrade = locked_items
-            .iter()
-            .position(|item| item.name == "Upgrade Corbanu Plan")
-            .expect("locked upgrade action");
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let sender = crate::app_event_sender::AppEventSender::new(tx);
-        (locked_items[locked_upgrade].actions[0])(&sender);
-        assert!(matches!(
-            rx.try_recv(),
-            Ok(AppEvent::OpenWalletUnlock {
-                policy: UnlockPolicy::Timed {
-                    duration_seconds: 300
-                },
-                continuation: crate::app_event::WalletUnlockContinuation::OpenPlans {
-                    mode: WalletPlanPurchaseMode::Upgrade { .. }
-                }
-            })
-        ));
-
-        let mut unlocked_overview = overview(/*locked*/ false);
-        unlocked_overview.plan = Some(starter_plan());
-        let mut header = ColumnRenderable::new();
-        let unlocked_items = wallet_items(
-            &mut header,
-            unlocked_overview,
-            /*client_can_sign*/ true,
-        );
-        let unlocked_upgrade = unlocked_items
-            .iter()
-            .position(|item| item.name == "Upgrade Corbanu Plan")
-            .expect("unlocked upgrade action");
-        (unlocked_items[unlocked_upgrade].actions[0])(&sender);
-        assert!(matches!(
-            rx.try_recv(),
-            Ok(AppEvent::OpenWalletPlans {
-                mode: WalletPlanPurchaseMode::Upgrade {
-                    current_plan_id,
-                    starts_at,
-                }
-            }) if current_plan_id == "starter" && starts_at == "2026-08-19T00:35:20Z"
-        ));
-    }
-
-    #[test]
-    fn queued_plan_becomes_the_upgrade_floor_and_schedule_boundary() {
-        let mut status = starter_plan();
-        status.queued_periods.push(WalletQueuedPlanPeriod {
-            transaction: "basic-transaction".to_string(),
-            plan_id: "basic".to_string(),
-            starts_at: "2026-08-19T00:35:20Z".to_string(),
-            ends_at: "2026-09-19T00:35:20Z".to_string(),
-        });
-        let mut active = overview(/*locked*/ false);
-        active.plan = Some(status);
-        let mut header = ColumnRenderable::new();
-        let items = wallet_items(&mut header, active, /*client_can_sign*/ true);
-        let upgrade = items
-            .iter()
-            .position(|item| item.name == "Upgrade Corbanu Plan")
-            .expect("upgrade action");
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let sender = crate::app_event_sender::AppEventSender::new(tx);
-        (items[upgrade].actions[0])(&sender);
-        assert!(matches!(
-            rx.try_recv(),
-            Ok(AppEvent::OpenWalletPlans {
-                mode: WalletPlanPurchaseMode::Upgrade {
-                    current_plan_id,
-                    starts_at,
-                }
-            }) if current_plan_id == "basic" && starts_at == "2026-09-19T00:35:20Z"
-        ));
-        let plans = ["entry", "daily", "studio"]
-            .into_iter()
-            .map(|id| WalletPlanChoice {
-                id: id.to_string(),
-                price_usdc: "1".to_string(),
-                amount_atomic: "1000000".to_string(),
-                weekly_token_limit: 1,
-                monthly_token_limit: 1,
-                scheduled_start: None,
-                deferred_setup: None,
-            })
-            .collect();
-        assert_eq!(
-            higher_tiers_from_catalog(plans, "daily")
-                .into_iter()
-                .map(|plan| plan.id)
-                .collect::<Vec<_>>(),
-            vec!["studio"]
-        );
-    }
-
-    #[test]
-    fn queued_payment_exposes_a_durable_authoritative_receipt() {
-        let mut status = starter_plan();
-        status.queued_periods.push(WalletQueuedPlanPeriod {
-            transaction: "basic-settlement-signature".to_string(),
-            plan_id: "basic".to_string(),
-            starts_at: "2026-08-19T00:35:20Z".to_string(),
-            ends_at: "2026-09-19T00:35:20Z".to_string(),
-        });
-        let mut active = overview(/*locked*/ true);
-        active.plan = Some(status);
-        active
-            .plan_prices_usdc
-            .insert("basic".to_string(), "20".to_string());
-        let mut header = ColumnRenderable::new();
-        let items = wallet_items(&mut header, active, /*client_can_sign*/ false);
-        let receipt = items
-            .iter()
-            .position(|item| item.name == "View latest plan receipt")
-            .expect("receipt action");
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        let sender = crate::app_event_sender::AppEventSender::new(tx);
-
-        (items[receipt].actions[0])(&sender);
-
-        let AppEvent::OpenWalletPlanReceipt { receipt } = rx.try_recv().expect("receipt event")
-        else {
-            panic!("unexpected event");
-        };
-        assert_eq!(receipt.plan_id, "basic");
-        assert_eq!(receipt.price_usdc.as_deref(), Some("20"));
-        assert_eq!(
-            receipt.transaction.as_deref(),
-            Some("basic-settlement-signature")
-        );
-        assert_eq!(receipt.active_plan_id.as_deref(), Some("starter"));
-    }
-
-    #[test]
-    fn plan_disconnect_and_wallet_removal_are_separate_actions() {
+    fn stored_api_credential_never_restores_legacy_plan_copy() {
         let mut overview = overview(/*locked*/ true);
         overview.plan_credential_present = true;
         let mut header = ColumnRenderable::new();
@@ -2952,14 +2634,24 @@ mod tests {
             .iter()
             .map(|item| item.name.as_str())
             .collect::<Vec<_>>();
-        assert!(names.contains(&"Disconnect Corbanu Plan"));
+        assert!(names.contains(&"Disconnect Corbanu API"));
         assert!(names.contains(&"Remove wallet from this device"));
+        for item in &items {
+            let visible_copy = format!(
+                "{} {}",
+                item.name,
+                item.description.as_deref().unwrap_or_default()
+            );
+            assert!(!visible_copy.contains("Corbanu Plan"));
+            assert!(!visible_copy.to_ascii_lowercase().contains("legacy"));
+            assert!(!visible_copy.to_ascii_lowercase().contains("paid period"));
+        }
 
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let sender = crate::app_event_sender::AppEventSender::new(tx);
         let disconnect = items
             .iter()
-            .position(|item| item.name == "Disconnect Corbanu Plan")
+            .position(|item| item.name == "Disconnect Corbanu API")
             .expect("disconnect action");
         (items[disconnect].actions[0])(&sender);
         assert!(matches!(
@@ -3014,9 +2706,24 @@ mod tests {
     }
 
     #[test]
-    fn signing_request_does_not_consume_the_tui_unlock_capability() {
-        let held = Some(Zeroizing::new("test-wallet-capability".to_string()));
-        let request = wallet_capability_for_request(held.as_ref()).expect("request capability");
+    fn one_action_signing_request_consumes_the_tui_unlock_capability() {
+        let mut held = Some(Zeroizing::new("test-wallet-capability".to_string()));
+        let request = wallet_capability_for_request(&mut held, Some(UnlockPolicy::OneAction))
+            .expect("request capability");
+        assert_eq!(request.as_str(), "test-wallet-capability");
+        assert!(held.is_none());
+    }
+
+    #[test]
+    fn timed_signing_request_preserves_the_tui_unlock_capability() {
+        let mut held = Some(Zeroizing::new("test-wallet-capability".to_string()));
+        let request = wallet_capability_for_request(
+            &mut held,
+            Some(UnlockPolicy::Timed {
+                duration_seconds: 1_800,
+            }),
+        )
+        .expect("request capability");
         assert_eq!(request.as_str(), "test-wallet-capability");
         assert_eq!(
             held.as_deref().map(String::as_str),
@@ -3036,9 +2743,21 @@ mod tests {
             "Remove wallet from this device",
             "Wallet: 3speRmS…JRwV5r",
             "Funds stay on Solana. Corbanu Terminal cannot recover them without your recovery material.",
-            "This also disconnects the local Corbanu Plan credential. It does not cancel or refund the paid period.",
+            "This also removes the stored Corbanu API credential. Your on-chain funds and dollar balance remain unchanged.",
             "Cancel — Keep the wallet on this device",
             "Remove wallet — I have saved the recovery material",
+        ]
+        .join("\n");
+        insta::assert_snapshot!(rendered);
+    }
+
+    #[test]
+    fn wallet_api_disconnect_confirmation_copy_snapshot() {
+        let rendered = [
+            "Disconnect Corbanu API",
+            "This removes the stored API credential from this device. Your wallet and dollar balance remain unchanged.",
+            "Cancel — Keep this device connected",
+            "Disconnect API — Remove only the stored API credential",
         ]
         .join("\n");
         insta::assert_snapshot!(rendered);

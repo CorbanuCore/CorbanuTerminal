@@ -2834,9 +2834,20 @@ fn ambient_profile_is_first_creation_option() {
             .copied(),
         Some(ClaudeProviderProfileKind::AmbientGlm52)
     );
-    assert!(
-        ClaudeProviderProfileKind::creation_options()
-            .contains(&ClaudeProviderProfileKind::AmbientKimiK27)
+}
+
+#[test]
+fn ambient_retired_pane_settings_still_restore() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    std::fs::write(
+        dir.path().join("settings.json"),
+        serde_json::to_vec(&json!({"env": {"ANTHROPIC_MODEL": AMBIENT_KIMI_K2_7_CODE_MODEL}}))
+            .expect("serialize settings"),
+    )
+    .expect("write settings");
+    assert_eq!(
+        super::persistence::profile_from_settings(dir.path()),
+        Some(ClaudeProviderProfileKind::AmbientKimiK27)
     );
 }
 

@@ -434,6 +434,7 @@ pub(crate) mod claude_auth_adapter;
 pub(crate) mod agent_control;
 pub(crate) mod campaign_tracker;
 mod campaign_tracker_workflows;
+pub(crate) mod claude_auth_presentation;
 pub(crate) mod claude_code_login;
 mod pfterminal_plan_status;
 pub(crate) mod provider_credentials;
@@ -444,6 +445,7 @@ mod usage;
 mod user_messages;
 mod vault_menu;
 mod wallet_account_actions;
+pub(crate) mod wallet_api;
 mod wallet_http;
 pub(crate) mod wallet_menu;
 pub(crate) mod wallet_receipt;
@@ -625,6 +627,7 @@ pub(crate) struct ChatWidget {
     /// Holds the platform clipboard lease so copied text remains available while supported.
     clipboard_lease: Option<crate::clipboard_copy::ClipboardLease>,
     wallet_capability: Option<zeroize::Zeroizing<String>>,
+    wallet_capability_policy: Option<codex_wallet_daemon::UnlockPolicy>,
     wallet_status_generation: u64,
     next_wallet_plan_persistence_attempt: u64,
     current_wallet_plan_persistence_attempt:

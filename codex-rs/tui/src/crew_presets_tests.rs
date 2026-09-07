@@ -65,6 +65,83 @@ fn standard_crew_is_valid_and_topologically_ordered() {
 }
 
 #[test]
+fn corbanu_api_crew_is_valid_and_uses_the_requested_runtime_for_every_role() {
+    let crew = corbanu_api_crew_spec();
+    crew.validate().expect("valid Corbanu API crew");
+
+    assert_eq!(
+        crew.members
+            .iter()
+            .map(|member| (
+                member.logical_member_id.as_str(),
+                member.parent_member_id.as_deref(),
+                member.role_profile.as_str(),
+                member.runtime_request.exact_parts(),
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                "nazgul",
+                None,
+                "nazgul",
+                Some((
+                    PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+                    CORBANU_API_KIMI_K3_MODEL,
+                    None,
+                )),
+            ),
+            (
+                "troll",
+                Some("nazgul"),
+                "troll",
+                Some((
+                    PFTERMINAL_PLAN_PROVIDER_ID,
+                    CORBANU_API_GPT_5_6_LUNA_MODEL,
+                    Some(ReasoningEffort::XHigh),
+                )),
+            ),
+            (
+                "orc-1",
+                Some("troll"),
+                "orc",
+                Some((
+                    PFTERMINAL_PLAN_PROVIDER_ID,
+                    CORBANU_API_GLM_5_3_FLASH_MODEL,
+                    None,
+                )),
+            ),
+            (
+                "orc-2",
+                Some("troll"),
+                "orc",
+                Some((
+                    PFTERMINAL_PLAN_PROVIDER_ID,
+                    CORBANU_API_GLM_5_3_FLASH_MODEL,
+                    None,
+                )),
+            ),
+            (
+                "orc-3",
+                Some("troll"),
+                "orc",
+                Some((
+                    PFTERMINAL_PLAN_PROVIDER_ID,
+                    CORBANU_API_GLM_5_3_FLASH_MODEL,
+                    None,
+                )),
+            ),
+        ]
+    );
+    assert_eq!(
+        crew.policy.provider_allowlist,
+        vec![
+            PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID.to_string(),
+            PFTERMINAL_PLAN_PROVIDER_ID.to_string(),
+        ]
+    );
+}
+
+#[test]
 fn qualification_crew_covers_each_required_runtime_pair() {
     let crew = multimodel_qualification_crew_spec();
     crew.validate().expect("valid qualification crew");

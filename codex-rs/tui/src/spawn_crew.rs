@@ -353,6 +353,14 @@ impl App {
             .await
     }
 
+    pub(crate) async fn create_spawn_corbanu_api_crew(
+        &mut self,
+        app_server: &mut AppServerSession,
+    ) -> Result<(ThreadId, ThreadId)> {
+        self.create_spawn_crew(app_server, crew_presets::corbanu_api_crew_spec())
+            .await
+    }
+
     async fn create_spawn_crew(
         &mut self,
         app_server: &mut AppServerSession,

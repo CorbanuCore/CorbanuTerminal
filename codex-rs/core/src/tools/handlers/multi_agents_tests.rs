@@ -928,8 +928,9 @@ async fn multi_agent_v2_spawn_fork_turns_all_rejects_agent_type_override() {
 }
 
 #[tokio::test]
-async fn multi_agent_v2_spawn_rejects_child_model_from_different_backend() {
+async fn multi_agent_v2_selects_child_models_with_different_engine_defaults() {
     let (session, mut turn) = make_session_and_context().await;
+    set_turn_to_openai_provider(&mut turn);
     let mut config = (*turn.config).clone();
     config
         .features
@@ -937,29 +938,60 @@ async fn multi_agent_v2_spawn_rejects_child_model_from_different_backend() {
         .expect("test config should allow feature update");
     set_turn_config(&mut turn, config);
 
-    let err = SpawnAgentHandlerV2::default()
-        .handle(invocation(
-            Arc::new(session),
-            Arc::new(turn),
-            "spawn_agent",
-            function_payload(json!({
-                "message": "inspect this repo",
-                "task_name": "incompatible_model",
-                "model": "gpt-5.4",
-                "fork_turns": "none"
-            })),
-        ))
-        .await
-        .err()
-        .expect("model from a different multi-agent backend should be rejected");
-
-    assert_eq!(
-        err,
-        FunctionCallError::RespondToModel(
-            "Unknown model `gpt-5.4` for spawn_agent. Available models: gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna"
-                .to_string()
+    for (model, provider) in [
+        ("gpt-5.4", OPENAI_PROVIDER_ID),
+        ("k3", KIMI_CODE_PROVIDER_ID),
+    ] {
+        let mut child =
+            build_agent_spawn_config(&BaseInstructions::default(), &turn).expect("child config");
+        apply_requested_spawn_agent_model_overrides(
+            &session,
+            &turn,
+            &mut child,
+            Some(model),
+            /*requested_reasoning_effort*/ None,
         )
-    );
+        .await
+        .expect("model selection is independent of the model's engine default");
+        assert_eq!(
+            (
+                child.model.as_deref(),
+                child.model_provider_id.as_str(),
+                child.multi_agent_version_for_model(None)
+            ),
+            (Some(model), provider, MultiAgentVersion::V2)
+        );
+    }
+}
+
+#[tokio::test]
+async fn build_agent_config_inherits_model_selected_v2_for_spawn_and_resume() {
+    let (_session, mut turn) = make_session_and_context().await;
+    let mut parent = (*turn.config).clone();
+    parent
+        .features
+        .disable(Feature::MultiAgentV2)
+        .expect("feature update");
+    turn.config = Arc::new(parent);
+    // The parent's model, not an explicit feature flag, selected the running engine.
+    turn.multi_agent_version = MultiAgentVersion::V2;
+    let spawn =
+        build_agent_spawn_config(&BaseInstructions::default(), &turn).expect("spawn config");
+    let resume = build_agent_resume_config(&turn).expect("resume config");
+    for preference in [
+        None,
+        Some(MultiAgentVersion::V1),
+        Some(MultiAgentVersion::V2),
+    ] {
+        assert_eq!(
+            (
+                spawn.multi_agent_version_for_model(preference),
+                resume.multi_agent_version_for_model(preference)
+            ),
+            (MultiAgentVersion::V2, MultiAgentVersion::V2)
+        );
+    }
+    assert!(!turn.config.features.enabled(Feature::MultiAgentV2));
 }
 
 #[tokio::test]

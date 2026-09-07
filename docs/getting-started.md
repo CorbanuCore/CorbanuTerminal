@@ -33,15 +33,15 @@ Corbanu Terminal currently ships these provider paths:
 | OpenAI Codex account      | OpenAI             | `gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra`                                                                   |
 | Claude subscription       | Claude Plan        | `claude-opus-5-plan`, `claude-fable-5-1-plan`, `claude-fable-5-plan`                                             |
 | Direct Claude API         | Anthropic          | `claude-opus-5`, `claude-fable-5-1`, `claude-fable-5`                                                           |
-| Ambient coding plan       | Ambient            | `z-ai/glm-5.2`, `moonshotai/kimi-k2.7-code`                                                                      |
+| Ambient coding plan       | Ambient            | `z-ai/glm-5.2`                                                                                                 |
 | Kimi coding plan          | Kimi Code          | `k3`                                                                                                             |
 | Z.AI coding plan          | Z.AI               | `glm-5.2`                                                                                                        |
 | Direct DeepSeek Responses | DeepSeek           | `deepseek-v4-flash` (DeepSeek V4 Flash 0731)                                                                     |
 | Metered model gateway     | OpenRouter         | `deepseek/deepseek-v4-flash-0731`, `deepseek/deepseek-v4-pro`, `moonshotai/kimi-k3`, and other catalogued routes |
 | Meta API                  | Meta               | `muse-spark-1.1`                                                                                                 |
 | Metered GLM               | Baseten            | `zai-org/GLM-5.2`                                                                                                |
-| Metered GLM gateway       | Vercel             | `zai/glm-5.2`, `zai/glm-5.2-fast`                                                                                |
-| Wallet-funded inference   | Corbanu Plan       | GLM 5.2, Kimi K2.7 Code, DeepSeek V4 Pro, Claude Fable 5.1 and 5                                                 |
+| Metered model gateway     | Vercel             | `zai/glm-5.3-flash`, `zai/glm-5.3`, Kimi K3, DeepSeek V4 Pro, and legacy GLM 5.2 routes                          |
+| Wallet-funded inference   | Corbanu API         | GLM 5.3 Flash, GLM 5.3, GPT-5.6 Luna/Sol, Kimi K3, DeepSeek V4 Pro, plus Claude Fable 5.1 and 5                   |
 | Cloud model runtime       | Bedrock            | Models available to the configured AWS account                                                                   |
 | Local model runtime       | Ollama / LM Studio | Models served by the configured local endpoint                                                                   |
 | Operator-defined endpoint | Custom             | Models declared in `config.toml`                                                                                 |
@@ -92,7 +92,7 @@ Provider API keys stored through onboarding use labels such as
 | [`/panes`](features/workspaces.md)          | Create or switch persistent native, Claude, and managed crew panes       |
 | [`/spawn`](features/spawn-orchestration.md) | Create or bind retained Nazgul/Troll/Orc agents                          |
 | [`/orchestrate`](features/orchestrate.md)   | Attach persistent Manager → Worker supervision                           |
-| `/wallet`                                   | Manage the local SOL/USDC wallet and Corbanu Plans                       |
+| `/wallet`                                   | Manage the local SOL/USDC wallet and Corbanu API balance/keys            |
 | `/gpu`                                      | Inspect, rent, stop, or terminate supported GPU capacity                 |
 | `/telegram`                                 | Configure and control the Telegram connector                             |
 | `/tasknode`                                 | Link and use Task Node tasks, context, chat, balances, and rewards       |

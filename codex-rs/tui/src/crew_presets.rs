@@ -2,6 +2,9 @@ use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+use codex_model_provider_info::CORBANU_API_GLM_5_3_FLASH_MODEL;
+use codex_model_provider_info::CORBANU_API_GPT_5_6_LUNA_MODEL;
+use codex_model_provider_info::CORBANU_API_KIMI_K3_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::KIMI_CODE_K3_MODEL;
 #[cfg(test)]
@@ -9,6 +12,8 @@ use codex_model_provider_info::KIMI_CODE_PROVIDER_ID;
 use codex_model_provider_info::OPENAI_PROVIDER_ID;
 use codex_model_provider_info::OPENROUTER_GROK_4_6_MODEL;
 use codex_model_provider_info::OPENROUTER_PROVIDER_ID;
+use codex_model_provider_info::PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID;
+use codex_model_provider_info::PFTERMINAL_PLAN_PROVIDER_ID;
 use codex_protocol::crew::CURRENT_CREW_SCHEMA_VERSION;
 use codex_protocol::crew::CrewMemberSpec;
 use codex_protocol::crew::CrewPolicy;
@@ -22,6 +27,9 @@ pub(crate) const STANDARD_TROLL_MODEL: &str = "gpt-5.6-sol";
 pub(crate) const STANDARD_ORC_MODEL: &str = "gpt-5.6-luna";
 pub(crate) const STANDARD_ORC_2_MODEL: &str = "gpt-5.6-terra";
 pub(crate) const STANDARD_ORC_3_MODEL: &str = OPENROUTER_GROK_4_6_MODEL;
+pub(crate) const CORBANU_API_NAZGUL_MODEL: &str = CORBANU_API_KIMI_K3_MODEL;
+pub(crate) const CORBANU_API_TROLL_MODEL: &str = CORBANU_API_GPT_5_6_LUNA_MODEL;
+pub(crate) const CORBANU_API_ORC_MODEL: &str = CORBANU_API_GLM_5_3_FLASH_MODEL;
 
 pub(crate) fn standard_crew_spec() -> CrewSpec {
     CrewSpec {
@@ -92,6 +100,80 @@ pub(crate) fn standard_crew_spec() -> CrewSpec {
                 CLAUDE_PLAN_PROVIDER_ID.to_string(),
                 OPENAI_PROVIDER_ID.to_string(),
                 OPENROUTER_PROVIDER_ID.to_string(),
+            ],
+            maximum_spend_usd: None,
+        },
+    }
+}
+
+pub(crate) fn corbanu_api_crew_spec() -> CrewSpec {
+    CrewSpec {
+        schema_version: CURRENT_CREW_SCHEMA_VERSION,
+        crew_id: "builtin-corbanu-api-v1".to_string(),
+        preset_id: Some("corbanu-api-v1".to_string()),
+        members: vec![
+            member(
+                "nazgul",
+                "Nazgul",
+                "nazgul",
+                /*parent_member_id*/ None,
+                RuntimeRequest::exact(
+                    PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+                    CORBANU_API_NAZGUL_MODEL,
+                    /*reasoning_effort*/ None,
+                ),
+            ),
+            member(
+                "troll",
+                "Troll",
+                "troll",
+                Some("nazgul"),
+                RuntimeRequest::exact(
+                    PFTERMINAL_PLAN_PROVIDER_ID,
+                    CORBANU_API_TROLL_MODEL,
+                    Some(ReasoningEffort::XHigh),
+                ),
+            ),
+            member(
+                "orc-1",
+                "Orc 1",
+                "orc",
+                Some("troll"),
+                RuntimeRequest::exact(
+                    PFTERMINAL_PLAN_PROVIDER_ID,
+                    CORBANU_API_ORC_MODEL,
+                    /*reasoning_effort*/ None,
+                ),
+            ),
+            member(
+                "orc-2",
+                "Orc 2",
+                "orc",
+                Some("troll"),
+                RuntimeRequest::exact(
+                    PFTERMINAL_PLAN_PROVIDER_ID,
+                    CORBANU_API_ORC_MODEL,
+                    /*reasoning_effort*/ None,
+                ),
+            ),
+            member(
+                "orc-3",
+                "Orc 3",
+                "orc",
+                Some("troll"),
+                RuntimeRequest::exact(
+                    PFTERMINAL_PLAN_PROVIDER_ID,
+                    CORBANU_API_ORC_MODEL,
+                    /*reasoning_effort*/ None,
+                ),
+            ),
+        ],
+        policy: CrewPolicy {
+            delegation_mode: DelegationMode::Proactive,
+            allow_ephemeral_descendants: true,
+            provider_allowlist: vec![
+                PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID.to_string(),
+                PFTERMINAL_PLAN_PROVIDER_ID.to_string(),
             ],
             maximum_spend_usd: None,
         },
