@@ -1206,6 +1206,31 @@ struct LoadedProjectLayers {
     startup_warnings: Vec<String>,
 }
 
+/// Detect the upstream Codex global config directory when Corbanu uses a
+/// different home.
+///
+/// A user who launches from `$HOME` has historically seen `~/.codex/config.toml`
+/// misclassified as a project-local config. That file belongs to the upstream
+/// Codex installation and is not a Corbanu project declaration. Skipping only
+/// the sibling global directory preserves ordinary `<project>/.codex` layers.
+fn is_foreign_upstream_codex_home(
+    dot_codex_abs: &AbsolutePathBuf,
+    codex_home_abs: &AbsolutePathBuf,
+) -> bool {
+    if dot_codex_abs == codex_home_abs {
+        return false;
+    }
+    codex_home_abs
+        .as_path()
+        .file_name()
+        .is_some_and(|name| name == ".corbanu")
+        && dot_codex_abs.as_path().parent() == codex_home_abs.as_path().parent()
+        && dot_codex_abs
+            .as_path()
+            .file_name()
+            .is_some_and(|name| name == ".codex")
+}
+
 /// Return the appropriate list of layers (each with
 /// [ConfigLayerSource::Project] as the source) between `cwd` and
 /// `project_root`, inclusive. The list is ordered in _increasing_ precdence,
@@ -1257,7 +1282,10 @@ async fn load_project_layers(
         let hooks_config_folder_override = trust_context.root_checkout_hooks_folder_for_dir(&dir);
         let dot_codex_normalized =
             normalize_path(dot_codex_abs.as_path()).unwrap_or_else(|_| dot_codex_abs.to_path_buf());
-        if dot_codex_abs == codex_home_abs || dot_codex_normalized == codex_home_normalized {
+        if dot_codex_abs == codex_home_abs
+            || dot_codex_normalized == codex_home_normalized
+            || is_foreign_upstream_codex_home(&dot_codex_abs, &codex_home_abs)
+        {
             continue;
         }
         let config_file = dot_codex_abs.join(CONFIG_TOML_FILE);
