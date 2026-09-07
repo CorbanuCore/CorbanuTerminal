@@ -405,13 +405,6 @@ fn clear_pending_scoped_from_store<S: SessionStore + ?Sized>(
     store.delete(&scope.pending_label())
 }
 
-fn clear_pending_scoped_from_store<S: SessionStore + ?Sized>(
-    store: &S,
-    scope: &SessionScope,
-) -> Result<bool, SessionStoreError> {
-    store.delete(&scope.pending_label())
-}
-
 /// Unlink Task Node, retaining a durable marker that prevents legacy reimport.
 pub fn clear_all(vault: &Vault) -> Result<(), SessionStoreError> {
     clear_all_from_store(vault)

@@ -1,0 +1,13 @@
+# Corbanu Terminal 0.1.39
+
+Release authorized by the requesting repository operator on 2026-09-07: “okay can you please run a release”. Release owner: requesting operator, executed by Codex.
+
+This release adds Campaign Tracker in `/tasknode`: explicit workspace recording, preserved prompts, compact GLM 5.3 Flash summaries, activity totals, permissioned history and replay. It includes the durable Task Node transport/recovery prerequisite and profile isolation, while retaining all commits shipped in 0.1.38, including unlink markers and provider-auth recovery.
+
+Product reference: **Campaign Tracker — LOCAL PILOT CANDIDATE**, “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”. PF-45 implementation is recorded in archived PF-45-S01. Release checkout: `/home/pfrpc/repos/worktrees/corbanu-release-0.1.39`, branch `release/corbanu-0.1.39`; bases origin/main `6dd9ad646b` and rust-v0.1.38 `32ff7bf874`, plus the tested tracker integration.
+
+The production Task Node backend is already deployed at v726. The prior installed debug candidate passed about 15 minutes of real-model Verglas qualification: 78 browser assertions, five recorded prompts, five Flash summaries, replay, access denial, pause/resume and cold restart. Final recorded state: 26 events, no pending uploads or capture gaps. [Detailed evidence](../../campaign-tracker/2026-09-07-verglas/README.md).
+
+The release combines that candidate with newer shipped code. Prior candidate evidence is not claimed as testing every byte of this integrated release. Build/installer verification for all five platform packages is owned by the publishing workflow. TensorCash, the full competitor/coding benchmark cycle, prolonged multi-account load and backup restore remain unqualified. The user explicitly authorized release; these gaps do not override that instruction and do not reset the benchmark cadence.
+
+Local integration: `just fix -p codex-tasknode-session -p codex-tui -p codex-cli` passed (existing warnings), followed by `just fmt` and `git diff --check`. Four installer-contract tests passed. `just bazel-lock-update` passed with no resulting lockfile changes. The focused Task Node and secrets suite is running. The sprint checker reports historical/global scope issues and PF-43/PF-44/PF-45 identifier collisions with the separately shipped Claude-auth plan; it is not claimed as passing. New-version full TUI and dual-repository qualification are not claimed beyond the prior candidate evidence. Publication workflow identifiers will be recorded once dispatched. Build products stay on the mounted data volume; the user's existing checkout and installed debug binary remain available.

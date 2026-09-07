@@ -990,3 +990,7 @@ before qualification.
 - [ ] Named human acceptance passes.
 - [ ] Finished documentation matches the accepted candidate.
 - [ ] Release and due benchmark records are linked.
+
+## PF-45 Campaign Tracker release integration
+
+The user authorized Campaign Tracker implementation on September 6 and production deployment and release on September 7. Product contract: **Campaign Tracker — LOCAL PILOT CANDIDATE**, “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”. [PF-45-S01](../../sprints/archive/p0-security-levels/pf-45-s01-campaign-tracker.md) records completed implementation. [0.1.39 publication](../../../qa/release/0.1.39/PUBLICATION.md) records integration with the shipped 0.1.38 baseline and qualification limits. No additional product initiative is introduced by packaging this completed feature.

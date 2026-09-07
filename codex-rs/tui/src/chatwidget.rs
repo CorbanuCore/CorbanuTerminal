@@ -429,11 +429,11 @@ use self::tps::TpsEstimator;
 mod turn_lifecycle;
 mod turn_runtime;
 use self::turn_lifecycle::TurnLifecycleState;
-#[allow(dead_code)] // Hidden typed host adapter; PF-53/PF-54 own renderer adoption.
-pub(crate) mod claude_auth_adapter;
 pub(crate) mod agent_control;
 pub(crate) mod campaign_tracker;
 mod campaign_tracker_workflows;
+#[allow(dead_code)] // Hidden typed host adapter; PF-53/PF-54 own renderer adoption.
+pub(crate) mod claude_auth_adapter;
 pub(crate) mod claude_auth_presentation;
 pub(crate) mod claude_code_login;
 mod pfterminal_plan_status;
