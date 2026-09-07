@@ -431,6 +431,9 @@ mod turn_runtime;
 use self::turn_lifecycle::TurnLifecycleState;
 #[allow(dead_code)] // Hidden typed host adapter; PF-53/PF-54 own renderer adoption.
 pub(crate) mod claude_auth_adapter;
+pub(crate) mod agent_control;
+pub(crate) mod campaign_tracker;
+mod campaign_tracker_workflows;
 pub(crate) mod claude_code_login;
 mod pfterminal_plan_status;
 pub(crate) mod provider_credentials;
@@ -607,8 +610,17 @@ pub(crate) struct ChatWidget {
     // Stream lifecycle controller for proposed plan output.
     plan_stream_controller: Option<PlanStreamController>,
     pending_stream_consolidations: usize,
+    campaign_tracker_turn: Option<String>,
+    campaign_tracker_indicator: Option<String>,
+    campaign_tracker_automated_input: bool,
+    campaign_tracker_syncing: bool,
+    campaign_tracker_vault: std::cell::OnceCell<codex_vault::Vault>,
+    campaign_tracker_stores: std::cell::RefCell<
+        std::collections::HashMap<String, codex_tasknode_session::tracker::TrackerStore>,
+    >,
     tasknode_menu_counts: Option<tasknode_menu::TaskNodeMenuCountsCache>,
     tasknode_menu_poll_generation: u64,
+    tasknode_response_generations: HashMap<&'static str, u64>,
     tasknode_active_chat_stream_id: Option<String>,
     /// Holds the platform clipboard lease so copied text remains available while supported.
     clipboard_lease: Option<crate::clipboard_copy::ClipboardLease>,

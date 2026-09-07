@@ -368,6 +368,10 @@ impl ChatWidget {
             ));
         }
 
+        if render_in_history {
+            self.campaign_tracker_turn = Some(uuid::Uuid::new_v4().to_string());
+        }
+        self.tracker_capture(if self.campaign_tracker_automated_input {"automated_prompt"} else {"human_prompt"}, &submitted_message.text, serde_json::json!({"attachmentCount": submitted_message.local_images.len() + submitted_message.remote_image_urls.len()}));
         if !self.submit_op(op.clone()) {
             return (false, None);
         }

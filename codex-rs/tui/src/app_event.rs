@@ -618,6 +618,37 @@ pub(crate) enum AppEvent {
         progress: crate::claude_panes::ClaudePaneTurnProgress,
     },
 
+    AgentControlTick {
+        directory: PathBuf,
+    },
+
+    /// A response may only update the profile, credential and view which requested it.
+    TaskNodeScopedResult {
+        label: &'static str,
+        generation: u64,
+        scope: codex_tasknode_session::SessionScope,
+        identity: Option<String>,
+        view: Option<String>,
+        event: Box<AppEvent>,
+    },
+
+    CampaignTrackerDocument {
+        text: String,
+    },
+    CampaignTrackerTick,
+    CampaignTrackerOpen {
+        path: String,
+        body: Option<serde_json::Value>,
+    },
+    CampaignTrackerResult {
+        path: String,
+        enrollment: Option<bool>,
+        result: Result<serde_json::Value, String>,
+    },
+    CampaignTrackerSync {
+        identity: String,
+        result: Result<usize, String>,
+    },
     /// Open the Task Node menu.
     OpenTaskNodeMenu,
     /// Task Node menu account/task counts loaded.
@@ -732,8 +763,18 @@ pub(crate) enum AppEvent {
     SubmitTaskNodeContextEditResult {
         result: Result<serde_json::Value, String>,
     },
+    RetryTaskNodeRequest {
+        request_id: String,
+        attempt: u64,
+    },
+    RetryTaskNodeRequestResult {
+        result: Result<serde_json::Value, String>,
+    },
     /// Show active Task Node task requests.
     OpenTaskNodeRequestList,
+    OpenTaskNodeRequestPage {
+        cursor: Option<String>,
+    },
     /// Active Task Node task requests loaded.
     OpenTaskNodeRequestListResult {
         result: Result<serde_json::Value, String>,

@@ -33,6 +33,18 @@ use serde::Serialize;
 use sha2::Digest;
 use sha2::Sha256;
 
+mod client;
+mod commands;
+mod stream;
+pub mod tracker;
+pub use client::Client;
+pub use client::ClientError;
+pub use client::Response;
+pub use client::normalize_origin;
+pub use commands::CommandStore;
+pub use commands::TaskCommand;
+pub use stream::StreamDecoder;
+
 /// Vault label holding the active terminal session (bearer token). Kept at the
 /// pre-split value so existing linked installations keep working unchanged.
 pub const TASKNODE_ACTIVE_SESSION_LABEL: &str = "tasknode/session";

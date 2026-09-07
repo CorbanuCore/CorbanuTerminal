@@ -6,7 +6,7 @@ use pretty_assertions::assert_eq;
 use super::*;
 
 #[derive(Default)]
-struct MemoryStore {
+pub(super) struct MemoryStore {
     entries: Mutex<HashMap<String, String>>,
 }
 

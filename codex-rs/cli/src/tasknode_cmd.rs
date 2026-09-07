@@ -256,10 +256,31 @@ pub(crate) struct RequestsCli {
 #[derive(Debug, Subcommand)]
 enum RequestsCommand {
     /// List active task-generation requests.
-    List(LimitArgs),
+    List(RequestsListArgs),
 
     /// Show one task request.
     Show(RequestShowArgs),
+
+    /// List locally saved submissions, including uncertain network outcomes.
+    Pending,
+
+    /// Retry a failed request, fenced to the attempt shown by requests show.
+    Retry {
+        request_id: String,
+        #[arg(long)]
+        attempt: u64,
+    },
+
+    /// Recover an original submission with its saved key.
+    Recover { key: String },
+}
+
+#[derive(Debug, Args)]
+struct RequestsListArgs {
+    #[arg(long, default_value_t = 20)]
+    limit: u8,
+    #[arg(long)]
+    cursor: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -534,29 +555,94 @@ async fn run_request_command(client: &TaskNodeClient, cli: RequestCli) -> anyhow
     match cli.action {
         RequestCommand::Create(args) => {
             let detail = read_text_input(args.text, args.body_file, "task request")?;
-            let body = json!({
-                "userDetailText": detail,
-                "requestedTaskKind": args.kind,
-                "source": "pfterminal-cli",
-                "sourceConversationTitle": args.source_title,
-                "idempotencyKey": idempotency_key("request"),
-            });
-            emit_response(
-                client
-                    .post("/api/terminal/tasknode/requests", &body)
-                    .await?,
-            )
+            let store = client
+                .commands
+                .as_ref()
+                .map_err(|error| anyhow::anyhow!("{error}"))?;
+            let command = store
+                .begin(&detail, &args.kind)
+                .map_err(anyhow::Error::msg)?;
+            let mut body = command.body();
+            body["sourceConversationTitle"] = Value::String(args.source_title);
+            let response = client
+                .post("/api/terminal/tasknode/requests", &body)
+                .await?;
+            if (200..300).contains(&response.status)
+                && response.body.get("ok") != Some(&Value::Bool(false))
+            {
+                store
+                    .acknowledge(&command.key, &response.body)
+                    .map_err(anyhow::Error::msg)?;
+            }
+            emit_response(response)
         }
     }
 }
 
 async fn run_requests_command(client: &TaskNodeClient, cli: RequestsCli) -> anyhow::Result<i32> {
     match cli.action {
+        RequestsCommand::Retry {
+            request_id,
+            attempt,
+        } => emit_response(
+            client
+                .post(
+                    "/api/terminal/tasknode/requests",
+                    &client.transport.retry_body(&request_id, attempt),
+                )
+                .await?,
+        ),
+        RequestsCommand::Pending => {
+            let store = client
+                .commands
+                .as_ref()
+                .map_err(|error| anyhow::anyhow!("{error}"))?;
+            print_json(
+                &json!({"ok": true, "commands": store.list().map_err(anyhow::Error::msg)?}),
+            )?;
+            Ok(0)
+        }
+        RequestsCommand::Recover { key } => {
+            let store = client
+                .commands
+                .as_ref()
+                .map_err(|error| anyhow::anyhow!("{error}"))?;
+            let command = store
+                .list()
+                .map_err(anyhow::Error::msg)?
+                .into_iter()
+                .find(|command| command.key == key)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("No saved request with that key in this profile and account.")
+                })?;
+            if let Some(request_id) = &command.request_id {
+                return emit_response(
+                    client
+                        .get(&format!(
+                            "/api/terminal/tasknode/requests/{}",
+                            urlencoding::encode(request_id)
+                        ))
+                        .await?,
+                );
+            }
+            let response = client
+                .post("/api/terminal/tasknode/requests", &command.body())
+                .await?;
+            if (200..300).contains(&response.status)
+                && response.body.get("ok") != Some(&Value::Bool(false))
+            {
+                store
+                    .acknowledge(&command.key, &response.body)
+                    .map_err(anyhow::Error::msg)?;
+            }
+            emit_response(response)
+        }
         RequestsCommand::List(args) => emit_response(
             client
                 .get(&format!(
-                    "/api/terminal/tasknode/requests?limit={}",
-                    limit(args.limit, /*min*/ 1, /*max*/ 50)
+                    "/api/terminal/tasknode/requests?limit={}&cursor={}",
+                    limit(args.limit, /*min*/ 1, /*max*/ 50),
+                    urlencoding::encode(args.cursor.as_deref().unwrap_or_default())
                 ))
                 .await?,
         ),
@@ -828,10 +914,10 @@ fn annotate_evidence_lifecycle(
     );
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct TaskNodeClient {
-    origin: String,
-    token: String,
+    transport: codex_tasknode_session::Client,
+    commands: Result<codex_tasknode_session::CommandStore, String>,
 }
 
 async fn resolve_codex_home(
@@ -1069,44 +1155,41 @@ impl TaskNodeClient {
             .build()
             .await?;
         let session = require_active_session(config.codex_home.as_path(), scope)?;
+        let origin = resolve_origin(origin_override, Some(session.origin.as_str()));
         Ok(Self {
-            origin: resolve_origin(origin_override, Some(session.origin.as_str())),
-            token: session.terminal_token,
+            transport: codex_tasknode_session::Client::for_session(&session, &origin)?,
+            commands: codex_tasknode_session::CommandStore::new(
+                config.codex_home.as_path(),
+                scope,
+                &session,
+            ),
         })
     }
 
     async fn get(&self, path: &str) -> anyhow::Result<TaskNodeResponse> {
-        let url = self.url(path);
-        let response = normal_http_client()?
-            .get(url)
-            .bearer_auth(&self.token)
-            .send()
-            .await
-            .map_err(reqwest_error)?;
-        parse_response(response).await
+        let response = self
+            .transport
+            .request(reqwest::Method::GET, path, None)
+            .await?;
+        Ok(TaskNodeResponse {
+            status: response.status,
+            body: response.body,
+        })
     }
 
     async fn post(&self, path: &str, body: &Value) -> anyhow::Result<TaskNodeResponse> {
-        let url = self.url(path);
-        let response = normal_http_client()?
-            .post(url)
-            .bearer_auth(&self.token)
-            .json(body)
-            .send()
-            .await
-            .map_err(reqwest_error)?;
-        parse_response(response).await
+        let response = self
+            .transport
+            .request(reqwest::Method::POST, path, Some(body))
+            .await?;
+        Ok(TaskNodeResponse {
+            status: response.status,
+            body: response.body,
+        })
     }
 
     async fn post_sse_jsonl(&self, path: &str, body: &Value) -> anyhow::Result<i32> {
-        let url = self.url(path);
-        let mut response = streaming_http_client()?
-            .post(url)
-            .bearer_auth(&self.token)
-            .json(body)
-            .send()
-            .await
-            .map_err(reqwest_error)?;
+        let mut response = self.transport.stream(path, body).await?;
         let status = response.status().as_u16();
         let content_type = response
             .headers()
@@ -1119,7 +1202,7 @@ impl TaskNodeClient {
         }
 
         let mut stdout = std::io::stdout();
-        let mut buffer = String::new();
+        let mut decoder = codex_tasknode_session::StreamDecoder::default();
         let mut saw_done = false;
         let mut exit_code = 0;
         while let Some(chunk) = response
@@ -1127,9 +1210,8 @@ impl TaskNodeClient {
             .await
             .context("failed reading Task Node chat stream")?
         {
-            buffer.push_str(&String::from_utf8_lossy(&chunk));
-            for block in tasknode_sse_drain_blocks(&mut buffer) {
-                if let Some((event, data)) = tasknode_parse_sse_block(&block)? {
+            for (event, data) in decoder.push(&chunk).map_err(anyhow::Error::msg)? {
+                {
                     if event == "done" {
                         saw_done = true;
                     } else if event == "error" {
@@ -1144,20 +1226,7 @@ impl TaskNodeClient {
                 }
             }
         }
-        for block in tasknode_sse_drain_remainder(&mut buffer) {
-            if let Some((event, data)) = tasknode_parse_sse_block(&block)? {
-                if event == "done" {
-                    saw_done = true;
-                } else if event == "error" {
-                    exit_code = 1;
-                }
-                writeln!(
-                    stdout,
-                    "{}",
-                    serde_json::to_string(&json!({ "event": event, "data": data }))?
-                )?;
-            }
-        }
+        decoder.finish().map_err(anyhow::Error::msg)?;
         stdout.flush()?;
         if !saw_done && exit_code == 0 {
             print_json(&json!({
@@ -1168,10 +1237,6 @@ impl TaskNodeClient {
             return Ok(1);
         }
         Ok(exit_code)
-    }
-
-    fn url(&self, path: &str) -> String {
-        format!("{}{}", self.origin.trim_end_matches('/'), path)
     }
 }
 
@@ -1245,16 +1310,9 @@ fn resolve_origin(origin_override: Option<String>, saved_origin: Option<&str>) -
 
 fn normal_http_client() -> anyhow::Result<reqwest::Client> {
     reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(std::time::Duration::from_secs(5))
         .timeout(std::time::Duration::from_secs(45))
-        .build()
-        .map_err(reqwest_error)
-}
-
-fn streaming_http_client() -> anyhow::Result<reqwest::Client> {
-    reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(5))
-        .timeout(std::time::Duration::from_secs(300))
         .build()
         .map_err(reqwest_error)
 }
@@ -1422,6 +1480,7 @@ fn infer_artifact_type(value: &str) -> &'static str {
     }
 }
 
+#[cfg(test)]
 fn tasknode_sse_separator(buffer: &str) -> Option<(usize, usize)> {
     match (buffer.find("\n\n"), buffer.find("\r\n\r\n")) {
         (Some(lf), Some(crlf)) if crlf < lf => Some((crlf, 4)),
@@ -1431,6 +1490,7 @@ fn tasknode_sse_separator(buffer: &str) -> Option<(usize, usize)> {
     }
 }
 
+#[cfg(test)]
 fn tasknode_sse_drain_blocks(buffer: &mut String) -> Vec<String> {
     let mut blocks = Vec::new();
     while let Some((index, separator_len)) = tasknode_sse_separator(buffer) {
@@ -1440,15 +1500,7 @@ fn tasknode_sse_drain_blocks(buffer: &mut String) -> Vec<String> {
     blocks
 }
 
-fn tasknode_sse_drain_remainder(buffer: &mut String) -> Vec<String> {
-    let remainder = std::mem::take(buffer);
-    if remainder.trim().is_empty() {
-        Vec::new()
-    } else {
-        vec![remainder]
-    }
-}
-
+#[cfg(test)]
 fn tasknode_parse_sse_block(block: &str) -> anyhow::Result<Option<(String, Value)>> {
     let normalized = block.replace("\r\n", "\n");
     let mut event = "message".to_string();

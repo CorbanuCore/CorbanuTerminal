@@ -769,7 +769,35 @@ impl App {
         app_server: &mut AppServerSession,
         event: AppEvent,
     ) -> Result<AppRunControl> {
+        let event = match event {
+            AppEvent::TaskNodeScopedResult {
+                label,
+                generation,
+                scope,
+                identity,
+                view,
+                event,
+            } => {
+                if !self
+                    .chat_widget
+                    .tasknode_response_is_latest(label, generation)
+                    || !self.chat_widget.tasknode_response_is_current(
+                        &scope,
+                        identity.as_deref(),
+                        view.as_deref(),
+                    )
+                {
+                    return Ok(AppRunControl::Continue);
+                }
+                *event
+            }
+            event => event,
+        };
         match event {
+            AppEvent::AgentControlTick { directory } => {
+                self.chat_widget.handle_agent_control_tick(&directory)
+            }
+            AppEvent::TaskNodeScopedResult { .. } => return Ok(AppRunControl::Continue),
             AppEvent::NewSession { name } => {
                 self.start_fresh_session_with_summary_hint(
                     tui, app_server, /*session_start_source*/ None,
@@ -3394,6 +3422,37 @@ impl App {
                 self.chat_widget
                     .on_vault_copy_secret_finished(label, result);
             }
+            AppEvent::CampaignTrackerDocument { text } => {
+                let _ = tui.enter_alt_screen();
+                let lines = text
+                    .lines()
+                    .map(|line| ratatui::text::Line::from(line.to_string()))
+                    .collect();
+                self.overlay = Some(Overlay::new_static_with_lines(
+                    lines,
+                    "Campaign Tracker · read-only replay".to_string(),
+                    self.keymap.pager.clone(),
+                ));
+                tui.frame_requester().schedule_frame();
+            }
+            AppEvent::CampaignTrackerTick => {
+                self.chat_widget.campaign_tracker_sync();
+            }
+            AppEvent::CampaignTrackerOpen { path, body } => {
+                self.chat_widget.open_campaign_tracker(path, body);
+            }
+            AppEvent::CampaignTrackerResult {
+                path,
+                enrollment,
+                result,
+            } => {
+                self.chat_widget
+                    .campaign_tracker_result(path, enrollment, result);
+            }
+            AppEvent::CampaignTrackerSync { identity, result } => {
+                self.chat_widget
+                    .campaign_tracker_sync_result(identity, result);
+            }
             AppEvent::OpenTaskNodeMenu => {
                 self.chat_widget.open_tasknode_menu();
             }
@@ -3498,6 +3557,19 @@ impl App {
             AppEvent::SubmitTaskNodeContextEditResult { result } => {
                 self.chat_widget
                     .handle_submit_tasknode_context_edit_result(result);
+            }
+            AppEvent::OpenTaskNodeRequestPage { cursor } => {
+                self.chat_widget.open_tasknode_request_page(cursor)
+            }
+            AppEvent::RetryTaskNodeRequest {
+                request_id,
+                attempt,
+            } => {
+                self.chat_widget.retry_tasknode_request(request_id, attempt);
+            }
+            AppEvent::RetryTaskNodeRequestResult { result } => {
+                self.chat_widget
+                    .handle_retry_tasknode_request_result(result);
             }
             AppEvent::OpenTaskNodeRequestList => {
                 self.chat_widget.open_tasknode_request_list();

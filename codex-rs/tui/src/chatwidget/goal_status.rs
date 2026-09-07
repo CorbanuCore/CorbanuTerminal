@@ -19,6 +19,10 @@ impl GoalStatusState {
         Self { goal, observed_at }
     }
 
+    pub(super) fn tracker_metadata(&self) -> serde_json::Value {
+        serde_json::json!({"id": format!("{}:{}", self.goal.thread_id, self.goal.created_at), "active": self.is_active(), "status": format!("{:?}", self.goal.status)})
+    }
+
     pub(super) fn is_active(&self) -> bool {
         self.goal.status == AppThreadGoalStatus::Active
     }

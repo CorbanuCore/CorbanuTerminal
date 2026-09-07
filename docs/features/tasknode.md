@@ -80,6 +80,39 @@ active request state. Context and chat use the linked Task Node account so an
 agent can consult the user's durable context without inventing user-specific
 preferences.
 
+## Recover a request
+
+The reliability changes in the current candidate save a request before sending it.
+If the connection fails, reopen `/tasknode request`: the original text returns.
+Submitting that text again recovers its receipt. Closing the menu or restarting
+Corbanu preserves the pending request. Editing the text creates a distinct request.
+These changes await candidate deployment; older installed builds may differ.
+
+The JSON helper provides the same recovery path:
+
+```text
+corbanu tasknode requests pending --json
+corbanu tasknode requests recover <saved-key> --json
+corbanu tasknode requests list --cursor <next-cursor> --json
+corbanu tasknode requests retry <request-id> --attempt <worker-attempt-count> --json
+```
+
+Use `--profile <name>` for the intended Corbanu profile. Saved requests and tokens
+stay with that profile, Task Node account and server. Changing the server requires
+linking it separately. The TUI request list also offers older pages and retry for
+failed requests; background refreshes preserve the selected row and search text.
+Chat supports large streamed replies and reports an interrupted stream as an error.
+
+## Track a workspace
+
+Product specification: **Campaign Tracker — LOCAL PILOT CANDIDATE**, “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”. The September 7 debug rollout connects this feature to the live Task Node backend.
+
+Open `/tasknode`, choose **Campaign Tracker**, and enable the workspace. The **Tracker REC** indicator shows recording and pending uploads. **My activity** opens saved prompts, compact output summaries and observed actions; choose an action for session replay or **Read full action** for a scrollable view. **Pause this workspace** stops new capture.
+
+Recording belongs to the linked Task Node account. Sharing requires an explicit Campaign Tracker grant in addition to an accepted collaborator or direct-report relationship. A manager relationship alone does not expose another person's prompts. Access audit shows reads and grant changes.
+
+This records observed Corbanu TUI work. Runtime measures agent execution, and summaries are not proof of task completion. The Verglas pilot is enabled for `@secondfmaster`; an already running older terminal needs to restart into the updated debug build.
+
 ## Inspect rewards and balance
 
 ```text
@@ -118,3 +151,7 @@ deletion of the user's Task Node identity.
 - `codex-rs/cli/src/tasknode_cmd.rs`
 - `codex-rs/tasknode-session/`
 - `codex-rs/skills/src/assets/samples/tasknode-usage/`
+
+The September 5 reliability candidate is installed for the production Kimi
+operator. The public release channel is unchanged. Its request recovery and
+control-inbox checks passed in a real terminal; the scoped supervisor is live.

@@ -86,12 +86,23 @@ impl SecretsFile {
 }
 
 #[derive(Debug, Clone)]
+struct CachedSecretsFile {
+    file: SecretsFile,
+    fingerprint: Option<(u64, std::time::SystemTime)>,
+}
+
+fn file_fingerprint(path: &Path) -> Option<(u64, std::time::SystemTime)> {
+    let metadata = fs::metadata(path).ok()?;
+    Some((metadata.len(), metadata.modified().ok()?))
+}
+
+#[derive(Debug, Clone)]
 pub struct LocalSecretsBackend {
     codex_home: PathBuf,
     keyring_store: Arc<dyn KeyringStore>,
     default_keyring_store: Option<Arc<LocalFallbackKeyringStore>>,
     namespace: LocalSecretsNamespace,
-    cached_file: Arc<Mutex<Option<SecretsFile>>>,
+    cached_file: Arc<Mutex<Option<CachedSecretsFile>>>,
 }
 
 impl LocalSecretsBackend {
@@ -237,14 +248,17 @@ impl LocalSecretsBackend {
     }
 
     fn load_file(&self) -> Result<SecretsFile> {
+        let path = self.secrets_path();
+        let fingerprint = file_fingerprint(&path);
         if let Ok(cache) = self.cached_file.lock()
-            && let Some(file) = cache.as_ref()
-            && file.version <= SECRETS_VERSION
+            && let Some(cached) = cache.as_ref()
+            && (fingerprint.is_some() || !path.exists())
+            && cached.fingerprint == fingerprint
+            && cached.file.version <= SECRETS_VERSION
         {
-            return Ok(file.clone());
+            return Ok(cached.file.clone());
         }
 
-        let path = self.secrets_path();
         let parsed = if !path.exists() {
             SecretsFile::new_empty()
         } else {
@@ -284,7 +298,10 @@ impl LocalSecretsBackend {
         };
 
         if let Ok(mut cache) = self.cached_file.lock() {
-            *cache = Some(parsed.clone());
+            *cache = Some(CachedSecretsFile {
+                file: parsed.clone(),
+                fingerprint,
+            });
         }
         Ok(parsed)
     }
@@ -320,7 +337,10 @@ impl LocalSecretsBackend {
         if file.version <= SECRETS_VERSION
             && let Ok(mut cache) = self.cached_file.lock()
         {
-            *cache = Some(file.clone());
+            *cache = Some(CachedSecretsFile {
+                file: file.clone(),
+                fingerprint: file_fingerprint(&path),
+            });
         }
         Ok(())
     }
@@ -382,12 +402,12 @@ impl LocalSecretsBackend {
 }
 
 type SharedSecretsCache =
-    Mutex<HashMap<(PathBuf, LocalSecretsNamespace), Weak<Mutex<Option<SecretsFile>>>>>;
+    Mutex<HashMap<(PathBuf, LocalSecretsNamespace), Weak<Mutex<Option<CachedSecretsFile>>>>>;
 
 fn shared_default_cache(
     codex_home: &Path,
     namespace: LocalSecretsNamespace,
-) -> Arc<Mutex<Option<SecretsFile>>> {
+) -> Arc<Mutex<Option<CachedSecretsFile>>> {
     static CACHES: OnceLock<SharedSecretsCache> = OnceLock::new();
     let caches = CACHES.get_or_init(|| Mutex::new(HashMap::new()));
     let mut caches = caches
@@ -890,6 +910,28 @@ fn parse_canonical_key(canonical_key: &str) -> Option<SecretListEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_replacement_invalidates_a_warm_cache() {
+        let directory = tempfile::tempdir().expect("temporary home");
+        let backend = LocalSecretsBackend::new(
+            directory.path().to_path_buf(),
+            Arc::new(MockKeyringStore::default()),
+        );
+        let path = backend.secrets_path();
+        std::fs::create_dir_all(path.parent().expect("secrets directory"))
+            .expect("create directory");
+        std::fs::write(&path, b"old encrypted file").expect("fixture file");
+        *backend.cached_file.lock().expect("cache") = Some(CachedSecretsFile {
+            file: SecretsFile::new_empty(),
+            fingerprint: file_fingerprint(&path),
+        });
+        assert!(backend.load_file().is_ok());
+        std::fs::write(&path, b"another process replaced the credential file")
+            .expect("replace file");
+        // It must read the replacement (invalid ciphertext), not return the old plaintext.
+        assert!(backend.load_file().is_err());
+    }
 
     #[test]
     fn default_backends_share_decrypted_file_cache() {

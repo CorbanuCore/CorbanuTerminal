@@ -1,0 +1,10 @@
+---
+source: tui/src/chatwidget/tasknode_menu.rs
+expression: rendered
+---
+▌ Request personal task
+▌ Uses your Task Node context, memory, recent chats, and task queue.
+▌
+▌ Describe the work you want Task Node to generate
+
+Press enter to confirm or esc to go back
