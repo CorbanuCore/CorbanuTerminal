@@ -432,7 +432,13 @@ pub(crate) async fn run(command: TaskNodeCli) -> anyhow::Result<()> {
 
 async fn run_inner(command: TaskNodeCli) -> anyhow::Result<i32> {
     let _json_flag = command.json;
-    let scope = tasknode_session_scope(command.config_profile.as_ref());
+    let inherited_profile = std::env::var("CORBANU_TASKNODE_PROFILE");
+    let profile = resolve_tasknode_profile(
+        command.config_profile.as_ref(),
+        inherited_profile.as_deref(),
+        std::env::var_os("CODEX_THREAD_ID").is_some(),
+    )?;
+    let scope = tasknode_session_scope(profile.as_ref());
     // `link` must work without an existing session; everything else requires one.
     if let TaskNodeCommand::Link(link) = command.command {
         return run_link_command(command.config_overrides, command.origin, scope, link).await;
@@ -1292,6 +1298,43 @@ fn require_active_session(
     }
 }
 
+fn resolve_tasknode_profile(
+    explicit: Option<&ProfileV2Name>,
+    inherited: Result<&str, &std::env::VarError>,
+    agent_session: bool,
+) -> anyhow::Result<Option<ProfileV2Name>> {
+    match inherited {
+        Ok(value) => {
+            let profile: Option<String> = serde_json::from_str(value).context(
+                "Invalid inherited Task Node profile; refusing default-account fallback",
+            )?;
+            let profile = profile
+                .map(|name| name.parse::<ProfileV2Name>())
+                .transpose()
+                .context(
+                    "Invalid inherited Task Node profile; refusing default-account fallback",
+                )?;
+            if explicit.is_some() && explicit != profile.as_ref() {
+                anyhow::bail!(
+                    "Task Node profile conflicts with the active terminal profile; switch profiles in Corbanu first"
+                );
+            }
+            Ok(profile)
+        }
+        Err(std::env::VarError::NotPresent) => {
+            if agent_session {
+                anyhow::bail!(
+                    "Active Task Node profile was not supplied by this terminal. Restart the updated terminal to inherit its profile; refusing default-account fallback"
+                );
+            }
+            Ok(explicit.cloned())
+        }
+        Err(_) => {
+            anyhow::bail!("Invalid inherited Task Node profile; refusing default-account fallback")
+        }
+    }
+}
+
 fn tasknode_session_scope(profile: Option<&ProfileV2Name>) -> codex_tasknode_session::SessionScope {
     profile
         .map(|profile| codex_tasknode_session::SessionScope::for_profile(profile.as_str()))
@@ -1566,6 +1609,95 @@ mod tests {
             tasknode_session_scope(cli.config_profile.as_ref()).profile(),
             Some("goodalexander")
         );
+    }
+
+    #[test]
+    fn tasknode_agent_profile_resolution_fails_closed() {
+        let alice: ProfileV2Name = "alice".parse().unwrap();
+        let bob: ProfileV2Name = "bob".parse().unwrap();
+        let missing = std::env::VarError::NotPresent;
+        for (explicit, inherited) in [
+            (None, Err(&missing)),
+            (Some(&alice), Err(&missing)),
+            (None, Ok("alice")),
+            (None, Ok("42")),
+            (None, Ok("\"../alice\"")),
+            (Some(&bob), Ok("\"alice\"")),
+            (Some(&alice), Ok("null")),
+        ] {
+            assert!(resolve_tasknode_profile(explicit, inherited, /*agent_session*/ true).is_err());
+        }
+        for (explicit, inherited, expected) in [
+            (None, "\"alice\"", Some(alice.clone())),
+            (Some(&alice), "\"alice\"", Some(alice.clone())),
+            (None, "\"bob\"", Some(bob.clone())),
+            (None, "null", None),
+        ] {
+            assert_eq!(
+                resolve_tasknode_profile(explicit, Ok(inherited), /*agent_session*/ true).unwrap(),
+                expected
+            );
+        }
+        assert_eq!(
+            resolve_tasknode_profile(None, Err(&missing), /*agent_session*/ false).unwrap(),
+            None
+        );
+        assert_eq!(
+            resolve_tasknode_profile(Some(&bob), Err(&missing), /*agent_session*/ false).unwrap(),
+            Some(bob)
+        );
+    }
+
+    #[test]
+    fn tasknode_inherited_profiles_load_distinct_linked_accounts() {
+        let home = tempfile::tempdir().unwrap();
+        let vault = tasknode_vault(home.path());
+        for (profile, account) in [
+            (None, "default-account"),
+            (Some("alice"), "alice-account"),
+            (Some("bob"), "bob-account"),
+        ] {
+            let profile = profile.map(|name| name.parse::<ProfileV2Name>().unwrap());
+            codex_tasknode_session::promote_active_scoped(
+                &vault,
+                &tasknode_session_scope(profile.as_ref()),
+                &codex_tasknode_session::ActiveSession {
+                    origin: "http://127.0.0.1:1".to_string(),
+                    account_id: Some(account.to_string()),
+                    github_username: Some(account.to_string()),
+                    terminal_token: format!("fixture-{account}"),
+                    expires_at: None,
+                },
+            )
+            .unwrap();
+        }
+        for (inherited, account) in [
+            ("null", "default-account"),
+            ("\"alice\"", "alice-account"),
+            ("\"bob\"", "bob-account"),
+        ] {
+            let profile =
+                resolve_tasknode_profile(None, Ok(inherited), /*agent_session*/ true).unwrap();
+            let active = codex_tasknode_session::load_scoped(
+                &vault,
+                &tasknode_session_scope(profile.as_ref()),
+            )
+            .unwrap()
+            .active
+            .unwrap();
+            assert_eq!(
+                (
+                    active.account_id,
+                    active.github_username,
+                    active.terminal_token
+                ),
+                (
+                    Some(account.to_string()),
+                    Some(account.to_string()),
+                    format!("fixture-{account}")
+                )
+            );
+        }
     }
 
     #[test]

@@ -164,6 +164,7 @@ pub struct ResponsesStreamEvent {
     pub(crate) headers: Option<Value>,
     metadata: Option<Value>,
     response: Option<Value>,
+    error: Option<Error>,
     item: Option<Value>,
     item_id: Option<String>,
     call_id: Option<String>,
@@ -342,6 +343,18 @@ pub fn process_responses_event(
     event: ResponsesStreamEvent,
 ) -> std::result::Result<Option<ResponseEvent>, ResponsesEventError> {
     match event.kind.as_str() {
+        "error" => {
+            if let Some(error) = event.error
+                && let Some(message) = crate::api_bridge::misalignment_policy_message(
+                    error.code.as_deref(),
+                    error.message.as_deref(),
+                )
+            {
+                return Err(ResponsesEventError::Api(ApiError::InvalidRequest {
+                    message,
+                }));
+            }
+        }
         "response.output_item.done" => {
             if let Some(item_val) = event.item {
                 if let Ok(item) = serde_json::from_value::<ResponseItem>(item_val) {
@@ -407,7 +420,12 @@ pub fn process_responses_event(
                 if let Some(error) = resp_val.get("error")
                     && let Ok(error) = serde_json::from_value::<Error>(error.clone())
                 {
-                    if is_context_window_error(&error) {
+                    if let Some(message) = crate::api_bridge::misalignment_policy_message(
+                        error.code.as_deref(),
+                        error.message.as_deref(),
+                    ) {
+                        response_error = ApiError::InvalidRequest { message };
+                    } else if is_context_window_error(&error) {
                         response_error = ApiError::ContextWindowExceeded;
                     } else if is_quota_exceeded_error(&error) {
                         response_error = ApiError::QuotaExceeded;
@@ -619,7 +637,15 @@ async fn process_sse_with_treatment(
             }
             Ok(None) => {}
             Err(error) => {
-                response_error = Some(error.into_api_error());
+                let error = error.into_api_error();
+                if matches!(
+                    error,
+                    ApiError::InvalidRequest { .. } | ApiError::CyberPolicy { .. }
+                ) {
+                    let _ = tx_event.send(Err(error)).await;
+                    return;
+                }
+                response_error = Some(error);
             }
         };
     }
@@ -630,25 +656,20 @@ fn try_parse_retry_after(err: &Error) -> Option<Duration> {
         return None;
     }
 
-    let re = rate_limit_regex();
-    if let Some(message) = &err.message
-        && let Some(captures) = re.captures(message)
-    {
-        let seconds = captures.get(1);
-        let unit = captures.get(2);
-
-        if let (Some(value), Some(unit)) = (seconds, unit) {
-            let value = value.as_str().parse::<f64>().ok()?;
-            let unit = unit.as_str().to_ascii_lowercase();
-
-            if unit == "s" || unit.starts_with("second") {
-                return Some(Duration::from_secs_f64(value));
-            } else if unit == "ms" {
-                return Some(Duration::from_millis(value as u64));
-            }
-        }
-    }
-    None
+    let message = err.message.as_ref()?.to_ascii_lowercase();
+    let (_, delay) = message.split_once("try again in")?;
+    let delay = delay.trim_start();
+    let number_end = delay.find(|ch: char| !ch.is_ascii_digit() && ch != '.')?;
+    let value = delay[..number_end].parse::<f64>().ok()?;
+    let unit = delay[number_end..].trim_start();
+    let seconds = if unit.starts_with("ms") {
+        value / 1000.0
+    } else if unit.starts_with('s') {
+        value
+    } else {
+        return None;
+    };
+    Duration::try_from_secs_f64(seconds).ok()
 }
 
 fn is_context_window_error(error: &Error) -> bool {
@@ -680,14 +701,6 @@ fn cyber_policy_message(message: Option<String>) -> String {
     message
         .filter(|message| !message.trim().is_empty())
         .unwrap_or_else(cyber_policy_fallback_message)
-}
-
-fn rate_limit_regex() -> &'static regex_lite::Regex {
-    static RE: std::sync::OnceLock<regex_lite::Regex> = std::sync::OnceLock::new();
-    #[expect(clippy::unwrap_used)]
-    RE.get_or_init(|| {
-        regex_lite::Regex::new(r"(?i)try again in\s*(\d+(?:\.\d+)?)\s*(s|ms|seconds?)").unwrap()
-    })
 }
 
 #[cfg(test)]
@@ -1168,6 +1181,41 @@ mod tests {
                 );
             }
             other => panic!("unexpected event: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn misalignment_stop_discards_later_tool_output_and_completion() {
+        let stopped = json!({"type": "response.failed", "response": {"id": "stopped", "error": {"code": "misalignment_policy_violation", "message": "Review agent activity."}}});
+        let tool = json!({"type": "response.output_item.done", "item": {"type": "function_call", "name": "shell_command", "call_id": "forbidden-after-stop", "arguments": "{}"}});
+        let completed =
+            json!({"type": "response.completed", "response": {"id": "late-completion"}});
+        let frames = format!("data: {stopped}\n\ndata: {tool}\n\ndata: {completed}\n\n");
+        let events = collect_events(&[frames.as_bytes()]).await;
+        assert_eq!(events.len(), 1);
+        assert_matches!(events[0], Err(ApiError::InvalidRequest { .. }));
+    }
+
+    #[tokio::test]
+    async fn misalignment_stream_events_are_terminal_by_code() {
+        for message in [Some("Review account access."), Some("Other wording."), None] {
+            for kind in ["error", "response.failed"] {
+                let error = json!({"code": "misalignment_policy_violation", "message": message});
+                let event = if kind == "error" {
+                    json!({"type": kind, "error": error})
+                } else {
+                    json!({"type": kind, "response": {"id": "resp-policy", "error": error}})
+                };
+                let frame = format!("data: {event}\n\n");
+                let events = collect_events(&[frame.as_bytes()]).await;
+                assert_eq!(events.len(), 1);
+                match &events[0] {
+                    Err(ApiError::InvalidRequest { message }) => {
+                        assert!(message.contains("Automatic retries are disabled"))
+                    }
+                    other => panic!("policy stop must be terminal: {other:?}"),
+                }
+            }
         }
     }
 

@@ -332,3 +332,48 @@ fn test_inherit_none() {
     expected.insert(CODEX_THREAD_ID_ENV_VAR.to_string(), thread_id.to_string());
     assert_eq!(result, expected);
 }
+
+#[tokio::test]
+async fn tasknode_profile_env_replaces_stale_scope_and_home() {
+    let (_, context) = crate::session::tests::make_session_and_context().await;
+    let mut config = (*context.config).clone();
+    for profile in [Some("alice"), Some("bob"), None] {
+        config.config_layer_stack = codex_config::ConfigLayerStack::new(
+            vec![codex_config::ConfigLayerEntry::new(
+                codex_config::ConfigLayerSource::User {
+                    file: config.codex_home.join("config.toml"),
+                    profile: profile.map(|name| name.parse().unwrap()),
+                },
+                toml::Value::Table(Default::default()),
+            )],
+            Default::default(),
+            Default::default(),
+        )
+        .unwrap();
+        let mut env = HashMap::from([
+            (
+                "corbanu_tasknode_profile".to_string(),
+                "\"stale\"".to_string(),
+            ),
+            (
+                CORBANU_TASKNODE_PROFILE_ENV_VAR.to_string(),
+                "\"stale\"".to_string(),
+            ),
+            ("codex_home".to_string(), "stale-home".to_string()),
+        ]);
+        inject_tasknode_profile_env(&mut env, &config);
+        assert_eq!(
+            env,
+            HashMap::from([
+                (
+                    CORBANU_TASKNODE_PROFILE_ENV_VAR.to_string(),
+                    serde_json::to_string(&profile).unwrap()
+                ),
+                (
+                    "CODEX_HOME".to_string(),
+                    config.codex_home.to_string_lossy().into_owned()
+                ),
+            ])
+        );
+    }
+}

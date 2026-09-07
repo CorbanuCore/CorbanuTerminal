@@ -1129,7 +1129,9 @@ write_visible_command_wrapper() {
   rm -f "$tmp_script"
   {
     printf '#!/bin/sh\n'
-    printf 'export CODEX_HOME=%s\n' "$(shell_quote "$codex_home")"
+    printf 'if [ -z "${CODEX_HOME:-}" ]; then\n'
+    printf '  export CODEX_HOME=%s\n' "$(shell_quote "$codex_home")"
+    printf 'fi\n'
     printf 'exec %s "$@"\n' "$(shell_quote "$target")"
   } >"$tmp_script"
   chmod 0755 "$tmp_script"

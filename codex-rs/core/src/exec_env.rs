@@ -8,6 +8,35 @@ use std::collections::HashMap;
 
 pub use codex_protocol::shell_environment::CODEX_THREAD_ID_ENV_VAR;
 
+/// JSON-encoded optional user profile for Task Node helpers launched by this turn.
+/// This is routing context, not a credential or an OS security boundary.
+pub const CORBANU_TASKNODE_PROFILE_ENV_VAR: &str = "CORBANU_TASKNODE_PROFILE";
+
+pub(crate) fn inject_tasknode_profile_env(
+    env: &mut HashMap<String, String>,
+    config: &crate::config::Config,
+) {
+    let profile = config
+        .config_layer_stack
+        .get_active_user_layer()
+        .and_then(|layer| match layer.metadata().name {
+            codex_config::ConfigLayerSource::User { profile, .. } => profile,
+            _ => None,
+        });
+    env.retain(|key, _| {
+        !key.eq_ignore_ascii_case(CORBANU_TASKNODE_PROFILE_ENV_VAR)
+            && !key.eq_ignore_ascii_case("CODEX_HOME")
+    });
+    env.insert(
+        CORBANU_TASKNODE_PROFILE_ENV_VAR.to_string(),
+        serde_json::to_string(&profile).expect("serialize optional Task Node profile"),
+    );
+    env.insert(
+        "CODEX_HOME".to_string(),
+        config.codex_home.to_string_lossy().into_owned(),
+    );
+}
+
 const BUILT_IN_PROVIDER_AUTH_ENV_VARS: &[&str] = &[
     "OPENAI_API_KEY",
     "AZURE_OPENAI_API_KEY",

@@ -13,6 +13,8 @@ This skill is for using Task Node. For implementation work inside `/home/pfrpc/r
 
 ## Core Principles
 
+- Preserve the terminal-provided `CORBANU_TASKNODE_PROFILE` and `CODEX_HOME`. Missing or conflicting scope must stop account operations; never guess the default account or retry with another profile.
+
 - Treat Task Node chat as a context-aware second brain. It often knows the user's recent work, preferences, and durable operating context better than the current thread.
 - Prefer Task Node chat over asking the user when the uncertainty is about user-specific priorities, project direction, or historical context and the action is reversible.
 - Ask the user directly when the choice is high-stakes, irreversible, explicitly personal, or Task Node lacks enough context.

@@ -617,6 +617,15 @@ fn map_wrapped_websocket_error_event(
     } = event;
 
     if let Some(error) = error.as_ref()
+        && let Some(message) = crate::api_bridge::misalignment_policy_message(
+            error.code.as_deref(),
+            error.message.as_deref(),
+        )
+    {
+        return Some(ApiError::InvalidRequest { message });
+    }
+
+    if let Some(error) = error.as_ref()
         && let Some(code) = error.code.as_deref()
         && let Some(fallback_message) = match code {
             WEBSOCKET_CONNECTION_LIMIT_REACHED_CODE => {
@@ -981,6 +990,17 @@ mod tests {
     fn websocket_config_enables_permessage_deflate() {
         let config = websocket_config();
         assert!(config.extensions.permessage_deflate.is_some());
+    }
+
+    #[test]
+    fn misalignment_websocket_error_is_terminal_with_or_without_status() {
+        for status in [Some(403), None] {
+            let payload = serde_json::json!({"type": "error", "status": status, "error": {"code": "misalignment_policy_violation", "message": "Review account access."}}).to_string();
+            let event = parse_wrapped_websocket_error_event(&payload).unwrap();
+            let error = map_wrapped_websocket_error_event(event, payload).unwrap();
+            assert!(matches!(error, ApiError::InvalidRequest { .. }));
+            assert!(!crate::api_bridge::map_api_error(error).is_retryable());
+        }
     }
 
     #[test]

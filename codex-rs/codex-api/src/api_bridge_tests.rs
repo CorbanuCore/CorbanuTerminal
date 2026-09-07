@@ -522,3 +522,31 @@ fn map_api_error_extracts_identity_auth_details_from_headers() {
     );
     assert_eq!(err.identity_error_code.as_deref(), Some("token_expired"));
 }
+
+#[test]
+fn misalignment_http_policy_stop_is_terminal_by_code() {
+    for status in [http::StatusCode::FORBIDDEN, http::StatusCode::BAD_REQUEST] {
+        for message in [Some("Review account access."), Some(""), None] {
+            let body = serde_json::json!({"error": {"code": "misalignment_policy_violation", "message": message}}).to_string();
+            let err = map_api_error(ApiError::Transport(TransportError::Http {
+                status,
+                url: None,
+                headers: None,
+                body: Some(body),
+            }));
+            assert!(matches!(
+                err.details(),
+                CodexErrorDetails::InvalidRequest(_)
+            ));
+            assert!(!err.is_retryable());
+            assert!(err.to_string().contains("Automatic retries are disabled"));
+        }
+    }
+    assert_eq!(
+        misalignment_policy_message(
+            Some("rate_limit_exceeded"),
+            Some("misalignment_policy_violation")
+        ),
+        None
+    );
+}

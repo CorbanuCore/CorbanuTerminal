@@ -17,6 +17,9 @@ product_spec:
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
+  - path: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.39"
+    branch: "fix/tasknode-agent-profile-scope"
+    base_commit: "9b71d86d7fc57b25e3b020a813a6b75dd898836a"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-protected-runtime"
     branch: "feat/p0-security-protected-runtime"
     base_commit: "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4"
@@ -990,6 +993,10 @@ before qualification.
 - [ ] Named human acceptance passes.
 - [ ] Finished documentation matches the accepted candidate.
 - [ ] Release and due benchmark records are linked.
+
+## PF-45-S02 agent identity repair — active
+
+User-reported post-release account mismatch authorizes repairing agent helper profile propagation. [Sprint PF-45-S02](../../sprints/current/p0-security-levels/pf-45-s02-agent-profile-scope.md) is in progress in `/home/pfrpc/repos/worktrees/corbanu-release-0.1.39`, branch `fix/tasknode-agent-profile-scope`, base `9b71d86d7f`. Its scope is runtime profile inheritance, fail-closed helper resolution and regression/PTY proof; historical records are not transferred.
 
 ## PF-45 Campaign Tracker release integration
 
