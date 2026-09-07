@@ -994,9 +994,9 @@ before qualification.
 - [ ] Finished documentation matches the accepted candidate.
 - [ ] Release and due benchmark records are linked.
 
-## PF-45-S02 agent identity repair — active
+## PF-45-S02 agent identity repair — completed
 
-User-reported post-release account mismatch authorizes repairing agent helper profile propagation. [Sprint PF-45-S02](../../sprints/current/p0-security-levels/pf-45-s02-agent-profile-scope.md) is in progress in `/home/pfrpc/repos/worktrees/corbanu-release-0.1.39`, branch `fix/tasknode-agent-profile-scope`, base `9b71d86d7f`. Its scope is runtime profile inheritance, fail-closed helper resolution and regression/PTY proof; historical records are not transferred.
+User-reported post-release account mismatch authorizes repairing agent helper profile propagation. [Sprint PF-45-S02](../../sprints/archive/p0-security-levels/pf-45-s02-agent-profile-scope.md) is implemented and locally qualified in `/home/pfrpc/repos/worktrees/corbanu-release-0.1.39`, branch `fix/tasknode-agent-profile-scope`, base `9b71d86d7f`. Its scope is runtime profile inheritance, fail-closed helper resolution and regression/PTY proof; historical records are not transferred.
 
 ## PF-45 Campaign Tracker release integration
 

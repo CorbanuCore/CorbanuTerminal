@@ -25,6 +25,16 @@ Run:
 The menu provides account linking, session status, task lists, task actions,
 requests, context, chat, balances, rewards, and logout.
 
+## Keep the tab and agent on the same account
+
+In the accepted 0.1.40 candidate, agent Task Node commands inherit the active
+tab's profile and home. Missing or conflicting scope stops the command before
+it opens account credentials. Restart older terminal processes after upgrading
+so their agent commands receive the repaired scope.
+
+The Task Node menu shows the linked account. Direct human CLI commands can select
+a named profile with `corbanu tasknode --profile <name> status --json`.
+
 ## Link an account
 
 ```text
