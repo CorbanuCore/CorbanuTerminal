@@ -16,6 +16,9 @@ impl ChatWidget {
         }
 
         let from_replay = replay_kind.is_some();
+        if !from_replay {
+            self.observe_provider_health(&notification);
+        }
         let is_resume_initial_replay =
             matches!(replay_kind, Some(ReplayKind::ResumeInitialMessages));
         let is_retry_error = matches!(

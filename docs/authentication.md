@@ -89,6 +89,19 @@ or out of one does not authenticate or erase the other.
 See [Reliable Claude Plan authentication](features/claude-plan-authentication.md)
 for eligibility, platform-store precedence, replacement, and recovery.
 
+## Reauthentication in the PF-58 candidate
+
+Use `/providers`, select the affected provider, and press **r** for its
+source-specific recovery. A definite authentication rejection is shown separately
+from configuration and activation. OpenAI connected-app authentication belongs to
+the OpenAI account even while Claude is the current model. Cancel preserves the
+existing credential and selection; successful managed replacement is usable
+without restarting. Externally owned credentials instead show renewal/restart
+instructions and are not silently replaced by vault credentials.
+
+See [credential recovery](features/model-providers.md#credential-recovery-pf-58-candidate)
+and the [candidate qualification record](../qa/provider-auth/pf-58/README.md).
+
 ## Provider Keys
 
 Built-in providers use these key names:

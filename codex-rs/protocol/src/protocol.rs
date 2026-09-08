@@ -3895,6 +3895,8 @@ pub enum McpStartupStatus {
 #[ts(rename_all = "snake_case")]
 pub enum McpStartupFailureReason {
     ReauthenticationRequired,
+    /// The explicitly attached OpenAI account credential was rejected.
+    OpenAiAccountReauthenticationRequired,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS, Default)]

@@ -1,5 +1,13 @@
 # codex-app-server
 
+MCP startup notifications may report `failureReason: "openAiAccountReauthenticationRequired"`
+when the built-in `codex_apps` connection's attached OpenAI account credential is
+rejected. Clients should offer account recovery without changing the current model
+or marking unrelated credentials invalid. A connector-token override is not an
+OpenAI account failure. Ordinary MCP OAuth recovery remains
+`"reauthenticationRequired"`; network errors and generic HTTP 403 are not token
+revocation signals.
+
 `codex app-server` is the interface Codex uses to power rich interfaces such as the [Codex VS Code extension](https://marketplace.visualstudio.com/items?itemName=openai.chatgpt).
 
 ## Table of Contents

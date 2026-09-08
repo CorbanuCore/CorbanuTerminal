@@ -37,6 +37,31 @@ its credential. Deactivating the current provider requires an explicit usable
 replacement; cancelling that choice leaves both current-provider and
 eligibility state unchanged.
 
+<!-- PF-58 is a separately qualified human-test candidate, not a main release. -->
+
+## Credential recovery (PF-58 candidate)
+
+`Enabled · configured` describes saved configuration, not a successful remote
+authentication check. After a definite credential rejection, the affected row
+shows `Credential needs attention · r recover`. An OpenAI connected-app rejection
+is attributed to its OpenAI account credential, not to a working Claude model.
+Network errors, rate limits and generic HTTP 403 failures are not called expired
+credentials.
+
+Select the provider and press **r**. Account credentials use the established
+sign-in flow; saved API keys use masked replacement. OpenAI's **Sign in to OpenAI
+again** also supports a manually requested sign-in while the account is configured.
+Cancel leaves the credential, activation and current model unchanged. Successful
+managed replacement applies in the same session; an account login also refreshes
+the connected-app runtime and dismisses its login dialog.
+
+Environment credentials must be renewed in the launching shell and Corbanu
+restarted; a vault key cannot override them. Command/AWS/external credentials
+stay owned by their tool or AWS session and require renewal there followed by a
+restart. Local model servers have no fabricated account-login action.
+
+See [PF-58 qualification and limitations](../../qa/provider-auth/pf-58/README.md).
+
 ## Choosing subagent models
 
 Ask for the model you want, for example: “Use Luna and Kimi K3 as separate

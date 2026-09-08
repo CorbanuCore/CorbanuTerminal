@@ -1,0 +1,79 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-provider-auth v0.1.41 (/home/travis/worktrees/provider-reauth-health-final/codex-rs/provider-auth)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.19s
+────────────
+ Nextest run ID 39a60f58-b43c-4558-9ad9-e1ba76c4d96e with nextest profile: local
+    Starting 71 tests across 1 binary
+        PASS [   0.002s] ( 1/71) codex-provider-auth auth_flow::tests::definite_failure_allows_retry_while_old_attempt_results_are_stale
+        PASS [   0.002s] ( 2/71) codex-provider-auth auth_flow::tests::configured_after_timeout_completes_add_but_replace_waits_for_fresh_status
+        PASS [   0.002s] ( 3/71) codex-provider-auth api_key_flow::tests::fake_host_consumes_only_persistence_effect_into_existing_request_shape
+        PASS [   0.003s] ( 4/71) codex-provider-auth api_key_flow::tests::target_derivation_covers_builtin_custom_shared_and_unsupported_entries
+        PASS [   0.002s] ( 5/71) codex-provider-auth auth_flow::tests::reconciling_transient_status_remains_nonretryable
+        PASS [   0.002s] ( 6/71) codex-provider-auth auth_flow::tests::second_correlated_timeout_bounds_unknown_replacement_and_unlocks_retry
+        PASS [   0.002s] ( 7/71) codex-provider-auth auth_flow::tests::environment_precedence_blocks_add_and_replace_for_all_managed_states
+        PASS [   0.002s] ( 8/71) codex-provider-auth auth_flow::tests::stored_result_reconciles_to_metadata_only_completion
+        PASS [   0.002s] ( 9/71) codex-provider-auth auth_flow::tests::timeout_nonconfigured_metadata_stays_unknown_until_late_stored_settlement
+        PASS [   0.002s] (10/71) codex-provider-auth auth_flow::tests::timeout_then_correlated_definite_failure_unlocks_retry_but_stale_id_does_not
+        PASS [   0.002s] (11/71) codex-provider-auth auth_flow::tests::timeout_then_stored_settlement_reconciles_without_duplicate_persistence
+        PASS [   0.002s] (12/71) codex-provider-auth auth_flow::tests::transition_contract_freezes_cancel_commit_timeout_and_enclosing_redaction
+        PASS [   0.002s] (13/71) codex-provider-auth claude_account_flow::tests::add_timeout_can_be_proved_by_status_but_replace_cannot
+        PASS [   0.002s] (14/71) codex-provider-auth claude_account_flow::tests::code_transport_loss_preserves_cancel_and_correlated_success_origins
+        PASS [   0.002s] (15/71) codex-provider-auth claude_account_flow::tests::code_login_freezes_identity_policy_challenge_code_cancel_and_late_events
+        PASS [   0.002s] (16/71) codex-provider-auth claude_account_flow::tests::correlated_managed_success_with_nonmatching_status_fails_terminally
+        PASS [   0.002s] (17/71) codex-provider-auth claude_account_flow::tests::correlated_success_requires_exact_method_status_and_rejects_stale_ids
+        PASS [   0.002s] (18/71) codex-provider-auth claude_account_flow::tests::target_add_short_circuit_environment_block_and_restart_are_typed
+        PASS [   0.002s] (19/71) codex-provider-auth claude_account_flow::tests::managed_submit_is_redacted_non_cancellable_and_reconciles_late_settlement
+        PASS [   0.002s] (20/71) codex-provider-auth claude_account_flow::tests::unauthorized_recovery_enforces_exact_selected_source_without_fallback
+        PASS [   0.002s] (21/71) codex-provider-auth claude_account_flow::tests::unproven_code_transport_and_stale_ready_have_typed_terminal_cleanup
+        PASS [   0.002s] (22/71) codex-provider-auth credential_health::tests::no_auth_local_provider_is_not_given_a_login_failure
+        PASS [   0.002s] (23/71) codex-provider-auth credential_health::tests::changed_credential_rejects_stale_failure_and_cancel_does_not_clear_failure
+        PASS [   0.002s] (24/71) codex-provider-auth credential_health::tests::old_source_failure_does_not_poison_replacement_source
+        PASS [   0.003s] (25/71) codex-provider-auth credential_health::tests::rejected_credential_preserves_selection_activation_and_unrelated_provider
+        PASS [   0.002s] (26/71) codex-provider-auth eligibility::tests::missing_state_migrates_configured_providers_to_active_without_touching_config
+        PASS [   0.002s] (27/71) codex-provider-auth eligibility::tests::malformed_and_future_state_fail_visibly_without_overwrite
+        PASS [   0.002s] (28/71) codex-provider-auth eligibility::tests::round_trip_is_deterministic_retains_unknown_identities_and_survives_restart
+        PASS [   0.002s] (29/71) codex-provider-auth eligibility::tests::shared_custom_api_key_has_stable_eligibility_identity
+        PASS [   0.002s] (30/71) codex-provider-auth management::tests::current_deactivation_requires_explicit_usable_replacement_and_cancel_is_inert
+        PASS [   0.002s] (31/71) codex-provider-auth management::tests::configured_current_provider_cannot_be_directly_deactivated
+        PASS [   0.002s] (32/71) codex-provider-auth management::tests::newly_configured_defaults_active_but_recovery_preserves_explicit_inactivity
+        PASS [   0.002s] (33/71) codex-provider-auth management::tests::non_current_activation_changes_only_eligibility
+        PASS [   0.002s] (34/71) codex-provider-auth management::tests::replacement_is_exact_and_stale_completion_cannot_finish_it
+        PASS [   0.002s] (35/71) codex-provider-auth openai_account_flow::tests::account_method_alternative_controls_short_circuit_not_api_key
+        PASS [   0.002s] (36/71) codex-provider-auth management::tests::replacement_write_failure_does_not_authorize_deactivation
+        PASS [   0.002s] (37/71) codex-provider-auth openai_account_flow::tests::browser_and_device_challenges_are_ephemeral_and_enclosing_debug_is_redacted
+        PASS [   0.002s] (38/71) codex-provider-auth openai_account_flow::tests::account_target_and_start_policy_freeze_account_specific_capability
+        PASS [   0.002s] (39/71) codex-provider-auth openai_account_flow::tests::cancel_before_start_dispatches_late_cancel_without_presenting_challenge
+        PASS [   0.002s] (40/71) codex-provider-auth openai_account_flow::tests::cancel_before_start_cancels_even_when_late_challenge_variant_is_unexpected
+        PASS [   0.002s] (41/71) codex-provider-auth openai_account_flow::tests::cancel_not_found_stays_unknown_and_accepts_correlated_late_completion
+        PASS [   0.002s] (42/71) codex-provider-auth openai_account_flow::tests::cancel_not_found_plus_nonaccount_status_completes_cancelled
+        PASS [   0.002s] (43/71) codex-provider-auth openai_account_flow::tests::explicit_reauthentication_starts_configured_account_but_not_external_credentials
+        PASS [   0.002s] (44/71) codex-provider-auth openai_account_flow::tests::cancel_transport_loss_preserves_cancel_intent_for_late_failure
+        PASS [   0.002s] (45/71) codex-provider-auth openai_account_flow::tests::settled_openai_failures_offer_working_retry_and_cancel
+        PASS [   0.002s] (46/71) codex-provider-auth openai_account_flow::tests::failed_attempt_retries_monotonically_and_old_results_are_stale
+        PASS [   0.002s] (47/71) codex-provider-auth openai_account_flow::tests::transport_loss_is_outcome_unknown_and_restart_reconciles_from_metadata
+        PASS [   0.002s] (48/71) codex-provider-auth openai_account_flow::tests::success_requires_account_status_and_rejects_stale_dual_correlation
+        PASS [   0.002s] (49/71) codex-provider-auth openai_account_flow::tests::wrong_challenge_is_cancelled_before_typed_protocol_failure
+        PASS [   0.002s] (50/71) codex-provider-auth runtime_selection::tests::active_ready_exact_runtime_is_preserved
+        PASS [   0.002s] (51/71) codex-provider-auth runtime_selection::tests::explicit_status_only_use_is_preserved_for_the_runtime_adapter
+        PASS [   0.002s] (52/71) codex-provider-auth runtime_selection::tests::command_authorization_preserves_unavailable_eligibility
+        PASS [   0.002s] (53/71) codex-provider-auth runtime_selection::tests::inactive_current_requires_explicit_recovery
+        PASS [   0.003s] (54/71) codex-provider-auth runtime_selection::tests::rejected_runtime_authorization_is_typed_and_secret_free
+        PASS [   0.002s] (55/71) codex-provider-auth runtime_selection::tests::status_only_runtime_cannot_bypass_unavailable_eligibility
+        PASS [   0.002s] (56/71) codex-provider-auth runtime_selection::tests::status_only_is_visible_without_eager_runtime_authorization
+        PASS [   0.002s] (57/71) codex-provider-auth runtime_selection::tests::unknown_current_is_not_rewritten_to_a_catalog_default
+        PASS [   0.002s] (58/71) codex-provider-auth status::tests::api_key_precedence_and_inactive_policy_keep_environment_removal_external
+        PASS [   0.002s] (59/71) codex-provider-auth status::tests::invalid_environment_key_shadows_all_managed_storage_states
+        PASS [   0.002s] (60/71) codex-provider-auth status::tests::claude_resolution_and_corbanu_outage_are_typed_without_losing_configuration
+        PASS [   0.002s] (61/71) codex-provider-auth status::tests::openai_environment_key_is_not_a_managed_replacement_target
+        PASS [   0.002s] (62/71) codex-provider-auth status::tests::local_and_command_adapters_are_configured_while_aws_remains_status_only
+        PASS [   0.002s] (63/71) codex-provider-auth status::tests::partial_metadata_and_upstream_errors_fail_visibly_without_secret_canary
+        PASS [   0.002s] (64/71) codex-provider-auth status::tests::openai_preserves_capability_order_and_account_configuration
+        PASS [   0.002s] (65/71) codex-provider-auth tests::built_in_wire_siblings_share_one_api_key_setup_identity
+        PASS [   0.002s] (66/71) codex-provider-auth tests::blank_runtime_identity_is_ignored_without_hiding_adjacent_provider
+        PASS [   0.002s] (67/71) codex-provider-auth tests::built_ins_expose_multi_method_openai_and_branded_corbanu_identity
+        PASS [   0.002s] (68/71) codex-provider-auth tests::built_ins_freeze_claude_local_and_aws_status_shapes
+        PASS [   0.002s] (69/71) codex-provider-auth tests::corbanu_runtime_aliases_deduplicate_without_leaking_legacy_catalog_identity
+        PASS [   0.002s] (70/71) codex-provider-auth tests::custom_env_key_providers_are_adjacent_deduplicated_and_deterministic
+        PASS [   0.002s] (71/71) codex-provider-auth tests::unsupported_custom_command_auth_is_status_only_while_adjacent_api_key_is_interactive
+────────────
+     Summary [   0.040s] 71 tests run: 71 passed, 0 skipped

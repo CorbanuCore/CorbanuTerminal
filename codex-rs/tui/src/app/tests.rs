@@ -14382,6 +14382,37 @@ async fn side_backtrack_rejection_reports_unavailable_message_snapshot() {
     );
 }
 #[tokio::test]
+async fn provider_manager_reuses_policy_health_after_setup_handle_is_cleared() {
+    let (mut app, _rx, _op_rx) = make_test_app_with_channels().await;
+    let host = crate::provider_status_host::ProviderStatusHost::from_config(
+        &app.config,
+        crate::provider_status_host::ProviderAccountMetadata {
+            openai: codex_login::OpenAiAuthMetadata::Account,
+            ..Default::default()
+        },
+    );
+    app.model_catalog.set_provider_policy(
+        crate::chatwidget::provider_model_policy::ProviderModelPolicy::new(
+            host.clone(),
+            codex_provider_auth::ProviderRuntimeAuthorizations::default(),
+        ),
+    );
+    app.shared_provider_status_host = None;
+    host.begin_credential_attempt("recreated-host".into(), "openai");
+    assert!(host.reject_credential_attempt("recreated-host"));
+    let reopened = app.reusable_provider_status_host().unwrap();
+    assert_eq!(
+        reopened.resolve_provider("openai").unwrap().configuration,
+        codex_provider_auth::ProviderConfigurationState::RecoveryRequired
+    );
+    reopened.credential_changed("openai");
+    assert_eq!(
+        host.resolve_provider("openai").unwrap().configuration,
+        codex_provider_auth::ProviderConfigurationState::Configured
+    );
+}
+
+#[tokio::test]
 async fn provider_manager_open_preserves_lazy_command_authorization_without_shared_state() {
     let home = tempfile::tempdir().unwrap();
     let mut config = ConfigBuilder::default()
@@ -14485,7 +14516,9 @@ fn provider_manager_claude_intent_uses_typed_status_and_recovery_source() {
             &status(ProviderConfigurationState::Configured),
             Source::ManagedToken,
         ),
-        None,
+        Some(ClaudeAccountIntent::UnauthorizedRecovery {
+            source: Source::ManagedToken,
+        }),
     );
 }
 

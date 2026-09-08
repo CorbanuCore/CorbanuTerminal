@@ -500,12 +500,21 @@ impl McpConnectionSet {
                         }
                         Err(StartupOutcomeError::Cancelled) => McpStartupStatus::Stopped,
                         Err(error) => {
-                            let reason = mcp_startup_failure_reason(auth_state, error);
-                            let error_str = mcp_init_error_display(
+                            let reason = if has_runtime_auth
+                                && server_name == CODEX_APPS_MCP_SERVER_NAME
+                                && error.is_authentication_required()
+                            {
+                                Some(codex_protocol::protocol::McpStartupFailureReason::OpenAiAccountReauthenticationRequired)
+                            } else {
+                                mcp_startup_failure_reason(auth_state, error)
+                            };
+                            let error_str = if reason == Some(codex_protocol::protocol::McpStartupFailureReason::OpenAiAccountReauthenticationRequired) {
+                                "OpenAI account authentication for codex_apps was rejected. Open /providers, select OpenAI, and press r to sign in again. Other providers are unchanged.".to_string()
+                            } else { mcp_init_error_display(
                                 server_name.as_str(),
                                 Some(&configured_config),
                                 error,
-                            );
+                            ) };
                             McpStartupStatus::Failed {
                                 error: error_str,
                                 reason,

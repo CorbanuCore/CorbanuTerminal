@@ -144,6 +144,30 @@ fn api_key_precedence_and_inactive_policy_keep_environment_removal_external() {
 }
 
 #[test]
+fn openai_environment_key_is_not_a_managed_replacement_target() {
+    assert_eq!(
+        resolve_openai(
+            &ProviderSetupCapability::ApiKey {
+                storage: ApiKeyStorage::OpenAiAuth
+            },
+            OpenAiAuthMetadata::EnvironmentApiKey,
+        ),
+        configured(
+            ProviderCredentialSource::Environment,
+            CredentialControl::ExternalEnvironment,
+            ConfiguredAvailability::Ready,
+        ),
+    );
+    assert_eq!(
+        resolve_openai(
+            &ProviderSetupCapability::OpenAiAccount,
+            OpenAiAuthMetadata::EnvironmentApiKey
+        ),
+        ProviderMethodState::NotConfigured,
+    );
+}
+
+#[test]
 fn invalid_environment_key_shadows_all_managed_storage_states() {
     let catalog = custom_api_catalog();
     let entry = &catalog.entries()[0];
@@ -160,7 +184,7 @@ fn invalid_environment_key_shadows_all_managed_storage_states() {
             },
         }],
         configuration: ProviderConfigurationState::RecoveryRequired,
-        eligibility: ProviderEligibilityState::NotConfigured,
+        eligibility: ProviderEligibilityState::Active,
         current: ProviderCurrentState::NotCurrent,
         availability: ProviderAvailabilityState::Unavailable {
             reason: ProviderUnavailableReason::RecoveryRequired,

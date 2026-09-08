@@ -54,8 +54,12 @@ impl ApiKeyAuthTarget {
         entry: &ProviderCatalogEntry,
         capability: &ProviderSetupCapability,
     ) -> Result<Self, ApiKeyTargetError> {
-        let ProviderSetupCapability::ApiKey { storage } = capability else {
-            return Err(ApiKeyTargetError::UnsupportedCapability);
+        let storage = match capability {
+            ProviderSetupCapability::ApiKey { storage } => storage.clone(),
+            ProviderSetupCapability::CorbanuPlan => ApiKeyStorage::EnvironmentVariable {
+                env_key: codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR.to_string(),
+            },
+            _ => return Err(ApiKeyTargetError::UnsupportedCapability),
         };
         if !entry
             .setup_capabilities
@@ -72,7 +76,7 @@ impl ApiKeyAuthTarget {
         Ok(Self {
             provider_id: entry.id.clone(),
             runtime_provider_id,
-            storage: storage.clone(),
+            storage,
         })
     }
 }

@@ -50,9 +50,7 @@ impl ProviderManagementSession {
                 let Some(status) = self.status(&provider_id) else {
                     return self.transition(false, effects, persistence_result);
                 };
-                let preserve_inactive = status.configuration
-                    == ProviderConfigurationState::Configured
-                    && status.eligibility == ProviderEligibilityState::Inactive;
+                let preserve_inactive = status.eligibility == ProviderEligibilityState::Inactive;
                 let attempt_id = self.allocate_attempt();
                 self.phase = ProviderManagementPhase::Authenticating {
                     attempt_id,

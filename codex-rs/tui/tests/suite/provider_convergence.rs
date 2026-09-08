@@ -104,7 +104,7 @@ async fn run_open_case(case: Case, fixture: &Fixture, pane: &TmuxPane<'_>) -> Re
             ensure!(current_provider(fixture.home.path())? == A);
         }
         Case::Environment => {
-            inspect_provider(pane, "PF55 Environment", "Active · current")?;
+            inspect_provider(pane, "PF55 Environment", "Enabled · configured · current")?;
             open_model_picker(pane)?;
             pane.wait_stable_contains(MODEL, READY_TIMEOUT)?;
             pane.send_key(TmuxKey::Escape)?;
@@ -127,7 +127,7 @@ async fn run_open_case(case: Case, fixture: &Fixture, pane: &TmuxPane<'_>) -> Re
             open_manager(pane)?;
             select_label(pane, "PF55 B")?;
             select_label(pane, "Reactivate")?;
-            pane.wait_stable_contains("Active", READY_TIMEOUT)?;
+            pane.wait_stable_contains("Enabled · configured", READY_TIMEOUT)?;
             pane.send_key(TmuxKey::Escape)?;
             wait_chat_ready(pane)?;
         }
@@ -235,7 +235,7 @@ async fn run_managed_restart(fixture: &Fixture, tmux: &TmuxServer) -> Result<()>
         let session = tmux.new_session(fixture.session(name, false))?;
         let pane = session.primary_pane();
         wait_chat_ready(pane)?;
-        inspect_provider(pane, "PF55 Managed", "Active · current")?;
+        inspect_provider(pane, "PF55 Managed", "Enabled · configured · current")?;
         if index == 1 {
             submit_and_wait(pane, "managed restart request", "PF55 response")?;
             require_authorization(&fixture.server, &fixture.managed_key).await?;
