@@ -7,4 +7,4 @@ Corbanu Terminal 0.1.41 fixes Task Node account recovery when using multiple nam
 
 The live Task Node linking service also now opens GitHub's account picker. If a saved session was revoked, restart Corbanu, run `/tasknode link`, choose the intended GitHub account and then run `/tasknode status`.
 
-The repair passed 48 focused Rust tests and actual terminal checks covering two-account isolation, relinking, restart, cancellation and concurrent status. This emergency release is authorized with the full competitor/model benchmark matrix incomplete. [Release evidence](https://github.com/CorbanuCore/CorbanuTerminal/blob/rust-v0.1.41/qa/release/0.1.41/RELEASE.md).
+The repair passed 48 focused Rust tests and fresh 0.1.41 terminal checks in TensorCash and Isometric Game covering two-account isolation, relinking, restart, cancellation and concurrent status. This emergency release is authorized with the full competitor/model benchmark matrix incomplete. [Release evidence](https://github.com/CorbanuCore/CorbanuTerminal/blob/main/qa/release/0.1.41/RELEASE.md).

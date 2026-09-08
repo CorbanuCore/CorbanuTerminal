@@ -66,8 +66,59 @@ Prior implementation artifacts:
 ## Qualification disclosure
 
 The full competitor and coding-model benchmark matrix is incomplete; the
-qualifying-cycle counter is not reset. New 0.1.41 live-repository PTY checks and
-cross-platform interactive acceptance have not yet completed. Historical
+qualifying-cycle counter is not reset. Linux 0.1.41 live-repository PTY checks passed as recorded below.
+Cross-platform interactive acceptance has not completed. Historical
 sprint-checker errors remain outside this repair; no PF-42-S02 error was found.
 A separate named-human acceptance record is unavailable. The explicit emergency
 release authorization applies; these gaps are disclosed accurately.
+
+## Publication dispatch and fresh tests
+
+Source `739897fd64527898fdddc2dec1ab15be287f620a` was pushed to `main`.
+[Release run 34180024130](https://github.com/CorbanuCore/CorbanuTerminal/actions/runs/34180024130)
+validated the release inputs and started all five platform builds with
+publication and latest-release selection enabled. Publication remains pending
+at this checkpoint.
+
+The fresh versioned source passed all **48 affected Rust tests** in one run
+(4,247 excluded by the explicit filter). The prior provider-path no-regex
+regression, portable skill mirror check and Bazel lock drift check also passed.
+No external dependency entries changed. The local 0.1.41 executable build and
+new repository PTY checks are being collected.
+
+User service `corbanu-emergency-release-0141.service` monitors the exact source
+and workflow. On successful publication it verifies the tag and Linux package
+checksum, applies the prepared public notes, installs the official package,
+and repeats the account-recovery terminal matrix in disposable TensorCash and
+Isometric Game worktrees. It preserves a newer independently installed version.
+Results or failures are written to the private `publication-status.json`;
+future completion is not represented as an existing pass.
+
+## Fresh 0.1.41 interactive qualification
+
+The Linux development executable built successfully from the immutable release
+source and reports `corbanu 0.1.41`. Its SHA256 is `3af400b99acad3b5cdce8ed915e90eac06296ab5d05a95540d8990e356acaecd`.
+No product source changed after the release commit.
+
+Actual PTY keys passed the full account-recovery matrix in both disposable
+repositories: revoked-token guidance, waiting for GitHub, completed relink,
+separate account isolation and cold restart. Adjacent CLI checks passed
+simultaneous one-time exchange, cancellation preserving the active account,
+and an independently unlinked default scope.
+
+Repository inputs:
+
+- TensorCash: `https://github.com/agtico/tensorcash.git`, base
+  `9325ed67d23355170d6ad38ad58ea776d049ae4e`, disposable worktree
+  `.../corbanu-0.1.41-qa/tensorcash-canonical`.
+- Isometric Game: `https://github.com/goodalexander/isometricgame.git`, base
+  `59821b7a85524f186f946c4670480c7ee96483cb`, disposable worktree
+  `.../corbanu-0.1.41-qa/isometricgame`.
+
+Private evidence: `candidate-qualification.json`, per-repository
+`candidate-pty-results.json` and PTY captures. These checks use local HTTP
+authentication fixtures with zero model calls. They prove the interactive
+account workflow, not coding benchmarks or a real GitHub browser login.
+The existing local account repair remains installed while the official
+cross-platform packages build. The verified user service will check the actual
+official Linux package and repeat this matrix after publication.
