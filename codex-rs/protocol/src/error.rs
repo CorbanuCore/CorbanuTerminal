@@ -440,6 +440,11 @@ impl CodexErr {
                 }
             }
             CodexErrorDetails::RefreshTokenFailed(_) => CodexErrorInfo::Unauthorized,
+            CodexErrorDetails::UnexpectedStatus(error)
+                if error.status == StatusCode::UNAUTHORIZED =>
+            {
+                CodexErrorInfo::Unauthorized
+            }
             CodexErrorDetails::SessionConfiguredNotFirstEvent
             | CodexErrorDetails::InternalServerError
             | CodexErrorDetails::InternalAgentDied => CodexErrorInfo::InternalServerError,

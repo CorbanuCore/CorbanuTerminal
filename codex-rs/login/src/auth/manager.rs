@@ -119,6 +119,7 @@ pub enum OpenAiAuthMetadata {
     Missing,
     Account,
     ApiKey,
+    EnvironmentApiKey,
     ExternallyManaged,
     RecoveryRequired,
     Unsupported,
@@ -3139,6 +3140,12 @@ impl AuthManager {
         let Some(auth) = self.auth_cached() else {
             return OpenAiAuthMetadata::Missing;
         };
+        if self.enable_codex_api_key_env && auth_uses_api_key_from_env(&auth) {
+            return OpenAiAuthMetadata::EnvironmentApiKey;
+        }
+        if auth.is_external_chatgpt_tokens() {
+            return OpenAiAuthMetadata::ExternallyManaged;
+        }
         if self.refresh_failure_for_auth(&auth).is_some() {
             return OpenAiAuthMetadata::RecoveryRequired;
         }

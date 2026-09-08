@@ -1595,6 +1595,13 @@ pub(crate) enum AppEvent {
     OpenProviderManagerActions {
         provider_id: codex_provider_auth::ProviderCatalogId,
     },
+    OpenProviderManagerRecovery {
+        provider_id: codex_provider_auth::ProviderCatalogId,
+    },
+    ProviderManagerApiKeyCancelled {
+        attempt_id: codex_provider_auth::ProviderManagementAttemptId,
+        provider_id: codex_provider_auth::ProviderCatalogId,
+    },
     ProviderManagerBeginAuthentication {
         provider_id: codex_provider_auth::ProviderCatalogId,
         capability: codex_provider_auth::ProviderSetupCapability,

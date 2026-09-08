@@ -255,6 +255,10 @@ pub enum ConfiguredAvailability {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderRecoveryReason {
+    CredentialRejected {
+        source: ProviderCredentialSource,
+        control: CredentialControl,
+    },
     InvalidEnvironmentCredential,
     OpenAiRefreshRequired,
     MissingMetadataAdapter,

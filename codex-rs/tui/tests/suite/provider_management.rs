@@ -32,6 +32,9 @@ const SECONDARY_PROVIDER: &str = "pf54-secondary";
 const MANAGED_PROVIDER: &str = "pf54-managed";
 const ENV_PROVIDER: &str = "pf54-environment";
 
+#[path = "provider_reauthentication.rs"]
+mod reauthentication;
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tmux_astra_selection_cancel_restart_and_request() -> Result<()> {
     if !TmuxServer::should_run("Astra OpenAI selection, cancel, restart and request")? {
@@ -246,11 +249,15 @@ async fn tmux_shared_and_custom_catalog_have_management_status_parity() -> Resul
 
     open_manager(pane)?;
     pane.wait_stable_contains("OpenAI", READY_TIMEOUT)?;
-    inspect_provider(pane, "PF54 Primary", "Active · current")?;
+    inspect_provider(pane, "PF54 Primary", "Enabled · configured · current")?;
     open_manager(pane)?;
     inspect_provider(pane, "PF54 Managed", "Not configured")?;
     open_manager(pane)?;
-    inspect_provider(pane, "PF54 Broken Environment", "Recovery required")?;
+    inspect_provider(
+        pane,
+        "PF54 Broken Environment",
+        "Credential needs attention",
+    )?;
 
     capture_success("catalog-parity", &fixture, pane, &[])?;
     close_overlay_and_exit(pane)?;
@@ -278,12 +285,17 @@ async fn tmux_pf50_api_key_setup_and_recovery_are_reused() -> Result<()> {
     pane.wait_stable_contains("encrypted vault", READY_TIMEOUT)?;
     pane.send_secret_literal(&canary)?;
     pane.send_key(TmuxKey::Enter)?;
-    wait_manager_row(pane, fixture.home.path(), "PF54 Managed", "Active")?;
-    inspect_provider(pane, "PF54 Managed", "Active")?;
+    wait_manager_row(
+        pane,
+        fixture.home.path(),
+        "PF54 Managed",
+        "Enabled · configured",
+    )?;
+    inspect_provider(pane, "PF54 Managed", "Enabled · configured")?;
 
     open_manager(pane)?;
     select_label(pane, "PF54 Broken Environment")?;
-    pane.wait_stable_contains("Recovery required", READY_TIMEOUT)?;
+    pane.wait_stable_contains("Credential needs attention", READY_TIMEOUT)?;
     select_label(pane, "Recover with API key")?;
     pane.wait_stable_contains("API key — masked", READY_TIMEOUT)?;
     pane.send_key(TmuxKey::Escape)?;
@@ -363,7 +375,7 @@ async fn tmux_pf52_claude_recovery_cancel_and_retry_are_reused() -> Result<()> {
     open_manager(pane)?;
     focus_label(pane, "Claude Account")?;
     pane.wait_stable_until("Claude recovery status", READY_TIMEOUT, |capture| {
-        selected_row(capture).is_some_and(|row| row.contains("Recovery required"))
+        selected_row(capture).is_some_and(|row| row.contains("Credential needs attention"))
     })?;
     pane.send_key(TmuxKey::Enter)?;
     select_label(pane, "Recover with Claude account")?;
@@ -375,7 +387,7 @@ async fn tmux_pf52_claude_recovery_cancel_and_retry_are_reused() -> Result<()> {
     open_manager(pane)?;
     focus_label(pane, "Claude Account")?;
     pane.wait_stable_until("Claude retry recovery status", READY_TIMEOUT, |capture| {
-        selected_row(capture).is_some_and(|row| row.contains("Recovery required"))
+        selected_row(capture).is_some_and(|row| row.contains("Credential needs attention"))
     })?;
     pane.send_key(TmuxKey::Enter)?;
     select_label(pane, "Recover with Claude account")?;
@@ -484,7 +496,7 @@ async fn tmux_noncurrent_deactivate_reactivate_restart_retains_request_credentia
     open_manager(pane)?;
     select_label(pane, "PF54 Managed")?;
     select_label(pane, "Reactivate")?;
-    pane.wait_stable_contains("Active", READY_TIMEOUT)?;
+    pane.wait_stable_contains("Enabled · configured", READY_TIMEOUT)?;
     close_manager(pane)?;
     open_model_picker(pane)?;
     pane.wait_stable_contains("[Other]", READY_TIMEOUT)?;
@@ -528,7 +540,7 @@ async fn tmux_current_deactivate_cancel_is_inert() -> Result<()> {
 
     open_manager(pane)?;
     select_label(pane, "PF54 Primary")?;
-    pane.wait_stable_contains("Active · current", READY_TIMEOUT)?;
+    pane.wait_stable_contains("Enabled · configured · current", READY_TIMEOUT)?;
     select_label(pane, "Deactivate")?;
     pane.wait_stable_contains("Choose replacement", READY_TIMEOUT)?;
     pane.wait_stable_contains("PF54 Secondary — fixture-model", READY_TIMEOUT)?;
@@ -580,7 +592,7 @@ async fn tmux_current_exact_replacement_is_persisted_before_deactivation() -> Re
     let pane = second.primary_pane();
     wait_chat_ready(pane)?;
     open_manager(pane)?;
-    inspect_provider(pane, "PF54 Secondary", "Active · current")?;
+    inspect_provider(pane, "PF54 Secondary", "Enabled · configured · current")?;
     open_manager(pane)?;
     inspect_provider(pane, "PF54 Primary", "Inactive")?;
     capture_success("current-replacement-restart", &fixture, pane, &[])?;
@@ -612,7 +624,7 @@ async fn tmux_environment_copy_and_eligibility_never_delete_credentials() -> Res
     pane.wait_stable_contains("Inactive", READY_TIMEOUT)?;
     select_label(pane, "PF54 Environment")?;
     select_label(pane, "Reactivate")?;
-    pane.wait_stable_contains("Active", READY_TIMEOUT)?;
+    pane.wait_stable_contains("Enabled · configured", READY_TIMEOUT)?;
 
     ensure!(fs::read(fixture.home.path().join("config.toml"))? == config_before);
     ensure!(fs::read(fixture.home.path().join("auth.json"))? == auth_before);
@@ -698,7 +710,7 @@ fn configure_managed_provider(pane: &TmuxPane<'_>, home: &Path, canary: &str) ->
     pane.wait_stable_contains("API key — masked", READY_TIMEOUT)?;
     pane.send_secret_literal(canary)?;
     pane.send_key(TmuxKey::Enter)?;
-    wait_manager_row(pane, home, "PF54 Managed", "Active")?;
+    wait_manager_row(pane, home, "PF54 Managed", "Enabled · configured")?;
     pane.send_key(TmuxKey::Escape)?;
     wait_chat_ready(pane)?;
     Ok(())
@@ -802,6 +814,8 @@ fn focus_label(pane: &TmuxPane<'_>, label: &str) -> Result<()> {
 fn selected_row(capture: &str) -> Option<String> {
     capture
         .lines()
+        // Submitted chat prompts use the same cursor; the active menu is below them.
+        .rev()
         .find(|line| strip_selection_cursor(line).is_some())
         .map(str::trim)
         .map(str::to_owned)
@@ -912,7 +926,11 @@ fn session_spec(
             .env("PF54_ENV_KEY", "pf54-external-environment-fixture")
             .env("PF54_BROKEN_KEY", "")
             .env("CODEX_APP_SERVER_LOGIN_ISSUER", login_issuer)
-            .env("RUST_LOG", "warn,codex_tui=debug,codex_login=debug")
+            .env(
+                "CODEX_REFRESH_TOKEN_URL_OVERRIDE",
+                format!("{login_issuer}/oauth/token"),
+            )
+            .env("RUST_LOG", "trace")
             .arg("-c")
             .arg("analytics.enabled=false")
             .arg("-c")
@@ -1142,10 +1160,18 @@ fn capture_success(
 }
 
 fn tree_contains_except_custody(root: &Path, needle: &[u8]) -> Result<bool> {
-    if root.file_name().and_then(|name| name.to_str()) == Some("provider_auth.json") {
-        return Ok(false);
+    // These exact home-level files are credential custody, not transcripts.
+    // Files with the same names elsewhere remain subject to the leak scan.
+    for entry in fs::read_dir(root)? {
+        let path = entry?.path();
+        if path == root.join("provider_auth.json") || path == root.join("auth.json") {
+            continue;
+        }
+        if tree_contains(&path, needle)? {
+            return Ok(true);
+        }
     }
-    tree_contains(root, needle)
+    Ok(false)
 }
 
 fn tree_contains(root: &Path, needle: &[u8]) -> Result<bool> {
@@ -1167,7 +1193,7 @@ fn tree_contains(root: &Path, needle: &[u8]) -> Result<bool> {
     }
     for entry in fs::read_dir(root)? {
         let entry = entry?;
-        if tree_contains_except_custody(&entry.path(), needle)? {
+        if tree_contains(&entry.path(), needle)? {
             return Ok(true);
         }
     }
@@ -1197,6 +1223,10 @@ fn codex_binary(repo_root: &Path) -> Result<PathBuf> {
 
 #[test]
 fn selection_parser_accepts_exact_and_inline_replacement_rows() {
+    assert_eq!(
+        selected_row("› submitted prompt\nProviders\n› 1. OpenAI\n  r recover"),
+        Some("› 1. OpenAI".to_string())
+    );
     assert_eq!(selected_title("> 12. PF54 Managed"), Some("PF54 Managed"));
     assert!(selected_title_matches(
         "PF54 Secondary — fixture-model  Exact provider: pf54-secondary",

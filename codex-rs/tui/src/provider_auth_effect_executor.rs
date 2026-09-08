@@ -63,6 +63,7 @@ impl ProviderAuthEffectExecutor {
                 secret,
             } => {
                 let openai_storage = matches!(target.storage, ApiKeyStorage::OpenAiAuth);
+                let provider_id = target.provider_id.clone();
                 let request = ClientRequest::LoginAccount {
                     request_id: RequestId::String(Uuid::new_v4().to_string()),
                     params: login_params(target, secret),
@@ -76,6 +77,7 @@ impl ProviderAuthEffectExecutor {
                         .await
                     {
                         Ok(LoginAccountResponse::ApiKey {}) => {
+                            status_host.credential_changed(provider_id.as_str());
                             if openai_storage {
                                 status_host.mark_openai_api_key();
                             }

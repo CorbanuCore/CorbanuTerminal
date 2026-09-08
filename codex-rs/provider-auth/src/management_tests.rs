@@ -12,7 +12,7 @@ use crate::ProviderRuntimeId;
 fn newly_configured_defaults_active_but_recovery_preserves_explicit_inactivity() {
     let inactive = status(
         "inactive",
-        ProviderConfigurationState::Configured,
+        ProviderConfigurationState::RecoveryRequired,
         ProviderEligibilityState::Inactive,
         ProviderCurrentState::NotCurrent,
         ProviderAvailabilityState::Ready,

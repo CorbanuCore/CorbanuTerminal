@@ -35,12 +35,22 @@ fn sync_provider_manager_model_policy(
 }
 
 impl App {
+    pub(super) fn reusable_provider_status_host(
+        &self,
+    ) -> Option<crate::provider_status_host::ProviderStatusHost> {
+        self.shared_provider_status_host.clone().or_else(|| {
+            self.model_catalog
+                .provider_policy()
+                .map(|policy| policy.host())
+        })
+    }
+
     pub(super) fn open_provider_manager(&mut self, _app_server: &AppServerSession) {
         sync_provider_manager_model_policy(&self.model_catalog, &self.config);
         let generation = self.next_provider_management_generation();
         self.provider_management_host = None;
         let config = self.config.clone();
-        let shared_status_host = self.shared_provider_status_host.clone();
+        let shared_status_host = self.reusable_provider_status_host();
         let tx = self.app_event_tx.clone();
         spawn_provider_status_job(move || {
             let status_host = provider_manager_status_host(&config, shared_status_host);

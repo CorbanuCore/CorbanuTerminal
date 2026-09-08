@@ -10,6 +10,21 @@ use super::AppEvent;
 use super::AppServerSession;
 
 impl App {
+    pub(super) fn open_provider_manager_recovery(
+        &mut self,
+        provider_id: codex_provider_auth::ProviderCatalogId,
+    ) {
+        let Some(host) = self.provider_management_host.as_ref() else {
+            return;
+        };
+        let Some(entry) = host.status_host().catalog().get(provider_id.as_str()) else {
+            return;
+        };
+        let Some(status) = host.status_host().resolve_provider(provider_id.as_str()) else {
+            return;
+        };
+        self.chat_widget.open_provider_recovery(entry, &status);
+    }
     pub(super) fn open_provider_manager_actions(
         &mut self,
         provider_id: codex_provider_auth::ProviderCatalogId,
@@ -110,7 +125,7 @@ impl App {
                     return;
                 };
                 self.app_event_tx.send(AppEvent::SharedProviderAuthAction(
-                    codex_provider_auth::OpenAiAccountAction::Start(
+                    codex_provider_auth::OpenAiAccountAction::Reauthenticate(
                         codex_provider_auth::OpenAiAccountFlowStart {
                             target,
                             method: codex_provider_auth::OpenAiAccountMethod::DeviceCode,
@@ -135,9 +150,11 @@ impl App {
                 else {
                     return;
                 };
-                if status.configuration
-                    == codex_provider_auth::ProviderConfigurationState::RecoveryRequired
-                {
+                if matches!(
+                    status.configuration,
+                    codex_provider_auth::ProviderConfigurationState::RecoveryRequired
+                        | codex_provider_auth::ProviderConfigurationState::Configured
+                ) {
                     let codex_home = self.config.codex_home.to_path_buf();
                     let tx = self.app_event_tx.clone();
                     tokio::spawn(async move {
@@ -163,7 +180,30 @@ impl App {
                 }
             }
             codex_provider_auth::ProviderSetupCapability::CorbanuPlan => {
-                self.app_event_tx.send(AppEvent::OpenWallet);
+                if self
+                    .provider_management_host
+                    .as_ref()
+                    .and_then(|host| host.status_host().resolve_provider(provider_id.as_str()))
+                    .is_some_and(|status| {
+                        status.configuration
+                            == codex_provider_auth::ProviderConfigurationState::NotConfigured
+                    })
+                {
+                    self.app_event_tx.send(AppEvent::OpenWallet);
+                    return;
+                }
+                let target = codex_provider_auth::ApiKeyAuthTarget::from_catalog_capability(
+                    &entry,
+                    &codex_provider_auth::ProviderSetupCapability::CorbanuPlan,
+                );
+                match target {
+                    Ok(target) => self.chat_widget.open_provider_manager_api_key(
+                        attempt_id,
+                        target,
+                        entry.display_name,
+                    ),
+                    Err(_) => self.provider_manager_authentication_cancelled(provider_id),
+                }
             }
             _ => self.provider_manager_authentication_cancelled(provider_id),
         }
@@ -434,7 +474,7 @@ pub(super) fn claude_intent_for_status(
 
     match status.configuration {
         ProviderConfigurationState::NotConfigured => Some(ClaudeAccountIntent::Add),
-        ProviderConfigurationState::RecoveryRequired
+        ProviderConfigurationState::RecoveryRequired | ProviderConfigurationState::Configured
             if source != ClaudeUnauthorizedRecoverySource::Unknown =>
         {
             Some(ClaudeAccountIntent::UnauthorizedRecovery { source })

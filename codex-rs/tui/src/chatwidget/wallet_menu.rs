@@ -515,6 +515,11 @@ impl ChatWidget {
         self.bottom_pane.show_view(Box::new(view));
     }
 
+    pub(crate) fn dismiss_shared_account_auth(&mut self) {
+        self.bottom_pane
+            .dismiss_view_by_id(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID);
+    }
+
     fn show_shared_account_auth_selection(&mut self, mut params: SelectionViewParams) {
         params.view_id = Some(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID);
         if self.bottom_pane.active_view_id() == Some(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID) {
@@ -2104,10 +2109,7 @@ mod tests {
             chat.bottom_pane.active_view_id(),
             Some(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID)
         );
-        assert!(
-            chat.bottom_pane
-                .dismiss_view_by_id(SHARED_PROVIDER_ACCOUNT_AUTH_VIEW_ID)
-        );
+        chat.dismiss_shared_account_auth();
         assert_eq!(chat.bottom_pane.active_view_id(), None);
 
         chat.open_shared_account_pending(

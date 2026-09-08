@@ -227,6 +227,8 @@ pub enum OpenAiAccountLoginOutcome {
 #[derive(Debug, PartialEq, Eq)]
 pub enum OpenAiAccountAction {
     Start(OpenAiAccountFlowStart),
+    /// Explicit user recovery must start login even when stored metadata looks healthy.
+    Reauthenticate(OpenAiAccountFlowStart),
     Cancel,
     Retry,
     StartFinished {

@@ -1,0 +1,10 @@
+---
+source: tui/src/chatwidget/provider_health_tests.rs
+expression: "super::super::tests::helpers::render_bottom_popup(&chat, 90)"
+---
+  Recover OpenAI
+  Keep the current provider and model. Esc cancels without changing credentials.
+
+› Sign in to OpenAI again
+
+  Press enter to confirm or esc to go back

@@ -77,12 +77,18 @@ are not credential revocation. Clear a failure only after matching recovery or
 validated success, rejecting stale results from an older credential/turn.
 
 The affected RTX process used its saved ChatGPT account: no connector-token,
-OpenAI API-key or Codex API-key environment override was present. Metadata-only
-inspection found access-token expiry 2026-09-02T21:01:56Z and a refresh token.
+OpenAI API-key or Codex API-key environment override was present. Its open state
+files identify `~/.corbanu`, not the separate `~/.codex` store. Corbanu's logs
+record proactive refresh failures including `refresh_token_reused`; the server
+also reported an expired access token. The exact vault token expiry has not been
+inspected. An earlier expiry observation from `~/.codex` was not this credential.
 No raw token, account identifier or private response is recorded in this plan.
 
-PF-58 owner/integrator is Codex /root in the newly listed worktree, with RTX-only
-builds and a separate receiving integration boundary. Review allocation for this
+PF-58 owner/integrator is Codex /root in the newly listed worktree. Build/test
+registration also covers the existing provider-journey nextest rule
+and mechanical Cargo/Bazel lock reconciliation after the requested main merge.
+No new dependency or runtime policy is introduced by that registration.
+PF-58 retains RTX-only builds and a separate receiving integration boundary. Review allocation for this
 new feature is an initial Astra High plus Fable5.1 High Corbanu/TMUX pair,
 at most five total, superseding historical PF-56 model choices for PF-58 only.
 The security monitor remains paused; no main merge is authorized by this amendment.
@@ -465,6 +471,14 @@ Run fix and formatting tools before the final affected tests.
 | PF-57 combined recovery matrix | `23f37955…33d2` | isolated startup/provider fixtures on remote Linux | Run all 12 PF-55 journeys plus PF-53 configure-many and cancel | fresh versus established recovery, current-provider blocking, restart, lazy command auth | PASS: 14 flows in 147.84s | [PF-57 ledger](../../qa/provider-auth/pf-57/qualification.md) |
 
 ## Live-repository applicability
+
+PF-58 changes home-level authentication health and recovery, not project contents,
+coding tasks or repository execution. Like PF-57-S02, neither default live
+repository adds a distinct feature boundary here. Its final proof uses isolated
+homes and loopback auth/model endpoints with real TMUX keys. This is a human-test
+candidate, not release qualification; prior live-repository or benchmark results
+are not claimed as rerun. The 2026-09-08 candidate incorporates main `3cec54d99`
+through integration commit `472b8fed5`, preserving the security branch history.
 
 | Repository | Applicable to this initiative? | Resolved checkout/test worktree | Base commit | Reason or result |
 | --- | --- | --- | --- | --- |

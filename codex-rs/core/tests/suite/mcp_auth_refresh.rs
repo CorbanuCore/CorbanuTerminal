@@ -32,6 +32,100 @@ use tokio_util::sync::CancellationToken;
 // Installs a known snapshot through AuthManager's public external-auth path.
 struct StaticExternalAuth(CodexAuth);
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn codex_apps_401_without_challenge_identifies_only_attached_account() -> Result<()> {
+    use codex_protocol::protocol::EventMsg;
+    use codex_protocol::protocol::McpStartupFailureReason;
+    use codex_protocol::protocol::McpStartupStatus;
+    use wiremock::Mock;
+    use wiremock::ResponseTemplate;
+    use wiremock::matchers::method;
+    for attach_account in [true, false] {
+        let server = start_mock_server().await;
+        Mock::given(method("POST"))
+            .respond_with(
+                ResponseTemplate::new(401).set_body_json(json!({"error":{"code":"token_expired"}})),
+            )
+            .mount(&server)
+            .await;
+        let home = TempDir::new()?;
+        let auth = CodexAuth::from_external_chatgpt_tokens(
+            "header.e30.synthetic",
+            "synthetic-account",
+            /*chatgpt_plan_type*/ None,
+        )?;
+        let manager =
+            AuthManager::from_auth_for_testing_with_home(auth.clone(), home.path().into());
+        let mut configured = codex_mcp::hosted_plugin_runtime_mcp_server_config(
+            &server.uri(),
+            /*apps_mcp_product_sku*/ None,
+            /*originator*/ None,
+        );
+        if let McpServerTransportConfig::StreamableHttp {
+            bearer_token_env_var,
+            ..
+        } = &mut configured.transport
+        {
+            *bearer_token_env_var = None;
+        }
+        let config = ConfigBuilder::default()
+            .codex_home(home.path().into())
+            .build()
+            .await?;
+        let plugins = codex_core_plugins::PluginsManager::new(home.path().into());
+        let (tx, rx) = async_channel::unbounded();
+        let runtime = McpRuntime::new(McpRuntimeInput {
+            config: Arc::new(config.to_mcp_config(&plugins).await),
+            plugins_available: false,
+            ready_selected_capability_roots: Vec::new(),
+            mcp_servers: HashMap::from([(
+                CODEX_APPS_MCP_SERVER_NAME.into(),
+                EffectiveMcpServer::configured(configured),
+            )]),
+            submit_id: "pf58".into(),
+            tx_event: Some(tx),
+            startup_cancellation_token: CancellationToken::new(),
+            runtime_context: McpRuntimeContext::new(
+                Arc::new(environment_manager_without_environments()),
+                home.path().into(),
+            ),
+            codex_apps_tools_cache: CodexAppsToolsCache::default(),
+            tool_catalog_cache: McpToolCatalogCache::default(),
+            codex_apps_tools_cache_key: codex_mcp::codex_apps_tools_cache_key(
+                attach_account.then_some(&auth),
+            ),
+            supports_openai_form_elicitation: false,
+            auth: attach_account.then_some(auth),
+            codex_apps_auth_manager: attach_account.then_some(manager),
+            elicitation_reviewer: None,
+            elicitation_lifecycle: None,
+        })
+        .await;
+        let failure = tokio::time::timeout(std::time::Duration::from_secs(20), async {
+            loop {
+                let event = rx.recv().await?;
+                if let EventMsg::McpStartupUpdate(update) = event.msg
+                    && let McpStartupStatus::Failed { error, reason } = update.status
+                {
+                    return Ok::<_, anyhow::Error>((error, reason));
+                }
+            }
+        })
+        .await??;
+        assert_eq!(
+            failure.1,
+            attach_account
+                .then_some(McpStartupFailureReason::OpenAiAccountReauthenticationRequired)
+        );
+        if attach_account {
+            assert!(failure.0.contains("/providers"));
+            assert!(!failure.0.contains("header.e30.synthetic"));
+        }
+        drop(runtime);
+    }
+    Ok(())
+}
+
 impl ExternalAuth for StaticExternalAuth {
     fn resolve(&self) -> ExternalAuthFuture<'_, CodexAuth> {
         Box::pin(async { Ok(self.0.clone()) })

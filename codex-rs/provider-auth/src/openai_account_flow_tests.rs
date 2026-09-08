@@ -4,6 +4,38 @@ use super::*;
 use crate::*;
 
 #[test]
+fn explicit_reauthentication_starts_configured_account_but_not_external_credentials() {
+    for state in [AccountState::Account, AccountState::External] {
+        let mut controller = ProviderAuthController::default();
+        let result = controller.dispatch(
+            OpenAiAccountAction::Reauthenticate(OpenAiAccountFlowStart {
+                target: target(),
+                method: OpenAiAccountMethod::DeviceCode,
+                context: OpenAiAccountLoginContext::ProviderEnrollment,
+                status: status(state),
+            })
+            .into(),
+        );
+        if matches!(state, AccountState::Account) {
+            assert!(matches!(
+                result.effects.as_slice(),
+                [ProviderAuthEffect::OpenAiAccount(
+                    OpenAiAccountEffect::StartLogin { .. }
+                )]
+            ));
+        } else {
+            assert!(matches!(
+                result.snapshot,
+                ProviderAuthFlowSnapshot::OpenAiAccount(OpenAiAccountSnapshot::Blocked {
+                    reason: OpenAiAccountBlockedReason::ExternallyManaged,
+                    ..
+                })
+            ));
+        }
+    }
+}
+
+#[test]
 fn settled_openai_failures_offer_working_retry_and_cancel() {
     for recovery in [false, true] {
         for retry in [false, true] {

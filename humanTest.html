@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Human acceptance checks for the Corbanu Terminal 0.1.38 reconciliation candidate">
+  <meta name="description" content="Human acceptance checks for the Corbanu Terminal 0.1.41 PF-58 reauthentication candidate">
   <link rel="icon" href="data:,">
   <title>Corbanu Terminal — Human Test Plan</title>
   <style>
@@ -202,20 +202,20 @@
     <header>
       <p class="eyebrow">Corbanu Terminal · human QA</p>
       <h1>Provider and security acceptance</h1>
-      <p class="lede">Keep the existing 35–45 minute provider acceptance pass. Round five adds five read-only security checks and three assisted memory checks on the exact RTX candidate below. Stop at the first failure and record the visible message—never a credential.</p>
+      <p class="lede">Start with <a href="#reauth-title">checks 24–26: credential recovery</a> on the replacement RTX build. The earlier provider and security checks remain below with their historical evidence. Stop at a failure and record the visible message—never a credential or login code.</p>
       <div class="release-strip">
-        <span><strong>Candidate:</strong> Corbanu 0.1.38</span>
-        <span><strong>Combined lines:</strong> <code>a935e507b</code> + <code>rust-v0.1.37</code></span>
-        <span><strong>Integration base:</strong> <code>6dd9ad646</code></span>
-        <span><strong>UX parity follow-up:</strong> 4 Sep 2026 (Phoenix)</span>
-        <span><strong>Provider baseline:</strong> Mac launcher unchanged</span>
-        <span><strong>Security/memory runtime:</strong> RTX <code>b12e32db3</code> · instructions below</span>
+        <span><strong>Candidate:</strong> Corbanu 0.1.41 · PF-58</span>
+        <span><strong>Main incorporated:</strong> <code>3cec54d99</code></span>
+        <span><strong>Combined base:</strong> <code>472b8fed5</code></span>
+        <span><strong>Recovery follow-up:</strong> 8 Sep 2026 (Phoenix)</span>
+        <span><strong>Machine:</strong> RTX · <code>travis@100.99.88.49</code></span>
+        <span><strong>Branch:</strong> <code>feat/provider-reauth-health</code> · not merged to main</span>
       </div>
       <div class="actions">
         <button type="button" onclick="window.print()">Print / save PDF</button>
         <button type="button" id="reset">Reset checks</button>
-        <div class="progress-shell" id="progressShell" role="progressbar" aria-label="Test progress" aria-valuemin="0" aria-valuemax="23" aria-valuenow="0"><div class="progress-bar" id="progress"></div></div>
-        <span class="progress-label" id="progressLabel" aria-live="polite">0 / 23</span>
+        <div class="progress-shell" id="progressShell" role="progressbar" aria-label="Test progress" aria-valuemin="0" aria-valuemax="26" aria-valuenow="0"><div class="progress-bar" id="progress"></div></div>
+        <span class="progress-label" id="progressLabel" aria-live="polite">0 / 26</span>
       </div>
     </header>
 
@@ -252,7 +252,7 @@
 
     <aside class="callout">
       <strong>Credential safety:</strong> retrieve the long-lived Anthropic credential from <code>Documents/clAuth.txt</code> only when a masked provider-entry field asks for it. Never paste it into chat, this page, notes, screenshots, logs, or a bug report. Close the file immediately after copying. Use normal launcher logging: do not enable debug/trace logging when typing real credentials, because a pre-existing key-event logging issue is documented in the provider UX audit.
-      <p><strong>Candidate startup:</strong> if 0.1.38 offers an “update” to 0.1.37, choose <strong>2. Skip</strong>. Do not install the downgrade. The existing release-recall heuristic mistakes this unpublished candidate for a recalled release; that separate issue is documented in the audit.</p>
+      <p><strong>Use the replacement:</strong> the PF-58 candidate is based on main 0.1.41 plus the security integration. Older 0.1.38 terminals do not contain the credential-health correction. The historical evidence below remains labeled with its original build; do not use its old launch command for checks 24–26.</p>
     </aside>
 
     <section aria-labelledby="checks-title">
@@ -404,10 +404,10 @@
 
     <section aria-labelledby="security-round5-title" style="margin-top:42px">
       <h2 id="security-round5-title">Round five: understand your protection</h2>
-      <p><strong>Ready for read-only UX testing on RTX.</strong> The combined candidate passed its automated and actual-key TMUX gates.
+      <p><strong>Historical round-five evidence.</strong> The original combined candidate passed its automated and actual-key TMUX gates.
         The existing Mac Apps shortcut has not been changed by this security round.
         Do not mistake its matching version number for the new build: record the supplied candidate commit and machine before checks 16–23.</p>
-      <p>Use <code>ssh travis@100.99.88.49</code>, then launch the exact candidate below from your intended test directory.
+      <p>The original launch path is retained for traceability, not for the new reauthentication checks.
         This is commit <code>b12e32db398c83854271e2e70f29e5290278af8b</code>, Corbanu <code>0.1.38</code>; it is not yet merged to main.</p>
       <pre><code>/home/travis/security-round5/evidence/anchor/combined-b12e32d/candidate/codex</code></pre>
       <details><summary>Candidate identity and automated evidence</summary>
@@ -474,6 +474,33 @@
       <p><strong>Security limit:</strong> automated fake-provider tests prove zero raw-history requests and zero outputs for Moderate/Aggressive. These manual regression checks do not activate protected modes or certify missing isolation/classifier gates.</p>
     </section>
 
+    <section aria-labelledby="reauth-title" style="margin-top:42px">
+      <h2 id="reauth-title">Provider reauthentication — PF-58 candidate</h2>
+      <p><strong>Replacement for human acceptance.</strong> Use this RTX session, not an older Mac launcher or the historical round-five executable. Never include a credential or login code in your notes.</p>
+      <pre><code>ssh -t travis@100.99.88.49 'tmux attach -t corbanu-human-pf58-final'</code></pre>
+      <p>Binary: <code>/home/travis/security-round5/evidence/provider-reauth-health-final/candidate-replacement/codex</code><br>
+      SHA-256: <code>37511bb9348e3793255ce67806d23060f3436cee53ef0a041b921420b201da35</code></p>
+      <p><strong>Scope:</strong> the focused recovery tests pass, including new-token requests without restarting. Human sign-off is still yours. A separate native child-agent test reports <code>source admission policy is unavailable</code>; this is not a release-clean security integration and is not merged to main. See <a href="qa/provider-auth/pf-58/README.md">qualification and limitations</a>.</p>
+      <p><strong>Scrolling:</strong> Page Up enters tmux history in this session. Page Up/Page Down scroll there; press <kbd>q</kbd> to return to Corbanu.</p>
+      <div class="tests">
+        <label class="test"><input type="checkbox" data-check="pf58-account"><span>
+          <strong>24. Recover the affected account, not the current model</strong>
+          <p>After an OpenAI connected-app authentication failure, open <code>/providers</code>. OpenAI should need attention while the working Claude provider remains configured. Select OpenAI, press <kbd>r</kbd>, and choose sign-in. Cancel once, reopen, then finish sign-in.</p>
+          <p class="expected">Pass: cancellation changes nothing; successful sign-in refreshes status and the app connection without restarting or changing provider/model.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="pf58-api"><span>
+          <strong>25. Replace a rejected saved API key</strong>
+          <p>Use our isolated synthetic fixture, not a production key. After its deliberate rejection, select the affected provider and press <kbd>r</kbd>. Cancel the masked form once, reopen it, and replace the key. Send another request in the same session.</p>
+          <p class="expected">Pass: the new key is used immediately; no secret appears in chat; the model, other providers, and any deliberately disabled provider remain unchanged.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="pf58-external"><span>
+          <strong>26. Recover according to the credential source</strong>
+          <p>Press <kbd>r</kbd> on an environment-backed provider, an external command/AWS provider, and a local provider where configured. Repeat in a narrow terminal window.</p>
+          <p class="expected">Pass: clear, readable instructions identify the owning shell/tool or local model server. Corbanu does not offer a fake browser login or a vault override for an environment credential. “Configured” does not claim a successful remote validation.</p>
+        </span></label>
+      </div>
+    </section>
+
     <section aria-labelledby="evidence-title" style="margin-top:42px">
       <h2 id="evidence-title">What machines already proved</h2>
       <p style="color:var(--muted)">These counts describe the previously qualified integration base. The additional provider UX corrections and their current validation results are recorded in <a href="qa/release/0.1.38/provider-ux-parity-audit.md">the provider UX audit</a>.</p>
@@ -519,7 +546,7 @@ git merge-base --is-ancestor rust-v0.1.37 HEAD &amp;&amp; echo "0.1.37 release l
   <script>
     const boxes = [...document.querySelectorAll('[data-check]')];
     const notes = [...document.querySelectorAll('[data-note]')];
-    const key = 'corbanu-human-test-0-1-38-reconciliation';
+    const key = 'corbanu-human-test-pf58-0-1-41';
 
     function loadState() {
       try {

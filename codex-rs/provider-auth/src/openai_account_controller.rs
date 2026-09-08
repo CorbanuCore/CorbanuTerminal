@@ -31,7 +31,8 @@ use crate::openai_account_flow::stale;
 impl ProviderAuthController {
     pub(crate) fn openai_account(&mut self, action: OpenAiAccountAction) -> Reduction {
         match action {
-            OpenAiAccountAction::Start(start) => self.start_openai_account(start),
+            OpenAiAccountAction::Start(start) => self.start_openai_account(start, false),
+            OpenAiAccountAction::Reauthenticate(start) => self.start_openai_account(start, true),
             OpenAiAccountAction::Cancel => self.cancel_openai_account(),
             OpenAiAccountAction::Retry => self.retry_openai_account(),
             OpenAiAccountAction::StartFinished { attempt_id, result } => {
@@ -54,7 +55,11 @@ impl ProviderAuthController {
         }
     }
 
-    fn start_openai_account(&mut self, start: OpenAiAccountFlowStart) -> Reduction {
+    fn start_openai_account(
+        &mut self,
+        start: OpenAiAccountFlowStart,
+        reauthenticate: bool,
+    ) -> Reduction {
         if super::auth_flow::commit_in_progress(&self.snapshot) {
             return rejected(ProviderAuthRejectionReason::CommitInProgress);
         }
@@ -68,13 +73,13 @@ impl ProviderAuthController {
             return self.block_openai(flow, OpenAiAccountBlockedReason::StatusIdentityMismatch);
         }
         match account_method_state(&start.status) {
-            AccountMethodState::ManagedAccount => {
+            AccountMethodState::ManagedAccount if !reauthenticate => {
                 return self.complete_openai(flow.target, start.status);
             }
             AccountMethodState::ExternallyManaged => {
                 return self.block_openai(flow, OpenAiAccountBlockedReason::ExternallyManaged);
             }
-            AccountMethodState::NotConfigured => {}
+            AccountMethodState::ManagedAccount | AccountMethodState::NotConfigured => {}
         }
         if flow.method == OpenAiAccountMethod::Browser
             && flow.context == OpenAiAccountLoginContext::ProviderEnrollment

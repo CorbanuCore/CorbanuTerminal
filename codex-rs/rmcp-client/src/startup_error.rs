@@ -18,7 +18,28 @@ pub fn is_authentication_required_error(error: &Error) -> bool {
             || source
                 .downcast_ref::<ClientInitializeError>()
                 .is_some_and(client_initialize_error_requires_authentication)
+            || source
+                .downcast_ref::<rmcp::service::ServiceError>()
+                .is_some_and(service_error_requires_authentication)
+            || source
+                .downcast_ref::<crate::rmcp_client::ClientOperationError>()
+                .is_some_and(|error| {
+                    // The transparent operation wrapper forwards its source, skipping
+                    // ServiceError itself in anyhow's ordinary error-chain traversal.
+                    matches!(error, crate::rmcp_client::ClientOperationError::Service(error)
+                    if service_error_requires_authentication(error))
+                })
     })
+}
+
+fn service_error_requires_authentication(error: &rmcp::service::ServiceError) -> bool {
+    let rmcp::service::ServiceError::TransportSend(error) = error else {
+        return false;
+    };
+    error
+        .error
+        .downcast_ref::<StreamableHttpError<StreamableHttpClientAdapterError>>()
+        .is_some_and(streamable_error_requires_authentication)
 }
 
 fn client_initialize_error_requires_authentication(error: &ClientInitializeError) -> bool {
@@ -29,13 +50,17 @@ fn client_initialize_error_requires_authentication(error: &ClientInitializeError
     error
         .error
         .downcast_ref::<StreamableHttpError<StreamableHttpClientAdapterError>>()
-        .is_some_and(|error| {
-            matches!(
-                error,
-                StreamableHttpError::Auth(auth_error)
-                    if auth_error_requires_authentication(auth_error)
-            )
-        })
+        .is_some_and(streamable_error_requires_authentication)
+}
+
+fn streamable_error_requires_authentication(
+    error: &StreamableHttpError<StreamableHttpClientAdapterError>,
+) -> bool {
+    match error {
+        StreamableHttpError::AuthRequired(_) => true,
+        StreamableHttpError::Auth(error) => auth_error_requires_authentication(error),
+        _ => false,
+    }
 }
 
 fn auth_error_requires_authentication(error: &AuthError) -> bool {

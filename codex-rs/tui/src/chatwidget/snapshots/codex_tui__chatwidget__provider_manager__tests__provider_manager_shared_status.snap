@@ -5,8 +5,9 @@ expression: rendered
   Providers
   Configure providers and control whether they are eligible for use.
 
-› 1. OpenAI          Active · current
+› 1. OpenAI          Enabled · configured · current
   2. Claude Account  Inactive
-  3. Corbanu API     Recovery required
+  3. Corbanu API     Credential needs attention · r recover
 
+  r recover credentials · Enter manage · Esc back
   Press enter to confirm or esc to go back

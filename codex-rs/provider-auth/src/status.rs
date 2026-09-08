@@ -45,12 +45,13 @@ fn resolve_entry(
     let configuration = configuration_state(&methods);
     let eligibility = match (configuration, eligibility) {
         (_, ProviderEligibilitySnapshot::Unavailable(_)) => ProviderEligibilityState::Unavailable,
-        (ProviderConfigurationState::Configured, ProviderEligibilitySnapshot::Loaded(policy)) => {
-            match policy.policy_for(entry) {
-                ProviderActivationPolicy::Active => ProviderEligibilityState::Active,
-                ProviderActivationPolicy::Inactive => ProviderEligibilityState::Inactive,
-            }
-        }
+        (
+            ProviderConfigurationState::Configured | ProviderConfigurationState::RecoveryRequired,
+            ProviderEligibilitySnapshot::Loaded(policy),
+        ) => match policy.policy_for(entry) {
+            ProviderActivationPolicy::Active => ProviderEligibilityState::Active,
+            ProviderActivationPolicy::Inactive => ProviderEligibilityState::Inactive,
+        },
         (_, ProviderEligibilitySnapshot::Loaded(_)) => ProviderEligibilityState::NotConfigured,
     };
     ProviderStatusSnapshot {
@@ -122,6 +123,11 @@ fn resolve_openai(
             CredentialControl::ManagedByCorbanu,
             ConfiguredAvailability::Ready,
         ),
+        OpenAiAuthMetadata::EnvironmentApiKey if is_api_key => configured(
+            ProviderCredentialSource::Environment,
+            CredentialControl::ExternalEnvironment,
+            ConfiguredAvailability::Ready,
+        ),
         OpenAiAuthMetadata::ExternallyManaged if is_account => configured(
             ProviderCredentialSource::ExternallyManaged,
             CredentialControl::ExternalProvider,
@@ -129,10 +135,12 @@ fn resolve_openai(
         ),
         OpenAiAuthMetadata::Account
         | OpenAiAuthMetadata::ApiKey
+        | OpenAiAuthMetadata::EnvironmentApiKey
         | OpenAiAuthMetadata::ExternallyManaged => ProviderMethodState::NotConfigured,
-        OpenAiAuthMetadata::RecoveryRequired => {
+        OpenAiAuthMetadata::RecoveryRequired if is_account => {
             recovery(ProviderRecoveryReason::OpenAiRefreshRequired)
         }
+        OpenAiAuthMetadata::RecoveryRequired => ProviderMethodState::NotConfigured,
         OpenAiAuthMetadata::Unsupported => recovery(ProviderRecoveryReason::UnsupportedAuthMode),
     }
 }
