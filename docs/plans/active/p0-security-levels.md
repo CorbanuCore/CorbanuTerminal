@@ -1004,7 +1004,7 @@ one machine. Product heading **Shipping MVP — LIVE**, row **Task Node and
 identity**: "Tasks, evidence, verification, rewards, balances, chat, context,
 linked identity". The selected profile must retain its own account, a rejected
 old token must not shadow a completed relink, and active guidance must name
-Corbanu. [PF-42-S02](../../sprints/current/p0-security-levels/pf-42-s02-relink-recovery.md)
+Corbanu. [PF-42-S02](../../sprints/archive/p0-security-levels/pf-42-s02-relink-recovery.md)
 owns the shared resolver, focused two-account tests and real TUI recovery proof.
 This extends the existing profile isolation contract, without transferring
 historical records or choosing GitHub identities for the user.

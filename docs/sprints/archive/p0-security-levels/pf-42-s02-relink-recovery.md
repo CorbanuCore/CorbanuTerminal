@@ -1,7 +1,7 @@
 ---
 sprint_id: PF-42-S02
 title: Multiple-account relink recovery
-status: in_progress
+status: completed
 plan_file: docs/plans/active/p0-security-levels.md
 plan_feature: PF-42
 execution_order: 82
@@ -54,9 +54,12 @@ Shared Task Node session resolver, TUI/CLI adapters and focused regression tests
 - [x] Replace obsolete active authentication guidance.
 - [x] Run formatting, affected tests and actual TUI keys on the final candidate.
 
+- [x] Delivery and remaining owner authentication recorded in the QA report.
+
 ## Remaining
 
-- [ ] Record exact delivery state and any live authentication dependency.
+None for implementation. The owner must complete GitHub sign-in for the revoked account.
+
 
 ## Verification
 
@@ -64,9 +67,13 @@ Shared Task Node session resolver, TUI/CLI adapters and focused regression tests
 
 ## Exit evidence
 
-- [ ] Record tested code and candidate delivery, then archive this sprint.
+- [x] Source `f20a2a7389`, local installation and live server delivery recorded.
+- [x] Installed PTY matrix passed; owner GitHub sign-in remains a live dependency.
+- [x] Sprint archived with accurate implementation and qualification evidence.
 
 Private evidence: `/mnt/HC_Volume_101713660/pfrpc/scratch/corbanu-multi-account-20260908`.
 Application repository coding benchmarks do not exercise this authentication
 boundary. Real TUI account checks and local HTTP authentication fixtures do.
 No full public release or new model benchmark is included in this repair.
+
+Evidence: [account recovery](../../../../qa/reliability/2026-09-08-corbanu-account-recovery.md).
