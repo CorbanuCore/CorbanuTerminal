@@ -81,6 +81,8 @@ checks pass; custody files alone are exempt from the transcript/log scan.
   `fc050adedb55af4395397b69f438b5f3be3f98b228a9c1873b7b1c5949005a2e`.
 - Base: `472b8fed5`, main incorporated `3cec54d99`. Source branch remains separate
   from main. Human acceptance and release sign-off are not claimed.
+- Source commit: `2545eedee`, pushed to `origin/feat/provider-reauth-health`.
+  Later handoff bookkeeping does not change the binary's source files.
 - Attach: `ssh -t travis@100.99.88.49 'tmux attach -t corbanu-human-pf58-final'`.
 - Scope: [human checks 24–26](../../../humanTest.html#reauth-title).
 
