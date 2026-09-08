@@ -50,6 +50,11 @@ pub(crate) trait BottomPaneView: Renderable {
         None
     }
 
+    /// Search text for a list that is refreshed while the user is interacting.
+    fn search_query(&self) -> Option<&str> {
+        None
+    }
+
     /// Active tab id for tabbed list-based views.
     #[allow(dead_code)]
     fn active_tab_id(&self) -> Option<&str> {

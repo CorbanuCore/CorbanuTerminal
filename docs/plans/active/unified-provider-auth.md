@@ -20,6 +20,12 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
     branch: "feat/provider-reauth-health"
     base_commit: "1b6921112d73217e1e2a78b5adc43e8ce24764ab"
+  - path: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.38-reconcile"
+    branch: "integration/reconcile-release-0.1.38"
+    base_commit: "43f4f187ba585e231b0bafed2bbcd9d9b4bffa54"
+  - path: "/home/pfrpc/repos/worktrees/corbanu-reconcile-release-fixes"
+    branch: "fix/reconcile-release-0.1.37-review"
+    base_commit: "f03e95f7a65609bb442764d6306682d5fe43f6bb"
   - path: "/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0"
     branch: "feat/unified-provider-auth"
     base_commit: "f7356a94e032234022a462d65b576a7de2854859"
@@ -80,6 +86,41 @@ builds and a separate receiving integration boundary. Review allocation for this
 new feature is an initial Astra High plus Fable5.1 High Corbanu/TMUX pair,
 at most five total, superseding historical PF-56 model choices for PF-58 only.
 The security monitor remains paused; no main merge is authorized by this amendment.
+The user's 2026-09-05 Luna/Kimi K3 delegation attempt was refused because the
+generated authorized-runtime list exposed only Sol and Terra. PF-55-S04 repairs
+the native child-runtime catalog/selection boundary under the existing PF-55
+provider convergence feature. Preserve explicit provider policy, credential
+custody, encrypted-message routing, and exact requested model identity. Prove
+real child launches and results in TUI; prior Astra parent tests are not proof.
+
+The user's live Astra test on 2026-09-05 failed with OpenAI's newer-Codex
+requirement. PF-55-S02 proved only the selector and loopback transport, not live
+account inference. The user now explicitly mandates a working Astra harness,
+including any necessary upstream upgrade, repeatable live acceptance and true
+TUI proof. PF-55-S03 owns this work. It cannot complete on mocks, a renamed
+version header alone, or a substituted model. No publication is authorized.
+
+The user's subsequent 2026-09-05 instruction explicitly adds GPT-6 Astra to the
+OpenAI model selector. PF-55-S02 extends the provider/model convergence feature
+with one bundled manual model option, documented capabilities and selection,
+cancel, restart and request-routing evidence. Existing defaults, automatic
+delegation policy, credentials and other providers remain unchanged. This is
+not a release-publishing instruction.
+
+The user's 2026-09-05 instruction authorizes PF-57-S03 to reconcile those repairs
+with IridiumMaster/Travis's updated `integration/reconcile-release-0.1.37` branch
+at `07791288b6feeccfaee5a57c12452359cc666957`. Preserve the provider-login UX,
+long-lived Claude token workflow and Ambient's GLM-only catalog change, and
+qualify the combined candidate. `origin/main` at `6dd9ad646beb4a7407521439411f436f21ea4af1`
+is already an ancestor of that branch. Publication is a separate release action;
+the user has been asked whether to publish or hand back the reconciled candidate.
+
+The user's 2026-09-04 instruction authorizes repairing Astra's reconciliation
+findings under PF-57: wallet daemon upgrade compatibility, durable Task Node
+profile logout, and Corbanu API environment-alias eligibility. This extends the
+credential-lifecycle regression scope to the existing Task Node session store;
+it does not authorize publication, live payments, or changes to site behavior.
+The site/backend API-key flow is reviewed separately without production writes.
 
 First-run onboarding and `/providers` currently maintain separate provider
 lists, status rules, persistence decisions, event routes, and completion
@@ -159,10 +200,28 @@ requires the user to choose a usable replacement first.
   credential operations that exceed the harness timeout.
 - Focused automated, snapshot, integration, adversarial redaction, substantial
   typed-TMUX, live-repository, human, documentation, and release evidence.
+- PF-55-S03: reconcile Astra's native Codex model/tool/wire contract with the
+  verified upstream release, repair compatibility negotiation, add regression
+  and explicit opt-in live TUI harnesses, then install the verified candidate
+  in the existing separate `corbanu-test` session using the user-approved normal
+  profile. Test real Astra responses, tool execution, cancellation and resume.
+- PF-55-S04: make authorized child runtime discovery and selection agree with
+  the effective orchestration runtime, including V1 and unset model defaults;
+  preserve operator allowlists and cross-provider plaintext adapters. Qualify
+  Luna and Kimi K3 child results, failure/recovery and resume in disposable
+  TensorCash and Isometric worktrees using the approved normal profile.
+  The first live run exposed a second boundary defect: the exact-runtime
+  plaintext adapter rejects OpenAI, whose reserved native schema cannot express
+  model overrides. Support explicitly plaintext task briefs on that same-provider
+  route without converting native ciphertext or widening provider authorization.
 
 ### Out
 
-- Changing provider wire protocols, pricing, subscriptions, or model catalogs.
+- Changing provider wire protocols, pricing, subscriptions, or model catalogs,
+  except preserving the user's explicitly requested incoming Ambient GLM-only
+  change in PF-57-S03 and adding the explicitly requested OpenAI Astra manual
+  selection in PF-55-S02 and the user-authorized Astra runtime upgrade in
+  PF-55-S03. No unrelated default-model, pricing or automatic-allocation changes.
 - Automatically importing, copying, or deleting provider-owned credentials.
 - Interactive enrollment for a custom command-auth provider without a supported
   typed setup adapter; it remains visible with metadata/status and recovery copy.
@@ -210,6 +269,7 @@ requires the user to choose a usable replacement first.
 | GPT-5.6 Sol high implementation agent | `/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0` | `feat/unified-provider-auth` | `f7356a94e032234022a462d65b576a7de2854859` | Serial implementation of PF-48 through PF-56 only. |
 | Codex primary agent | same receiving worktree | same branch | same base | Feature completeness, integration decisions, scope control, review budget, final-tree verification, and TMUX acceptance. |
 | Codex primary integration agent | `/Volumes/CorbanuDrive/Corbanu/worktrees/integrate-unified-provider-auth-final` | `integration/unified-provider-auth-final` | `06211dbfca61d3f36df3bf069a79ed53ad7a6fa2` | PF-57 latest-main merge, conflict resolution, verified regression repairs, combined-tree qualification, and handoff. |
+| Codex primary agent | `/home/pfrpc/repos/worktrees/corbanu-reconcile-release-fixes` | `fix/reconcile-release-0.1.37-review` | `f03e95f7a65609bb442764d6306682d5fe43f6bb` | PF-57-S02: the three user-authorized release credential-lifecycle regressions; serial implementation. |
 
 `parallel_sprint_limit: 1` is intentional. Shared manifests, config schemas,
 provider state, event routing, and TUI hosts make parallel writes unsafe. The
@@ -242,6 +302,31 @@ user work and integrate rather than revert concurrent changes.
 | Verification | Contract and migration tests, affected crate suites, snapshots, config schema checks, redaction/canary checks, typed-TMUX flows, both default live repositories, physical platform evidence where required, and release records. |
 | Upgrade handling | At final qualification, record upstream candidate, classify each adapter as retained/adapted/removed, resolve conflicts in a disposable worktree, and rerun combined-tree tests and TUI qualification. |
 
+PF-57-S02 reverified the same local upstream baseline on 2026-09-04; it does not
+merge an upstream update. Its fork base is `f03e95f7a65609bb442764d6306682d5fe43f6bb`.
+Product-owned wallet IPC, Task Node persistence, and provider metadata adapters
+retain existing authorization, wire formats, wallet assets, and session history.
+Exact files, regression commands, candidate identity and platform limitations
+are recorded in the sprint and `qa/release/0.1.38/astra-fixes.md`.
+
+PF-55-S03 compares baseline `ba6cf9c69277caec51a4c12c5b7401a9920930e0` against
+official `rust-v0.153.4`, commit `3d2ee51ca2d5db578f328aa75e20aa22c0197c9a`.
+The native Astra catalog declares minimum client version `0.153.0`, Code Mode
+tools, Responses Lite, unified execution and model-owned instructions. The
+pre-repair fork advertised `0.144.1` and had an API-doc-derived Astra entry
+that omitted these native harness requirements. The completed selective repair
+shares the native minimum across discovery/inference and installs the native
+model contract without replacing working Corbanu adapters. Account identity,
+credential custody, non-OpenAI routes, permissions and history are preserved.
+Both default repositories passed live Astra TUI file/tool, cancellation,
+recovery and same-thread restart/resume with the installed binary. Exact source,
+upstream disposition and evidence: [runtime qualification](../../../qa/release/0.1.38/astra-runtime.md).
+
+PF-55-S04 retains that upstream baseline and the native V2 interfaces. The
+product-owned adapter must distinguish a model's preferred orchestration version
+from the engine version inherited by a child. No remote model metadata, reserved
+OpenAI schema, provider authorization or credential format is rewritten.
+
 ## Sprint execution map
 
 | Feature ID | Plan feature | Sprint record | State |
@@ -260,9 +345,14 @@ user work and integrate rather than revert concurrent changes.
 | `PF-53` | Multi-provider onboarding and deferred Corbanu Plan flow | [PF-53-S01](../../sprints/archive/unified-provider-auth/pf-53-s01-multi-provider-onboarding.md) | completed at `30b595034b` |
 | `PF-54` | Unified `/providers` management and eligibility controls | [PF-54-S01](../../sprints/archive/unified-provider-auth/pf-54-s01-provider-management.md) | completed |
 | `PF-55` | Startup, current-model, and custom-provider convergence | [PF-55-S01](../../sprints/archive/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | completed at `21cf3199f2` |
+| `PF-55` | Explicit OpenAI Astra model selection | [PF-55-S02](../../sprints/archive/unified-provider-auth/pf-55-s02-openai-astra-selector.md) | completed; [selector evidence](../../../qa/release/0.1.38/astra-selector.md) |
+| `PF-55` | Verified live Astra runtime and TUI harness | [PF-55-S03](../../sprints/archive/unified-provider-auth/pf-55-s03-astra-runtime-compatibility.md) | completed; [real TUI qualification](../../../qa/release/0.1.38/astra-runtime.md) |
+| `PF-55` | Mixed-model native subagent runtime convergence | [PF-55-S04](../../sprints/archive/unified-provider-auth/pf-55-s04-subagent-runtime-convergence.md) | completed; [exact child/runtime TUI evidence](../../../qa/release/0.1.38/subagent-runtime.md) |
 | `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/archive/unified-provider-auth/pf-56-s01-final-qualification.md) | completed at `fd8a9c900e` |
 | `PF-57` | Latest-main integration, regression preservation, and credential-store liveness | [PF-57-S01](../../sprints/archive/unified-provider-auth/pf-57-s01-latest-main-integration.md) | completed at `a935e507b` |
 | `PF-58` | Credential-scoped runtime health and keyboard reauthentication | [PF-58-S01](../../sprints/current/unified-provider-auth/pf-58-s01-credential-health-and-reauth.md) | in_progress; user-authorized recovery follow-up |
+| `PF-57` | Reconciled release credential-lifecycle regressions | [PF-57-S02](../../sprints/archive/unified-provider-auth/pf-57-s02-reconciliation-auth-repairs.md) | completed; [Astra repair evidence](../../../qa/release/0.1.38/astra-fixes.md) |
+| `PF-57` | Reconcile Travis's provider UX/catalog changes with repaired release | [PF-57-S03](../../sprints/archive/unified-provider-auth/pf-57-s03-travis-release-reconciliation.md) | completed; [combined-tree evidence](../../../qa/release/0.1.38/travis-reconciliation.md) at `c37eb277d9` |
 
 ## Hard dependency graph
 
@@ -383,6 +473,23 @@ Run fix and formatting tools before the final affected tests.
 
 Disposable worktrees and exact base commits must be recorded before PF-56 runs.
 Historical Claude artifacts do not substitute for final integrated-tree runs.
+
+PF-57-S02 is a home-level credential-lifecycle repair, not a coding workflow or
+release qualification. Neither TensorCash nor Isometric Game is applicable to
+this bounded repair: the changed boundaries do not inspect project contents,
+edit project files, or execute project tasks. Its proof uses isolated homes,
+private daemon sockets and a loopback API with actual TUI input and restart.
+The older PF-56 live-repository results above are historical, not reruns on the
+2026-09-04 repair tree. Both live repositories, named-human acceptance and due
+benchmarks remain release-level gates, not claims made by PF-57-S02.
+
+PF-57-S03 follows the same bounded applicability: it preserves the incoming
+home-level auth and catalog behavior without changing project-editing or coding
+task execution. Its final Linux candidate passed 625 selected automated tests,
+16 true-TMUX tests and manual `just codex` token-entry/cancel checks. The user's
+Astra request received a bounded final combined-source review with no new
+P0/P1 findings. None of these results replaces the release-level gates above;
+see the [reconciliation evidence](../../../qa/release/0.1.38/travis-reconciliation.md).
 
 ## Human acceptance
 

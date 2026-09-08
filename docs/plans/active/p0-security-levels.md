@@ -32,6 +32,12 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-ui"
     branch: "feat/security-round5-ui"
     base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
+  - path: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.39"
+    branch: "fix/tasknode-agent-profile-scope"
+    base_commit: "7e99c5a06bdb7b0f01f655cb4d84739b4f70bb86"
+  - path: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.39"
+    branch: "fix/tasknode-agent-profile-scope"
+    base_commit: "9b71d86d7fc57b25e3b020a813a6b75dd898836a"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-protected-runtime"
     branch: "feat/p0-security-protected-runtime"
     base_commit: "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4"
@@ -1144,3 +1150,23 @@ before qualification.
 - [ ] Named human acceptance passes.
 - [ ] Finished documentation matches the accepted candidate.
 - [ ] Release and due benchmark records are linked.
+
+## PF-42-S02 — Multiple-account relink recovery
+
+The September 8 user report authorizes repairing multiple Task Node accounts on
+one machine. Product heading **Shipping MVP — LIVE**, row **Task Node and
+identity**: "Tasks, evidence, verification, rewards, balances, chat, context,
+linked identity". The selected profile must retain its own account, a rejected
+old token must not shadow a completed relink, and active guidance must name
+Corbanu. [PF-42-S02](../../sprints/archive/p0-security-levels/pf-42-s02-relink-recovery.md)
+owns the shared resolver, focused two-account tests and real TUI recovery proof.
+This extends the existing profile isolation contract, without transferring
+historical records or choosing GitHub identities for the user.
+
+## PF-45-S02 agent identity repair — completed
+
+User-reported post-release account mismatch authorizes repairing agent helper profile propagation. [Sprint PF-45-S02](../../sprints/archive/p0-security-levels/pf-45-s02-agent-profile-scope.md) is implemented and locally qualified in `/home/pfrpc/repos/worktrees/corbanu-release-0.1.39`, branch `fix/tasknode-agent-profile-scope`, base `9b71d86d7f`. Its scope is runtime profile inheritance, fail-closed helper resolution and regression/PTY proof; historical records are not transferred.
+
+## PF-45 Campaign Tracker release integration
+
+The user authorized Campaign Tracker implementation on September 6 and production deployment and release on September 7. Product contract: **Campaign Tracker — LOCAL PILOT CANDIDATE**, “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”. [PF-45-S01](../../sprints/archive/p0-security-levels/pf-45-s01-campaign-tracker.md) records completed implementation. [0.1.39 publication](../../../qa/release/0.1.39/PUBLICATION.md) records integration with the shipped 0.1.38 baseline and qualification limits. No additional product initiative is introduced by packaging this completed feature.

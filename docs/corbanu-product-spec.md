@@ -56,6 +56,7 @@ Corbanu Terminal already exists and is shipping. The roadmap expands this live, 
 | **Runtime**                  | Rust, Apache-2.0, Linux/macOS/Windows, the `corbanu` command, and legacy `pfterminal` command and state compatibility.                                           |
 | **Multi-provider inference** | OpenAI, Anthropic/Claude Plan, Kimi, Z.AI, DeepSeek, OpenRouter, Ambient, Meta, Baseten, Vercel, Bedrock, Ollama, LM Studio, Corbanu Plan, and custom providers. |
 | **Vault and credentials**    | Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat.                                   |
+| **Named profiles**           | A provider selected or linked while a named profile is active is durably owned by that profile, restored after restart, and unavailable to other named profiles. |
 | **Agent orchestration**      | Sauron → Nazgul → Troll → Orc orchestration, model-aware delegation, durable mailboxes, supervision, resume, and recovery.                                       |
 | **Workspaces**               | `/panes`, `/agent`, approvals, existing general sandboxing, review, MCP, skills, plugins, apps, connectors, and background terminals.                            |
 | **Wallet and payments**      | Local Solana wallet, SOL and canonical USDC support, scoped signing, backup/restore, and Corbanu Plan purchase/recovery.                                         |
@@ -493,6 +494,26 @@ No commercial performance numbers have been supplied. The following metrics must
 | **Referral, builder-code, advertising, and financialization model** | Commercial incentives may require disclosures or restrictions.                                               | Define the commercial implementation and complete required legal/compliance review before launch.                                                                                                                                      | Head of Product         |
 | **Third-party inference leakage**                                   | Strategy or financial context may leave Corbanu-controlled infrastructure.                                   | Keep provider privacy labels explicit; private workflows default to Corbanu-controlled inference; minimize model-visible financial data in all modes.                                                                                  | Lead developer          |
 | **Upstream Codex changes**                                          | Corbanu may fall behind or regress specialized behavior.                                                     | Continuous parity review with regression tests for Corbanu-specific layers.                                                                                                                                                            | Lead developer          |
+
+## Campaign Tracker — LOCAL PILOT CANDIDATE
+
+Authorized by the user's 2026-09-06 instruction to implement the reviewed Campaign
+Tracker specification and test with `corbanu-debug --yolo`: preserve attributable
+user prompts and compact GLM 5.3 Flash summaries in a bounded database, map work
+to Task Node handles/tasks/context, dates, goals and repositories, and provide
+permissioned historical replay in the Task Node tab. Manager views distinguish
+human prompting, autonomous execution and verified outcomes. Recording requires
+workspace enrollment; sharing requires an explicit scoped grant.
+
+This adds product scope to the existing Task Node integration program as PF-45
+in the active P0 plan. It is not a bounded repair. The reviewed specification is
+`/home/pfrpc/repos/campaign_tracker_spec_20260906.md`. Build and QA artifacts go
+on the mounted data volume. Public deployment is a separate action.
+
+Local capture, encrypted synchronization, Flash summaries, permissioned replay,
+reviews and aggregate views are implemented. The [qualification record](../qa/campaign-tracker/2026-09-06/README.md)
+distinguishes tested behavior from the remaining deployment, backup/restore,
+advanced UI and pilot-calibration requirements.
 
 ## Open decisions
 

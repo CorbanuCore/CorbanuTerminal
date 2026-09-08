@@ -175,7 +175,9 @@ impl ChatWidget {
     }
 
     fn refresh_status_line_from_selections(&mut self, selections: &StatusSurfaceSelections) {
-        let enabled = !selections.status_line_items.is_empty() || self.gpu_spend_status.is_some();
+        let enabled = !selections.status_line_items.is_empty()
+            || self.gpu_spend_status.is_some()
+            || self.campaign_tracker_indicator.is_some();
         self.bottom_pane.set_status_line_enabled(enabled);
         if !enabled {
             self.set_status_line(/*status_line*/ None);
@@ -191,7 +193,10 @@ impl ChatWidget {
         }
 
         let line = status_line_from_segments(segments, self.config.tui_status_line_use_colors);
-        if line.is_none() && self.gpu_spend_status.is_none() {
+        if line.is_none()
+            && self.gpu_spend_status.is_none()
+            && self.campaign_tracker_indicator.is_none()
+        {
             self.set_status_line(/*status_line*/ None);
             self.set_status_line_hyperlink(/*url*/ None);
             return;
@@ -202,6 +207,12 @@ impl ChatWidget {
                 line.spans.push(" · ".dim());
             }
             line.spans.push(gpu_spend_status.clone().red().bold());
+        }
+        if let Some(tracker) = &self.campaign_tracker_indicator {
+            if !line.spans.is_empty() {
+                line.spans.insert(0, " · ".dim());
+            }
+            line.spans.insert(0, tracker.clone().cyan());
         }
         self.set_status_line(Some(line));
         let hyperlink_url = selections

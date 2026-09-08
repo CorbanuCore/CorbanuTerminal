@@ -80,12 +80,13 @@ async fn run_exec_like(args: RunExecLikeArgs) -> Result<FunctionToolOutput, Func
 
     let fs = turn_environment.environment.get_filesystem();
 
-    let explicit_env_overrides = turn
+    let mut explicit_env_overrides = turn
         .config
         .permissions
         .shell_environment_policy
         .r#set
         .clone();
+    crate::exec_env::inject_tasknode_profile_env(&mut explicit_env_overrides, &turn.config);
     let exec_permission_approvals_enabled =
         session.features().enabled(Feature::ExecPermissionApprovals);
     let requested_additional_permissions = additional_permissions.clone();

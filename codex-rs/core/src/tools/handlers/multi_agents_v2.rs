@@ -69,7 +69,7 @@ pub(super) fn plaintext_adapter_spec(
         ToolSpec::Function(mut tool) => {
             tool.name = adapter_name.to_string();
             tool.description = format!(
-                "Cross-provider plaintext adapter for `{native_name}`. Use this only when the native OpenAI collaboration call reports that its encrypted assignment cannot be delivered to the target provider. It performs the same Core graph/mailbox operation; never put credentials or other secrets in the message. {}",
+                "Plaintext adapter for `{native_name}`. Use this for explicit provider/model selection (the native OpenAI spawn schema has no runtime override fields), or to deliver an ordinary task brief to another provider. It supports OpenAI recipients too. Prefer the native encrypted tool when inheriting an OpenAI runtime. Supply a fresh plaintext task brief, never native encrypted content, credentials or other secrets. It performs the same authorized Core graph/mailbox operation. {}",
                 tool.description
             );
             ToolSpec::Function(tool)
@@ -87,11 +87,9 @@ pub(super) fn ensure_message_encoding_matches_target(
     plaintext_tool_name: &str,
 ) -> Result<(), FunctionCallError> {
     if encoding == CollaborationMessageEncoding::PlaintextAdapter {
-        if target_provider_id == OPENAI_PROVIDER_ID {
-            return Err(FunctionCallError::RespondToModel(format!(
-                "target provider `{OPENAI_PROVIDER_ID}` supports the native encrypted collaboration payload; use `{native_tool_name}` instead"
-            )));
-        }
+        // Encoding belongs to the declared tool surface, not the recipient's ability
+        // to also consume encrypted assignments. OpenAI accepts plaintext agent
+        // messages, and its reserved native spawn schema cannot select a model.
         return Ok(());
     }
 
@@ -250,6 +248,23 @@ mod tests {
             },
             OPENAI_PROVIDER_ID,
         );
+    }
+
+    #[test]
+    fn explicit_plaintext_assignments_support_same_and_cross_provider_recipients() {
+        for target in [OPENAI_PROVIDER_ID, "kimi-code", "custom-provider"] {
+            assert_eq!(
+                ensure_message_encoding_matches_target(
+                    OPENAI_PROVIDER_ID,
+                    &crate::tools::context::ToolCallSource::Direct,
+                    target,
+                    CollaborationMessageEncoding::PlaintextAdapter,
+                    "spawn_agent",
+                    PLAINTEXT_SPAWN_AGENT_TOOL,
+                ),
+                Ok(())
+            );
+        }
     }
 
     #[test]

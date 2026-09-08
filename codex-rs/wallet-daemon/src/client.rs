@@ -35,6 +35,28 @@ impl WalletDaemonClient {
     }
 
     pub async fn ensure_running(&self) -> Result<(), WalletDaemonError> {
+        self.ensure_available().await?;
+        match self
+            .call_with_timeout(Request::ProtocolVersion, STATUS_TIMEOUT)
+            .await
+        {
+            Ok(Response::ProtocolVersion { version })
+                if version == crate::protocol::PROTOCOL_VERSION =>
+            {
+                Ok(())
+            }
+            Ok(Response::ProtocolVersion { .. }) => Err(upgrade_required(&self.codex_home)),
+            Err(WalletDaemonError::Refused { code, .. }) if code == "invalid_request" => {
+                Err(upgrade_required(&self.codex_home))
+            }
+            Ok(other) => response_error(other),
+            Err(error) => Err(error),
+        }
+    }
+
+    // A live socket is not proof that this installation's protocol is running.
+    // Older releases leave a detached daemon alive when the TUI exits.
+    async fn ensure_available(&self) -> Result<(), WalletDaemonError> {
         if matches!(
             self.call_with_timeout(Request::Ping, PING_TIMEOUT).await,
             Ok(Response::Pong)
@@ -112,7 +134,9 @@ impl WalletDaemonClient {
     }
 
     pub async fn lock(&self) -> Result<(), WalletDaemonError> {
-        self.ensure_running().await?;
+        // Revocation remains available against a legacy daemon. Never use it
+        // as an upgrade/drain handshake: cancellation is not payment completion.
+        self.ensure_available().await?;
         match self
             .call_with_timeout(Request::Lock, STATUS_TIMEOUT)
             .await?
@@ -284,12 +308,26 @@ fn daemon_executable_beside(current: &Path) -> PathBuf {
 fn unavailable(error: impl std::fmt::Display) -> WalletDaemonError {
     WalletDaemonError::Unavailable(error.to_string())
 }
+
+fn upgrade_required(home: &Path) -> WalletDaemonError {
+    WalletDaemonError::Refused {
+        code: "daemon_upgrade_required".into(),
+        message: format!(
+            "A wallet daemon from a different Corbanu Terminal release is still running. No new wallet operation was sent. Let any existing payment finish and verify its outcome; then close Terminal sessions for this home and stop only the pfterminal-walletd (or corbanu-walletd) process whose --codex-home is {} using your operating system's process manager. Reopen Terminal to start the matching daemon. Restarting only the TUI does not stop the daemon. Do not delete the wallet directory, socket or ownership lock, and do not repeat a payment whose outcome is unknown.",
+            home.display()
+        ),
+    }
+}
 fn response_error<T>(response: Response) -> Result<T, WalletDaemonError> {
     match response {
         Response::Error { code, message } => Err(WalletDaemonError::Refused { code, message }),
         _ => Err(WalletDaemonError::Protocol),
     }
 }
+
+#[cfg(test)]
+#[path = "client_upgrade_tests.rs"]
+mod upgrade_tests;
 
 #[cfg(test)]
 mod tests {

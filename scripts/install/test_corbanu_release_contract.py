@@ -17,6 +17,38 @@ TARGET = "x86_64-unknown-linux-gnu"
 
 
 class CorbanuReleaseContractTest(unittest.TestCase):
+    def test_installed_wrapper_preserves_agent_home_and_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive, checksum, metadata = create_release_fixture(root)
+            result, _ = run_installer(root, metadata, archive, checksum)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            wrapper = root / "install-bin" / "corbanu"
+            inherited_home = str(root / "profile-owned-home")
+            env = {
+                **os.environ,
+                "CODEX_HOME": inherited_home,
+                "CORBANU_TASKNODE_PROFILE": '"alice"',
+                "CODEX_THREAD_ID": "fixture-thread",
+            }
+            probe = subprocess.run(
+                [wrapper, "--test-scope"],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertEqual(probe.stdout.splitlines(), [inherited_home, '"alice"'])
+            env.pop("CODEX_HOME")
+            probe = subprocess.run(
+                [wrapper, "--test-scope"],
+                env=env,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertEqual(probe.stdout.splitlines()[0], str(root / "corbanu-home"))
+
     def test_windows_installer_prunes_releases_after_command_verification(self) -> None:
         installer = INSTALLER.with_suffix(".ps1").read_text(encoding="utf-8")
 
@@ -110,7 +142,11 @@ def create_release_fixture(
     (package / "codex-package.json").write_text("{}\n", encoding="utf-8")
     write_executable(
         package / "bin" / "corbanu",
-        f"#!/bin/sh\nprintf 'corbanu {VERSION}\\n'\n",
+        f"#!/bin/sh\n"
+        'if [ "${1:-}" = "--test-scope" ]; then\n'
+        '  printf \'%s\\n\' "$CODEX_HOME" "$CORBANU_TASKNODE_PROFILE"\n'
+        "  exit 0\nfi\n"
+        f"printf 'corbanu {VERSION}\\n'\n",
     )
     write_executable(package / "bin" / "corbanu-debug", "#!/bin/sh\nexit 0\n")
     write_executable(package / "bin" / "corbanu-acp", "#!/bin/sh\nexit 0\n")

@@ -37,6 +37,34 @@ its credential. Deactivating the current provider requires an explicit usable
 replacement; cancelling that choice leaves both current-provider and
 eligibility state unchanged.
 
+## Choosing subagent models
+
+Ask for the model you want, for example: “Use Luna and Kimi K3 as separate
+subagents and wait for both results.” Providers still need working credentials,
+and any explicit `agents.provider_allowlist` remains authoritative.
+
+The reconciled debug candidate supports OpenAI Luna (`gpt-5.6-luna`) and Kimi
+Code K3 (`k3`) under the same native V2 orchestration engine. A model's preferred
+engine version does not exclude it from child selection. Exact runtime overrides
+use the typed plaintext adapter; the native encrypted OpenAI interface remains
+available for inherited runtimes. Kimi K3 supports low, high and max effort, not
+medium. No fallback model is substituted when an exact request fails.
+
+Both runtimes have passed real TUI repository work and follow-up on the same
+child threads after a parent restart. [Candidate evidence](../../qa/release/0.1.38/subagent-runtime.md).
+
+Astra (`gpt-6-astra`) is also advertised as an explicit subagent choice. Ask
+“Use Astra as a subagent” or let a child inherit an Astra parent's runtime.
+Missing allocation prices do not hide a selectable model: these entries are
+marked **explicit-choice only**, so they are not automatically selected by cost.
+The catalog is a bounded discovery list, not an exhaustive authorization list.
+Explicit and inherited Astra children have both passed real tool work and
+same-child follow-up after a parent restart in both test repositories.
+[Astra child evidence](../../qa/release/0.1.38/astra-subagents.md).
+
+This implements **Shipping MVP — LIVE**, “model-aware delegation, durable
+mailboxes, supervision, resume, and recovery.”
+
 ## Account-backed provider login
 
 Account login is one access mode inside the provider feature. OpenAI Codex
@@ -57,6 +85,26 @@ Corbanu Terminal feature.
 5. Run `/model` and select an OpenAI model.
 
 The same route is available from first-run onboarding or `corbanu login`.
+
+#### GPT-6 Astra
+
+Run `/model`, choose OpenAI, then **GPT-6 Astra** (`gpt-6-astra`). Choose Low,
+Medium, High, Extra high, or **More reasoning… → Max**. Medium is Astra's picker
+default; adding Astra does not replace your selected model or the existing Sol
+default. Cancel before confirming the reasoning level to keep your selection.
+
+Astra uses the native OpenAI Responses route. Availability still depends on
+OpenAI's rollout and your account's permissions; a selector entry does not grant
+access. It is offered for explicit selection, not automatic agent allocation,
+whose account-usage economics are not yet configured. Corbanu uses Astra's native
+Codex configuration: Code Mode tools, Responses Lite, and a 272,000-token
+default context with an 872,000-token maximum. These native limits come from
+the [upstream Codex catalog](https://github.com/openai/codex/blob/rust-v0.153.4/codex-rs/models-manager/models.json),
+not the larger public API model configuration.
+
+The reconciled candidate fixes the older-client rejection and has passed live
+TUI file/tool, cancellation, restart and resume checks in both default test
+repositories. [Qualification and build identity](../../qa/release/0.1.38/astra-runtime.md).
 
 ### Claude Plan
 

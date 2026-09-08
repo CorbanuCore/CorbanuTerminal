@@ -12,7 +12,9 @@
 //! This crate makes that failure unrepresentable at the storage layer:
 //!
 //! - **Active and pending state live under different vault labels.** Starting
-//!   a link only ever writes [`TASKNODE_PENDING_LINK_LABEL`]. The active
+//!   a link preserves usable active state and records the pending attempt under
+//!   [`TASKNODE_PENDING_LINK_LABEL`]. Durable unlink intent suppresses legacy
+//!   reimport; relinking clears only already-revoked credential residue. The active
 //!   session under [`TASKNODE_ACTIVE_SESSION_LABEL`] is written by exactly one
 //!   operation: [`promote_active`], which callers invoke only after the
 //!   replacement token has been validated against the server.
@@ -32,6 +34,20 @@ use serde::Deserialize;
 use serde::Serialize;
 use sha2::Digest;
 use sha2::Sha256;
+
+mod client;
+mod commands;
+mod recovery;
+mod stream;
+pub mod tracker;
+pub use client::Client;
+pub use client::ClientError;
+pub use client::Response;
+pub use client::normalize_origin;
+pub use commands::CommandStore;
+pub use commands::TaskCommand;
+pub use recovery::resolve_scoped;
+pub use stream::StreamDecoder;
 
 /// Vault label holding the active terminal session (bearer token). Kept at the
 /// pre-split value so existing linked installations keep working unchanged.
@@ -78,6 +94,46 @@ impl SessionScope {
     fn pending_label(&self) -> String {
         self.label(TASKNODE_PENDING_LINK_LABEL, "link-pending")
     }
+
+    fn lifecycle_label(&self) -> String {
+        self.label("tasknode/session-lifecycle", "session-lifecycle")
+    }
+}
+
+/// Persistent local intent outlives credential deletion and legacy migration.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum SessionLifecycle {
+    Linked,
+    Unlinked,
+}
+
+fn load_lifecycle<S: SessionStore + ?Sized>(
+    store: &S,
+    scope: &SessionScope,
+) -> Result<Option<SessionLifecycle>, SessionStoreError> {
+    store
+        .reveal_optional(&scope.lifecycle_label())?
+        .map(|raw| {
+            serde_json::from_str(&raw)
+                .map_err(|err| SessionStoreError::Corrupt(format!("session lifecycle: {err}")))
+        })
+        .transpose()
+}
+
+fn save_lifecycle<S: SessionStore + ?Sized>(
+    store: &S,
+    scope: &SessionScope,
+    lifecycle: SessionLifecycle,
+) -> Result<(), SessionStoreError> {
+    let value = serde_json::to_string(&lifecycle)
+        .map_err(|err| SessionStoreError::Corrupt(format!("session lifecycle: {err}")))?;
+    store.upsert(
+        &scope.lifecycle_label(),
+        value,
+        "Local Task Node link intent; contains no credential.",
+        "",
+    )
 }
 
 /// A proven, usable terminal session.
@@ -159,9 +215,8 @@ pub fn load(vault: &Vault) -> Result<LocalState, SessionStoreError> {
 
 /// Load only the Task Node state owned by `scope`.
 ///
-/// A named profile may import the legacy global active session once, but only
-/// when the session's GitHub username matches the profile name. A mismatched
-/// global session is never returned to the named profile.
+/// Each profile must obtain its own session through linking. Copying a global
+/// bearer would let logout in one profile revoke another profile's authority.
 pub fn load_scoped(vault: &Vault, scope: &SessionScope) -> Result<LocalState, SessionStoreError> {
     load_scoped_from_store(vault, scope)
 }
@@ -175,6 +230,10 @@ fn load_scoped_from_store<S: SessionStore + ?Sized>(
     scope: &SessionScope,
 ) -> Result<LocalState, SessionStoreError> {
     let mut state = LocalState::default();
+    let lifecycle = load_lifecycle(store, scope)?;
+    if lifecycle == Some(SessionLifecycle::Unlinked) {
+        return Ok(state);
+    }
     let pending_label = scope.pending_label();
     let active_label = scope.active_label();
 
@@ -221,26 +280,11 @@ fn load_scoped_from_store<S: SessionStore + ?Sized>(
         }
     }
 
-    if state.active.is_none()
-        && state.pending.is_none()
-        && let Some(profile) = scope.profile()
-    {
-        let legacy = load_from_store(store)?;
-        if let Some(active) = legacy.active
-            && active
-                .github_username
-                .as_deref()
-                .is_some_and(|username| username.eq_ignore_ascii_case(profile))
-        {
-            promote_active_scoped_to_store(store, scope, &active)?;
-            state.active = Some(active);
-        }
-    }
-
     Ok(state)
 }
 
-/// Record a new link attempt. Never touches the active session.
+/// Record a new link attempt. Preserves usable active state; removes residual
+/// credentials suppressed by a previous unlink before reopening the scope.
 pub fn save_pending(vault: &Vault, pending: &PendingLink) -> Result<(), SessionStoreError> {
     save_pending_to_store(vault, pending)
 }
@@ -265,6 +309,10 @@ fn save_pending_scoped_to_store<S: SessionStore + ?Sized>(
     scope: &SessionScope,
     pending: &PendingLink,
 ) -> Result<(), SessionStoreError> {
+    if load_lifecycle(store, scope)? == Some(SessionLifecycle::Unlinked) {
+        // A prior failed unlink cleanup must not regain authority on relink.
+        store.delete(&scope.active_label())?;
+    }
     let secret = serde_json::to_string(pending)
         .map_err(|err| SessionStoreError::Corrupt(format!("serialize pending link: {err}")))?;
     store.upsert(
@@ -272,10 +320,11 @@ fn save_pending_scoped_to_store<S: SessionStore + ?Sized>(
         secret,
         "Task Node link attempt in progress; holds no usable token.",
         &pending.origin,
-    )
+    )?;
+    save_lifecycle(store, scope, SessionLifecycle::Linked)
 }
 
-/// Atomically install a validated replacement session, then clear the pending
+/// Install a validated replacement session, then clear the pending
 /// attempt. Callers must have proven the token against the server first (a
 /// successful authenticated `status` call); this function is the only writer
 /// of the active label.
@@ -311,10 +360,8 @@ fn promote_active_scoped_to_store<S: SessionStore + ?Sized>(
         "Task Node terminal session; token is not printed to chat.",
         &session.origin,
     )?;
-    // Best-effort: a leftover pending record cannot shadow the active session
-    // (load prefers active), so a failed delete here is not fatal.
-    let _ = store.delete(&scope.pending_label());
-    Ok(())
+    store.delete(&scope.pending_label())?;
+    save_lifecycle(store, scope, SessionLifecycle::Linked)
 }
 
 /// Abandon an in-flight link attempt. The active session is untouched.
@@ -342,7 +389,7 @@ fn clear_pending_scoped_from_store<S: SessionStore + ?Sized>(
     store.delete(&scope.pending_label())
 }
 
-/// Remove all Task Node authentication state (unlink).
+/// Unlink Task Node, retaining a durable marker that prevents legacy reimport.
 pub fn clear_all(vault: &Vault) -> Result<(), SessionStoreError> {
     clear_all_from_store(vault)
 }
@@ -359,8 +406,13 @@ fn clear_all_scoped_from_store<S: SessionStore + ?Sized>(
     store: &S,
     scope: &SessionScope,
 ) -> Result<(), SessionStoreError> {
-    let _ = store.delete(&scope.pending_label());
-    let _ = store.delete(&scope.active_label());
+    // Commit revocation before cleanup. A failed delete must neither silently
+    // succeed nor let a saved token or pending link become usable on reload.
+    save_lifecycle(store, scope, SessionLifecycle::Unlinked)?;
+    let pending = store.delete(&scope.pending_label());
+    let active = store.delete(&scope.active_label());
+    pending?;
+    active?;
     Ok(())
 }
 

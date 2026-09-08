@@ -161,6 +161,9 @@ async fn handle_immediate(state: Arc<Mutex<State>>, mut request: Request) -> Res
     expire(&mut state);
     match &mut request {
         Request::Ping => Response::Pong,
+        Request::ProtocolVersion => Response::ProtocolVersion {
+            version: crate::protocol::PROTOCOL_VERSION,
+        },
         Request::Status => Response::Status(status(&state)),
         Request::Lock => {
             lock(&mut state);

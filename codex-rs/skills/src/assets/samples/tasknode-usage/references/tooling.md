@@ -31,6 +31,14 @@ Follow the TUI footer for exact keybindings. Multiline prompts may use a submit 
 
 Prefer the JSON helper for agent work.
 
+**Preserve the active account scope.** Updated Corbanu supplies
+`CORBANU_TASKNODE_PROFILE` as a JSON string for a named profile or `null` for the
+default profile, together with `CODEX_HOME`. Never synthesize or override either
+value, unset the scope, or retry under a different account. Missing or conflicting
+scope means stop and restart the updated terminal in the intended profile.
+Verify the returned account before account writes. A helper `--profile` argument
+may confirm the inherited profile; it cannot switch it.
+
 **Resolve the helper binary first.** Child commands inherit the running session's
 `CODEX_HOME`, which is the authoritative location of its Task Node vault. Prefer
 the installed Corbanu entrypoint. For a conventional debug home, prefer
@@ -42,6 +50,11 @@ helper. Fail closed if the session home or every installed entrypoint is missing
 ```bash
 if [ -z "${CODEX_HOME:-}" ]; then
   echo "CODEX_HOME is missing; refusing to guess which Task Node vault to use" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+if [ -z "${CORBANU_TASKNODE_PROFILE:-}" ]; then
+  echo "Active Task Node profile is missing; restart the updated terminal in the intended profile" >&2
   return 1 2>/dev/null || exit 1
 fi
 

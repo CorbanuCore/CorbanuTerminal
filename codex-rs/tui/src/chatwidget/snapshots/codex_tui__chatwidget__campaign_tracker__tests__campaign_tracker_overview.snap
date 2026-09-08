@@ -1,0 +1,19 @@
+---
+source: tui/src/chatwidget/campaign_tracker_tests.rs
+expression: rendered
+---
+  Campaign Tracker
+  @alice · 12 events · 0 pending · 0 capture gaps · recording OFF
+
+
+› Activity totals                      Observed prompts, runs, actions and verified task outcomes
+  My activity                          Preserved prompts, compact summaries and observed actions
+  Access & replay                      View explicit history grants and collaborators
+  Access audit                         See who read, exported or changed your history
+  Direct reports & collaborators       Choose a Task Node handle to share or inspect activity
+  Campaigns                            Group work around a named objective
+  Enable recording for this workspace  Preserve prompts and summarized outputs; no sharing until
+                                       you grant access
+  Sync now                             Retry the encrypted local outbox
+
+  Press enter to confirm or esc to go back

@@ -1169,6 +1169,35 @@ impl BottomPane {
         true
     }
 
+    /// Refresh rows in place while retaining the user's filter and selected item.
+    pub(crate) fn refresh_selection_view_if_active(
+        &mut self,
+        view_id: &'static str,
+        mut params: list_selection_view::SelectionViewParams,
+    ) -> bool {
+        let Some(current) = self
+            .view_stack
+            .last()
+            .filter(|view| view.view_id() == Some(view_id))
+        else {
+            return false;
+        };
+        params.initial_selected_idx = current.selected_index();
+        let search_query = current.search_query().map(str::to_owned);
+        self.view_stack.pop();
+        self.apply_standard_popup_hint(&mut params);
+        let mut view = list_selection_view::ListSelectionView::new(
+            params,
+            self.app_event_tx.clone(),
+            self.keymap.list.clone(),
+        );
+        if let Some(query) = search_query {
+            view.set_search_query(query);
+        }
+        self.push_view(Box::new(view));
+        true
+    }
+
     /// Replace the newest matching selection view without disturbing views stacked above it.
     pub(crate) fn replace_selection_view_if_present(
         &mut self,

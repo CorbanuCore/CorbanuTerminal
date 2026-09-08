@@ -2,8 +2,19 @@
 
 The active [unified provider onboarding and management plan](../../../plans/active/unified-provider-auth.md)
 allows one serial sprint. PF-42 through PF-47 are the merged Claude-auth
-foundation. PF-48 through PF-57 are completed and archived. PF-58 is the current
-serial credential-health and reauthentication follow-up.
+foundation. PF-48 through PF-57 are completed and archived; no implementation
+sprint from that sequence remains open. PF-57-S02 also completed the user's
+2026-09-04 Astra reconciliation repairs in its isolated serial worktree.
+PF-57-S03 also completed and is archived: it reconciled those repairs with
+Travis's two subsequent integration-branch commits under the user's 2026-09-05
+mandate. PF-55-S02 is also completed and archived, adding the user's explicitly
+requested OpenAI Astra selector option without changing defaults or delegation.
+PF-55-S03 is completed and archived: the native Astra repair passed real TUI
+inference/tool, cancel/recovery and same-thread resume in both default test
+repositories, and the exact qualified binary is installed for human testing.
+PF-55-S04 is completed and archived: exact Luna/Kimi K3 child launches, results
+and cold resume pass in both live repositories. PF-58 is the current serial
+credential-health and reauthentication follow-up.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
@@ -18,6 +29,11 @@ serial credential-health and reauthentication follow-up.
 | 14 | [PF-55-S01](../../archive/unified-provider-auth/pf-55-s01-startup-provider-convergence.md) | Startup, current-model, and custom-provider convergence | completed | PF-54-S01 |
 | 15 | [PF-56-S01](../../archive/unified-provider-auth/pf-56-s01-final-qualification.md) | Final automated, TMUX, review, documentation, and release evidence | completed | PF-55-S01 |
 | 16 | [PF-57-S01](../../archive/unified-provider-auth/pf-57-s01-latest-main-integration.md) | Latest-main integration and credential-store liveness | completed | PF-56-S01 |
+| 17 | [PF-57-S02](../../archive/unified-provider-auth/pf-57-s02-reconciliation-auth-repairs.md) | Reconciliation credential-lifecycle repairs | completed | PF-57-S01 |
+| 18 | [PF-57-S03](../../archive/unified-provider-auth/pf-57-s03-travis-release-reconciliation.md) | Travis/provider UX and release repair reconciliation | completed | PF-57-S02 |
+| 19 | [PF-55-S02](../../archive/unified-provider-auth/pf-55-s02-openai-astra-selector.md) | Explicit OpenAI Astra model selection | completed | PF-57-S03 |
+| 20 | [PF-55-S03](../../archive/unified-provider-auth/pf-55-s03-astra-runtime-compatibility.md) | Working live Astra runtime and TUI harness | completed | PF-55-S02 |
+| 21 | [PF-55-S04](../../archive/unified-provider-auth/pf-55-s04-subagent-runtime-convergence.md) | Mixed-model native subagent runtime convergence | completed | PF-55-S03 |
 
 ## Delivery contract
 

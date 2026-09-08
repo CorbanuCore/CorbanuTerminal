@@ -8,6 +8,34 @@ use std::time::Duration;
 use tempfile::tempdir;
 
 #[test]
+fn corbanu_environment_precedence_and_blank_fallback_match_both_wire_providers() {
+    let providers = built_in_model_providers(None);
+    for provider in [
+        PFTERMINAL_PLAN_PROVIDER_ID,
+        PFTERMINAL_PLAN_ANTHROPIC_PROVIDER_ID,
+    ] {
+        let aliases = providers[provider].api_key_env_vars();
+        assert_eq!(aliases, CORBANU_API_KEY_ENV_VARS);
+        for first_present in 0..aliases.len() {
+            let resolved = api_key_from_environment(&aliases, |name| {
+                let position = aliases.iter().position(|alias| *alias == name).unwrap();
+                Some(if position < first_present {
+                    " \t\n".to_string()
+                } else {
+                    format!("test-key-{position}")
+                })
+            });
+            assert_eq!(resolved, Some(format!("test-key-{first_present}")));
+        }
+        assert_eq!(api_key_from_environment(&aliases, |_| None), None);
+        assert_eq!(
+            api_key_from_environment(&aliases, |_| Some(" \t".into())),
+            None
+        );
+    }
+}
+
+#[test]
 fn test_deserialize_ollama_model_provider_toml() {
     let azure_provider_toml = r#"
 name = "Ollama"

@@ -33,6 +33,159 @@ const MANAGED_PROVIDER: &str = "pf54-managed";
 const ENV_PROVIDER: &str = "pf54-environment";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn tmux_astra_selection_cancel_restart_and_request() -> Result<()> {
+    if !TmuxServer::should_run("Astra OpenAI selection, cancel, restart and request")? {
+        return Ok(());
+    }
+    let fixture = Fixture::new("astra-selector", /*openai_auth*/ true).await?;
+    let config_path = fixture.home.path().join("config.toml");
+    let mut config: toml::Value = toml::from_str(&fs::read_to_string(&config_path)?)?;
+    let settings = config.as_table_mut().context("fixture config is a table")?;
+    settings.insert("model".into(), "gpt-5.6-sol".into());
+    settings.insert("model_provider".into(), "openai".into());
+    settings.insert("model_reasoning_effort".into(), "low".into());
+    settings.insert("check_for_update_on_startup".into(), false.into());
+    fs::write(&config_path, toml::to_string(&config)?)?;
+    Mock::given(method("POST"))
+        .and(path("/v1/responses"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/event-stream")
+                .set_body_raw(
+                    response("astra selector request succeeded"),
+                    "text/event-stream",
+                ),
+        )
+        .mount(&fixture.server)
+        .await;
+    let tmux = fixture.tmux()?;
+    for restart in [false, true] {
+        let session = tmux.new_session(SessionSpec::new(
+            "astra-selector",
+            TerminalSize::new(140, 44),
+            CommandSpec::new(&fixture.binary)
+                .env("CODEX_HOME", fixture.home.path())
+                .env("CORBANU_HOME", fixture.home.path())
+                .env("PFTERMINAL_HOME", fixture.home.path())
+                .env("RUST_LOG", "trace")
+                .arg("-c")
+                .arg(format!("openai_base_url=\"{}/v1\"", fixture.server.uri()))
+                .arg("-c")
+                .arg("analytics.enabled=false")
+                .arg("-c")
+                .arg("tui.animations=false")
+                .arg("-c")
+                .arg(format!("log_dir={:?}", fixture.home.path().join("log")))
+                .arg("--no-alt-screen")
+                .arg("-C")
+                .arg(&fixture.repo_root),
+        ))?;
+        let pane = session.primary_pane();
+        wait_chat_ready(pane)?;
+        if !restart {
+            let before = fs::read_to_string(&config_path)?;
+            open_model_picker(pane)?;
+            pane.wait_stable_contains("GPT-5.6-Sol", READY_TIMEOUT)?;
+            select_label(pane, "GPT-6 Astra")?;
+            pane.wait_stable_contains("Select Reasoning Level for GPT-6 Astra", READY_TIMEOUT)?;
+            capture_success("astra-reasoning-cancel", &fixture, pane, &[])?;
+            pane.send_key(TmuxKey::Escape)?;
+            // Returning from effort selection may reveal its parent picker.
+            close_manager(pane)?;
+            ensure!(
+                fs::read_to_string(&config_path)? == before,
+                "cancel changed selection"
+            );
+            open_model_picker(pane)?;
+            select_label(pane, "GPT-6 Astra")?;
+            pane.wait_stable_contains("Select Reasoning Level for GPT-6 Astra", READY_TIMEOUT)?;
+            select_label(pane, "High")?;
+            wait_chat_ready(pane)?;
+            pane.wait_stable_contains("GPT-6 Astra", READY_TIMEOUT)?;
+        }
+        let selected: toml::Value = toml::from_str(&fs::read_to_string(&config_path)?)?;
+        ensure!(
+            (
+                selected["model"].as_str(),
+                selected["model_provider"].as_str(),
+                selected["model_reasoning_effort"].as_str()
+            ) == (Some("gpt-6-astra"), Some("openai"), Some("high")),
+            "Astra model/provider/effort did not persist"
+        );
+        submit_and_wait(
+            pane,
+            "Check the selected model.",
+            "astra selector request succeeded",
+        )?;
+        capture_success(
+            &format!("astra-selected-restart-{restart}"),
+            &fixture,
+            pane,
+            &[],
+        )?;
+        exit_tui(pane)?;
+        session.wait_for_exit(READY_TIMEOUT)?;
+    }
+    let requests = fixture.server.received_requests().await.unwrap_or_default();
+    let requests = requests
+        .iter()
+        .filter(|request| request.url.path() == "/v1/responses")
+        .collect::<Vec<_>>();
+    ensure!(requests.len() == 2, "expected one request per process");
+    for request in requests {
+        let body: serde_json::Value = serde_json::from_slice(&request.body)?;
+        ensure!(body["model"] == "gpt-6-astra" && body["reasoning"]["effort"] == "high");
+        ensure!(
+            request
+                .headers
+                .get("version")
+                .and_then(|value| value.to_str().ok())
+                == Some(codex_model_provider_info::OPENAI_CODEX_COMPAT_VERSION)
+        );
+        let version = request.headers["version"]
+            .to_str()?
+            .split('.')
+            .map(str::parse::<u32>)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        ensure!(
+            version >= vec![0, 153, 0],
+            "Astra requires native client 0.153.0 or newer"
+        );
+        ensure!(
+            request
+                .headers
+                .contains_key("x-openai-internal-codex-responses-lite")
+        );
+        ensure!(body.get("instructions").is_none());
+        ensure!(body.get("tools").is_none());
+        ensure!(body["parallel_tool_calls"] == false);
+        ensure!(
+            body["input"]
+                .as_array()
+                .context("native input")?
+                .iter()
+                .any(|item| item["type"] == "additional_tools"
+                    && item["tools"]
+                        .as_array()
+                        .is_some_and(|tools| tools.iter().any(|tool| tool["name"] == "exec")))
+        );
+        for unsupported in [
+            "temperature",
+            "top_p",
+            "top_logprobs",
+            "logprobs",
+            "prompt_cache_retention",
+        ] {
+            ensure!(
+                body.get(unsupported).is_none(),
+                "unsupported Astra parameter {unsupported}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tmux_ambient_model_picker_offers_only_glm() -> Result<()> {
     if !TmuxServer::should_run("Ambient GLM-only picker")? {
         return Ok(());

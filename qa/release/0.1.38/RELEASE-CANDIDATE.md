@@ -1,5 +1,81 @@
 # Corbanu Terminal 0.1.38 integration candidate
 
+## Authorized publication — September 5
+
+The repository operator explicitly requested the release after the Astra
+subagent fix. [Publication authority, execution and disclosed gaps](PUBLICATION.md)
+supersede earlier historical statements that publication was not authorized.
+Qualification gaps remain disclosed; authorization does not turn them into passes.
+
+## Latest repair — explicit Astra subagents, September 5
+
+Source `51185a24d404f98ce7f0dd5fc67e516deabee000` separates explicit runtime
+discovery from automatic-allocation economics. Astra is now advertised as an
+explicit choice without inventing prices or changing spawn authorization.
+183 focused Core tests and 22 harness tests pass; an intermittent existing
+resume-fixture timeout on another run is disclosed in the evidence.
+Four actual Astra children passed tool work, cancellation/recovery and same-child
+cold resume across both default repositories: 20 child responses and 12 paired
+tool calls. `corbanu-debug` uses the verified installed build; the fresh human
+session is `corbanu-astra-agents`. [Exact evidence and limits](astra-subagents.md).
+No release was published; older user sessions are unchanged.
+
+## Historical repair — native Luna/Kimi subagents, September 5
+
+Runtime source `e7cdb94359a7bdedeb6b0abdf2f17f09823d08e1` repairs the mixed-model
+catalog filter, V2 child inheritance and exact OpenAI-runtime adapter dead end.
+180 selected Core tests and 19 harness tests pass. Both real child runtimes pass
+tool-backed repository tasks, parent cancellation/recovery and cold resume with
+the original child IDs. `corbanu-debug` now uses this verified build;
+`corbanu-agents` is the fresh human session, with the old session preserved.
+[Exact evidence and limits](subagent-runtime.md). No release was published.
+
+## Historical repair — live GPT-6 Astra, September 5
+
+Runtime source `6df2f2e2ed545506057e9e1aa7a76b9375aaea73`, harness/source tree
+`f848954d7739da8eaa4962f0866c612dedbaf5bb`. Fixed the real newer-client rejection
+and native Astra runtime metadata. **445 selected Rust/TUI tests and 12 harness
+tests pass**. The exact installed debug binary passed actual Astra file/tool,
+cancel/recovery, restart and same-thread resume in both TensorCash and Isometric
+Game: 18 responses and 12 paired tool calls. `corbanu-debug --yolo` and the
+separate `corbanu-test` session use that binary and the approved normal profile.
+[Exact evidence and limits](astra-runtime.md). No release was published; human
+follow-up, cross-platform qualification and competitor benchmarks remain separate.
+
+## Historical selector addition — GPT-6 Astra, September 5
+
+Selector-only implementation source: `6b17a2630f31f5447d2c53fa8f6a29b60407b42a`
+on `integration/reconcile-release-0.1.38`. GPT-6 Astra is selectable under
+OpenAI with its supported reasoning levels; existing Sol/current defaults and
+automatic allocation remain unchanged. Final affected tests passed **87/87**,
+including real-TMUX cancellation, selection, restart and loopback Responses
+request checks. Manual `just codex` selection also passed.
+
+[Astra selector evidence](astra-selector.md) records exact sources, binaries,
+commands, account-access limitations and test-fixture corrections. This is not
+live Astra inference or new cross-platform/release qualification. No release
+workflow, tag or publication was started by this addition.
+
+## Latest reconciliation — September 5
+
+Reconciled baseline source: `c37eb277d9f83ebcabe89e41cc81b9d3e92797a2` on
+`integration/reconcile-release-0.1.38`. This preserves Travis/IridiumMaster's
+`07791288b6` integration tip and the two PF-57-S02 repair commits. Fork `main`
+through `6dd9ad646b` is already included. Claude token/login improvements and
+Ambient's GLM-only selection remain intact.
+
+Combined Linux evidence: 625 selected tests, 16 real-TMUX application/harness
+tests and a manual `just codex` flow passed. Astra's bounded combined-source
+review found no new P0/P1. [Exact evidence and limits](travis-reconciliation.md)
+include source/build identities and the unresolved debug credential-logging
+concern. No tag or release was published by this reconciliation.
+
+The sections below retain historical candidate evidence. Their build hashes,
+platform passes and publication statements are scoped to their original runs;
+they are not new qualification of this combined source.
+
+## Original candidate record
+
 Date: 2026-09-03 UTC
 
 Branch: `integration/reconcile-release-0.1.37`

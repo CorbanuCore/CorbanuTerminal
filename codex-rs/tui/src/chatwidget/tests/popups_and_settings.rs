@@ -3718,6 +3718,27 @@ async fn spawn_picker_only_shows_models_with_constructible_native_providers() {
 }
 
 #[tokio::test]
+async fn astra_model_and_reasoning_picker_snapshots() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.6-sol")).await;
+    chat.thread_id = Some(ThreadId::new());
+    let presets = chat
+        .model_catalog
+        .try_list_models()
+        .expect("model catalog should load");
+    let astra = presets
+        .iter()
+        .find(|preset| preset.model == "gpt-6-astra")
+        .expect("bundled Astra preset")
+        .clone();
+    chat.open_all_models_popup(presets);
+    let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 30);
+    assert_chatwidget_snapshot!("astra_openai_model_picker", popup);
+    chat.open_reasoning_popup(astra);
+    let popup = render_bottom_popup_with_height(&chat, /*width*/ 100, /*height*/ 20);
+    assert_chatwidget_snapshot!("astra_reasoning_picker", popup);
+}
+
+#[tokio::test]
 async fn gpt_5_6_model_selection_popup_snapshot() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.6-sol")).await;
     chat.thread_id = Some(ThreadId::new());

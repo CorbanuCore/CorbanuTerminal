@@ -50,9 +50,15 @@ impl ChatWidget {
             }
             ServerNotification::ThreadGoalUpdated(notification) => {
                 self.on_thread_goal_updated(notification.goal, notification.turn_id);
+                if !from_replay {
+                    self.tracker_capture("goal", "", serde_json::json!({"action":"goal_updated"}));
+                }
             }
             ServerNotification::ThreadGoalCleared(notification) => {
                 self.on_thread_goal_cleared(notification.thread_id.as_str());
+                if !from_replay {
+                    self.tracker_capture("goal", "", serde_json::json!({"action":"goal_cleared"}));
+                }
             }
             ServerNotification::ThreadSettingsUpdated(notification) => {
                 self.on_thread_settings_updated(notification);
@@ -243,6 +249,9 @@ impl ChatWidget {
         notification: TurnCompletedNotification,
         replay_kind: Option<ReplayKind>,
     ) {
+        if replay_kind.is_none() {
+            self.tracker_capture("turn_end", "", serde_json::json!({"status": format!("{:?}", notification.turn.status), "durationMs": notification.turn.duration_ms, "nativeTurnId": notification.turn.id}));
+        }
         // User-message dedupe only suppresses the app-server echo of a prompt
         // this TUI already rendered locally. Once that turn ends, another
         // client can submit the same text and it still needs its own user cell.
@@ -370,6 +379,9 @@ impl ChatWidget {
         notification: ItemCompletedNotification,
         replay_kind: Option<ReplayKind>,
     ) {
+        if replay_kind.is_none() {
+            self.tracker_item(&notification.item);
+        }
         self.handle_thread_item(
             notification.item,
             notification.turn_id,
