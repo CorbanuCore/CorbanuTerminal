@@ -67,5 +67,5 @@ updated: 2026-09-08
 
 - [x] Exact changed-source manifest/candidate hashes and final test/review reports linked under qa/provider-auth/pf-58.
 - [x] Human guide updated without marking user checks accepted.
-- [ ] Scoped commits pushed; integration/main status explicit.
+- [x] Source commit `2545eedee` pushed to `origin/feat/provider-reauth-health`; not merged to main. Handoff bookkeeping follows separately.
 - [ ] Ledgers accurate and completed sprint archived only after required evidence.
