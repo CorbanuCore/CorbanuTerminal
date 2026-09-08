@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-44-S01"
 title: "Task Node durable command and transport recovery"
-status: in_progress
+status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-44"
 execution_order: 79
@@ -18,6 +18,11 @@ updated: 2026-09-05
 ---
 
 # PF-44-S01 — Task Node durable command and transport recovery
+
+September 8 allocation handoff: implementation and PTY checks are already
+recorded below. Return the outstanding production observation to draft while
+PF-42-S02 serially repairs the same authentication adapters. Preserve all
+completed work and the unchecked observation; this is not completion.
 
 ## Execution mandate
 

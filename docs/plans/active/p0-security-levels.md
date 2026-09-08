@@ -19,6 +19,9 @@ product_spec:
 implementation_worktrees:
   - path: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.39"
     branch: "fix/tasknode-agent-profile-scope"
+    base_commit: "7e99c5a06bdb7b0f01f655cb4d84739b4f70bb86"
+  - path: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.39"
+    branch: "fix/tasknode-agent-profile-scope"
     base_commit: "9b71d86d7fc57b25e3b020a813a6b75dd898836a"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-protected-runtime"
     branch: "feat/p0-security-protected-runtime"
@@ -993,6 +996,18 @@ before qualification.
 - [ ] Named human acceptance passes.
 - [ ] Finished documentation matches the accepted candidate.
 - [ ] Release and due benchmark records are linked.
+
+## PF-42-S02 — Multiple-account relink recovery
+
+The September 8 user report authorizes repairing multiple Task Node accounts on
+one machine. Product heading **Shipping MVP — LIVE**, row **Task Node and
+identity**: "Tasks, evidence, verification, rewards, balances, chat, context,
+linked identity". The selected profile must retain its own account, a rejected
+old token must not shadow a completed relink, and active guidance must name
+Corbanu. [PF-42-S02](../../sprints/current/p0-security-levels/pf-42-s02-relink-recovery.md)
+owns the shared resolver, focused two-account tests and real TUI recovery proof.
+This extends the existing profile isolation contract, without transferring
+historical records or choosing GitHub identities for the user.
 
 ## PF-45-S02 agent identity repair — completed
 

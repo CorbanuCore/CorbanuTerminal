@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/tasknode_menu.rs
+assertion_line: 3815
+expression: rendered
+---
+  Task Node
+  Task Node no longer accepts this profile's session. Run /tasknode link, choose your GitHub accou
+
+›    Task Node request failed  Task Node no longer accepts this profile's session. Run /tasknode
+                               link, choose your GitHub account, then run /tasknode status.
+
+  Press enter to confirm or esc to go back

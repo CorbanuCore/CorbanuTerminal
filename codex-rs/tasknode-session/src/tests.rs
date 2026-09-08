@@ -152,29 +152,21 @@ fn named_profile_never_imports_mismatched_legacy_identity() {
 }
 
 #[test]
-fn matching_named_profile_imports_legacy_identity_once() {
+fn same_account_in_default_and_named_profiles_has_independent_sessions() {
     let store = MemoryStore::default();
-    promote_active_to_store(
-        &store,
-        &active_for("SecondFoundation", "tok-secondfoundation"),
-    )
-    .expect("seed legacy global session");
-    let scope = SessionScope::for_profile("secondfoundation");
-
-    let imported = load_scoped_from_store(&store, &scope).expect("import matching session");
+    let scope = SessionScope::for_profile("tester");
+    promote_active_to_store(&store, &active("default-token")).unwrap();
     assert_eq!(
-        imported.active.map(|session| session.terminal_token),
-        Some("tok-secondfoundation".to_string())
+        load_scoped_from_store(&store, &scope).unwrap(),
+        LocalState::default()
     );
-
-    clear_all_from_store(&store).expect("clear legacy state");
+    promote_active_scoped_to_store(&store, &scope, &active("named-token")).unwrap();
+    clear_all_from_store(&store).unwrap();
     assert_eq!(
-        load_scoped_from_store(&store, &scope)
-            .expect("profile copy remains")
-            .active
-            .map(|session| session.terminal_token),
-        Some("tok-secondfoundation".to_string())
+        load_scoped_from_store(&store, &scope).unwrap().active,
+        Some(active("named-token"))
     );
+    assert_eq!(load_from_store(&store).unwrap(), LocalState::default());
 }
 
 #[test]
@@ -182,6 +174,7 @@ fn unlink_survives_restart_without_reimporting_matching_legacy_credentials() {
     let store = MemoryStore::default();
     let scope = SessionScope::for_profile("tester");
     promote_active_to_store(&store, &active("legacy-token")).unwrap();
+    promote_active_scoped_to_store(&store, &scope, &active("named-token")).unwrap();
     assert!(
         load_scoped_from_store(&store, &scope)
             .unwrap()

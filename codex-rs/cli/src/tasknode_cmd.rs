@@ -1015,6 +1015,10 @@ async fn run_link_start(
     };
     codex_tasknode_session::save_pending_scoped(&tasknode_vault(codex_home), scope, &pending)
         .map_err(|err| anyhow::anyhow!("failed to store link attempt: {err}"))?;
+    let status_command = scope.profile().map_or_else(
+        || "corbanu tasknode status".to_string(),
+        |profile| format!("corbanu --profile {profile} tasknode status"),
+    );
     print_json(&json!({
         "ok": true,
         "state": "pending",
@@ -1023,7 +1027,7 @@ async fn run_link_start(
         "expiresAt": started.expires_at,
         "activeSessionPreserved": state.active.is_some(),
         "nextStep": format!(
-            "Open {} in a browser, complete GitHub auth, then run `corbanu tasknode link poll --wait 120`.",
+            "Open {} in a browser, choose your GitHub account, then run `{status_command}`.",
             started.verification_url
         ),
     }))?;
@@ -1160,7 +1164,21 @@ impl TaskNodeClient {
             .cli_overrides(cli_kv_overrides)
             .build()
             .await?;
-        let session = require_active_session(config.codex_home.as_path(), scope)?;
+        let codex_home = config.codex_home.as_path().to_path_buf();
+        let session_scope = scope.clone();
+        let requested_origin = origin_override
+            .clone()
+            .or_else(|| std::env::var("PFT_TASKNODE_ORIGIN").ok())
+            .or_else(|| std::env::var("TASKNODE_ORIGIN").ok());
+        let session = tokio::task::spawn_blocking(move || {
+            codex_tasknode_session::resolve_scoped(
+                &codex_home,
+                &session_scope,
+                requested_origin.as_deref(),
+            )
+        })
+        .await?
+        .map_err(anyhow::Error::msg)?;
         let origin = resolve_origin(origin_override, Some(session.origin.as_str()));
         Ok(Self {
             transport: codex_tasknode_session::Client::for_session(&session, &origin)?,
@@ -1264,40 +1282,6 @@ fn load_tasknode_state(
         .map_err(|err| anyhow::anyhow!("failed to read local Task Node state: {err}"))
 }
 
-/// Resolve the active session or explain exactly which state the user is in.
-fn require_active_session(
-    codex_home: &std::path::Path,
-    scope: &codex_tasknode_session::SessionScope,
-) -> anyhow::Result<codex_tasknode_session::ActiveSession> {
-    let state = load_tasknode_state(codex_home, scope)?;
-    let expired_active = match state.active {
-        Some(active) if !active.is_expired() => return Ok(active),
-        other => other,
-    };
-    if expired_active.is_some() {
-        match state.pending {
-            Some(_) => anyhow::bail!(
-                "Task Node session expired and a link attempt is pending. Finish GitHub auth, then run `corbanu tasknode link poll`."
-            ),
-            None => anyhow::bail!(
-                "Task Node session expired. Run `corbanu tasknode link` to re-authenticate."
-            ),
-        }
-    }
-    match state.pending {
-        Some(pending) if !pending.verification_url.trim().is_empty() => anyhow::bail!(
-            "Task Node link is pending. Finish GitHub auth: {} then run `corbanu tasknode link poll`.",
-            pending.verification_url
-        ),
-        Some(_) => anyhow::bail!(
-            "Task Node link is pending. Run `corbanu tasknode link poll` to complete it."
-        ),
-        None => anyhow::bail!(
-            "Task Node is not linked. Run `corbanu tasknode link` (or /tasknode link in the TUI)."
-        ),
-    }
-}
-
 fn resolve_tasknode_profile(
     explicit: Option<&ProfileV2Name>,
     inherited: Result<&str, &std::env::VarError>,
@@ -1374,7 +1358,17 @@ async fn parse_response(response: reqwest::Response) -> anyhow::Result<TaskNodeR
     Ok(TaskNodeResponse { status, body })
 }
 
-fn emit_response(response: TaskNodeResponse) -> anyhow::Result<i32> {
+fn emit_response(mut response: TaskNodeResponse) -> anyhow::Result<i32> {
+    if response.status == 401 {
+        let message = codex_tasknode_session::Response {
+            status: response.status,
+            body: response.body.clone(),
+        }
+        .message();
+        if let Some(body) = response.body.as_object_mut() {
+            body.insert("message".into(), Value::String(message));
+        }
+    }
     print_json(&response.body)?;
     Ok(if response_is_ok(&response) { 0 } else { 1 })
 }

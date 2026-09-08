@@ -185,7 +185,18 @@ impl ChatWidget {
 
     pub(crate) fn handle_tasknode_status_result(&mut self, result: Result<Value, String>) {
         match parse_tasknode_value::<TaskNodeStatusResponse>(result, "status") {
-            Ok(status) => self.add_plain_history_lines(tasknode_status_lines(&status)),
+            Ok(status) => {
+                let scope = tasknode_session_scope(&self.config);
+                let mut lines = tasknode_status_lines(&status);
+                lines.insert(
+                    1,
+                    Line::from(format!(
+                        "  profile: {}",
+                        scope.profile().unwrap_or("default")
+                    )),
+                );
+                self.add_plain_history_lines(lines);
+            }
             Err(err) => self.add_error_message(format!("Task Node status failed: {err}")),
         }
     }
@@ -2869,69 +2880,16 @@ fn load_tasknode_local_state(
         .map_err(|err| TaskNodeLocalError::Vault(err.to_string()))
 }
 
-/// Resolve a usable session for a request.
-///
-/// The proven active session always wins. Only when no active session exists
-/// does this try to complete a pending link — and an issued token must pass a
-/// live authenticated `status` call before it is promoted to the active label,
-/// so unproven authority never replaces stored state.
+/// Complete this profile's relink before reusing a previously saved token.
 fn ensure_tasknode_session(
     codex_home: &Path,
     scope: &codex_tasknode_session::SessionScope,
 ) -> Result<codex_tasknode_session::ActiveSession, TaskNodeLocalError> {
-    let state = load_tasknode_local_state(codex_home, scope)?;
-    // Only a *fresh* active session wins outright. An expired one must not
-    // shadow a completable link attempt: sending its dead token would just
-    // bounce off the server with an unhelpful 401.
-    let expired_active = match state.active {
-        Some(active) if !active.is_expired() => return Ok(active),
-        other => other,
-    };
-    let Some(pending) = state.pending else {
-        return match expired_active {
-            Some(_) => Err(TaskNodeLocalError::Client(
-                "Task Node session expired. Run /tasknode link to re-authenticate.".to_string(),
-            )),
-            None => Err(TaskNodeLocalError::NoSession),
-        };
-    };
-    match TaskNodeClient::anonymous_at(&pending.origin)
-        .poll_session(&pending.request_id, &pending.poll_token)
-    {
-        Ok(issued) => {
-            let candidate =
-                codex_tasknode_session::ActiveSession::from_issued(pending.origin.clone(), issued);
-            TaskNodeClient::from_session(&candidate, &pending.origin)
-                .and_then(|client| client.status())
-                .map_err(|err| {
-                    TaskNodeLocalError::Client(format!(
-                        "issued Task Node token failed validation; keeping link pending: {err}"
-                    ))
-                })?;
-            codex_tasknode_session::promote_active_scoped(
-                &Vault::new(codex_home.to_path_buf()),
-                scope,
-                &candidate,
-            )
-            .map_err(|err| TaskNodeLocalError::Vault(err.to_string()))?;
-            Ok(candidate)
-        }
-        Err(TaskNodeClientError::Pending) => Err(TaskNodeLocalError::Pending {
-            verification_url: pending.verification_url,
-        }),
-        Err(TaskNodeClientError::Gone(message)) => {
-            // The server no longer recognizes this attempt (expired or already
-            // consumed). Clearing it cannot lose authority: it never held any.
-            let _ = codex_tasknode_session::clear_pending_scoped(
-                &Vault::new(codex_home.to_path_buf()),
-                scope,
-            );
-            Err(TaskNodeLocalError::Client(format!(
-                "Task Node link attempt expired ({message}). Run /tasknode link to start again."
-            )))
-        }
-        Err(err) => Err(TaskNodeLocalError::Client(err.to_string())),
-    }
+    let requested = std::env::var("PFT_TASKNODE_ORIGIN")
+        .or_else(|_| std::env::var("TASKNODE_ORIGIN"))
+        .ok();
+    codex_tasknode_session::resolve_scoped(codex_home, scope, requested.as_deref())
+        .map_err(TaskNodeLocalError::Client)
 }
 
 pub(super) fn tasknode_session_scope(
@@ -2958,8 +2916,6 @@ fn unix_timestamp_string() -> Option<String> {
 
 #[derive(Debug)]
 enum TaskNodeLocalError {
-    NoSession,
-    Pending { verification_url: String },
     Vault(String),
     Client(String),
 }
@@ -2967,13 +2923,6 @@ enum TaskNodeLocalError {
 impl std::fmt::Display for TaskNodeLocalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NoSession => write!(f, "Task Node is not linked. Run /tasknode link."),
-            Self::Pending { verification_url } => {
-                write!(
-                    f,
-                    "Task Node link is pending. Finish GitHub auth: {verification_url}"
-                )
-            }
             Self::Vault(err) | Self::Client(err) => write!(f, "{err}"),
         }
     }
@@ -3037,19 +2986,6 @@ impl TaskNodeClient {
     fn start_github_link(&self) -> Result<TerminalAuthStartResponse, String> {
         self.post_json("/api/auth/terminal/start/github", &serde_json::json!({}))
             .map_err(|err| err.to_string())
-    }
-
-    fn poll_session(
-        &self,
-        request_id: &str,
-        poll_token: &str,
-    ) -> Result<codex_tasknode_session::TerminalSessionIssued, TaskNodeClientError> {
-        let path = format!(
-            "/api/auth/terminal/session?requestId={}&pollToken={}",
-            urlencoding::encode(request_id),
-            urlencoding::encode(poll_token)
-        );
-        self.get_json(&path)
     }
 
     fn status(&self) -> Result<Value, String> {
@@ -3859,6 +3795,24 @@ mod tests {
 
         assert!(rendered.contains("Corbanu profile: goodalexander"));
         assert!(!rendered.contains("secondfoundation"));
+    }
+
+    #[tokio::test]
+    async fn tasknode_relink_error_uses_current_corbanu_guidance() {
+        let (mut chat, _, _, _) =
+            crate::chatwidget::tests::make_chatwidget_manual_with_sender().await;
+        let message = codex_tasknode_session::Response {
+            status: 401,
+            body: serde_json::json!({"error":"terminal_login_required","message":"Legacy server instructions"}),
+        }.message();
+        chat.bottom_pane
+            .show_selection_view(tasknode_error_selection_params(
+                TASKNODE_MENU_VIEW_ID,
+                "Task Node".to_string(),
+                message,
+            ));
+        let rendered = crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 100);
+        insta::assert_snapshot!("tasknode_relink_corbanu_guidance", rendered);
     }
 
     #[test]

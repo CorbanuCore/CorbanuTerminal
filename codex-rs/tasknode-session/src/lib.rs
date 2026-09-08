@@ -37,6 +37,7 @@ use sha2::Sha256;
 
 mod client;
 mod commands;
+mod recovery;
 mod stream;
 pub mod tracker;
 pub use client::Client;
@@ -45,6 +46,7 @@ pub use client::Response;
 pub use client::normalize_origin;
 pub use commands::CommandStore;
 pub use commands::TaskCommand;
+pub use recovery::resolve_scoped;
 pub use stream::StreamDecoder;
 
 /// Vault label holding the active terminal session (bearer token). Kept at the
@@ -213,9 +215,8 @@ pub fn load(vault: &Vault) -> Result<LocalState, SessionStoreError> {
 
 /// Load only the Task Node state owned by `scope`.
 ///
-/// A named profile may import the legacy global active session once, but only
-/// when the session's GitHub username matches the profile name. A mismatched
-/// global session is never returned to the named profile.
+/// Each profile must obtain its own session through linking. Copying a global
+/// bearer would let logout in one profile revoke another profile's authority.
 pub fn load_scoped(vault: &Vault, scope: &SessionScope) -> Result<LocalState, SessionStoreError> {
     load_scoped_from_store(vault, scope)
 }
@@ -276,23 +277,6 @@ fn load_scoped_from_store<S: SessionStore + ?Sized>(
                 // a real session can be written cleanly later.
                 let _ = store.delete(&active_label);
             }
-        }
-    }
-
-    if state.active.is_none()
-        && state.pending.is_none()
-        && lifecycle.is_none()
-        && let Some(profile) = scope.profile()
-    {
-        let legacy = load_from_store(store)?;
-        if let Some(active) = legacy.active
-            && active
-                .github_username
-                .as_deref()
-                .is_some_and(|username| username.eq_ignore_ascii_case(profile))
-        {
-            promote_active_scoped_to_store(store, scope, &active)?;
-            state.active = Some(active);
         }
     }
 

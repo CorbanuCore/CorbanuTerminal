@@ -54,10 +54,11 @@ pending link attempts, status, or logout state. The Task Node menu shows the
 active Corbanu profile so the local profile and linked identity can be checked
 together.
 
-After upgrading from the older machine-wide session format, a named profile
-reuses that session only when its name matches the linked GitHub username.
-Other profiles remain unlinked and must link once; a mismatched identity is
-never imported.
+Link each named profile once to create its own terminal session. A profile
+name is a local label; GitHub account selection establishes the identity.
+Profiles do not copy the default account's token, so logging out the default
+account cannot revoke a newly linked named profile. Completing a relink and
+running `/tasknode status` replaces that profile's old token after validation.
 
 ## Work with tasks
 

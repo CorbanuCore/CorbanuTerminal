@@ -38,6 +38,11 @@ impl Response {
     }
 
     pub fn message(&self) -> String {
+        if self.status == 401
+            && self.body.get("error").and_then(Value::as_str) == Some("terminal_login_required")
+        {
+            return "Task Node no longer accepts this profile's session. Run /tasknode link, choose your GitHub account, then run /tasknode status.".to_string();
+        }
         let message = self
             .body
             .get("message")
