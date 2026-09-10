@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "baseline": "3cec54d9917b776bedaffb586247d7cd7c633df6",
+  "portfolio_plans": 16,
+  "portfolio_sprints": 50,
+  "max_sprint_lines": 73,
+  "current_count": 110,
+  "archive_count": 121,
+  "inherited_global_errors": 7,
+  "global_sprint_checker_ok": false,
+  "reserved_sprints": [
+    "PF-27-S04",
+    "PF-35-S01"
+  ],
+  "errors": []
+}

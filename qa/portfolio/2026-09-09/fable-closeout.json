@@ -1,0 +1,6 @@
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "Focused closeout verified. (1) docs/sprints/index.md line 101 now accurately states that the portfolio links each plan and each plan's sprint execution map links every sprint directly; this matches the actual structure (plans' sprint tables link ../../sprints/current/... records; the portfolio table links plans). (2) docs/plans/proposed/portfolio-campaign-roi.md line 35 now carries the same explicit missing-authority activation gate as PF-64/PF-73/PF-74, with wording correctly adapted to 'external tracker work' rather than editorial work, so the Product measurement citation is not misread as authorization. Bookkeeping: all 72 SHA-256 entries in candidate-manifest.json match the on-disk files (independently recomputed, zero mismatches), and the manifest's own SHA-256 (73c128c7…3261) matches the value recorded in review-evidence.md; scope_files count (16+50+6) is consistent. review-evidence.md correctly labels this closeout as pending and does not claim a clean cycle. No runtime, schema, policy, active-plan or acceptance contract changed in this closeout, and no regression was introduced by the two corrections.",
+  "overall_confidence": 0.9
+}
