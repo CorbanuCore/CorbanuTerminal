@@ -66,7 +66,7 @@ cache-write, and output prices, plus the privacy boundary. API keys share the
 wallet's balance but retain separate creation, last-use, revocation, request,
 and spend attribution.
 
-The current debug candidate includes **DeepSeek V4.1 Flash** under `/model` →
+The 0.1.42 release candidate includes **DeepSeek V4.1 Flash** under `/model` →
 **Corbanu API**, using your existing API credential. Its model ID is
 `corbanu/deepseek-v4.1-flash`. The picker shows High reasoning and the published
 rates: $0.22/M input, $0.007/M cached input, $0.66/M output, plus $0.0001 per

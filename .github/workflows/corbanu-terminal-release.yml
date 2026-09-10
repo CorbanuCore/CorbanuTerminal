@@ -7,7 +7,7 @@ on:
         description: "Release version; must match codex-rs/Cargo.toml."
         required: true
         type: string
-        default: "0.1.41"
+        default: "0.1.42"
       publish_release:
         description: "Create or update the matching GitHub release."
         required: true
@@ -64,6 +64,11 @@ jobs:
 
           if [[ -n "${{ inputs.reuse_run_id }}" && ! "${{ inputs.reuse_run_id }}" =~ ^[0-9]+$ ]]; then
             echo "reuse_run_id must be a numeric GitHub Actions run id"
+            exit 1
+          fi
+
+          if [[ ! -s "qa/release/${RELEASE_VERSION}/RELEASE_NOTES.md" ]]; then
+            echo "Versioned release notes are required before building packages"
             exit 1
           fi
 
@@ -713,6 +718,7 @@ jobs:
           tag_name: ${{ needs.validate.outputs.tag }}
           target_commitish: ${{ github.sha }}
           name: ${{ needs.validate.outputs.version }}
+          body_path: qa/release/${{ needs.validate.outputs.version }}/RELEASE_NOTES.md
           files: release-dist/*
           overwrite_files: true
           make_latest: ${{ inputs.make_latest }}

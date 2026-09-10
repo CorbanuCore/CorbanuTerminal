@@ -1,0 +1,13 @@
+
+╭─────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                       │
+│                                                     │
+│ model:       loading   /model to change             │
+│ directory:   /mnt/…/corbanu-0.1.42-qa/isometricgame │
+│ permissions: YOLO mode                              │
+╰─────────────────────────────────────────────────────╯
+
+
+› Find and fix a bug in @filename
+
+  GPT-5.6-Sol default · /mnt/HC_Volume_101713660/pfrpc/scr…
