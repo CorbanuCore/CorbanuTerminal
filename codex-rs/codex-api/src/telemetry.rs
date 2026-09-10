@@ -16,6 +16,8 @@ use tokio::time::Instant;
 use tokio_tungstenite::tungstenite::Error;
 use tokio_tungstenite::tungstenite::Message;
 
+const CORBANU_REQUEST_ID_HEADERS: [&str; 2] = ["x-corbanu-request-id", "x-pfterminal-request-id"];
+
 /// Generic telemetry.
 pub trait SseTelemetry: Send + Sync {
     fn on_sse_poll(
@@ -87,8 +89,12 @@ where
     let request_id = Arc::clone(&next_id);
     let make_request = move || {
         let mut request = make_request();
-        if let Some(value) = request_id.lock().expect("request ID lock").as_ref() {
-            for name in ["x-corbanu-request-id", "x-pfterminal-request-id"] {
+        if let Some(value) = request_id
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .as_ref()
+        {
+            for name in CORBANU_REQUEST_ID_HEADERS {
                 if request.headers.contains_key(name) {
                     request.headers.insert(name, value.clone());
                 }
@@ -99,10 +105,9 @@ where
     run_with_retry(policy, make_request, move |req, attempt| {
         let telemetry = telemetry.clone();
         let send = send.clone();
-        let sent_id = req
-            .headers
-            .get("x-corbanu-request-id")
-            .or_else(|| req.headers.get("x-pfterminal-request-id"))
+        let sent_id = CORBANU_REQUEST_ID_HEADERS
+            .iter()
+            .find_map(|name| req.headers.get(*name))
             .cloned();
         let next_id = Arc::clone(&next_id);
         async move {
@@ -119,7 +124,7 @@ where
                 && sent_id.is_some()
                 && headers.get("x-corbanu-request-id") == sent_id.as_ref()
             {
-                *next_id.lock().expect("request ID lock") = Some(
+                *next_id.lock().unwrap_or_else(|error| error.into_inner()) = Some(
                     HeaderValue::from_str(&uuid::Uuid::new_v4().to_string())
                         .expect("UUID is a valid header"),
                 );

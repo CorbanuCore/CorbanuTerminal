@@ -1,0 +1,5 @@
+Health Checks for pfterminal-plan-gateway
+ NAME                      │ STATUS  │ MACHINE        │ LAST UPDATED │ OUTPUT
+───────────────────────────┼─────────┼────────────────┼──────────────┼────────────────────
+ servicecheck-00-http-8080 │ passing │ 2870663bd33de8 │ 1m4s ago     │ {"status":"ready"}
+ servicecheck-00-http-8080 │ passing │ 784503db5e0398 │ 46s ago      │ {"status":"ready"}
