@@ -120,6 +120,10 @@ Product specification: **Campaign Tracker — LOCAL PILOT CANDIDATE**, “preser
 
 Open `/tasknode`, choose **Campaign Tracker**, and enable the workspace. The **Tracker REC** indicator shows recording and pending uploads. **My activity** opens saved prompts, compact output summaries and observed actions; choose an action for session replay or **Read full action** for a scrollable view. **Pause this workspace** stops new capture.
 
+If a request is rejected, Campaign Tracker shows the failed operation and the server's correction guidance. **Retry** reloads the same failed read, including its filters; **Overview** opens status. Failed campaign, mapping and review forms offer **Edit draft** with your input retained. Review saved items after a connection failure before submitting a write again. Recording changes can be retried with a newly resolved credential.
+
+Recording accepts the same environment credential aliases as Corbanu API, in order: `CORBANU_API_KEY`, `CORBANU_PLAN_API_KEY`, then `PFTERMINAL_PLAN_API_KEY`, with the existing saved credential fallback. Blank aliases are skipped. Missing credentials direct you to Providers; they do not delete the encrypted outbox.
+
 Recording belongs to the linked Task Node account. Sharing requires an explicit Campaign Tracker grant in addition to an accepted collaborator or direct-report relationship. A manager relationship alone does not expose another person's prompts. Access audit shows reads and grant changes.
 
 This records observed Corbanu TUI work. Runtime measures agent execution, and summaries are not proof of task completion. The Verglas pilot is enabled for `@secondfmaster`; an already running older terminal needs to restart into the updated debug build.

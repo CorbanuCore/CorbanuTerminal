@@ -196,3 +196,7 @@ documented environment or configuration inputs.
 - [Configuration](../config.md)
 - [Corbanu API](wallet-plan.md)
 - [Provider integration references](../integrations/index.md)
+
+## Provider tabs after refresh
+
+Refreshing Providers keeps catalog models on compatible provider routes. Claude subscription models remain under **Claude Plan**; they are not copied into **OpenAI** when another model was active during refresh. Intentional custom-provider entries keep their configured provider identity. This restores the product-spec **Shipping MVP — LIVE**, **Multi-provider inference** catalog behavior.

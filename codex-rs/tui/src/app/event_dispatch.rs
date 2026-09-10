@@ -3615,10 +3615,11 @@ impl App {
             AppEvent::CampaignTrackerResult {
                 path,
                 enrollment,
+                body,
                 result,
             } => {
                 self.chat_widget
-                    .campaign_tracker_result(path, enrollment, result);
+                    .campaign_tracker_result(path, enrollment, body, result);
             }
             AppEvent::CampaignTrackerSync { identity, result } => {
                 self.chat_widget

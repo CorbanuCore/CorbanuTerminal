@@ -1,0 +1,41 @@
+╭───────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                         │
+│                                                       │
+│ model:       gpt-6-astra   /model to change           │
+│ directory:   /mnt/…/corbanu-tracker-tabs-qa/workspace │
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────╯
+
+• Campaign Tracker recording enabled for this workspace.
+Prompts are preserved; sharing needs an explicit history
+grant.
+
+
+  Campaign Tracker
+  @fixture · 0 events · 0 pending · 0 capture gaps · reco
+
+
+› Activity totals                 Observed prompts, runs,
+                                  actions and verified
+                                  task outcomes
+  My activity                     Preserved prompts,
+                                  compact summaries and
+                                  observed actions
+  Access & replay                 View explicit history
+                                  grants and
+                                  collaborators
+  Access audit                    See who read, exported
+                                  or changed your history
+  Direct reports & collaborators  Choose a Task Node
+                                  handle to share or
+                                  inspect activity
+  Campaigns                       Group work around a
+                                  named objective
+  Pause this workspace            Preserve prompts and
+                                  summarized outputs; no
+                                  sharing until you grant
+                                  access
+  Sync now                        Retry the encrypted
+                                  local outbox
+
+  Press enter to confirm or esc to go back

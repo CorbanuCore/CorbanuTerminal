@@ -1,0 +1,11 @@
+use codex_vault::ClaudeAuthSelection;
+use codex_vault::Vault;
+
+fn main() {
+    let home = std::env::args_os().nth(1).expect("isolated QA home");
+    let selection = ClaudeAuthSelection::new_environment_token("fixture-claude-token")
+        .expect("synthetic environment selection");
+    Vault::new(home.into())
+        .save_claude_auth_selection(&selection)
+        .expect("save isolated QA selection");
+}

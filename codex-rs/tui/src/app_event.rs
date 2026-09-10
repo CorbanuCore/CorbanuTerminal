@@ -652,6 +652,7 @@ pub(crate) enum AppEvent {
     CampaignTrackerResult {
         path: String,
         enrollment: Option<bool>,
+        body: Option<serde_json::Value>,
         result: Result<serde_json::Value, String>,
     },
     CampaignTrackerSync {

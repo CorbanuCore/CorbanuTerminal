@@ -1,0 +1,22 @@
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────╯
+
+• Campaign Tracker recording enabled for this workspace.
+Prompts are preserved; sharing needs an explicit history
+grant.
+
+• Campaign Tracker recording paused for this workspace.
+
+• Campaign Tracker change saved.
+
+
+  Campaign Tracker
+  0 visible actions · 0 human prompts on this page · agen
+
+
+› Search activity   Search only fields you are allowed to
+                    read
+  Tracker overview  Return to status and recording
+                    controls
+
+  Press enter to confirm or esc to go back

@@ -1,0 +1,8 @@
+{
+  "version": "0.1.41 plus unpublished wallet, tracker and provider-tab fixes",
+  "baseCommit": "9677aef4e2",
+  "binary": "/mnt/HC_Volume_101713660/pfrpc/build-cache/cargo-workspaces/corbanu-wallet-launch-hotfix-db67e02208dd/debug/corbanu",
+  "sha256": "a072e95eb8d816075aca4a1d6c84aeb6af1861e32a2736da3f8c5e8215296e40",
+  "platform": "x86_64-unknown-linux-gnu",
+  "published": false
+}
