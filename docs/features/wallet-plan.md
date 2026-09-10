@@ -27,6 +27,30 @@ reviewable flow.
 Keep enough SOL for transaction fees unless checkout explicitly reports that
 fees are sponsored. Never paste recovery material into chat.
 
+## Wallet unavailable after updating to 0.1.41
+
+The 0.1.41 package contains `corbanu-walletd`, but its wallet client looks for the
+old `pfterminal-walletd` filename. This can prevent `/wallet` from opening even
+though installation succeeded. Repeatedly restarting the terminal does not
+repair the filename mismatch.
+
+On Linux or macOS, create a compatibility link beside the installed executable.
+Use the exact `bin` directory printed in the error:
+
+```sh
+cd "/path/from/the/error/bin" &&
+  test -x corbanu-walletd &&
+  ln -s corbanu-walletd pfterminal-walletd
+```
+
+Then choose **Retry** in Wallet. This links the bundled daemon under the name
+0.1.41 expects; it does not change wallet data. Do not delete the wallet directory
+to resolve this installation error.
+
+This recovery supports product-spec heading **Shipping MVP — LIVE**, **Wallet
+and payments**: “Local Solana wallet, SOL and canonical USDC support, scoped
+signing, backup/restore, and Corbanu Plan purchase/recovery.”
+
 ## Fund and use Corbanu API
 
 1. Open `/wallet` and choose **Corbanu API**.

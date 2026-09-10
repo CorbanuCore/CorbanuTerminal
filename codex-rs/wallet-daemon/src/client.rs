@@ -295,16 +295,20 @@ fn daemon_executable() -> std::io::Result<PathBuf> {
 }
 
 fn daemon_executable_beside(current: &Path) -> PathBuf {
-    let name = if cfg!(windows) {
-        "pfterminal-walletd.exe"
+    let directory = current.parent().unwrap_or_else(|| Path::new("."));
+    let canonical = directory.join(format!("corbanu-walletd{}", std::env::consts::EXE_SUFFIX));
+    let legacy = directory.join(format!(
+        "pfterminal-walletd{}",
+        std::env::consts::EXE_SUFFIX
+    ));
+    // Resolve only within this installation, never from PATH or another release.
+    if canonical.is_file() || !legacy.is_file() {
+        canonical
     } else {
-        "pfterminal-walletd"
-    };
-    current
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join(name)
+        legacy
+    }
 }
+
 fn unavailable(error: impl std::fmt::Display) -> WalletDaemonError {
     WalletDaemonError::Unavailable(error.to_string())
 }
@@ -336,19 +340,25 @@ mod tests {
     use codex_uds::prepare_private_socket_directory;
 
     #[test]
-    fn wallet_daemon_is_resolved_beside_the_running_executable() {
-        let executable = if cfg!(windows) {
-            Path::new(r"C:\PFTerminal\bin\pfterminal.exe")
-        } else {
-            Path::new("/opt/pfterminal/bin/pfterminal")
-        };
-        let expected = if cfg!(windows) {
-            Path::new(r"C:\PFTerminal\bin\pfterminal-walletd.exe")
-        } else {
-            Path::new("/opt/pfterminal/bin/pfterminal-walletd")
-        };
+    fn wallet_daemon_uses_the_shipped_package_name_and_legacy_fallback() {
+        let package = tempfile::tempdir().expect("package");
+        let executable = package.path().join("corbanu");
+        let canonical = package
+            .path()
+            .join(format!("corbanu-walletd{}", std::env::consts::EXE_SUFFIX));
+        let legacy = package.path().join(format!(
+            "pfterminal-walletd{}",
+            std::env::consts::EXE_SUFFIX
+        ));
 
-        assert_eq!(daemon_executable_beside(executable), expected);
+        // A missing package reports the canonical name users should have installed.
+        assert_eq!(daemon_executable_beside(&executable), canonical);
+        std::fs::write(&legacy, "legacy fixture").expect("legacy daemon");
+        assert_eq!(daemon_executable_beside(&executable), legacy);
+        std::fs::write(&canonical, "canonical fixture").expect("canonical daemon");
+        assert_eq!(daemon_executable_beside(&executable), canonical);
+        std::fs::remove_file(&legacy).expect("remove legacy daemon");
+        assert_eq!(daemon_executable_beside(&executable), canonical);
     }
 
     #[tokio::test]

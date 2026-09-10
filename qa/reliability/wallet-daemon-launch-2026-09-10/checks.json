@@ -1,0 +1,23 @@
+{
+  "base": "739897fd64527898fdddc2dec1ab15be287f620a",
+  "candidateVersion": "0.1.41 plus wallet discovery fix (local dev build, unpublished)",
+  "tests": "12 wallet daemon tests passed; new discovery regression failed on original implementation",
+  "build": "cargo build -p codex-cli --bin corbanu -j 16; 3m 09s",
+  "releaseGate": "Canonical-only packaged daemon cold startup and repeat status passed; non-serving executable rejected",
+  "platformsExecuted": [
+    "x86_64-unknown-linux-gnu"
+  ],
+  "ciPlatformsConfigured": [
+    "Linux x86_64",
+    "Linux aarch64",
+    "macOS x86_64",
+    "macOS aarch64",
+    "Windows x86_64"
+  ],
+  "money": "No model calls, wallet creation, signing or payments",
+  "hashes": {
+    "codex-rs/wallet-daemon/src/client.rs": "50eb86a25cf7c102c287e60d192b7920710712b2a77f338f053b3b374b9fb672",
+    "/mnt/HC_Volume_101713660/pfrpc/scratch/corbanu-wallet-package-qa/candidate/bin/corbanu": "5bfe989816ed0eedc174f2304043d7d3eb861d132bb4ed50dafc23d9610d2d1c",
+    "/mnt/HC_Volume_101713660/pfrpc/scratch/corbanu-wallet-package-qa/candidate/bin/corbanu-walletd": "7ea4db9f1a39e12292d21ae6b14748573e311e5abd7b6fc94a1760db644ed929"
+  }
+}

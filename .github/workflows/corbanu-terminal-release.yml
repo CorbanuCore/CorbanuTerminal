@@ -123,6 +123,12 @@ jobs:
             --bin corbanu-walletd \
             --bin codex-code-mode-host
 
+      - name: Build wallet package client probe
+        shell: bash
+        run: |
+          cargo build --manifest-path codex-rs/Cargo.toml --target "$TARGET" --release \
+            -p codex-wallet-daemon --example package_client_probe
+
       - name: Build standalone package archive
         shell: bash
         run: |
@@ -168,6 +174,8 @@ jobs:
           test ! -e "$package_dir/bin/pfterminal-acp"
           test ! -e "$package_dir/bin/pfterminal-walletd"
           "$package_dir/bin/corbanu-walletd" --help >/dev/null
+          python3 scripts/smoke_wallet_package.py --package-dir "$package_dir" \
+            --probe "codex-rs/target/${TARGET}/release/examples/package_client_probe"
           wallet_home="${RUNNER_TEMP}/wallet-smoke-${TARGET}"
           "$package_dir/bin/corbanu-walletd" --codex-home "$wallet_home" &
           walletd_pid=$!
@@ -350,6 +358,12 @@ jobs:
             --bin codex-code-mode-host \
             --bin bwrap
 
+      - name: Build wallet package client probe
+        shell: bash
+        run: |
+          cargo build --manifest-path codex-rs/Cargo.toml --target "$TARGET" --release \
+            -p codex-wallet-daemon --example package_client_probe
+
       - name: Build standalone package archive
         shell: bash
         run: |
@@ -396,6 +410,8 @@ jobs:
           test ! -e "$package_dir/bin/pfterminal-acp"
           test ! -e "$package_dir/bin/pfterminal-walletd"
           "$package_dir/bin/corbanu-walletd" --help >/dev/null
+          python3 scripts/smoke_wallet_package.py --package-dir "$package_dir" \
+            --probe "codex-rs/target/${TARGET}/release/examples/package_client_probe"
           wallet_home="${RUNNER_TEMP}/wallet-smoke-${TARGET}"
           "$package_dir/bin/corbanu-walletd" --codex-home "$wallet_home" &
           walletd_pid=$!
@@ -503,6 +519,12 @@ jobs:
             --bin codex-command-runner \
             --bin codex-windows-sandbox-setup
 
+      - name: Build wallet package client probe
+        shell: bash
+        run: |
+          cargo build --manifest-path codex-rs/Cargo.toml --target "$TARGET" --release \
+            -p codex-wallet-daemon --example package_client_probe
+
       - name: Build standalone package archive
         shell: bash
         run: |
@@ -557,6 +579,8 @@ jobs:
             if (Test-Path (Join-Path $packageDir "bin/$legacyName")) { throw "package contains legacy command: $legacyName" }
           }
           & $walletDaemon --help | Out-Null
+          python scripts/smoke_wallet_package.py --package-dir $packageDir --probe "codex-rs/target/${env:TARGET}/release/examples/package_client_probe.exe"
+          if ($LASTEXITCODE -ne 0) { throw "packaged wallet client startup failed" }
           $walletHome = Join-Path $env:RUNNER_TEMP "wallet-smoke-${env:TARGET}"
           $walletProcess = Start-Process -FilePath $walletDaemon -ArgumentList @("--codex-home", $walletHome) -PassThru
           try {
