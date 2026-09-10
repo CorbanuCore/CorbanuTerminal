@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "model": "corbanu/deepseek-v4.1-flash",
+  "binary": "/mnt/HC_Volume_101713660/pfrpc/build-cache/cargo-workspaces/corbanu-wallet-launch-hotfix-db67e02208dd/debug/corbanu",
+  "checks": [
+    "visible in Corbanu API",
+    "cancel preserves current model",
+    "selection persists Corbanu provider and model",
+    "High reasoning and streaming request use exact public model",
+    "response renders",
+    "restart retains selected model"
+  ],
+  "fixtureRequests": 1,
+  "productionWrites": 0
+}

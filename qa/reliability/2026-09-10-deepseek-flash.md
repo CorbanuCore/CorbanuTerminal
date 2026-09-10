@@ -1,0 +1,17 @@
+# DeepSeek V4.1 Flash catalog integration
+
+User-authorized catalog integration: “add it”, resumed as “resume adding flash to the dropdown list”. Scope: one model on the existing Corbanu API route and picker; keep the existing default model and account settings. Product specification **Corbanu API — TO BUILD**: “The customer-facing model catalog uses Corbanu identities and displays Corbanu prices”; **Shipping MVP — LIVE**, **Multi-provider inference** includes DeepSeek and Corbanu providers.
+
+Worktree: `/mnt/HC_Volume_101713660/pfrpc/scratch/corbanu-wallet-launch-hotfix`, branch `fix/0.1.41-wallet-daemon-launch`, base `9a9922c626`. API checkout: `/home/pfrpc/repos/CorbanuAPI`, base `7dcac2c756becce1f760a04d1e0a88e9ab7ede97`.
+
+Public model `corbanu/deepseek-v4.1-flash`; upstream Vercel model `deepseek/deepseek-v4.1-flash`. The catalog entry owns its metadata directly, including image input, a 1,048,576-token context and High reasoning. The public model stays on the Corbanu API tab and uses existing credentials.
+
+The qualified upstream route is pinned to Fireworks so its versioned token prices cannot drift through provider fallback. Vercel's endpoint catalog reports $0.90/M input/output and $0.45/M cached input. A synthetic streamed tool call completed in 2.398 seconds, with 306 prompt tokens, 51 completion tokens, correct `report_result({"value":4})`, and gateway cost $0.0004213 including its existing $0.0001 team ZDR request charge. The new route exposes and includes that fee; existing route prices are unchanged. No team privacy setting is changed. API credentials and upstream routing metadata remain server-side.
+
+Sources: https://ai-gateway.vercel.sh/v1/models/deepseek/deepseek-v4.1-flash/endpoints and https://vercel.com/changelog/zero-data-retention-no-prompt-training-on-ai-gateway (checked 2026-09-10).
+
+Validation complete. The final focused Rust run passed all 83 model-manager and picker tests; provider-info tests also passed during the initial suite. All 37 API tests passed, as did API type checking/build and the final Terminal development build. Reviewed picker snapshots include the new route and its provider tab. The real Terminal PTY check confirms one Flash row, cancellation without changing the selected model, selection and persistence, High reasoning on the actual streamed request, rendered response, and restart persistence. It uses an isolated local HTTP fixture and synthetic credentials.
+
+The API deployed as Fly release 33 with both machines healthy. A separate live check of the deployed gateway modules used real upstream inference with an isolated in-memory balance store: tool arguments were correct, settlement charged 378 microdollars including the request fee, and duplicate submission returned 409 with only one upstream call. Production customer ledger state was not changed by this check. Public `/v1/models` exposes the new model and request fee. API implementation commit: `e7cee8c`; deployment evidence commit: `322589e`.
+
+Evidence is in [deepseek-flash-2026-09-10](deepseek-flash-2026-09-10/), including terminal captures, executable hash, test summary, and upstream/deployed gateway checks. `/home/pfrpc/.local/bin/corbanu-debug` launches this rebuilt candidate using the existing `/home/pfrpc/.corbanu` profile unless `CODEX_HOME` is explicitly set. Restart `corbanu-debug --yolo`, open `/model`, select the Corbanu API tab, then DeepSeek V4.1 Flash. This is an unpublished Terminal candidate; the normal installed public Terminal release is still 0.1.41.

@@ -66,6 +66,13 @@ cache-write, and output prices, plus the privacy boundary. API keys share the
 wallet's balance but retain separate creation, last-use, revocation, request,
 and spend attribution.
 
+The current debug candidate includes **DeepSeek V4.1 Flash** under `/model` →
+**Corbanu API**, using your existing API credential. Its model ID is
+`corbanu/deepseek-v4.1-flash`. The picker shows High reasoning and the published
+rates: $0.90/M input, $0.45/M cached input, $0.90/M output, plus $0.0001 per
+request. It supports image input, streaming and tool calls. Selecting it keeps
+the Corbanu API route when you restart Terminal.
+
 ## Wallet and API controls
 
 - **Unlock** grants signing capability to the current TUI for one action or the

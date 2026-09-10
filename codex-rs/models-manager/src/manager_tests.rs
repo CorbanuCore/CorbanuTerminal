@@ -527,6 +527,7 @@ async fn corbanu_api_public_models_inherit_exact_catalog_metadata() {
         ("corbanu/gpt-5.6-sol", "gpt-5.6-sol"),
         ("corbanu/kimi-k3", "vercel/moonshotai/kimi-k3"),
         ("corbanu/deepseek-v4-pro", "deepseek-v4-pro"),
+        ("corbanu/deepseek-v4.1-flash", "corbanu/deepseek-v4.1-flash"),
     ] {
         let public_info = manager.get_model_info(public_model, &config).await;
         let catalog_info = manager.get_model_info(catalog_model, &config).await;
