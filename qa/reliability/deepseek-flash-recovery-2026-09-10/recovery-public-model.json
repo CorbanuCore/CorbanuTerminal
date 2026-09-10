@@ -1,0 +1,22 @@
+{
+  "id": "corbanu/deepseek-v4.1-flash",
+  "object": "model",
+  "displayName": "DeepSeek V4.1 Flash",
+  "recommended": false,
+  "balanceRate": "standard",
+  "privacy": "third-party",
+  "supportsStreaming": true,
+  "pricing": {
+    "policy": "at-cost",
+    "markupPercent": 0,
+    "currency": "USD",
+    "unit": "per_million_tokens",
+    "version": "at-cost-2026-09-10.2",
+    "effectiveAt": "2026-09-10T00:00:00.000Z",
+    "inputUsd": "0.22",
+    "outputUsd": "0.66",
+    "cacheReadUsd": "0.007",
+    "cacheWriteUsd": "0.22",
+    "requestUsd": "0.0001"
+  }
+}

@@ -2848,7 +2848,7 @@
         "mode": "tokens",
         "limit": 10000
       },
-      "supports_parallel_tool_calls": true,
+      "supports_parallel_tool_calls": false,
       "context_window": 1048576,
       "max_context_window": 1048576,
       "max_output_tokens": 1048576,
@@ -2861,13 +2861,13 @@
         "capability": "fast",
         "billing": {
           "kind": "metered",
-          "input_milli_usd_per_million_tokens": 900,
-          "output_milli_usd_per_million_tokens": 900,
-          "cached_input_milli_usd_per_million_tokens": 450
+          "input_milli_usd_per_million_tokens": 220,
+          "output_milli_usd_per_million_tokens": 660,
+          "cached_input_milli_usd_per_million_tokens": 7
         }
       },
       "display_name": "DeepSeek V4.1 Flash",
-      "description": "At cost: $0.90/M input · $0.45/M cache read · $0.90/M output + $0.0001/request. Third-party inference.",
+      "description": "At cost: $0.22/M input · $0.007/M cache read · $0.66/M output + $0.0001/request. Third-party inference.",
       "default_reasoning_level": "high",
       "supported_reasoning_levels": [
         {

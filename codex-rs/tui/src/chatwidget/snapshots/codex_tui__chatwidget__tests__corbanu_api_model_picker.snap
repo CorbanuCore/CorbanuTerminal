@@ -10,7 +10,7 @@ expression: popup
 
 › 1. GLM 5.3 Flash (Recommended) (current)  Model: corbanu/glm-5.3-flash. At cost: $0.15/M input · $0.03/M cache read · $0.15/M cache
                                             write · $0.50/M output. Third-party inference.
-  2. DeepSeek V4.1 Flash                    Model: corbanu/deepseek-v4.1-flash. At cost: $0.90/M input · $0.45/M cache read · $0.90/M
+  2. DeepSeek V4.1 Flash                    Model: corbanu/deepseek-v4.1-flash. At cost: $0.22/M input · $0.007/M cache read · $0.66/M
                                             output + $0.0001/request. Third-party inference.
   3. Ambient GLM 5.2                        Model: z-ai/glm-5.2. Ambient: GLM 5.2 - $0.76/M input, $0.14/M cached input, $2.42/M output.
   4. GLM 5.3                                Model: corbanu/glm-5.3. Uses balance faster. At cost: $1.40/M input · $0.14/M cache read ·
