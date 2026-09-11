@@ -1,4 +1,4 @@
-import json, os, shlex, subprocess, tempfile, threading, time
+import json, os, shlex, shutil, subprocess, tempfile, threading, time
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
@@ -64,7 +64,12 @@ try:
   def launch():
    cmd=shlex.join(['env','-i',*[k+'='+v for k,v in env.items()],str(BIN),'--yolo','--no-alt-screen','-c','log_dir='+json.dumps(str(out/'logs'))])
    tmux('new-session','-d','-s',name,'-x','160','-y','45','-c',str(workspace),cmd);wait('permissions:')
-   assert 'tasknode team context --json' in (home/'skills/.system/tasknode-usage/references/tooling.md').read_text()
+   tooling=(home/'skills/.system/tasknode-usage/references/tooling.md').read_text()
+   snippet=tooling.split('## Team Context',1)[1].split('```bash',1)[1].split('```',1)[0]
+   helper_env={**env,'CORBANU_BIN':shutil.which('corbanu')}
+   check=subprocess.run(['bash','-c',snippet],env=helper_env,text=True,capture_output=True,timeout=30)
+   assert check.returncode==0,(check.stdout,check.stderr)
+   assert json.loads(check.stdout)==report(),check.stdout
   def stop():subprocess.run(['tmux','kill-session','-t',name],capture_output=True)
   try:
    launch();send('/tasknode');wait('Team Context');save('main-menu');choose('Team Context');wait('Status: current');save('team-menu')
@@ -78,7 +83,7 @@ try:
    send('/tasknode team');wait('Status: current');save('slash');stop();launch();send('/tasknode team');wait('Status: current');save('restart')
    assert state['posts']==0,state
    assert not subprocess.check_output(['git','-C',str(workspace),'status','--porcelain'],text=True).strip()
-   result={'repo':repo,'version':subprocess.check_output([str(BIN),'--version'],text=True).strip(),'ok':True,'checks':['CLI JSON exact report and authenticated route','Task Node menu entry','read-only pager with summaries and counts','previous-report status','failure and refresh recovery','cancel rejects late response','direct slash command','restart keeps linked account','no workspace changes or model calls'],'mode':'real terminal and keys, synthetic HTTP identity/report'}
+   result={'repo':repo,'version':subprocess.check_output([str(BIN),'--version'],text=True).strip(),'ok':True,'checks':['CLI JSON exact report and authenticated route','Task Node menu entry','read-only pager with summaries and counts','previous-report status','failure and refresh recovery','cancel rejects late response','direct slash command','restart keeps linked account','embedded guidance resolves old-release/new-debug helper without changing profile','no workspace changes or model calls'],'mode':'real terminal and keys, synthetic HTTP identity/report'}
    results.append(result);print(json.dumps(result),flush=True)
   finally:release.set();stop()
  (ROOT/'pty-results.json').write_text(json.dumps(results,indent=2)+'\n')

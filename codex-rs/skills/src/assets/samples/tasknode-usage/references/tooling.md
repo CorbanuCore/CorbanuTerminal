@@ -113,7 +113,29 @@ The helper reuses the same Corbanu Terminal vault session as the TUI and never p
 
 ## Team Context
 
-For collaborators' shared work, use `"$CORBANU_BIN" tasknode team context --json`. This reads the same report as the web Team page under the active profile's existing task-history grants. It returns members, shared work summaries, task counts, generation time and report freshness. Treat a previous or pending report as such. Unshared task history remains unavailable, and this command does not expose collaborators' private context documents.
+For collaborators' shared work, use `"$CORBANU_BIN" tasknode team context --json`. A local debug binary can support newer commands than the installed release. Before this read, check command support with `--help` and, if necessary, resolve a compatible installed helper without changing `CODEX_HOME` or `CORBANU_TASKNODE_PROFILE`:
+
+```bash
+if ! "$CORBANU_BIN" tasknode team context --help >/dev/null 2>&1; then
+  TEAM_CONTEXT_BIN=""
+  for candidate in corbanu-debug corbanu pfterminal-debug pfterminal; do
+    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" tasknode team context --help >/dev/null 2>&1; then
+      TEAM_CONTEXT_BIN="$(command -v "$candidate")"
+      break
+    fi
+  done
+  if [ -z "$TEAM_CONTEXT_BIN" ]; then
+    echo "No installed helper supports Team Context; update Corbanu Terminal." >&2
+    return 1 2>/dev/null || exit 1
+  fi
+  CORBANU_BIN="$TEAM_CONTEXT_BIN"
+fi
+"$CORBANU_BIN" tasknode team context --json
+```
+
+This fallback is only for missing command support. Do not retry an authentication or permission failure with another profile, home, or account.
+
+ This reads the same report as the web Team page under the active profile's existing task-history grants. It returns members, shared work summaries, task counts, generation time and report freshness. Treat a previous or pending report as such. Unshared task history remains unavailable, and this command does not expose collaborators' private context documents.
 
 The report can be read even when **Use in personal context** is off. That preference separately controls injection of a current report into Task Node chat. `context get` continues to return only the user's editable context document. Use the current Task Node collaboration API as authority; the historical PFTasks network-context/admin routes describe a different feature.
 

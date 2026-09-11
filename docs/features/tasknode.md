@@ -79,7 +79,7 @@ verification-related work.
 
 Run `/tasknode team` or choose **Team Context** from `/tasknode`, then select **Read full report**. The report shows collaborators' shared work summaries, rewarded-task counts, update time and freshness. Scroll with the pager keys; press Esc to return and choose **Refresh Team Context** for the latest report and sharing permissions.
 
-Agents can retrieve the same report with `corbanu tasknode team context --json`. This uses the active profile's linked Task Node account. Access follows the same task-history grants as the web Team page. Reading the report does not require enabling **Use in personal context**; that separate preference controls Task Node chat context. Private context documents are not exposed by this command.
+Agents can retrieve the same report with `corbanu tasknode team context --json`. While testing a newer local debug build, use `corbanu-debug tasknode team context --json`; the bundled agent guidance detects older helpers by command support. This uses the active profile's linked Task Node account. Access follows the same task-history grants as the web Team page. Reading the report does not require enabling **Use in personal context**; that separate preference controls Task Node chat context. Private context documents are not exposed by this command.
 
 If the report is pending or unavailable, its status is shown explicitly. An older report is labeled as previous. Manage teammates and sharing in the Task Node app.
 

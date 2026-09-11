@@ -12,6 +12,7 @@
       "cancel rejects late response",
       "direct slash command",
       "restart keeps linked account",
+      "embedded guidance resolves old-release/new-debug helper without changing profile",
       "no workspace changes or model calls"
     ],
     "mode": "real terminal and keys, synthetic HTTP identity/report"
@@ -29,6 +30,7 @@
       "cancel rejects late response",
       "direct slash command",
       "restart keeps linked account",
+      "embedded guidance resolves old-release/new-debug helper without changing profile",
       "no workspace changes or model calls"
     ],
     "mode": "real terminal and keys, synthetic HTTP identity/report"
