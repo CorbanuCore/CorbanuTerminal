@@ -12,7 +12,9 @@ excluded and no human checklist box is checked automatically.
   inert permissions/security cancellation, narrow token guidance, Claude
   catalog after masked setup/restart and independent Anthropic API catalog.
 - Mac existing profile: two bounded process launches, provider/model menus,
-  unchanged configuration and no password entry. This uses the stable target
+  consistent visible provider/model state and no password entry by the tester.
+  Configuration equality is an assertion reported by the runner's successful
+  exit, not a separately supplied before/after receipt. This uses the stable target
   from tmux, not native Applications-window automation or a model request.
 - Both platforms: new F08/F09 input probes keep empty/whitespace entry in the
   form, preserve masking during cancellation and keep a canary out of chat

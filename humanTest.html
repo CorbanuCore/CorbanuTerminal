@@ -211,8 +211,9 @@
     <aside style="border:1px solid var(--amber);border-radius:12px;padding:18px;margin-bottom:24px;color:var(--amber)" role="status">
       <strong>Next testing round is not ready yet.</strong>
       The branch now includes main through <code>0d1c3240d</code>; the latest published release remains 0.1.41.
-      The independent functional-test design, execution and evidence-check loop must finish before the next handoff.
-      Its two review passes await a budget amendment. Existing checkmarks and yellow prerequisites are unchanged.
+      The independent designer proposed 26 cases. Fresh regression/package checks passed, but the full journeys still have unverified conditions.
+      Both additional passes are complete. The evidence check failed readiness: recovery errors omit the affected provider, and custom-model chat status can omit provider identity. Existing human checkmarks are unchanged.
+      <a href="qa/provider-auth/pf-58/blind-20260910/report.html" style="color:inherit">Independent case-by-case report</a> ·
       <a href="qa/provider-auth/pf-58/main-reconciliation-20260910.md" style="color:inherit">Reconciliation record</a>
     </aside>
     <header>
@@ -221,8 +222,8 @@
       <p class="lede"><strong>Product repairs are staged; full human handoff remains gated.</strong> Use only the complete repaired package identified below, not the previous replacement. All 26 checks have a machine-coverage entry. Automated results and remaining live/platform prerequisites are recorded in the <a href="qa/provider-auth/pf-58/handoff-readiness.md">readiness report</a>; missing evidence is not a pass. No human checks have been accepted automatically.</p>
       <div class="release-strip">
         <span><strong>Candidate:</strong> Corbanu 0.1.41 · PF-58</span>
-        <span><strong>Main incorporated:</strong> <code>3cec54d99</code></span>
-        <span><strong>Combined base:</strong> <code>472b8fed5</code></span>
+        <span><strong>Main incorporated:</strong> <code>0d1c3240d</code></span>
+        <span><strong>Combined base:</strong> <code>acfc9f205</code></span>
         <span><strong>Recovery/picker follow-up:</strong> 10 Sep 2026 (Phoenix)</span>
         <span><strong>Machine:</strong> RTX · <code>travis@100.99.88.49</code></span>
         <span><strong>Branch:</strong> <code>feat/provider-reauth-health</code> · not merged to main</span>

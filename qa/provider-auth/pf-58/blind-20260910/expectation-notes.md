@@ -18,6 +18,14 @@ accepting an invalid key. F08 is unresolved against the designer's stronger
 expectation; deciding whether to validate on save or explicitly label unverified
 credentials is a product/UX decision, not silently assumed by this QA pass.
 
+The independent evidence check also identified concrete Linux UI omissions:
+the generic authentication warning does not name the affected provider, and
+chat status for identical custom model slugs does not identify the provider.
+These are recorded as failed expectations, not just missing tests. Environment
+credential guidance explicitly requires a launching-shell change and restart;
+that observed limit needs an explicit exception to the blanket same-session
+intent, not a claim that this recovery already works without restarting.
+
 Synthetic endpoint success is useful regression evidence but does not certify
 live OpenAI/Claude/Anthropic onboarding, browser handoff, every supported
 provider, billing route, or macOS consent. The original cases combine several

@@ -4,9 +4,15 @@
 
 [September 10 reconciliation](main-reconciliation-20260910.md) rebases the
 follow-up work onto a combined baseline containing current main and retains the
-security history. Application source is unchanged. The new code-blind functional
-loop has not run; its two additional passes await a review-budget amendment.
-Do not treat the historical results below as clearance for the next human round.
+security history. Application source is unchanged. The user approved exactly two
+additional passes. The independent designer's 26 cases are frozen; fresh Linux
+regressions (32/32), both package TMUX smokes and bounded Mac menu checks pass,
+but complete case expectations still have gaps. See the
+[independent case report](blind-20260910/report.html). Both authorized passes are
+complete. The independent evidence check failed readiness and identified missing
+provider names in recovery errors and custom-model chat status. Those Linux case
+variants are failed, not merely blocked; other complete journeys remain
+unverified. Historical results are not clearance for the next human round.
 
 ## September 10 Mac superseding note
 

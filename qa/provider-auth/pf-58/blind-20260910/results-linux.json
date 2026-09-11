@@ -30,7 +30,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F02",
@@ -50,7 +51,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F03",
@@ -70,7 +72,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F04",
@@ -90,7 +93,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F05",
@@ -110,7 +114,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F06",
@@ -130,7 +135,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F07",
@@ -150,7 +156,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F08",
@@ -170,7 +177,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F09",
@@ -190,7 +198,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F10",
@@ -210,7 +219,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F11",
@@ -230,12 +240,13 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F12",
-      "disposition": "blocked",
-      "summary": "Linux synthetic API/account rejection and same-session recovery are exercised; complete cross-route/profile/platform recovery, message-count and other-provider assertions are missing.",
+      "disposition": "failed",
+      "summary": "Observed failure: API-key and OpenAI-account recovery captures show only 'A provider credential was rejected' without the affected provider name. Same-session recovery succeeds, but the explicit affected-service/route error requirement fails. Other full-case variants remain unverified.",
       "candidate_sha256": "5ecd62f90574e1b6208625220abf93e431d347c1f2a91c9111c3512e81448062",
       "supporting_evidence": [
         {
@@ -249,8 +260,17 @@
         {
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
+        },
+        {
+          "path": "linux/success-captures/pf54-reauth-key/viewport.txt",
+          "sha256": "4419645c3a721bd77e6fa2c67d3eff3fdbc93086e8feb388c0fb2fb71c4b18e2"
+        },
+        {
+          "path": "linux/success-captures/pf54-reauth-openai/viewport.txt",
+          "sha256": "245ade72819fce1d48835d1254501e8523069a934e162282994ca6e5220fa98b"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F13",
@@ -270,7 +290,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F14",
@@ -290,12 +311,13 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F15",
-      "disposition": "blocked",
-      "summary": "Both packages show distinct Claude and Anthropic catalog entries. Linux duplicate-slug/current-identity tests run; the complete Mac duplicate-custom-provider and effort combination is not proven.",
+      "disposition": "failed",
+      "summary": "Observed failure: duplicate-slug and recovery chat captures show fixture-model and effort without a provider identifier, contrary to unambiguous current provider/model/effort in chat. Complete remaining variants are unverified.",
       "candidate_sha256": "5ecd62f90574e1b6208625220abf93e431d347c1f2a91c9111c3512e81448062",
       "supporting_evidence": [
         {
@@ -309,8 +331,21 @@
         {
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
+        },
+        {
+          "path": "linux/success-captures/pf54-reauth-key/viewport.txt",
+          "sha256": "4419645c3a721bd77e6fa2c67d3eff3fdbc93086e8feb388c0fb2fb71c4b18e2"
+        },
+        {
+          "path": "linux/success-captures/pf54-reauth-openai/viewport.txt",
+          "sha256": "245ade72819fce1d48835d1254501e8523069a934e162282994ca6e5220fa98b"
+        },
+        {
+          "path": "linux/success-captures/pf55-duplicateslug/viewport.txt",
+          "sha256": "39dcdf4c12a3e93b678c02d35bac36aa5f79fba91ffd00cfe2f8a6bcf51f1d39"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F16",
@@ -330,7 +365,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F17",
@@ -350,7 +386,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F18",
@@ -370,12 +407,13 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F19",
       "disposition": "blocked",
-      "summary": "Linux existing-config/custom/resume fixtures run and the real Mac profile opens twice unchanged. Historical migration range and live chat on that existing Mac profile are not proven.",
+      "summary": "Linux existing-config/custom/resume fixtures run; visible provider/model state is consistent across two real Mac profile launches. Historical migration range and live chat on that existing Mac profile are not proven.",
       "candidate_sha256": "5ecd62f90574e1b6208625220abf93e431d347c1f2a91c9111c3512e81448062",
       "supporting_evidence": [
         {
@@ -390,7 +428,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F20",
@@ -410,12 +449,13 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "macOS-specific; not applicable to Linux execution; see Mac record for overall prerequisite"
     },
     {
       "id": "PF58-F21",
       "disposition": "blocked",
-      "summary": "Linux tests run through SSH with real tmux keys and same-home restart. Client detach/reattach plus the complete account-login handoff sequence is not demonstrated.",
+      "summary": "Linux tests run through SSH with real tmux keys and same-home restart. Client detach/reattach plus the complete account-login handoff sequence is not demonstrated. External-environment recovery guidance explicitly requires restarting; this is an observed limitation, not same-process recovery.",
       "candidate_sha256": "5ecd62f90574e1b6208625220abf93e431d347c1f2a91c9111c3512e81448062",
       "supporting_evidence": [
         {
@@ -430,7 +470,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F22",
@@ -450,7 +491,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F23",
@@ -470,7 +512,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F24",
@@ -490,7 +533,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F25",
@@ -510,7 +554,8 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F26",
@@ -530,20 +575,29 @@
           "path": "linux/inputs-ready/result.json",
           "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
         }
-      ]
+      ],
+      "applicability": "applicable"
     }
   ],
   "human_acceptance": false,
   "evidence_check": {
     "agent": "/root/blind_functional_designer",
-    "verdict": "pending"
+    "verdict": "fail",
+    "artifact": {
+      "path": "evidence-check.md",
+      "sha256": "0b4fb9450b76d6d8ba0c0f964b84849f894032ac78ccd41bab6bd265f16898a5"
+    }
+  },
+  "execution_manifest": {
+    "path": "execution-artifacts.json",
+    "sha256": "36ddb4fed1b91020dae7d292a031b60ee52f9308586bb4726ba84efbb175b891"
   },
   "review_budget": {
     "used": 7,
     "limit": 5,
     "ledger": {
       "path": "review-ledger.md",
-      "sha256": "1e76680f5b5920047c96de748d8c6d4fbc3b84af0f8d37b28b36c77027ac5c84"
+      "sha256": "72761c1002ac88f92ee04759087cead6ce0ab0a7b8ef77acfbf663630cfecdf6"
     },
     "extension": {
       "by": "Travis Good (user)",

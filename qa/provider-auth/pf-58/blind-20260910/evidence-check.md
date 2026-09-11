@@ -1,0 +1,43 @@
+Readiness verdict: **fail** against the frozen proposal. Most cases remain blocked by incomplete evidence, but PF58-F12 contains an observed failure that should not be classified solely as blocked.
+
+The proposal is preserved: all 26 IDs appear exactly once in `design.json` and each platform result, with 23 blocker and 3 advisory priorities. The extracted conditions, actions, and expectations match `original-proposal.md`. All 15 distinct referenced artifact SHA256 values match; both design hashes and all per-case candidate hashes agree. The 32 Linux binary-hash records contain the declared Linux executable hash. Package result executable/host hashes agree with `candidate-manifest.md`.
+
+These checks establish packet consistency. The binaries and source-comparison receipt are not supplied inside this packet, so I could not independently establish executable contents, source equivalence, or build provenance. Raw captures also lack individual hash references in the platform results.
+
+| Finding | Cases | Classification and evidence |
+|---|---|---|
+| Authentication failure does not identify the affected provider. | PF58-F12; also relevant to F23 | **Observed blocker failure.** `linux/success-captures/pf54-reauth-key/viewport.txt` and `scrollback.txt` say “A provider credential was rejected” and instruct the user to select “the affected provider,” without naming it. The accompanying error identifies a localhost URL. `pf54-reauth-openai/viewport.txt` and `scrollback.txt` likewise omit the account/provider name from the authentication error. Both journeys subsequently show recovery responses, but successful recovery does not satisfy the separate diagnostic requirement. |
+| Current provider is absent from the captured chat status. | PF58-F15, F16; also F12 | **Observed UI omission.** `linux/success-captures/pf55-duplicateslug/{viewport,scrollback}.txt` and the recovery captures display `fixture-model` and effort without a provider identifier. This conflicts with the brief’s requirement that current provider/model/effort be unambiguous in chat. The captures do not independently establish the entire duplicate-provider setup or actual request routing. |
+| Environment-owned credential recovery explicitly requires restart. | PF58-F12, F21 | **Observed limitation requiring an explicit scope decision.** `linux/success-captures/pf54-reauth-openai-env/viewport.txt` directs the user to update the launching shell and restart Corbanu. This is not evidence of same-process recovery. The frozen brief contains no environment-credential exception; the packet should identify this incompatibility rather than subsume it under missing variants. This capture alone does not demonstrate a failed expired-credential recovery attempt. |
+| An arbitrary invalid credential is saved as “Enabled · configured.” | PF58-F08, F11 | **Ambiguous expectation, not proven authentication acceptance.** Both `mac-inputs-ready/invalid-submitted.txt` and `linux/inputs-ready/invalid-submitted.txt` show that label without an “unverified” qualification. The label can describe stored configuration rather than health, so it does not alone prove a false claim of successful authentication. Keep F08 blocked pending the product meaning of “configured,” remote validation evidence, and other-provider checks. Explicitly retain this observed behavior. |
+| Repeated packaged-tool failures occur in the account-recovery fixture. | PF58-F22 | **Fixture/service evidence gap.** `linux/success-captures/pf54-reauth-openai/scrollback.txt` records `codex_apps` HTTP 404 startup failures before and after account recovery. The synthetic endpoint context prevents attributing these to a production defect. The successful model response does not establish tool recovery. |
+| Initial input probes stopped before credential entry. | PF58-F08, F09 | **Fixture errors, honestly disclosed.** `mac-inputs/last.txt` and `linux/inputs/last.txt` show trust prompts; corresponding results are incomplete. The `*-ready` results and captures substantiate the corrected limited input probes. |
+| Native launch, consent, live authentication, billing and complete recovery remain unverified. | PF58-F02–F07, F12–F13, F18–F23 | **Missing evidence.** Existing-profile menu captures, synthetic responses and package smoke results cannot close these journeys. The packet appropriately disclaims these claims. |
+
+The three requested execution claims have the following support:
+
+- **32 Linux regression checks: substantiated as an execution receipt.** `linux/tmux-tests.log` contains 32 individual PASS records and a final `32 passed, 57 skipped` summary. Two checks concern binary timestamp representation and selection parsing; therefore “32 complete tmux user journeys” would be inaccurate. Success captures substantiate visible states and several synthetic responses, not every request assertion suggested by test names.
+- **Both package smoke results: substantiated within their synthetic scope.** Each package has four tool-output records containing host, successful shell, and MCP markers in `synthetic-tool-results.json`, corroborated by `handoff-0.txt` through `handoff-2.txt` and `restart.txt`. Both `stream-recovery.txt` captures show interruption followed by `STREAM_RECOVERY_OK`. Catalog captures support distinct subscription/API menus and persisted Claude selection. The exact Ctrl+C key, concurrent process overlap, and inert permission/security cancellation are reported by result JSON; the supplied captures do not independently demonstrate every one of those details. These are not full provider or native-security passes.
+- **Two existing-profile Mac menu launches: substantiated at process/menu level.** `mac-existing/result.json` records two distinct PIDs and timings; both provider/model capture pairs show the expected menus and consistent visible selection. This supports two bounded menu launches using the reported stable target. It does not prove native Applications invocation, absence of unseen native prompts, unchanged configuration bytes, or live chat.
+
+Corrections required:
+
+1. Record the observed PF58-F12 diagnostic failure separately and mark that case failed for the demonstrated Linux variant. Missing remaining steps do not turn an observed failed expectation into “blocked.”
+2. Record the chat provider-identity omission and the environment-recovery restart requirement explicitly.
+3. Replace “configuration unchanged”/“profile opens twice unchanged” with “visible provider/model state was consistent across two launches,” unless a before/after configuration comparison is supplied.
+4. Keep platform applicability separate from overall readiness. PF58-F20 is macOS-specific and PF58-F21 Linux-specific; retaining their IDs in both files is fine, but the other-platform entry should identify its applicability rather than imply a local test blocker.
+5. Describe Linux partial passes as synthetic regression checks, and distinguish result-reported assertions from independently visible capture evidence. Most existing disclaimers already do this well.
+
+Exact access scope for this pass:
+
+All filesystem access remained under `/Volumes/CorbanuDrive/Corbanu/.codex-work/pf58-blind-20260910/evidence/`.
+
+- Read/parsed: `original-proposal.md`, `design.json`, `candidate-manifest.md`, `execution-notes.md`, `expectation-notes.md`, `results-mac.json`, `results-linux.json`, `report.html`.
+- Read logs/results: `linux/tmux-tests.log`, `linux/package-tmux.log`; all files in `mac-existing/`, `mac-inputs/`, `linux/inputs/`, `mac-inputs-ready/`, `linux/inputs-ready/`, `mac-package/`, and `linux/package-tmux/`.
+- Read all `linux/success-captures/*/viewport.txt` and `*/binary.sha256`, plus `linux/candidate.sha256`.
+- Additionally read `scrollback.txt` within these success-capture directories: `pf54-reauth-key`, `pf54-reauth-openai`, `pf54-reauth-environment`, `pf54-reauth-openai-env`, `pf55-duplicateslug`, `pf55-inactivecurrentcancel`.
+- Hash-only reads additionally included `packet/intent.md`, the three `packet/*.png` originals, `designer-session.md`, `review-ledger.md`, and `budget-amendment.md`.
+- Enumerated filenames and file sizes throughout the permitted evidence directory.
+- Used seven `functions.exec` calls invoking `tools.exec_command`, with shell reads and Python standard-library read/parse/hash computations. Sent one progress message to the parent through `collaboration.send_message`.
+
+No artifacts were executed, files modified, tests run, accounts operated, network sources accessed, or reviewers spawned. No implementation/test source files were opened; the permitted execution log contained incidental compiler diagnostic excerpts.

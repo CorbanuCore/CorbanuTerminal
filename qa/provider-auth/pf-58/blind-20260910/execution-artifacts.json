@@ -1,0 +1,766 @@
+[
+  {
+    "path": "mac-package/anthropic-catalog-after-setup.txt",
+    "sha256": "ef84bcb32b03a8cd41f121ba866dd126ca92d972d60e98369cf17527bd3ddef0"
+  },
+  {
+    "path": "mac-package/anthropic-manager-after-setup.txt",
+    "sha256": "c2ca013e6d4023efc6b0bbfde655cc6cd26d89b9325efb32a16f2cd1a13a8dfa"
+  },
+  {
+    "path": "mac-package/claude-catalog-after-restart.txt",
+    "sha256": "b832bc913741b9d0e7d28c5e525602d3627e963f1d5398ae56fd17369a9c2d67"
+  },
+  {
+    "path": "mac-package/claude-catalog-after-setup.txt",
+    "sha256": "52e5eee3b109714130403af870bb18d090ce23d762d865724af536818faeb136"
+  },
+  {
+    "path": "mac-package/claude-guidance-40.txt",
+    "sha256": "b48c9a5929a6a30a85d63ccfa83e8681328172f8895409a422712812a2065c67"
+  },
+  {
+    "path": "mac-package/final-0.txt",
+    "sha256": "c0feb463eb6624eaff1bd7513029acea8fb71d7dc1879c647dfd0cc9544ea495"
+  },
+  {
+    "path": "mac-package/final-1.txt",
+    "sha256": "01d9b47ca27282b32720eaafb2a99ad0c89bf646fa368ff1c11e9687b58d4925"
+  },
+  {
+    "path": "mac-package/final-2.txt",
+    "sha256": "331defde7408fc3633ca7b467c98158347d7f54d73dc1b188ce2a4d6ec2c32d2"
+  },
+  {
+    "path": "mac-package/handoff-0.txt",
+    "sha256": "b75e0a48137c94dab11d9499a941c1643e0fb6ae7b82606a7370b3c1b6755792"
+  },
+  {
+    "path": "mac-package/handoff-1.txt",
+    "sha256": "01d9b47ca27282b32720eaafb2a99ad0c89bf646fa368ff1c11e9687b58d4925"
+  },
+  {
+    "path": "mac-package/handoff-2.txt",
+    "sha256": "331defde7408fc3633ca7b467c98158347d7f54d73dc1b188ce2a4d6ec2c32d2"
+  },
+  {
+    "path": "mac-package/provider-inventory.txt",
+    "sha256": "b3e798e858e062e4dd7913181adf4dfb37349bc0bcfd82865ac94446ba260276"
+  },
+  {
+    "path": "mac-package/restart.txt",
+    "sha256": "b71c151a2207cb6a70dd20ebc96c0d910a266e81ee16917205c77788f6ac7921"
+  },
+  {
+    "path": "mac-package/result.json",
+    "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+  },
+  {
+    "path": "mac-package/stream-recovery.txt",
+    "sha256": "8cef9098893bfd5fcac7f47aa275c45a8540f4572e6a7c5fd197ccb770059352"
+  },
+  {
+    "path": "mac-package/synthetic-tool-results.json",
+    "sha256": "19510062e6565128af0015584907cb55b1d61ba3c945207708111e272a336dce"
+  },
+  {
+    "path": "mac-existing/models-0.txt",
+    "sha256": "0560669a13f9534602df0153209d6dde72426d6b627749a29c06a7bb8fdb4034"
+  },
+  {
+    "path": "mac-existing/models-1.txt",
+    "sha256": "0560669a13f9534602df0153209d6dde72426d6b627749a29c06a7bb8fdb4034"
+  },
+  {
+    "path": "mac-existing/providers-0.txt",
+    "sha256": "bbc3bfb76955d1cc6e2e12795814884a1a9877fba7641a4db46987a6312bf6a6"
+  },
+  {
+    "path": "mac-existing/providers-1.txt",
+    "sha256": "bbc3bfb76955d1cc6e2e12795814884a1a9877fba7641a4db46987a6312bf6a6"
+  },
+  {
+    "path": "mac-existing/result.json",
+    "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+  },
+  {
+    "path": "mac-inputs-ready/cancelled.txt",
+    "sha256": "c59730c41b4ff6197edb87512a3ab7003928fecfe056c18fd7e83caea05cdaf0"
+  },
+  {
+    "path": "mac-inputs-ready/empty.txt",
+    "sha256": "2a72972e58ee1c02ef2aac43099ac3d4c7a6fe95af9cd0fb3f745d1e4a1be1ae"
+  },
+  {
+    "path": "mac-inputs-ready/invalid-submitted.txt",
+    "sha256": "a8ca884e05fdfae373960f9425cd396d25fb8f646c413c69a7c365e2e633dedc"
+  },
+  {
+    "path": "mac-inputs-ready/last.txt",
+    "sha256": "a8ca884e05fdfae373960f9425cd396d25fb8f646c413c69a7c365e2e633dedc"
+  },
+  {
+    "path": "mac-inputs-ready/masked.txt",
+    "sha256": "415ec2fe774d925571e81ab77f8e0ca9f8266b0b55e4cf83d1e9236170de0137"
+  },
+  {
+    "path": "mac-inputs-ready/result.json",
+    "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+  },
+  {
+    "path": "mac-inputs-ready/scrollback.txt",
+    "sha256": "a8ca884e05fdfae373960f9425cd396d25fb8f646c413c69a7c365e2e633dedc"
+  },
+  {
+    "path": "mac-inputs-ready/whitespace.txt",
+    "sha256": "e10e09dc30b0e3de2e63729df65b149b694f30bbdc8481f40026d29800e5ee2e"
+  },
+  {
+    "path": "linux/candidate.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/inputs/last.txt",
+    "sha256": "275f9bc2161a6fbdf0b84f056c34f5fb82663cc28ca49fd9600eaaa1681b6dc9"
+  },
+  {
+    "path": "linux/inputs/result.json",
+    "sha256": "6357ddfeba070cf3c186a4b81c96c6495b63723169c904b0927e60bedb2512c4"
+  },
+  {
+    "path": "linux/inputs-ready/cancelled.txt",
+    "sha256": "c7dcda682781ce4977629fd3e374c0fb658990c7b2ca852edbe88961dbe63fd5"
+  },
+  {
+    "path": "linux/inputs-ready/empty.txt",
+    "sha256": "cb0d7ae32876f9f897cd91be911ebe4cbdb8fb3c9f3ce54f5be18ff036b5d464"
+  },
+  {
+    "path": "linux/inputs-ready/invalid-submitted.txt",
+    "sha256": "58db1c7b18d4912de45a311dc43108008da8d1dd2d21c96b699ab529ff2a2eab"
+  },
+  {
+    "path": "linux/inputs-ready/last.txt",
+    "sha256": "58db1c7b18d4912de45a311dc43108008da8d1dd2d21c96b699ab529ff2a2eab"
+  },
+  {
+    "path": "linux/inputs-ready/masked.txt",
+    "sha256": "836f1424e0ffc456e056bbe5d4028b170e417e24d78a5538617b20ff9b72253b"
+  },
+  {
+    "path": "linux/inputs-ready/result.json",
+    "sha256": "7b4b11275cb690aee761c5ba98202fb1bd42255b72853cbcb0cbfa71cd208cdb"
+  },
+  {
+    "path": "linux/inputs-ready/scrollback.txt",
+    "sha256": "30dc5e00ea6061ef4c3002573579d12ebdd6a9dd757a0387db3079bcad59facd"
+  },
+  {
+    "path": "linux/inputs-ready/whitespace.txt",
+    "sha256": "404e46788fa5e49714e9a2e61523b3062c692c17631ee77b4bbc5cd603b657fc"
+  },
+  {
+    "path": "linux/package-tmux/anthropic-catalog-after-setup.txt",
+    "sha256": "d19edbdd1cf38ad944515443ef891609f17e372475c8b3b597c0a71e7c35eeb6"
+  },
+  {
+    "path": "linux/package-tmux/anthropic-manager-after-setup.txt",
+    "sha256": "d353dffc45e62289ad94089b5cd180fdb00c73adda6ed130659af504ff2643e1"
+  },
+  {
+    "path": "linux/package-tmux/claude-catalog-after-restart.txt",
+    "sha256": "eae1173d24cf08e9fa9eeff2f4252c114bb01c225038edd0a8cff56b067df3f4"
+  },
+  {
+    "path": "linux/package-tmux/claude-catalog-after-setup.txt",
+    "sha256": "4ac8d9c0e35702977731bb0ecc7790cd431de35de8cc00f30c244448f54a85c5"
+  },
+  {
+    "path": "linux/package-tmux/claude-guidance-40.txt",
+    "sha256": "f528f7bdd7296c08b4c4c7a3a3f07ba65d845713db2dd505acfbaec824e79f95"
+  },
+  {
+    "path": "linux/package-tmux/final-0.txt",
+    "sha256": "815b809e5cd814ad5320e3b8a0ee9d95308716d8aad95dfe32b31db4585d039a"
+  },
+  {
+    "path": "linux/package-tmux/final-1.txt",
+    "sha256": "d8eeecc798e4eeba0c47b0f4f80281126690a2e44f05eba1d9666b3d6f7042a2"
+  },
+  {
+    "path": "linux/package-tmux/final-2.txt",
+    "sha256": "77edbeff333b788c9d2da681827a5fdda168f2029fa91337572f7ba42dec21b2"
+  },
+  {
+    "path": "linux/package-tmux/handoff-0.txt",
+    "sha256": "5f554f5bcdcb1602f3952476a902e1febf9b03fea8be425e7e12c9b6829a9bec"
+  },
+  {
+    "path": "linux/package-tmux/handoff-1.txt",
+    "sha256": "d8eeecc798e4eeba0c47b0f4f80281126690a2e44f05eba1d9666b3d6f7042a2"
+  },
+  {
+    "path": "linux/package-tmux/handoff-2.txt",
+    "sha256": "77edbeff333b788c9d2da681827a5fdda168f2029fa91337572f7ba42dec21b2"
+  },
+  {
+    "path": "linux/package-tmux/provider-inventory.txt",
+    "sha256": "b3e798e858e062e4dd7913181adf4dfb37349bc0bcfd82865ac94446ba260276"
+  },
+  {
+    "path": "linux/package-tmux/restart.txt",
+    "sha256": "5f554f5bcdcb1602f3952476a902e1febf9b03fea8be425e7e12c9b6829a9bec"
+  },
+  {
+    "path": "linux/package-tmux/result.json",
+    "sha256": "e49775f8e7636dabf4cc151a6924d4b78da57e4e9aecf6ab4389a8d4875fd6ac"
+  },
+  {
+    "path": "linux/package-tmux/stream-recovery.txt",
+    "sha256": "b702541127f452ae499f25d8b4472630e500f42a36bace92878a7f9fc1d97671"
+  },
+  {
+    "path": "linux/package-tmux/synthetic-tool-results.json",
+    "sha256": "bd213f53a0715a3c99ab6535f92b38a7cde12cb505c8f3d66529e1167b47534b"
+  },
+  {
+    "path": "linux/package-tmux.log",
+    "sha256": "0cd14eba78ad1df4b80b89b1a4b4075f9c4128bfaf67c4824f48f709fc05d3ec"
+  },
+  {
+    "path": "linux/success-captures/pf54-ambient-glm-only/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-ambient-glm-only/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-ambient-glm-only/scrollback.txt",
+    "sha256": "fc433f54bcaf2b6c9a680621a59c0a87d11a140dc77c30a2ef4baf506a55be8d"
+  },
+  {
+    "path": "linux/success-captures/pf54-ambient-glm-only/viewport.txt",
+    "sha256": "191b5a4ed2974dd61faf833ef1052b3f3ead44edb4bcca6876619497162944b8"
+  },
+  {
+    "path": "linux/success-captures/pf54-api-setup-recovery/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-api-setup-recovery/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-api-setup-recovery/provider-eligibility.json",
+    "sha256": "ad77961a1775954ef48f5f460626e3cbeb3a4475ca710d3721bc6a6df7b07e15"
+  },
+  {
+    "path": "linux/success-captures/pf54-api-setup-recovery/scrollback.txt",
+    "sha256": "04415d45e178ed7c31f06240e21f0094b34dc595f33975c09bb99564c881908a"
+  },
+  {
+    "path": "linux/success-captures/pf54-api-setup-recovery/viewport.txt",
+    "sha256": "119667f67fae02d614aa6981a7ab690475e0732028ef6db24da8ef47dc2c5dc7"
+  },
+  {
+    "path": "linux/success-captures/pf54-astra-reasoning-cancel/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-astra-reasoning-cancel/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-astra-reasoning-cancel/scrollback.txt",
+    "sha256": "3e2c6b3f1b9760b413fc6ffe9fad49dc515311d3b94b81a774b4aca700ffdf8d"
+  },
+  {
+    "path": "linux/success-captures/pf54-astra-reasoning-cancel/viewport.txt",
+    "sha256": "eeb10aed370f13e9f955aa7b925c2878f06b2f92ba35099fe76fa6f38f5eb3ca"
+  },
+  {
+    "path": "linux/success-captures/pf54-astra-selected-restart-false/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-astra-selected-restart-false/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-astra-selected-restart-false/scrollback.txt",
+    "sha256": "df09bf89fcd72297f9114ed2d8a8e9bd6a5a6a1b92180f225a5ce756214ac09e"
+  },
+  {
+    "path": "linux/success-captures/pf54-astra-selected-restart-false/viewport.txt",
+    "sha256": "5bb63019364b7e95a27ca5e4645c384004ed2f197db4b5095de3e2745eb3570f"
+  },
+  {
+    "path": "linux/success-captures/pf54-astra-selected-restart-true/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-astra-selected-restart-true/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-astra-selected-restart-true/scrollback.txt",
+    "sha256": "fd2308d3bf61b569f98855ee80e449dbbd5ba5f7c671867ae8d0baa863d747b4"
+  },
+  {
+    "path": "linux/success-captures/pf54-astra-selected-restart-true/viewport.txt",
+    "sha256": "875845d2fe0ebe774aa128498eeaf942112533a0e0e8bca5f8b8b99cd9c0c375"
+  },
+  {
+    "path": "linux/success-captures/pf54-catalog-parity/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-catalog-parity/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-catalog-parity/scrollback.txt",
+    "sha256": "200d312eb29a7330b12bc96645b5f669a59307219e55a1a36011b79e9889ba21"
+  },
+  {
+    "path": "linux/success-captures/pf54-catalog-parity/viewport.txt",
+    "sha256": "829c96da32c86c5f1a5f8fd821c25ca43d76a228fff8e82b1c036002db23c003"
+  },
+  {
+    "path": "linux/success-captures/pf54-claude-recovery-cancel/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-claude-recovery-cancel/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-claude-recovery-cancel/provider-eligibility.json",
+    "sha256": "ad77961a1775954ef48f5f460626e3cbeb3a4475ca710d3721bc6a6df7b07e15"
+  },
+  {
+    "path": "linux/success-captures/pf54-claude-recovery-cancel/scrollback.txt",
+    "sha256": "e68bf13563ef26413396dff2a1e9b6b163bff5e1de1f18aece04b93044f7abb3"
+  },
+  {
+    "path": "linux/success-captures/pf54-claude-recovery-cancel/viewport.txt",
+    "sha256": "6cf3e0dd9c991428e4bc56576d98dd08046da587b1034d47739bbfab28cd3189"
+  },
+  {
+    "path": "linux/success-captures/pf54-current-cancel/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-current-cancel/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-current-cancel/scrollback.txt",
+    "sha256": "fa106cda8d2760db92b2ad1ddb084d0b646522c025d1dd0d8b09b81937d970f8"
+  },
+  {
+    "path": "linux/success-captures/pf54-current-cancel/viewport.txt",
+    "sha256": "aca72e4e17c41d70b9c488e262d31ce378f99aa28318a7634b5f5ef237545691"
+  },
+  {
+    "path": "linux/success-captures/pf54-current-replacement/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-current-replacement/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-current-replacement/provider-eligibility.json",
+    "sha256": "1a399dd0fd120b3a70518b7d7bcd9af1406f922d1ef1ebd313626b2683e317da"
+  },
+  {
+    "path": "linux/success-captures/pf54-current-replacement/scrollback.txt",
+    "sha256": "f1948117c2cc89101d6ba2165af1542dc231233eb4a45d967254b61f8466d401"
+  },
+  {
+    "path": "linux/success-captures/pf54-current-replacement/viewport.txt",
+    "sha256": "b1f22a74af226c4fefdcfb9c25d7f084639396a99635922c853898e97d343645"
+  },
+  {
+    "path": "linux/success-captures/pf54-current-replacement-restart/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-current-replacement-restart/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-current-replacement-restart/provider-eligibility.json",
+    "sha256": "1a399dd0fd120b3a70518b7d7bcd9af1406f922d1ef1ebd313626b2683e317da"
+  },
+  {
+    "path": "linux/success-captures/pf54-current-replacement-restart/scrollback.txt",
+    "sha256": "152b7b14c53861430bc0ed344967b0f67265af49111e840b04fe0534af36f71a"
+  },
+  {
+    "path": "linux/success-captures/pf54-current-replacement-restart/viewport.txt",
+    "sha256": "8fd94b064ce8aa62bf5752e4d6d606773df56dbd73585fd67f31d2dd51adffbc"
+  },
+  {
+    "path": "linux/success-captures/pf54-environment-copy/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-environment-copy/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-environment-copy/provider-eligibility.json",
+    "sha256": "ad77961a1775954ef48f5f460626e3cbeb3a4475ca710d3721bc6a6df7b07e15"
+  },
+  {
+    "path": "linux/success-captures/pf54-environment-copy/scrollback.txt",
+    "sha256": "c7b963bf588aeafaa79f0bf015ba31bfe55560d93d5c089f5637487c52531dc1"
+  },
+  {
+    "path": "linux/success-captures/pf54-environment-copy/viewport.txt",
+    "sha256": "38ac01e890591b8772b6c05b1de886d5cbe34660990a907236aac2d89c9f9a04"
+  },
+  {
+    "path": "linux/success-captures/pf54-noncurrent-inactive/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-noncurrent-inactive/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-noncurrent-inactive/provider-eligibility.json",
+    "sha256": "e9a7bdb60db3531db15b89a74d01438eabf8c323f367b716f3777e2367f088fc"
+  },
+  {
+    "path": "linux/success-captures/pf54-noncurrent-inactive/scrollback.txt",
+    "sha256": "e8576c742896933ae50c81f7a931cd915075bb89c75df5b54e897397a93c752e"
+  },
+  {
+    "path": "linux/success-captures/pf54-noncurrent-inactive/viewport.txt",
+    "sha256": "18c4b22147a248194aa6b239a5de74e0a337ade4293c48fa0d4033eba95f475e"
+  },
+  {
+    "path": "linux/success-captures/pf54-noncurrent-retention-request/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-noncurrent-retention-request/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-noncurrent-retention-request/provider-eligibility.json",
+    "sha256": "ad77961a1775954ef48f5f460626e3cbeb3a4475ca710d3721bc6a6df7b07e15"
+  },
+  {
+    "path": "linux/success-captures/pf54-noncurrent-retention-request/scrollback.txt",
+    "sha256": "9bc4e7e319f8a57c56a7defd7ac1109f064aaccb8bcd2251bd40855f0b4d28bd"
+  },
+  {
+    "path": "linux/success-captures/pf54-noncurrent-retention-request/viewport.txt",
+    "sha256": "fc84a40a8b41a63379bc3c6f8834fc6057a8899a4127d63b2855584042c5948a"
+  },
+  {
+    "path": "linux/success-captures/pf54-openai-cancel-retry/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-openai-cancel-retry/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-openai-cancel-retry/scrollback.txt",
+    "sha256": "200d312eb29a7330b12bc96645b5f669a59307219e55a1a36011b79e9889ba21"
+  },
+  {
+    "path": "linux/success-captures/pf54-openai-cancel-retry/viewport.txt",
+    "sha256": "829c96da32c86c5f1a5f8fd821c25ca43d76a228fff8e82b1c036002db23c003"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-environment/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-environment/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-environment/scrollback.txt",
+    "sha256": "66060723921bda377b374f83a3c7f1ff5ab52ac56f3bad629471237e5ff5db2c"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-environment/viewport.txt",
+    "sha256": "6cc41c0b114414e8b974ade3614bbfde9f0fd509bd65d3f48764654a3f94c7c9"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-key/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-key/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-key/provider-eligibility.json",
+    "sha256": "ad77961a1775954ef48f5f460626e3cbeb3a4475ca710d3721bc6a6df7b07e15"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-key/scrollback.txt",
+    "sha256": "9806db908098ea969518f86552c9b46dec6697f416b6240e0079a1066da4dcee"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-key/viewport.txt",
+    "sha256": "4419645c3a721bd77e6fa2c67d3eff3fdbc93086e8feb388c0fb2fb71c4b18e2"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-openai/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-openai/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-openai/provider-eligibility.json",
+    "sha256": "ad77961a1775954ef48f5f460626e3cbeb3a4475ca710d3721bc6a6df7b07e15"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-openai/scrollback.txt",
+    "sha256": "02383f71ec0da6bdb1b175345f42947c36b36b16b47c6d9c457725a9083b93a8"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-openai/viewport.txt",
+    "sha256": "245ade72819fce1d48835d1254501e8523069a934e162282994ca6e5220fa98b"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-openai-env/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-openai-env/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-openai-env/scrollback.txt",
+    "sha256": "78285ff8f6d40c512ae6ad58938e05a6e25cf0561829324c4c28036fe9584e5f"
+  },
+  {
+    "path": "linux/success-captures/pf54-reauth-openai-env/viewport.txt",
+    "sha256": "41320111628d4023959cc51c856b2fed814b4a61e537992e0ea98e2cacaf764d"
+  },
+  {
+    "path": "linux/success-captures/pf55-activeruntimepermissions/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf55-activeruntimepermissions/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf55-activeruntimepermissions/scrollback.txt",
+    "sha256": "b5e09e47618488dc3e9ef4ceeef85cb5a5045eb66fab22ab752a7d1f6e4d2744"
+  },
+  {
+    "path": "linux/success-captures/pf55-activeruntimepermissions/viewport.txt",
+    "sha256": "e4798943d9667b255f63f065ec5a3ee3764b183234c72afbdc5adfb0c9111be1"
+  },
+  {
+    "path": "linux/success-captures/pf55-commandauth/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf55-commandauth/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf55-commandauth/scrollback.txt",
+    "sha256": "ec0c837a2d79a6e59b40fbec7614475bdee5743dcb966a85155b3fc5f6b32593"
+  },
+  {
+    "path": "linux/success-captures/pf55-commandauth/viewport.txt",
+    "sha256": "764cba6e4bda36f0c5ce0f3517bf3a2ba2a14fdee4815ecc700bbb592f2e83f9"
+  },
+  {
+    "path": "linux/success-captures/pf55-duplicateslug/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf55-duplicateslug/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf55-duplicateslug/scrollback.txt",
+    "sha256": "54deb39b35bc2af86c3e1be8d6290cca7d82bc3f9d4856fe2f4cdb3d28a5be6a"
+  },
+  {
+    "path": "linux/success-captures/pf55-duplicateslug/viewport.txt",
+    "sha256": "39dcdf4c12a3e93b678c02d35bac36aa5f79fba91ffd00cfe2f8a6bcf51f1d39"
+  },
+  {
+    "path": "linux/success-captures/pf55-environment/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf55-environment/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf55-environment/scrollback.txt",
+    "sha256": "60c3e9fa95403a90e66a74af62c527038bfaf1082aaa5746f7cf77a28311ac77"
+  },
+  {
+    "path": "linux/success-captures/pf55-environment/viewport.txt",
+    "sha256": "dde758a1313ed911009b9a1cf4738da85d19b9f9cb8ee3d80f7f879a030dbcba"
+  },
+  {
+    "path": "linux/success-captures/pf55-exactreplacement/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf55-exactreplacement/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf55-exactreplacement/scrollback.txt",
+    "sha256": "6daaa043624d3a909d8c5d36a4ffba69812ba49c9b172757c986d317050064c6"
+  },
+  {
+    "path": "linux/success-captures/pf55-exactreplacement/viewport.txt",
+    "sha256": "58c447e9991b563a61ffc220f47442593b4db621a4a2b442e4b245d617714271"
+  },
+  {
+    "path": "linux/success-captures/pf55-freshfirstsuccess/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf55-freshfirstsuccess/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf55-freshfirstsuccess/scrollback.txt",
+    "sha256": "c4eda3c274ea771790d2e2d96423c94b37020a6de438cde329bd0d8944f715e8"
+  },
+  {
+    "path": "linux/success-captures/pf55-freshfirstsuccess/viewport.txt",
+    "sha256": "d09e1157c02d008f5077d165d3e2aa797e5329d8359491b7a3e407c06d45328e"
+  },
+  {
+    "path": "linux/success-captures/pf55-inactivecurrentcancel/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf55-inactivecurrentcancel/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf55-inactivecurrentcancel/scrollback.txt",
+    "sha256": "c8494b604458e44a6a892ebf172e648200a6d035af6568376583fab8b4d82e35"
+  },
+  {
+    "path": "linux/success-captures/pf55-inactivecurrentcancel/viewport.txt",
+    "sha256": "b4f78c984b9ad90c231cb1b9be10424e22ff0bd0cd04a19a44903eb29c95b2f9"
+  },
+  {
+    "path": "linux/success-captures/pf55-inactivenoncurrent/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf55-inactivenoncurrent/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf55-inactivenoncurrent/scrollback.txt",
+    "sha256": "211c0613caf56b024381f27a0176c698e48cba154dd31332cc0e8e0507a0edcf"
+  },
+  {
+    "path": "linux/success-captures/pf55-inactivenoncurrent/viewport.txt",
+    "sha256": "20df9a99303348955e76402edddcd5809d3ad4826035ca48be3262a10a656bd3"
+  },
+  {
+    "path": "linux/success-captures/pf55-managedrestart/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf55-managedrestart/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf55-managedrestart/scrollback.txt",
+    "sha256": "ae2db2bce4f6aedbe33a6c28527434887c16228800ab2d8a348701fd09b4fd61"
+  },
+  {
+    "path": "linux/success-captures/pf55-managedrestart/viewport.txt",
+    "sha256": "9285a462837dbf92440f058bf4111f070ab266d9f2d333f55d8bdb992f41a989"
+  },
+  {
+    "path": "linux/success-captures/pf55-missingcurrent/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf55-missingcurrent/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf55-missingcurrent/scrollback.txt",
+    "sha256": "c1800642012560d224c44825585d45135ecbba4e4dafb33bd2d689a7b9d0b6ba"
+  },
+  {
+    "path": "linux/success-captures/pf55-missingcurrent/viewport.txt",
+    "sha256": "e04201bc5bcb8bf33819ef7ca910efbbd3b865422f419d18273c737f6289d048"
+  },
+  {
+    "path": "linux/success-captures/pf55-nativespawn/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf55-nativespawn/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf55-nativespawn/scrollback.txt",
+    "sha256": "aed757763cec6bf0266336fbd16e206b074c8a5e5a59e6a7743d1ff94590f534"
+  },
+  {
+    "path": "linux/success-captures/pf55-nativespawn/viewport.txt",
+    "sha256": "db9f39d7131252194f11cc5191a4da390e843d95771f0ade550e404efd7e0022"
+  },
+  {
+    "path": "linux/success-captures/pf55-resume/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf55-resume/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf55-resume/scrollback.txt",
+    "sha256": "8166f4505fe64f0cfdb44c0a0b3e99444b68a3378e53109f1d2156ce3bca5cb7"
+  },
+  {
+    "path": "linux/success-captures/pf55-resume/viewport.txt",
+    "sha256": "5811ac6ad3eac74ba56b987ca72753e598392b8887e7838a23ecbc67b20daca7"
+  },
+  {
+    "path": "linux/success-captures/pf55-upgrade/binary.metadata",
+    "sha256": "aa422758765d6340d5e6b4ab4b2433fcb99ae1a2cd8ca4f8527d8641c2b72e2a"
+  },
+  {
+    "path": "linux/success-captures/pf55-upgrade/binary.sha256",
+    "sha256": "27dcaef9f7386812d3f0c2ebc8d7c7bc58dec0b4f1f671cda2cd14ba5f015c8b"
+  },
+  {
+    "path": "linux/success-captures/pf55-upgrade/scrollback.txt",
+    "sha256": "f7942a9cd55cd2474aa3433226f5d6389d8c85334c5a1272cacf4a686b0035b6"
+  },
+  {
+    "path": "linux/success-captures/pf55-upgrade/viewport.txt",
+    "sha256": "c0794374ec24e1ab1578950f6953f8f422507b464758d276b46c018e9c5554e8"
+  },
+  {
+    "path": "linux/tmux-tests.log",
+    "sha256": "e71b4aed83cd5db864b0fc1a302196aad4d08085a05442cd908ac616014205ae"
+  }
+]

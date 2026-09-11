@@ -30,7 +30,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F02",
@@ -50,7 +51,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F03",
@@ -70,7 +72,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F04",
@@ -90,7 +93,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F05",
@@ -110,7 +114,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F06",
@@ -130,7 +135,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F07",
@@ -150,7 +156,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F08",
@@ -170,7 +177,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F09",
@@ -190,7 +198,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F10",
@@ -210,7 +219,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F11",
@@ -230,7 +240,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F12",
@@ -250,7 +261,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F13",
@@ -270,7 +282,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F14",
@@ -290,7 +303,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F15",
@@ -310,7 +324,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F16",
@@ -330,7 +345,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F17",
@@ -350,7 +366,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F18",
@@ -370,12 +387,13 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F19",
       "disposition": "blocked",
-      "summary": "Linux existing-config/custom/resume fixtures run and the real Mac profile opens twice unchanged. Historical migration range and live chat on that existing Mac profile are not proven.",
+      "summary": "Linux existing-config/custom/resume fixtures run; visible provider/model state is consistent across two real Mac profile launches. Historical migration range and live chat on that existing Mac profile are not proven.",
       "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
       "supporting_evidence": [
         {
@@ -390,7 +408,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F20",
@@ -410,12 +429,13 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F21",
       "disposition": "blocked",
-      "summary": "Linux tests run through SSH with real tmux keys and same-home restart. Client detach/reattach plus the complete account-login handoff sequence is not demonstrated.",
+      "summary": "Linux tests run through SSH with real tmux keys and same-home restart. Client detach/reattach plus the complete account-login handoff sequence is not demonstrated. External-environment recovery guidance explicitly requires restarting; this is an observed limitation, not same-process recovery.",
       "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
       "supporting_evidence": [
         {
@@ -430,7 +450,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "Linux-specific; not applicable to Mac execution; see Linux record for overall prerequisite"
     },
     {
       "id": "PF58-F22",
@@ -450,7 +471,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F23",
@@ -470,7 +492,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F24",
@@ -490,7 +513,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F25",
@@ -510,7 +534,8 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     },
     {
       "id": "PF58-F26",
@@ -530,20 +555,29 @@
           "path": "mac-inputs-ready/result.json",
           "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
         }
-      ]
+      ],
+      "applicability": "applicable"
     }
   ],
   "human_acceptance": false,
   "evidence_check": {
     "agent": "/root/blind_functional_designer",
-    "verdict": "pending"
+    "verdict": "fail",
+    "artifact": {
+      "path": "evidence-check.md",
+      "sha256": "0b4fb9450b76d6d8ba0c0f964b84849f894032ac78ccd41bab6bd265f16898a5"
+    }
+  },
+  "execution_manifest": {
+    "path": "execution-artifacts.json",
+    "sha256": "36ddb4fed1b91020dae7d292a031b60ee52f9308586bb4726ba84efbb175b891"
   },
   "review_budget": {
     "used": 7,
     "limit": 5,
     "ledger": {
       "path": "review-ledger.md",
-      "sha256": "1e76680f5b5920047c96de748d8c6d4fbc3b84af0f8d37b28b36c77027ac5c84"
+      "sha256": "72761c1002ac88f92ee04759087cead6ce0ab0a7b8ef77acfbf663630cfecdf6"
     },
     "extension": {
       "by": "Travis Good (user)",

@@ -38,7 +38,7 @@ gaps = {
     16: "Linux Astra model/effort request and restart are covered; switching among incompatible/no-effort models with matching wire evidence is missing.",
     17: "Linux Astra effort cancellation/confirmation/request and exact identity fixtures run; cancel at every provider/model/effort level with an existing conversation on Mac is missing.",
     18: "Synthetic package restart and two real-profile Mac menu launches pass. Native Applications shortcut invocation, disabled-state persistence and live requests in that same full journey are missing.",
-    19: "Linux existing-config/custom/resume fixtures run and the real Mac profile opens twice unchanged. Historical migration range and live chat on that existing Mac profile are not proven.",
+    19: "Linux existing-config/custom/resume fixtures run; visible provider/model state is consistent across two real Mac profile launches. Historical migration range and live chat on that existing Mac profile are not proven.",
     20: "Two existing-profile Mac processes reached menus without password entry; no native Applications launch or controlled Keychain deny/cancel/allow recovery was performed. Linux is not the platform for this native case; the overall Mac prerequisite remains open.",
     21: "Linux tests run through SSH with real tmux keys and same-home restart. Client detach/reattach plus the complete account-login handoff sequence is not demonstrated.",
     22: "Both packages complete real Code Mode/shell/MCP calls against synthetic servers. Independent expired tool vs model credentials, inverse cases and live codex_apps reconnect are not proven by that smoke test.",
@@ -48,6 +48,10 @@ gaps = {
     26: "No new controlled delayed-health-result UI race journey was executed. Historical unit tests are not a substitute for this proposed observable flow.",
 }
 design = json.loads((root / "design.json").read_text())
+artifacts = []
+for directory in ("mac-package", "mac-existing", "mac-inputs-ready", "linux"):
+    artifacts.extend(ref(str(path.relative_to(root))) for path in sorted((root / directory).rglob("*")) if path.is_file())
+(root / "execution-artifacts.json").write_text(json.dumps(artifacts, indent=2) + "\n")
 for platform, binary_hash, evidence in (
     ("macOS arm64", "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
      ["mac-package/result.json", "mac-existing/result.json", "mac-inputs-ready/result.json"]),
@@ -57,14 +61,42 @@ for platform, binary_hash, evidence in (
     cases = []
     for case in design["cases"]:
         number = int(case["id"].split("F")[-1])
-        cases.append({"id": case["id"], "disposition": "blocked", "summary": gaps[number],
+        disposition = "blocked"
+        summary = gaps[number]
+        if number == 12 and platform.startswith("Linux"):
+            disposition = "failed"
+            summary = ("Observed failure: API-key and OpenAI-account recovery captures show only "
+                       "'A provider credential was rejected' without the affected provider name. "
+                       "Same-session recovery succeeds, but the explicit affected-service/route "
+                       "error requirement fails. Other full-case variants remain unverified.")
+        if number == 15 and platform.startswith("Linux"):
+            disposition = "failed"
+            summary = ("Observed failure: duplicate-slug and recovery chat captures show fixture-model "
+                       "and effort without a provider identifier, contrary to unambiguous current "
+                       "provider/model/effort in chat. Complete remaining variants are unverified.")
+        if number == 21:
+            summary += " External-environment recovery guidance explicitly requires restarting; this is an observed limitation, not same-process recovery."
+        cases.append({"id": case["id"], "disposition": disposition, "summary": summary,
                       "candidate_sha256": binary_hash, "supporting_evidence": [ref(p) for p in evidence]})
+        cases[-1]["applicability"] = (
+            "macOS-specific; not applicable to Linux execution; see Mac record for overall prerequisite"
+            if number == 20 and platform.startswith("Linux") else
+            "Linux-specific; not applicable to Mac execution; see Linux record for overall prerequisite"
+            if number == 21 and platform.startswith("macOS") else "applicable")
+        if disposition == "failed":
+            cases[-1]["supporting_evidence"].extend(ref(p) for p in (
+                "linux/success-captures/pf54-reauth-key/viewport.txt",
+                "linux/success-captures/pf54-reauth-openai/viewport.txt"))
+        if number == 15 and platform.startswith("Linux"):
+            cases[-1]["supporting_evidence"].append(ref("linux/success-captures/pf55-duplicateslug/viewport.txt"))
     result = {"design_sha256": digest(root / "design.json"), "implementer": "/root",
               "candidate": {"version": "0.1.41", "source": "da77f7c03827d56284d62a3dadb477aed36bb6ce; source-equivalent existing package",
                             "platform": platform, "binary_sha256": binary_hash,
                             "package_manifest": ref("candidate-manifest.md")},
               "cases": cases, "human_acceptance": False,
-              "evidence_check": {"agent": "/root/blind_functional_designer", "verdict": "pending"},
+              "evidence_check": {"agent": "/root/blind_functional_designer", "verdict": "fail",
+                                 "artifact": ref("evidence-check.md")},
+              "execution_manifest": ref("execution-artifacts.json"),
               "review_budget": {"used": 7, "limit": 5, "ledger": ref("review-ledger.md"),
                                 "extension": {"by": "Travis Good (user)",
                                               "reason": "Explicit approval for two additional passes only",
@@ -74,7 +106,10 @@ for platform, binary_hash, evidence in (
 
 rows = "".join(
     "<tr><td>" + html.escape(case["id"]) + "</td><td>" + html.escape(case["priority"]) +
-    "</td><td>Incomplete</td><td>" + html.escape(gaps[int(case["id"].split("F")[-1])]) + "</td></tr>"
+    "</td><td>" + ("<strong style='color:#ff8d83'>Failed on Linux</strong>" if case["id"] in ("PF58-F12", "PF58-F15") else "Incomplete") +
+    "</td><td>" + ("Observed: recovery warning does not name the affected provider. " if case["id"] == "PF58-F12" else
+                  "Observed: chat status omits provider identity for duplicate custom model names. " if case["id"] == "PF58-F15" else "") +
+    html.escape(gaps[int(case["id"].split("F")[-1])]) + "</td></tr>"
     for case in design["cases"]
 )
 (root / "report.html").write_text('''<!doctype html><html lang="en"><meta charset="utf-8">
