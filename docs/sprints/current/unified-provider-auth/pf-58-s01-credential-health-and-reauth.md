@@ -46,11 +46,9 @@ updated: 2026-09-10
 
 - [x] Final signed picker package passes Mac/Linux TMUX and two unattended Mac existing-profile menu launches; human no-loop acceptance remains open.
 - [x] Repair invented catalog/current markers and stale health, preserve custom routes; 58 TUI + 72 provider-auth regressions and 32 Linux integration tests pass. See `qa/provider-auth/pf-58/picker-repair-20260910.md`.
-
-- [x] September 10 native Mac prompt budget installed with no secret cache or
-  ACL changes. Eight focused tests, two native Keychain tests and staged TMUX
-  using Ctrl+C pass. Escape fails on old and new packages and remains yellow;
-  see `qa/provider-auth/pf-58/macos-keychain-20260910.md`.
+- [x] September 10 native Mac prompt budget installed without ACL/secret-cache changes.
+  Eight focused tests, two native Keychain tests and Ctrl+C TMUX pass. That historical
+  package fails Escape; superseded by the repair below. See `qa/provider-auth/pf-58/macos-keychain-20260910.md`.
 
 - [x] User amendment and serial allocation recorded before source changes.
 - [x] Working human-test candidate left unchanged and security monitor left paused.
@@ -60,20 +58,22 @@ updated: 2026-09-10
 - [x] Refresh status and reconnect the affected app service after successful account recovery without process restart (synthetic account/request and core MCP transport proof; live sign-in remains a human check).
 - [x] Generalize managed, environment, command/AWS and local capability handling with truthful unsupported-action guidance.
 - [x] Run final focused automated/TMUX matrix and five bounded reviews; findings corrected. The fifth correction is test-verified without a sixth review under the user cap. The later expanded qualification and native-child repair are documented separately.
-- [x] Repair explicit Claude recovery with missing source selection, retaining
-  known-source and external-owner restrictions. All three Claude TMUX journeys
-  pass on the pinned repaired package; provider-auth regressions pass 71/71.
-  User-authorized adjacent runtime/child repairs and final package evidence are
-  tracked in `qa/provider-auth/pf-58/product-repairs-20260908.md`.
+- [x] Repair Claude recovery with missing source selection, retaining source/owner restrictions.
+  Three Claude TMUX journeys and 71 provider-auth tests pass; adjacent runtime/child evidence:
+  `qa/provider-auth/pf-58/product-repairs-20260908.md`.
+
+- [x] Repair rejection/provider identity and clarify configured versus verified credentials.
+  Strict 226 selected units and 32 Linux checks pass; packaged Escape passes on both platforms.
+  Four Mac live launches replied with unchanged config. See `qa/provider-auth/pf-58/blind-repairs-20260910/`.
+  Final Astra High evidence review (pass 8) supports targeted repairs, not full frozen-case readiness.
 
 ## Remaining
-- [ ] Obtain real-user Keychain no-loop confirmation on the signed copy. Escape cancellation remains a baseline failure (human check 11).
+- [ ] Qualify remaining frozen cases with exact evidence; live/native prerequisites remain.
+  Final pass 9 found two reporting issues, corrected without re-review; no tenth pass or waiver. Native Applications confirmation remains open.
 
-- [ ] September 8 human-test finding: qualify the complete staged runtime and
-  actual plugin launch environment before another handoff. All 26 human checks
-  require current-candidate evidence or an explicit blocker; see
-  `qa/provider-auth/pf-58/handoff-readiness.md`. Earlier auth-only passes did not
-  qualify helper packaging or installed MCP dependencies.
+- [ ] Qualify complete runtime and plugin launch environment before handoff; all 26 human checks
+  require current-candidate evidence or a blocker. `qa/provider-auth/pf-58/handoff-readiness.md`
+  distinguishes earlier auth-only passes from helper packaging/MCP dependency qualification.
 
 ## Verification
 
@@ -95,5 +95,6 @@ updated: 2026-09-10
 
 - [x] Exact changed-source manifest/candidate hashes and final test/review reports linked under qa/provider-auth/pf-58.
 - [x] Human guide updated without marking user checks accepted.
+- [x] Both final packages pass 12 expanded journeys and trusted Apps recovery; 227 units, integration follow-up and eight Mac live replies recorded in `qa/provider-auth/pf-58/finish-20260910/`; shortcut retargeted.
 - [x] Source commit `2545eedee` pushed to `origin/feat/provider-reauth-health`; not merged to main. Handoff bookkeeping follows separately.
 - [ ] Ledgers accurate and completed sprint archived only after required evidence.

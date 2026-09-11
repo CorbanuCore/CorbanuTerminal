@@ -29,6 +29,32 @@ fn configured(
 }
 
 #[test]
+fn rejection_identity_is_captured_and_consumed_once() {
+    let mut health = ProviderCredentialHealth::default();
+    health.begin(
+        "a".into(),
+        &configured(
+            "openai",
+            ProviderCredentialSource::OpenAiAccount,
+            CredentialControl::ManagedByCorbanu,
+        ),
+    );
+    health.begin(
+        "b".into(),
+        &configured(
+            "claude-plan",
+            ProviderCredentialSource::ClaudeManaged,
+            CredentialControl::ManagedByCorbanu,
+        ),
+    );
+    assert_eq!(health.reject_provider("a"), Some("openai".into()));
+    assert_eq!(health.reject_provider("a"), None);
+    health.credential_changed("claude-plan");
+    assert_eq!(health.reject_provider("b"), None);
+    assert_eq!(health.reject_provider("missing"), None);
+}
+
+#[test]
 fn rejected_credential_preserves_selection_activation_and_unrelated_provider() {
     for (source, control) in [
         (

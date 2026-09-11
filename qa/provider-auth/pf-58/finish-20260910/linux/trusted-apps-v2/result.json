@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "canonical_origin": "https://chatgpt.com",
+  "synthetic_tls_fixture": true,
+  "same_process_recovery": true,
+  "unrelated_model_unchanged": true,
+  "candidate": "/home/travis/security-round5/evidence/pf58-final9-20260910/candidate-v2/bin/codex",
+  "sha256": "bc2200d67d273e8555d1824b9cff9f14390276de92c915685f96015525279dc7",
+  "human_acceptance": false
+}

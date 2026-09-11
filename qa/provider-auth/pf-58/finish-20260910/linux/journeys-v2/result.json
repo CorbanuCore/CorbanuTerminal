@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "checks": [
+    "F01-F25-inventory-cancel",
+    "F17-selection-cancel-request",
+    "F15-F16-effort-request-parity",
+    "F18-persisted-disabled-restart-twice",
+    "F14-reactivation-without-setup",
+    "F24-resize-last-row-recovery",
+    "F21-attach-detach-reattach",
+    "F26-late-response-keeps-menu-selection",
+    "F23-service-failure-retry-isolation",
+    "F08-F12-rejection-cancel-repair-no-duplicate",
+    "F13-nonselected-repair-both-routes-usable",
+    "F14-current-disable-cancel-explicit-replacement-reactivate"
+  ],
+  "candidate": "/home/travis/security-round5/evidence/pf58-final9-20260910/candidate-v2/bin/codex",
+  "sha256": "bc2200d67d273e8555d1824b9cff9f14390276de92c915685f96015525279dc7",
+  "human_acceptance": false
+}

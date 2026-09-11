@@ -1,7 +1,7 @@
 # P0 security-level execution sprints
 
 The active [P0 security plan](../../../plans/active/p0-security-levels.md) owns
-**50 current sprints** and **28 completed archives**.
+**52 current sprints** and **31 completed archives**.
 The integrated Sprint 13 branch completes PF-13-S02–S04 and the early PF-26-S01
 harness; PF-13-S05 is also completed and archived after its integrated Core and
 platform qualification. PF-13-S06 and PF-41-S03 are now also completed and
@@ -71,6 +71,11 @@ archived evidence proves only its recorded candidate and scope.
 | 74 | [PF-26-S04](pf-26-s04-final-automated-qualification.md) | Final integrated automated security qualification | draft | PF-26-S01, PF-13-S07, PF-21-S02, PF-23-S03, PF-25-S02, PF-36-S02, PF-41-S02 |
 | 75 | [PF-26-S02](pf-26-s02-true-tui-and-live-repository-qualification.md) | True-TUI and live-repository qualification | draft | PF-26-S04 |
 | 76 | [PF-26-S03](pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | Human acceptance, finished docs, and release evidence | draft | PF-26-S02 |
+| 83 | [PF-76-S01](pf-76-s01-provider-profile-persistence.md) | Provider profile persistence; reconcile shipped provider work before allocation | draft | none |
+| 79 | [PF-77-S01](pf-77-s01-tasknode-reliability.md) | Task Node durable command/recovery; natural production observation outstanding | draft | none |
+
+The [identity reconciliation](../../identity-reconciliation-2026-09-10.md)
+maps legacy P0 IDs to PF-76–78 without changing completion or allocation state.
 
 ## Machine checks
 

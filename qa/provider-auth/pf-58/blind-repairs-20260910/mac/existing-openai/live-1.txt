@@ -1,0 +1,45 @@
+╭────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                  │
+│                                                │
+│ model:     gpt-6-astra high   /model to change │
+│ directory: /Volumes/CorbanuDrive/Corbanu       │
+╰────────────────────────────────────────────────╯
+
+
+› Reply only with PF58, NATIVE, LIVE, OK joined by underscores. Do not use tools.
+
+
+• You have 3 usage limit resets available. Run /usage to use one.
+
+• PF58_NATIVE_LIVE_OK
+
+
+› Use /skills to list available skills
+
+  GPT-6-Astra high · /Volumes/CorbanuDrive/Corbanu · Corbanu Terminal · TPS: ~1.7 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

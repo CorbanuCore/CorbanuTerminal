@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "canonical_origin": "https://chatgpt.com",
+  "synthetic_tls_fixture": true,
+  "same_process_recovery": true,
+  "unrelated_model_unchanged": true,
+  "candidate": "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-final9-20260910/bin/corbanu",
+  "sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "human_acceptance": false
+}

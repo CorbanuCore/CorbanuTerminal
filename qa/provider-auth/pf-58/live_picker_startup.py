@@ -1,10 +1,12 @@
-"""Opt-in existing-profile menu check. Never sends prompts or edits credentials.
+"""Opt-in existing-profile menu check. Never edits credentials.
 
 Run with an explicitly supplied home/candidate. Startup is bounded; a Keychain
 approval cannot be completed by this script. Captures contain only the startup
-and provider/model menus, never credential forms. No global trace logging.
+and provider/model menus, never credential forms. With --live-smoke, also sends
+a short model prompt and captures its reply. No global trace logging.
 """
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -21,11 +23,19 @@ def main():
     parser.add_argument("--home", type=Path, required=True)
     parser.add_argument("--cwd", type=Path, required=True)
     parser.add_argument("--evidence", type=Path, required=True)
+    parser.add_argument("--live-smoke", action="store_true",
+                        help="Opt in to one short request per launch through the existing selected provider")
+    parser.add_argument("--interaction-timeout", type=int, default=8)
+    parser.add_argument("--provider", help="Ephemeral provider override; requires --model")
+    parser.add_argument("--model", help="Ephemeral model override; requires --provider")
     args = parser.parse_args()
+    if bool(args.provider) != bool(args.model):
+        parser.error("--provider and --model must be supplied together")
     args.evidence.mkdir(parents=True, exist_ok=False)
     config_before = (args.home / "config.toml").read_bytes()
     results = {"passed": False, "candidate": str(args.candidate),
                "sha256": digest(args.candidate), "launches": [], "human_acceptance": False}
+    results["config_before_sha256"] = hashlib.sha256(config_before).hexdigest()
     env = dict(os.environ)
     env.update(CORBANU_HOME=str(args.home), CODEX_HOME=str(args.home),
                PFTERMINAL_HOME=str(args.home), RUST_LOG="codex_keyring_store=trace")
@@ -37,7 +47,8 @@ def main():
             return subprocess.run(["tmux", "-S", socket, *words], env=env,
                                   capture_output=True, text=True, check=check, timeout=10)
 
-        def wait_for(text, timeout=8):
+        def wait_for(text, timeout=None):
+            timeout = args.interaction_timeout if timeout is None else timeout
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
                 capture = tmux("capture-pane", "-p", "-t", "probe").stdout
@@ -53,7 +64,10 @@ def main():
         try:
             for number in range(2):
                 started = time.monotonic()
-                command = "exec " + shlex.join([str(args.candidate), "--no-alt-screen", "-C", str(args.cwd)])
+                argv = [str(args.candidate), "--no-alt-screen", "-C", str(args.cwd)]
+                if args.provider:
+                    argv += ["-c", "model_provider=" + json.dumps(args.provider), "-m", args.model]
+                command = "exec " + shlex.join(argv)
                 tmux("new-session", "-d", "-s", "probe", "-x", "150", "-y", "45", command)
                 pid = tmux("display-message", "-p", "-t", "probe", "#{pane_pid}").stdout.strip()
                 wait_for("Corbanu Terminal")
@@ -64,20 +78,29 @@ def main():
                 tmux("send-keys", "-t", "probe", "Escape")
                 send("/model")
                 picker = wait_for("Select Model")
-                for _ in range(16):
-                    if "[Claude Plan]" in picker:
-                        break
-                    tmux("send-keys", "-t", "probe", "Right")
-                    time.sleep(0.1)
-                    picker = tmux("capture-pane", "-p", "-t", "probe").stdout
-                assert "[Claude Plan]" in picker, picker
-                assert picker.count("(current)") == 1, picker
-                for model in ("claude-opus-5-plan", "claude-fable-5-1-plan", "claude-fable-5-plan"):
-                    assert "Model: " + model + "." in picker, picker
-                assert "[Other]" not in picker, picker
+                if args.provider:
+                    assert picker.count("(current)") == 1, picker
+                else:
+                    for _ in range(16):
+                        if "[Claude Plan]" in picker:
+                            break
+                        tmux("send-keys", "-t", "probe", "Right")
+                        time.sleep(0.1)
+                        picker = tmux("capture-pane", "-p", "-t", "probe").stdout
+                    assert "[Claude Plan]" in picker, picker
+                    assert picker.count("(current)") == 1, picker
+                    for model in ("claude-opus-5-plan", "claude-fable-5-1-plan", "claude-fable-5-plan"):
+                        assert "Model: " + model + "." in picker, picker
+                    assert "[Other]" not in picker, picker
                 (args.evidence / f"models-{number}.txt").write_text(picker)
                 results["launches"].append({"pid": pid, "menu_seconds": round(time.monotonic() - started, 2)})
                 tmux("send-keys", "-t", "probe", "Escape")
+                if args.live_smoke:
+                    # The exact marker is absent from the prompt, so its echo cannot pass.
+                    send("Reply only with PF58, NATIVE, LIVE, OK joined by underscores. Do not use tools.")
+                    live = wait_for("PF58_NATIVE_LIVE_OK", timeout=120)
+                    (args.evidence / f"live-{number}.txt").write_text(live)
+                    results["launches"][-1]["live_reply"] = True
                 send("/exit")
                 deadline = time.monotonic() + 8
                 while tmux("has-session", "-t", "probe", check=False).returncode == 0:
@@ -87,6 +110,10 @@ def main():
             results["passed"] = True
         finally:
             tmux("kill-server", check=False)
+            results["config_after_sha256"] = digest(args.home / "config.toml")
+            results["configuration_unchanged"] = (
+                results["config_before_sha256"] == results["config_after_sha256"]
+            )
             (args.evidence / "result.json").write_text(json.dumps(results, indent=2) + "\n")
     print(json.dumps(results))
 

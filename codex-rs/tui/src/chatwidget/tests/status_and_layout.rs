@@ -3258,6 +3258,30 @@ async fn status_line_fast_mode_footer_snapshot() {
 }
 
 #[tokio::test]
+async fn status_line_identifies_custom_provider_with_shared_model_slug() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("fixture-model")).await;
+    chat.config.tui_status_line = Some(vec!["model-with-reasoning".to_string()]);
+    chat.set_reasoning_effort(Some(ReasoningEffortConfig::High));
+    chat.config.model_provider_id = "custom-a".to_string();
+    chat.refresh_status_line();
+    assert_eq!(
+        status_line_text(&chat),
+        Some("fixture-model via custom-a high".into())
+    );
+    chat.config.model_provider_id = "custom-b".to_string();
+    chat.refresh_status_line();
+    assert_eq!(
+        status_line_text(&chat),
+        Some("fixture-model via custom-b high".into())
+    );
+    chat.set_active_external_model_display(Some("GLM 5.2 via external-child".into()));
+    assert_eq!(
+        status_line_text(&chat),
+        Some("GLM 5.2 via external-child".into())
+    );
+}
+
+#[tokio::test]
 async fn status_line_model_with_reasoning_includes_fast_for_fast_capable_models() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.4")).await;
     set_fast_mode_test_catalog(&mut chat);

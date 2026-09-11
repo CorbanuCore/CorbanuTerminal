@@ -63,6 +63,24 @@ active-plan slot.
 
 ## User pain
 
+September 10 blind-test repair amendment (user: “can you fix all these blockers?”):
+PF-58 owns exact captured-provider rejection warnings, unambiguous provider/model
+status, and truthful metadata-only configured-state guidance, with regression and
+packaged TUI evidence. Include the handoff's Escape cancellation defect: active
+streams must remain interruptible when the progress indicator is hidden, while
+retaining popup and Vim-input precedence. Preserve external credential ownership; do not import shell
+credentials to remove restart requirements. Full live-account/native-consent cases
+remain unverified until actually executed. Seven authorized review passes are spent;
+the user approved one final independent evidence review (pass 8) after repairs,
+using the frozen design. The subsequent user instruction to execute steps 1–5
+authorizes one further final review (pass 9), expanded automated journeys, fresh
+live setup with user-handled browser consent, exact-package shortcut installation,
+and commit/push. Merge still follows human acceptance. The user observed no
+Keychain prompts during the four previous Mac launches; controlled denial/cancel
+and Applications-path verification remain separate. No tenth pass is authorized.
+No human-ready or merge claim is
+authorized by passing only a subset of the frozen 26-case design.
+
 September 10 picker follow-up (user: “Please fix these and create regression
 coverage”): PF-58 also repairs TUI model-catalog synchronization, exact
 provider/model current markers, and asynchronous health refresh. Do not invent

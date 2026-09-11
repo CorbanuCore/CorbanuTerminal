@@ -902,7 +902,17 @@ impl ChatWidget {
     fn status_model_display_name(&self) -> String {
         self.active_external_model_display
             .clone()
-            .unwrap_or_else(|| self.model_display_name())
+            .unwrap_or_else(|| self.model_with_provider_display_name())
+    }
+
+    fn model_with_provider_display_name(&self) -> String {
+        let model = self.model_display_name();
+        let provider = &self.config.model_provider_id;
+        if provider == "openai" {
+            model
+        } else {
+            format!("{model} via {provider}")
+        }
     }
 
     fn reasoning_display_name(&self) -> String {
@@ -926,7 +936,10 @@ impl ChatWidget {
             .filter(|_| self.has_chatgpt_account)
             .map(|tier| format!(" {tier}"))
             .unwrap_or_default();
-        format!("{} {label}{service_tier_label}", self.model_display_name())
+        format!(
+            "{} {label}{service_tier_label}",
+            self.model_with_provider_display_name()
+        )
     }
 
     /// Computes the compact runtime status label used by word-based status items.

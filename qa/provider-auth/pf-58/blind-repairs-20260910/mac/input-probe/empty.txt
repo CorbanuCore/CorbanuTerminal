@@ -1,0 +1,43 @@
+WARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporar
+y dir "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/tmp" (codex_home: AbsolutePathBuf("/Volumes/
+CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/tmp/bi-8ug6vg0f/profile"))
+╭───────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)             │
+│                                           │
+│ model:     gpt-6-astra   /model to change │
+│ directory: ~                              │
+╰───────────────────────────────────────────╯
+
+▌ Add Anthropic
+▌ API key — masked
+▌
+▌ Paste your ANTHROPIC_API_KEY API key. Corbanu stores it in the encrypted vault and never adds it to chat. An
+▌ existing environment variable takes precedence; unset it outside Corbanu to use the saved key.
+
+Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

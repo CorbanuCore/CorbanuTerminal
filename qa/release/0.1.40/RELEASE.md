@@ -12,7 +12,7 @@ The operator explicitly instructed repairing the account mismatch, testing it, a
 
 ## Classification and authority
 
-Profile/home propagation belongs to the existing PF-45 Campaign Tracker initiative, [PF-45-S02](../../../docs/sprints/archive/p0-security-levels/pf-45-s02-agent-profile-scope.md). Product heading **Campaign Tracker — LOCAL PILOT CANDIDATE**: “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”. The user explicitly authorized this emergency repair.
+Profile/home propagation belongs to the existing PF-45 Campaign Tracker initiative, [PF-45-S02](../../../docs/sprints/archive/p0-security-levels/pf-78-s02-agent-profile-scope.md). Product heading **Campaign Tracker — LOCAL PILOT CANDIDATE**: “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”. The user explicitly authorized this emergency repair.
 
 Provider refusal handling is a bounded reliability repair under **Product principles**, “Visible control: Show what an agent can read, disclose, propose, approve, sign, and broadcast”, and preserves the existing provider refusal boundary. The implementation follows [OpenAI's stopped-request guidance](https://developers.openai.com/api/docs/guides/safety-checks/misalignment-monitoring#handle-a-stopped-request).
 

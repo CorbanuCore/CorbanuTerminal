@@ -95,6 +95,7 @@ def main():
             time.sleep(.3)
             empty = save("empty")
             result["observations"].append({"input": "empty", "remains_in_form": "API key — masked" in empty})
+            assert "API key — masked" in empty, "empty input unexpectedly left form"
             literal("   ")
             key("Enter")
             time.sleep(.3)
@@ -126,12 +127,15 @@ def main():
                     break
                 time.sleep(.1)
             stored = save("invalid-submitted")
+            assert re.search(r"Anthropic\s+Enabled\s*·\s*configured", stored), "credential storage did not settle"
+            assert "not verified by the provider" in stored, "stored credentials imply verified access"
             history = tmux("capture-pane", "-p", "-S", "-", "-t", "probe").stdout
             assert secret not in history, "secret leaked to scrollback"
             (args.evidence / "scrollback.txt").write_text(history)
             result["observations"].append({"input": "synthetic-invalid", "configured_label":
                 bool(re.search(r"Anthropic\s+Enabled\s*·\s*configured", stored)),
                 "secret_absent_scrollback": True, "remote_auth_validation_proven": False})
+            result["stored_not_verified_guidance"] = True
             result["completed"] = True
         finally:
             last = tmux("capture-pane", "-p", "-t", "probe", check=False)

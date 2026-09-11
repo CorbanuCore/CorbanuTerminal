@@ -1,0 +1,131 @@
+{
+  "connects": [
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443",
+    "chatgpt.com:443"
+  ],
+  "apps": [
+    {
+      "credential": "old",
+      "method": "initialize",
+      "host": "chatgpt.com"
+    },
+    {
+      "credential": "old",
+      "method": "initialize",
+      "host": "chatgpt.com"
+    },
+    {
+      "credential": "new",
+      "method": "initialize",
+      "host": "chatgpt.com"
+    },
+    {
+      "credential": "new",
+      "method": "notifications/initialized",
+      "host": "chatgpt.com"
+    },
+    {
+      "credential": "new",
+      "method": "tools/list",
+      "host": "chatgpt.com"
+    },
+    {
+      "credential": "new",
+      "method": "initialize",
+      "host": "chatgpt.com"
+    },
+    {
+      "credential": "new",
+      "method": "notifications/initialized",
+      "host": "chatgpt.com"
+    },
+    {
+      "credential": "new",
+      "method": "tools/list",
+      "host": "chatgpt.com"
+    },
+    {
+      "credential": "new",
+      "method": "tools/call",
+      "host": "chatgpt.com"
+    }
+  ],
+  "allow_login": true,
+  "tool_called": true,
+  "model_requests": 3,
+  "model_diagnostics": [
+    {
+      "tool_names": [],
+      "outputs": []
+    },
+    {
+      "tool_names": [],
+      "outputs": []
+    },
+    {
+      "tool_names": [],
+      "outputs": [
+        {
+          "type": "custom_tool_call_output",
+          "id": "ctco_01a08ed2-46bf-7251-b2c3-f9a442062184",
+          "call_id": "apps-call",
+          "output": [
+            {
+              "type": "input_text",
+              "text": "Script completed\nWall time 0.0 seconds\nOutput:\n"
+            },
+            {
+              "type": "input_text",
+              "text": "{\"content\":[{\"type\":\"text\",\"text\":\"TRUSTED_MCP_ECHO\"}]}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

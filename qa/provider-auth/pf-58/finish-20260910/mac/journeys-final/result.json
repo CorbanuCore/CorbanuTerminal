@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "checks": [
+    "F01-F25-inventory-cancel",
+    "F17-selection-cancel-request",
+    "F15-F16-effort-request-parity",
+    "F18-persisted-disabled-restart-twice",
+    "F14-reactivation-without-setup",
+    "F24-resize-last-row-recovery",
+    "F21-attach-detach-reattach",
+    "F26-late-response-keeps-menu-selection",
+    "F23-service-failure-retry-isolation",
+    "F08-F12-rejection-cancel-repair-no-duplicate",
+    "F13-nonselected-repair-both-routes-usable",
+    "F14-current-disable-cancel-explicit-replacement-reactivate"
+  ],
+  "candidate": "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-final9-20260910/bin/corbanu",
+  "sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "human_acceptance": false
+}

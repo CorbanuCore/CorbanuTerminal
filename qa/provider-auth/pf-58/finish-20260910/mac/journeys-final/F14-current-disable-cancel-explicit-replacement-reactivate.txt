@@ -1,0 +1,44 @@
+• JOURNEY_REPLY_17
+
+
+› Nonselected repair must not change current routing
+
+
+• JOURNEY_REPLY_18
+
+• Model changed to fixture-model via QA Route B default
+
+
+› Use the explicitly selected repaired route
+
+
+• JOURNEY_REPLY_19
+
+
+› Cancel current-provider deactivation
+
+
+• JOURNEY_REPLY_20
+
+
+› Explicit replacement of disabled current provider
+
+
+• JOURNEY_REPLY_21
+
+• Model changed to fixture-model via QA Route B default
+
+
+› Reactivated route retains repaired credential
+
+
+• JOURNEY_REPLY_22
+
+
+› Implement {feature}
+
+  fixture-model via qa-b default · /Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health · Corbanu Terminal · TPS: -- tok/s
+
+
+
+

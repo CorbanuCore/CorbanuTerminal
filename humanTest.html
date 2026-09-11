@@ -209,10 +209,11 @@
 <body>
   <main>
     <aside style="border:1px solid var(--amber);border-radius:12px;padding:18px;margin-bottom:24px;color:var(--amber)" role="status">
-      <strong>Next testing round is not ready yet.</strong>
-      The branch now includes main through <code>0d1c3240d</code>; the latest published release remains 0.1.41.
-      The independent designer proposed 26 cases. Fresh regression/package checks passed, but the full journeys still have unverified conditions.
-      Both additional passes are complete. The evidence check failed readiness: recovery errors omit the affected provider, and custom-model chat status can omit provider identity. Existing human checkmarks are unchanged.
+      <strong>Replacement installed; limited native-launch check next.</strong>
+      The branch reconciles main through <code>295aed26e</code>. Both replacement builds report 0.1.41; the Mac CLI hash begins <code>4a8eba7b1019</code>.
+      Twelve expanded TMUX journeys and trusted Apps recovery pass on both platforms. Eight live Mac launches/replies pass across OpenAI, Claude, Ambient and DeepSeek.
+      The Applications shortcut now points to this tested replacement. Yellow prerequisites still block an unqualified 26-case round: native consent variants, missing live API credentials and the remaining frozen variants. Existing human checkmarks are unchanged; no merge or acceptance is claimed.
+      <a href="qa/provider-auth/pf-58/finish-20260910/report.html" style="color:inherit">Latest replacement evidence and yellow prerequisites</a> ·
       <a href="qa/provider-auth/pf-58/blind-20260910/report.html" style="color:inherit">Independent case-by-case report</a> ·
       <a href="qa/provider-auth/pf-58/main-reconciliation-20260910.md" style="color:inherit">Reconciliation record</a>
     </aside>
@@ -274,12 +275,12 @@
 
     <section aria-labelledby="checks-title">
       <h2 id="checks-title">Core acceptance checks</h2>
-      <aside class="prerequisite-legend"><strong>Yellow = incomplete prerequisites or a reproduced failure (12 checks).</strong> Highlighted checks are 1, 2, 3, 5, 6, 7, 11, 12, 15, 20, 24 and 26. Check 11 failed on both the September 8 and September 10 Mac packages; the others retain live/platform evidence gaps. Unhighlighted checks have automated baseline evidence, not human acceptance. Your saved checkmarks are unchanged, and yellow remains visible even if a box was previously checked.</aside>
+      <aside class="prerequisite-legend"><strong>Yellow = incomplete prerequisites or historical failures (12 checks).</strong> Highlighted checks are 1, 2, 3, 5, 6, 7, 11, 12, 15, 20, 24 and 26. Check 11 now passes automated Escape cancellation on both newly staged packages, but the shortcut has not been updated. Other live/platform evidence gaps remain. Unhighlighted checks have automated baseline evidence, not human acceptance. Your saved checkmarks are unchanged.</aside>
       <div class="checklist">
         <label class="test prerequisite">
           <input type="checkbox" data-check="launch">
           <span>
-            <p class="prerequisite-note"><strong>Build prerequisite satisfied on Mac and Linux.</strong> The Mac shortcut now uses the final September 10 picker/Keychain replacement. Both packages passed expanded TMUX checks; the Mac also passed two unattended existing-profile startup/menu runs. Escape cancellation remains blocked in check 11. Actual new-window placement and named-human Keychain confirmation remain open.</p>
+            <p class="prerequisite-note"><strong>New repair packages built on Mac and Linux, not installed in the shortcut yet.</strong> Both pass packaged Escape cancellation. The Mac also completed four existing-profile live requests. Actual Applications launch, window placement and named-human Keychain confirmation remain open.</p>
             <h3>1. Launch from the app shortcut</h3>
             <p>Open a new window using <strong>Corbanu Terminal Launcher</strong> in Applications. Existing windows keep their older running binary; use the app shortcut—not a shell command or debug launcher—to test the new Mac package.</p>
             <p class="expected">Pass: a new Terminal window opens on Desktop 3 in the first free position of the 2 × 3 card grid.</p>
@@ -386,7 +387,7 @@
         <label class="test prerequisite">
           <input type="checkbox" data-check="stream">
           <span>
-            <p class="prerequisite-note"><strong>Known automated failure — do not spend time retesting yet.</strong> Escape did not cancel the synthetic stream on either the untouched September 8 package or the September 10 Keychain repair. Ctrl+C cancellation and subsequent recovery passed on the replacement; that is not acceptance of this Escape-specific check.</p>
+            <p class="prerequisite-note"><strong>Repaired on the newest staged packages.</strong> Escape now cancels a synthetic stream and the next prompt succeeds on both Mac and Linux. Earlier packages failed this check; the Applications shortcut still uses the earlier picker package, so wait for the explicitly identified replacement before retesting.</p>
             <h3>11. Cancel a stream and continue the same session</h3>
             <p>Ask for several paragraphs. While text is streaming, press <span class="keys">Escape</span>, then send <span class="keys">Reply with exactly: RECOVERY_OK</span>.</p>
             <p class="expected">Pass: streaming stops cleanly, the second response is <code>RECOVERY_OK</code>, and the composer remains responsive.</p>
@@ -505,7 +506,8 @@
     <section aria-labelledby="reauth-title" style="margin-top:42px">
       <h2 id="reauth-title">Provider reauthentication — PF-58 candidate</h2>
       <p><strong>Repaired package, not the old replacement.</strong> It includes matching Code Mode and wallet helpers, the RTX plugin runtime launcher, Claude recovery and native-pane fixes, and model/provider-preserving configuration reloads. The old user sessions remain untouched. Full acceptance still requires the readiness report's remaining prerequisites. Never include a credential or login code in your notes.</p>
-      <p>Final Linux binary: <code>/home/travis/security-round5/evidence/picker-20260910/candidate-final/bin/codex</code><br>
+      <p><strong>Historical picker candidate below—not the installed replacement.</strong> Use the <a href="qa/provider-auth/pf-58/finish-20260910/report.html">latest replacement report</a> for exact package paths, hashes and yellow prerequisites. Only the limited native-launch check is requested now.</p>
+      <p>Previous Linux binary: <code>/home/travis/security-round5/evidence/picker-20260910/candidate-final/bin/codex</code><br>
       SHA-256: <code>5ecd62f90574e1b6208625220abf93e431d347c1f2a91c9111c3512e81448062</code></p>
       <p>Launch through <code>qa/provider-auth/pf-58/launch-candidate.sh</code> in the RTX worktree, passing the package's <code>bin</code> directory. That wrapper checks companion binaries and supplies the installed plugins' Node PATH. A separately copied executable does not qualify.</p>
       <p><strong>Final native Mac signed replacement (10 September, 17:52).</strong> Open <strong>Corbanu Terminal Launcher</strong> in Applications. Its links now resolve to <code>/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-picker-final-20260910/bin/corbanu</code>, version 0.1.41. Corbanu and its three matching helpers have verified Developer ID signatures and unchanged stable identifiers.<br>

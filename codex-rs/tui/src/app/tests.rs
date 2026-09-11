@@ -14399,7 +14399,7 @@ async fn provider_manager_reuses_policy_health_after_setup_handle_is_cleared() {
     );
     app.shared_provider_status_host = None;
     host.begin_credential_attempt("recreated-host".into(), "openai");
-    assert!(host.reject_credential_attempt("recreated-host"));
+    assert!(host.reject_credential_attempt("recreated-host").is_some());
     let reopened = app.reusable_provider_status_host().unwrap();
     assert_eq!(
         reopened.resolve_provider("openai").unwrap().configuration,

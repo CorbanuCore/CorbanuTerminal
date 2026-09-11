@@ -54,14 +54,18 @@ impl ProviderCredentialHealth {
 
     /// Reject only a request made with the still-current credential revision.
     pub fn reject(&mut self, scope: &str) -> bool {
-        let Some(attempt) = self.attempts.remove(scope) else {
-            return false;
-        };
+        self.reject_provider(scope).is_some()
+    }
+
+    /// Return the captured provider, never the selection at notification time.
+    pub fn reject_provider(&mut self, scope: &str) -> Option<String> {
+        let attempt = self.attempts.remove(scope)?;
         if self.revisions.get(&attempt.provider) != Some(&attempt.revision) {
-            return false;
+            return None;
         }
+        let provider = attempt.provider.clone();
         self.rejected.insert(attempt.provider.clone(), attempt);
-        true
+        Some(provider)
     }
 
     pub fn finish(&mut self, scope: &str) {

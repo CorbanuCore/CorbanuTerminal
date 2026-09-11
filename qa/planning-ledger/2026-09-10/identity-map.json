@@ -1,0 +1,53 @@
+{
+  "base_commit": "0d1c3240d752335cc89faeb2149c5030063e5d69",
+  "plan_file": "docs/plans/active/p0-security-levels.md",
+  "records": [
+    {
+      "old_path": "docs/sprints/current/p0-security-levels/pf-43-s01-provider-profile-persistence.md",
+      "new_path": "docs/sprints/current/p0-security-levels/pf-76-s01-provider-profile-persistence.md",
+      "old_id": "PF-43-S01",
+      "new_id": "PF-76-S01",
+      "replacements": {
+        "PF-43": "PF-76"
+      }
+    },
+    {
+      "old_path": "docs/sprints/current/p0-security-levels/pf-44-s01-tasknode-reliability.md",
+      "new_path": "docs/sprints/current/p0-security-levels/pf-77-s01-tasknode-reliability.md",
+      "old_id": "PF-44-S01",
+      "new_id": "PF-77-S01",
+      "replacements": {
+        "PF-44": "PF-77",
+        "PF-42-S02": "PF-77-S02"
+      }
+    },
+    {
+      "old_path": "docs/sprints/archive/p0-security-levels/pf-42-s02-relink-recovery.md",
+      "new_path": "docs/sprints/archive/p0-security-levels/pf-77-s02-relink-recovery.md",
+      "old_id": "PF-42-S02",
+      "new_id": "PF-77-S02",
+      "replacements": {
+        "PF-42": "PF-77",
+        "PF-44": "PF-77"
+      }
+    },
+    {
+      "old_path": "docs/sprints/archive/p0-security-levels/pf-45-s01-campaign-tracker.md",
+      "new_path": "docs/sprints/archive/p0-security-levels/pf-78-s01-campaign-tracker.md",
+      "old_id": "PF-45-S01",
+      "new_id": "PF-78-S01",
+      "replacements": {
+        "PF-45": "PF-78"
+      }
+    },
+    {
+      "old_path": "docs/sprints/archive/p0-security-levels/pf-45-s02-agent-profile-scope.md",
+      "new_path": "docs/sprints/archive/p0-security-levels/pf-78-s02-agent-profile-scope.md",
+      "old_id": "PF-45-S02",
+      "new_id": "PF-78-S02",
+      "replacements": {
+        "PF-45": "PF-78"
+      }
+    }
+  ]
+}

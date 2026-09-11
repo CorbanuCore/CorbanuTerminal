@@ -1140,6 +1140,22 @@ fn interrupted_history(
 }
 
 #[tokio::test]
+async fn escape_interrupts_stream_when_progress_indicator_is_hidden() {
+    let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.bottom_pane.set_task_running(/*running*/ true);
+    chat.bottom_pane.hide_status_indicator();
+    let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+    assert!(chat.bottom_pane.should_interrupt_running_task(esc));
+    chat.handle_key_event(esc);
+    assert!(
+        std::iter::from_fn(|| rx.try_recv().ok())
+            .any(|event| matches!(event, AppEvent::CodexOp(Op::Interrupt)))
+    );
+    chat.bottom_pane.set_task_running(/*running*/ false);
+    assert!(!chat.bottom_pane.should_interrupt_running_task(esc));
+}
+
+#[tokio::test]
 async fn output_free_esc_interrupt_keeps_prompt_and_opens_blank_composer() {
     let (mut chat, mut rx, mut op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     let prompt = "revise this prompt";

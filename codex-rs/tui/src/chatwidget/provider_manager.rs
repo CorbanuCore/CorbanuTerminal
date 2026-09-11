@@ -56,6 +56,9 @@ impl ChatWidget {
         header.push(Line::from(
             "Configure providers and control whether they are eligible for use.",
         ));
+        header.push(Line::from(
+            "Configured means credentials are present, not verified by the provider.",
+        ));
         let items = statuses
             .iter()
             .filter_map(|status| {
@@ -113,6 +116,11 @@ impl ChatWidget {
         let mut header = ColumnRenderable::new();
         header.push(Line::from(entry.display_name.clone().bold()));
         header.push(Line::from(status_description(status)));
+        if status.configuration == ProviderConfigurationState::Configured {
+            header.push(Line::from(
+                "Credentials are present; a successful request is needed to verify access.",
+            ));
+        }
         if let Some(note) = credential_control_note(status) {
             header.push(Line::from(note));
         }

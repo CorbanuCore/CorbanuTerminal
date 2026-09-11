@@ -1,0 +1,44 @@
+WARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary dir "/Volumes/CorbanuD
+rive/Corbanu/.codex-work/provider-reauth-health/tmp" (codex_home: AbsolutePathBuf("/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth
+-health/tmp/ta-6n6ek8cd/home"))
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       gpt-6-astra   /model to change              │
+│ directory:   /Volumes/…/worktrees/provider-reauth-health │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+⚠ OpenAI (openai) credential was rejected. Open /providers, select OpenAI, and press r to recover. Other providers are unchanged.
+
+⚠ OpenAI account authentication for codex_apps was rejected. Open /providers, select OpenAI, and press r to sign in again. Other providers
+  are unchanged.
+
+⚠ MCP startup incomplete (failed: codex_apps)
+
+
+› Verify unrelated healthy model
+
+
+• UNRELATED_CHAT_OK
+
+
+› Exercise recovered tool
+
+
+• Called codex_apps.pf58_echo({})
+  └ TRUSTED_MCP_ECHO
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• TRUSTED_APPS_TOOL_OK
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Find and fix a bug in @filename
+
+  GPT-6 Astra via qa-healthy default · /Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health · Corbanu Terminal · TPS: -- tok/s
+
+
+

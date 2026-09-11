@@ -39,7 +39,7 @@ impl ChatWidget {
                     format!("turn:{}:{}", n.thread_id, n.turn.id),
                     &self.config.model_provider_id,
                 );
-                false
+                None
             }
             ServerNotification::Error(n)
                 if !n.will_retry && is_credential_rejection(n.error.codex_error_info.as_ref()) =>
@@ -48,9 +48,10 @@ impl ChatWidget {
             }
             ServerNotification::TurnCompleted(n) => {
                 let scope = format!("turn:{}:{}", n.thread_id, n.turn.id);
-                let rejected = n.turn.error.as_ref().is_some_and(|error| {
+                let rejected = n.turn.error.as_ref().and_then(|error| {
                     is_credential_rejection(error.codex_error_info.as_ref())
-                        && host.reject_credential_attempt(&scope)
+                        .then(|| host.reject_credential_attempt(&scope))
+                        .flatten()
                 });
                 host.finish_credential_attempt(&scope);
                 rejected
@@ -65,7 +66,7 @@ impl ChatWidget {
                         })) {
                             host.begin_credential_attempt(scope, "openai");
                         }
-                        false
+                        None
                     }
                     McpServerStartupState::Failed if n.failure_reason == Some(
                         McpServerStartupFailureReason::OpenAiAccountReauthenticationRequired
@@ -73,15 +74,23 @@ impl ChatWidget {
                     McpServerStartupState::Ready | McpServerStartupState::Failed
                     | McpServerStartupState::Stopped | McpServerStartupState::Cancelled => {
                         host.finish_credential_attempt(&scope);
-                        false
+                        None
                     }
                 }
             }
-            _ => false,
+            _ => None,
         };
-        if rejected {
+        if let Some(provider) = rejected {
+            let name = host
+                .catalog()
+                .get(&provider)
+                .map(|entry| entry.display_name.as_str())
+                .unwrap_or(&provider);
+            let warning = format!(
+                "{name} ({provider}) credential was rejected. Open /providers, select {name}, and press r to recover. Other providers are unchanged."
+            );
             self.model_catalog.refresh_provider_policy();
-            self.on_warning("A provider credential was rejected. Open /providers, select the affected provider, and press r to recover. Other providers are unchanged.");
+            self.on_warning(warning);
         }
     }
 }

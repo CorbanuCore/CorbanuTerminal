@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "candidate": "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-final9-20260910/bin/corbanu",
+  "sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "launches": [
+    {
+      "pid": "12222",
+      "menu_seconds": 1.48,
+      "live_reply": true
+    },
+    {
+      "pid": "12348",
+      "menu_seconds": 1.56,
+      "live_reply": true
+    }
+  ],
+  "human_acceptance": false,
+  "config_before_sha256": "6dac857755a44baad33e784dfb75c297711b4d75798bc4bf967a265864e4099d",
+  "config_after_sha256": "6dac857755a44baad33e784dfb75c297711b4d75798bc4bf967a265864e4099d",
+  "configuration_unchanged": true
+}

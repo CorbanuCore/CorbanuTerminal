@@ -1,0 +1,44 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       gpt-6-astra   /model to change              │
+│ directory:   /home/travis/…/provider-reauth-health-final │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+⚠ OpenAI (openai) credential was rejected. Open /providers, select OpenAI, and press r to recover. Other providers are unchanged.
+
+⚠ OpenAI account authentication for codex_apps was rejected. Open /providers, select OpenAI, and press r to sign in again. Other providers
+  are unchanged.
+
+⚠ MCP startup incomplete (failed: codex_apps)
+
+
+› Verify unrelated healthy model
+
+
+• UNRELATED_CHAT_OK
+
+
+  OpenAI account login
+  Code: PF58-SYNTHETIC
+  Open:
+  http://127.0.0.1:41507/codex/device
+  On a remote or headless machine, open this link on another device and enter the code.
+
+› 1. Cancel login
+
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+

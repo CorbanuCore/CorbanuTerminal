@@ -35,6 +35,9 @@ const ENV_PROVIDER: &str = "pf54-environment";
 #[path = "provider_reauthentication.rs"]
 mod reauthentication;
 
+#[path = "provider_reauthentication_apps.rs"]
+mod reauthentication_apps;
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tmux_astra_selection_cancel_restart_and_request() -> Result<()> {
     if !TmuxServer::should_run("Astra OpenAI selection, cancel, restart and request")? {

@@ -1,0 +1,44 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       gpt-5.6-sol low   /model to change          │
+│ directory:   /home/travis/…/provider-reauth-health-final │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+
+› Confirm cancellation leaves the selected route intact
+
+
+• JOURNEY_REPLY_1
+
+• Model changed to GPT-6 Astra via OpenAI high
+
+
+› Prove selected model and effort High
+
+
+• JOURNEY_REPLY_2
+
+• Model changed to GPT-5.6-Sol via OpenAI low
+
+
+› Prove selected model and effort Low
+
+
+• JOURNEY_REPLY_3
+
+
+› Implement {feature}
+
+  GPT-5.6-Sol low · /home/travis/worktrees/provider-reauth-health-final · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+

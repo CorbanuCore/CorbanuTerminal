@@ -97,7 +97,7 @@ async fn tmux_reauth_openai_account_cancel_then_request_without_model_change() -
     submit_and_wait(
         pane,
         "exercise synthetic account failure",
-        "A provider credential was rejected",
+        "OpenAI (openai) credential was rejected",
     )?;
     open_manager(pane)?;
     focus_label(pane, "OpenAI")?;
@@ -196,7 +196,7 @@ async fn tmux_reauth_api_key_failure_cancel_replace_and_same_session_request() -
     submit_and_wait(
         pane,
         "exercise synthetic credential failure",
-        "A provider credential was rejected",
+        "PF54 Managed (pf54-managed) credential was rejected",
     )?;
     open_manager(pane)?;
     focus_label(pane, "PF54 Managed")?;

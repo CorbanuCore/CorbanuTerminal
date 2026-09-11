@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "flow": "fresh live onboarding, separate Claude token setup, restart reply",
+  "candidate": "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-blind-repairs-20260910/bin/corbanu",
+  "sha256": "865731588b5fd0447b0d7f60ad04ca4a544a8ab39a8ae48eb2764f37c90abb4d",
+  "human_acceptance": false
+}

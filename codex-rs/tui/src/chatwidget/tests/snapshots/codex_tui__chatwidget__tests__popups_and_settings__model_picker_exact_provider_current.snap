@@ -5,9 +5,9 @@ expression: popup
   Select Model and Effort
   Access hidden models by running corbanu -m <model_name> or in your config.toml
 
-  1. Claude Fable 5.1 Plan            Model: claude-fable-5-1-plan. Claude Fable 5.1 through Claude Code subscription
-                                      auth in Corbanu Terminal.
-› 2. Claude Fable 5.1 Plan (current)  Model: claude-fable-5-1-plan. Claude Fable 5.1 through Claude Code subscription
-                                      auth in Corbanu Terminal.
+  1. Claude Fable 5.1 Plan via custom-a            Model: claude-fable-5-1-plan. Claude Fable 5.1 through Claude Code
+                                                   subscription auth in Corbanu Terminal.
+› 2. Claude Fable 5.1 Plan via custom-b (current)  Model: claude-fable-5-1-plan. Claude Fable 5.1 through Claude Code
+                                                   subscription auth in Corbanu Terminal.
 
   Press enter to confirm or esc to go back

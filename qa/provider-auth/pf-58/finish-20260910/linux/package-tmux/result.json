@@ -1,0 +1,17 @@
+{
+  "stream_cancel_key": "Escape",
+  "passed": true,
+  "candidate": "/home/travis/security-round5/evidence/pf58-final9-20260910/candidate-v2/bin/codex",
+  "sha256": "bc2200d67d273e8555d1824b9cff9f14390276de92c915685f96015525279dc7",
+  "host_sha256": "8a541f36059090b84d26c13476e360d85ccdb1dc0bf39b5a68b2203668007ae8",
+  "human_acceptance": false,
+  "tool_round_trips": 4,
+  "concurrent_processes": 3,
+  "same_home_restart": true,
+  "stream_cancel_recovery": true,
+  "permissions_security_cancel_inert": true,
+  "claude_guidance_40_columns": true,
+  "claude_catalog_after_setup_and_restart": true,
+  "anthropic_management_entry_present": true,
+  "anthropic_catalog_after_api_setup": true
+}

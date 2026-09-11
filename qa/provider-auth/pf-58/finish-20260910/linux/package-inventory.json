@@ -1,0 +1,239 @@
+{
+  "package": "/home/travis/security-round5/evidence/pf58-final9-20260910/candidate-v2",
+  "files": [
+    {
+      "path": "actual-launcher.json",
+      "size": 1520,
+      "sha256": "df63ad4d3c9afb242928826e2927f4bb38f44d3cdee2cce10d58e4dcfb97d64d"
+    },
+    {
+      "path": "bin/codex",
+      "size": 1389398784,
+      "sha256": "bc2200d67d273e8555d1824b9cff9f14390276de92c915685f96015525279dc7"
+    },
+    {
+      "path": "bin/codex-code-mode-host",
+      "size": 266545136,
+      "sha256": "8a541f36059090b84d26c13476e360d85ccdb1dc0bf39b5a68b2203668007ae8"
+    },
+    {
+      "path": "bin/pfterminal",
+      "link": "codex"
+    },
+    {
+      "path": "bin/pfterminal-walletd",
+      "size": 93777016,
+      "sha256": "a9f71740477019eff0046429d6f7d1d060b429f527b92557cdaa1f2e1c5521a2"
+    },
+    {
+      "path": "codex-package.json",
+      "size": 280,
+      "sha256": "9a0ff13b95cb0cbbbfbabcb98e789fbb83f22c6420bb4722c1b7b33e9775a6b5"
+    },
+    {
+      "path": "codex-path/rg",
+      "size": 5408904,
+      "sha256": "e62198eb19b136b88c330af83647b5a962cb99b6b1f066758568f12de1974849"
+    },
+    {
+      "path": "codex-resources/bwrap",
+      "size": 80424,
+      "sha256": "0abea81db798ebf6b4742ac0664802d97521547a353c2a0dbdc21d76cbbfd2c0"
+    },
+    {
+      "path": "codex-resources/zsh/bin/zsh",
+      "size": 898480,
+      "sha256": "52fc20199c35aac8a9ce1aad7de127a3cac47886a9ff0bf2f80bac3ebac2283f"
+    },
+    {
+      "path": "matrix/claude-auth.log",
+      "size": 6382,
+      "sha256": "6efdc81a6de4ad9fba519af6504756c2b76d0b4fe8faa5440875972870bbca24"
+    },
+    {
+      "path": "matrix/claude-auth.xml",
+      "size": 910,
+      "sha256": "6124659f9a51455e99cab14009b0349690968b088daa6d72c3d8f19e6f9cbfad"
+    },
+    {
+      "path": "matrix/memory.log",
+      "size": 6241,
+      "sha256": "e13921b5988608fc0578ca55780c804ecac32290d5050caf53905cbb9abcee1d"
+    },
+    {
+      "path": "matrix/memory.xml",
+      "size": 707,
+      "sha256": "fe3483a6c791d276d4e539fdda0ae4d89005aaeded80ce56f0c37b20a802056b"
+    },
+    {
+      "path": "matrix/multi-provider.log",
+      "size": 7420,
+      "sha256": "0fdb9ff56d105fe64e5544096542533a67a4ea84d2fd8fa81aab2a1e13cc7656"
+    },
+    {
+      "path": "matrix/multi-provider.xml",
+      "size": 2373,
+      "sha256": "ebf10b332a6ecab7170699d69ef49eedb2e378dd9e1dfc5182b62352db4b7129"
+    },
+    {
+      "path": "matrix/partial.json",
+      "size": 2203,
+      "sha256": "74441e6b7e13735f7039c7b27c50107ffcb8f87731da78c42fedfde0fc45d9ee"
+    },
+    {
+      "path": "matrix/provider-convergence.log",
+      "size": 7793,
+      "sha256": "1355035e0eeb97855a790ce39660db5f23a8a53acbcbb1fe40a1d0492c4d5e75"
+    },
+    {
+      "path": "matrix/provider-convergence.xml",
+      "size": 2930,
+      "sha256": "acf253c8b1703f8c2b096e2cdca51fda1f10d4ab3a7614699a4055b526ec0709"
+    },
+    {
+      "path": "matrix/provider-management.log",
+      "size": 10559,
+      "sha256": "79f958996227d541028183ad37b0063334e02d0a8f6e2b716ba87593db188a9c"
+    },
+    {
+      "path": "matrix/provider-management.xml",
+      "size": 2262,
+      "sha256": "d7b5ba90c5eb9ee44a473b01e9309def250c72caec9163bf9d0b3289a30693d1"
+    },
+    {
+      "path": "matrix/reauthentication.log",
+      "size": 6625,
+      "sha256": "c111f8409ed58e0c53bc4908be633ad1e4826373b8040f7204235e49d28e665f"
+    },
+    {
+      "path": "matrix/reauthentication.xml",
+      "size": 1217,
+      "sha256": "c70fcd269cdad8205c583569bbd9c324990fc2c2871feab5f7f23b2dfbcc2026"
+    },
+    {
+      "path": "matrix/report.html",
+      "size": 4267,
+      "sha256": "d430391d433ec1bd6260b1b9ea1c0b1708382e75024bc43a6474aa512448e494"
+    },
+    {
+      "path": "matrix/report.json",
+      "size": 7305,
+      "sha256": "b51c02558696c1d3ef3caa856019a8259681e9da27ee5af26da7fde5a64ae3a9"
+    },
+    {
+      "path": "matrix/security/security/aggressive-80-profile.txt",
+      "size": 1132,
+      "sha256": "b745b2c7de02d14b464a32df7ff56e3a9730f330a4610bda483497ae6bd33923"
+    },
+    {
+      "path": "matrix/security/security/aggressive-80-status.txt",
+      "size": 2641,
+      "sha256": "e84eb28b08c0d2e79fd26d39560ccdbc0da0d862157290ba3b7946060a6fb8bb"
+    },
+    {
+      "path": "matrix/security/security/moderate-40-profile.txt",
+      "size": 984,
+      "sha256": "228f077399ee25fabfe5d1c606cd31a749d131d02e7b4530678b60ef24793277"
+    },
+    {
+      "path": "matrix/security/security/moderate-40-status.txt",
+      "size": 1843,
+      "sha256": "ba2da36a98f32dffbd93b499de63eb4ccf620c732941e5a9d863c002459051f0"
+    },
+    {
+      "path": "matrix/security/security/permissive-120-profile.txt",
+      "size": 1093,
+      "sha256": "ec9ef29a80a7c25589de5f046c73dd296df886f222e45f2f5e53695ab15eb9ad"
+    },
+    {
+      "path": "matrix/security/security/permissive-120-status.txt",
+      "size": 2842,
+      "sha256": "754fc5370c8400d6f660aea1aa5f383328711ffd36d07fed3820a90ff8498844"
+    },
+    {
+      "path": "matrix/security/security/unknown-config-error.txt",
+      "size": 179,
+      "sha256": "68dbb8b7c4daa497587ce0ced27334141638d46802246f1e67eea539d39b23eb"
+    },
+    {
+      "path": "matrix/security.log",
+      "size": 6273,
+      "sha256": "d53961b02a7616807c2faaf5ff9bd9bc765dc1ecb857b377e0bce22cac11e74a"
+    },
+    {
+      "path": "matrix/security.xml",
+      "size": 738,
+      "sha256": "1d4f6ab22935ecfc397ae6af6e49d0e43c24bf3990e8a5c030e79d1a58d227b0"
+    },
+    {
+      "path": "matrix/stream.log",
+      "size": 6117,
+      "sha256": "6c70538f44f8a15b531efb8ebe4c3e33e3a99887238134a0f47cd8a466974560"
+    },
+    {
+      "path": "matrix/stream.xml",
+      "size": 519,
+      "sha256": "823c9d2878737a902cd53ee7ff4b3544bc915c3306746d6bb31d447f080a6529"
+    },
+    {
+      "path": "tools-tmux/claude-guidance-40.txt",
+      "size": 1409,
+      "sha256": "28319a6fdc4ceafd0d722a8189a8affd90102ef5196736610f77ef6613060988"
+    },
+    {
+      "path": "tools-tmux/final-0.txt",
+      "size": 1729,
+      "sha256": "e6dcc14fb2046489081639bf869f60e6c5ecdd7ae52514379c55d97fa2b054a8"
+    },
+    {
+      "path": "tools-tmux/final-1.txt",
+      "size": 2834,
+      "sha256": "036b9a0226670c69ac2198840e945aed5fb7485b089ce856821db6f33520c8ca"
+    },
+    {
+      "path": "tools-tmux/final-2.txt",
+      "size": 2596,
+      "sha256": "cb315010b3c0981e99bf38f23e18aefd0b4fd91ec52c33dbe5ff469c36bd70ed"
+    },
+    {
+      "path": "tools-tmux/handoff-0.txt",
+      "size": 2810,
+      "sha256": "01c8964842290ef94d6cecdacd701d8f2c9aa3548be0a1759e63dab9f2a4926f"
+    },
+    {
+      "path": "tools-tmux/handoff-1.txt",
+      "size": 2834,
+      "sha256": "036b9a0226670c69ac2198840e945aed5fb7485b089ce856821db6f33520c8ca"
+    },
+    {
+      "path": "tools-tmux/handoff-2.txt",
+      "size": 2596,
+      "sha256": "cb315010b3c0981e99bf38f23e18aefd0b4fd91ec52c33dbe5ff469c36bd70ed"
+    },
+    {
+      "path": "tools-tmux/restart.txt",
+      "size": 2622,
+      "sha256": "acc63456cae87be9402ade6a6460e5850447644cd29be17eb96e090bd415d185"
+    },
+    {
+      "path": "tools-tmux/result.json",
+      "size": 539,
+      "sha256": "491aef0371597153ac37dd4f6910fea5412aa69d56bf025c9b85f0cac9afed4e"
+    },
+    {
+      "path": "tools-tmux/stream-recovery.txt",
+      "size": 2831,
+      "sha256": "a58e18066b9180e8736ae0c61cefb28449e02c96ee66663498ea67ad61155a43"
+    },
+    {
+      "path": "tools-tmux/synthetic-tool-results.json",
+      "size": 3427,
+      "sha256": "21a2e97ee136bc732a586183826d3487068a34775fc4e4dfac584092c5e267aa"
+    },
+    {
+      "path": "tools.log",
+      "size": 515,
+      "sha256": "fbabc92b6be8894604aea71c07880be2c51f8390c4d30d7508bd63bf3c45d9d2"
+    }
+  ]
+}

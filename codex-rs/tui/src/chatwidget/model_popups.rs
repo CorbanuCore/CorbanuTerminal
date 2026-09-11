@@ -663,7 +663,15 @@ impl ChatWidget {
         let is_current = preset.model == selected_model && preset_provider == selected_provider;
         let direct_select = preset.supported_reasoning_efforts.len() <= 1;
         let preset_for_action = preset.clone();
-        let display_name = Self::model_display_label_for_preset(&preset);
+        let mut display_name = Self::model_display_label_for_preset(&preset);
+        // The Other tab can contain identical model IDs from distinct routes.
+        // Keep their provider identity visible before the user selects one.
+        if Self::model_picker_provider_group(preset_provider.as_deref())
+            .is_some_and(|group| group.id == "other")
+            && let Some(provider) = preset_provider.as_deref()
+        {
+            display_name = format!("{display_name} via {provider}");
+        }
         let model = preset.model.clone();
         let actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
             let preset_for_event = preset_for_action.clone();
@@ -1008,7 +1016,7 @@ impl ChatWidget {
                                 effort: selected_effort,
                             });
                     } else {
-                        self.apply_model_and_effort(selected_model, selected_effort);
+                        self.apply_model_and_effort(selected_model, provider, selected_effort);
                     }
                 }
                 ModelSelectionPurpose::CodexPane { .. } => {
@@ -1352,8 +1360,12 @@ impl ChatWidget {
         ))
     }
 
-    fn apply_model_and_effort(&self, model: String, effort: Option<ReasoningEffortConfig>) {
-        let provider = self.resolved_model_provider(&model);
+    fn apply_model_and_effort(
+        &self,
+        model: String,
+        provider: Option<String>,
+        effort: Option<ReasoningEffortConfig>,
+    ) {
         let warning = effort
             .as_ref()
             .and_then(|effort| self.ultra_reasoning_concurrency_warning(effort));

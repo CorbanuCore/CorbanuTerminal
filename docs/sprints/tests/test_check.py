@@ -134,6 +134,78 @@ class SprintCheckerTests(unittest.TestCase):
                 any("missing sprint backlink" in error for error in result["errors"])
             )
 
+    def test_plan_must_define_linked_feature(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo, root, sprint = self.make_repo(temporary)
+            sprint.write_text(sprint_text(), encoding="utf-8")
+            plan = repo / "docs/plans/proposed/plan.md"
+            plan.write_text(
+                plan.read_text(encoding="utf-8").replace("\nPF-01\n", "\nPF-02\n"),
+                encoding="utf-8",
+            )
+            result = checker.check_sprints(root, repo)
+            self.assertEqual(len(result["errors"]), 1, result["errors"])
+            self.assertIn("does not define feature PF-01", result["errors"][0])
+
+    def test_renumber_requires_matching_filename(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo, root, sprint = self.make_repo(temporary)
+            sprint.write_text(
+                sprint_text().replace("PF-01", "PF-02"), encoding="utf-8"
+            )
+            plan = repo / "docs/plans/proposed/plan.md"
+            plan.write_text(
+                plan.read_text(encoding="utf-8").replace("PF-01", "PF-02"),
+                encoding="utf-8",
+            )
+            result = checker.check_sprints(root, repo)
+            self.assertEqual(len(result["errors"]), 1, result["errors"])
+            self.assertIn("filename must contain lowercase sprint id", result["errors"][0])
+
+    def test_cross_plan_collision_repair_preserves_archived_dependency(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo, root, sprint = self.make_repo(temporary)
+            sprint.write_text(sprint_text(), encoding="utf-8")
+            archive = root / "archive/other-plan"
+            archive.mkdir()
+            other_plan = repo / "docs/plans/proposed/other-plan.md"
+            other_plan.write_text(
+                "---\nstatus: draft\n---\n\nPF-01\nPF-02\n", encoding="utf-8"
+            )
+            original = sprint_text(
+                status="completed", plan_file="docs/plans/proposed/other-plan.md"
+            ).replace("- [ ]", "- [x]")
+            archived = archive / "pf-01-s01-one-task.md"
+            archived.write_text(original, encoding="utf-8")
+            dependent = archive / "pf-02-s01-follow-up.md"
+            dependent_text = (
+                original.replace("PF-01", "PF-02")
+                .replace("execution_order: 1", "execution_order: 2")
+                .replace('depends_on: "none"', 'depends_on: "PF-01-S01"')
+            )
+            dependent.write_text(dependent_text, encoding="utf-8")
+            result = checker.check_sprints(root, repo)
+            self.assertEqual(len(result["errors"]), 1, result["errors"])
+            self.assertIn("duplicate sprint_id", result["errors"][0])
+
+            renamed = sprint.with_name("pf-76-s01-one-task.md")
+            sprint.rename(renamed)
+            renamed.write_text(
+                sprint_text().replace("PF-01", "PF-76"), encoding="utf-8"
+            )
+            plan = repo / "docs/plans/proposed/plan.md"
+            plan.write_text(
+                plan.read_text(encoding="utf-8")
+                .replace("PF-01", "PF-76")
+                .replace("pf-01", "pf-76"),
+                encoding="utf-8",
+            )
+            result = checker.check_sprints(root, repo)
+            self.assertTrue(result["ok"], result["errors"])
+            self.assertEqual((result["current_count"], result["archive_count"]), (1, 2))
+            self.assertEqual(archived.read_text(encoding="utf-8"), original)
+            self.assertEqual(dependent.read_text(encoding="utf-8"), dependent_text)
+
     def test_ready_sprint_requires_active_plan_and_worktree(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo, root, sprint = self.make_repo(temporary)
