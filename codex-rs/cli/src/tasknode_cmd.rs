@@ -57,6 +57,9 @@ pub(crate) enum TaskNodeCommand {
     /// Read or save the Task Node context document.
     Context(ContextCli),
 
+    /// Read shared collaborator context from Task Node.
+    Team(TeamCli),
+
     /// Create a new task request.
     Request(RequestCli),
 
@@ -184,6 +187,18 @@ struct ChatSendArgs {
     /// Preflight through the backend without calling the model, when the server supports it.
     #[arg(long, default_value_t = false)]
     dry_run: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct TeamCli {
+    #[command(subcommand)]
+    action: TeamCommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum TeamCommand {
+    /// Read the permission-filtered Team Context report.
+    Context,
 }
 
 #[derive(Debug, Args)]
@@ -470,6 +485,9 @@ async fn run_inner(command: TaskNodeCli) -> anyhow::Result<i32> {
         },
         TaskNodeCommand::Chat(cli) => run_chat_command(&client, cli).await,
         TaskNodeCommand::Context(cli) => run_context_command(&client, cli).await,
+        TaskNodeCommand::Team(TeamCli {
+            action: TeamCommand::Context,
+        }) => emit_response(client.get("/api/terminal/tasknode/team/context").await?),
         TaskNodeCommand::Request(cli) => run_request_command(&client, cli).await,
         TaskNodeCommand::Requests(cli) => run_requests_command(&client, cli).await,
         TaskNodeCommand::Tasks(cli) => run_tasks_command(&client, cli).await,
@@ -1582,6 +1600,31 @@ fn reqwest_error(err: reqwest::Error) -> anyhow::Error {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+
+    #[test]
+    fn team_context_is_read_only_and_accepts_profile_scope() {
+        let cli = TaskNodeCli::try_parse_from([
+            "tasknode",
+            "--profile",
+            "alice",
+            "team",
+            "context",
+            "--json",
+        ])
+        .unwrap();
+        assert_eq!(cli.config_profile.as_deref(), Some("alice"));
+        assert!(matches!(
+            cli.command,
+            TaskNodeCommand::Team(TeamCli {
+                action: TeamCommand::Context
+            })
+        ));
+        assert!(
+            TaskNodeCli::try_parse_from(["tasknode", "team", "context", "--account", "bob"])
+                .is_err()
+        );
+        assert!(TaskNodeCli::try_parse_from(["tasknode", "team", "save"]).is_err());
+    }
 
     #[test]
     fn tasknode_cli_accepts_profile_scoped_credentials() {

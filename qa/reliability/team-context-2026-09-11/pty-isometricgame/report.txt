@@ -1,0 +1,43 @@
+/ Task Node Team Context · read only/ / / / / / / / / / /
+Task Node Team Context
+Status: current
+Updated: 2026-09-11T00:00:00Z
+Use in personal context: off
+
+Shared contributor updates
+
+Alice (@alice)
+Rewarded tasks: 2 in 24 hours · 5 in 7 days
+Focus: Reliable task delivery
+• Added retry coverage.
+• Shipped the worker fix.
+Effect: Fewer stalled requests.
+
+Bob
+Task history has not been shared with you.
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+~
+──────────────────────────────────────────────────── 100% ─
+ ↑/↓ to scroll   pgup/pgdn to page   home/end to jump
+ q to quit

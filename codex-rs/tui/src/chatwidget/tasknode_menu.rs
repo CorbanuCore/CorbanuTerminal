@@ -1,5 +1,7 @@
 //! Task Node menu, terminal auth, and task actions.
 
+mod team_context;
+
 use super::*;
 use codex_config::ConfigLayerSource;
 use codex_vault::Vault;
@@ -1578,6 +1580,13 @@ fn tasknode_menu_items(
                     tx.send(AppEvent::OpenTaskNodeTaskRequestPrompt)
                 })],
                 dismiss_on_select: true,
+                ..Default::default()
+            },
+            SelectionItem {
+                name: "Team Context".to_string(),
+                description: Some("Read collaborators' shared work summaries".to_string()),
+                actions: vec![Box::new(|tx| tx.send(AppEvent::OpenTaskNodeTeamContext))],
+                dismiss_on_select: false,
                 ..Default::default()
             },
             SelectionItem {
