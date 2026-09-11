@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "launches": [
+    {
+      "pid": "57303",
+      "menu_seconds": 1.77
+    },
+    {
+      "pid": "57447",
+      "menu_seconds": 1.65
+    }
+  ],
+  "human_acceptance": false
+}

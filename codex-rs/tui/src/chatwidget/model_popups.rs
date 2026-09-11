@@ -589,7 +589,10 @@ impl ChatWidget {
 
         let (items, tabs, initial_tab_id, footer_hint) = if provider_items.len() > 1 {
             let selected_model = purpose.selected_model(self.current_model());
-            let current_provider = self.resolved_model_provider(selected_model);
+            let current_provider = match purpose {
+                ModelSelectionPurpose::Session => Some(self.config.model_provider_id.clone()),
+                _ => self.resolved_model_provider(selected_model),
+            };
             let current_group = Self::model_picker_provider_group(current_provider.as_deref());
             let initial_tab_id = current_group
                 .filter(|group| {
@@ -648,7 +651,16 @@ impl ChatWidget {
         purpose: ModelSelectionPurpose,
     ) -> SelectionItem {
         let description = Self::model_description_for_preset(&preset);
-        let is_current = preset.model.as_str() == purpose.selected_model(self.current_model());
+        let selected_model = purpose.selected_model(self.current_model());
+        let selected_provider = match &purpose {
+            ModelSelectionPurpose::Session => Some(self.config.model_provider_id.clone()),
+            _ => self.resolved_model_provider(selected_model),
+        };
+        let preset_provider = preset
+            .provider_id
+            .clone()
+            .or_else(|| Self::model_provider_for_selection(&preset.model));
+        let is_current = preset.model == selected_model && preset_provider == selected_provider;
         let direct_select = preset.supported_reasoning_efforts.len() <= 1;
         let preset_for_action = preset.clone();
         let display_name = Self::model_display_label_for_preset(&preset);

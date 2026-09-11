@@ -479,6 +479,13 @@ pub(super) fn claude_intent_for_status(
         {
             Some(ClaudeAccountIntent::UnauthorizedRecovery { source })
         }
+        ProviderConfigurationState::RecoveryRequired => {
+            // The user explicitly opened recovery, but there is no selected source
+            // to renew. Enroll the method they explicitly choose, including an
+            // existing Claude login; never guess an account/billing source.
+            Some(ClaudeAccountIntent::Add)
+        }
+        ProviderConfigurationState::Configured => Some(ClaudeAccountIntent::Replace),
         _ => None,
     }
 }

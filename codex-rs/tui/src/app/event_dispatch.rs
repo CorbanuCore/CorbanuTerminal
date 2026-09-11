@@ -2414,16 +2414,13 @@ impl App {
                 let session = crate::onboarding::provider_setup::ProviderSetupSession::from_statuses(
                     host.resolve().entries(),
                 );
-                self.shared_provider_status_host = Some(host);
+                self.shared_provider_status_host = Some(host.clone());
                 self.shared_provider_setup_session = Some(session);
                 self.shared_provider_account_auth_host = Some(
                     crate::provider_account_auth_host::ProviderAccountAuthHost::new(
                         app_server.request_handle(),
                         self.app_event_tx.clone(),
-                        self.shared_provider_status_host
-                            .as_ref()
-                            .expect("shared provider status host")
-                            .clone(),
+                        host,
                         self.config.clone(),
                     ),
                 );
@@ -2745,6 +2742,7 @@ impl App {
                     self.model_catalog.sync_runtime_models(
                         self.config.model_providers.keys().map(String::as_str),
                         self.config.model.as_deref(),
+                        &self.config.model_provider_id,
                     );
                     self.model_catalog.refresh_provider_policy();
                 }

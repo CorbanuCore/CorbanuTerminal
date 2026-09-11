@@ -14412,6 +14412,9 @@ async fn provider_manager_reuses_policy_health_after_setup_handle_is_cleared() {
     );
 }
 
+#[path = "tests/provider_picker_refresh.rs"]
+mod provider_picker_refresh;
+
 #[tokio::test]
 async fn provider_manager_open_preserves_lazy_command_authorization_without_shared_state() {
     let home = tempfile::tempdir().unwrap();
@@ -14509,7 +14512,7 @@ fn provider_manager_claude_intent_uses_typed_status_and_recovery_source() {
             &status(ProviderConfigurationState::RecoveryRequired),
             Source::Unknown,
         ),
-        None,
+        Some(ClaudeAccountIntent::Add),
     );
     assert_eq!(
         super::provider_management::claude_intent_for_status(

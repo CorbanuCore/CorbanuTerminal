@@ -248,6 +248,7 @@ class SourceBinariesForTargetTest(unittest.TestCase):
             command_runner = touch_file(root / "codex-command-runner.exe")
             sandbox_setup = touch_file(root / "codex-windows-sandbox-setup.exe")
             pfterminal = touch_file(root / "pfterminal.exe")
+            walletd = touch_file(root / "pfterminal-walletd.exe")
 
             outputs = build_source_binaries(
                 TARGET_SPECS["x86_64-pc-windows-msvc"],
@@ -259,13 +260,17 @@ class SourceBinariesForTargetTest(unittest.TestCase):
                 bwrap_bin=None,
                 codex_command_runner_bin=command_runner,
                 codex_windows_sandbox_setup_bin=sandbox_setup,
-                extra_bins={"pfterminal.exe": pfterminal},
+                extra_bins={
+                    "pfterminal.exe": pfterminal,
+                    "pfterminal-walletd.exe": walletd,
+                },
             )
 
         self.assertEqual(outputs.entrypoint_bin, entrypoint)
         self.assertEqual(outputs.code_mode_host_bin, code_mode_host)
         self.assertEqual(outputs.codex_command_runner_bin, command_runner)
         self.assertEqual(outputs.codex_windows_sandbox_setup_bin, sandbox_setup)
+        self.assertEqual(outputs.extra_bins["pfterminal-walletd.exe"], walletd)
 
 
 def touch_file(path: Path) -> Path:

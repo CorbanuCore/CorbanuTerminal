@@ -1024,6 +1024,26 @@ model = "claude-fable-5-plan"
 }
 
 #[test]
+fn corbanu_auth_helper_recognizes_all_supported_cli_names_without_path_lookup() {
+    let dir = tempdir().expect("tempdir");
+    for name in [
+        "corbanu",
+        "corbanu-debug",
+        "codex",
+        "pfterminal",
+        "pfterminal-debug",
+    ] {
+        let executable = dir
+            .path()
+            .join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+        assert_eq!(
+            corbanu_auth_helper_from_executable(executable.clone()).as_deref(),
+            executable.to_str()
+        );
+    }
+}
+
+#[test]
 fn corbanu_auth_helper_rejects_an_unrelated_runtime_without_a_sibling_cli() {
     let temp_dir = tempdir().expect("tempdir");
     let runtime = temp_dir.path().join(if cfg!(windows) {

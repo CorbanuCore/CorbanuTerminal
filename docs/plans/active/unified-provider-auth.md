@@ -63,6 +63,37 @@ active-plan slot.
 
 ## User pain
 
+September 10 picker follow-up (user: “Please fix these and create regression
+coverage”): PF-58 also repairs TUI model-catalog synchronization, exact
+provider/model current markers, and asynchronous health refresh. Do not invent
+model availability or bypass credential eligibility. Preserve Anthropic API
+versus Claude subscription ownership. Add regressions and packaged TMUX proof;
+continue Developer ID signing without changing credential ACLs.
+
+Final follow-up evidence: `qa/provider-auth/pf-58/picker-repair-20260910.md`.
+The signed native Mac and RTX packages pass catalog/setup/restart TMUX; 58 TUI,
+72 provider-auth and 32 Linux integration tests pass. Two unattended Mac
+existing-profile menu launches complete with successful Keychain reads.
+Human acceptance and the separate documented release/live-platform gates remain open.
+
+September 10 Mac Keychain amendment (user: “Can you fix it?”): PF-58 also
+owns `codex-rs/keyring-store/` for bounded native permission prompting. Permit
+at most one interactive operation per credential per process; subsequent native
+operations must remain fresh reads/writes but fail rather than prompt again.
+Do not cache credential values, change Keychain ACLs, erase credentials, or add
+fallback storage. A new process resets the interaction budget. Native Mac
+builds/tests are authorized by the user's September 8 dual-platform request;
+Linux remains the preferred location for portable rebuilds. Verify native
+allow/deny/repeated-read behavior and preserve explicit human sign-off gaps.
+
+September 8 repair amendment: the expanded candidate gate exposed a silent
+Claude manager recovery cancellation when no credential source is selected.
+PF-58 must expose the existing explicit method/replacement choice in this case,
+while retaining known-source recovery restrictions and external ownership.
+The user's request to fix failing tests authorizes this repair; the adjacent
+bounded packaging and native-pane inheritance repairs are recorded separately
+under `qa/provider-auth/pf-58/product-repairs-20260908.md`.
+
 2026-09-05 user amendment: identify the credential rejected by `codex_apps`
 and generalize actionable reauthentication across providers. PF-58 owns this
 follow-up; it does not reopen completed PF-48–PF-57 or activate protected modes.

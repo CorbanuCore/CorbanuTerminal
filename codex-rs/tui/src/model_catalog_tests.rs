@@ -1,6 +1,7 @@
 use super::*;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ReasoningEffort;
+use pretty_assertions::assert_eq;
 
 fn preset(model: &str, provider_id: Option<&str>) -> ModelPreset {
     ModelPreset {
@@ -96,22 +97,60 @@ fn configured_runtime_model_does_not_duplicate_existing_exact_or_inferred_provid
 }
 
 #[test]
-fn runtime_sync_is_idempotent_deterministic_and_preserves_exact_provider_identity() {
+fn runtime_sync_preserves_shared_opaque_custom_routes_but_not_idle_local_runtimes() {
     let catalog = ModelCatalog::new(vec![preset("shared-model", Some("provider-a"))]);
 
     catalog.sync_runtime_models(
-        ["provider-c", "provider-a", "provider-b"],
+        [
+            "provider-c",
+            "provider-a",
+            "provider-b",
+            "ollama",
+            "lmstudio",
+        ],
         Some("shared-model"),
+        "provider-b",
     );
     catalog.sync_runtime_models(
         ["provider-b", "provider-c", "provider-a"],
         Some("shared-model"),
+        "provider-b",
     );
 
     let models = catalog.try_list_models().unwrap();
     assert_eq!(models.len(), 3);
     assert_eq!(models[1].provider_id.as_deref(), Some("provider-b"));
     assert_eq!(models[1].id, "provider-b:shared-model");
-    assert_eq!(models[2].provider_id.as_deref(), Some("provider-c"));
     assert_eq!(models[2].id, "provider-c:shared-model");
+}
+
+#[test]
+fn claude_current_does_not_seed_local_or_custom_providers_on_manager_refresh() {
+    use codex_model_provider_info::*;
+    let current = CLAUDE_FABLE_5_1_PLAN_MODEL;
+    let catalog = ModelCatalog::new(vec![preset(current, Some(CLAUDE_PLAN_PROVIDER_ID))]);
+    for _ in 0..3 {
+        catalog.sync_runtime_models(
+            [
+                CLAUDE_PLAN_PROVIDER_ID,
+                "ollama",
+                "lmstudio",
+                "custom",
+                ANTHROPIC_PROVIDER_ID,
+            ],
+            Some(current),
+            CLAUDE_PLAN_PROVIDER_ID,
+        );
+    }
+    let models = catalog.try_list_models().unwrap();
+    assert_eq!(
+        models
+            .iter()
+            .map(|p| (p.model.as_str(), p.provider_id.as_deref()))
+            .collect::<Vec<_>>(),
+        vec![
+            (current, Some(CLAUDE_PLAN_PROVIDER_ID)),
+            (ANTHROPIC_DEFAULT_MODEL, Some(ANTHROPIC_PROVIDER_ID))
+        ],
+    );
 }

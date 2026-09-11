@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "candidate": "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-repaired-20260908/bin/corbanu",
+  "sha256": "22b78e2d5c26865b454103229220bbc922839208aee5eff7f5ea03f22aa033a0",
+  "host_sha256": "4244e014665a2faac72c4622a9b9f877684694c9bc3240b631bb454afd0a6a1d",
+  "human_acceptance": false,
+  "tool_round_trips": 4,
+  "concurrent_processes": 3,
+  "same_home_restart": true,
+  "stream_cancel_recovery": true,
+  "permissions_security_cancel_inert": true,
+  "claude_guidance_40_columns": true
+}

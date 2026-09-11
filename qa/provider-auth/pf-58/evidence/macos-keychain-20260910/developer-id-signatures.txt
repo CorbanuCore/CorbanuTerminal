@@ -1,0 +1,68 @@
+/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/corbanu: valid on disk
+/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/corbanu: satisfies its Designated Requirement
+Executable=/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/corbanu
+Identifier=com.corbanu.corbanu
+Format=Mach-O thin (arm64)
+CodeDirectory v=20400 size=464407 flags=0x0(none) hashes=14507+2 location=embedded
+Signature size=9042
+Authority=Developer ID Application: Travis Good (K5N2T25C23)
+Authority=Developer ID Certification Authority
+Authority=Apple Root CA
+Timestamp=10 Sep 2026 at 4:54:59 pm
+Info.plist=not bound
+TeamIdentifier=K5N2T25C23
+Sealed Resources=none
+Internal requirements count=1 size=180
+Executable=/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/corbanu
+designated => identifier "com.corbanu.corbanu" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = K5N2T25C23
+/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/codex-code-mode-host: valid on disk
+/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/codex-code-mode-host: satisfies its Designated Requirement
+Executable=/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/codex-code-mode-host
+Identifier=com.corbanu.codex-code-mode-host
+Format=Mach-O thin (arm64)
+CodeDirectory v=20400 size=108452 flags=0x0(none) hashes=3383+2 location=embedded
+Signature size=9041
+Authority=Developer ID Application: Travis Good (K5N2T25C23)
+Authority=Developer ID Certification Authority
+Authority=Apple Root CA
+Timestamp=10 Sep 2026 at 4:55:00 pm
+Info.plist=not bound
+TeamIdentifier=K5N2T25C23
+Sealed Resources=none
+Internal requirements count=1 size=192
+Executable=/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/codex-code-mode-host
+designated => identifier "com.corbanu.codex-code-mode-host" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = K5N2T25C23
+/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/corbanu-walletd: valid on disk
+/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/corbanu-walletd: satisfies its Designated Requirement
+Executable=/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/corbanu-walletd
+Identifier=com.corbanu.corbanu-walletd
+Format=Mach-O thin (arm64)
+CodeDirectory v=20400 size=11743 flags=0x0(none) hashes=361+2 location=embedded
+Signature size=9042
+Authority=Developer ID Application: Travis Good (K5N2T25C23)
+Authority=Developer ID Certification Authority
+Authority=Apple Root CA
+Timestamp=10 Sep 2026 at 4:55:00 pm
+Info.plist=not bound
+TeamIdentifier=K5N2T25C23
+Sealed Resources=none
+Internal requirements count=1 size=188
+Executable=/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/corbanu-walletd
+designated => identifier "com.corbanu.corbanu-walletd" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = K5N2T25C23
+/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/corbanu-acp: valid on disk
+/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/corbanu-acp: satisfies its Designated Requirement
+Executable=/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/corbanu-acp
+Identifier=com.corbanu.corbanu-acp
+Format=Mach-O thin (arm64)
+CodeDirectory v=20400 size=1019 flags=0x0(none) hashes=26+2 location=embedded
+Signature size=9041
+Authority=Developer ID Application: Travis Good (K5N2T25C23)
+Authority=Developer ID Certification Authority
+Authority=Apple Root CA
+Timestamp=10 Sep 2026 at 4:55:00 pm
+Info.plist=not bound
+TeamIdentifier=K5N2T25C23
+Sealed Resources=none
+Internal requirements count=1 size=184
+Executable=/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-developer-id-20260910/bin/corbanu-acp
+designated => identifier "com.corbanu.corbanu-acp" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = K5N2T25C23

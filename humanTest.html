@@ -130,6 +130,13 @@
     .test p:last-child { margin-bottom: 0; }
     .expected { color: var(--green) !important; }
     .failure { color: var(--red) !important; }
+    .test.prerequisite, .test.prerequisite:has(input:checked) {
+      border: 2px solid #f5d547;
+      background: #302b16;
+    }
+    .test.prerequisite input { accent-color: #f5d547; outline: 2px solid #f5d547; outline-offset: 2px; }
+    .prerequisite-note { color: #ffe881 !important; font-size: .9rem; }
+    .prerequisite-legend { margin-bottom: 24px; padding: 16px 20px; border: 2px solid #f5d547; border-radius: 12px; background: #302b16; color: #ffe881; }
 
     .keys, .tag {
       display: inline-block;
@@ -194,6 +201,8 @@
       .actions { display: none; }
       .test, .map, .metric, details { break-inside: avoid; }
       details > div { display: block; }
+      .test.prerequisite, .prerequisite-legend { background: #fff5bc; border-color: #927000; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .prerequisite-note, .prerequisite-legend { color: #594500 !important; }
     }
   </style>
 </head>
@@ -202,12 +211,12 @@
     <header>
       <p class="eyebrow">Corbanu Terminal · human QA</p>
       <h1>Provider and security acceptance</h1>
-      <p class="lede">Start with <a href="#reauth-title">checks 24–26: credential recovery</a> on the replacement RTX build. The earlier provider and security checks remain below with their historical evidence. Stop at a failure and record the visible message—never a credential or login code.</p>
+      <p class="lede"><strong>Product repairs are staged; full human handoff remains gated.</strong> Use only the complete repaired package identified below, not the previous replacement. All 26 checks have a machine-coverage entry. Automated results and remaining live/platform prerequisites are recorded in the <a href="qa/provider-auth/pf-58/handoff-readiness.md">readiness report</a>; missing evidence is not a pass. No human checks have been accepted automatically.</p>
       <div class="release-strip">
         <span><strong>Candidate:</strong> Corbanu 0.1.41 · PF-58</span>
         <span><strong>Main incorporated:</strong> <code>3cec54d99</code></span>
         <span><strong>Combined base:</strong> <code>472b8fed5</code></span>
-        <span><strong>Recovery follow-up:</strong> 8 Sep 2026 (Phoenix)</span>
+        <span><strong>Recovery/picker follow-up:</strong> 10 Sep 2026 (Phoenix)</span>
         <span><strong>Machine:</strong> RTX · <code>travis@100.99.88.49</code></span>
         <span><strong>Branch:</strong> <code>feat/provider-reauth-health</code> · not merged to main</span>
       </div>
@@ -257,20 +266,23 @@
 
     <section aria-labelledby="checks-title">
       <h2 id="checks-title">Core acceptance checks</h2>
+      <aside class="prerequisite-legend"><strong>Yellow = incomplete prerequisites or a reproduced failure (12 checks).</strong> Highlighted checks are 1, 2, 3, 5, 6, 7, 11, 12, 15, 20, 24 and 26. Check 11 failed on both the September 8 and September 10 Mac packages; the others retain live/platform evidence gaps. Unhighlighted checks have automated baseline evidence, not human acceptance. Your saved checkmarks are unchanged, and yellow remains visible even if a box was previously checked.</aside>
       <div class="checklist">
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="launch">
           <span>
+            <p class="prerequisite-note"><strong>Build prerequisite satisfied on Mac and Linux.</strong> The Mac shortcut now uses the final September 10 picker/Keychain replacement. Both packages passed expanded TMUX checks; the Mac also passed two unattended existing-profile startup/menu runs. Escape cancellation remains blocked in check 11. Actual new-window placement and named-human Keychain confirmation remain open.</p>
             <h3>1. Launch from the app shortcut</h3>
-            <p>Use the <strong>Corbanu Terminal Launcher</strong> window opened for this run. If you need to relaunch, use the same app shortcut—not a shell command or debug launcher.</p>
+            <p>Open a new window using <strong>Corbanu Terminal Launcher</strong> in Applications. Existing windows keep their older running binary; use the app shortcut—not a shell command or debug launcher—to test the new Mac package.</p>
             <p class="expected">Pass: a new Terminal window opens on Desktop 3 in the first free position of the 2 × 3 card grid.</p>
             <p class="failure">Fail: it opens beside Codex on another desktop, overlaps an existing terminal, says the build is missing, or opens a debug build.</p>
           </span>
         </label>
 
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="startup">
           <span>
+            <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> complete startup through the intended app launcher, including the update notice. RTX helper availability, installed MCPs and the live connected-app inventory already passed; the complete launcher flow is not yet certified.</p>
             <h3>2. Verify startup identity and remembered setup</h3>
             <p>Wait for the composer, then run <span class="keys">/status</span>. Note the current provider and model. Do not configure anything yet.</p>
             <p class="expected">Pass: startup reaches chat without forcing <code>/providers</code>, your previously selected provider/model is remembered, Code Mode is available, no <code>codex_apps</code> startup warning appears, and Corbanu does not offer an “update” to the older 0.1.37 release.</p>
@@ -278,9 +290,10 @@
           </span>
         </label>
 
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="catalog">
           <span>
+            <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> inspect all wallet balance, top-up, pricing and key-management actions, and confirm obsolete plan-sales actions are absent. Inspection does not require making a payment.</p>
             <h3>3. Inspect the unified provider catalog</h3>
             <p>Run <span class="keys">/providers</span>. Move through the list, inspecting OpenAI, Anthropic/Claude, Corbanu API, API-key providers, and any local/custom entries. Then run <span class="keys">/wallet</span> and inspect the Corbanu API entry.</p>
             <p>In <span class="keys">/model</span>, select Ambient: its only offered model should be GLM 5.2. Kimi 2.7 should not appear under Ambient; other providers' Kimi models are unchanged.</p>
@@ -299,9 +312,10 @@
           </span>
         </label>
 
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="fable">
           <span>
+            <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> select Fable 5.1 Max through the model picker and check both labels. A live Fable 5.1 Max request already passed when selected at launch; the full picker-to-request journey still needs evidence.</p>
             <h3>5. Select Fable 5.1 Max and make a live request</h3>
             <p>Run <span class="keys">/model</span>, select <strong>Claude Fable 5.1</strong> at <strong>Max</strong>, then send <span class="keys">Reply with exactly: FABLE_51_OK</span>. Type the prompt and press Return separately.</p>
             <p class="expected">Pass: Fable 5.1 is offered, both model labels change immediately, the response is <code>FABLE_51_OK</code>, and no missing-environment or provider-auth-command error appears.</p>
@@ -309,9 +323,10 @@
           </span>
         </label>
 
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="model-sync">
           <span>
+            <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> confirm immediate header/footer agreement when switching Claude → OpenAI → Claude, before sending another prompt.</p>
             <h3>6. Switch models and compare both labels</h3>
             <p>Use <span class="keys">/model</span> to select a different provider/model, then switch back to Fable 5.1 Max. Watch the boxed model indicator near the top and the footer throughout.</p>
             <p class="expected">Pass: both labels update immediately after each selection and always agree—no redraw, restart, or prompt is required.</p>
@@ -319,9 +334,10 @@
           </span>
         </label>
 
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="restart">
           <span>
+            <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> restart via the actual app launcher, retain the real selected provider/model, and complete a live request. Synthetic same-home restart tests already passed.</p>
             <h3>7. Restart and confirm provider persistence</h3>
             <p>Quit this Corbanu window normally, relaunch from the app shortcut, and run <span class="keys">/status</span>. Send <span class="keys">Reply with exactly: RESTART_OK</span>.</p>
             <p class="expected">Pass: startup goes directly to chat, the selected provider/model and active providers are preserved, and the response is <code>RESTART_OK</code>.</p>
@@ -359,9 +375,10 @@
           </span>
         </label>
 
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="stream">
           <span>
+            <p class="prerequisite-note"><strong>Known automated failure — do not spend time retesting yet.</strong> Escape did not cancel the synthetic stream on either the untouched September 8 package or the September 10 Keychain repair. Ctrl+C cancellation and subsequent recovery passed on the replacement; that is not acceptance of this Escape-specific check.</p>
             <h3>11. Cancel a stream and continue the same session</h3>
             <p>Ask for several paragraphs. While text is streaming, press <span class="keys">Escape</span>, then send <span class="keys">Reply with exactly: RECOVERY_OK</span>.</p>
             <p class="expected">Pass: streaming stops cleanly, the second response is <code>RECOVERY_OK</code>, and the composer remains responsive.</p>
@@ -369,9 +386,10 @@
           </span>
         </label>
 
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="grid-soak">
           <span>
+            <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> three actual Mac windows on Desktop 3 must occupy distinct slots and remain independent. Three concurrent RTX terminal processes already passed; Mac window placement has not.</p>
             <h3>12. Open three concurrent launcher windows</h3>
             <p>Use the app shortcut twice more. On Desktop 3, send a short request in each of the three windows and switch models in one of them.</p>
             <p class="expected">Pass: the windows occupy distinct card slots, remain independently usable, and no launch replaces, overlaps, or moves another session.</p>
@@ -394,7 +412,8 @@
           <p>In Claude's token entry, submit exactly <code>not a valid token</code>, including the spaces. Spaces make it fail the local format check before storage. Do not substitute a whitespace-free dummy string: that could replace your saved token. Read the error, choose Retry authentication, and then press Escape.</p>
           <p class="expected">Pass: the error explains why setup failed and how to obtain a token. Retry reopens masked entry. Escape returns cleanly, and your previously configured account still works.</p>
         </span></label>
-        <label class="test"><input type="checkbox" data-check="auth-parity"><span>
+        <label class="test prerequisite"><input type="checkbox" data-check="auth-parity"><span>
+          <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> click the wrapped real browser login link and confirm macOS Keychain does not repeatedly prompt.</p>
           <h3>15. Check API-key and browser guidance</h3>
           <p>Inspect an API-key provider's entry screen, then cancel. If an OpenAI account setup action is available, open it and inspect the login link and device-code guidance, then cancel.</p>
           <p class="expected">Pass: API-key guidance identifies its environment variable and credential storage, and says it is never added to chat. The OpenAI link remains clickable when wrapped, and explains signing in from another device. No repeated keychain prompts appear during this pass.</p>
@@ -440,7 +459,8 @@
           <p>Resize to approximately 40 columns. Inspect <code>/security</code> and <code>/status</code>, then restore the normal width.</p>
           <p class="expected">Pass: the requested/effective warning and profile descriptions remain readable. Navigation and Escape still work; no critical warning is silently truncated.</p>
         </span></label>
-        <label class="test"><input type="checkbox" data-check="security-permissive-regression"><span>
+        <label class="test prerequisite"><input type="checkbox" data-check="security-permissive-regression"><span>
+          <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> combine permission cancellation and same-home security restart in one journey, confirming the effective policy is unchanged. Separate component checks already passed.</p>
           <h3>20. Continue your ordinary session</h3>
           <p>In the normal Permissive test session, inspect <code>/permissions</code> and cancel without changing it. Use <code>/model</code> to switch between already-configured providers, send a harmless message, then restart and repeat <code>/security</code>.</p>
           <p class="expected">Pass: ordinary provider, permission and session behavior is unchanged. Viewing profiles creates no policy change that survives restart. Do not edit your real config to manufacture a protected-mode test.</p>
@@ -476,14 +496,19 @@
 
     <section aria-labelledby="reauth-title" style="margin-top:42px">
       <h2 id="reauth-title">Provider reauthentication — PF-58 candidate</h2>
-      <p><strong>Replacement for human acceptance.</strong> Use this RTX session, not an older Mac launcher or the historical round-five executable. Never include a credential or login code in your notes.</p>
-      <pre><code>ssh -t travis@100.99.88.49 'tmux attach -t corbanu-human-pf58-final'</code></pre>
-      <p>Binary: <code>/home/travis/security-round5/evidence/provider-reauth-health-final/candidate-replacement/codex</code><br>
-      SHA-256: <code>37511bb9348e3793255ce67806d23060f3436cee53ef0a041b921420b201da35</code></p>
-      <p><strong>Scope:</strong> the focused recovery tests pass, including new-token requests without restarting. Human sign-off is still yours. A separate native child-agent test reports <code>source admission policy is unavailable</code>; this is not a release-clean security integration and is not merged to main. See <a href="qa/provider-auth/pf-58/README.md">qualification and limitations</a>.</p>
-      <p><strong>Scrolling:</strong> Page Up enters tmux history in this session. Page Up/Page Down scroll there; press <kbd>q</kbd> to return to Corbanu.</p>
+      <p><strong>Repaired package, not the old replacement.</strong> It includes matching Code Mode and wallet helpers, the RTX plugin runtime launcher, Claude recovery and native-pane fixes, and model/provider-preserving configuration reloads. The old user sessions remain untouched. Full acceptance still requires the readiness report's remaining prerequisites. Never include a credential or login code in your notes.</p>
+      <p>Final Linux binary: <code>/home/travis/security-round5/evidence/picker-20260910/candidate-final/bin/codex</code><br>
+      SHA-256: <code>5ecd62f90574e1b6208625220abf93e431d347c1f2a91c9111c3512e81448062</code></p>
+      <p>Launch through <code>qa/provider-auth/pf-58/launch-candidate.sh</code> in the RTX worktree, passing the package's <code>bin</code> directory. That wrapper checks companion binaries and supplies the installed plugins' Node PATH. A separately copied executable does not qualify.</p>
+      <p><strong>Final native Mac signed replacement (10 September, 17:52).</strong> Open <strong>Corbanu Terminal Launcher</strong> in Applications. Its links now resolve to <code>/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-picker-final-20260910/bin/corbanu</code>, version 0.1.41. Corbanu and its three matching helpers have verified Developer ID signatures and unchanged stable identifiers.<br>
+      Mac SHA-256: <code>8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669</code>.<br>
+      Final results: 58 TUI unit/snapshot regressions, 72 provider-auth tests, and 32 Linux integration tests passed. Both complete packages passed real-key TMUX setup, all three Claude subscription models, exactly one current model, repeated manager visits, restart, independent Anthropic API setup, four host/shell/MCP round trips, three concurrent processes and Ctrl+C recovery. The older Mac package fails the same catalog regression. <a href="qa/provider-auth/pf-58/picker-repair-20260910.md">Current evidence and limitations</a>.</p>
+      <p><strong>Provider/model retest:</strong> in <code>/providers</code>, wait for setup to say configured. In <code>/model</code>, Claude Plan should offer Opus 5, Fable 5.1 and Fable 5 with only the actual provider/model pair marked current. There should be no invented Claude copies under Other. Anthropic remains a separate API-key route: it is always available for setup in <code>/providers</code>, but its models become selectable only after its own API credential is configured. A Claude subscription token does not authorize billed API use.</p>
+      <p><strong>Keychain verification:</strong> the final signed package opened the existing Mac profile twice without password entry, displayed the correct provider/model menus, and recorded successful account/vault reads. The automated probe left configuration unchanged and sent no model request. Your earlier four- and two-prompt experiences remain recorded; this is not automatic human acceptance. Open a new shortcut window; existing windows retain the old binary. If macOS asks for initial access, enter the password yourself only if you trust this build. Separate account and vault items can each need an initial permission. Do not keep entering your password through a repeated loop—report the exact item text if it recurs. No credential permissions or saved checkmarks were changed. Escape cancellation remains the separate yellow check 11.</p>
+      <p><strong>Scope:</strong> repaired-runtime evidence is separate from human acceptance, platform qualification and release sign-off. This branch is not merged to main. See <a href="qa/provider-auth/pf-58/README.md">qualification and limitations</a>.</p>
       <div class="tests">
-        <label class="test"><input type="checkbox" data-check="pf58-account"><span>
+        <label class="test prerequisite"><input type="checkbox" data-check="pf58-account"><span>
+          <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> complete live OpenAI account reauthentication and reconnect codex_apps without restart or provider/model changes. A healthy live connection and synthetic reauthentication passed, but that combined live recovery has not been performed.</p>
           <strong>24. Recover the affected account, not the current model</strong>
           <p>After an OpenAI connected-app authentication failure, open <code>/providers</code>. OpenAI should need attention while the working Claude provider remains configured. Select OpenAI, press <kbd>r</kbd>, and choose sign-in. Cancel once, reopen, then finish sign-in.</p>
           <p class="expected">Pass: cancellation changes nothing; successful sign-in refreshes status and the app connection without restarting or changing provider/model.</p>
@@ -493,7 +518,8 @@
           <p>Use our isolated synthetic fixture, not a production key. After its deliberate rejection, select the affected provider and press <kbd>r</kbd>. Cancel the masked form once, reopen it, and replace the key. Send another request in the same session.</p>
           <p class="expected">Pass: the new key is used immediately; no secret appears in chat; the model, other providers, and any deliberately disabled provider remain unchanged.</p>
         </span></label>
-        <label class="test"><input type="checkbox" data-check="pf58-external"><span>
+        <label class="test prerequisite"><input type="checkbox" data-check="pf58-external"><span>
+          <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> exercise narrow recovery screens with actual keyboard input for command/AWS and local providers; unit/snapshot evidence alone does not cover this journey.</p>
           <strong>26. Recover according to the credential source</strong>
           <p>Press <kbd>r</kbd> on an environment-backed provider, an external command/AWS provider, and a local provider where configured. Repeat in a narrow terminal window.</p>
           <p class="expected">Pass: clear, readable instructions identify the owning shell/tool or local model server. Corbanu does not offer a fake browser login or a vault override for an environment credential. “Configured” does not claim a successful remote validation.</p>
@@ -532,7 +558,7 @@ git merge-base --is-ancestor rust-v0.1.37 HEAD &amp;&amp; echo "0.1.37 release l
       <div class="signoff">
         <label class="field">Tester<input type="text" data-note="tester" placeholder="Your name"></label>
         <label class="field">Date<input type="date" data-note="date"></label>
-        <label class="field">Platform<input type="text" data-note="platform" value="macOS · local CorbanuDrive"></label>
+        <label class="field">Platform<input type="text" data-note="platform" value="Linux RTX via SSH/TMUX; Mac launcher checks require separate evidence"></label>
         <label class="field">Result<input type="text" data-note="result" placeholder="PASS or FAIL at step …"></label>
         <label class="field wide">Notes<textarea data-note="notes" placeholder="Record the first failed step, visible behavior, and exact non-secret message. Never record a credential."></textarea></label>
       </div>

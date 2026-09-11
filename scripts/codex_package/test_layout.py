@@ -168,6 +168,36 @@ class PackageLayoutTest(unittest.TestCase):
 
             self.assertTrue((package_dir / "bin" / "codex-code-mode-host").is_file())
 
+    def test_codex_package_requires_wallet_runtime_companion(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            variant = PACKAGE_VARIANTS["codex"]
+            spec = TARGET_SPECS["x86_64-unknown-linux-gnu"]
+            inputs = PackageInputs(
+                entrypoint_bin=touch_executable(root / "codex"),
+                code_mode_host_bin=touch_executable(root / "codex-code-mode-host"),
+                extra_bins={
+                    extra.entrypoint_name(spec): touch_executable(
+                        root / extra.entrypoint_name(spec)
+                    )
+                    for extra in variant.extra_binaries
+                },
+                rg_bin=touch_executable(root / "rg"),
+                zsh_bin=None,
+                bwrap_bin=touch_executable(root / "bwrap"),
+                codex_command_runner_bin=None,
+                codex_windows_sandbox_setup_bin=None,
+            )
+            package = root / "package"
+            package.mkdir()
+            build_package_dir(package, "1.2.3", variant, spec, inputs)
+            validate_package_dir(package, variant, spec, include_zsh=False)
+            companion = package / "bin" / "pfterminal-walletd"
+            self.assertTrue(companion.is_file())
+            companion.unlink()
+            with self.assertRaises(RuntimeError):
+                validate_package_dir(package, variant, spec, include_zsh=False)
+
     def test_corbanu_debug_alias_is_relative_and_survives_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

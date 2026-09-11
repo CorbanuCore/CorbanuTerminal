@@ -19,6 +19,28 @@ use pretty_assertions::assert_eq;
 use super::*;
 use crate::CommandAuthSetup;
 use crate::ProviderCatalog;
+use crate::ProviderCatalogId;
+
+#[test]
+fn settled_status_update_refreshes_existing_identity_without_adding_providers() {
+    let mut statuses = ProviderStatusCatalog {
+        entries: vec![ProviderStatusSnapshot {
+            id: ProviderCatalogId("claude-plan".into()),
+            methods: vec![],
+            configuration: ProviderConfigurationState::Unavailable,
+            eligibility: ProviderEligibilityState::Active,
+            current: ProviderCurrentState::Current,
+            availability: ProviderAvailabilityState::Checking,
+        }],
+    };
+    let mut recovered = statuses.entries()[0].clone();
+    recovered.configuration = ProviderConfigurationState::Configured;
+    recovered.availability = ProviderAvailabilityState::Ready;
+    let mut unrelated = recovered.clone();
+    unrelated.id = ProviderCatalogId("not-in-catalog".into());
+    statuses.update(&[recovered.clone(), unrelated]);
+    assert_eq!(statuses.entries(), &[recovered]);
+}
 use crate::ProviderEligibility;
 use crate::ProviderEligibilityError;
 use crate::ProviderEligibilityId;

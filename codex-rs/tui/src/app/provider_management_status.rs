@@ -30,6 +30,7 @@ fn sync_provider_manager_model_policy(
     catalog.sync_runtime_models(
         config.model_providers.keys().map(String::as_str),
         config.model.as_deref(),
+        &config.model_provider_id,
     );
     catalog.refresh_provider_policy();
 }
@@ -73,18 +74,27 @@ impl App {
         if generation != self.provider_management_generation {
             return;
         }
+        if self
+            .provider_management_host
+            .as_ref()
+            .is_some_and(|host| !matches!(host.phase(), ProviderManagementPhase::Browsing))
+        {
+            return;
+        }
+        // The asynchronous discovery may have settled after the picker cached
+        // its eligibility snapshot. Publish the same status result to both UIs.
+        self.model_catalog.update_provider_statuses(&statuses);
         let selected_index = self.chat_widget.provider_manager_selected_index();
         if let Some(host) = self.provider_management_host.as_mut() {
-            if !matches!(host.phase(), ProviderManagementPhase::Browsing) {
-                return;
-            }
             if let Some(provider_id) = selected_index
                 .and_then(|index| host.statuses().get(index))
                 .map(|status| status.id.clone())
             {
                 host.remember_focused_provider(provider_id);
             }
-            if host.apply_statuses(statuses).applied {
+            // A late discovery result still refreshes policy, but must not
+            // reopen a manager the user dismissed (for example to open /model).
+            if host.apply_statuses(statuses).applied && selected_index.is_some() {
                 self.render_provider_manager();
             }
             return;
@@ -125,13 +135,8 @@ impl App {
         if !matches!(host.phase(), ProviderManagementPhase::Browsing) {
             return;
         }
+        let status_host = host.status_host().clone();
         let generation = self.next_provider_management_generation();
-        let status_host = self
-            .provider_management_host
-            .as_ref()
-            .expect("provider management host disappeared")
-            .status_host()
-            .clone();
         let worker_host = status_host.clone();
         let tx = self.app_event_tx.clone();
         spawn_provider_status_job(move || {
@@ -184,6 +189,7 @@ mod tests {
             .await
             .unwrap();
         config.model = Some("shared-model".to_string());
+        config.model_provider_id = "manager-added".to_string();
         config.model_providers.insert(
             "manager-added".to_string(),
             codex_model_provider_info::ModelProviderInfo {

@@ -78,6 +78,9 @@ owner must compare actual diffs to scope and record final combined-tree evidence
 3. Set it to `in_progress` before code changes.
 4. Execute only `Remaining` items; move verified work to `Done` with `[x]`.
 5. Run formatting before final affected tests and true-TUI QA.
+   For user-facing work, collect the root policy's code-blind functional design
+   before disclosing test results, then execute its cases and reconcile every
+   disposition before human handoff. Link the record and shared review budget.
 6. Complete every verification and exit-evidence checkbox.
 7. Set status to `completed`, move the file to `archive/<plan-slug>/`, and remove
    it from current MkDocs navigation.

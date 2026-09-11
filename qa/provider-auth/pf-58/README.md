@@ -1,5 +1,19 @@
 # PF-58 credential health and recovery — human-test candidate
 
+**Current: September 10 signed picker/health replacement.** See the
+[current repair record](picker-repair-20260910.md) for the installed Mac shortcut,
+final RTX package, source identity and passing regression/TMUX evidence. It
+supersedes both the September 8 package and the earlier September 10 Mac copies.
+Two existing-profile Mac menu launches completed without password entry; human
+acceptance and the explicitly yellow prerequisites remain open.
+
+**Historical September 8 product repairs.** The incomplete replacement had been
+superseded by `candidate-repaired-qualified/bin/codex`, with matching companions,
+installed-plugin runtime support, native-pane policy inheritance and corrected
+Claude recovery/configuration reloads. See [current repair evidence](product-repairs-20260908.md)
+and [the mandatory handoff gate and remaining coverage gaps](handoff-readiness.md).
+The historical scoped passes below are retained as history, not final-package acceptance.
+
 This candidate corrects misleading configured-provider status after a typed
 authentication rejection and adds `r` recovery from `/providers`.
 
@@ -72,7 +86,7 @@ API-key replacement/new-key request, both environment ownership cases, the menu
 parser regression, and Claude recovery/cancel/retry. Synthetic credential canary
 checks pass; custody files alone are exempt from the transcript/log scan.
 
-## Replacement identity
+## Previous replacement identity (superseded)
 
 - Binary: `/home/travis/security-round5/evidence/provider-reauth-health-final/candidate-replacement/codex`.
 - Version: `corbanu 0.1.41` (Linux RTX build).
@@ -93,14 +107,15 @@ transport suites are recorded in `error-protocol.log`, `login.log`, `rmcp.log`,
 `mcp.log`, `core.log` and `protocol.log`. Candidate viewport/scrollback evidence
 is copied into [evidence/](evidence/); no real account credentials are included.
 
-## Integration blockers
+## Historical integration failures and remaining qualification limits
 
 The broader 28-check run on the preceding build passed 25 and failed three:
 the account popup above, a Claude fixture using different keyring backends in
 parent and child, and native-child convergence reporting `source admission policy
 is unavailable`. Matching the parent's isolated keyring setting to the harness
-child makes the Claude case pass. The native-child issue remains an integration
-blocker outside PF-58; this is not a release-clean security candidate.
+child makes the Claude case pass. The later native-child repair is now included
+in the expanded pinned-package matrix; no case was excluded to hide the failure.
+Full platform/live qualification and human sign-off remain separate release gates.
 
 The first real-TMUX run caught an additional protocol gap: ordinary model HTTP
 401 errors were mapped to `Other`. The final patch maps only definite 401 to the

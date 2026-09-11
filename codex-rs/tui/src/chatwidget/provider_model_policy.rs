@@ -36,6 +36,13 @@ impl ProviderModelPolicy {
         self.statuses = self.host.resolve();
     }
 
+    pub(crate) fn update_statuses(
+        &mut self,
+        statuses: &[codex_provider_auth::ProviderStatusSnapshot],
+    ) {
+        self.statuses.update(statuses);
+    }
+
     pub(crate) fn set_current_runtime(&mut self, runtime_provider_id: &str) {
         self.host
             .set_current_runtime(runtime_provider_id.to_string());

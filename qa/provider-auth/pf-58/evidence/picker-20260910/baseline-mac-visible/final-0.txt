@@ -1,0 +1,55 @@
+
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       gpt-6-astra   /model to change              │
+│ directory:   /Volumes/…/worktrees/provider-reauth-health │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+
+› Perform the synthetic handoff tool check
+
+
+• Ran printf SHELL_HANDOFF_OK
+  └ SHELL_HANDOFF_OK
+
+• Called handoff.echo({})
+  └ MCP_HANDOFF_OK
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• HANDOFF_EXECUTION_PASSED
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Start the cancellable stream
+
+
+• STREAM_ACTIVE
+
+■ Conversation interrupted - tell the model what to do differently. Something went wrong? Hit `/feedback` to report the
+issue.
+
+
+› Reply after cancellation
+
+
+• STREAM_RECOVERY_OK
+
+
+  Providers
+  Configure providers and control whether they are eligible for use.
+
+  1. OpenAI          Enabled · configured · current
+› 2. Claude Account  Enabled · configured
+  3. Corbanu API     Not configured · unavailable
+  4. Anthropic       Not configured · unavailable
+  5. Ambient         Not configured · unavailable
+  6. Kimi Code       Not configured · unavailable
+  7. Z.AI            Not configured · unavailable
+  8. DeepSeek        Not configured · unavailable
+
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back

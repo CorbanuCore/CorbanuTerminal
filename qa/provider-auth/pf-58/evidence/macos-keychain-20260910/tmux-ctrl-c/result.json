@@ -1,0 +1,14 @@
+{
+  "stream_cancel_key": "C-c",
+  "passed": true,
+  "candidate": "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-keychain-20260910/bin/corbanu",
+  "sha256": "573c871d1b738ea31a072da42b59b31c66bd27ade70fec5b0cf5fd91887b01ff",
+  "host_sha256": "93dd4c133c13a9d06b9e0074701cb9ad70b38ddb201f75985ecc8532a974ae54",
+  "human_acceptance": false,
+  "tool_round_trips": 4,
+  "concurrent_processes": 3,
+  "same_home_restart": true,
+  "stream_cancel_recovery": true,
+  "permissions_security_cancel_inert": true,
+  "claude_guidance_40_columns": true
+}

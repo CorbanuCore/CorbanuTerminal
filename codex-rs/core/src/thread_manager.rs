@@ -822,6 +822,7 @@ impl ThreadManager {
             .prepare_durable_thread_spawn_parent(&session_source, options.config.ephemeral)
             .await?;
         let thread_source = options.thread_source.or(resumed_thread_source);
+        let configured_child_security_level = options.config.security_level;
         let new_thread = Box::pin(self.state.spawn_thread_with_source(
             options.config,
             options.initial_history,
@@ -845,6 +846,29 @@ impl ThreadManager {
             /*user_shell_override*/ None,
         ))
         .await?;
+        // Direct human pane creation does not pass through AgentControl::spawn_agent,
+        // which normally binds the child after spawn. Use the same live-parent
+        // inheritance here before publishing a usable pane. Resumed/detached
+        // bindings keep their existing (possibly fail-closed) policy.
+        if let SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+            parent_thread_id, ..
+        }) = &new_thread.thread.session_source
+            && agent_control
+                .effective_security_policy()
+                .snapshot_for_agent(new_thread.thread_id)
+                .is_err()
+            && let Err(error) = agent_control.effective_security_policy().inherit_child(
+                *parent_thread_id,
+                new_thread.thread_id,
+                format!("task:spawn:{}", new_thread.thread_id),
+                configured_child_security_level,
+            )
+        {
+            let _ = self.state.remove_thread(&new_thread.thread_id).await;
+            return Err(CodexErr::Fatal(format!(
+                "failed to inherit native pane security policy: {error}"
+            )));
+        }
         agent_control
             .persist_durable_thread_spawn(
                 new_thread.thread.as_ref(),

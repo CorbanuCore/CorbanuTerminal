@@ -1,0 +1,22 @@
+{
+  "candidate": "/home/travis/security-round5/evidence/provider-reauth-health-final/candidate-repaired-qualified/bin/codex",
+  "sha256": "fa2b710733a57787cb0cfbd250be903ef9d2fe1f08b981dd49196697eae14fb8",
+  "method": "Actual keys and captured output in private RTX TMUX session pf58-repair-runtime:qualified",
+  "model": "claude-fable-5-1-plan",
+  "effort": "max",
+  "fable_response": "FABLE_51_OK",
+  "shell_command": "printf CORBANU_REPAIR_LIVE_OK",
+  "shell_tool_output": "CORBANU_REPAIR_LIVE_OK",
+  "mcp_inventory_loaded": true,
+  "installed_servers": [
+    {"name": "codex_apps", "auth_label": "Bearer token", "tools_listed": true},
+    {"name": "creative_production_mcp", "tool_count": 1},
+    {"name": "dataAnalyticsWidgets", "tool_count": 5}
+  ],
+  "startup_missing_executable_warning": false,
+  "inventory_reload_error": false,
+  "human_acceptance": false,
+  "live_reauthentication_performed": false,
+  "user_existing_sessions_modified": false,
+  "raw_credentials_or_trace_logs_exported": false
+}

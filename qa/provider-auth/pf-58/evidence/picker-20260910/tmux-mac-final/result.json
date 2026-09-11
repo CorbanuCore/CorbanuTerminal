@@ -1,0 +1,8 @@
+{
+  "stream_cancel_key": "C-c",
+  "passed": false,
+  "candidate": "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-picker-20260910/bin/corbanu",
+  "sha256": "cab583a03b8489cf0f45f73785c162a1835084d1c63f832682af30752dca11e0",
+  "host_sha256": "d8f6424c5b6e7d084e36fad5aa59e871a96bf1ad6a12a72716b1df5c8bdafd4f",
+  "human_acceptance": false
+}

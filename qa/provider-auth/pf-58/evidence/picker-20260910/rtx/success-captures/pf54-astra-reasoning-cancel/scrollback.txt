@@ -1,0 +1,57 @@
+
+╭─────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                       │
+│                                                     │
+│ model:     loading   /model to change               │
+│ directory: ~/worktrees/provider-reauth-health-final │
+╰─────────────────────────────────────────────────────╯
+
+
+› Use /skills to list available skills
+
+  GPT-5.6-Sol default · ~/worktrees/provider-reauth-health-final · Corbanu Terminal · TPS: -- tok/s
+
+╭─────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                       │
+│                                                     │
+│ model:     gpt-5.6-sol low   /model to change       │
+│ directory: ~/worktrees/provider-reauth-health-final │
+╰─────────────────────────────────────────────────────╯
+
+
+  Select Reasoning Level for GPT-6 Astra
+
+  1. Low               Fast responses with lighter reasoning
+› 2. Medium (default)  Balances speed and reasoning depth for everyday tasks
+  3. High              Greater reasoning depth for complex problems
+  4. Extra high        Extra high reasoning depth for complex problems
+  5. More reasoning…   Max consumes usage limits faster
+
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -295,7 +295,14 @@ fn daemon_executable() -> std::io::Result<PathBuf> {
 }
 
 fn daemon_executable_beside(current: &Path) -> PathBuf {
-    let name = if cfg!(windows) {
+    let corbanu = current
+        .file_stem()
+        .is_some_and(|name| name == "corbanu" || name == "corbanu-debug");
+    let name = if corbanu && cfg!(windows) {
+        "corbanu-walletd.exe"
+    } else if corbanu {
+        "corbanu-walletd"
+    } else if cfg!(windows) {
         "pfterminal-walletd.exe"
     } else {
         "pfterminal-walletd"
@@ -349,6 +356,22 @@ mod tests {
         };
 
         assert_eq!(daemon_executable_beside(executable), expected);
+    }
+
+    #[test]
+    fn wallet_daemon_tracks_the_installed_terminal_brand() {
+        let directory = tempfile::tempdir().expect("package");
+        for (entrypoint, daemon) in [
+            ("corbanu", "corbanu-walletd"),
+            ("corbanu-debug", "corbanu-walletd"),
+            ("pfterminal", "pfterminal-walletd"),
+            ("codex", "pfterminal-walletd"),
+        ] {
+            let suffix = if cfg!(windows) { ".exe" } else { "" };
+            let executable = directory.path().join(format!("{entrypoint}{suffix}"));
+            let expected = directory.path().join(format!("{daemon}{suffix}"));
+            assert_eq!(daemon_executable_beside(&executable), expected);
+        }
     }
 
     #[tokio::test]

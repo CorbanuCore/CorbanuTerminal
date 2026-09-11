@@ -1,0 +1,52 @@
+{
+  "passed": false,
+  "checks": [
+    {
+      "check": "codex",
+      "passed": true,
+      "detail": {
+        "path": "/home/travis/security-round5/evidence/provider-reauth-health-final/candidate-preflight/codex",
+        "sha256": "37511bb9348e3793255ce67806d23060f3436cee53ef0a041b921420b201da35"
+      }
+    },
+    {
+      "check": "codex-code-mode-host",
+      "passed": true,
+      "detail": {
+        "path": "/home/travis/security-round5/evidence/provider-reauth-health-final/candidate-preflight/codex-code-mode-host",
+        "sha256": "b91e5ab7e7af108b5651cf30a73dae98d2e98c49ecc6a87aaed8154ef92179a5"
+      }
+    },
+    {
+      "check": "pfterminal-walletd",
+      "passed": false,
+      "detail": {
+        "path": "/home/travis/security-round5/evidence/provider-reauth-health-final/candidate-preflight/pfterminal-walletd",
+        "sha256": null
+      }
+    },
+    {
+      "check": "candidate starts",
+      "passed": true,
+      "detail": "corbanu 0.1.41"
+    },
+    {
+      "check": "dataAnalyticsWidgets",
+      "passed": false,
+      "detail": {
+        "command": "node",
+        "resolved": null,
+        "cwd_exists": true
+      }
+    },
+    {
+      "check": "creative_production_mcp",
+      "passed": false,
+      "detail": {
+        "command": "node",
+        "resolved": null,
+        "cwd_exists": true
+      }
+    }
+  ]
+}

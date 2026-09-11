@@ -781,7 +781,7 @@ fn open_model_picker(pane: &TmuxPane<'_>) -> Result<()> {
     Ok(())
 }
 
-fn select_label(pane: &TmuxPane<'_>, label: &str) -> Result<()> {
+pub(super) fn select_label(pane: &TmuxPane<'_>, label: &str) -> Result<()> {
     focus_label(pane, label)?;
     pane.send_key(TmuxKey::Enter)?;
     Ok(())
@@ -1212,13 +1212,10 @@ fn response(text: &str) -> String {
     ])
 }
 
-fn codex_binary(repo_root: &Path) -> Result<PathBuf> {
-    let binary = repo_root.join("codex-rs/target/debug/codex");
-    ensure!(
-        binary.is_file(),
-        "build target/debug/codex before PF-54 TMUX qualification"
-    );
-    Ok(binary)
+fn codex_binary(_repo_root: &Path) -> Result<PathBuf> {
+    // Respect CARGO_BIN_EXE_codex so handoff tests exercise the staged package,
+    // including sibling helpers, rather than a different build-tree binary.
+    Ok(codex_utils_cargo_bin::cargo_bin("codex")?)
 }
 
 #[test]

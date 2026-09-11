@@ -14,6 +14,7 @@ use anyhow::ensure;
 use tempfile::TempDir;
 use tempfile::tempdir;
 
+use super::provider_management::select_label;
 use crate::support::tmux::CommandSpec;
 use crate::support::tmux::SessionSpec;
 use crate::support::tmux::TerminalSize;
@@ -56,11 +57,13 @@ fn tmux_first_run_anthropic_account_selects_claude_login_after_success() -> Resu
     let pane = session.primary_pane();
     pane.wait_stable_contains("Provider: Anthropic Claude Account", READY_TIMEOUT)?;
 
-    pane.send_key(TmuxKey::Enter)?;
+    select_label(pane, "Provider: Anthropic Claude Account")?;
     pane.wait_stable_contains("Long-lived subscription token (Recommended)", READY_TIMEOUT)?;
-    pane.send_key(TmuxKey::Down)?;
-    pane.wait_stable_contains("> Claude Code login", READY_TIMEOUT)?;
+    select_label(pane, "Claude Code login")?;
+    pane.wait_stable_contains("Anthropic Claude account configured", READY_TIMEOUT)?;
     pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Configured · active · ready", READY_TIMEOUT)?;
+    select_label(pane, "Done")?;
     pane.wait_stable_until(
         "first-run Claude provider persistence",
         Duration::from_secs(45),
@@ -71,7 +74,7 @@ fn tmux_first_run_anthropic_account_selects_claude_login_after_success() -> Resu
     )?;
 
     open_providers(pane)?;
-    pane.wait_stable_contains("Provider: Claude Code Plan", READY_TIMEOUT)?;
+    wait_claude_configured(pane)?;
     pane.send_key(TmuxKey::Escape)?;
     let viewport = pane.capture_viewport()?;
     let scrollback = pane.capture_scrollback_tail(2_000)?;
@@ -137,17 +140,16 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
     pane.send_secret_literal(&canary)?;
     pane.wait_stable_contains("••", Duration::from_secs(10))?;
     pane.send_key(TmuxKey::Enter)?;
-    pane.wait_stable_contains("saved and selected", Duration::from_secs(45))?;
+    wait_claude_configured(pane)?;
     assert_managed_resolver_returns(&codex, codex_home.path(), &canary)?;
 
     open_claude_auth_choice(pane)?;
     pane.send_key(TmuxKey::Enter)?;
     pane.wait_stable_contains("Long-lived token — masked", READY_TIMEOUT)?;
-    pane.send_secret_literal(" invalid-token")?;
+    pane.send_secret_literal("not a valid token")?;
     pane.send_key(TmuxKey::Enter)?;
-    pane.wait_stable_contains("Claude authentication needs attention", READY_TIMEOUT)?;
-    pane.wait_stable_contains("No fallback occurred", READY_TIMEOUT)?;
-    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Authentication needs attention", READY_TIMEOUT)?;
+    select_label(pane, "Retry authentication")?;
     pane.wait_stable_contains("Long-lived token — masked", READY_TIMEOUT)?;
     pane.send_key(TmuxKey::Escape)?;
     pane.wait_stable_until("masked replacement cancelled", READY_TIMEOUT, |capture| {
@@ -156,13 +158,11 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
     assert_managed_resolver_returns(&codex, codex_home.path(), &canary)?;
 
     open_providers(pane)?;
-    pane.wait_stable_contains(
-        "Selected · long-lived subscription token",
-        Duration::from_secs(45),
-    )?;
+    wait_claude_configured(pane)?;
     pane.send_key(TmuxKey::Escape)?;
     let first_viewport = pane.capture_viewport()?;
     let first_scrollback = pane.capture_scrollback_tail(2_000)?;
+    assert_claude_model_catalog(pane)?;
     exit_tui(pane)?;
     session.wait_for_exit(READY_TIMEOUT)?;
 
@@ -179,12 +179,11 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
     let resumed_pane = resumed.primary_pane();
     resumed_pane.wait_stable_contains("Corbanu Terminal", READY_TIMEOUT)?;
     open_providers(resumed_pane)?;
-    let resumed_viewport = resumed_pane.wait_stable_contains(
-        "Selected · long-lived subscription token",
-        Duration::from_secs(45),
-    )?;
+    wait_claude_configured(resumed_pane)?;
+    let resumed_viewport = resumed_pane.capture_viewport()?;
     let resumed_scrollback = resumed_pane.capture_scrollback_tail(2_000)?;
     resumed_pane.send_key(TmuxKey::Escape)?;
+    assert_claude_model_catalog(resumed_pane)?;
     exit_tui(resumed_pane)?;
     resumed.wait_for_exit(READY_TIMEOUT)?;
 
@@ -210,6 +209,38 @@ fn tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume() -> Resu
         );
     }
     Ok(())
+}
+
+// Real key-driven coverage of the provider-manager -> model-picker boundary.
+// Credential configuration alone did not previously refresh picker eligibility.
+fn assert_claude_model_catalog(pane: &TmuxPane) -> Result<()> {
+    pane.send_literal("/model")?;
+    pane.send_key(TmuxKey::Enter)?;
+    pane.wait_stable_contains("Select Model", READY_TIMEOUT)?;
+    for _ in 0..16 {
+        let capture = pane.capture_viewport()?;
+        if capture.contains("[Claude Plan]") {
+            for model in [
+                "claude-opus-5-plan",
+                "claude-fable-5-1-plan",
+                "claude-fable-5-plan",
+            ] {
+                ensure!(
+                    capture.contains(model),
+                    "missing subscription model: {model}"
+                );
+            }
+            ensure!(
+                !capture.contains("(current)"),
+                "OpenAI session incorrectly marked Claude current"
+            );
+            pane.send_key(TmuxKey::Escape)?;
+            return Ok(());
+        }
+        pane.send_key(TmuxKey::Right)?;
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    anyhow::bail!("Claude Plan tab missing after successful provider configuration")
 }
 
 #[test]
@@ -244,13 +275,8 @@ fn tmux_claude_auth_compatibility_selects_existing_login() -> Result<()> {
     let pane = session.primary_pane();
     pane.wait_stable_contains("Corbanu Terminal", READY_TIMEOUT)?;
     open_claude_auth_choice(pane)?;
-    pane.send_key(TmuxKey::Down)?;
-    pane.wait_stable_contains("› Claude Code login", READY_TIMEOUT)?;
-    pane.send_key(TmuxKey::Enter)?;
-    pane.wait_stable_contains(
-        "Existing Claude Code login selected",
-        Duration::from_secs(45),
-    )?;
+    select_label(pane, "Claude Code login")?;
+    wait_claude_configured(pane)?;
     exit_tui(pane)?;
     session.wait_for_exit(READY_TIMEOUT)?;
 
@@ -266,22 +292,57 @@ fn tmux_claude_auth_compatibility_selects_existing_login() -> Result<()> {
 
 fn open_claude_auth_choice(pane: &TmuxPane<'_>) -> Result<()> {
     open_providers(pane)?;
-    pane.send_key(TmuxKey::Down)?;
-    pane.wait_stable_contains("› Provider: Claude Code Plan", READY_TIMEOUT)?;
-    pane.send_key(TmuxKey::Enter)?;
+    select_label(pane, "Claude Account")?;
+    pane.wait_stable_until("Claude management actions", READY_TIMEOUT, |text| {
+        text.contains("Deactivate")
+            || text.contains("Reactivate")
+            || text.contains("with Claude account")
+    })?;
+    // Enter manages eligibility. Recovery/rotation is the advertised `r`
+    // shortcut, including when a saved credential is currently healthy.
+    pane.send_key(TmuxKey::Escape)?;
+    pane.wait_stable_contains("r recover credentials", READY_TIMEOUT)?;
+    pane.send_literal("r")?;
+    pane.wait_stable_contains("Recover the selected Claude credential", READY_TIMEOUT)?;
+    select_label(pane, "Recover the selected Claude credential")?;
     pane.wait_stable_contains("Long-lived subscription token (Recommended)", READY_TIMEOUT)?;
     Ok(())
 }
 
 fn open_providers(pane: &TmuxPane<'_>) -> Result<()> {
+    if pane
+        .capture_viewport()?
+        .contains("Configure providers and control")
+    {
+        pane.send_key(TmuxKey::Escape)?;
+        pane.wait_stable_until("manager closed", READY_TIMEOUT, |text| {
+            !text.contains("Configure providers and control")
+        })?;
+    }
+    pane.wait_stable_contains("Corbanu Terminal · TPS:", READY_TIMEOUT)?;
     pane.send_literal("/providers")?;
     pane.wait_stable_contains("/providers", Duration::from_secs(10))?;
     pane.send_key(TmuxKey::Enter)?;
-    pane.wait_stable_contains("Provider: Claude Code Plan", READY_TIMEOUT)?;
+    pane.wait_stable_contains("Configure providers and control", READY_TIMEOUT)?;
+    Ok(())
+}
+
+fn wait_claude_configured(pane: &TmuxPane<'_>) -> Result<()> {
+    pane.wait_stable_until("Claude configured in manager", READY_TIMEOUT, |text| {
+        text.lines()
+            .any(|line| line.contains("Claude Account") && line.contains("Enabled · configured"))
+    })?;
     Ok(())
 }
 
 fn exit_tui(pane: &TmuxPane<'_>) -> Result<()> {
+    if pane
+        .capture_viewport()?
+        .contains("Configure providers and control")
+    {
+        pane.send_key(TmuxKey::Escape)?;
+    }
+    pane.wait_stable_contains("Corbanu Terminal · TPS:", READY_TIMEOUT)?;
     pane.send_literal("/exit")?;
     pane.wait_stable_contains("/exit", Duration::from_secs(10))?;
     pane.send_key(TmuxKey::Enter)?;
@@ -322,6 +383,8 @@ fn session_spec(
         .env("PFTERMINAL_HOME", codex_home)
         .env("CODEX_HOME", codex_home)
         .env("PATH", fake.path())
+        // A navigation regression must fail locally, never start real OAuth.
+        .env("CODEX_APP_SERVER_LOGIN_ISSUER", "http://127.0.0.1:9")
         .env("RUST_LOG", "trace")
         .arg("-c")
         .arg(format!("log_dir=\"{}\"", log_dir.display()))
