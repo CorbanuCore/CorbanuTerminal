@@ -188,9 +188,97 @@ nav:
                   - "PF-14-S05 — Fail-closed full-history invariant": sprints/current/arbitrary-model-autoreview/pf-14-s05-full-history-invariant.md
                   - "PF-14-S06 — Isolated bounded review runner": sprints/current/arbitrary-model-autoreview/pf-14-s06-isolated-review-runner.md
                   - "PF-14-S07 — TUI qualification and finished documentation": sprints/current/arbitrary-model-autoreview/pf-14-s07-tui-qualification-and-docs.md
+          - Draft September 9 Portfolio:
+              - Overview: plans/portfolio-2026-09-09.md
+              - "PF-60 — Unified agent cost and usage accounting":
+                  - Plan: plans/proposed/portfolio-agent-cost-accounting.md
+                  - "PF-60-S01 — Accounting contract and golden fixtures": sprints/current/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md
+                  - "PF-60-S02 — Idempotent usage persistence and replay": sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md
+                  - "PF-60-S03 — Inspectable run and campaign totals": sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md
+                  - "PF-60-S04 — Cost-accounting acceptance and handoff": sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md
+              - "PF-61 — Plan and model-serving backend reconciliation":
+                  - Plan: plans/proposed/portfolio-plan-backend-reconciliation.md
+                  - "PF-61-S01 — Repository and deployment truth map": sprints/current/portfolio-plan-backend-reconciliation/pf-61-s01-repository-and-deployment-truth-map.md
+                  - "PF-61-S02 — Offline compatibility fixture pack": sprints/current/portfolio-plan-backend-reconciliation/pf-61-s02-offline-compatibility-fixture-pack.md
+                  - "PF-61-S03 — Repair scope and release decision": sprints/current/portfolio-plan-backend-reconciliation/pf-61-s03-repair-scope-and-release-decision.md
+              - "PF-62 — Compute referrals and provider onboarding discovery":
+                  - Plan: plans/proposed/portfolio-compute-referrals.md
+                  - "PF-62-S01 — Provider terms and economics screen": sprints/current/portfolio-compute-referrals/pf-62-s01-provider-terms-and-economics-screen.md
+                  - "PF-62-S02 — Recoverable signup and key journey": sprints/current/portfolio-compute-referrals/pf-62-s02-recoverable-signup-and-key-journey.md
+                  - "PF-62-S03 — Commercial and delivery handoff": sprints/current/portfolio-compute-referrals/pf-62-s03-commercial-and-delivery-handoff.md
+              - "PF-63 — Repeatable cross-harness quality, runtime and cost benchmarks":
+                  - Plan: plans/proposed/portfolio-recurring-benchmarks.md
+                  - "PF-63-S01 — Comparable campaign specification": sprints/current/portfolio-recurring-benchmarks/pf-63-s01-comparable-campaign-specification.md
+                  - "PF-63-S02 — Resumable runner and evidence adapters": sprints/current/portfolio-recurring-benchmarks/pf-63-s02-resumable-runner-and-evidence-adapters.md
+                  - "PF-63-S03 — First bounded campaign and gate rehearsal": sprints/current/portfolio-recurring-benchmarks/pf-63-s03-first-bounded-campaign-and-gate-rehearsal.md
+              - "PF-64 — Controlled rollout, support ownership and adoption":
+                  - Plan: plans/proposed/portfolio-rollout-support.md
+                  - "PF-64-S01 — Cohort and activation contract": sprints/current/portfolio-rollout-support/pf-64-s01-cohort-and-activation-contract.md
+                  - "PF-64-S02 — Support and recovery rehearsal": sprints/current/portfolio-rollout-support/pf-64-s02-support-and-recovery-rehearsal.md
+                  - "PF-64-S03 — Opt-in pilot readiness decision": sprints/current/portfolio-rollout-support/pf-64-s03-opt-in-pilot-readiness-decision.md
+              - "PF-65 — Private inference feasibility for Ambient and Corbanu":
+                  - Plan: plans/proposed/portfolio-private-inference-research.md
+                  - "PF-65-S01 — Threat model and evidence review": sprints/current/portfolio-private-inference-research/pf-65-s01-threat-model-and-evidence-review.md
+                  - "PF-65-S02 — One bounded reproducible experiment": sprints/current/portfolio-private-inference-research/pf-65-s02-one-bounded-reproducible-experiment.md
+                  - "PF-65-S03 — Feasibility and integration decision": sprints/current/portfolio-private-inference-research/pf-65-s03-feasibility-and-integration-decision.md
+              - "PF-66 — Private enterprise Terminal opportunity qualification":
+                  - Plan: plans/proposed/portfolio-private-enterprise-terminal.md
+                  - "PF-66-S01 — Buyer and competitor evidence map": sprints/current/portfolio-private-enterprise-terminal/pf-66-s01-buyer-and-competitor-evidence-map.md
+                  - "PF-66-S02 — Synthetic demonstration and requirements brief": sprints/current/portfolio-private-enterprise-terminal/pf-66-s02-synthetic-demonstration-and-requirements-brief.md
+                  - "PF-66-S03 — Business boundary go or no-go": sprints/current/portfolio-private-enterprise-terminal/pf-66-s03-business-boundary-go-or-no-go.md
+              - "PF-67 — Real-time domain fine-tuning feasibility":
+                  - Plan: plans/proposed/portfolio-domain-finetuning.md
+                  - "PF-67-S01 — Task, rights and baseline contract": sprints/current/portfolio-domain-finetuning/pf-67-s01-task-rights-and-baseline-contract.md
+                  - "PF-67-S02 — Small adaptation experiment": sprints/current/portfolio-domain-finetuning/pf-67-s02-small-adaptation-experiment.md
+                  - "PF-67-S03 — Deployment feasibility decision": sprints/current/portfolio-domain-finetuning/pf-67-s03-deployment-feasibility-decision.md
+              - "PF-68 — On-chain stock access and broker-wrapper feasibility":
+                  - Plan: plans/proposed/portfolio-onchain-stock-access.md
+                  - "PF-68-S01 — Venue and instrument diligence": sprints/current/portfolio-onchain-stock-access/pf-68-s01-venue-and-instrument-diligence.md
+                  - "PF-68-S02 — Read-only user and risk journey": sprints/current/portfolio-onchain-stock-access/pf-68-s02-read-only-user-and-risk-journey.md
+                  - "PF-68-S03 — Wrapper economics and launch gate": sprints/current/portfolio-onchain-stock-access/pf-68-s03-wrapper-economics-and-launch-gate.md
+              - "PF-69 — Cash management and basis-strategy paper validation":
+                  - Plan: plans/proposed/portfolio-cash-basis-product.md
+                  - "PF-69-S01 — Strategy and risk contract": sprints/current/portfolio-cash-basis-product/pf-69-s01-strategy-and-risk-contract.md
+                  - "PF-69-S02 — Reproducible paper and stress evaluation": sprints/current/portfolio-cash-basis-product/pf-69-s02-reproducible-paper-and-stress-evaluation.md
+                  - "PF-69-S03 — Personal pilot versus product decision": sprints/current/portfolio-cash-basis-product/pf-69-s03-personal-pilot-versus-product-decision.md
+              - "PF-70 — Index API, replayability and creators":
+                  - Plan: plans/proposed/portfolio-acceleration-index.md
+                  - "PF-70-S01 — Existing prototype and API contract": sprints/current/portfolio-acceleration-index/pf-70-s01-index-methodology-and-tradability.md
+                  - "PF-70-S02 — Replayability, paper index and stresses": sprints/current/portfolio-acceleration-index/pf-70-s02-historical-paper-index-and-stresses.md
+                  - "PF-70-S03 — Index product decision": sprints/current/portfolio-acceleration-index/pf-70-s03-index-product-decision.md
+                  - "PF-70-S04 — Flag-gated index API candidate": sprints/current/portfolio-acceleration-index/pf-70-s04-flag-gated-index-api-candidate.md
+                  - "PF-70-S05 — Creator ownership and economics decision": sprints/current/portfolio-acceleration-index/pf-70-s05-creator-ownership-and-economics-decision.md
+              - "PF-71 — Tokenized options-basket feasibility":
+                  - Plan: plans/proposed/portfolio-options-basket.md
+                  - "PF-71-S01 — Instrument, rights and operating model": sprints/current/portfolio-options-basket/pf-71-s01-instrument-rights-and-operating-model.md
+                  - "PF-71-S02 — Synthetic NAV and lifecycle model": sprints/current/portfolio-options-basket/pf-71-s02-synthetic-nav-and-lifecycle-model.md
+                  - "PF-71-S03 — Distribution and feasibility decision": sprints/current/portfolio-options-basket/pf-71-s03-distribution-and-feasibility-decision.md
+              - "PF-72 — Campaign Tracker and agent ROI integration":
+                  - Plan: plans/proposed/portfolio-campaign-roi.md
+                  - "PF-72-S01 — Existing tracker and outcome contract": sprints/current/portfolio-campaign-roi/pf-72-s01-existing-tracker-and-outcome-contract.md
+                  - "PF-72-S02 — Offline attribution and import fixture": sprints/current/portfolio-campaign-roi/pf-72-s02-offline-attribution-and-import-fixture.md
+                  - "PF-72-S03 — Native integration decision and pilot handoff": sprints/current/portfolio-campaign-roi/pf-72-s03-native-integration-decision-and-pilot-handoff.md
+              - "PF-73 — Text-improvement harness qualification":
+                  - Plan: plans/proposed/portfolio-text-improvement.md
+                  - "PF-73-S01 — Harness inventory and editorial rubric": sprints/current/portfolio-text-improvement/pf-73-s01-harness-inventory-and-editorial-rubric.md
+                  - "PF-73-S02 — Blinded exact-model comparison": sprints/current/portfolio-text-improvement/pf-73-s02-blinded-exact-model-comparison.md
+                  - "PF-73-S03 — Upgrade or retain decision": sprints/current/portfolio-text-improvement/pf-73-s03-upgrade-or-retain-decision.md
+              - "PF-74 — Stock research and content distribution workflow":
+                  - Plan: plans/proposed/portfolio-research-content-distribution.md
+                  - "PF-74-S01 — Editorial brief and source contract": sprints/current/portfolio-research-content-distribution/pf-74-s01-editorial-brief-and-source-contract.md
+                  - "PF-74-S02 — One evidence-backed draft packet": sprints/current/portfolio-research-content-distribution/pf-74-s02-one-evidence-backed-draft-packet.md
+                  - "PF-74-S03 — Human review and distribution decision": sprints/current/portfolio-research-content-distribution/pf-74-s03-human-review-and-distribution-decision.md
+              - "PF-75 — Native agent management and independent acceptance pilot":
+                  - Plan: plans/proposed/portfolio-agent-management-pilot.md
+                  - "PF-75-S01 — Native capability and authority contract": sprints/current/portfolio-agent-management-pilot/pf-75-s01-native-capability-and-authority-contract.md
+                  - "PF-75-S02 — Human-style acceptance and tester calibration": sprints/current/portfolio-agent-management-pilot/pf-75-s02-human-style-acceptance-and-tester-calibration.md
+                  - "PF-75-S03 — Bounded native end-to-end rehearsal": sprints/current/portfolio-agent-management-pilot/pf-75-s03-bounded-native-end-to-end-rehearsal.md
+                  - "PF-75-S04 — Two-week pilot operating decision": sprints/current/portfolio-agent-management-pilot/pf-75-s04-two-week-pilot-operating-decision.md
           - Sprint Template: sprints/SPRINT_TEMPLATE.md
       - Plans:
           - Plan Process: plans/index.md
+          - Alex Scrum — September 10: plans/scrum-2026-09-10.md
+          - Latest Call Amendments — September 10: plans/call-followup-2026-09-10.md
           - Upstream Integration Contract: plans/upstream-integration.md
           - Active Plans: plans/active/index.md
           - P0 Security Levels: plans/active/p0-security-levels.md

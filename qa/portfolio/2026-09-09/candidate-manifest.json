@@ -1,0 +1,369 @@
+{
+  "plans": 16,
+  "sprints": 50,
+  "max_sprint_lines": 73,
+  "scope_files": 72,
+  "errors": [],
+  "manifest": [
+    {
+      "path": "docs/plans/portfolio-2026-09-09.md",
+      "sha256": "4ae192db9e824a90bf9a25cc4241dabc932842376e07dc9b1d5b02e6852aa6a2",
+      "bytes": 18198
+    },
+    {
+      "path": "docs/plans/proposed/index.md",
+      "sha256": "bfc82ca67275e8e9bfb7a279f833dfd0c597a1c84f0201f312a3f15a8cae7046",
+      "bytes": 4168
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-acceleration-index.md",
+      "sha256": "d5fc4fca6252707ebab34e873f8b993cf17685517763ab0118271b9b26f6d3a4",
+      "bytes": 10945
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-agent-cost-accounting.md",
+      "sha256": "68fcb66a0af38f3385bef65332c97c010533b497305dd8a29a02511fe2fd897e",
+      "bytes": 12213
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-agent-management-pilot.md",
+      "sha256": "79043c5a6dada82f4941844ee14e91118baec087702cfcfa4ca6c985453684c1",
+      "bytes": 13174
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-campaign-roi.md",
+      "sha256": "70a653c6c2246c7fc256cabaff129392ea31296039ff3d6d38938358963650d7",
+      "bytes": 11745
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-cash-basis-product.md",
+      "sha256": "15dc97f86d12fca3047f5046480ea20a26f65fc3d14371cb14b04d8df3f41b34",
+      "bytes": 11294
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-compute-referrals.md",
+      "sha256": "e91669b2d4c6b019f56540da51a1046a57ebc4f9266ab1106f8bd1ecf14ee833",
+      "bytes": 11275
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-domain-finetuning.md",
+      "sha256": "c02aabce7db333063c8dae359924bce5e86ec7f0cc912b5234bed641be9ed67a",
+      "bytes": 11148
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-onchain-stock-access.md",
+      "sha256": "e3db729025214dbcb4dc5b1c70207853d766318549f6273137fc71dba5e2d2cb",
+      "bytes": 11165
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-options-basket.md",
+      "sha256": "949a0c4ba2c53fe4565b41ece6e035ad8291f6349c8f40d1809bf2d41f624b40",
+      "bytes": 11161
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-plan-backend-reconciliation.md",
+      "sha256": "669706bf9c2a9e279ea9f5d26c2d8227526505d78573735d419b4ee6ad82813c",
+      "bytes": 11328
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-private-enterprise-terminal.md",
+      "sha256": "df8549f7c851a587841a48b69568c85c12634fb3c77abdbf2816f0aac527e1c2",
+      "bytes": 11298
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-private-inference-research.md",
+      "sha256": "bebfb1d0d70c422a302b6562133c02872ab5bfae12c8d9cbd1ef9777abf95bd2",
+      "bytes": 11165
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-recurring-benchmarks.md",
+      "sha256": "460b8fcc2aaeea1e1a79b0dc0f6c6f49ace6c30a31c5906011b684788ddfff29",
+      "bytes": 12167
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-research-content-distribution.md",
+      "sha256": "03508737b941d210b6c5277bd0f5644f888cb250e90eb94905fb837ec51049a7",
+      "bytes": 11871
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-rollout-support.md",
+      "sha256": "672c69543ae09e03b997fc1a5e93dce467ac80c24fdd44572b729909c71c1ae9",
+      "bytes": 11759
+    },
+    {
+      "path": "docs/plans/proposed/portfolio-text-improvement.md",
+      "sha256": "73e62d17894cd3afef394b70c1d3c52aa2caba60d9cf9ef599e82c76d7315e9e",
+      "bytes": 11352
+    },
+    {
+      "path": "docs/sprints/current/portfolio-acceleration-index/pf-70-s01-index-methodology-and-tradability.md",
+      "sha256": "d53a0b1c60b4fcc39e9a14b381536a7c049950cfb1fa6560a28e08b6d6384eca",
+      "bytes": 3873
+    },
+    {
+      "path": "docs/sprints/current/portfolio-acceleration-index/pf-70-s02-historical-paper-index-and-stresses.md",
+      "sha256": "3e52ddf4367dc670b460fd797445527f96fc3f2a62dba895f361d8cce2b6c59b",
+      "bytes": 3917
+    },
+    {
+      "path": "docs/sprints/current/portfolio-acceleration-index/pf-70-s03-index-product-decision.md",
+      "sha256": "5cfbb10a55fb08df094ffb253799609a4fefa4a0e2ca9426b04256c4f357016f",
+      "bytes": 3827
+    },
+    {
+      "path": "docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md",
+      "sha256": "6d312e217aa550136c25babc8eabcfc0db175b5134921488da2c42343b11ef28",
+      "bytes": 4295
+    },
+    {
+      "path": "docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md",
+      "sha256": "d7c497685ddd680b5b370d78b111dbd66cded1e6818a0afd1e79ef6f531f1a82",
+      "bytes": 4182
+    },
+    {
+      "path": "docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md",
+      "sha256": "3fb2cfbd298e8acf2e649d2172f0b8d4645af7237990e43c5dd53c2e7cf7b8e2",
+      "bytes": 3977
+    },
+    {
+      "path": "docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md",
+      "sha256": "d38f3d2a0b234ad765042275e5bf7e0be376caa64f18bf25d7d023f3b1aca458",
+      "bytes": 4113
+    },
+    {
+      "path": "docs/sprints/current/portfolio-agent-management-pilot/pf-75-s01-native-capability-and-authority-contract.md",
+      "sha256": "c90c5787b151c95ba90212de7f32280b3a62be46ffbe7328618524b7f78a1f96",
+      "bytes": 4587
+    },
+    {
+      "path": "docs/sprints/current/portfolio-agent-management-pilot/pf-75-s02-human-style-acceptance-and-tester-calibration.md",
+      "sha256": "2a0a55f694908121e491cf166f4cef560207fccccbb158ba9eb1e80d5460c6da",
+      "bytes": 4798
+    },
+    {
+      "path": "docs/sprints/current/portfolio-agent-management-pilot/pf-75-s03-bounded-native-end-to-end-rehearsal.md",
+      "sha256": "0d2144299269ecc63c985f40b11aa1f6c626ce68ae69a1bb72bfc3f603f442e0",
+      "bytes": 4320
+    },
+    {
+      "path": "docs/sprints/current/portfolio-agent-management-pilot/pf-75-s04-two-week-pilot-operating-decision.md",
+      "sha256": "73a8b4ff1db606138d73e2e1d93555b0f8e215452d7d05a83055093c09a0d062",
+      "bytes": 4301
+    },
+    {
+      "path": "docs/sprints/current/portfolio-campaign-roi/pf-72-s01-existing-tracker-and-outcome-contract.md",
+      "sha256": "d3a1783e6140d576a389bf3654af2907ed0049dc9e6632812a10cbcf54211949",
+      "bytes": 4033
+    },
+    {
+      "path": "docs/sprints/current/portfolio-campaign-roi/pf-72-s02-offline-attribution-and-import-fixture.md",
+      "sha256": "1cf32081fe58d2f6e0d35bd6db57f83adb5aca5f6248947c631dcf157920e1a7",
+      "bytes": 3998
+    },
+    {
+      "path": "docs/sprints/current/portfolio-campaign-roi/pf-72-s03-native-integration-decision-and-pilot-handoff.md",
+      "sha256": "0ce45fd174b1fe235da6422cc721e1077887b186688d552abb215c83571cd989",
+      "bytes": 3981
+    },
+    {
+      "path": "docs/sprints/current/portfolio-cash-basis-product/pf-69-s01-strategy-and-risk-contract.md",
+      "sha256": "22f174e6ed9fcd68c9c28df3f5531c3693bf546becc836b50b36c9a193056406",
+      "bytes": 3978
+    },
+    {
+      "path": "docs/sprints/current/portfolio-cash-basis-product/pf-69-s02-reproducible-paper-and-stress-evaluation.md",
+      "sha256": "91aa6e673fc4a4344a35a62a49aee5219e5d1f9f8ac0e716776b6cdff56a3882",
+      "bytes": 3976
+    },
+    {
+      "path": "docs/sprints/current/portfolio-cash-basis-product/pf-69-s03-personal-pilot-versus-product-decision.md",
+      "sha256": "1c109ebc3689bc76e5c5bc0017b645f0fdb71def0b4a4f1bed94f9a6d65e0d95",
+      "bytes": 3926
+    },
+    {
+      "path": "docs/sprints/current/portfolio-compute-referrals/pf-62-s01-provider-terms-and-economics-screen.md",
+      "sha256": "45985bb1cb4b694c4c8a08442e28270c9083cd204202c9a1cc5ccd46e4def9f3",
+      "bytes": 4017
+    },
+    {
+      "path": "docs/sprints/current/portfolio-compute-referrals/pf-62-s02-recoverable-signup-and-key-journey.md",
+      "sha256": "e16ca5a91fb6f8b83c42369b1fa4cfe0cbc73aae7f7dc28e6b8f96f14f7d692c",
+      "bytes": 3983
+    },
+    {
+      "path": "docs/sprints/current/portfolio-compute-referrals/pf-62-s03-commercial-and-delivery-handoff.md",
+      "sha256": "8c4a0b082a16d32e6e732b2e649c7087c08f5e4193c5228e9638fd223c417ee2",
+      "bytes": 3987
+    },
+    {
+      "path": "docs/sprints/current/portfolio-domain-finetuning/pf-67-s01-task-rights-and-baseline-contract.md",
+      "sha256": "26f4464718a415e75244693e306d0c03233e6739b144947858209903eb428da7",
+      "bytes": 3945
+    },
+    {
+      "path": "docs/sprints/current/portfolio-domain-finetuning/pf-67-s02-small-adaptation-experiment.md",
+      "sha256": "4805b4e80de00222b3bc3a9936e57661f95c861fe0a92a048fc6ab04cf4cea8f",
+      "bytes": 3939
+    },
+    {
+      "path": "docs/sprints/current/portfolio-domain-finetuning/pf-67-s03-deployment-feasibility-decision.md",
+      "sha256": "e58c00a6d2e1517a08a269770c0c88517f0626bd3d11edd97f46d900113958c8",
+      "bytes": 3939
+    },
+    {
+      "path": "docs/sprints/current/portfolio-onchain-stock-access/pf-68-s01-venue-and-instrument-diligence.md",
+      "sha256": "ea7a597960573a1fc365d7dff8fc849976a57304631096f5f31b16860c2ebb30",
+      "bytes": 4061
+    },
+    {
+      "path": "docs/sprints/current/portfolio-onchain-stock-access/pf-68-s02-read-only-user-and-risk-journey.md",
+      "sha256": "c80a6e16eb2e7d98e4624a5beb442562e47b2afc364190a740c4150bbb5e93cb",
+      "bytes": 4011
+    },
+    {
+      "path": "docs/sprints/current/portfolio-onchain-stock-access/pf-68-s03-wrapper-economics-and-launch-gate.md",
+      "sha256": "984c8e5f732884c66f137d1f829d363a19af547f7093f25cc460666c8790aaed",
+      "bytes": 3969
+    },
+    {
+      "path": "docs/sprints/current/portfolio-options-basket/pf-71-s01-instrument-rights-and-operating-model.md",
+      "sha256": "09a9ca07d86a826cffd24b820fbe80a55cb6ad7cf3a06cd1689eacb6cbdacb7a",
+      "bytes": 3967
+    },
+    {
+      "path": "docs/sprints/current/portfolio-options-basket/pf-71-s02-synthetic-nav-and-lifecycle-model.md",
+      "sha256": "0a95662678127c9dae74c5404216d3f333c8685cbdcadb0d551b154bd2dbba7b",
+      "bytes": 3863
+    },
+    {
+      "path": "docs/sprints/current/portfolio-options-basket/pf-71-s03-distribution-and-feasibility-decision.md",
+      "sha256": "95c066ceb35374e09e627ebb678e31ec819b3c61492f8eac3d2f56ae758a652c",
+      "bytes": 3889
+    },
+    {
+      "path": "docs/sprints/current/portfolio-plan-backend-reconciliation/pf-61-s01-repository-and-deployment-truth-map.md",
+      "sha256": "3fc9c01bd8ed83898bfa5039ff4a2f6ad34f7fcd0e43085129f9ff766f3e5850",
+      "bytes": 4161
+    },
+    {
+      "path": "docs/sprints/current/portfolio-plan-backend-reconciliation/pf-61-s02-offline-compatibility-fixture-pack.md",
+      "sha256": "420bd74034b2d5198425125324cfcf519525ee6af7e37c5bcb7a49819e06bd03",
+      "bytes": 4193
+    },
+    {
+      "path": "docs/sprints/current/portfolio-plan-backend-reconciliation/pf-61-s03-repair-scope-and-release-decision.md",
+      "sha256": "492d55b710050d1ba8033e78eac23c23baf6f0d4b3473b627826a57f9732a820",
+      "bytes": 4188
+    },
+    {
+      "path": "docs/sprints/current/portfolio-private-enterprise-terminal/pf-66-s01-buyer-and-competitor-evidence-map.md",
+      "sha256": "d6a87053659da16c5e1a472d7e0748407874dd5242c3e18309e56375c14d4903",
+      "bytes": 4057
+    },
+    {
+      "path": "docs/sprints/current/portfolio-private-enterprise-terminal/pf-66-s02-synthetic-demonstration-and-requirements-brief.md",
+      "sha256": "7426844d466b884a19d00fa7a48e08b5c918f4ae0b5741df1fced924cd1974b5",
+      "bytes": 4086
+    },
+    {
+      "path": "docs/sprints/current/portfolio-private-enterprise-terminal/pf-66-s03-business-boundary-go-or-no-go.md",
+      "sha256": "02ba5c81530c59f58700d1d63e45a133b499baf8473c76018c7baed59de5fb4e",
+      "bytes": 4011
+    },
+    {
+      "path": "docs/sprints/current/portfolio-private-inference-research/pf-65-s01-threat-model-and-evidence-review.md",
+      "sha256": "da2efa12e2a7c25215588aaf3b9eafdd0c37bce99e04167027ee0f328cd58a72",
+      "bytes": 4006
+    },
+    {
+      "path": "docs/sprints/current/portfolio-private-inference-research/pf-65-s02-one-bounded-reproducible-experiment.md",
+      "sha256": "8a213bb08c1b8000e057cbb6e171950c7646c3cd5bde4daf21bb76a51aed828b",
+      "bytes": 4000
+    },
+    {
+      "path": "docs/sprints/current/portfolio-private-inference-research/pf-65-s03-feasibility-and-integration-decision.md",
+      "sha256": "3a990c912211593a2dc389452ac285578e6e6b8edeff31df0c226095df9c8e7a",
+      "bytes": 4033
+    },
+    {
+      "path": "docs/sprints/current/portfolio-recurring-benchmarks/pf-63-s01-comparable-campaign-specification.md",
+      "sha256": "110ed06ece2aaf038f0f069940c396bc080fa8f39fafaa6c8cbb46e3507c3c28",
+      "bytes": 4219
+    },
+    {
+      "path": "docs/sprints/current/portfolio-recurring-benchmarks/pf-63-s02-resumable-runner-and-evidence-adapters.md",
+      "sha256": "de103c136485ed2339914df20bf8aecefb31fdddb86919b07b5831821f1ae558",
+      "bytes": 4475
+    },
+    {
+      "path": "docs/sprints/current/portfolio-recurring-benchmarks/pf-63-s03-first-bounded-campaign-and-gate-rehearsal.md",
+      "sha256": "0062d0f8fee47d66bef0b75e9b060f648f57a7acc69023872d4d03ab4b714031",
+      "bytes": 4138
+    },
+    {
+      "path": "docs/sprints/current/portfolio-research-content-distribution/pf-74-s01-editorial-brief-and-source-contract.md",
+      "sha256": "fdf7692e2dd9e32841d0666fcbb690feabd3f8d22f7cd1f78097e7c25a342219",
+      "bytes": 4023
+    },
+    {
+      "path": "docs/sprints/current/portfolio-research-content-distribution/pf-74-s02-one-evidence-backed-draft-packet.md",
+      "sha256": "b8d779efc8afcdecd949f9c543a362e05acac35150cf6e2fdd83c0b006ae1825",
+      "bytes": 4083
+    },
+    {
+      "path": "docs/sprints/current/portfolio-research-content-distribution/pf-74-s03-human-review-and-distribution-decision.md",
+      "sha256": "24d0ccf28f1d7b4ddafb69ddf1c29764723af315678fae111c9d9253ec6404f8",
+      "bytes": 4065
+    },
+    {
+      "path": "docs/sprints/current/portfolio-rollout-support/pf-64-s01-cohort-and-activation-contract.md",
+      "sha256": "ba662deacb7eca284c794a26261d687ff62006d1d267b1412b8bb17fe90949ab",
+      "bytes": 4012
+    },
+    {
+      "path": "docs/sprints/current/portfolio-rollout-support/pf-64-s02-support-and-recovery-rehearsal.md",
+      "sha256": "07f3f7ea4780124ceb8f99619918186513f6d940cc677d1b71c9cab96b4ded90",
+      "bytes": 4060
+    },
+    {
+      "path": "docs/sprints/current/portfolio-rollout-support/pf-64-s03-opt-in-pilot-readiness-decision.md",
+      "sha256": "85f27b329d98acd3c0050f962a1621204969c69550b2de746b65c5cb202aab13",
+      "bytes": 4018
+    },
+    {
+      "path": "docs/sprints/current/portfolio-text-improvement/pf-73-s01-harness-inventory-and-editorial-rubric.md",
+      "sha256": "18733b0c6460dcdd9cbb1953639db18dfacc4f8c440fd216095f047aed1e3ff2",
+      "bytes": 3894
+    },
+    {
+      "path": "docs/sprints/current/portfolio-text-improvement/pf-73-s02-blinded-exact-model-comparison.md",
+      "sha256": "19b6f664594a62c5e166eee8b3e516d6d45cdc2c4c2de40bdaaf32fa5ef74262",
+      "bytes": 3970
+    },
+    {
+      "path": "docs/sprints/current/portfolio-text-improvement/pf-73-s03-upgrade-or-retain-decision.md",
+      "sha256": "0ce2054c7f82c3b9d4042dab7a0251577007048b3ece22ac2773ae87644396cf",
+      "bytes": 3823
+    },
+    {
+      "path": "docs/sprints/index.md",
+      "sha256": "3cdd1c3bfdc3a38d50dd9fe2e852e59e4c70eb13f667332271c36f6a96c3f6f2",
+      "bytes": 6676
+    },
+    {
+      "path": "mkdocs.yml",
+      "sha256": "4695ee1d5191ef3a692b3589951be6b97a6c7ad9f2b313711db15f9f659ba9b9",
+      "bytes": 26199
+    },
+    {
+      "path": "qa/portfolio/2026-09-09/review-scope.md",
+      "sha256": "228e1dad3282a3ea4189b8a654146cad5db35d14ea235ad4a064ec80ed2d6882",
+      "bytes": 5770
+    },
+    {
+      "path": "qa/portfolio/2026-09-09/validate.py",
+      "sha256": "0d16249b982740c9c2d0828c958ceb70a2a8eda8a05f1af7e88a5f4046dd5203",
+      "bytes": 4052
+    }
+  ]
+}

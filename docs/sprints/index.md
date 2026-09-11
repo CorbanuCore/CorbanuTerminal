@@ -94,6 +94,13 @@ owner must compare actual diffs to scope and record final combined-tree evidence
 
 ## Machine check
 
+September 10 planning publication and call follow-up add [16 proposals and 52 draft sprints](../plans/portfolio-2026-09-09.md)
+(PF-60–PF-75), with no execution authority or allocations. The receiving `main`
+baseline had 60 current and 121 archived records; the initial 50 plus two new PF-70 drafts yield 112 current
+and 121 archived records. Seven inherited sprint-link/ID errors remain visible;
+see the [scrum packet](../plans/scrum-2026-09-10.md#receiving-main-and-existing-work).
+Each proposal's sprint execution map links every draft directly.
+
 ```bash
 python3 docs/sprints/check.py
 ```
