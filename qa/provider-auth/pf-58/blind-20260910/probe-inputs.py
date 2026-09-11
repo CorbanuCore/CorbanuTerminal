@@ -32,7 +32,8 @@ def main():
             'model="gpt-6-astra"\nmodel_provider="openai"\n'
             'cli_auth_credentials_store="file"\ncheck_for_update_on_startup=false\n'
             'suppress_unstable_features_warning=true\n'
-            'openai_base_url="http://127.0.0.1:1/v1"\n')
+            'openai_base_url="http://127.0.0.1:1/v1"\n'
+            f'[projects.{json.dumps(str(root))}]\ntrust_level="trusted"\n')
         # No inference requests in this probe; network route fails closed locally.
         (home / "auth.json").write_text(json.dumps({"OPENAI_API_KEY": "synthetic-existing-key"}))
         env = {k: v for k, v in os.environ.items() if k in ("PATH", "LANG", "LC_ALL", "TMPDIR")}
