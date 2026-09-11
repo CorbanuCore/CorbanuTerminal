@@ -75,6 +75,14 @@ Task lists use stable status tabs. Opening a task shows its details and the
 actions currently available for that state, including evidence guidance and
 verification-related work.
 
+## Read your team's shared context
+
+Run `/tasknode team` or choose **Team Context** from `/tasknode`, then select **Read full report**. The report shows collaborators' shared work summaries, rewarded-task counts, update time and freshness. Scroll with the pager keys; press Esc to return and choose **Refresh Team Context** for the latest report and sharing permissions.
+
+Agents can retrieve the same report with `corbanu tasknode team context --json`. This uses the active profile's linked Task Node account. Access follows the same task-history grants as the web Team page. Reading the report does not require enabling **Use in personal context**; that separate preference controls Task Node chat context. Private context documents are not exposed by this command.
+
+If the report is pending or unavailable, its status is shown explicitly. An older report is labeled as previous. Manage teammates and sharing in the Task Node app.
+
 ## Request work and use context
 
 ```text

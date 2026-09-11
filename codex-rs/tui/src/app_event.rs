@@ -751,6 +751,16 @@ pub(crate) enum AppEvent {
         result: Result<serde_json::Value, String>,
     },
     /// Show the current Task Node context document.
+    TaskNodeTeamContextDocument {
+        text: String,
+    },
+
+    OpenTaskNodeTeamContext,
+
+    OpenTaskNodeTeamContextResult {
+        result: Result<serde_json::Value, String>,
+    },
+
     OpenTaskNodeContext,
     /// Task Node context document loaded.
     OpenTaskNodeContextResult {

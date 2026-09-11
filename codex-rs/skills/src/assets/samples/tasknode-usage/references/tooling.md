@@ -18,6 +18,7 @@ Corbanu Terminal exposes Task Node through slash commands:
 - `/tasknode request` - open a task-request prompt.
 - `/tasknode request <text>` - submit a task request directly.
 - `/tasknode context` - view or edit the context document.
+- `/tasknode team` - read collaborators' shared Team Context, including work summaries, task counts and report freshness.
 - `/tasknode chat` - open Task Node chat threads.
 - `/tasknode chat <message>` - start a new Private Thinking chat with a message.
 - `/tasknode requests` - list active task-generation requests.
@@ -93,6 +94,7 @@ Every command below uses the resolved `"$CORBANU_BIN"`.
 "$CORBANU_BIN" tasknode chat send --message "<text>" --json
 "$CORBANU_BIN" tasknode chat send --stream --message "<text>" --json
 "$CORBANU_BIN" tasknode context get --json
+"$CORBANU_BIN" tasknode team context --json
 "$CORBANU_BIN" tasknode context save --body-file <path> --revision <n> --json
 "$CORBANU_BIN" tasknode request create --body-file <path> --json
 "$CORBANU_BIN" tasknode requests list --json
@@ -108,6 +110,12 @@ Every command below uses the resolved `"$CORBANU_BIN"`.
 ```
 
 The helper reuses the same Corbanu Terminal vault session as the TUI and never prints the bearer token. Non-streaming commands emit one JSON object. Streaming chat emits JSON lines for SSE events when the backend streams; dry-run or preflight responses may return one normal JSON object.
+
+## Team Context
+
+For collaborators' shared work, use `"$CORBANU_BIN" tasknode team context --json`. This reads the same report as the web Team page under the active profile's existing task-history grants. It returns members, shared work summaries, task counts, generation time and report freshness. Treat a previous or pending report as such. Unshared task history remains unavailable, and this command does not expose collaborators' private context documents.
+
+The report can be read even when **Use in personal context** is off. That preference separately controls injection of a current report into Task Node chat. `context get` continues to return only the user's editable context document. Use the current Task Node collaboration API as authority; the historical PFTasks network-context/admin routes describe a different feature.
 
 ## Evidence Lifecycle Gate
 

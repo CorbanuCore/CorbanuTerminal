@@ -957,6 +957,7 @@ impl ChatWidget {
                         }
                     }
                     "context" => self.app_event_tx.send(AppEvent::OpenTaskNodeContext),
+                    "team" | "team-context" => self.app_event_tx.send(AppEvent::OpenTaskNodeTeamContext),
                     "chat" => {
                         if rest.is_empty() {
                             self.app_event_tx.send(AppEvent::OpenTaskNodeChat);
@@ -973,7 +974,7 @@ impl ChatWidget {
                     "rewards" => self.app_event_tx.send(AppEvent::OpenTaskNodeRewards),
                     "logout" => self.app_event_tx.send(AppEvent::LogoutTaskNode),
                     _ => self.add_error_message(
-                        "Usage: /tasknode [link|status|tasks|task|request|context|chat|requests|verification|balance|rewards|logout]"
+                        "Usage: /tasknode [link|status|tasks|task|request|context|team|chat|requests|verification|balance|rewards|logout]"
                             .to_string(),
                     ),
                 }

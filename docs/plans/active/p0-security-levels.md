@@ -17,6 +17,9 @@ product_spec:
   heading: "P0 /security levels"
   requirement_excerpt: "Existing approval, sandbox, vault, wallet, tool, network, and agent policies are unchanged."
 implementation_worktrees:
+  - path: "/mnt/HC_Volume_101713660/pfrpc/scratch/corbanu-wallet-launch-hotfix"
+    branch: "fix/tasknode-team-context"
+    base_commit: "7ae35557657b2f2d1c51a8f4af4e4bb1180fe5eb"
   - path: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.39"
     branch: "fix/tasknode-agent-profile-scope"
     base_commit: "7e99c5a06bdb7b0f01f655cb4d84739b4f70bb86"
@@ -1016,3 +1019,11 @@ User-reported post-release account mismatch authorizes repairing agent helper pr
 ## PF-45 Campaign Tracker release integration
 
 The user authorized Campaign Tracker implementation on September 6 and production deployment and release on September 7. Product contract: **Campaign Tracker — LOCAL PILOT CANDIDATE**, “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”. [PF-45-S01](../../sprints/archive/p0-security-levels/pf-45-s01-campaign-tracker.md) records completed implementation. [0.1.39 publication](../../../qa/release/0.1.39/PUBLICATION.md) records integration with the shipped 0.1.38 baseline and qualification limits. No additional product initiative is introduced by packaging this completed feature.
+
+## PF-76 — Team Context terminal parity
+
+The operator explicitly authorized this extension on 2026-09-11: make the Team Context already visible in Task Node available through Corbanu Terminal and `corbanu-debug --yolo`. Product heading **Shipping MVP — LIVE**, **Task Node and identity**: “Tasks, evidence, verification, rewards, balances, chat, context, linked identity”. This extends the existing Task Node integration with an authenticated read surface; existing task-history grants remain authoritative.
+
+[Sprint PF-76-S01](../../sprints/current/p0-security-levels/pf-76-s01-team-context.md) owns the CLI, TUI, bridge route and focused acceptance. No dependency on unfinished security features. Worktree coordinates are declared above; the companion server is `/home/pfrpc/repos/tasknode` with its existing unrelated work preserved. Upstream touch: CLI/TUI adapter and event registration only, based on the release candidate `7ae35557657b2f2d1c51a8f4af4e4bb1180fe5eb`; no Core, protocol, dependency, wallet or inference change.
+
+Acceptance: the CLI returns the same permission-filtered report as the web app, the TUI shows summaries/counts/freshness and refresh, unauthorized or revoked relationships expose no work, account switching and stale responses retain existing safeguards, and unavailable reports remain explicit. Verify route grants/auth, CLI JSON, TUI snapshots and real keyboard success/failure/recovery/cancel/restart on the final binary in both recorded disposable default repositories. Target is the local debug candidate; the already-running 0.1.42 release remains pinned to its existing source. Human acceptance and wider benchmarks are recorded separately. Codex owns integration and serializes the combined checks.
