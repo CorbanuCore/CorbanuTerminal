@@ -1,5 +1,113 @@
 # Local verification receipt — PF-60-S01 proposal v1
 
+## Native Anthropic known-subtotal correction — 2026-09-11
+
+Bounded fix under Travis's standing implementation/review-agent authority, in
+the existing active PF-60 plan and PF-60-S01 (`in_progress`) allocation. Product
+citation: **Product measurement** — “No commercial performance numbers have
+been supplied.” Current corbanu-terminal-development skill, root AGENTS, plan and
+sprint rules, active PF-60 plan and S01 were read; no nested AGENTS apply to these
+four QA paths. No shared plan/sprint edits or new allocation were made.
+
+Starting worktree was clean at `58b214a0ab1f220a5a768dd605697f7bae54c0ba`, branch
+`workstream/accounting-pf60-s01-20260911`, in
+`/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911`.
+That committed baseline already includes the reviewed partial-cache validation
+fix. This receipt supersedes the 41-test candidate below; its earlier receipts
+are historical. The existing cache-sum validation and all 41 tests are preserved.
+
+The parent finding was reproduced by removing `cache_creation_input_tokens`
+from every `child-a-1` observation in memory. The original oracle returned
+`3/1,000,000 USD`, losing independently measured noncached input 50. Correct
+known cost is `(50 * 3 + 10 * 0.3) / 1,000,000 = 153/1,000,000 USD`.
+Read remains 10; write, inclusive input, output, total and full cost remain null.
+The reasons are `write:usage_unknown`, `output:usage_unknown` and
+`attempt_not_complete`. The pricing reason `input:usage_unknown` is no longer
+appropriate because the disjoint noncached pricing bucket is measured; inclusive
+input remains unknown independently. Root known cost becomes
+`(220 + 153 + 636 + 0) / 1,000,000 = 0.001009 USD`; root inclusive input has
+known subtotal 340 and one unknown attempt, so its total remains null.
+
+`normalize` validates native Anthropic components and carries raw noncached input
+as private `_noncached_input` for `estimate`. `Replay.rows` emits only the existing
+six usage fields plus existing cost/billed fields; checkpoints keep raw source
+observations. This private count never contributes separately to token totals.
+Only the explicit native `anthropic` wire dialect sets it. Chat/Responses still
+require a complete inclusive split to derive noncached input, even with provider
+name `anthropic`; unsupported compatible dialects remain rejected. Existing
+contract semantics suffice; contract, QA README and fixture goldens are unchanged.
+
+The added matrix tests all 27 combinations of noncached `{null, 0, 50}`, read
+`{null, 0, 10}` and write `{null, 0, 20}`, each with omission and explicit-null
+forms (54 subcases). Output 2 contributes an independent `2 * 6 = 12` micro-USD
+in that matrix. The input-only arithmetic for the positive/unknown cases is:
+
+| Noncached / read / write | Known input-bucket subtotal (micro-USD) |
+| --- | --- |
+| 50 / 10 / unknown | `50 * 3 + 10 * 0.3 = 153` |
+| 50 / unknown / 20 | `50 * 3 + 20 * 3.75 = 225` |
+| unknown / 10 / 20 | `10 * 0.3 + 20 * 3.75 = 78` |
+| 50 / unknown / unknown | `50 * 3 = 150` |
+| unknown / 10 / unknown | `10 * 0.3 = 3` |
+| unknown / unknown / 20 | `20 * 3.75 = 75` |
+| unknown / unknown / unknown | `0` known subtotal; full cost unknown |
+| 50 / 10 / 20 | `150 + 3 + 75 = 228`; inclusive input 80 |
+
+A measured zero bucket requires no price but cannot fill an absent measurement.
+All-zero completed input/read/write/output costs zero without prices; omitting
+write still leaves full cost and inclusive input unknown. Missing noncached
+price with measured 50/read 10/output 0 retains `3/1,000,000` known cost and
+`input:price_missing`, not `input:usage_unknown`. Invalid noncached counts are
+rejected by normalization even when a missing cache field prevents a total.
+
+Partial replay/checkpoint sequence: input 50 gives 150 micro-USD; null input
+plus read 10 preserves 50 and gives 153; explicit input 0 replaces 50 and gives
+3; input 60/write 20/output 2 completes at `180 + 3 + 75 + 12 = 270` micro-USD,
+inclusive input 90 and total 92. Duplicate ingestion, a JSON reopen at each
+partial state and all 24 revision permutations agree without additive charging.
+This is oracle replay only, not native persistence or process-crash proof.
+
+Commands ran from the worker root with `PYTHONDONTWRITEBYTECODE=1` for every
+Python command, preserving the literal write scope.
+
+| UTC batch | Command | Actual result / exit |
+| --- | --- | --- |
+| 2026-09-11T22:37:14Z | `python3 -m unittest discover -s qa/portfolio/agent-cost-accounting/pf-60-s01 -p 'test_*.py'` | Baseline: 41 tests, 0.054s, OK / 0. |
+| 2026-09-11T22:38:59Z | Same discovery, seven added methods, unchanged oracle | 48 tests, 0.057s, 27 failures across five new methods, no errors / 1. All 41 existing tests pass. |
+| 2026-09-11T22:39:17Z | Same discovery, corrected oracle | 48 tests (41 existing + 7 new), 0.068s, OK / 0. |
+| Completed 2026-09-11T22:39:36Z | `python3 docs/plans/check.py` | `plans: active 3/3; available slots 0` / 0. |
+| Completed 2026-09-11T22:39:36Z | `python3 docs/sprints/check.py` | `sprints: current 115; archived 121` / 0. |
+| Completed 2026-09-11T22:39:36Z | `git diff --check` | No diagnostics / 0. |
+
+Before-fix failures: one parent reproduction, 20 matrix subcases, one missing
+price reason, four invalid raw counts, and one initial partial replay subtotal.
+No failed expectations were removed; all six original literal golden rows and
+the complete original root aggregate remain unchanged and pass.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `reference.py` | `ad2bcbb5d140c29a52ca471496e711af4eaaefb59e2e5b1c97b03eb9338272c1` |
+| `test_contract.py` | `4f8e828d97f1300a8358ad764cf3bd834b04ace0f423ca23cc506aa66f5ea3e5` |
+| `fixtures.json` (unchanged) | `96ba9416a8d0e69436fdd07c4ca6ddbb20cc30ece757b983eb1de2d708ca95dd` |
+| `contract.md` (unchanged) | `15a3060103980595cce252960d18be0daf4b05d95375dbe2f7e51f4f4eb1eb8e` |
+| `README.md` (unchanged) | `f348a66c48e742492a6878f815c9b56493699b59e1ca4b9657a9d652f63191e1` |
+
+Only `reference.py`, `test_contract.py`, `results.md` and `handoff.md` change.
+Final receipt-file hashes and the SHA-256 of the entire full-index patch are
+reported in the delivery message after freezing these files, avoiding a
+self-referential digest. Reproduce the patch digest from this unchanged HEAD
+with `git diff --binary --full-index --no-ext-diff --no-textconv HEAD -- | shasum -a 256`.
+Final whitespace and scope checks accompany that delivery. The patch remains
+unstaged and uncommitted for the parent's independent review before a scoped
+local commit; this is executor self-check, not independent review.
+
+No agents/models/reviewers, network services, credentials, private logs, live
+bills or product runtime were accessed. Native/TUI/live-repository/benchmark
+qualification and human acceptance remain untested. Shared ledgers, source
+cutover, S02 activation, schema/retention/price policy, push/merge/release and
+contract acceptance remain outside this follow-up. Local governance counts are
+worker-only; the parent's different current-sprint count is not reconciled here.
+
 ## Bounded cache-invariant correction — 2026-09-11
 
 This follow-up supersedes the original oracle/test digests and 33-test candidate

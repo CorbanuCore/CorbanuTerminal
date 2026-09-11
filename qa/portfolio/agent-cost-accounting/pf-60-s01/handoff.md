@@ -1,5 +1,52 @@
 # PF-60-S01 kickoff and handoff
 
+## Native Anthropic subtotal follow-up — 2026-09-11
+
+Frozen UNCOMMITTED/unstaged patch based on clean HEAD
+`58b214a0ab1f220a5a768dd605697f7bae54c0ba` in the existing worker worktree
+`/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911`, branch
+`workstream/accounting-pf60-s01-20260911`. The already committed/reviewed
+partial-cache validation fix is preserved. This receipt supersedes the previous
+candidate receipts below, retained as historical evidence.
+
+Class: bounded same-owner fix in active PF-60 / PF-60-S01 (`in_progress`), under
+the parent's supplied standing authority. Product citation: **Product
+measurement** — “No commercial performance numbers have been supplied.” No new
+sprint, contract decision or dispatch approval is required for this correction.
+The development skill routed the work through existing rules and local checks;
+the user's four-file scope governs evidence updates and leaves shared ledgers
+with the parent.
+
+Native Anthropic noncached input is now an internal pricing measurement even
+when inclusive input cannot be computed. With `child-a-1` cache creation absent,
+known cost is `(50 * 3 + 10 * 0.3) / 1,000,000 = 0.000153 USD`, previously
+`0.000003`. Inclusive input, write, output, total and full cost remain unknown.
+The private count is excluded from rows/checkpoints and cannot be double counted
+with known cache. Chat/Responses inclusive dialects and unknown compatible
+dialects retain their existing handling. No runtime/public schema changes.
+
+Seven regression methods cover the reported case and root subtotal, all 54
+omitted/null/zero input-bucket matrix subcases, missing prices, explicit zero,
+partial JSON replay with replacements and 24 reordered/duplicate permutations,
+wire isolation, raw-count validation and unchanged row/checkpoint shape.
+Baseline: 41 passing tests. Failing before: 48 tests, 27 failures across five new
+methods, no errors. Passed after: all 48 tests. Plans: 3/3 active; sprints:
+115 current / 121 archived. Local whitespace check passed. Exact commands,
+arithmetic and code/input hashes are in [results.md](results.md); the frozen
+full-index patch hash and all four changed-file hashes accompany delivery.
+
+Only `reference.py`, `test_contract.py`, `results.md` and `handoff.md` changed.
+Contract/README/fixtures and all 41 prior tests are preserved. No additional
+agents, reviewers or model calls were made. Parent independently reviews this
+uncommitted patch, verifies the final hashes and recomputes partial arithmetic,
+then reruns fixture/governance checks on its combined tree before any local
+scoped commit. No independent-review or combined-tree pass is claimed here.
+
+No source cutover, shared-plan edits, network/private-log/credential access,
+runtime/schema/retention/price-policy/live-bill changes, push/merge/release or
+S02 activation occurred. Contract/human acceptance, native/TUI/live-repository
+qualification, benchmark and S02+ gates remain unchanged and open.
+
 ## Follow-up correction handoff — 2026-09-11
 
 Frozen uncommitted correction based on clean HEAD

@@ -2,14 +2,14 @@
 
 from copy import deepcopy
 from fractions import Fraction
-from itertools import permutations
+from itertools import permutations, product
 import json
 from pathlib import Path
 import subprocess
 import sys
 import unittest
 
-from reference import Replay, exact, normalize, select_price
+from reference import Replay, estimate, exact, normalize, select_price
 
 
 HERE = Path(__file__).resolve().parent
@@ -275,6 +275,125 @@ class AccountingContractTests(unittest.TestCase):
             with self.subTest(missing=missing):
                 row = normalize("anthropic", partial)
                 self.assertEqual((row["input"], row["read"], row["write"]), expected)
+
+    def test_anthropic_missing_write_keeps_measured_noncached_cost(self):
+        events = deepcopy(self.events)
+        for event in events:
+            if event["attempt_id"] == "child-a-1":
+                event["usage"].pop("cache_creation_input_tokens", None)
+        replay = self.replay(events)
+        row = replay.rows(self.prices)["child-a-1"]
+        self.assertEqual(row["known_cost"], Fraction(153, 1_000_000))
+        self.assertEqual(row["read"], 10)
+        for field in ("input", "write", "output", "total", "cost"):
+            self.assertIsNone(row[field], field)
+        self.assertEqual(set(row["unknown_reasons"]),
+                         {"write:usage_unknown", "output:usage_unknown", "attempt_not_complete"})
+        aggregate = replay.aggregate("root", self.prices)
+        self.assertEqual(aggregate["known_cost"], Fraction(1009, 1_000_000))
+        self.assertEqual(aggregate["input"], {"known": 340, "unknown": 1, "total": None})
+        self.assertIsNone(aggregate["cost"])
+
+    def test_anthropic_partial_bucket_matrix_prices_only_measured_parts(self):
+        price = next(p for p in self.prices if p["provider"] == "anthropic")
+        fields = ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")
+        # 27 combinations, each with omitted and explicit-null unknowns.
+        # Literal rates/expectations are independent of the oracle's price lookup.
+        for parts in product((None, 0, 50), (None, 0, 10), (None, 0, 20)):
+            for omit in (False, True):
+                raw = {key: value for key, value in zip(fields, parts)
+                       if value is not None or not omit}
+                raw["output_tokens"] = 2
+                with self.subTest(parts=parts, omit=omit):
+                    usage = normalize("anthropic", raw)
+                    result = estimate(usage, price, "completed")
+                    known = Fraction(12, 1_000_000) + sum(
+                        (value * rate / 1_000_000 for value, rate in
+                         zip(parts, (Fraction(3), Fraction(3, 10), Fraction(15, 4)))
+                         if value is not None), Fraction(0))
+                    missing = {name + ":usage_unknown" for name, value in
+                               zip(("input", "read", "write"), parts) if value is None}
+                    self.assertEqual(result["known_cost"], known)
+                    self.assertEqual(set(result["unknown_reasons"]), missing)
+                    self.assertEqual(result["cost"], None if missing else known)
+                    self.assertEqual(usage["input"], None if missing else sum(parts))
+                    self.assertEqual(usage["total"], None if missing else sum(parts) + 2)
+                    self.assertEqual((usage["read"], usage["write"]), parts[1:])
+                    self.assertIsNone(usage["reasoning"])
+
+    def test_anthropic_partial_missing_price_and_explicit_zero(self):
+        price = deepcopy(next(p for p in self.prices if p["provider"] == "anthropic"))
+        price["rates"]["input"] = None
+        usage = normalize("anthropic", {"input_tokens": 50, "cache_read_input_tokens": 10,
+                                        "output_tokens": 0})
+        result = estimate(usage, price, "completed")
+        self.assertEqual(result["known_cost"], Fraction(3, 1_000_000))
+        self.assertEqual(set(result["unknown_reasons"]),
+                         {"input:price_missing", "write:usage_unknown"})
+        self.assertIsNone(result["cost"])
+        for write in (None, 0):
+            usage = normalize("anthropic", {"input_tokens": 0, "cache_read_input_tokens": 0,
+                                            "cache_creation_input_tokens": write, "output_tokens": 0})
+            result = estimate(usage, None, "completed")
+            self.assertEqual(result["known_cost"], 0)
+            self.assertEqual(result["unknown_reasons"], ["write:usage_unknown"] if write is None else [])
+            self.assertEqual(result["cost"], None if write is None else 0)
+            self.assertEqual(usage["input"], None if write is None else 0)
+
+    def test_anthropic_partial_replay_preserves_replaces_and_completes_buckets(self):
+        template = next(e for e in self.events if e["attempt_id"] == "child-a-1")
+        patches = [{"input_tokens": 50},
+                   {"input_tokens": None, "cache_read_input_tokens": 10},
+                   {"input_tokens": 0, "cache_creation_input_tokens": None},
+                   {"input_tokens": 60, "cache_creation_input_tokens": 20, "output_tokens": 2}]
+        events = [{**deepcopy(template), "revision": i + 1,
+                   "status": "completed" if i == 3 else "streaming", "usage": patch}
+                  for i, patch in enumerate(patches)]
+        replay = self.replay([])
+        for i, expected in enumerate((150, 153, 3, 270)):
+            replay.ingest([events[i], events[i]])
+            # Reopen the partial JSON checkpoint before receiving the next patch.
+            replay = self.replay(json.loads(json.dumps(replay.snapshot())))
+            row = replay.rows(self.prices)["child-a-1"]
+            self.assertEqual(row["known_cost"], Fraction(expected, 1_000_000))
+            self.assertEqual(row["input"], 90 if i == 3 else None)
+            self.assertEqual(row["total"], 92 if i == 3 else None)
+            self.assertEqual(row["cost"], Fraction(270, 1_000_000) if i == 3 else None)
+            self.assertNotIn("input:usage_unknown", row["unknown_reasons"])
+        for order in permutations(events):
+            with self.subTest(order=[e["revision"] for e in order]):
+                self.assertEqual(self.replay(list(order) * 2).rows(self.prices), replay.rows(self.prices))
+
+    def test_anthropic_provider_does_not_override_inclusive_wire_dialect(self):
+        attempts = deepcopy(self.data["attempts"])
+        attempt = next(a for a in attempts if a["attempt_id"] == "child-a-1")
+        template = next(e for e in self.events if e["attempt_id"] == "child-a-1")
+        for wire, prefix in (("responses", "input"), ("chat", "prompt")):
+            attempt["wire"] = wire
+            event = {**deepcopy(template), "status": "completed", "usage": {
+                prefix + "_tokens": 50, prefix + "_tokens_details": {"cached_tokens": 10},
+                "output_tokens" if wire == "responses" else "completion_tokens": 2}}
+            with self.subTest(wire=wire):
+                row = self.replay([event], attempts=attempts).rows(self.prices)["child-a-1"]
+                self.assertEqual(row["input"], 50)
+                self.assertIsNone(row["write"])
+                self.assertEqual(row["known_cost"], Fraction(15, 1_000_000))
+                self.assertEqual(set(row["unknown_reasons"]), {"input:usage_unknown", "write:usage_unknown"})
+                self.assertIsNone(row["cost"])
+
+    def test_anthropic_partial_noncached_measurement_is_validated(self):
+        for value in (-1, True, 1.5, "50"):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "invalid token count"):
+                normalize("anthropic", {"input_tokens": value, "cache_read_input_tokens": 10})
+
+    def test_anthropic_internal_pricing_count_does_not_extend_row_or_checkpoint(self):
+        row_fields = {"input", "read", "write", "output", "reasoning", "total", "known_cost",
+                      "cost", "unknown_reasons", "price_id", "billed"}
+        for replay in (self.replay(), self.replay([])):
+            before = replay.snapshot()
+            for row in replay.rows(self.prices).values():
+                self.assertEqual(set(row), row_fields)
+            self.assertEqual(replay.snapshot(), before)
 
     def test_replay_rejects_invalid_partial_cache_before_later_valid_revision(self):
         for wire, prefix, field in (("chat", "prompt", "cached_tokens"),

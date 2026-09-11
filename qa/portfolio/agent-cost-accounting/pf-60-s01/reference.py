@@ -64,7 +64,7 @@ def normalize(wire, usage):
     elif wire == "anthropic":
         # Explicitly native Anthropic noncached-input dialect, not its compatible
         # providers' cumulative-input heuristic. Unknown dialects are rejected.
-        parts = [usage.get(name) for name in
+        parts = [count(usage.get(name)) for name in
                  ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")]
         input_count = sum(parts) if all(v is not None for v in parts) else None
         output = usage.get("output_tokens")
@@ -73,6 +73,10 @@ def normalize(wire, usage):
     else:
         raise ValueError("unsupported wire dialect")
     result = dict(zip(FIELDS, (count(value) for value in values)))
+    if wire == "anthropic":
+        # Internal pricing measurement: independent of an unknown cache split.
+        # This is not inclusive input and must not enter rows or token totals.
+        result["_noncached_input"] = parts[0]
     if result["input"] is not None:
         known_cache = sum(result[key] for key in ("read", "write") if result[key] is not None)
         if known_cache > result["input"]:
@@ -117,8 +121,11 @@ def select_price(attempt, prices):
 
 def estimate(usage, price, status):
     buckets = {key: usage[key] for key in ("read", "write", "output")}
-    parts = [usage[key] for key in ("input", "read", "write")]
-    buckets["input"] = parts[0] - parts[1] - parts[2] if all(v is not None for v in parts) else None
+    if "_noncached_input" in usage:
+        buckets["input"] = usage["_noncached_input"]
+    else:
+        parts = [usage[key] for key in ("input", "read", "write")]
+        buckets["input"] = parts[0] - parts[1] - parts[2] if all(v is not None for v in parts) else None
     rates = price["rates"] if price else {}
     known = Fraction(0)
     unknown = []
@@ -219,7 +226,8 @@ class Replay:
             if billed is not None:
                 if billed["currency"] != "USD" or not billed["line_id"] or not billed["provenance"]:
                     raise ValueError("invalid billed evidence")
-            rows[key] = {**usage, **estimate(usage, select_price(attempt, prices), status),
+            rows[key] = {**{field: usage[field] for field in FIELDS},
+                         **estimate(usage, select_price(attempt, prices), status),
                          "billed": exact(billed["amount"]) if billed is not None else None}
         return rows
 
