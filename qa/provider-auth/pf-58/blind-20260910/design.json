@@ -1,0 +1,322 @@
+{
+  "feature": "PF-58 provider setup, recovery and model selection",
+  "designer": "/root/blind_functional_designer",
+  "fresh_context": true,
+  "code_blind": true,
+  "results_blind": true,
+  "isolation": "instruction-only",
+  "brief": {
+    "path": "packet/intent.md",
+    "sha256": "2d980f875488d273ec75a230bca85fdb9d044b89c714eed19bc6141914645b18"
+  },
+  "screenshots": [
+    {
+      "path": "packet/token-entry.png",
+      "sha256": "7224a3554c0dd56744ba0c110c7dd8cf244d94e697817d68388c20496e75e2d6"
+    },
+    {
+      "path": "packet/provider-manager.png",
+      "sha256": "dacdb6ffade73c307a7eb70f48bae928e7af90a3b0b879932173ab3b98280744"
+    },
+    {
+      "path": "packet/model-picker.png",
+      "sha256": "2046999b2eb274abaa60216868b165c29f72204e8d7bb3d4c55cfd1580894142"
+    }
+  ],
+  "proposal": {
+    "path": "original-proposal.md",
+    "sha256": "01608242ee06fcceff8fe6e4098d3b77889d25ab3da633c4d94fcc1a317fd52c"
+  },
+  "access_record": {
+    "path": "designer-session.md",
+    "sha256": "aa551ab846bb98eabfc8562b398ab44ed2761f69435e218fd579c305ced1f610"
+  },
+  "cases": [
+    {
+      "id": "PF58-F01",
+      "priority": "blocker",
+      "starting_conditions": "Fresh profile without credentials.",
+      "actions": [
+        "Launch normally; open `/providers`; inspect each route; open `/model`; cancel to chat."
+      ],
+      "expected": [
+        "App remains usable. Unconfigured routes are recognizable and offer setup. Selection status does not imply authentication health. No provider is falsely presented as ready for chat."
+      ]
+    },
+    {
+      "id": "PF58-F02",
+      "priority": "blocker",
+      "starting_conditions": "Fresh profile; eligible OpenAI account.",
+      "actions": [
+        "Open `/providers`; choose OpenAI account login; complete the offered login; choose an available model and effort through `/model`; send a short prompt."
+      ],
+      "expected": [
+        "Login completes through the named account route; provider becomes usable; chosen provider/model/effort are clear; a response arrives without restarting the terminal."
+      ]
+    },
+    {
+      "id": "PF58-F03",
+      "priority": "blocker",
+      "starting_conditions": "Fresh profile; eligible Claude subscription account.",
+      "actions": [
+        "Choose Claude subscription login, complete it, select a subscription model and effort, and send a prompt."
+      ],
+      "expected": [
+        "Subscription authentication succeeds; the UI identifies the subscription route; chat works without requiring an Anthropic API key or silently switching billing routes."
+      ]
+    },
+    {
+      "id": "PF58-F04",
+      "priority": "blocker",
+      "starting_conditions": "Fresh profile; valid Claude managed subscription token.",
+      "actions": [
+        "Choose managed-token entry; paste the token; confirm; select the subscription model; send a prompt."
+      ],
+      "expected": [
+        "Entry remains masked. Token is accepted for the named subscription route, status becomes usable, and chat succeeds without restart or token disclosure."
+      ]
+    },
+    {
+      "id": "PF58-F05",
+      "priority": "blocker",
+      "starting_conditions": "Fresh profile; valid Anthropic API key.",
+      "actions": [
+        "Configure the Anthropic API route; select a supported model and effort; send a prompt."
+      ],
+      "expected": [
+        "UI clearly identifies the API route. Chat uses that route without requiring Claude subscription login or silently substituting subscription authentication."
+      ]
+    },
+    {
+      "id": "PF58-F06",
+      "priority": "blocker",
+      "starting_conditions": "Designated valid credentials for each supported other API-key provider; configured custom-provider fixture with known endpoint/model.",
+      "actions": [
+        "Configure each supported provider separately. Open `/model`, select its model, and send a prompt. Repeat with the custom provider."
+      ],
+      "expected": [
+        "Each supported route is reachable and usable. Custom providers/models remain identifiable. Selection and responses correspond to the chosen provider. Exact provider coverage depends on the supported-provider list."
+      ]
+    },
+    {
+      "id": "PF58-F07",
+      "priority": "blocker",
+      "starting_conditions": "Claude subscription and Anthropic API routes both available; distinguishable test credentials or provider-side request records.",
+      "actions": [
+        "Configure both; select and chat through each; recover one credential; chat through both again. Separately attempt to enter an API key in subscription-token setup and vice versa."
+      ],
+      "expected": [
+        "Routes remain distinct. Recovery changes only the intended credential. Wrong-route input is not silently reinterpreted or stored under another route. Request evidence identifies the selected billing/authentication route."
+      ]
+    },
+    {
+      "id": "PF58-F08",
+      "priority": "blocker",
+      "starting_conditions": "Credential-entry screen for a new provider; a separate healthy provider already configured.",
+      "actions": [
+        "Submit empty input, whitespace-only input, and an invalid credential in separate attempts."
+      ],
+      "expected": [
+        "No unusable input is reported as successful setup. Failure identifies the affected route and provides a useful correction/retry path. The other provider remains usable."
+      ]
+    },
+    {
+      "id": "PF58-F09",
+      "priority": "blocker",
+      "starting_conditions": "Masked entry screen for each secret-bearing route.",
+      "actions": [
+        "Type and paste a distinctive test secret, edit it, submit a rejected value, and repeat with cancellation. Inspect the resulting UI and chat scrollback."
+      ],
+      "expected": [
+        "Secret contents never appear in entry rendering, confirmation, error messages, or chat. Cancelling or retrying does not replay the secret into the chat composer. Long-token paste behaves as one credential entry."
+      ]
+    },
+    {
+      "id": "PF58-F10",
+      "priority": "blocker",
+      "starting_conditions": "Healthy configured provider with working credential and an unfinished chat message.",
+      "actions": [
+        "Start replacement/recovery; enter a different credential; press Escape before confirmation. Also cancel account login before completion. Return to chat and send a prompt."
+      ],
+      "expected": [
+        "Cancellation returns to a usable screen; the existing working credential and selection remain available; no partial replacement is reported as complete. The unfinished message is not sent accidentally."
+      ]
+    },
+    {
+      "id": "PF58-F11",
+      "priority": "blocker",
+      "starting_conditions": "Profile containing healthy, disabled, unconfigured, checking, and expired-credential examples; expired provider is selected.",
+      "actions": [
+        "Open `/providers`; move through entries; open the selected provider\u2019s actions; compare with `/model` and chat status."
+      ],
+      "expected": [
+        "Enabled/disabled status, current selection, and authentication health are distinguishable. The selected expired provider visibly needs attention. Its recovery action identifies the affected route. \u201cCurrent\u201d or \u201cactive\u201d alone does not imply healthy authentication."
+      ]
+    },
+    {
+      "id": "PF58-F12",
+      "priority": "blocker",
+      "starting_conditions": "An expired/revoked credential for the selected provider; another healthy provider; existing conversation.",
+      "actions": [
+        "Send a prompt to encounter the failure; open `/providers`; complete recovery; retry the prompt in the same process."
+      ],
+      "expected": [
+        "Error names the failing service/route and offers a usable next step. Recovery restores chat without terminal restart, conversation loss, or changes to the other provider. A retry does not send the same user message twice unintentionally."
+      ]
+    },
+    {
+      "id": "PF58-F13",
+      "priority": "blocker",
+      "starting_conditions": "Two healthy providers; one remains selected.",
+      "actions": [
+        "Recover or replace the credential of the nonselected provider; return to chat; use the selected provider; then select and use the recovered provider."
+      ],
+      "expected": [
+        "Recovery targets the chosen provider. It does not unexpectedly replace the current selection or damage the other provider. Both remain usable through their respective routes."
+      ]
+    },
+    {
+      "id": "PF58-F14",
+      "priority": "blocker",
+      "starting_conditions": "Multiple configured providers, including the selected provider.",
+      "actions": [
+        "Disable a nonselected provider; inspect `/model`; re-enable it. Repeat by disabling the currently selected provider and attempting chat."
+      ],
+      "expected": [
+        "Disabled providers cannot be used unknowingly. Re-enabling preserves usable setup. Disabling the current provider produces a clear, actionable state or explicitly communicated selection change; it never silently sends through an unexpected route. Exact fallback policy requires clarification."
+      ]
+    },
+    {
+      "id": "PF58-F15",
+      "priority": "blocker",
+      "starting_conditions": "Multiple configured providers/models, including identical model display names where supported.",
+      "actions": [
+        "Navigate `/model` across providers and rows; inspect the current markers; choose a different provider/model/effort; reopen the menu."
+      ],
+      "expected": [
+        "Every selectable choice has enough information to distinguish its provider and effective selection. The resulting current provider/model/effort is unambiguous. Duplicate labels do not conceal meaningful differences or falsely mark conflicting choices as current."
+      ]
+    },
+    {
+      "id": "PF58-F16",
+      "priority": "blocker",
+      "starting_conditions": "Two models with different supported effort choices, including a model with no configurable effort if supported.",
+      "actions": [
+        "Change effort; switch models and providers; confirm selections; reopen `/model`; send a prompt after each change."
+      ],
+      "expected": [
+        "Only valid combinations are accepted. Any adjustment to an unsupported carried-over effort is visible. Menu, chat status, and actual request behavior agree about provider/model/effort."
+      ]
+    },
+    {
+      "id": "PF58-F17",
+      "priority": "blocker",
+      "starting_conditions": "Active conversation and saved selection.",
+      "actions": [
+        "Browse other providers/models/efforts without committing; Escape at each level; resume chat. Then explicitly confirm a new selection and continue the conversation."
+      ],
+      "expected": [
+        "Browsing/cancellation leaves the committed selection intact. Confirmation changes it clearly. Conversation remains usable and the next request uses the committed choice."
+      ]
+    },
+    {
+      "id": "PF58-F18",
+      "priority": "blocker",
+      "starting_conditions": "Successful setup and selected model/effort; at least one disabled configured provider.",
+      "actions": [
+        "Exit cleanly and relaunch twice. On macOS use the Applications shortcut each time; on Linux use the normal launch path. Open both menus and send a prompt."
+      ],
+      "expected": [
+        "Credentials, selection, and disabled status persist. Ordinary relaunch does not repeat completed setup. Chat remains usable. Any native consent is recognizable as such and does not masquerade as missing provider configuration."
+      ]
+    },
+    {
+      "id": "PF58-F19",
+      "priority": "blocker",
+      "starting_conditions": "Existing supported profile created before the candidate, with multiple credentials, selected model/effort, and any configured custom provider.",
+      "actions": [
+        "Launch the candidate using that profile; inspect both menus; chat; exit and relaunch."
+      ],
+      "expected": [
+        "Supported saved setup remains usable without credential-route mixing, unexpected duplicate selections, or unnecessary reauthentication. Unsupported/missing selections receive a clear recovery path without damaging the profile. Supported migration range requires clarification."
+      ]
+    },
+    {
+      "id": "PF58-F20",
+      "priority": "blocker",
+      "starting_conditions": "macOS installation launched through Applications shortcut; controllable Keychain test credential/access state.",
+      "actions": [
+        "Complete setup and native consent; relaunch and use chat. In separate runs deny or cancel Keychain access, then allow it and retry."
+      ],
+      "expected": [
+        "Successful access permits ordinary continued use without repeated completed setup. Denial/cancellation yields an actionable credential-access explanation, preserves saved setup, and supports recovery. Credentials stay masked throughout native-access failures."
+      ]
+    },
+    {
+      "id": "PF58-F21",
+      "priority": "blocker",
+      "starting_conditions": "Linux terminal over SSH in tmux; designated working account/key and model.",
+      "actions": [
+        "Complete supported setup using keyboard; use `/providers` and `/model`; send a prompt; detach and reattach tmux; continue chat; launch a later session."
+      ],
+      "expected": [
+        "The flow is usable in the stated environment. Any account-login handoff offers a workable path or clearly explains the required handoff. Input, selection, setup persistence, and chat survive the ordinary tmux workflow."
+      ]
+    },
+    {
+      "id": "PF58-F22",
+      "priority": "blocker",
+      "starting_conditions": "Healthy chat provider and a packaged tool with a separately expired credential; then the inverse arrangement.",
+      "actions": [
+        "Launch; attempt chat and a harmless packaged-tool operation; recover the failing credential through the offered path; retry the operation without restarting."
+      ],
+      "expected": [
+        "Errors identify the actual failing service. Tool authentication failure does not falsely mark unrelated model authentication as failed, and vice versa. After recovery, the affected chat/tool operation works in the same terminal. Independent healthy routes stay usable. The intended tool-recovery surface needs specification."
+      ]
+    },
+    {
+      "id": "PF58-F23",
+      "priority": "blocker",
+      "starting_conditions": "Provider checking or recovery in progress; test-controlled network failure, timeout, rate-limit response, and server error available.",
+      "actions": [
+        "Trigger each failure separately; inspect status and next steps; restore service and retry."
+      ],
+      "expected": [
+        "App remains responsive; checking resolves or can be cancelled/retried. Errors identify the affected service and distinguish authentication recovery from network, quota, or server trouble when known. Working credentials are not erased and unrelated providers stay usable."
+      ]
+    },
+    {
+      "id": "PF58-F24",
+      "priority": "advisory",
+      "starting_conditions": "`/providers`, token entry, or `/model` open; a long provider/model name and enough entries to require navigation.",
+      "actions": [
+        "Resize from the screenshot\u2019s 116\u00d743 context to a narrower/shorter terminal; navigate to the last item, submit/cancel, and enlarge again."
+      ],
+      "expected": [
+        "Selected item, critical identity/status information, and available controls remain discoverable. Layout changes do not corrupt input or select the wrong row. If size is unsupported, the app communicates that limitation and recovers when enlarged."
+      ]
+    },
+    {
+      "id": "PF58-F25",
+      "priority": "advisory",
+      "starting_conditions": "Keyboard-driven menus and credential entry open.",
+      "actions": [
+        "Use documented movement keys, Enter, Escape, and provider switching; repeat open/cancel cycles; navigate at list boundaries."
+      ],
+      "expected": [
+        "Focus follows the visible selection; keys perform the displayed actions; no unintended confirmation, chat submission, or stuck modal occurs. Keyboard-only users can finish and exit each flow."
+      ]
+    },
+    {
+      "id": "PF58-F26",
+      "priority": "advisory",
+      "starting_conditions": "Slow health check for provider A; provider B also configured.",
+      "actions": [
+        "Start checking A; switch to B before A completes; return to A after completion. Repeat with cancelling/reopening the menu."
+      ],
+      "expected": [
+        "Delayed results update the correct provider. They do not replace the selected row, overwrite another route\u2019s state, or leave contradictory health indicators."
+      ]
+    }
+  ]
+}
