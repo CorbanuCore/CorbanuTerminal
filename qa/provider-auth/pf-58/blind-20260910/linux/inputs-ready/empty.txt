@@ -1,0 +1,43 @@
+╭───────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)             │
+│                                           │
+│ model:     gpt-6-astra   /model to change │
+│ directory: ~                              │
+╰───────────────────────────────────────────╯
+
+▌ Add Anthropic
+▌ API key — masked
+▌
+▌ Paste your ANTHROPIC_API_KEY API key. Corbanu stores it in the encrypted vault and never adds it to chat. An
+▌ existing environment variable takes precedence; unset it outside Corbanu to use the saved key.
+
+Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

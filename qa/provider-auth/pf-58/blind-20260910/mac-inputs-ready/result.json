@@ -1,0 +1,26 @@
+{
+  "candidate": "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-picker-final-20260910/bin/corbanu",
+  "sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+  "human_acceptance": false,
+  "observations": [
+    {
+      "input": "empty",
+      "remains_in_form": true
+    },
+    {
+      "input": "whitespace",
+      "remains_in_form": true
+    },
+    {
+      "input": "cancelled-canary",
+      "masked": true
+    },
+    {
+      "input": "synthetic-invalid",
+      "configured_label": true,
+      "secret_absent_scrollback": true,
+      "remote_auth_validation_proven": false
+    }
+  ],
+  "completed": true
+}

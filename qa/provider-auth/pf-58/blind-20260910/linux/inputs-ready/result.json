@@ -1,0 +1,26 @@
+{
+  "candidate": "/home/travis/security-round5/evidence/picker-20260910/candidate-final/bin/codex",
+  "sha256": "5ecd62f90574e1b6208625220abf93e431d347c1f2a91c9111c3512e81448062",
+  "human_acceptance": false,
+  "observations": [
+    {
+      "input": "empty",
+      "remains_in_form": true
+    },
+    {
+      "input": "whitespace",
+      "remains_in_form": true
+    },
+    {
+      "input": "cancelled-canary",
+      "masked": true
+    },
+    {
+      "input": "synthetic-invalid",
+      "configured_label": true,
+      "secret_absent_scrollback": true,
+      "remote_auth_validation_proven": false
+    }
+  ],
+  "completed": true
+}

@@ -1,0 +1,16 @@
+{
+  "passed": true,
+  "candidate": "/Volumes/CorbanuDrive/Corbanu/.codex-work/corbanu-terminal/bin/corbanu",
+  "sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+  "launches": [
+    {
+      "pid": "73692",
+      "menu_seconds": 1.64
+    },
+    {
+      "pid": "73843",
+      "menu_seconds": 1.63
+    }
+  ],
+  "human_acceptance": false
+}

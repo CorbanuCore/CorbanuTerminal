@@ -1,0 +1,44 @@
+
+
+› exercise synthetic account failure
+
+
+⚠ Model metadata for `fixture-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+
+⚠ A provider credential was rejected. Open /providers, select the affected provider, and press r to recover. Other providers are unchanged.
+
+■ Your access token could not be refreshed because your refresh token was already used. Please log out and sign in again.
+
+⚠ MCP client for `codex_apps` failed to start: MCP startup failed: handshaking with MCP server failed: Send message error Transport
+  [rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_clie
+  nt_adapter::StreamableHttpClientAdapter>>] error: unexpected server response: HTTP 404: , when send initialize request
+
+⚠ MCP startup incomplete (failed: codex_apps)
+
+⚠ MCP client for `codex_apps` failed to start: MCP startup failed: handshaking with MCP server failed: Send message error Transport
+  [rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_clie
+  nt_adapter::StreamableHttpClientAdapter>>] error: unexpected server response: HTTP 404: , when send initialize request
+
+⚠ MCP startup incomplete (failed: codex_apps)
+
+
+› continue after account recovery
+
+
+• PF58 account recovered without restart
+
+
+› Write tests for @filename
+
+  fixture-model default · ~/worktrees/provider-reauth-health-final · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+

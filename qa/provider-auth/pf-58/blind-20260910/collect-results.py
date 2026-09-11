@@ -4,6 +4,7 @@ Execution records are separate from the original design. A passing component
 test is recorded as supporting evidence, not a waiver of the remaining steps.
 """
 import hashlib
+import html
 import json
 from pathlib import Path
 
@@ -70,3 +71,34 @@ for platform, binary_hash, evidence in (
                                               "artifact": ref("budget-amendment.md")}}}
     name = "results-mac.json" if platform.startswith("macOS") else "results-linux.json"
     (root / name).write_text(json.dumps(result, indent=2) + "\n")
+
+rows = "".join(
+    "<tr><td>" + html.escape(case["id"]) + "</td><td>" + html.escape(case["priority"]) +
+    "</td><td>Incomplete</td><td>" + html.escape(gaps[int(case["id"].split("F")[-1])]) + "</td></tr>"
+    for case in design["cases"]
+)
+(root / "report.html").write_text('''<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Independent functional qualification — PF-58</title>
+<style>body{margin:0;background:#111318;color:#eee;font:16px/1.5 system-ui}
+main{max-width:1100px;margin:auto;padding:40px 24px}h1{line-height:1.1}
+a{color:#57d6d0}.notice{padding:20px;border:1px solid #f6c76a;border-radius:12px;color:#f6c76a}
+table{width:100%;border-collapse:collapse;margin-top:24px}td,th{text-align:left;padding:14px;border-bottom:1px solid #41444a;vertical-align:top}
+td:nth-child(3){color:#f6c76a}td:first-child{white-space:nowrap}small{color:#aaa}
+@media(max-width:650px){table{font-size:13px}td,th{padding:8px}}
+</style><main><h1>Independent functional qualification</h1>
+<p>PF-58 · Provider setup, authentication recovery and model selection · macOS and Linux</p>
+<div class="notice"><strong>Not ready for unqualified human testing.</strong>
+<p>26 independently proposed cases are preserved. Partial regression passes are not full case passes.
+The remaining conditions below have not been waived. “Incomplete” is not a claim that every feature failed.</p></div>
+<p>Exact execution receipts: <a href="linux/tmux-tests.log">Linux regression run</a>,
+<a href="mac-package/result.json">Mac package TMUX</a>,
+<a href="linux/package-tmux/result.json">Linux package TMUX</a>,
+<a href="mac-existing/result.json">existing Mac profile</a>.</p>
+<p><a href="original-proposal.md">Frozen independent proposal</a> ·
+<a href="candidate-manifest.md">Candidate identity</a> ·
+<a href="evidence-check.md">Independent evidence check</a> ·
+<a href="execution-notes.md">Execution limits</a></p>
+<table><thead><tr><th>Case</th><th>Priority</th><th>Full-case status</th><th>Evidence and remaining gap</th></tr></thead><tbody>'''
+    + rows + '</tbody></table><p><small>No human acceptance or scope exclusion is inferred. '
+    'Two additional review passes were authorized; no further review loop is scheduled.</small></p></main></html>')
