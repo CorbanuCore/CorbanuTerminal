@@ -1,0 +1,7 @@
+PASS: clean launch HEAD f17e5a54daba11c6da2554f14b62f11ace752142 and branch workstream/tasknode-pf80-s01-20260911 verified.
+PASS: all 12 source-file hashes match source-port-manifest.json.
+PASS: all 14 receiving tooling/fixture hashes match source-port-manifest.json.
+PASS: staged changes are confined to scripts/initiative_control/, docs/research/tasknode-integration/, qa/initiative-control/pf-80-s01/.
+PASS: no native Rust, runtime feature registry, CI, root policy or shared plan/sprint changes.
+PASS: git diff --check and git diff --cached --check.
+Source files were read only. Independent review, combined-tree verification and external CI remain manager-owned gates.

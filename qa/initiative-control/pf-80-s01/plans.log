@@ -1,0 +1,11 @@
+test_concurrency_metadata_before_sprint_allocation (test_check.PlanCheckerTests.test_concurrency_metadata_before_sprint_allocation) ... ok
+test_fourth_active_plan_fails (test_check.PlanCheckerTests.test_fourth_active_plan_fails) ... ok
+test_one_complete_active_plan_passes (test_check.PlanCheckerTests.test_one_complete_active_plan_passes) ... ok
+test_status_must_match_lifecycle_directory (test_check.PlanCheckerTests.test_status_must_match_lifecycle_directory) ... ok
+test_three_active_plans_pass (test_check.PlanCheckerTests.test_three_active_plans_pass) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.018s
+
+OK
+plans: active 3/3; available slots 0
