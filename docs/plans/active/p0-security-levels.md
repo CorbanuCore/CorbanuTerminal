@@ -11,7 +11,7 @@ activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to rec
 target_release: "TBD — candidate qualified by 2026-10-08"
 deadline: 2026-10-08
 created: 2026-08-23
-updated: 2026-09-02
+updated: 2026-09-10
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "P0 /security levels"
@@ -983,7 +983,7 @@ before qualification.
 - [ ] Accepted architecture refinements and upstream-seam register have final-tree evidence.
 - [ ] Parallel allocations, scope audits and combined-tree integration evidence are complete.
 
-- [x] Complete source scope maps to 52 current and 24 completed single-feature sprints; all 72 cancelled records have explicit dispositions.
+- [x] Original reconciliation snapshot mapped source scope to 52 current and 24 completed single-feature sprints; all 72 cancelled records have explicit dispositions. The current index tracks subsequent completions and additions.
 - [ ] Every PF-27–41 contract and protected-mode readiness condition passes final-candidate evidence.
 - [ ] Optional hosted/reviewer lanes are explicitly qualified-enabled or disabled with an auditable reason.
 - [ ] Permissive compatibility is proven against the frozen pre-feature baseline.
@@ -997,22 +997,48 @@ before qualification.
 - [ ] Finished documentation matches the accepted candidate.
 - [ ] Release and due benchmark records are linked.
 
-## PF-42-S02 — Multiple-account relink recovery
+## Profile, Task Node and Campaign Tracker feature reconciliation
+
+These are existing contracts, not new product authorizations. The
+[September 10 identity map](../../sprints/identity-reconciliation-2026-09-10.md)
+resolves collisions with Claude-auth PF-42–45 and preserves recorded outcomes,
+dependencies, evidence and allocations. Historical IDs are qualified by their
+owning plan and record path; they are not global aliases.
+
+| Feature | Contract / acceptance boundary | Sprint | Current disposition |
+| --- | --- | --- | --- |
+| PF-76 | Durable named-profile provider selection and authorization, restart recovery and profile isolation | [PF-76-S01](../../sprints/current/p0-security-levels/pf-76-s01-provider-profile-persistence.md) | Draft, unallocated; reconcile against unified-provider shipped evidence before any implementation |
+| PF-77 | Profile/server-bound durable Task Node requests, original receipts, stale-response fencing and recovery without account mixing | [PF-77-S01](../../sprints/current/p0-security-levels/pf-77-s01-tasknode-reliability.md) | Draft; implementation/PTY evidence recorded, natural nonempty production observation still unchecked |
+| PF-77 | Multiple-account relink recovery under the same identity boundary | [PF-77-S02](../../sprints/archive/p0-security-levels/pf-77-s02-relink-recovery.md) | Completed bounded repair; does not complete S01's pending observation |
+| PF-78 | Attributable campaign capture, permissioned replay and bounded summaries | [PF-78-S01](../../sprints/archive/p0-security-levels/pf-78-s01-campaign-tracker.md) | Completed for recorded local scope; deployment/restore/advanced UI/pilot caveats retained |
+| PF-78 | Propagate the active profile to agent Task Node helpers, fail closed on missing/conflicting scope | [PF-78-S02](../../sprints/archive/p0-security-levels/pf-78-s02-agent-profile-scope.md) | Completed repair; historical records are not transferred |
+
+PF-76 cites **Shipping MVP — LIVE**, **Named profiles**: “durably owned by that
+profile, restored after restart, and unavailable to other named profiles.”
+PF-77 cites the same heading, **Task Node and identity**: “Tasks, evidence,
+verification, rewards, balances, chat, context, linked identity”. Its existing
+reliability contract is durable account-owned recovery, not a new Task Node
+management service. The archived relink repair was performed serially while
+S01's observation was returned to draft; it is not retroactively made dependent
+on that observation. PF-78's product citation and release limits follow below.
+No draft is activated or marked complete by this reconciliation.
+
+## PF-77-S02 — Multiple-account relink recovery
 
 The September 8 user report authorizes repairing multiple Task Node accounts on
 one machine. Product heading **Shipping MVP — LIVE**, row **Task Node and
 identity**: "Tasks, evidence, verification, rewards, balances, chat, context,
 linked identity". The selected profile must retain its own account, a rejected
 old token must not shadow a completed relink, and active guidance must name
-Corbanu. [PF-42-S02](../../sprints/archive/p0-security-levels/pf-42-s02-relink-recovery.md)
+Corbanu. [PF-77-S02](../../sprints/archive/p0-security-levels/pf-77-s02-relink-recovery.md)
 owns the shared resolver, focused two-account tests and real TUI recovery proof.
 This extends the existing profile isolation contract, without transferring
 historical records or choosing GitHub identities for the user.
 
-## PF-45-S02 agent identity repair — completed
+## PF-78-S02 agent identity repair — completed
 
-User-reported post-release account mismatch authorizes repairing agent helper profile propagation. [Sprint PF-45-S02](../../sprints/archive/p0-security-levels/pf-45-s02-agent-profile-scope.md) is implemented and locally qualified in `/home/pfrpc/repos/worktrees/corbanu-release-0.1.39`, branch `fix/tasknode-agent-profile-scope`, base `9b71d86d7f`. Its scope is runtime profile inheritance, fail-closed helper resolution and regression/PTY proof; historical records are not transferred.
+User-reported post-release account mismatch authorizes repairing agent helper profile propagation. [Sprint PF-78-S02](../../sprints/archive/p0-security-levels/pf-78-s02-agent-profile-scope.md) is implemented and locally qualified in `/home/pfrpc/repos/worktrees/corbanu-release-0.1.39`, branch `fix/tasknode-agent-profile-scope`, base `9b71d86d7f`. Its scope is runtime profile inheritance, fail-closed helper resolution and regression/PTY proof; historical records are not transferred.
 
-## PF-45 Campaign Tracker release integration
+## PF-78 Campaign Tracker release integration
 
-The user authorized Campaign Tracker implementation on September 6 and production deployment and release on September 7. Product contract: **Campaign Tracker — LOCAL PILOT CANDIDATE**, “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”. [PF-45-S01](../../sprints/archive/p0-security-levels/pf-45-s01-campaign-tracker.md) records completed implementation. [0.1.39 publication](../../../qa/release/0.1.39/PUBLICATION.md) records integration with the shipped 0.1.38 baseline and qualification limits. No additional product initiative is introduced by packaging this completed feature.
+The user authorized Campaign Tracker implementation on September 6 and production deployment and release on September 7. Product contract: **Campaign Tracker — LOCAL PILOT CANDIDATE**, “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”. [PF-78-S01](../../sprints/archive/p0-security-levels/pf-78-s01-campaign-tracker.md) records completed implementation. [0.1.39 publication](../../../qa/release/0.1.39/PUBLICATION.md) records integration with the shipped 0.1.38 baseline and qualification limits. No additional product initiative is introduced by packaging this completed feature.

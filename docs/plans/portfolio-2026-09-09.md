@@ -70,9 +70,11 @@ at `6f8f4ce46446e951437e1ce7e7c4a526e5b9e546`. The selected receiving main basel
 is `3cec54d9917b776bedaffb586247d7cd7c633df6`, with security and unified provider
 auth active. Only the planning packet is imported; root policy, product spec,
 runtime, existing release records and active allocations are preserved.
-Seven pre-existing sprint-link/ID errors on that baseline must be reconciled
-before new dispatch. Their exact baseline and no-new-error checks are recorded
-in `qa/portfolio/2026-09-10-main-integration/`. Do not merge the recovery tree wholesale.
+Seven pre-existing sprint-link/ID errors on that baseline are now resolved by the
+[September 10 P0 identity repair](../sprints/identity-reconciliation-2026-09-10.md).
+The global checker passes; statuses and allocations are unchanged. The original
+baseline/no-new-error checks in `qa/portfolio/2026-09-10-main-integration/` are
+historical snapshots, not current-tree gates. Do not merge the recovery tree wholesale.
 
 PF-60–PF-75 were unused in the readable local Corbanu worktree/doc inventory at
 planning time. The publication checks also compare the new sprint IDs with the
@@ -189,7 +191,7 @@ false confidence; it is not a claim of bulletproof testing.
 
 ## Decisions for our next workload discussion
 
-1. Main is the chosen publication lineage. Who owns reconciliation of its inherited sprint IDs and the transition to three independent, sequential initiatives?
+1. Main is the chosen publication lineage and its inherited sprint-ID errors are repaired. Who owns the policy transition to three independent, sequential initiatives?
 2. Should the next available initiative slot go to the management/QA pilot or accounting/backend clarity?
 3. Who besides the user can accept research/commercial packets, and which decisions must remain with Travis/Alex/Jim under the product spec?
 4. What initial per-run spend cap and maximum experiment budget should govern the pilot?
@@ -210,3 +212,5 @@ promised as public-site links.
 Latest-call amendment QA: `qa/portfolio/2026-09-10-call-followup/`; the earlier
 50-sprint receipts remain historical, not evidence for these 52-sprint amendments.
 No model review of these documents is product acceptance or a release qualification.
+Current ledger repair proof: `qa/planning-ledger/2026-09-10/`. Use the global
+plan/sprint validators on today's tree, not the earlier seven-error snapshot assertions.

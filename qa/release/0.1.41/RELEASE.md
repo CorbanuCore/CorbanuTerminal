@@ -18,7 +18,7 @@ was revoked still needs to complete a fresh GitHub sign-in; this repair does
 not reinstate revoked sessions.
 
 This release packages the completed product initiative
-[PF-42-S02](../../../docs/sprints/archive/p0-security-levels/pf-42-s02-relink-recovery.md).
+[PF-42-S02](../../../docs/sprints/archive/p0-security-levels/pf-77-s02-relink-recovery.md).
 Product heading **Shipping MVP — LIVE**, rows **Task Node and identity** and
 **Named profiles**: independently selectable named profiles and linked Task
 Node identity. Implementation commit: `f20a2a7389e2baa5eaddcd00755ca93129591808`.

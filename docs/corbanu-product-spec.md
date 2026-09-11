@@ -490,8 +490,10 @@ permissioned historical replay in the Task Node tab. Manager views distinguish
 human prompting, autonomous execution and verified outcomes. Recording requires
 workspace enrollment; sharing requires an explicit scoped grant.
 
-This adds product scope to the existing Task Node integration program as PF-45
-in the active P0 plan. It is not a bounded repair. The reviewed specification is
+This adds product scope to the existing Task Node integration program as PF-78
+in the active P0 plan (formerly P0 PF-45; see the
+[identity reconciliation](sprints/identity-reconciliation-2026-09-10.md)).
+It is not a bounded repair. The reviewed specification is
 `/home/pfrpc/repos/campaign_tracker_spec_20260906.md`. Build and QA artifacts go
 on the mounted data volume. Public deployment is a separate action.
 

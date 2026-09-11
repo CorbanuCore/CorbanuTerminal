@@ -1,9 +1,9 @@
 ---
-sprint_id: "PF-44-S01"
+sprint_id: "PF-77-S01"
 title: "Task Node durable command and transport recovery"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
-plan_feature: "PF-44"
+plan_feature: "PF-77"
 execution_order: 79
 owner: "Task Node reliability integration"
 parallel_lane: "tasknode-reliability"
@@ -14,14 +14,16 @@ branch: "fix/tasknode-profile-isolation"
 base_commit: "ec549c0c687f50a682487e9d68289c05557ff579"
 depends_on: "none"
 created: 2026-09-05
-updated: 2026-09-05
+updated: 2026-09-10
 ---
 
-# PF-44-S01 — Task Node durable command and transport recovery
+# PF-77-S01 — Task Node durable command and transport recovery
+
+Renumbered from P0 PF-44-S01; see the [identity reconciliation](../../identity-reconciliation-2026-09-10.md). Historical evidence and completion state are retained.
 
 September 8 allocation handoff: implementation and PTY checks are already
 recorded below. Return the outstanding production observation to draft while
-PF-42-S02 serially repairs the same authentication adapters. Preserve all
+PF-77-S02 serially repairs the same authentication adapters. Preserve all
 completed work and the unchecked observation; this is not completion.
 
 ## Execution mandate
@@ -29,11 +31,11 @@ completed work and the unchecked observation; this is not completion.
 - Deliver shared profile/server-bound Task Node transport and recoverable task
   requests across failure, closing a view and restarting Corbanu.
 - Excludes inference selection, portfolio behavior and a public versioned release.
-- Product authority and excerpt: PF-44 in the linked active plan.
+- Product authority and excerpt: PF-77 in the linked active plan.
 
 ## Plan linkage
 
-- Plan: [P0 security](../../../plans/active/p0-security-levels.md), feature `PF-44`.
+- Plan: [P0 security](../../../plans/active/p0-security-levels.md), feature `PF-77`.
 - Repeated submission recovers the original account-owned receipt; stale
   profile/view responses cannot replace the current display.
 
@@ -90,4 +92,4 @@ duties at cutover. The supervisor is active with successful quiet ticks and zero
 restarts. Per-duty outcomes and partial resume passed PostgreSQL fixtures; this
 is not represented as a live nonempty round. No artificial task or payment was
 created for qualification. All implementation and deployment work is complete;
-the pending observation keeps this sprint in progress. Public release is excluded.
+the pending observation keeps this sprint in draft pending reallocation. Public release is excluded.

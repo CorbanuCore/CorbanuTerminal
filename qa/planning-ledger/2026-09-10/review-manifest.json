@@ -1,0 +1,88 @@
+{
+  "base_commit": "0d1c3240d752335cc89faeb2149c5030063e5d69",
+  "target_branch": "main",
+  "review_model": "claude-fable-5-1-plan",
+  "reasoning_effort": "high",
+  "changed_logical_files": 19,
+  "insertions": 460,
+  "deletions": 57,
+  "note": "Frozen staged content before review; excludes this manifest and post-review receipt. Renames count once. 72 added regression-test lines; 129 added fixed-baseline QA-check lines. No runtime changes.",
+  "files": [
+    {
+      "path": "docs/corbanu-product-spec.md",
+      "sha256": "bc0c20fedc89b5f9e91c0f5d42bd5c0cea379cc383a417d5af86ecc6f3a2bd0c"
+    },
+    {
+      "path": "docs/plans/active/p0-security-levels.md",
+      "sha256": "e24376b1888f577a5480acd87d8cc74d3a7fbafe0d4e6954bf0d37fd9d95203d"
+    },
+    {
+      "path": "docs/plans/portfolio-2026-09-09.md",
+      "sha256": "fc26d7e3feaf9a4180476bfb2120ea1dfce1cff15531d47b020eb57178d2653d"
+    },
+    {
+      "path": "docs/plans/scrum-2026-09-10.md",
+      "sha256": "76d47ff0e626d0a59c7959a2fcff257724b5a7fd0c1ea26c0bc899cbf7d263ec"
+    },
+    {
+      "path": "docs/sprints/archive/p0-security-levels/pf-77-s02-relink-recovery.md",
+      "sha256": "052b91d95b3172edf95b478271ef7bfea21a2d447ffa4c961d178b2ba2f76bcb"
+    },
+    {
+      "path": "docs/sprints/archive/p0-security-levels/pf-78-s01-campaign-tracker.md",
+      "sha256": "17301518ed1d138fc9161520853d9575b4b3c23989fec08e4357c62e35cb6bbc"
+    },
+    {
+      "path": "docs/sprints/archive/p0-security-levels/pf-78-s02-agent-profile-scope.md",
+      "sha256": "2c4d0925240fb6718c7986ee4d268277a298c2e4cbc0fbfb308c228f14de412a"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/index.md",
+      "sha256": "19948899d1451dd4c8110cd57473e4279e459dcc53fd2ced9d78a41241b61419"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-76-s01-provider-profile-persistence.md",
+      "sha256": "c7353ff14960bca15ddf765368faa38d743c04bb252d16d2323bcc23af7f2552"
+    },
+    {
+      "path": "docs/sprints/current/p0-security-levels/pf-77-s01-tasknode-reliability.md",
+      "sha256": "0a2998e3790c30235d28fd31a19ced48a5b345a9eb1e5efe50a08d06a7537f9c"
+    },
+    {
+      "path": "docs/sprints/identity-reconciliation-2026-09-10.md",
+      "sha256": "217c8359d7913c265faf3f9f862e03e6a20eec858446d4dda631d2bdee93979b"
+    },
+    {
+      "path": "docs/sprints/index.md",
+      "sha256": "0bb316c308212336c2b981c700c63fc31af54b714dd8567058f10e69a8498963"
+    },
+    {
+      "path": "docs/sprints/tests/test_check.py",
+      "sha256": "8773bef60bbb01fa4df669050d953ee531cb4671b7bbe0688ec71307a17be1f8"
+    },
+    {
+      "path": "mkdocs.yml",
+      "sha256": "63131d9762aa9ad3d018f73cd9f9cddb8fb08544a8f674c7e0d166f7e8826c76"
+    },
+    {
+      "path": "qa/planning-ledger/2026-09-10/check.py",
+      "sha256": "9a6da58ad6c0cc84e50c1f826b304297123069bcff64a3bb8d8db79b625a5a4c"
+    },
+    {
+      "path": "qa/planning-ledger/2026-09-10/identity-map.json",
+      "sha256": "1b6c05894d81f38af26c69fd2e0dbe13e178cc47a758707018785684d0be2c5d"
+    },
+    {
+      "path": "qa/planning-ledger/2026-09-10/review-scope.md",
+      "sha256": "d31c530529f9d0e5d38f9d7a9ec666e651af03a81890abedc06f7e18751d3966"
+    },
+    {
+      "path": "qa/release/0.1.40/RELEASE.md",
+      "sha256": "af6e717ebb36c8a20cef29b5abdaf86161d8a05eea8152480da62d60ef2a3e2f"
+    },
+    {
+      "path": "qa/release/0.1.41/RELEASE.md",
+      "sha256": "76d51274ee9f863340045db5e2ba4f49026f7b18996b4d0991e29e48e84dd84d"
+    }
+  ]
+}

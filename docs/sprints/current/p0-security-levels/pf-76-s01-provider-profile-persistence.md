@@ -1,9 +1,9 @@
 ---
-sprint_id: "PF-43-S01"
+sprint_id: "PF-76-S01"
 title: "Provider profile persistence"
 status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
-plan_feature: "PF-43"
+plan_feature: "PF-76"
 execution_order: 78
 owner: "Alex Good profile-persistence lane"
 parallel_lane: "UNALLOCATED"
@@ -14,10 +14,14 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "none"
 created: 2026-09-01
-updated: 2026-09-01
+updated: 2026-09-10
 ---
 
-# PF-43-S01 — Provider profile persistence
+# PF-76-S01 — Provider profile persistence
+
+Renumbered from P0 PF-43-S01; see the [identity reconciliation](../../identity-reconciliation-2026-09-10.md). Historical evidence and completion state are retained.
+
+Before allocation, reconcile this historical draft with the unified-provider plan's shipped evidence; do not duplicate already completed provider work.
 
 ## Execution mandate
 
@@ -29,7 +33,7 @@ updated: 2026-09-01
 ## Plan linkage
 
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md)
-- Feature: `PF-43`
+- Feature: `PF-76`
 - Acceptance advanced: A provider selected or linked while a named profile is
   active is restored only for that profile after restart.
 
