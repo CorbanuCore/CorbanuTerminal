@@ -5,13 +5,13 @@ status: in_progress
 plan_file: "docs/plans/active/initiative-delivery-control.md"
 plan_feature: "PF-80"
 execution_order: 1
-owner: "Astra High Task Node kickoff"
-parallel_lane: "tasknode-control-port"
-write_scope: "scripts/initiative_control/, docs/research/tasknode-integration/, qa/initiative-control/pf-80-s01/"
+owner: "Astra High Task Node native preparation"
+parallel_lane: "tasknode-native-preparation"
+write_scope: "codex-rs/tasknode-session/src/delivery_goal.rs, codex-rs/tasknode-session/src/delivery_goal_tests.rs, codex-rs/tasknode-session/src/lib.rs, qa/initiative-control/pf-80-s01/native-preparation/"
 integration_gate: "Codex management audits the source-port manifest and literal worker diff, reruns control and governance suites on the combined tree, reviews the immutable queue migration/one-event preview, and owns CI registration and any later live source cutover; no worker main push or external mutation."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
 branch: "workstream/tasknode-pf80-s01-20260911"
-base_commit: "295aed26e53b17f919f7199ae1c9748b1b1250ba"
+base_commit: "0415a00dc3d3ee55a96662920c3eedbc0f0d4838"
 depends_on: "none"
 created: 2026-09-10
 updated: 2026-09-11
@@ -19,8 +19,9 @@ updated: 2026-09-11
 
 # PF-80-S01 — Native Task Node delivery-control integration
 
-Allocated before post-merge dispatch; status reserves the lane, not proof a
-worker has started. Manager receipt records native agent ID and actual HEAD.
+Port returned, reviewed and integrated locally. This same sprint now allocates
+native pure preparation; [handoff](../../../plans/workstream-manager-handoff-2026-09-11.md#task-node-next-assignment)
+owns exact boundaries, upstream pins and tests. Agent identity is recorded at dispatch.
 
 ## Execution mandate
 
@@ -40,6 +41,7 @@ worker has started. Manager receipt records native agent ID and actual HEAD.
 - Port: `scripts/initiative_control/` from the recovery source; audit every file, no state/auth/credential directories.
 - Planned contract and tests: `docs/research/tasknode-integration/`, `qa/initiative-control/pf-80-s01/`, focused tests beside the ported scripts.
 - Manager alone owns plan/sprint allocation, CI registration and live dashboard state; submit a handoff for any needed shared changes.
+- Current worker: only front-matter paths; lib.rs gets one module declaration. The old Python allocation is closed. No CLI, Client, tracker, auth, manifests or lockfile writes.
 
 ## Preconditions
 
@@ -52,14 +54,15 @@ worker has started. Manager receipt records native agent ID and actual HEAD.
 - [x] Recovery source implemented and independently reviewed the internal dashboard; historical evidence retained without claiming a main-tree port pass.
 - [x] Verified native account setup and generated task IDs; no seed/password needed, no task accepted or completed.
 - [x] Recorded collision-free PF-80 receiving identity and two dependent PF-79 beta drafts.
+- [x] Audited port, pinned first-party contract, offline preview and conservative PF-76 hold reviewed; candidate 8640ca452 integrated locally at 0415a00dc.
+- [x] Combined baseline passed 54 focused tests plus both governance checkers; no native/live or human acceptance inferred.
 
 ## Remaining
 
-- [ ] Manifest and port only the existing internal tooling; retain main's newer policy/tests and native API-balance semantics.
-- [ ] Pin current Task Node source/contract; distinguish read-only capability checks from live entitlement and board grants. Prefer existing native transport over a second integration authority.
-- [ ] Prepare redacted preview and a bounded one-event qualification path; retain immutable IDs, mapping checks, disable behavior and safe retry/restart semantics.
+- [ ] Implement and test the pure native immutable-goal preparation slice from the linked handoff; no production entry or sender.
+- [ ] Manager reviews the returned native slice and allocates the subsequent profile-bound one-event transport within PF-80; do not delegate live authority.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.
-- [ ] Test disabled, stale/unsafe input, malformed/failed publication, expired/wrong-owner auth, duplicate send, timeout and changed-payload conflicts offline.
+- [ ] Preserve passing Python negative coverage; add native selected-ID/digest, schema, mapping, byte-limit and explicit-time negatives with cross-language goldens.
 - [ ] Give manager exact credential-scope/destination, enrollment, task-lifecycle and first-payload decisions; remain OFF if missing authority. Never inspect real credential stores as a worker.
 - [ ] After separate approval, qualify one live goal event and recovery; do not treat fixtures as delivery proof.
 - [ ] Manager receives reviewed commit/evidence and controls source-sync cutover; existing remote service stays untouched by worker.

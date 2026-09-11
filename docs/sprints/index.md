@@ -73,6 +73,44 @@ owner must compare actual diffs to scope and record final combined-tree evidence
 
 ## Execution loop
 
+### Manager-owned continuation
+
+Travis's September 11 request to fix stalled orchestration authorizes the named
+integration owner to perform local receiving-branch integration, reconcile
+evidence, and revise exact worker allocations within already-approved active
+features. This is not permission to change a product contract or a hard gate.
+Do not ask the human to do routine allocation, branch preparation or bookkeeping.
+
+Before a worker finishes, prepare the next bounded assignment and human test
+plan. On return, inspect its literal diff and independent review, integrate
+reviewed changes on the recorded local receiving branch, and run the combined
+tree's affected tests. Update Done/Remaining without equating a worker return,
+a passing test or a local merge with human acceptance. Preserve feature-OFF
+boundaries. Shared registration and policy edits remain manager-owned.
+
+Then either dispatch remaining work in the same sprint, or complete/archive
+the sprint and activate exactly one dependency-complete successor once all
+required evidence and decisions actually exist. A changed literal file
+allocation within approved feature scope is manager work: record it in plan
+and sprint, check overlap and coordinates, run both checkers, then dispatch.
+Preparing a successor while its predecessor is unfinished is allowed; starting
+its implementation is not. Do not split or waive dependencies merely to stay busy.
+
+Each reserved lane must have a running assignment, an executable next action,
+or a concrete blocker with owner, exact question, recommendation, affected scope
+and evidence. Manager-owned missing work stays in the manager queue, not marked
+as waiting on the human. Deliver newly required decisions to the human; a note
+hidden in a private packet does not count as asking. Continue independent work
+inside the approved sprint while waiting, without manufacturing busywork.
+
+Existing review limits remain binding; one fresh independent review of each new
+material candidate plus scoped corrections is the normal closeout, not repeated
+reviews of unchanged clean code. Do not reset exhausted budgets or resume paused
+PF13/security work. Main merges/pushes, releases, deployments, live Task Node
+actions, new product contracts and paid-service commitments still need their
+separate authority. Current assignments/evidence are in the
+[manager handoff](../plans/workstream-manager-handoff-2026-09-11.md).
+
 1. Select the next dependency-complete sprint linked from the active plan.
 2. Resolve its exact worktree coordinates and set it to `ready`.
 3. Set it to `in_progress` before code changes.

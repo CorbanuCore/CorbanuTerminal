@@ -19,10 +19,10 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "295aed26e53b17f919f7199ae1c9748b1b1250ba"
+    base_commit: "0415a00dc3d3ee55a96662920c3eedbc0f0d4838"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
     branch: "workstream/tasknode-pf80-s01-20260911"
-    base_commit: "295aed26e53b17f919f7199ae1c9748b1b1250ba"
+    base_commit: "0415a00dc3d3ee55a96662920c3eedbc0f0d4838"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
     branch: "feat/provider-reauth-health"
     base_commit: "eb7af932bc8cc859122b5b2dbef223fbd45ea25c"
@@ -54,8 +54,13 @@ blockers, machine/run reports and human test plans. Workers cannot self-accept.
 PF-80 owns the internal projection/progress adapter; PF-79 owns the subsequent
 public Desktop beta program. PF-81 owns the queued standalone visual QA harness,
 as requested by Travis through the PF13/provider-reauth owner on September 11.
-No fourth initiative, automatic merge, release,
+No fourth initiative, automatic main merge/push, release,
 reward, financial action or private-recording export is authorized.
+
+Local receiving-branch integration and reallocation within PF-80 are now
+manager-owned under the [continuation rule](../../sprints/index.md#manager-owned-continuation).
+The [current handoff](../workstream-manager-handoff-2026-09-11.md) records
+combined-tree evidence and the next offline native slice; live authority is separate.
 
 PF-80 replaces only the recovery operations source's conflicting PF-76 identity.
 Main's provider-persistence PF-76 and security PF-77/PF-78 remain untouched.
@@ -70,7 +75,9 @@ and [setup checks](../../../qa/initiative-control/2026-09-11/tasknode-setup.md)
 do not establish accepted tasks, current worker profile isolation or live posting.
 The private dashboard, tested adapter and default-OFF checker exist on the
 recovery source, not this main baseline. PF-80-S01 must port the bounded tooling,
-qualify it here and prepare a reviewed first-event path. Do not copy the whole
+qualify it here and prepare a reviewed first-event path. The port and corrections
+are now integrated locally at the receiving base recorded above; remote main and
+the published recovery-source dashboard are unchanged. Do not copy the whole
 recovery branch or any auth/session/state directory.
 
 ## Invariants
@@ -94,9 +101,12 @@ Reuse `codex-rs/cli/src/tasknode_cmd.rs`, native tasknode-session/profile and
 Campaign Tracker contracts read-only initially. Port `scripts/initiative_control/`
 from the inspected recovery source under an audited manifest; tests must run on
 the receiving main tree. Keep `docs/plans/check.py` and `docs/sprints/check.py`
-manager-owned. No Rust/upstream protocol modification is allocated by kickoff.
-If one becomes necessary, return an exact scoped follow-up instead of widening
-authority. [Feature delivery contract](../feature-delivery.md).
+manager-owned. The original kickoff was Python-only. The current PF-80-S01
+allocation now permits only a pure native preparation module and sibling tests,
+with its single module-registration line delegated serially by the manager. No CLI/TUI entry,
+auth, transport, queue, dependencies or upstream protocol changes are allocated.
+See the [native preparation boundary](../workstream-manager-handoff-2026-09-11.md#task-node-next-assignment).
+[Feature delivery contract](../feature-delivery.md).
 
 ## Sprint execution map
 

@@ -462,6 +462,12 @@ and freshness; preserve the last good publication on failure. Task Node receives
 only explicitly mapped, supported progress; no automatic reward, signing,
 financial action or task-completion claim is implied.
 
+On September 11 Travis authorized correcting stalled orchestration: the manager
+owns local receiving-branch integration, exact allocations within approved
+features, successor preparation and concrete decision escalation under the
+sprint execution process. This is not blanket main-push, release, deployment,
+live-posting or product-contract acceptance authority.
+
 Travis additionally requested an ongoing public manual-testing beta program
 under Task Node integration: a separate Corbanu Desktop beta branch/channel,
 candidate-pinned public assignments, independent evidence review and bounded

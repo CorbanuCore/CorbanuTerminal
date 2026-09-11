@@ -19,7 +19,7 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "295aed26e53b17f919f7199ae1c9748b1b1250ba"
+    base_commit: "0415a00dc3d3ee55a96662920c3eedbc0f0d4838"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
     branch: "workstream/accounting-pf60-s01-20260911"
     base_commit: "295aed26e53b17f919f7199ae1c9748b1b1250ba"
@@ -34,12 +34,19 @@ runtime implementation and human acceptance remain gated. The worktree above is
 the manager's merge checkout; the second entry is the independent S01 worker.
 Dispatch follows the verified main merge; an allocation is not a running-agent claim.
 
+Current receiving result: reviewed S01 candidate `1c5978690` is integrated
+locally at `0415a00dc3`; 48 fixture tests pass on the combined tree. The
+[manager handoff](../workstream-manager-handoff-2026-09-11.md#accounting-decision)
+records Travis's explicit approval of the v1 defaults in this task. Do not
+re-ask that decision. S02 preparation is manager-owned; technical handoff,
+final evidence reconciliation and S01 archival remain before S02 activation.
+
 ## Activation record
 
 - Status: active; slot 2/3; target release/date not promised.
 - Authority: Travis's September 11 workstream selection and Astra High kickoff request.
-- Codex owns contract preparation; Travis accepts vocabulary/retention decisions before S02.
-- Gate before S02 runtime: approve the cost vocabulary, retention window, currency/price source and historical unknown policy. S01 prepares these decisions with synthetic fixtures; it does not change a migration or live price.
+- Codex owns contract preparation; Travis approved the v1 defaults in this task on September 11, including vocabulary, retention/replay, exact USD estimates and unknown handling.
+- Before S02 runtime: finish the concrete adapter handoff, final S01 evidence and archive; do not request the already-recorded defaults again. Approval does not enable billing, a collector, a migration or live prices.
 
 ## User pain
 
@@ -104,7 +111,7 @@ Research/artifact paths in the sprint table are planned files, not existing impl
 
 ## Sprint execution map
 
-All records belong to the single feature **PF-60**. Dependencies are hard prerequisites, not suggestions. All results are pending.
+All records belong to the single feature **PF-60**. Dependencies are hard prerequisites, not suggestions. S01 contract/fixture review and defaults approval are recorded; runtime evidence remains pending.
 
 | Sprint | Record / outcome | Depends on | Planned output | Evidence |
 | --- | --- | --- | --- | --- |
@@ -150,7 +157,9 @@ Release-level live-repository gates remain intact regardless of this plan's boun
 
 ## Human acceptance
 
-Proposed accountable owner reviews the exact artifact/candidate; Travis or named delegate decides product scope. Named tester, date, digest, observed flows, result and evidence are **pending**. Agent review is advisory and never substitutes for required human acceptance.
+Travis approved S01's v1 defaults on September 11 in this task; the linked manager
+handoff records the exact decision and candidate. Native/runtime human testing
+is still pending. Agent review never substitutes for that later acceptance.
 
 ## Documentation
 
@@ -158,7 +167,7 @@ Research outputs stay under the declared research/QA paths. Finished-feature doc
 
 ## Dependencies, decisions, and blockers
 
-- Approve the cost vocabulary, retention window, currency/price source and historical unknown policy; reconcile current branch before selecting the next migration number.
+- Approved defaults are recorded; reconcile the receiving branch and finish exact adapter/schema allocation before selecting the next migration number.
 - Activation is authorized; allocate S01 after this planning merge. S01 proposes the vocabulary/retention contract using synthetic inputs; approval gates S02 runtime, not preparation of that proposal.
 - Before each next sprint: predecessor evidence accepted/archived, its handoff resolves concrete inputs and any newly discovered decisions; otherwise stop.
 - Cross-plan IDs in the table must exist and be completed in the receiving ledger. A draft dependency does not activate either plan.

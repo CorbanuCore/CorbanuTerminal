@@ -46,23 +46,23 @@ agent has started; manager receipt records native subagent ID and actual HEAD.
 - [x] No sprint dependencies; synthetic contract preparation is authorized, with vocabulary/retention approval gating S02 runtime.
 - [x] Exact worktree/branch/base, literal research/QA paths and receiving owner allocated; fast-forward to main planning merge before dispatch.
 - [x] Only public source/synthetic inputs; one requested Astra High agent, no extra agents, paid data, private logs or external writes.
-- [ ] Run nonempty fixture validation below before handoff; no production or migration code in S01.
+- [x] Combined local baseline 0415a00dc passed all 48 fixture tests; no production or migration code in S01.
 
 ## Done
 
 - [x] Draft sprint created and linked to one feature; no implementation completed.
+- [x] Native source trace, proposed contract, hand-calculated fixtures and two reviewed corrections returned at 1c5978690 and integrated locally at 0415a00dc.
+- [x] Manager independently verified corrections and 48 combined-tree tests; review/commit evidence is retained in the handoff.
+- [x] Travis explicitly approved the v1 defaults in this task; [decision record](../../../plans/workstream-manager-handoff-2026-09-11.md#accounting-decision). No billing/live collection enabled.
 
 ## Remaining
 
-- [ ] Trace existing persisted usage, replay and parent/child IDs; reconcile receiving worktrees and private Corbanu API balance accounting read-only, without restoring legacy Plan entitlements.
-- [ ] Specify request identity, retry identity, hierarchy aggregation, currency precision, cached/reasoning tokens, estimates versus invoices and effective-dated prices.
-- [ ] Create a hand-calculated fixture matrix for three providers, two children, retries, partial streams, unknown prices and historical records.
-- [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
+- [ ] Finish the exact S02 native adapter/allocation handoff and reconcile final receiving evidence; do not start S02 before acceptance/archive.
 
 ## Verification
 
-- [ ] Focused: `python3 -m unittest discover -s qa/portfolio/agent-cost-accounting/pf-60-s01 -p 'test_*.py'`; add and run nonzero tests. Reviewer independently recomputes fixture totals and checks fields against native state.
-- [ ] Integration: from repo root, `python3 docs/plans/check.py; python3 docs/sprints/check.py`; `git diff --check`.
+- [x] Focused: 48 tests on combined baseline 0415a00dc; reviewer findings independently reproduced and corrected. No runtime proof claimed.
+- [ ] Integration: final allocation/policy candidate must pass `python3 docs/plans/check.py`, `python3 docs/sprints/check.py` and `git diff --check`.
 - [ ] Independently inspect source provenance, calculations and the plan's success/failure/recovery table; document-only checks do not qualify product UI.
 - [ ] Record reviewer, artifact digest, expected versus actual results and observed cases; identify automation as not applicable when none ran. Never invent a test count or pass.
 
