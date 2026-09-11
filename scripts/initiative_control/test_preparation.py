@@ -1,4 +1,7 @@
 """Synthetic preparation/migration tests. Never load operator state or credentials."""
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
+import hashlib
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -172,6 +175,116 @@ class PreparationTests(unittest.TestCase):
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 2)
         self.assertIn("flush is a batch operation", result.stderr)
+
+
+    def assert_cli_rejected_without_activity(self, command, extra, message):
+        before = self.snapshot()
+        stderr = io.StringIO()
+        with ExitStack() as stack:
+            guards = [stack.enter_context(patch.object(tasknode, name,
+                      side_effect=AssertionError(f"unexpected {name}")))
+                      for name in ("read_json", "atomic_json", "locked", "credentials",
+                                   "post", "prepare", "retry", "enqueue", "flush", "enroll")]
+            guards.append(stack.enter_context(patch.object(Path, "glob", side_effect=AssertionError("no state scan"))))
+            guards.append(stack.enter_context(patch.object(tasknode.urllib.request, "build_opener", side_effect=AssertionError("no HTTP"))))
+            stack.enter_context(patch.object(sys, "argv", ["tasknode.py", command,
+                                "--state", str(self.state), *extra]))
+            stack.enter_context(redirect_stderr(stderr))
+            with self.assertRaises(SystemExit) as raised:
+                tasknode.main()
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn(message, stderr.getvalue())
+            for guard in guards:
+                guard.assert_not_called()
+        self.assertEqual(self.snapshot(), before)
+
+    def test_cli_repeated_selectors_reject_before_any_activity(self):
+        missing = "cc-" + "0" * 64
+        variants = [
+            ["--event-id", self.event_id, "--event-id", missing],
+            ["--event-id", self.event_id, "--event-id", self.event_id],
+            ["--event-id", "../invalid", "--event-id", self.event_id],
+            ["--event-id", missing, "--event-id", self.event_id],
+            ["--event-id", "", "--event-id", self.event_id],
+            ["--event-id=" + self.event_id, "--event-id=" + self.event_id],
+            ["--event-id", "--event-id", self.event_id],
+        ]
+        for command in ("prepare", "preview", "retry", "enqueue", "flush", "enroll", "status"):
+            for index, extra in enumerate(variants):
+                with self.subTest(command=command, variant=index):
+                    self.assert_cli_rejected_without_activity(command, extra,
+                        "expected one argument" if index == 6 else "must occur exactly once")
+            with self.subTest(command=command, live_arguments=True):
+                self.assert_cli_rejected_without_activity(command, variants[1] +
+                    ["--confirm-live", "--credentials-file", "/synthetic/must-not-read"],
+                    "must occur exactly once")
+
+    def test_cli_missing_selector_rejects_before_any_activity(self):
+        for command in ("prepare", "preview", "retry"):
+            with self.subTest(command=command):
+                self.assert_cli_rejected_without_activity(command, [],
+                    "retry requires --event-id" if command == "retry" else "offline preparation requires")
+
+    def test_cli_unsupported_selector_rejects_before_any_activity(self):
+        for command in ("enqueue", "flush", "enroll", "status"):
+            with self.subTest(command=command):
+                self.assert_cli_rejected_without_activity(command,
+                    ["--event-id", self.event_id, "--confirm-live",
+                     "--credentials-file", "/synthetic/must-not-read"],
+                    "--event-id is only valid for prepare, preview or retry")
+
+    def test_cli_single_selector_dispatches_unchanged(self):
+        for command in ("prepare", "preview", "retry"):
+            with self.subTest(command=command), \
+                 patch.object(sys, "argv", ["tasknode.py", command, "--state", str(self.state),
+                                           "--event-id", self.event_id]), \
+                 patch.object(tasknode, "retry" if command == "retry" else "prepare", return_value={}) as handler, \
+                 redirect_stdout(io.StringIO()):
+                tasknode.main()
+                handler.assert_called_once_with(self.state, self.event_id)
+
+    def branch_cases(self):
+        return [("a" * size, size <= 300) for size in (299, 300, 301, 499, 500, 501)] + [
+            ("猫" * 166 + suffix, allowed) for suffix, allowed in
+            (("a", True), ("ab", True), ("abc", False))] + [
+            ("work/" + "/".join(["猫" * 60] * 3), False),
+            ("test/\x1bunsafe", False), ("password=synthetic-canary", False)]
+
+    def test_creation_preserves_text_checks_and_enforces_branch_byte_limit(self):
+        for branch, allowed in self.branch_cases():
+            with self.subTest(characters=len(branch), bytes=len(branch.encode("utf-8")), branch=branch):
+                report = {**run(), "branch": branch}
+                if allowed:
+                    event = tasknode.event_for(report, "synthetic-workspace", ["synthetic-owned-task"], 0)
+                    self.assertEqual(event["repository"]["branch"], branch)
+                    self.assertEqual(tasknode.checked_event(event, event["id"]), event)
+                else:
+                    with self.assertRaises(ValueError):
+                        tasknode.event_for(report, "synthetic-workspace", ["synthetic-owned-task"], 0)
+
+    def test_persisted_branch_validation_never_rewrites_payload(self):
+        for branch, allowed in self.branch_cases():
+            with self.subTest(characters=len(branch), bytes=len(branch.encode("utf-8")), branch=branch):
+                record = self.record()
+                event = record["event"]
+                event["repository"]["branch"] = branch
+                # Model a previously queued, hash-consistent payload, not hash corruption.
+                payload = {k: v for k, v in event.items() if k != "id"}
+                event["id"] = "cc-" + hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+                control.atomic_json(self.state / "outbox" / (event["id"] + ".json"), record)
+                before = self.snapshot()
+                with patch.object(tasknode, "post", side_effect=AssertionError("no network")), \
+                     patch.object(tasknode, "credentials", side_effect=AssertionError("no auth")), \
+                     patch.object(tasknode, "atomic_json", side_effect=AssertionError("no rewrite")):
+                    if allowed:
+                        self.assertEqual(tasknode.checked_event(event, event["id"]), event)
+                        self.assertEqual(tasknode.prepare(self.state, event["id"])["payload"]["event"], event)
+                    else:
+                        with self.assertRaises(ValueError):
+                            tasknode.checked_event(event, event["id"])
+                        with self.assertRaises(ValueError):
+                            tasknode.prepare(self.state, event["id"])
+                self.assertEqual(self.snapshot(), before)
 
 
 class MigrationTests(unittest.TestCase):

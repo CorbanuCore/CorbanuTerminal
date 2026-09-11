@@ -67,8 +67,8 @@
     {
       "path": "scripts/initiative_control/tasknode.py",
       "source_sha256": "bbcf622f623912fc3ab3cf2a3e4288b720c170b786cb10444e9cb7af7f8146e0",
-      "receiving_sha256": "a0525385248dd4580306eaebb61cf053ffca33e0cdc5b8b4f89e4ed0e7f3fa67",
-      "audit": "Added exact-ID read-only prepare/preview, immutable goal validation before preview/send/retry, PF-76 enqueue/retry hold and byte-preserving batch skip, explicit rejection of flush --event-id. Existing transport reused; no new credential flow or live one-event sender."
+      "receiving_sha256": "f8fc005626363de68e95454e02b2a53d0351e92ee1f1768d05a214f040400e2b",
+      "audit": "Added exact-ID read-only prepare/preview, immutable goal validation before preview/send/retry, PF-76 enqueue/retry hold and byte-preserving batch skip, explicit rejection of flush --event-id. Existing transport reused; no new credential flow or live one-event sender. Follow-up to f7159c167: reject repeated selectors before dispatch, including retry, and enforce the pinned 500-byte UTF-8 branch bound at creation and immutable validation while retaining text safety checks."
     },
     {
       "path": "scripts/initiative_control/test_control.py",
@@ -86,8 +86,8 @@
   "added": [
     {
       "path": "scripts/initiative_control/test_preparation.py",
-      "receiving_sha256": "d1d36dd55f086e3181617ffd5f66976fe4b5e1bbdd79f3986d3d9b10cfcd235b",
-      "audit": "15 new offline preparation, identity, history, batch and receiving-publication tests."
+      "receiving_sha256": "d7dc3a031c14ee295f1ec8625722317e27b49dcaf68140f05e913798a8731809",
+      "audit": "15 original offline preparation, identity, history, batch and receiving-publication tests plus 6 follow-up regressions for selector rejection without state/auth/network activity, unchanged single-ID dispatch, and branch text/byte bounds at creation and persisted validation."
     },
     {
       "path": "scripts/initiative_control/fixtures/recovery-old-state.json",

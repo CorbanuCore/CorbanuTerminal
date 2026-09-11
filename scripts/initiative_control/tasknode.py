@@ -22,8 +22,16 @@ def identifier(value):
     return value
 
 
+def checked_branch(value):
+    safe_text(value, 300)
+    if len(value.encode("utf-8")) > 500:
+        raise ValueError("repository branch exceeds Tracker's 500-byte limit")
+    return value
+
+
 def event_for(run, workspace, task_ids, sequence):
     checked_run(run)
+    checked_branch(run["branch"])
     identifier(workspace)
     if not task_ids or len(task_ids) > 32:
         raise ValueError("explicit owned Task Node task IDs required")
@@ -152,7 +160,7 @@ def checked_event(event, event_id):
         raise ValueError("invalid repository metadata")
     if event["coverage"] != "manager_observed_worker_report_not_independent_acceptance" or event["repository"]["label"] != "Corbanu Terminal":
         raise ValueError("invalid observation coverage")
-    safe_text(event["repository"]["branch"], 300)
+    checked_branch(event["repository"]["branch"])
     if not re.fullmatch(r"[a-f0-9]{40}", event["repository"]["commit"]):
         raise ValueError("invalid source commit")
     if len(safe_text(event["content"]).encode()) > 2048:
@@ -267,8 +275,11 @@ def main():
     parser.add_argument("--report", type=Path)
     parser.add_argument("--credentials-file", type=Path)
     parser.add_argument("--confirm-live", action="store_true")
-    parser.add_argument("--event-id")
+    parser.add_argument("--event-id", action="append")
     args = parser.parse_args()
+    if args.event_id is not None and len(args.event_id) != 1:
+        parser.error("--event-id must occur exactly once")
+    args.event_id = args.event_id[0] if args.event_id else None
     if args.command in {"prepare", "preview"}:
         if not args.event_id or args.credentials_file or args.confirm_live or args.report:
             parser.error("offline preparation requires only --state and --event-id; live/report arguments forbidden")

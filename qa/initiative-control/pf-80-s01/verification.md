@@ -1,5 +1,43 @@
 # PF-80-S01 offline qualification and manager handoff
 
+## Bounded follow-up to f7159c167 (2026-09-11)
+
+The original qualification below is retained as historical evidence for
+`f7159c16723f59d021f46c7b66fdb8401ac777e4`. Its 48-test result and statement about
+multiple IDs did not cover repeated CLI options. The first independent helper
+review reported two P2 blockers, both verified by the parent. Travis authorized
+this bounded uncommitted fix; the parent owns the one post-fix structured review.
+
+Repeated `--event-id` occurrences now fail during argument validation before
+dispatch for every command, including retry. Tests cover different/same IDs,
+invalid, empty, absent-value and missing-record first selections, equals syntax,
+live arguments, unchanged single-ID dispatch and unsupported commands. Guards
+assert no state reads/writes/locks/scans, credential access or transport calls on
+rejected input, and synthetic state remains byte-identical.
+
+Creation and immutable-event validation share the existing 300-character text
+safety check plus the pinned 500 UTF-8-byte branch limit. Regressions cover ASCII
+299/300/301 and 499/500/501 lengths (the stricter text bound remains), multibyte
+499/500/501 byte lengths, the reported 187-character/547-byte example, unsafe
+text, and hash-consistent persisted records. Validation never rewrites payloads.
+
+Current checks: **81 tests passed** (54 focused, 5 plan, 22 sprint), no failures,
+errors or skips. Appended exact command/output records are in `focused.log`,
+`plans.log` and `sprints.log`; prior outputs are explicitly historical. Repository
+checks passed: 3 active plans, 115 current and 121 archived sprints. Whitespace
+checks passed. All 14 receiving hashes match and all 12 original source hashes
+are preserved. The delivery merge contract now binds the current tooling digest
+and appended evidence; its check is mechanical and does not establish review,
+enablement or human acceptance. No reviewer/model/extra agent was invoked for
+this implementation follow-up. The full-index patch hash is reported at handoff
+outside this patch to avoid a self-referential hash.
+
+The Corbanu development skill kept this fix within the existing PF-80 plan and
+in-progress PF-80-S01 sprint; shared manager ledgers were not changed. All original
+live, human, native runtime, deployment and release limitations below still apply.
+
+## Original port qualification (historical)
+
 Status: **in progress / awaiting independent manager review**. No sprint
 completion, deployment, enablement, TaskNode delivery or release is claimed.
 Change class: product initiative. Product citation: **Internal delivery control

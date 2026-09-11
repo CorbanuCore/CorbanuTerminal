@@ -24,13 +24,13 @@
     "scripts/initiative_control/test_preparation.py",
     "scripts/initiative_control/tick.py"
   ],
-  "candidate_tree_sha256": "0c4169ddb8e2b4ed84e10a93369f096eba2b9f37cc680a772764cdc34f1c77b9",
+  "candidate_tree_sha256": "7e8efa2a2407101bdb4e1741771b5db4105f399e8da5dcca659e7673835b00f0",
   "enablement_decision": null,
   "feature": "PF-80",
   "human_acceptance": {
     "result": "pending"
   },
-  "independent_review": "pending_manager",
+  "independent_review": "initial_review_two_parent_verified_P2s; post_fix_review_pending_parent",
   "internal_boundary": "Explicit internal Python commands; no runtime registration or native UI changes. Preparation never sends. Inherited live adapter requires explicit enablement and enrollment; operator authority remains separate.",
   "mode": "internal-only",
   "sprint": "PF-80-S01",
@@ -38,20 +38,20 @@
   "tests": {
     "compatibility": {
       "artifact": "qa/initiative-control/pf-80-s01/focused.log",
-      "artifact_sha256": "532b27a204540311d6a9486133b1d0c5f66ba44d1a56677f8eeb82dabe05a70d",
-      "candidate_tree_sha256": "0c4169ddb8e2b4ed84e10a93369f096eba2b9f37cc680a772764cdc34f1c77b9",
+      "artifact_sha256": "b38546303922052b8886ec49a7d68ca342d8686c3e1caa75ca8831e9d19b5785",
+      "candidate_tree_sha256": "7e8efa2a2407101bdb4e1741771b5db4105f399e8da5dcca659e7673835b00f0",
       "result": "pass"
     },
     "off_execution": {
       "artifact": "qa/initiative-control/pf-80-s01/focused.log",
-      "artifact_sha256": "532b27a204540311d6a9486133b1d0c5f66ba44d1a56677f8eeb82dabe05a70d",
-      "candidate_tree_sha256": "0c4169ddb8e2b4ed84e10a93369f096eba2b9f37cc680a772764cdc34f1c77b9",
+      "artifact_sha256": "b38546303922052b8886ec49a7d68ca342d8686c3e1caa75ca8831e9d19b5785",
+      "candidate_tree_sha256": "7e8efa2a2407101bdb4e1741771b5db4105f399e8da5dcca659e7673835b00f0",
       "result": "pass"
     },
     "off_visibility": {
       "artifact": "qa/initiative-control/pf-80-s01/scope.log",
-      "artifact_sha256": "d10c0e30d2357cbd129aa84026e131f88ba3919a4f20e1e6d26aebba1c426023",
-      "candidate_tree_sha256": "0c4169ddb8e2b4ed84e10a93369f096eba2b9f37cc680a772764cdc34f1c77b9",
+      "artifact_sha256": "b578fc10377d1a3ad49b1a0711f1dadf199b51df36848165be3100d1f6a364db",
+      "candidate_tree_sha256": "7e8efa2a2407101bdb4e1741771b5db4105f399e8da5dcca659e7673835b00f0",
       "result": "pass"
     }
   }
