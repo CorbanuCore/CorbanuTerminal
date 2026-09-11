@@ -37,11 +37,11 @@ contract. A sprint turns one feature into an exact code-and-evidence checklist.
 
 ## Bounded parallel implementation
 
-The default is one active implementation sprint per plan. A plan may opt into
-two or three with `parallel_sprint_limit` and a named `integration_owner` in its
-front matter. Across all plans, at most **three** sprints may be `in_progress`
-or `blocked`; blocked work keeps its reservation until explicitly returned to
-draft with a recorded handoff. The two-active-plan limit is unchanged.
+Each of at most three active initiatives has `parallel_sprint_limit: 1` and a
+named `integration_owner`. Across all plans, at most **three** sprints may be
+`in_progress` or `blocked`; blocked work keeps its reservation until explicitly
+returned to draft with a recorded handoff. This is Travis's September 10/11
+operating-model decision, not additional within-plan parallelism.
 
 Before a parallel allocation starts:
 
@@ -87,8 +87,10 @@ owner must compare actual diffs to scope and record final combined-tree evidence
 
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
-| [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [53 current sprints](current/p0-security-levels/index.md), 28 completed archives | PF-22-S02 is integrated and archived; PF-27-S04 retains serialized integration, PF-30-S01 returned to unallocated draft after its unrecoverable worktree loss, and PF-35-S01 continues external qualification |
-| [Unified provider onboarding and management](../plans/active/unified-provider-auth.md) | Active | [0 current sprints](current/unified-provider-auth/index.md) | PF-55-S04 is completed and archived with real Luna/Kimi K3 child results and cold resume in both default repositories |
+| [PF-13 / security — workstream 1](../plans/active/p0-security-levels.md) | Active | [53 current sprints](current/p0-security-levels/index.md), 28 completed archives | PF-35-S01 retains its reservation; unusable PF-27-S04 allocation returned to draft with preserved recovery pin; PF13 task untouched |
+| [Accounting — workstream 2](../plans/active/portfolio-agent-cost-accounting.md) | Active | 4 sequential PF-60 sprints | S01 contract/fixtures selected for independent Astra High allocation after main merge |
+| [Task Node — workstream 3](../plans/active/initiative-delivery-control.md) | Active | PF-80-S01 then two PF-79 beta drafts | Scoped main port and progress qualification first; beta not launched |
+| [Unified provider onboarding and management](../plans/proposed/unified-provider-auth.md) | Deferred | [0 current sprints](current/unified-provider-auth/index.md) | Completed PF-55/provider evidence remains unchanged; no completion claim added |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
 | [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | Historical 72-sprint decomposition remains cancelled; every record maps into the active P0 plan's current work |
 
@@ -99,7 +101,9 @@ September 10 planning publication and call follow-up add [16 proposals and 52 dr
 baseline had 60 current and 121 archived records; the initial 50 plus two new PF-70 drafts yield 112 current
 and 121 archived records. The seven inherited sprint-link/ID errors are resolved;
 see the [identity reconciliation](identity-reconciliation-2026-09-10.md).
-The unchanged global checker passes without error exceptions or execution waivers.
+September 11 adds PF-80-S01 (renamed operations PF-76) and PF-79-S01/S02:
+115 current, 121 archived. The three-initiative policy is now explicit; all
+identity/dependency regression checks remain, with no error exceptions.
 Each proposal's sprint execution map links every draft directly.
 
 ```bash

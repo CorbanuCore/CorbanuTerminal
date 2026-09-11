@@ -306,7 +306,8 @@ class SprintCheckerTests(unittest.TestCase):
                     )
                 path.write_text(value)
             result = checker.check_sprints(root, repo)
-            self.assertTrue(result["ok"], result["errors"])
+            self.assertFalse(result["ok"])
+            self.assertTrue(any("plan limit 1" in e for e in result["errors"]))
             second.write_text(
                 second.read_text().replace("src/module2/", "src/module1/child.rs")
             )
@@ -386,7 +387,7 @@ class ParallelAllocationTests(unittest.TestCase):
                 path=f"sprint-{i}.md",
                 lifecycle="current",
                 status="in_progress",
-                plan_file="plan.md",
+                plan_file=f"plan-{i}.md",
                 owner=f"Named worker {i}",
                 parallel_lane=f"lane-{i}",
                 worktree=f"/tmp/worker-{i}",
@@ -401,11 +402,11 @@ class ParallelAllocationTests(unittest.TestCase):
         return checker.check_parallel(
             records,
             {
-                "plan.md": {
-                    "parallel_sprint_limit": "3",
+                name: {
+                    "parallel_sprint_limit": "1",
                     "integration_owner": "Alex",
                     **values,
-                }
+                } for name in ({r["plan_file"] for r in records} or {"plan.md"})
             },
         )
 
@@ -418,14 +419,16 @@ class ParallelAllocationTests(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                "plan limit 2" in e
+                "sequential initiative" in e
                 for e in self.check(self.records(), parallel_sprint_limit="2")
             )
         )
+        records = self.records(2)
+        records[1]["plan_file"] = records[0]["plan_file"]
         self.assertTrue(
             any(
                 "plan limit 1" in e
-                for e in checker.check_parallel(self.records(2), {"plan.md": {}})
+                for e in self.check(records)
             )
         )
 
@@ -449,25 +452,25 @@ class ParallelAllocationTests(unittest.TestCase):
         self.assertEqual(self.check(records), [])
 
     def test_invalid_limits_and_missing_integration_owner(self):
-        for value in ("0", "4", "three", "", "1.5"):
+        for value in ("0", "2", "3", "4", "three", "", "1.5"):
             with self.subTest(value=value):
                 self.assertTrue(
                     any(
-                        "must be 1, 2, or 3" in e
+                        "sequential initiative" in e
                         for e in self.check([], parallel_sprint_limit=value)
                     )
                 )
         self.assertTrue(
             any(
                 "integration_owner" in e
-                for e in self.check([], integration_owner="UNALLOCATED")
+                for e in self.check(self.records(2), integration_owner="UNALLOCATED")
             )
         )
 
-    def test_required_parallel_fields_even_for_first_worker_in_opted_in_plan(self):
+    def test_required_parallel_fields_for_concurrent_initiatives(self):
         for key in ("owner", "parallel_lane", "write_scope", "integration_gate"):
             with self.subTest(key=key):
-                records = self.records(1)
+                records = self.records(2)
                 records[0][key] = "UNALLOCATED"
                 self.assertTrue(any(key in e for e in self.check(records)))
 

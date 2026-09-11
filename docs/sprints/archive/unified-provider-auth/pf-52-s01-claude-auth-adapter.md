@@ -2,7 +2,7 @@
 sprint_id: "PF-52-S01"
 title: "Claude auth adapter"
 status: completed
-plan_file: "docs/plans/active/unified-provider-auth.md"
+plan_file: "docs/plans/proposed/unified-provider-auth.md"
 plan_feature: "PF-52"
 execution_order: 11
 owner: "GPT-5.6 Sol high implementation agent"
@@ -26,7 +26,7 @@ updated: 2026-09-01
 
 ## Plan linkage
 
-- Plan: [Unified provider onboarding and management](../../../plans/active/unified-provider-auth.md).
+- Plan: [Unified provider onboarding and management](../../../plans/proposed/unified-provider-auth.md).
 - Feature: `PF-52`.
 - Acceptance advanced: onboarding and `/providers` invoke exactly the qualified Claude flow.
 

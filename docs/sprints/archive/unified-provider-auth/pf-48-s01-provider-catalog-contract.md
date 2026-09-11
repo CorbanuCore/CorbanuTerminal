@@ -2,7 +2,7 @@
 sprint_id: "PF-48-S01"
 title: "Provider catalog contract"
 status: completed
-plan_file: "docs/plans/active/unified-provider-auth.md"
+plan_file: "docs/plans/proposed/unified-provider-auth.md"
 plan_feature: "PF-48"
 execution_order: 7
 owner: "GPT-5.6 Sol high implementation agent"
@@ -26,7 +26,7 @@ updated: 2026-09-01
 
 ## Plan linkage
 
-- Plan: [Unified provider onboarding and management](../../../plans/active/unified-provider-auth.md).
+- Plan: [Unified provider onboarding and management](../../../plans/proposed/unified-provider-auth.md).
 - Feature: `PF-48`.
 - Acceptance advanced: onboarding and `/providers` can consume one provider inventory.
 

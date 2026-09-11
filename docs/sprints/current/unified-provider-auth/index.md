@@ -1,7 +1,7 @@
 # Unified provider-auth execution sprints
 
-The active [unified provider onboarding and management plan](../../../plans/active/unified-provider-auth.md)
-allows one serial sprint. PF-42 through PF-47 are the merged Claude-auth
+The deferred (draft) [unified provider onboarding and management plan](../../../plans/proposed/unified-provider-auth.md)
+has no current worker reservation. PF-42 through PF-47 are the merged Claude-auth
 foundation. PF-48 through PF-57 are completed and archived; no implementation
 sprint from that sequence remains open. PF-57-S02 also completed the user's
 2026-09-04 Astra reconciliation repairs in its isolated serial worktree.

@@ -15,7 +15,7 @@ LIFECYCLE_STATUS = {
     "completed": "completed",
     "cancelled": "cancelled",
 }
-ACTIVE_LIMIT = 2
+ACTIVE_LIMIT = 3
 REQUIRED_ACTIVE_KEYS = (
     "title",
     "status",
@@ -153,11 +153,11 @@ def check_active(path, text, values, front, root):
         errors.append(f"{relative}: priority must be P0, P1, or P2")
 
     try:
-        sprint_limit = int(values.get("max_active_sprints", "1"))
-        if sprint_limit not in (1, 2, 3):
+        sprint_limit = int(values.get("parallel_sprint_limit", "1"))
+        if sprint_limit != 1 or values.get("max_active_sprints", "1") != "1":
             raise ValueError
     except ValueError:
-        errors.append(f"{relative}: max_active_sprints must be 1, 2, or 3")
+        errors.append(f"{relative}: sequential initiative requires parallel_sprint_limit: 1")
         sprint_limit = 1
     if sprint_limit > 1:
         owner = values.get("integration_owner", "")

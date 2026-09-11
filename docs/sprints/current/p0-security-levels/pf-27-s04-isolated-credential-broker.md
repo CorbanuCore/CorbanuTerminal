@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-27-S04"
 title: "Isolated credential broker process"
-status: in_progress
+status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 28
@@ -14,10 +14,16 @@ branch: "feat/p0-security-isolated-broker"
 base_commit: "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4"
 depends_on: "PF-27-S01, PF-13-S04, PF-27-S03, PF-41-S03"
 created: 2026-08-28
-updated: 2026-08-31
+updated: 2026-09-11
 ---
 
 # PF-27-S04 — Isolated credential broker process
+
+September 11 handoff: returned to draft under Travis's three-stream selection.
+The recorded live checkout is not a Git repository and its original branch ref
+is invalid; clean recovery commit `cdb82128988a63ad30cef97494a3b048505b5ddf`
+is preserved. No process or files were stopped/deleted. Historical coordinates
+below are not a current allocation; [reconcile before resuming](../../../plans/main-workstreams-2026-09-11.md).
 
 ## Execution mandate
 

@@ -10,16 +10,22 @@ slot and do not authorize implementation.
 
 ## September 9 transcript portfolio
 
+September 11: accounting is now [active workstream 2](../active/portfolio-agent-cost-accounting.md),
+with S01 selected for kickoff. The other 15 portfolio initiatives remain draft;
+[provider onboarding](unified-provider-auth.md) is deferred without changing its
+completed evidence. [Current three-stream allocation](../main-workstreams-2026-09-11.md).
+
 The [portfolio map](../portfolio-2026-09-09.md) covers Alex's product discussion
 and adjacent/enabling ideas. After the [September 10 follow-up](../call-followup-2026-09-10.md),
-all 16 proposals and 52 sprints below remain draft.
+the historical portfolio contains 16 initiatives and 52 sprints. The September
+11 disposition above supersedes its earlier no-activation status.
 The [September 10 scrum packet](../scrum-2026-09-10.md) records the receiving
 `main` baseline and remaining activation decisions. No new active slot or worker
 allocation is implied.
 
 | Proposal | Suggested priority | Proposed accountable role | Bounded scope |
 | --- | --- | --- | --- |
-| [Unified agent cost and usage accounting](portfolio-agent-cost-accounting.md) | P1 proposed | Jim Ricketts (proposed) | PF-60; 4 draft sprints; delivery |
+| [Unified agent cost and usage accounting](../active/portfolio-agent-cost-accounting.md) | P1 active | Codex accounting lane / Travis acceptance | PF-60; 4 sequential sprints; S01 kickoff selected |
 | [Plan and model-serving backend reconciliation](portfolio-plan-backend-reconciliation.md) | P1 proposed | Jim Ricketts (proposed) | PF-61; 3 draft sprints; decision |
 | [Compute referrals and provider onboarding discovery](portfolio-compute-referrals.md) | P1 proposed | Alex Good (commercial lead, proposed) | PF-62; 3 draft sprints; decision |
 | [Repeatable cross-harness quality, runtime and cost benchmarks](portfolio-recurring-benchmarks.md) | P1 proposed | Jim Ricketts (proposed) | PF-63; 3 draft sprints; delivery |

@@ -1,10 +1,10 @@
 ---
-title: "P0 /security levels"
+title: "1. PF-13 security and protected credentials"
 status: active
 change_class: product-initiative
 priority: P0
 owner: "Jim Ricketts"
-parallel_sprint_limit: 3
+parallel_sprint_limit: 1
 integration_owner: "Codex ingress/classifier lane"
 activation_authority: "Product authority defined in the product specification"
 activation_basis: "P0 sequencing plus Travis Good’s 2026-08-28 decision to reconcile the complete security program into this active plan."
@@ -75,7 +75,7 @@ Plan lifecycle: `docs/plans/index.md`
 | Field | Value |
 | --- | --- |
 | Status | **Active** |
-| Active-plan slot | **1 of 2** |
+| Active-plan slot | **1 of 3**; September 11 sequential-workstream allocation |
 | Product authority | Defined once in the product specification |
 | Authoritative decision | “Accountable sequencing,” item 1: `/security` is P0 and begins immediately |
 | Delivery owner | Jim Ricketts |

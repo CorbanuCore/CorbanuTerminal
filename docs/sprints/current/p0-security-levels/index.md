@@ -20,7 +20,7 @@ archived evidence proves only its recorded candidate and scope.
 | ---: | --- | --- | --- | --- |
 | 20 | [PF-35-S01](pf-35-s01-classifier-corpus-and-evaluation.md) | Classifier corpus and leakage-free evaluation | in progress | PF-34-S04 |
 | 21 | [PF-35-S02](pf-35-s02-local-cpu-detector-artifact.md) | Reproducible local CPU detector artifact | draft | PF-35-S01 |
-| 28 | [PF-27-S04](pf-27-s04-isolated-credential-broker.md) | Isolated credential broker process | in progress | PF-27-S01, PF-13-S04, PF-27-S03, PF-41-S03 |
+| 28 | [PF-27-S04](pf-27-s04-isolated-credential-broker.md) | Isolated credential broker process | draft; recovery handoff recorded | PF-27-S01, PF-13-S04, PF-27-S03, PF-41-S03 |
 | 29 | [PF-27-S02](pf-27-s02-secretless-agent-launch.md) | Secretless agent launch and bypass containment | draft | PF-27-S04 |
 | 30 | [PF-28-S01](pf-28-s01-central-secret-output-gate.md) | Central secret and protected-output gate | draft | PF-27-S02 |
 | 31 | [PF-28-S02](pf-28-s02-reflected-secret-response-scrubbing.md) | Reflected-secret response scrubbing | draft | PF-28-S01 |

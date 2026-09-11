@@ -2,12 +2,12 @@
 sprint_id: "PF-55-S04"
 title: "Mixed-model native subagent runtime convergence"
 status: completed
-plan_file: "docs/plans/active/unified-provider-auth.md"
+plan_file: "docs/plans/proposed/unified-provider-auth.md"
 plan_feature: "PF-55"
 execution_order: 21
 owner: "Codex primary subagent runtime integration agent"
 parallel_lane: "subagent-runtime"
-write_scope: "codex-rs/core/src/tools/handlers/multi_agents_common.rs, codex-rs/core/src/tools/handlers/multi_agents_spec.rs, codex-rs/core/src/tools/handlers/multi_agents_spec_tests.rs, codex-rs/core/src/tools/handlers/multi_agents_tests.rs, codex-rs/core/src/tools/handlers/multi_agents_v2.rs, codex-rs/core/src/tools/spec_plan.rs, codex-rs/core/src/tools/spec_plan_tests.rs, codex-rs/core/tests/suite/spawn_agent_description.rs, scripts/subagent_tui_acceptance.py, scripts/test_subagent_tui_acceptance.py, docs/features/model-providers.md, docs/plans/active/unified-provider-auth.md, docs/sprints/index.md, docs/sprints/current/unified-provider-auth/, docs/sprints/archive/unified-provider-auth/, qa/release/0.1.38/"
+write_scope: "codex-rs/core/src/tools/handlers/multi_agents_common.rs, codex-rs/core/src/tools/handlers/multi_agents_spec.rs, codex-rs/core/src/tools/handlers/multi_agents_spec_tests.rs, codex-rs/core/src/tools/handlers/multi_agents_tests.rs, codex-rs/core/src/tools/handlers/multi_agents_v2.rs, codex-rs/core/src/tools/spec_plan.rs, codex-rs/core/src/tools/spec_plan_tests.rs, codex-rs/core/tests/suite/spawn_agent_description.rs, scripts/subagent_tui_acceptance.py, scripts/test_subagent_tui_acceptance.py, docs/features/model-providers.md, docs/plans/proposed/unified-provider-auth.md, docs/sprints/index.md, docs/sprints/current/unified-provider-auth/, docs/sprints/archive/unified-provider-auth/, qa/release/0.1.38/"
 integration_gate: "Primary agent audits the exact runtime and provider boundaries, runs final affected Core tests and real TUI child launch/result, failure/recovery and resume checks, records binary identity, and installs the verified debug candidate without interrupting unrelated sessions or publishing a release."
 worktree: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.38-reconcile"
 branch: "integration/reconcile-release-0.1.38"
@@ -28,7 +28,7 @@ updated: 2026-09-05
 
 ## Plan linkage
 
-- [Unified provider authentication](../../../plans/active/unified-provider-auth.md), PF-55.
+- [Unified provider authentication](../../../plans/proposed/unified-provider-auth.md), PF-55.
 - Product: **Shipping MVP — LIVE**, “Sauron → Nazgul → Troll → Orc orchestration,
   model-aware delegation, durable mailboxes, supervision, resume, and recovery.”
 

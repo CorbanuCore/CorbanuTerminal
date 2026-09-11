@@ -1,36 +1,45 @@
 ---
-title: "Unified agent cost and usage accounting"
-status: draft
+title: "2. Accounting — unified agent cost and usage"
+status: active
 change_class: product-initiative
 priority: P1
-owner: "Jim Ricketts (proposed)"
+owner: "Codex accounting contract lane; Travis Good accountable"
 parallel_sprint_limit: 1
-integration_owner: "Jim Ricketts (proposed; confirmation required)"
+integration_owner: "Codex management; Travis Good accepts the contract"
 activation_authority: "Travis Good"
-activation_basis: "2026-09-09 request authorizes planning and Fable review only; activation decision pending"
+activation_basis: "Travis selected accounting September 11 and requested an Astra High subagent after the main planning merge; contract and synthetic fixtures first, no runtime enablement"
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-09-09
-updated: 2026-09-10
+updated: 2026-09-11
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Product measurement"
   requirement_excerpt: "No commercial performance numbers have been supplied."
-implementation_worktrees: []
+implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
+    branch: "integrate/management-workstreams-20260911"
+    base_commit: "295aed26e53b17f919f7199ae1c9748b1b1250ba"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
+    branch: "workstream/accounting-pf60-s01-20260911"
+    base_commit: "295aed26e53b17f919f7199ae1c9748b1b1250ba"
 ---
 
-# Unified agent cost and usage accounting
+# 2. Accounting — unified agent cost and usage
 
 Policy: repository-root `AGENTS.md`. Lifecycle: [plans](../index.md).
 Portfolio: [source coverage, sequencing and human capacity](../portfolio-2026-09-09.md).
-This is a fully specified **draft delivery plan**, not an executable assignment or a shipped-feature claim.
+This is active workstream 2. Only S01 contract/fixture preparation is selected;
+runtime implementation and human acceptance remain gated. The worktree above is
+the manager's merge checkout; the second entry is the independent S01 worker.
+Dispatch follows the verified main merge; an allocation is not a running-agent claim.
 
 ## Activation record
 
-- Status: draft; active slot: none; target release/date: not promised.
-- Planning authority: user's 2026-09-09 request. Product activation: Travis Good, pending.
-- Proposed priority/owners are recommendations, not new assignments or reordered P0 commitments.
-- Gate: Approve the cost vocabulary, retention window, currency/price source and historical unknown policy; reconcile current branch before selecting the next migration number.
+- Status: active; slot 2/3; target release/date not promised.
+- Authority: Travis's September 11 workstream selection and Astra High kickoff request.
+- Codex owns contract preparation; Travis accepts vocabulary/retention decisions before S02.
+- Gate before S02 runtime: approve the cost vocabulary, retention window, currency/price source and historical unknown policy. S01 prepares these decisions with synthetic fixtures; it does not change a migration or live price.
 
 ## User pain
 
@@ -63,12 +72,16 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 ## Ownership and implementation worktrees
 
-| Proposed accountable role | Worktree | Branch | Base | Scope |
+| Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Jim Ricketts (proposed) | UNALLOCATED | UNALLOCATED | UNALLOCATED | PF-60; one sprint at a time |
-| Jim Ricketts, receiving integrator (confirm) | UNALLOCATED | UNALLOCATED | UNALLOCATED | Source reconciliation and combined evidence |
+| Astra High accounting kickoff | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `295aed26e53b17f919f7199ae1c9748b1b1250ba` | PF-60-S01 contract and synthetic fixtures only |
+| Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
-No worktree or worker slot is reserved. Before readiness, confirm actual owner, exact repository/branch/40-character base, literal write scopes including registration/tests/manifests, and receiving gate. Cross-repository work requires separate explicit coordinates and authority.
+S01 is allocated to one Astra High subagent after main merge. Its only writes
+are research and synthetic QA in the sprint's literal scope; the manager owns
+shared plans and integration. Cross-repository work is not allocated. The worker
+branch starts at the recorded base and fast-forwards to the merged planning
+commit before dispatch; the dispatch receipt records the actual HEAD.
 
 ## Useful code references
 
@@ -84,7 +97,7 @@ Research/artifact paths in the sprint table are planned files, not existing impl
 ## Native lifecycle and upstream-touch record
 
 - Observed planning checkout: `/Volumes/CorbanuDrive/Corbanu/CorbanuTerminal`, branch `recovery/corbanu-drive-2026-09-02`, HEAD `6f8f4ce46446e951437e1ce7e7c4a526e5b9e546`.
-- Historical source only. Publication uses main baseline `3cec54d9917b776bedaffb586247d7cd7c633df6`; the [scrum packet](../scrum-2026-09-10.md) records receiving state and gates. Future implementation coordinates remain unallocated.
+- Historical source only. This amendment receives main `295aed26e53b17f919f7199ae1c9748b1b1250ba`; the [current handoff](../main-workstreams-2026-09-11.md) supersedes the earlier scrum allocation. Preserve main's Corbanu API balance semantics, not legacy Plan entitlements.
 - Canonical upstream: `https://github.com/openai/codex.git`; verified upstream SHA for this future candidate: unresolved, blocks code readiness.
 - Inspect the existing references above; keep product-owned implementation behind thin native adapters, preserving event/replay/schema contracts. Exact files, compatibility tests and retain/adapt/remove dispositions are filled at S01 handoff before code readiness.
 - Follow [upstream integration](../upstream-integration.md). Shared migrations, module registration, lockfiles and config schemas require serial ownership.
@@ -146,7 +159,7 @@ Research outputs stay under the declared research/QA paths. Finished-feature doc
 ## Dependencies, decisions, and blockers
 
 - Approve the cost vocabulary, retention window, currency/price source and historical unknown policy; reconcile current branch before selecting the next migration number.
-- Before activation: reconcile canonical worktree/release, inherited ledger errors and active slots. The [three-initiative operating-model transition](../scrum-2026-09-10.md#operating-model) is separate from this draft publication; follow the receiving policy until it lands.
+- Activation is authorized; allocate S01 after this planning merge. S01 proposes the vocabulary/retention contract using synthetic inputs; approval gates S02 runtime, not preparation of that proposal.
 - Before each next sprint: predecessor evidence accepted/archived, its handoff resolves concrete inputs and any newly discovered decisions; otherwise stop.
 - Cross-plan IDs in the table must exist and be completed in the receiving ledger. A draft dependency does not activate either plan.
 - Before dispatch: agreed budget, named human acceptance owner, exact scope and privacy permissions. No capacity or deadline is assumed from hardware ownership alone.

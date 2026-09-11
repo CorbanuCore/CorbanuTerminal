@@ -2,7 +2,7 @@
 sprint_id: "PF-54-S01"
 title: "Provider management and eligibility"
 status: completed
-plan_file: "docs/plans/active/unified-provider-auth.md"
+plan_file: "docs/plans/proposed/unified-provider-auth.md"
 plan_feature: "PF-54"
 execution_order: 13
 owner: "GPT-5.6 Sol high implementation agent"
@@ -26,7 +26,7 @@ updated: 2026-09-02
 
 ## Plan linkage
 
-- Plan: [Unified provider onboarding and management](../../../plans/active/unified-provider-auth.md).
+- Plan: [Unified provider onboarding and management](../../../plans/proposed/unified-provider-auth.md).
 - Feature: `PF-54`.
 - Acceptance advanced: returning users see the same providers/status and control eligibility safely.
 

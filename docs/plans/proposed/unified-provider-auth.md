@@ -1,6 +1,6 @@
 ---
 title: "Unified provider onboarding and management"
-status: active
+status: draft
 change_class: product-initiative
 priority: P1
 owner: "Codex primary agent"
@@ -11,7 +11,7 @@ activation_basis: "The user's 2026-09-01 P1 decision to supersede the remaining 
 target_release: "TBD"
 deadline: "TBD"
 created: 2026-08-30
-updated: 2026-09-05
+updated: 2026-09-11
 product_spec:
   file: docs/corbanu-product-spec.md
   heading: "Shipping MVP — LIVE"
@@ -33,6 +33,12 @@ implementation_worktrees:
 
 # Unified provider onboarding and management
 
+September 11 disposition: deferred under Travis's explicit PF-13/accounting/
+Task Node selection. There are no current provider-auth sprints. Preserve all
+completed archives, runtime and release evidence; neither cancellation nor final
+plan completion is asserted. The activation table below is historical, not a
+current worker reservation. [Current allocation](../main-workstreams-2026-09-11.md).
+
 Policy: repository-root `AGENTS.md`
 
 Plan lifecycle: `docs/plans/index.md`
@@ -41,8 +47,8 @@ Plan lifecycle: `docs/plans/index.md`
 
 | Field | Value |
 | --- | --- |
-| Status | **Active** |
-| Active-plan slot | **2 of 2**, superseding the remaining Claude-auth slot |
+| Status | **Deferred / draft**; previously Active |
+| Active-plan slot | None; historical **2 of 2** superseded September 11 |
 | Priority | **P1** — current drift is disrupting co-founders and users |
 | Product authority | Final product authority — user decision |
 | Authoritative decision | Unify onboarding and `/providers` behind one provider catalog, status model, authentication controller, and persisted eligibility policy; retain the merged Claude-auth foundation and its evidence. |

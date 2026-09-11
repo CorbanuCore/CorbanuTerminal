@@ -2,12 +2,12 @@
 sprint_id: "PF-57-S03"
 title: "Travis release-branch reconciliation"
 status: completed
-plan_file: "docs/plans/active/unified-provider-auth.md"
+plan_file: "docs/plans/proposed/unified-provider-auth.md"
 plan_feature: "PF-57"
 execution_order: 18
 owner: "Codex primary integration agent"
 parallel_lane: "release-reconciliation"
-write_scope: "codex-rs/.config/nextest.toml, codex-rs/cli/src/claude_oauth.rs, codex-rs/keyring-store/, codex-rs/models-manager/, codex-rs/provider-auth/, codex-rs/tui/, docs/getting-started.md, docs/install.md, docs/integrations/index.md, docs/plans/active/unified-provider-auth.md, docs/sprints/index.md, docs/sprints/current/unified-provider-auth/, docs/sprints/archive/unified-provider-auth/, humanTest.html, qa/release/0.1.38/"
+write_scope: "codex-rs/.config/nextest.toml, codex-rs/cli/src/claude_oauth.rs, codex-rs/keyring-store/, codex-rs/models-manager/, codex-rs/provider-auth/, codex-rs/tui/, docs/getting-started.md, docs/install.md, docs/integrations/index.md, docs/plans/proposed/unified-provider-auth.md, docs/sprints/index.md, docs/sprints/current/unified-provider-auth/, docs/sprints/archive/unified-provider-auth/, humanTest.html, qa/release/0.1.38/"
 integration_gate: "Preserve both source histories through a serial merge, inspect overlapping credential/login and test-harness seams, run formatted combined-tree domain/TUI/TMUX tests, and record exact evidence and release limits before handoff."
 worktree: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.38-reconcile"
 branch: "integration/reconcile-release-0.1.38"
@@ -31,7 +31,7 @@ updated: 2026-09-05
 
 ## Plan linkage
 
-- Plan: [Unified provider authentication](../../../plans/active/unified-provider-auth.md).
+- Plan: [Unified provider authentication](../../../plans/proposed/unified-provider-auth.md).
 - Feature: `PF-57`.
 - Product citation: **Shipping MVP — LIVE** — “Encrypted `/vault`, masked entry,
   metadata-only inspection, and operational credential use without placing raw

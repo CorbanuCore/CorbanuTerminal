@@ -196,7 +196,7 @@ nav:
           - Draft September 9 Portfolio:
               - Overview: plans/portfolio-2026-09-09.md
               - "PF-60 — Unified agent cost and usage accounting":
-                  - Plan: plans/proposed/portfolio-agent-cost-accounting.md
+                  - Plan: plans/active/portfolio-agent-cost-accounting.md
                   - "PF-60-S01 — Accounting contract and golden fixtures": sprints/current/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md
                   - "PF-60-S02 — Idempotent usage persistence and replay": sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md
                   - "PF-60-S03 — Inspectable run and campaign totals": sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md
@@ -280,14 +280,23 @@ nav:
                   - "PF-75-S03 — Bounded native end-to-end rehearsal": sprints/current/portfolio-agent-management-pilot/pf-75-s03-bounded-native-end-to-end-rehearsal.md
                   - "PF-75-S04 — Two-week pilot operating decision": sprints/current/portfolio-agent-management-pilot/pf-75-s04-two-week-pilot-operating-decision.md
           - Sprint Template: sprints/SPRINT_TEMPLATE.md
+          - "PF-80 — Task Node delivery control": sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md
+          - "PF-79 — Desktop beta program":
+              - "S01 — Beta channel and test contract": sprints/current/initiative-delivery-control/pf-79-s01-beta-channel-and-test-contract.md
+              - "S02 — Public beta pilot": sprints/current/initiative-delivery-control/pf-79-s02-public-beta-pilot.md
       - Plans:
           - Plan Process: plans/index.md
           - Alex Scrum — September 10: plans/scrum-2026-09-10.md
           - Latest Call Amendments — September 10: plans/call-followup-2026-09-10.md
           - Upstream Integration Contract: plans/upstream-integration.md
           - Active Plans: plans/active/index.md
+          - Current Workstream Allocation: plans/main-workstreams-2026-09-11.md
+          - Task Node Integration: plans/active/initiative-delivery-control.md
+          - Task Node Task Targets: plans/tasknode-workstream-tasks-2026-09-11.md
+          - Desktop Beta Contract: plans/tasknode-beta-program.md
+          - Feature Delivery Gates: plans/feature-delivery.md
           - P0 Security Levels: plans/active/p0-security-levels.md
-          - Unified Provider Onboarding: plans/active/unified-provider-auth.md
+          - Unified Provider Onboarding: plans/proposed/unified-provider-auth.md
           - Security Source Reconciliation: plans/security-source-reconciliation.md
           - OpenClaw Source Review: plans/openclaw-source-review-2026-08-28.md
           - Architecture refinements: plans/security-architecture-refinements-2026-08-28.md
