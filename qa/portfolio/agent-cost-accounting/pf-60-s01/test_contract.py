@@ -208,6 +208,108 @@ class AccountingContractTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 self.replay(events).rows(self.prices)
 
+    def test_cache_read_exceeding_input_rejected_with_unknown_write(self):
+        for wire, prefix, details in (("chat", "prompt", {}),
+                                      ("responses", "input", {}),
+                                      ("responses", "input", {"cache_write_tokens": None})):
+            for inputs, reads in ((10, 20), (0, 1)):
+                usage = {prefix + "_tokens": inputs,
+                         prefix + "_tokens_details": {**details, "cached_tokens": reads}}
+                with self.subTest(wire=wire, usage=usage), self.assertRaisesRegex(
+                        ValueError, "cache exceeds inclusive input"):
+                    normalize(wire, usage)
+
+    def test_cache_write_exceeding_input_rejected_with_unknown_read(self):
+        for details in ({}, {"cached_tokens": None}):
+            for inputs, writes in ((10, 20), (0, 1)):
+                usage = {"input_tokens": inputs,
+                         "input_tokens_details": {**details, "cache_write_tokens": writes}}
+                with self.subTest(usage=usage), self.assertRaisesRegex(
+                        ValueError, "cache exceeds inclusive input"):
+                    normalize("responses", usage)
+
+    def test_valid_partial_cache_splits_preserve_unknowns(self):
+        for wire, prefix, field, known, unknown in (
+                ("chat", "prompt", "cached_tokens", "read", "write"),
+                ("responses", "input", "cached_tokens", "read", "write"),
+                ("responses", "input", "cache_write_tokens", "write", "read")):
+            for inputs, cached in ((10, 0), (10, 4), (10, 10), (0, 0)):
+                usage = {prefix + "_tokens": inputs, prefix + "_tokens_details": {field: cached}}
+                with self.subTest(wire=wire, field=field, inputs=inputs, cached=cached):
+                    row = normalize(wire, usage)
+                    self.assertEqual(row["input"], inputs)
+                    self.assertEqual(row[known], cached)
+                    self.assertIsNone(row[unknown])
+
+    def test_complete_cache_split_checks_sum_not_individual_components(self):
+        for reads, writes in ((6, 5), (10, 1), (1, 10)):
+            usage = {"input_tokens": 10,
+                     "input_tokens_details": {"cached_tokens": reads, "cache_write_tokens": writes}}
+            with self.subTest(reads=reads, writes=writes), self.assertRaisesRegex(
+                    ValueError, "cache exceeds inclusive input"):
+                normalize("responses", usage)
+        row = normalize("responses", {"input_tokens": 10, "input_tokens_details": {
+            "cached_tokens": 6, "cache_write_tokens": 4}})
+        self.assertEqual((row["input"], row["read"], row["write"]), (10, 6, 4))
+
+    def test_unknown_inclusive_input_does_not_bound_known_cache(self):
+        for wire, prefix, details, expected in (
+                ("chat", "prompt", {"cached_tokens": 20}, (20, None)),
+                ("responses", "input", {"cached_tokens": 20}, (20, None)),
+                ("responses", "input", {"cache_write_tokens": 20}, (None, 20)),
+                ("responses", "input", {"cached_tokens": 20, "cache_write_tokens": 30}, (20, 30))):
+            for inputs in ({}, {prefix + "_tokens": None}):
+                usage = {**inputs, prefix + "_tokens_details": details}
+                with self.subTest(wire=wire, usage=usage):
+                    row = normalize(wire, usage)
+                    self.assertIsNone(row["input"])
+                    self.assertEqual((row["read"], row["write"]), expected)
+
+    def test_anthropic_cache_is_added_to_noncached_input_only_when_complete(self):
+        usage = {"input_tokens": 10, "cache_read_input_tokens": 20,
+                 "cache_creation_input_tokens": 30}
+        for missing, expected in ((None, (60, 20, 30)), ("input_tokens", (None, 20, 30)),
+                                  ("cache_read_input_tokens", (None, None, 30)),
+                                  ("cache_creation_input_tokens", (None, 20, None))):
+            partial = {key: value for key, value in usage.items() if key != missing}
+            with self.subTest(missing=missing):
+                row = normalize("anthropic", partial)
+                self.assertEqual((row["input"], row["read"], row["write"]), expected)
+
+    def test_replay_rejects_invalid_partial_cache_before_later_valid_revision(self):
+        for wire, prefix, field in (("chat", "prompt", "cached_tokens"),
+                                    ("responses", "input", "cached_tokens"),
+                                    ("responses", "input", "cache_write_tokens")):
+            attempts = deepcopy(self.data["attempts"])
+            attempts[0]["wire"] = wire
+            first = deepcopy(self.events[0])
+            first.update(revision=1, status="streaming", usage={prefix + "_tokens": 10})
+            invalid = deepcopy(first)
+            invalid.update(revision=2, usage={prefix + "_tokens_details": {field: 20}})
+            repaired = deepcopy(first)
+            repaired.update(revision=3, status="completed", usage={prefix + "_tokens": 30})
+            with self.subTest(wire=wire, field=field), self.assertRaisesRegex(
+                    ValueError, "cache exceeds inclusive input"):
+                self.replay([repaired, invalid, first], attempts=attempts).rows(self.prices)
+
+    def test_replay_valid_partial_cache_keeps_unmeasured_split_unknown(self):
+        for wire, prefix, field, known, unknown in (
+                ("chat", "prompt", "cached_tokens", "read", "write"),
+                ("responses", "input", "cached_tokens", "read", "write"),
+                ("responses", "input", "cache_write_tokens", "write", "read")):
+            attempts = deepcopy(self.data["attempts"])
+            attempts[0]["wire"] = wire
+            first = deepcopy(self.events[0])
+            first.update(revision=1, status="streaming", usage={prefix + "_tokens": 10})
+            second = deepcopy(first)
+            second.update(revision=2, status="completed", usage={prefix + "_tokens_details": {field: 4}})
+            with self.subTest(wire=wire, field=field):
+                row = self.replay([second, first], attempts=attempts).rows(self.prices)["root-1"]
+                self.assertEqual((row["input"], row[known]), (10, 4))
+                self.assertIsNone(row[unknown])
+                self.assertIsNone(row["cost"])
+                self.assertIn("input:usage_unknown", row["unknown_reasons"])
+
     def test_lineage_cycle_unknown_parent_and_unattributed_attempt_rejected(self):
         for problem in ("cycle", "parent", "owner"):
             threads = deepcopy(self.data["threads"])

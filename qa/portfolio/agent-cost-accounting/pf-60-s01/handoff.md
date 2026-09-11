@@ -1,5 +1,30 @@
 # PF-60-S01 kickoff and handoff
 
+## Follow-up correction handoff — 2026-09-11
+
+Frozen uncommitted correction based on clean HEAD
+`1a29602e8ab5605ed781dd5ddf1eb49e6033b872` in the worker coordinates below.
+This receipt supersedes the original test/oracle candidate, not its contract or
+human gates. The original kickoff receipt follows as historical evidence.
+
+`normalize` now rejects a known read/write subtotal above known inclusive input,
+including Chat/Responses input 10, read 20, write unknown and Responses input 10,
+write 20, read unknown. Missing measurements remain unknown. Eight added methods
+cover invalid/valid partial splits, complete-sum boundaries, unknown input,
+Anthropic dialect semantics and per-revision replay. Baseline: 33 passing tests;
+regressions before fix: 41 tests with 13 failing subcases; corrected: 41 passing.
+Local governance: 3 active plans, 115 current / 121 archived sprints; the parent
+reports 116 current in its manager tree. Exact commands/digests: [results.md](results.md).
+
+Changed files only: `reference.py` (+3/-2 non-test source lines),
+`test_contract.py` (+102/-0 test lines), `results.md`, `handoff.md`, all under this
+QA directory. No staging or commit; parent owns mandatory independent structured
+review, combined-tree verification and any scoped local commit. No follow-up
+agents/reviewers/model calls were launched. All runtime, S02, human acceptance
+and release gates remain open; this is synthetic fixture evidence only.
+
+## Original kickoff handoff (historical)
+
 Delivered scope: proposed accounting contract v1 plus hand-computed synthetic
 goldens and executable reference tests. Product initiative, feature PF-60,
 sprint PF-60-S01 allocated `in_progress`; worker output does not complete or

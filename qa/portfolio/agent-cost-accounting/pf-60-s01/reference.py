@@ -73,8 +73,9 @@ def normalize(wire, usage):
     else:
         raise ValueError("unsupported wire dialect")
     result = dict(zip(FIELDS, (count(value) for value in values)))
-    if all(result[key] is not None for key in ("input", "read", "write")):
-        if result["read"] + result["write"] > result["input"]:
+    if result["input"] is not None:
+        known_cache = sum(result[key] for key in ("read", "write") if result[key] is not None)
+        if known_cache > result["input"]:
             raise ValueError("cache exceeds inclusive input")
     if result["reasoning"] is not None and result["output"] is not None:
         if result["reasoning"] > result["output"]:
