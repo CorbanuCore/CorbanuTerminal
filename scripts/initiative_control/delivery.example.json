@@ -1,0 +1,19 @@
+{
+  "feature": "PF-NN",
+  "mode": "feature-flagged",
+  "flag": "REGISTER_THE_REAL_NATIVE_FLAG",
+  "candidate_files": ["codex-rs/features/src/lib.rs"],
+  "candidate_tree_sha256": "FILL_FROM_FINAL_TREE",
+  "boundaries": {
+    "discovery": "REPLACE with actual UI/discovery gate",
+    "commands": "REPLACE with command-handler gate",
+    "tools": "REPLACE with registration and execution gates",
+    "api": "REPLACE with API gate or explicit non-applicability",
+    "jobs": "REPLACE with job-dispatch and disable contract",
+    "resume": "REPLACE with persisted-session recovery contract",
+    "migrations": "REPLACE with compatibility and reversibility contract"
+  },
+  "tests": {},
+  "human_acceptance": {"result": "pending"},
+  "enablement_decision": null
+}

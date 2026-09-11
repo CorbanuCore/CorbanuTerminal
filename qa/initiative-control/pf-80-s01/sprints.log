@@ -1,0 +1,61 @@
+test_blocked_keeps_reservation_ready_does_not (test_check.ParallelAllocationTests.test_blocked_keeps_reservation_ready_does_not) ... ok
+test_default_single_worker_does_not_need_parallel_metadata (test_check.ParallelAllocationTests.test_default_single_worker_does_not_need_parallel_metadata) ... ok
+test_duplicate_owners_lanes_worktrees_and_branches (test_check.ParallelAllocationTests.test_duplicate_owners_lanes_worktrees_and_branches) ... ok
+test_global_and_per_plan_limits (test_check.ParallelAllocationTests.test_global_and_per_plan_limits) ... ok
+test_global_limit_applies_across_plans (test_check.ParallelAllocationTests.test_global_limit_applies_across_plans) ... ok
+test_invalid_limits_and_missing_integration_owner (test_check.ParallelAllocationTests.test_invalid_limits_and_missing_integration_owner) ... ok
+test_invalid_scope_paths (test_check.ParallelAllocationTests.test_invalid_scope_paths) ... ok
+test_required_parallel_fields_for_concurrent_initiatives (test_check.ParallelAllocationTests.test_required_parallel_fields_for_concurrent_initiatives) ... ok
+test_scope_overlap_includes_parent_prefix_and_case (test_check.ParallelAllocationTests.test_scope_overlap_includes_parent_prefix_and_case) ... ok
+test_three_independent_allocations_pass (test_check.ParallelAllocationTests.test_three_independent_allocations_pass) ... ok
+test_cross_plan_collision_repair_preserves_archived_dependency (test_check.SprintCheckerTests.test_cross_plan_collision_repair_preserves_archived_dependency) ... ok
+test_cycle_and_wrong_order_are_rejected_even_for_drafts (test_check.SprintCheckerTests.test_cycle_and_wrong_order_are_rejected_even_for_drafts) ... ok
+test_parallel_metadata_is_checked_end_to_end (test_check.SprintCheckerTests.test_parallel_metadata_is_checked_end_to_end) ... ok
+test_plan_backlink_is_required (test_check.SprintCheckerTests.test_plan_backlink_is_required) ... ok
+test_plan_must_define_linked_feature (test_check.SprintCheckerTests.test_plan_must_define_linked_feature) ... ok
+test_ready_sprint_coordinates_must_match_active_plan (test_check.SprintCheckerTests.test_ready_sprint_coordinates_must_match_active_plan) ... ok
+test_ready_sprint_requires_active_plan_and_worktree (test_check.SprintCheckerTests.test_ready_sprint_requires_active_plan_and_worktree) ... ok
+test_ready_sprint_with_matching_active_plan_passes (test_check.SprintCheckerTests.test_ready_sprint_with_matching_active_plan_passes) ... ok
+test_ready_still_requires_completed_archived_dependency (test_check.SprintCheckerTests.test_ready_still_requires_completed_archived_dependency) ... ok
+test_renumber_requires_matching_filename (test_check.SprintCheckerTests.test_renumber_requires_matching_filename) ... ok
+test_sprint_must_link_exactly_one_feature (test_check.SprintCheckerTests.test_sprint_must_link_exactly_one_feature) ... ok
+test_valid_draft_sprint_passes (test_check.SprintCheckerTests.test_valid_draft_sprint_passes) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 0.040s
+
+OK
+sprints: current 115; archived 121
+
+PF-80-S01 bounded follow-up on f7159c16723f59d021f46c7b66fdb8401ac777e4
+Earlier output above is historical candidate evidence.
+Command: PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s docs/sprints/tests -p 'test_*.py' -v && PYTHONDONTWRITEBYTECODE=1 python3 docs/sprints/check.py
+test_blocked_keeps_reservation_ready_does_not (test_check.ParallelAllocationTests.test_blocked_keeps_reservation_ready_does_not) ... ok
+test_default_single_worker_does_not_need_parallel_metadata (test_check.ParallelAllocationTests.test_default_single_worker_does_not_need_parallel_metadata) ... ok
+test_duplicate_owners_lanes_worktrees_and_branches (test_check.ParallelAllocationTests.test_duplicate_owners_lanes_worktrees_and_branches) ... ok
+test_global_and_per_plan_limits (test_check.ParallelAllocationTests.test_global_and_per_plan_limits) ... ok
+test_global_limit_applies_across_plans (test_check.ParallelAllocationTests.test_global_limit_applies_across_plans) ... ok
+test_invalid_limits_and_missing_integration_owner (test_check.ParallelAllocationTests.test_invalid_limits_and_missing_integration_owner) ... ok
+test_invalid_scope_paths (test_check.ParallelAllocationTests.test_invalid_scope_paths) ... ok
+test_required_parallel_fields_for_concurrent_initiatives (test_check.ParallelAllocationTests.test_required_parallel_fields_for_concurrent_initiatives) ... ok
+test_scope_overlap_includes_parent_prefix_and_case (test_check.ParallelAllocationTests.test_scope_overlap_includes_parent_prefix_and_case) ... ok
+test_three_independent_allocations_pass (test_check.ParallelAllocationTests.test_three_independent_allocations_pass) ... ok
+test_cross_plan_collision_repair_preserves_archived_dependency (test_check.SprintCheckerTests.test_cross_plan_collision_repair_preserves_archived_dependency) ... ok
+test_cycle_and_wrong_order_are_rejected_even_for_drafts (test_check.SprintCheckerTests.test_cycle_and_wrong_order_are_rejected_even_for_drafts) ... ok
+test_parallel_metadata_is_checked_end_to_end (test_check.SprintCheckerTests.test_parallel_metadata_is_checked_end_to_end) ... ok
+test_plan_backlink_is_required (test_check.SprintCheckerTests.test_plan_backlink_is_required) ... ok
+test_plan_must_define_linked_feature (test_check.SprintCheckerTests.test_plan_must_define_linked_feature) ... ok
+test_ready_sprint_coordinates_must_match_active_plan (test_check.SprintCheckerTests.test_ready_sprint_coordinates_must_match_active_plan) ... ok
+test_ready_sprint_requires_active_plan_and_worktree (test_check.SprintCheckerTests.test_ready_sprint_requires_active_plan_and_worktree) ... ok
+test_ready_sprint_with_matching_active_plan_passes (test_check.SprintCheckerTests.test_ready_sprint_with_matching_active_plan_passes) ... ok
+test_ready_still_requires_completed_archived_dependency (test_check.SprintCheckerTests.test_ready_still_requires_completed_archived_dependency) ... ok
+test_renumber_requires_matching_filename (test_check.SprintCheckerTests.test_renumber_requires_matching_filename) ... ok
+test_sprint_must_link_exactly_one_feature (test_check.SprintCheckerTests.test_sprint_must_link_exactly_one_feature) ... ok
+test_valid_draft_sprint_passes (test_check.SprintCheckerTests.test_valid_draft_sprint_passes) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 0.037s
+
+OK
+sprints: current 115; archived 121
+Command exit: 0
