@@ -132,7 +132,7 @@ jobs:
         shell: bash
         run: |
           cargo build --manifest-path codex-rs/Cargo.toml --target "$TARGET" --release \
-            -p codex-wallet-daemon --example package_client_probe
+            -p codex-core -p codex-wallet-daemon --example package_client_probe
 
       - name: Build standalone package archive
         shell: bash
@@ -367,7 +367,7 @@ jobs:
         shell: bash
         run: |
           cargo build --manifest-path codex-rs/Cargo.toml --target "$TARGET" --release \
-            -p codex-wallet-daemon --example package_client_probe
+            -p codex-core -p codex-wallet-daemon --example package_client_probe
 
       - name: Build standalone package archive
         shell: bash
@@ -528,7 +528,7 @@ jobs:
         shell: bash
         run: |
           cargo build --manifest-path codex-rs/Cargo.toml --target "$TARGET" --release \
-            -p codex-wallet-daemon --example package_client_probe
+            -p codex-core -p codex-wallet-daemon --example package_client_probe
 
       - name: Build standalone package archive
         shell: bash
