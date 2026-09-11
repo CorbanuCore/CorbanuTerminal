@@ -37,11 +37,11 @@ contract. A sprint turns one feature into an exact code-and-evidence checklist.
 
 ## Bounded parallel implementation
 
-The default is one active implementation sprint per plan. A plan may opt into
-two or three with `parallel_sprint_limit` and a named `integration_owner` in its
-front matter. Across all plans, at most **three** sprints may be `in_progress`
-or `blocked`; blocked work keeps its reservation until explicitly returned to
-draft with a recorded handoff. The two-active-plan limit is unchanged.
+Each of at most three active initiatives has `parallel_sprint_limit: 1` and a
+named `integration_owner`. Across all plans, at most **three** sprints may be
+`in_progress` or `blocked`; blocked work keeps its reservation until explicitly
+returned to draft with a recorded handoff. This is Travis's September 10/11
+operating-model decision, not additional within-plan parallelism.
 
 Before a parallel allocation starts:
 
@@ -90,8 +90,10 @@ owner must compare actual diffs to scope and record final combined-tree evidence
 
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
-| [P0 `/security` levels](../plans/active/p0-security-levels.md) | Active | [50 current sprints](current/p0-security-levels/index.md), 28 completed archives | PF-24-S01, PF-30-S04 and PF-20-S03 archived; active reservation PF-27-S04. PF-30-S01 remains frozen/incomplete; PF-35 external |
-| [Unified provider onboarding and management](../plans/active/unified-provider-auth.md) | Active | [1 current sprint](current/unified-provider-auth/index.md), 16 completed archives including the inherited Claude foundation | PF-48–PF-57 are archived; PF-58 credential health and reauthentication is in progress |
+| [PF-13 / security — workstream 1](../plans/active/p0-security-levels.md) | Active | [52 current sprints](current/p0-security-levels/index.md), 31 completed archives | PF-35 remains external; PF-27-S04 draft pending fresh integration allocation |
+| [Accounting — workstream 2](../plans/active/portfolio-agent-cost-accounting.md) | Active | 4 sequential PF-60 sprints | S01 contract/fixtures selected for independent Astra High allocation after main merge |
+| [Task Node — workstream 3](../plans/active/initiative-delivery-control.md) | Active | PF-80-S01 then two PF-79 beta drafts | Scoped main port and progress qualification first; beta not launched |
+| [Unified provider onboarding and management](../plans/proposed/unified-provider-auth.md) | Deferred | [1 current sprint](current/unified-provider-auth/index.md) | PF-58 human accepted for integration; residual automated/native qualification retained separately |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
 | [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | Historical 72-sprint decomposition remains cancelled; every record maps into the active P0 plan's current work |
 
@@ -100,8 +102,11 @@ owner must compare actual diffs to scope and record final combined-tree evidence
 September 10 planning publication and call follow-up add [16 proposals and 52 draft sprints](../plans/portfolio-2026-09-09.md)
 (PF-60–PF-75), with no execution authority or allocations. The receiving `main`
 baseline had 60 current and 121 archived records; the initial 50 plus two new PF-70 drafts yield 112 current
-and 121 archived records. Seven inherited sprint-link/ID errors remain visible;
-see the [scrum packet](../plans/scrum-2026-09-10.md#receiving-main-and-existing-work).
+and 121 archived records. The seven inherited sprint-link/ID errors are resolved;
+see the [identity reconciliation](identity-reconciliation-2026-09-10.md).
+September 11 adds PF-80-S01 (renamed operations PF-76) and PF-79-S01/S02:
+115 current, 121 archived. The three-initiative policy is now explicit; all
+identity/dependency regression checks remain, with no error exceptions.
 Each proposal's sprint execution map links every draft directly.
 
 ```bash

@@ -1,0 +1,59 @@
+{
+  "base_commit": "0d1c3240d752335cc89faeb2149c5030063e5d69",
+  "checks": [
+    {
+      "command": "python3 docs/plans/check.py",
+      "exit_code": 0,
+      "output": "plans: active 2/2; available slots 0\n"
+    },
+    {
+      "command": "python3 docs/sprints/check.py",
+      "exit_code": 0,
+      "output": "sprints: current 112; archived 121\n"
+    },
+    {
+      "command": "python3 -m unittest discover -s docs/plans/tests",
+      "exit_code": 0,
+      "output": "....\n----------------------------------------------------------------------\nRan 4 tests in 0.015s\n\nOK\n"
+    },
+    {
+      "command": "python3 -m unittest discover -s docs/sprints/tests",
+      "exit_code": 0,
+      "output": "......................\n----------------------------------------------------------------------\nRan 22 tests in 0.037s\n\nOK\n"
+    },
+    {
+      "command": "python3 qa/planning-ledger/2026-09-10/check.py",
+      "exit_code": 0,
+      "output": "{\n  \"ok\": true,\n  \"base_commit\": \"0d1c3240d752335cc89faeb2149c5030063e5d69\",\n  \"errors\": [],\n  \"original_sprints_checked\": 233,\n  \"renumbered_sprints\": 5,\n  \"current\": 112,\n  \"archived\": 121,\n  \"reserved_sprints\": [\n    \"PF-27-S04\",\n    \"PF-35-S01\"\n  ]\n}\n"
+    },
+    {
+      "command": "ruby -ryaml -e 'YAML.parse_file(\"mkdocs.yml\"); puts \"MkDocs YAML syntax: PASS\"'",
+      "exit_code": 0,
+      "output": "MkDocs YAML syntax: PASS\n"
+    },
+    {
+      "command": "git diff --cached --check",
+      "exit_code": 0,
+      "output": ""
+    }
+  ],
+  "portfolio": {
+    "command": "python3 qa/portfolio/2026-09-09/validate.py --expected-sprints 52",
+    "exit_code": 0,
+    "plans": 16,
+    "sprints": 52,
+    "max_sprint_lines": 78,
+    "scope_files": 74,
+    "errors": []
+  },
+  "review": {
+    "requested_model": "claude-fable-5-1-plan",
+    "observed_provider_model": "claude-fable-5-1",
+    "reasoning_effort": "high",
+    "helper_exit_code": 0,
+    "findings": [],
+    "overall_correctness": "patch is correct",
+    "overall_explanation": "Verified on the staged tree: `python3 docs/sprints/check.py` reports 112 current / 121 archived with zero errors, `docs/plans/check.py` passes, and the new fixed-baseline audit `qa/planning-ledger/2026-09-10/check.py` passes (233 original sprints compared, 5 renumbered, reserved set {PF-27-S04, PF-35-S01}). P0 index counts (53 current / 28 completed archives) match the filesystem; every current P0 record has an index row; PF-27-S04 frontmatter is `in_progress` as the index now shows. The renamed records preserve frontmatter (except `updated`), sprint_id/plan_feature/heading text, checkbox ledgers, owners, worktrees, and dependencies; Claude-auth PF-42–45 archives are untouched. No stale links to the old pf-42/43/44/45 P0 paths remain outside the historical portfolio snapshots and the intentional identity map; the two release-record edits change only link destinations. All 19 sha256 entries in review-manifest.json match the staged blobs. The three added unit tests are consistent with the checker's actual behavior (case-sensitive feature substring check, filename check, duplicate detection with current-before-archive ordering, backlink relative path). One non-blocking note: the reconciliation page lists the fixed-baseline audit among validators to run before any implementation handoff, but that script rejects any file changed since commit 0d1c3240 that is outside this repair's allowlist, so it will report failures after the next unrelated commit on main; the page's own disclaimer already describes it as a one-time audit, so this is not a landing blocker.",
+    "overall_confidence": 0.9
+  }
+}

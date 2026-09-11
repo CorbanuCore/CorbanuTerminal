@@ -89,11 +89,11 @@ def check_parallel(records, plans):
     limits = {}
     for path, values in plans.items():
         value = values.get("parallel_sprint_limit", "1")
-        if value not in {"1", "2", "3"}:
-            errors.append(f"{path}: parallel_sprint_limit must be 1, 2, or 3")
+        if value != "1":
+            errors.append(f"{path}: sequential initiative requires parallel_sprint_limit: 1")
             limits[path] = 1
         else:
-            limits[path] = int(value)
+            limits[path] = 1
         count = sum(r["plan_file"] == path for r in active)
         if (limits[path] > 1 or (count and len(active) > 1)) and not concrete(
             values.get("integration_owner", "")

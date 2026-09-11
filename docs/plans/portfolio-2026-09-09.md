@@ -1,5 +1,9 @@
 # Alex's product portfolio — proposed sprint map
 
+Current disposition: the [September 11 main handoff](main-workstreams-2026-09-11.md)
+supersedes the historical allocation statements below. Accounting and Task Node
+are now selected alongside PF13; unrelated portfolio proposals remain draft.
+
 Planning snapshot: 2026-09-09. **Draft only. No new initiative, sprint, worker, automation, external message, account action or spend has been activated.**
 
 Publication update, 2026-09-10: these drafts are being integrated onto the
@@ -32,7 +36,7 @@ The proposed priorities and effort ranges are planning hypotheses. Existing P0 s
 | Feature | Plan | Group | New sprints | Planned endpoint | Recording anchor |
 | --- | --- | --- | ---: | --- | --- |
 | Existing security/auth | [P0 security](active/p0-security-levels.md) plus newer provider-auth work | Terminal | 0 | Existing implementation and qualification; no duplicate plan | 01:57:29–02:02:41 |
-| PF-60 | [Unified agent cost and usage accounting](proposed/portfolio-agent-cost-accounting.md) | Terminal | 4 | Bounded delivery | 01:58:15–02:02:41 |
+| PF-60 | [Unified agent cost and usage accounting](active/portfolio-agent-cost-accounting.md) | Terminal | 4 | Bounded delivery | 01:58:15–02:02:41 |
 | PF-61 | [Plan and model-serving backend reconciliation](proposed/portfolio-plan-backend-reconciliation.md) | Terminal | 3 | Evidence / go-no-go | 01:58:15–02:02:41 |
 | PF-62 | [Compute referrals and provider onboarding discovery](proposed/portfolio-compute-referrals.md) | Terminal | 3 | Evidence / go-no-go | 01:58:15–02:02:41 |
 | PF-63 | [Repeatable cross-harness quality, runtime and cost benchmarks](proposed/portfolio-recurring-benchmarks.md) | Terminal | 3 | Bounded delivery | 01:49:00–01:51:57 and 01:58:15–02:02:41 |
@@ -58,7 +62,7 @@ PF-74's workflow is an inferred packaging, while its latest-call research topics
 | Existing boundary | Evidence inspected | How the portfolio treats it |
 | --- | --- | --- |
 | Security, protected credentials and human/TUI qualification | [Active P0 plan](active/p0-security-levels.md); PF-13, PF-26, PF-27, PF-35, PF-37 and related current sprints | Remains the first implementation initiative. Expiry/recovery tests belong to its owning auth boundary, not a new manager workaround. |
-| Provider lifecycle and reauthentication | [Receiving main's active provider-auth plan](active/unified-provider-auth.md), including PF-57/PF-58 evidence and subsequent release records | Reuse the integrated record before opening an auth fix. A historical worker result alone does not establish installed behavior. |
+| Provider lifecycle and reauthentication | [Receiving main's active provider-auth plan](proposed/unified-provider-auth.md), including PF-57/PF-58 evidence and subsequent release records | Reuse the integrated record before opening an auth fix. A historical worker result alone does not establish installed behavior. |
 | Historical large-image gateway/TUI work | The original recovery planning checkout carried a different active-plan ledger | Not an active plan on the receiving main baseline. Backend audit may reconcile historical artifacts; this merge does not resurrect or close that work. |
 | Exact-model native review | [Existing PF-14 proposal and seven drafts](proposed/arbitrary-model-autoreview.md) | No second native autoreview implementation. Current external review workflow is a development tool, not proof PF-14 ships. |
 | Agent hierarchy, mailbox, resume, Task Node | Existing core agent control/registry and tasknode-session modules; product spec's live MVP | PF-75 tests/reuses the native lifecycle first. A second scheduler requires a separate product decision and evidence of a concrete native gap. |
@@ -70,9 +74,11 @@ at `6f8f4ce46446e951437e1ce7e7c4a526e5b9e546`. The selected receiving main basel
 is `3cec54d9917b776bedaffb586247d7cd7c633df6`, with security and unified provider
 auth active. Only the planning packet is imported; root policy, product spec,
 runtime, existing release records and active allocations are preserved.
-Seven pre-existing sprint-link/ID errors on that baseline must be reconciled
-before new dispatch. Their exact baseline and no-new-error checks are recorded
-in `qa/portfolio/2026-09-10-main-integration/`. Do not merge the recovery tree wholesale.
+Seven pre-existing sprint-link/ID errors on that baseline are now resolved by the
+[September 10 P0 identity repair](../sprints/identity-reconciliation-2026-09-10.md).
+The global checker passes; statuses and allocations are unchanged. The original
+baseline/no-new-error checks in `qa/portfolio/2026-09-10-main-integration/` are
+historical snapshots, not current-tree gates. Do not merge the recovery tree wholesale.
 
 PF-60–PF-75 were unused in the readable local Corbanu worktree/doc inventory at
 planning time. The publication checks also compare the new sprint IDs with the
@@ -189,7 +195,7 @@ false confidence; it is not a claim of bulletproof testing.
 
 ## Decisions for our next workload discussion
 
-1. Main is the chosen publication lineage. Who owns reconciliation of its inherited sprint IDs and the transition to three independent, sequential initiatives?
+1. Main is the chosen publication lineage and its inherited sprint-ID errors are repaired. Who owns the policy transition to three independent, sequential initiatives?
 2. Should the next available initiative slot go to the management/QA pilot or accounting/backend clarity?
 3. Who besides the user can accept research/commercial packets, and which decisions must remain with Travis/Alex/Jim under the product spec?
 4. What initial per-run spend cap and maximum experiment budget should govern the pilot?
@@ -210,3 +216,5 @@ promised as public-site links.
 Latest-call amendment QA: `qa/portfolio/2026-09-10-call-followup/`; the earlier
 50-sprint receipts remain historical, not evidence for these 52-sprint amendments.
 No model review of these documents is product acceptance or a release qualification.
+Current ledger repair proof: `qa/planning-ledger/2026-09-10/`. Use the global
+plan/sprint validators on today's tree, not the earlier seven-error snapshot assertions.

@@ -1,9 +1,9 @@
 ---
-sprint_id: PF-42-S02
+sprint_id: PF-77-S02
 title: Multiple-account relink recovery
 status: completed
 plan_file: docs/plans/active/p0-security-levels.md
-plan_feature: PF-42
+plan_feature: PF-77
 execution_order: 82
 owner: Codex account recovery owner
 parallel_lane: account-recovery
@@ -14,10 +14,12 @@ branch: fix/tasknode-agent-profile-scope
 base_commit: 7e99c5a06bdb7b0f01f655cb4d84739b4f70bb86
 depends_on: none
 created: 2026-09-08
-updated: 2026-09-08
+updated: 2026-09-10
 ---
 
-# PF-42-S02 — Multiple-account relink recovery
+# PF-77-S02 — Multiple-account relink recovery
+
+Renumbered from P0 PF-42-S02; see the [identity reconciliation](../../identity-reconciliation-2026-09-10.md). Historical evidence and completion state are retained.
 
 ## Execution mandate
 
@@ -29,7 +31,7 @@ User authority: September 8 report requesting multiple accounts on one machine.
 
 ## Plan linkage
 
-Active [P0 plan](../../../plans/active/p0-security-levels.md), feature PF-42.
+Active [P0 plan](../../../plans/active/p0-security-levels.md), feature PF-77.
 
 ## Code boundaries
 
@@ -38,7 +40,7 @@ Shared Task Node session resolver, TUI/CLI adapters and focused regression tests
 ## Preconditions
 
 - [x] Active plan, concrete user defect and exact worktree recorded.
-- [x] Prior PF-44 implementation is preserved; remaining observation returned
+- [x] Prior PF-77 implementation is preserved; remaining observation returned
   to draft to serialize this repair. Existing unrelated checker failures persist.
 
 ## Done

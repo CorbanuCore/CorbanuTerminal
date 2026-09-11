@@ -465,6 +465,28 @@ These are target expansion workflows, not claims that every step is live today.
 
 # Product measurement
 
+## Internal delivery control — TO BUILD
+
+Travis authorized up to three independent product initiatives on September 10,
+then selected PF-13, accounting and Task Node integration on September 11.
+Use sequential sprints per initiative, incremental merges behind verified
+default-OFF feature boundaries, and a private read-only Alex-server dashboard.
+One manager owns plan records and publication; workers emit separate redacted
+reports. Show blockers, rendered sprints, human test plans, machines, run logs
+and freshness; preserve the last good publication on failure. Task Node receives
+only explicitly mapped, supported progress; no automatic reward, signing,
+financial action or task-completion claim is implied.
+
+Travis additionally requested an ongoing public manual-testing beta program
+under Task Node integration: a separate Corbanu Desktop beta branch/channel,
+candidate-pinned public assignments, independent evidence review and bounded
+human triage. Private evidence is not public by default; stable installs stay
+isolated. Resolve Desktop source and public-board authority before readiness.
+Planning and kickoff do not launch, offer rewards or waive root release policy.
+See the [beta contract](plans/tasknode-beta-program.md).
+
+## Measurement targets
+
 No commercial performance numbers have been supplied. The following metrics must be instrumented, with targets set through the decision rights defined above.
 
 | Area                 | Metric                                                                                | Target                                                  |
@@ -505,8 +527,10 @@ permissioned historical replay in the Task Node tab. Manager views distinguish
 human prompting, autonomous execution and verified outcomes. Recording requires
 workspace enrollment; sharing requires an explicit scoped grant.
 
-This adds product scope to the existing Task Node integration program as PF-45
-in the active P0 plan. It is not a bounded repair. The reviewed specification is
+This adds product scope to the existing Task Node integration program as PF-78
+in the active P0 plan (formerly P0 PF-45; see the
+[identity reconciliation](sprints/identity-reconciliation-2026-09-10.md)).
+It is not a bounded repair. The reviewed specification is
 `/home/pfrpc/repos/campaign_tracker_spec_20260906.md`. Build and QA artifacts go
 on the mounted data volume. Public deployment is a separate action.
 

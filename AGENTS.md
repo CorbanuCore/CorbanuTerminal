@@ -52,7 +52,7 @@ Classify work before editing. When uncertain, use the higher class.
 | **Product initiative** | Adds or materially changes a user goal, interaction, authorization boundary, financial/data flow, persistent state, compatibility surface, or multiple-worktree workflow.     | Active plan governed by `docs/plans/index.md` plus a current sprint governed by `docs/sprints/index.md` for implementation work. |
 | **Release**            | Packages accepted routine work, bounded fixes, and product initiatives into a versioned candidate. It does not consume an active-plan slot.                                   | `qa/release/<version>/` release record.                                                                                          |
 
-Urgent reliability and security repairs may proceed as bounded fixes while two
+Urgent reliability and security repairs may proceed as bounded fixes while all
 product initiatives are active. They may not disguise new product scope, and
 they do not bypass release gates. Any change to authorization, vault access,
 financial action, or protected-data disclosure is a product initiative even

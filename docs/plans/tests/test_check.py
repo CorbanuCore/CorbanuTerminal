@@ -65,12 +65,12 @@ class PlanCheckerTests(unittest.TestCase):
             result = checker.check_plan_root(root)
             self.assertTrue(result["ok"], result["errors"])
             self.assertEqual(result["active_count"], 1)
-            self.assertEqual(result["available_slots"], 1)
+            self.assertEqual(result["available_slots"], 2)
 
-    def test_third_active_plan_fails(self):
+    def test_fourth_active_plan_fails(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = self.make_root(temporary)
-            for number in range(3):
+            for number in range(4):
                 (root / "active" / f"plan-{number}.md").write_text(
                     active_plan(f"Plan {number}"),
                     encoding="utf-8",
@@ -78,7 +78,7 @@ class PlanCheckerTests(unittest.TestCase):
             result = checker.check_plan_root(root)
             self.assertFalse(result["ok"])
             self.assertIn(
-                "active-plan limit exceeded: found 3, maximum is 2",
+                "active-plan limit exceeded: found 4, maximum is 3",
                 result["errors"],
             )
 
@@ -95,7 +95,8 @@ class PlanCheckerTests(unittest.TestCase):
 
     def test_concurrency_metadata_before_sprint_allocation(self):
         for limit, owner, valid in (
-            (3, "Owner", True),
+            (1, "Owner", True),
+            (3, "Owner", False),
             (2, "", False),
             (0, "Owner", False),
             (4, "Owner", False),
@@ -109,11 +110,21 @@ class PlanCheckerTests(unittest.TestCase):
                 root = self.make_root(temporary)
                 text = active_plan("Security").replace(
                     "status: active",
-                    f'status: active\nmax_active_sprints: {limit}\nintegration_owner: "{owner}"',
+                    f'status: active\nparallel_sprint_limit: {limit}\nintegration_owner: "{owner}"',
                 )
                 (root / "active/security.md").write_text(text, encoding="utf-8")
                 result = checker.check_plan_root(root)
                 self.assertEqual(result["ok"], valid, result["errors"])
+
+
+    def test_three_active_plans_pass(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.make_root(temporary)
+            for number in range(3):
+                (root / "active" / f"plan-{number}.md").write_text(active_plan(str(number)))
+            result = checker.check_plan_root(root)
+            self.assertTrue(result["ok"], result["errors"])
+            self.assertEqual(result["available_slots"], 0)
 
 
 if __name__ == "__main__":

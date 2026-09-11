@@ -1,7 +1,7 @@
 ---
-sprint_id: PF-45-S02
+sprint_id: PF-78-S02
 title: Agent Task Node profile propagation
-plan_feature: PF-45
+plan_feature: PF-78
 execution_order: 81
 owner: Codex emergency release owner
 parallel_lane: emergency-profile-repair
@@ -9,7 +9,7 @@ write_scope: codex-rs/cli/src/tasknode_cmd.rs, codex-rs/core/src/exec_env.rs, co
 integration_gate: Codex emergency release owner runs combined profile and provider regression tests
 depends_on: none
 created: 2026-09-07
-updated: 2026-09-07
+updated: 2026-09-10
 status: completed
 plan_file: docs/plans/active/p0-security-levels.md
 worktree: /home/pfrpc/repos/worktrees/corbanu-release-0.1.39
@@ -17,7 +17,9 @@ branch: fix/tasknode-agent-profile-scope
 base_commit: 9b71d86d7fc57b25e3b020a813a6b75dd898836a
 ---
 
-# PF-45-S02 — Agent Task Node profile propagation
+# PF-78-S02 — Agent Task Node profile propagation
+
+Renumbered from P0 PF-45-S02; see the [identity reconciliation](../../identity-reconciliation-2026-09-10.md). Historical evidence and completion state are retained.
 
 The user reported a concrete account mismatch: the active profile tab and an agent's unscoped helper used different accounts. Restore the authorized profile boundary for all agent-side Task Node reads and writes. Product: **Campaign Tracker — LOCAL PILOT CANDIDATE**, attributable prompts and permissioned history; Task Node profile-owned identity.
 
@@ -43,7 +45,7 @@ Finish agent profile propagation and fail closed before any Task Node account lo
 
 ## Plan linkage
 
-Plan: [P0 security levels](../../../plans/active/p0-security-levels.md), feature PF-45. Product heading **Campaign Tracker — LOCAL PILOT CANDIDATE**: “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”.
+Plan: [P0 security levels](../../../plans/active/p0-security-levels.md), feature PF-78. Product heading **Campaign Tracker — LOCAL PILOT CANDIDATE**: “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”.
 
 ## Code boundaries
 

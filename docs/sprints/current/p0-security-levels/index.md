@@ -1,7 +1,7 @@
 # P0 security-level execution sprints
 
 The active [P0 security plan](../../../plans/active/p0-security-levels.md) owns
-**50 current sprints** and **28 completed archives**.
+**52 current sprints** and **31 completed archives**.
 The integrated Sprint 13 branch completes PF-13-S02–S04 and the early PF-26-S01
 harness; PF-13-S05 is also completed and archived after its integrated Core and
 platform qualification. PF-13-S06 and PF-41-S03 are now also completed and
@@ -23,7 +23,7 @@ archived evidence proves only its recorded candidate and scope.
 | ---: | --- | --- | --- | --- |
 | 20 | [PF-35-S01](pf-35-s01-classifier-corpus-and-evaluation.md) | Classifier corpus and leakage-free evaluation | draft reservation; external qualification pending | PF-34-S04 |
 | 21 | [PF-35-S02](pf-35-s02-local-cpu-detector-artifact.md) | Reproducible local CPU detector artifact | draft | PF-35-S01 |
-| 28 | [PF-27-S04](pf-27-s04-isolated-credential-broker.md) | Isolated credential broker process | in progress | PF-27-S01, PF-13-S04, PF-27-S03, PF-41-S03 |
+| 28 | [PF-27-S04](pf-27-s04-isolated-credential-broker.md) | Isolated credential broker process | draft; recovery handoff recorded | PF-27-S01, PF-13-S04, PF-27-S03, PF-41-S03 |
 | 29 | [PF-27-S02](pf-27-s02-secretless-agent-launch.md) | Secretless agent launch and bypass containment | draft | PF-27-S04 |
 | 30 | [PF-28-S01](pf-28-s01-central-secret-output-gate.md) | Central secret and protected-output gate | draft | PF-27-S02 |
 | 31 | [PF-28-S02](pf-28-s02-reflected-secret-response-scrubbing.md) | Reflected-secret response scrubbing | draft | PF-28-S01 |
@@ -71,6 +71,11 @@ archived evidence proves only its recorded candidate and scope.
 | 74 | [PF-26-S04](pf-26-s04-final-automated-qualification.md) | Final integrated automated security qualification | draft | PF-26-S01, PF-13-S07, PF-21-S02, PF-23-S03, PF-25-S02, PF-36-S02, PF-41-S02 |
 | 75 | [PF-26-S02](pf-26-s02-true-tui-and-live-repository-qualification.md) | True-TUI and live-repository qualification | draft | PF-26-S04 |
 | 76 | [PF-26-S03](pf-26-s03-human-acceptance-finished-docs-and-release-evidence.md) | Human acceptance, finished docs, and release evidence | draft | PF-26-S02 |
+| 78 | [PF-76-S01](pf-76-s01-provider-profile-persistence.md) | Provider profile persistence; reconcile shipped provider work before allocation | draft | none |
+| 79 | [PF-77-S01](pf-77-s01-tasknode-reliability.md) | Task Node durable command/recovery; natural production observation outstanding | draft | none |
+
+The [identity reconciliation](../../identity-reconciliation-2026-09-10.md)
+maps legacy P0 IDs to PF-76–78 without changing completion or allocation state.
 
 ## Machine checks
 

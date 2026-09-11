@@ -2,12 +2,12 @@
 sprint_id: "PF-57-S02"
 title: "Reconciled release credential-lifecycle repairs"
 status: completed
-plan_file: "docs/plans/active/unified-provider-auth.md"
+plan_file: "docs/plans/proposed/unified-provider-auth.md"
 plan_feature: "PF-57"
 execution_order: 17
 owner: "Codex primary repair agent"
 parallel_lane: "reconciliation-repairs"
-write_scope: "codex-rs/wallet-daemon/, codex-rs/tasknode-session/, codex-rs/model-provider-info/, codex-rs/tui/src/provider_status_host.rs, codex-rs/tui/src/provider_status_host_tests.rs, codex-rs/tui/src/chatwidget/wallet_api.rs, codex-rs/tui/src/chatwidget/wallet_api_tests.rs, codex-rs/tui/src/chatwidget/wallet_http.rs, codex-rs/tui/src/chatwidget/wallet_http_tests.rs, codex-rs/tui/src/chatwidget/wallet_menu.rs, codex-rs/tui/src/chatwidget/wallet_usage.rs, codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__wallet_menu__tests__wallet_legacy_daemon_upgrade.snap, codex-rs/tui/tests/suite/multi_provider_onboarding.rs, docs/plans/active/unified-provider-auth.md, docs/sprints/current/unified-provider-auth/, docs/sprints/archive/unified-provider-auth/, docs/features/tasknode.md, docs/features/wallet-plan.md, docs/authentication.md, qa/release/0.1.38/"
+write_scope: "codex-rs/wallet-daemon/, codex-rs/tasknode-session/, codex-rs/model-provider-info/, codex-rs/tui/src/provider_status_host.rs, codex-rs/tui/src/provider_status_host_tests.rs, codex-rs/tui/src/chatwidget/wallet_api.rs, codex-rs/tui/src/chatwidget/wallet_api_tests.rs, codex-rs/tui/src/chatwidget/wallet_http.rs, codex-rs/tui/src/chatwidget/wallet_http_tests.rs, codex-rs/tui/src/chatwidget/wallet_menu.rs, codex-rs/tui/src/chatwidget/wallet_usage.rs, codex-rs/tui/src/chatwidget/snapshots/codex_tui__chatwidget__wallet_menu__tests__wallet_legacy_daemon_upgrade.snap, codex-rs/tui/tests/suite/multi_provider_onboarding.rs, docs/plans/proposed/unified-provider-auth.md, docs/sprints/current/unified-provider-auth/, docs/sprints/archive/unified-provider-auth/, docs/features/tasknode.md, docs/features/wallet-plan.md, docs/authentication.md, qa/release/0.1.38/"
 integration_gate: "Codex primary agent serially integrates the three review fixes, runs formatting then affected suites and true-TUI regression proof, records site review findings separately, and preserves the reviewed integration ancestry and unrelated worktrees."
 worktree: "/home/pfrpc/repos/worktrees/corbanu-reconcile-release-fixes"
 branch: "fix/reconcile-release-0.1.37-review"
@@ -26,7 +26,7 @@ updated: 2026-09-04
 
 ## Plan linkage
 
-- Plan: [Unified provider authentication](../../../plans/active/unified-provider-auth.md).
+- Plan: [Unified provider authentication](../../../plans/proposed/unified-provider-auth.md).
 - Feature: `PF-57`; upstream-touch record and 2026-09-04 amendment in that plan.
 - Product citation: **Shipping MVP — LIVE** — “Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat.”
 - Related product contracts: existing wallet scoped signing and linked Task Node identity.

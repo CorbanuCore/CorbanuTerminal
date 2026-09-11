@@ -134,6 +134,78 @@ class SprintCheckerTests(unittest.TestCase):
                 any("missing sprint backlink" in error for error in result["errors"])
             )
 
+    def test_plan_must_define_linked_feature(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo, root, sprint = self.make_repo(temporary)
+            sprint.write_text(sprint_text(), encoding="utf-8")
+            plan = repo / "docs/plans/proposed/plan.md"
+            plan.write_text(
+                plan.read_text(encoding="utf-8").replace("\nPF-01\n", "\nPF-02\n"),
+                encoding="utf-8",
+            )
+            result = checker.check_sprints(root, repo)
+            self.assertEqual(len(result["errors"]), 1, result["errors"])
+            self.assertIn("does not define feature PF-01", result["errors"][0])
+
+    def test_renumber_requires_matching_filename(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo, root, sprint = self.make_repo(temporary)
+            sprint.write_text(
+                sprint_text().replace("PF-01", "PF-02"), encoding="utf-8"
+            )
+            plan = repo / "docs/plans/proposed/plan.md"
+            plan.write_text(
+                plan.read_text(encoding="utf-8").replace("PF-01", "PF-02"),
+                encoding="utf-8",
+            )
+            result = checker.check_sprints(root, repo)
+            self.assertEqual(len(result["errors"]), 1, result["errors"])
+            self.assertIn("filename must contain lowercase sprint id", result["errors"][0])
+
+    def test_cross_plan_collision_repair_preserves_archived_dependency(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo, root, sprint = self.make_repo(temporary)
+            sprint.write_text(sprint_text(), encoding="utf-8")
+            archive = root / "archive/other-plan"
+            archive.mkdir()
+            other_plan = repo / "docs/plans/proposed/other-plan.md"
+            other_plan.write_text(
+                "---\nstatus: draft\n---\n\nPF-01\nPF-02\n", encoding="utf-8"
+            )
+            original = sprint_text(
+                status="completed", plan_file="docs/plans/proposed/other-plan.md"
+            ).replace("- [ ]", "- [x]")
+            archived = archive / "pf-01-s01-one-task.md"
+            archived.write_text(original, encoding="utf-8")
+            dependent = archive / "pf-02-s01-follow-up.md"
+            dependent_text = (
+                original.replace("PF-01", "PF-02")
+                .replace("execution_order: 1", "execution_order: 2")
+                .replace('depends_on: "none"', 'depends_on: "PF-01-S01"')
+            )
+            dependent.write_text(dependent_text, encoding="utf-8")
+            result = checker.check_sprints(root, repo)
+            self.assertEqual(len(result["errors"]), 1, result["errors"])
+            self.assertIn("duplicate sprint_id", result["errors"][0])
+
+            renamed = sprint.with_name("pf-76-s01-one-task.md")
+            sprint.rename(renamed)
+            renamed.write_text(
+                sprint_text().replace("PF-01", "PF-76"), encoding="utf-8"
+            )
+            plan = repo / "docs/plans/proposed/plan.md"
+            plan.write_text(
+                plan.read_text(encoding="utf-8")
+                .replace("PF-01", "PF-76")
+                .replace("pf-01", "pf-76"),
+                encoding="utf-8",
+            )
+            result = checker.check_sprints(root, repo)
+            self.assertTrue(result["ok"], result["errors"])
+            self.assertEqual((result["current_count"], result["archive_count"]), (1, 2))
+            self.assertEqual(archived.read_text(encoding="utf-8"), original)
+            self.assertEqual(dependent.read_text(encoding="utf-8"), dependent_text)
+
     def test_ready_sprint_requires_active_plan_and_worktree(self):
         with tempfile.TemporaryDirectory() as temporary:
             repo, root, sprint = self.make_repo(temporary)
@@ -234,7 +306,8 @@ class SprintCheckerTests(unittest.TestCase):
                     )
                 path.write_text(value)
             result = checker.check_sprints(root, repo)
-            self.assertTrue(result["ok"], result["errors"])
+            self.assertFalse(result["ok"])
+            self.assertTrue(any("plan limit 1" in e for e in result["errors"]))
             second.write_text(
                 second.read_text().replace("src/module2/", "src/module1/child.rs")
             )
@@ -314,7 +387,7 @@ class ParallelAllocationTests(unittest.TestCase):
                 path=f"sprint-{i}.md",
                 lifecycle="current",
                 status="in_progress",
-                plan_file="plan.md",
+                plan_file=f"plan-{i}.md",
                 owner=f"Named worker {i}",
                 parallel_lane=f"lane-{i}",
                 worktree=f"/tmp/worker-{i}",
@@ -329,11 +402,11 @@ class ParallelAllocationTests(unittest.TestCase):
         return checker.check_parallel(
             records,
             {
-                "plan.md": {
-                    "parallel_sprint_limit": "3",
+                name: {
+                    "parallel_sprint_limit": "1",
                     "integration_owner": "Alex",
                     **values,
-                }
+                } for name in ({r["plan_file"] for r in records} or {"plan.md"})
             },
         )
 
@@ -346,14 +419,16 @@ class ParallelAllocationTests(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                "plan limit 2" in e
+                "sequential initiative" in e
                 for e in self.check(self.records(), parallel_sprint_limit="2")
             )
         )
+        records = self.records(2)
+        records[1]["plan_file"] = records[0]["plan_file"]
         self.assertTrue(
             any(
                 "plan limit 1" in e
-                for e in checker.check_parallel(self.records(2), {"plan.md": {}})
+                for e in self.check(records)
             )
         )
 
@@ -377,25 +452,25 @@ class ParallelAllocationTests(unittest.TestCase):
         self.assertEqual(self.check(records), [])
 
     def test_invalid_limits_and_missing_integration_owner(self):
-        for value in ("0", "4", "three", "", "1.5"):
+        for value in ("0", "2", "3", "4", "three", "", "1.5"):
             with self.subTest(value=value):
                 self.assertTrue(
                     any(
-                        "must be 1, 2, or 3" in e
+                        "sequential initiative" in e
                         for e in self.check([], parallel_sprint_limit=value)
                     )
                 )
         self.assertTrue(
             any(
                 "integration_owner" in e
-                for e in self.check([], integration_owner="UNALLOCATED")
+                for e in self.check(self.records(2), integration_owner="UNALLOCATED")
             )
         )
 
-    def test_required_parallel_fields_even_for_first_worker_in_opted_in_plan(self):
+    def test_required_parallel_fields_for_concurrent_initiatives(self):
         for key in ("owner", "parallel_lane", "write_scope", "integration_gate"):
             with self.subTest(key=key):
-                records = self.records(1)
+                records = self.records(2)
                 records[0][key] = "UNALLOCATED"
                 self.assertTrue(any(key in e for e in self.check(records)))
 

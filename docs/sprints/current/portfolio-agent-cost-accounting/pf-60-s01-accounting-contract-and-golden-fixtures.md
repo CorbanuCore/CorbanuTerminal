@@ -1,23 +1,26 @@
 ---
 sprint_id: "PF-60-S01"
 title: "Accounting contract and golden fixtures"
-status: draft
-plan_file: "docs/plans/proposed/portfolio-agent-cost-accounting.md"
+status: in_progress
+plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 1
-owner: "Jim Ricketts (proposed)"
-parallel_lane: "UNALLOCATED"
-write_scope: "UNALLOCATED"
-integration_gate: "UNALLOCATED"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "Astra High accounting kickoff"
+parallel_lane: "accounting-contract"
+write_scope: "docs/research/agent-cost-accounting/, qa/portfolio/agent-cost-accounting/pf-60-s01/"
+integration_gate: "Codex management reviews only the worker's research/fixture diff, independently recomputes totals, runs fixture and governance tests on the combined tree, and requests Travis's contract acceptance before S02; worker cannot edit shared plans or merge."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
+branch: "workstream/accounting-pf60-s01-20260911"
+base_commit: "295aed26e53b17f919f7199ae1c9748b1b1250ba"
 depends_on: "none"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-11
 ---
 
 # PF-60-S01 — Accounting contract and golden fixtures
+
+Allocated before post-merge dispatch. Status reserves the lane, not proof an
+agent has started; manager receipt records native subagent ID and actual HEAD.
 
 ## Execution mandate
 
@@ -27,9 +30,9 @@ updated: 2026-09-09
 
 ## Plan linkage
 
-- Plan: [Unified agent cost and usage accounting](../../../plans/proposed/portfolio-agent-cost-accounting.md)
+- Plan: [Unified agent cost and usage accounting](../../../plans/active/portfolio-agent-cost-accounting.md)
 - Feature: `PF-60`; acceptance: Every fixture has raw inputs, expected totals and provenance; no unknown value is rendered as zero.
-- Upstream/allocation: [plan record](../../../plans/proposed/portfolio-agent-cost-accounting.md#native-lifecycle-and-upstream-touch-record).
+- Upstream/allocation: [plan record](../../../plans/active/portfolio-agent-cost-accounting.md#native-lifecycle-and-upstream-touch-record).
 
 ## Code boundaries
 
@@ -39,11 +42,11 @@ updated: 2026-09-09
 
 ## Preconditions
 
-- [ ] Plan active after explicit authority decision; global WIP and occupied lanes reconciled.
-- [ ] Dependencies completed and archived; Approve the cost vocabulary, retention window, currency/price source and historical unknown policy; reconcile current branch before selecting the next migration number.
-- [ ] Exact worktree/branch/40-character base match plan; literal scopes and receiving owner are allocated.
-- [ ] Inputs, disclosure rights and spend/time limits approved; external writes and live financial actions remain excluded.
-- [ ] Resolve exact changed files, native compatibility and nonempty test commands before any code sprint starts.
+- [x] Travis authorized S01 kickoff; active plan, disjoint worker lane and global three-sprint reservation reconciled.
+- [x] No sprint dependencies; synthetic contract preparation is authorized, with vocabulary/retention approval gating S02 runtime.
+- [x] Exact worktree/branch/base, literal research/QA paths and receiving owner allocated; fast-forward to main planning merge before dispatch.
+- [x] Only public source/synthetic inputs; one requested Astra High agent, no extra agents, paid data, private logs or external writes.
+- [ ] Run nonempty fixture validation below before handoff; no production or migration code in S01.
 
 ## Done
 
@@ -58,7 +61,7 @@ updated: 2026-09-09
 
 ## Verification
 
-- [ ] Focused: Reviewer independently recomputes all fixture totals; inspect every proposed schema field against existing state.
+- [ ] Focused: `python3 -m unittest discover -s qa/portfolio/agent-cost-accounting/pf-60-s01 -p 'test_*.py'`; add and run nonzero tests. Reviewer independently recomputes fixture totals and checks fields against native state.
 - [ ] Integration: from repo root, `python3 docs/plans/check.py; python3 docs/sprints/check.py`; `git diff --check`.
 - [ ] Independently inspect source provenance, calculations and the plan's success/failure/recovery table; document-only checks do not qualify product UI.
 - [ ] Record reviewer, artifact digest, expected versus actual results and observed cases; identify automation as not applicable when none ran. Never invent a test count or pass.

@@ -2,12 +2,12 @@
 sprint_id: "PF-55-S02"
 title: "OpenAI Astra model selector"
 status: completed
-plan_file: "docs/plans/active/unified-provider-auth.md"
+plan_file: "docs/plans/proposed/unified-provider-auth.md"
 plan_feature: "PF-55"
 execution_order: 19
 owner: "Codex primary implementation agent"
 parallel_lane: "astra-selector"
-write_scope: "codex-rs/models-manager/models.json, codex-rs/models-manager/src/manager_tests.rs, codex-rs/tui/src/chatwidget/tests/popups_and_settings.rs, codex-rs/tui/src/chatwidget/snapshots/, codex-rs/tui/tests/suite/provider_management.rs, docs/features/model-providers.md, docs/plans/active/unified-provider-auth.md, docs/sprints/index.md, docs/sprints/current/unified-provider-auth/, docs/sprints/archive/unified-provider-auth/, qa/release/0.1.38/"
+write_scope: "codex-rs/models-manager/models.json, codex-rs/models-manager/src/manager_tests.rs, codex-rs/tui/src/chatwidget/tests/popups_and_settings.rs, codex-rs/tui/src/chatwidget/snapshots/, codex-rs/tui/tests/suite/provider_management.rs, docs/features/model-providers.md, docs/plans/proposed/unified-provider-auth.md, docs/sprints/index.md, docs/sprints/current/unified-provider-auth/, docs/sprints/archive/unified-provider-auth/, qa/release/0.1.38/"
 integration_gate: "Primary agent serially adds the sourced catalog entry, validates remote-overlay/default behavior, snapshots and real TUI selection/cancel/restart/request routing, then archives evidence and pushes the existing reconciled branch without releasing."
 worktree: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.38-reconcile"
 branch: "integration/reconcile-release-0.1.38"
@@ -28,7 +28,7 @@ updated: 2026-09-05
 
 ## Plan linkage
 
-- [Unified provider authentication](../../../plans/active/unified-provider-auth.md),
+- [Unified provider authentication](../../../plans/proposed/unified-provider-auth.md),
   feature `PF-55`, explicitly amended by the user's 2026-09-05 model request.
 - Product citation: **Shipping MVP — LIVE**, “OpenAI, Anthropic/Claude Plan, Kimi,
   Z.AI, DeepSeek, OpenRouter, Ambient, Meta, Baseten, Vercel, Bedrock, Ollama,

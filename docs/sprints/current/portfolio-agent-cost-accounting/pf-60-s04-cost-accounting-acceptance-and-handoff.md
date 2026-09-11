@@ -2,7 +2,7 @@
 sprint_id: "PF-60-S04"
 title: "Cost-accounting acceptance and handoff"
 status: draft
-plan_file: "docs/plans/proposed/portfolio-agent-cost-accounting.md"
+plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 4
 owner: "Jim Ricketts (proposed)"
@@ -27,9 +27,9 @@ updated: 2026-09-09
 
 ## Plan linkage
 
-- Plan: [Unified agent cost and usage accounting](../../../plans/proposed/portfolio-agent-cost-accounting.md)
+- Plan: [Unified agent cost and usage accounting](../../../plans/active/portfolio-agent-cost-accounting.md)
 - Feature: `PF-60`; acceptance: All cost flows pass on one recorded binary; unknown/estimated values remain visibly distinct.
-- Upstream/allocation: [plan record](../../../plans/proposed/portfolio-agent-cost-accounting.md#native-lifecycle-and-upstream-touch-record).
+- Upstream/allocation: [plan record](../../../plans/active/portfolio-agent-cost-accounting.md#native-lifecycle-and-upstream-touch-record).
 
 ## Code boundaries
 

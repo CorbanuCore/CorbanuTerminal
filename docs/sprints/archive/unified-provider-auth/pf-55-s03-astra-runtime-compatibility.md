@@ -2,12 +2,12 @@
 sprint_id: "PF-55-S03"
 title: "Live Astra runtime compatibility and TUI harness"
 status: completed
-plan_file: "docs/plans/active/unified-provider-auth.md"
+plan_file: "docs/plans/proposed/unified-provider-auth.md"
 plan_feature: "PF-55"
 execution_order: 20
 owner: "Codex primary Astra runtime integration agent"
 parallel_lane: "astra-runtime"
-write_scope: "codex-rs/model-provider-info/, codex-rs/models-manager/, codex-rs/protocol/src/openai_models.rs, codex-rs/login/src/auth/default_client.rs, codex-rs/login/src/auth/default_client_tests.rs, codex-rs/tui/tests/suite/provider_management.rs, codex-rs/tui/src/chatwidget/tests/popups_and_settings.rs, codex-rs/tui/src/chatwidget/snapshots/, codex-rs/core/tests/suite/astra_runtime.rs, codex-rs/core/tests/suite/mod.rs, scripts/astra_tui_acceptance.py, scripts/test_astra_tui_acceptance.py, docs/features/model-providers.md, docs/plans/active/unified-provider-auth.md, docs/sprints/index.md, docs/sprints/current/unified-provider-auth/, docs/sprints/archive/unified-provider-auth/, qa/release/0.1.38/"
+write_scope: "codex-rs/model-provider-info/, codex-rs/models-manager/, codex-rs/protocol/src/openai_models.rs, codex-rs/login/src/auth/default_client.rs, codex-rs/login/src/auth/default_client_tests.rs, codex-rs/tui/tests/suite/provider_management.rs, codex-rs/tui/src/chatwidget/tests/popups_and_settings.rs, codex-rs/tui/src/chatwidget/snapshots/, codex-rs/core/tests/suite/astra_runtime.rs, codex-rs/core/tests/suite/mod.rs, scripts/astra_tui_acceptance.py, scripts/test_astra_tui_acceptance.py, docs/features/model-providers.md, docs/plans/proposed/unified-provider-auth.md, docs/sprints/index.md, docs/sprints/current/unified-provider-auth/, docs/sprints/archive/unified-provider-auth/, qa/release/0.1.38/"
 integration_gate: "Primary agent audits upstream Astra contracts, implements the compatible runtime, runs final affected regression tests and live TUI tool/cancel/restart/resume acceptance, records exact binary/evidence identities, then installs and pushes the reconciled candidate without publishing."
 worktree: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.38-reconcile"
 branch: "integration/reconcile-release-0.1.38"
@@ -28,7 +28,7 @@ updated: 2026-09-05
 
 ## Plan linkage
 
-- [Unified provider authentication](../../../plans/active/unified-provider-auth.md), PF-55.
+- [Unified provider authentication](../../../plans/proposed/unified-provider-auth.md), PF-55.
 - Product: **Shipping MVP — LIVE**, “Multi-provider inference”; **Product
   principles**, “Maintain continuous Codex parity without removing Corbanu-specific behavior.”
 - User mandate: live Astra failed with a newer-Codex error; do the necessary

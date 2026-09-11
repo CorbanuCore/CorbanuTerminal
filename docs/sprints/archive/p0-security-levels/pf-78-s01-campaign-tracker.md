@@ -1,9 +1,9 @@
 ---
-sprint_id: "PF-45-S01"
+sprint_id: "PF-78-S01"
 title: "Campaign Tracker capture, persistence and permissioned replay"
 status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
-plan_feature: "PF-45"
+plan_feature: "PF-78"
 execution_order: 80
 owner: "Campaign Tracker integration"
 parallel_lane: "campaign-tracker"
@@ -14,10 +14,12 @@ branch: "fix/tasknode-profile-isolation"
 base_commit: "ec549c0c687f50a682487e9d68289c05557ff579"
 depends_on: "none"
 created: 2026-09-06
-updated: 2026-09-06
+updated: 2026-09-10
 ---
 
-# PF-45-S01 — Campaign Tracker
+# PF-78-S01 — Campaign Tracker
+
+Renumbered from P0 PF-45-S01; see the [identity reconciliation](../../identity-reconciliation-2026-09-10.md). Historical evidence and completion state are retained.
 
 ## Execution mandate
 
@@ -25,7 +27,7 @@ Implement the local Campaign Tracker candidate in the Task Node tab. Public depl
 
 ## Plan linkage
 
-[Active P0 integration plan](../../../plans/active/p0-security-levels.md), PF-45.
+[Active P0 integration plan](../../../plans/active/p0-security-levels.md), PF-78.
 Product: **Campaign Tracker — LOCAL PILOT CANDIDATE**, “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”.
 
 ## Code boundaries
@@ -52,7 +54,7 @@ User authority, active-plan linkage, checkout coordinates and mounted storage we
 
 ## Remaining
 
-None for this local integration and qualification sprint. Production rollout, backup restoration, advanced campaign/export UI and pilot calibration remain in PF-45's product follow-up; they are explicitly described in the qualification record and are not claimed complete.
+None for this local integration and qualification sprint. Production rollout, backup restoration, advanced campaign/export UI and pilot calibration remain in PF-78's product follow-up; they are explicitly described in the qualification record and are not claimed complete.
 
 ## Verification
 

@@ -8,7 +8,7 @@ Status: scoped repair complete; not a release authorization or production fix cl
 - Product citation: **Shipping MVP — LIVE**, “Encrypted `/vault`, masked entry,
   metadata-only inspection, and operational credential use without placing raw
   values in chat”; existing profile-owned Task Node identity and scoped wallet signing.
-- Plan: `docs/plans/active/unified-provider-auth.md`; feature PF-57; sprint PF-57-S02.
+- Plan: `docs/plans/proposed/unified-provider-auth.md`; feature PF-57; sprint PF-57-S02.
 - User authorized repair of three previously reported Terminal regressions and
   separately requested site API-key-generation review.
 - Worktree: `/home/pfrpc/repos/worktrees/corbanu-reconcile-release-fixes`.

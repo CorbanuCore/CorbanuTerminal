@@ -2,7 +2,7 @@
 sprint_id: "PF-50-S01"
 title: "Shared API-key flow controller"
 status: completed
-plan_file: "docs/plans/active/unified-provider-auth.md"
+plan_file: "docs/plans/proposed/unified-provider-auth.md"
 plan_feature: "PF-50"
 execution_order: 9
 owner: "GPT-5.6 Sol high implementation agent"
@@ -26,7 +26,7 @@ updated: 2026-09-01
 
 ## Plan linkage
 
-- Plan: [Unified provider onboarding and management](../../../plans/active/unified-provider-auth.md).
+- Plan: [Unified provider onboarding and management](../../../plans/proposed/unified-provider-auth.md).
 - Feature: `PF-50`.
 - Acceptance advanced: API-key setup behaves identically from either host.
 

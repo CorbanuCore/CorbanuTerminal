@@ -3,7 +3,7 @@
 ## Scope and source
 
 - Class: product initiative, explicitly requested by the user; feature PF-55 in
-  the [unified provider-auth plan](../../../docs/plans/active/unified-provider-auth.md),
+  the [unified provider-auth plan](../../../docs/plans/proposed/unified-provider-auth.md),
   sprint PF-55-S02.
 - Product citation: **Shipping MVP — LIVE**, “OpenAI, Anthropic/Claude Plan, Kimi,
   Z.AI, DeepSeek, OpenRouter, Ambient, Meta, Baseten, Vercel, Bedrock, Ollama,

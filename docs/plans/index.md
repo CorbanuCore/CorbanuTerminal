@@ -27,15 +27,18 @@ The machine source of truth is the front matter in each lifecycle directory.
 
 | Slot | Initiative | Priority | Deadline | Owner |
 | ---: | --- | --- | --- | --- |
-| 1 of 2 | [P0 `/security` levels](active/p0-security-levels.md) | P0 | 2026-10-08 | Jim Ricketts |
-| 2 of 2 | [Unified provider onboarding and management](active/unified-provider-auth.md) | P1 | TBD | Codex primary agent |
+| 1 of 3 | [PF-13 security](active/p0-security-levels.md) | P0 | 2026-10-08 | Existing security owner; unchanged |
+| 2 of 3 | [Accounting](active/portfolio-agent-cost-accounting.md) | P1 | TBD | Codex accounting lane; Travis accepts |
+| 3 of 3 | [Task Node integration](active/initiative-delivery-control.md) | P1 | TBD | Codex Task Node lane; Travis accepts |
 
 Run `python3 docs/plans/check.py` to validate lifecycle placement, required active
-metadata, and the two-plan limit. CI runs the same check.
+metadata, and the three-plan limit. CI runs the same check.
 
 ## Work-in-progress limit
 
-Corbanu may have at most **two active product-initiative plans**.
+Corbanu may have at most **three active product-initiative plans**, each with one
+reserved sprint. Travis authorized this operating model September 10 and selected
+PF-13, accounting and Task Node on September 11. See the [main handoff](main-workstreams-2026-09-11.md).
 
 A plan counts toward the limit only when it:
 
@@ -47,9 +50,9 @@ Routine work, bounded fixes, and release records do not consume a plan slot.
 They also cannot introduce new product scope. A product initiative may not be
 reclassified to evade the limit.
 
-Before activation, run the checker and inspect every active plan. If two exist,
+Before activation, run the checker and inspect every active plan. If three exist,
 finish, cancel, or explicitly replace one through the product decision process.
-Never activate a third.
+Never activate a fourth.
 
 ## Activation requirements
 
@@ -63,7 +66,7 @@ activate when it records:
 - scope and non-goals;
 - owner, target release, and exact implementation worktree paths, branches, and
   base commits;
-- optional parallel allocation, integration owner and disjoint work ownership
+- cross-initiative parallel allocation, integration owner and disjoint work ownership
   under the [sprint concurrency rules](../sprints/index.md#bounded-parallel-implementation);
 - useful code references;
 - an upstream-touch record under the [upstream integration contract](upstream-integration.md),
@@ -107,7 +110,7 @@ until the map is complete and the sprint checker passes.
    `status: cancelled`, record the decision, and move it to
    `docs/plans/cancelled/<slug>.md`.
 
-A release record may aggregate either or both active initiatives without
+A release record may aggregate the active initiatives without
 becoming another active plan. A plan cannot be marked completed merely because
 code was merged: all required evidence and the release linkage must be present.
 

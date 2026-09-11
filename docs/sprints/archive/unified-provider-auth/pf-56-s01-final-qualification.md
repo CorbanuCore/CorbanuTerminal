@@ -2,12 +2,12 @@
 sprint_id: "PF-56-S01"
 title: "Unified provider final qualification"
 status: completed
-plan_file: "docs/plans/active/unified-provider-auth.md"
+plan_file: "docs/plans/proposed/unified-provider-auth.md"
 plan_feature: "PF-56"
 execution_order: 15
 owner: "GPT-5.6 Sol high implementation agent"
 parallel_lane: "provider-auth-serial"
-write_scope: "codex-rs/provider-auth/src/auth_flow.rs; codex-rs/provider-auth/src/auth_flow_tests.rs; codex-rs/tui/src/startup_provider.rs; codex-rs/tui/src/chatwidget/provider_model_policy.rs; codex-rs/tui/src/app/event_dispatch.rs; codex-rs/tui/src/app/provider_management_status.rs; codex-rs/tui/src/provider_auth_effect_executor.rs; codex-rs/tui/src/model_catalog.rs; codex-rs/tui/src/model_catalog_tests.rs; codex-rs/tui/tests/suite/multi_provider_onboarding.rs; codex-rs/tui/tests/suite/provider_management.rs; codex-rs/tui/tests/suite/provider_convergence.rs; codex-rs/tui/tests/suite/mod.rs; docs/authentication.md; docs/features/model-providers.md; docs/features/claude-plan-authentication.md; docs/corbanu-product-spec.md; docs/plans/active/unified-provider-auth.md; docs/sprints/current/unified-provider-auth/pf-56-s01-final-qualification.md; qa/provider-auth/pf-56/"
+write_scope: "codex-rs/provider-auth/src/auth_flow.rs; codex-rs/provider-auth/src/auth_flow_tests.rs; codex-rs/tui/src/startup_provider.rs; codex-rs/tui/src/chatwidget/provider_model_policy.rs; codex-rs/tui/src/app/event_dispatch.rs; codex-rs/tui/src/app/provider_management_status.rs; codex-rs/tui/src/provider_auth_effect_executor.rs; codex-rs/tui/src/model_catalog.rs; codex-rs/tui/src/model_catalog_tests.rs; codex-rs/tui/tests/suite/multi_provider_onboarding.rs; codex-rs/tui/tests/suite/provider_management.rs; codex-rs/tui/tests/suite/provider_convergence.rs; codex-rs/tui/tests/suite/mod.rs; docs/authentication.md; docs/features/model-providers.md; docs/features/claude-plan-authentication.md; docs/corbanu-product-spec.md; docs/plans/proposed/unified-provider-auth.md; docs/sprints/current/unified-provider-auth/pf-56-s01-final-qualification.md; qa/provider-auth/pf-56/"
 integration_gate: "PF-56 only: qualify the complete PF-48–PF-55 tree, run the bounded final primary review plus exactly one Kimi 3.0 high external review through Vercel controlled through TMUX (the user-authorized replacement for the superseded Fable OAuth failure), rerun the integrated automated and true-TMUX matrices, exercise disposable TensorCash and Isometric Game worktrees, update finished provider/auth documentation, and record release blockers truthfully. Production fixes or additional paths require a documented literal scope expansion before editing. No fabricated live-account, named-human, platform, benchmark, merge, tag, or release evidence."
 worktree: "/home/pfrpc/repos/worktrees/corbanu-main-f7356a94e0"
 branch: "feat/unified-provider-auth"
@@ -26,7 +26,7 @@ updated: 2026-09-02
 
 ## Plan linkage
 
-- Plan: [Unified provider onboarding and management](../../../plans/active/unified-provider-auth.md).
+- Plan: [Unified provider onboarding and management](../../../plans/proposed/unified-provider-auth.md).
 - Feature: `PF-56`.
 - Acceptance advanced: the complete P1 feature is fit for purpose on the final tree.
 

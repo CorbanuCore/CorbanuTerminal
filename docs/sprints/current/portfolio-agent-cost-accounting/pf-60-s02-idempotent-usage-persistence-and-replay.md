@@ -2,7 +2,7 @@
 sprint_id: "PF-60-S02"
 title: "Idempotent usage persistence and replay"
 status: draft
-plan_file: "docs/plans/proposed/portfolio-agent-cost-accounting.md"
+plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 2
 owner: "Jim Ricketts (proposed)"
@@ -27,9 +27,9 @@ updated: 2026-09-09
 
 ## Plan linkage
 
-- Plan: [Unified agent cost and usage accounting](../../../plans/proposed/portfolio-agent-cost-accounting.md)
+- Plan: [Unified agent cost and usage accounting](../../../plans/active/portfolio-agent-cost-accounting.md)
 - Feature: `PF-60`; acceptance: Replay each fixture twice and after process restart; persisted and reconstructed totals equal the approved fixture exactly.
-- Upstream/allocation: [plan record](../../../plans/proposed/portfolio-agent-cost-accounting.md#native-lifecycle-and-upstream-touch-record).
+- Upstream/allocation: [plan record](../../../plans/active/portfolio-agent-cost-accounting.md#native-lifecycle-and-upstream-touch-record).
 
 ## Code boundaries
 
