@@ -1,5 +1,13 @@
 # Candidate readiness and runtime repair evidence
 
+## Main reconciliation and next handoff gate
+
+[September 10 reconciliation](main-reconciliation-20260910.md) rebases the
+follow-up work onto a combined baseline containing current main and retains the
+security history. Application source is unchanged. The new code-blind functional
+loop has not run; its two additional passes await a review-budget amendment.
+Do not treat the historical results below as clearance for the next human round.
+
 ## September 10 Mac superseding note
 
 The Mac launcher now targets the [Keychain repair package](macos-keychain-20260910.md).
