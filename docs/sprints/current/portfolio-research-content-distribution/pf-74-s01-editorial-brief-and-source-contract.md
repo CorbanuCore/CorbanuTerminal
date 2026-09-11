@@ -14,7 +14,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "none"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
 # PF-74-S01 — Editorial brief and source contract
@@ -51,7 +51,8 @@ updated: 2026-09-09
 
 ## Remaining
 
-- [ ] Select one trader-relevant topic with Alex; define audience, thesis question, counterthesis and desired Terminal learning outcome.
+- [ ] Select one bounded exemplar from the September 10 register with its owner: Travis/SSD; Alex/materials-robotics; Alex/Apple-hedge. Confirm timing/budget and private-memo versus editorial audience; no automatic dispatch of all three.
+- [ ] Define thesis/counterthesis, rejection criteria and Terminal learning outcome; Apple research must quantify the local-AI-beneficiary counterargument and allow no trade.
 - [ ] Specify approved primary sources, dates, licensing, material-claim ledger and conflict disclosures.
 - [ ] Write acceptance and publication authority criteria before drafting.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.

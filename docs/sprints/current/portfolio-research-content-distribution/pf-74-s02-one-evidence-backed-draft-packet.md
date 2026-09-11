@@ -14,7 +14,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-74-S01"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
 # PF-74-S02 — One evidence-backed draft packet
@@ -52,7 +52,7 @@ updated: 2026-09-09
 ## Remaining
 
 - [ ] Research using current primary sources and record conflicting evidence; no factual claim from model memory alone.
-- [ ] Draft one article/demo outline and supporting reproducible analysis; separate factual claims, interpretations and uncertainty.
+- [ ] Draft the one S01-selected private research memo or article/demo outline with reproducible analysis; separate facts, interpretations, valuation assumptions and uncertainty. Other call tickets remain separately owned.
 - [ ] Verify every shown Terminal capability against a released candidate; retain source timestamps and corrections.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 

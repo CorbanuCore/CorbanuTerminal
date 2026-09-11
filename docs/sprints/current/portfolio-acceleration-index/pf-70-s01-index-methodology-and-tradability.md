@@ -1,6 +1,6 @@
 ---
 sprint_id: "PF-70-S01"
-title: "Index methodology and tradability"
+title: "Existing prototype and index API contract"
 status: draft
 plan_file: "docs/plans/proposed/portfolio-acceleration-index.md"
 plan_feature: "PF-70"
@@ -12,23 +12,23 @@ integration_gate: "UNALLOCATED"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-68-S03"
+depends_on: "none"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
-# PF-70-S01 — Index methodology and tradability
+# PF-70-S01 — Existing prototype and index API contract
 
 ## Execution mandate
 
-- Deliver: docs/research/acceleration-index/methodology.md; All constituent and weight decisions are deterministic given a dated input set.
+- Deliver: docs/research/acceleration-index/methodology.md; inventory the existing prototype and freeze a general-purpose index API contract, including methodology and replay claims to test.
 - Excludes: Trading, launching tokens, claiming neutrality without a defined hedge, or inventing Alex's holdings and weights.
 - Budget proposal: 0.5–2 analyst-days after inputs are available; not a commitment. Stop and re-slice if the bound is exceeded.
 
 ## Plan linkage
 
-- Plan: [Algorithmic acceleration index paper design](../../../plans/proposed/portfolio-acceleration-index.md)
-- Feature: `PF-70`; acceptance: All constituent and weight decisions are deterministic given a dated input set.
+- Plan: [Index-creation API, replayability and creator ecosystem](../../../plans/proposed/portfolio-acceleration-index.md)
+- Feature: `PF-70`; acceptance: existing pipeline ownership and bounded request/result/error/recovery contract are explicit; no unsupported determinism promise.
 - Upstream/allocation: [plan record](../../../plans/proposed/portfolio-acceleration-index.md#native-lifecycle-and-upstream-touch-record).
 
 ## Code boundaries
@@ -40,7 +40,7 @@ updated: 2026-09-09
 ## Preconditions
 
 - [ ] Plan active after explicit authority decision; global WIP and occupied lanes reconciled.
-- [ ] Dependencies completed and archived; Alex chooses objective, universe, weights and whether any hedge is part of the hypothesis; verified stock-access evidence is required.
+- [ ] Alex supplies prototype/cache/price-pipeline coordinates, read permissions and data rights; approve a sample objective/universe without requiring live stock access.
 - [ ] Exact worktree/branch/40-character base match plan; literal scopes and receiving owner are allocated.
 - [ ] Inputs, disclosure rights and spend/time limits approved; external writes and live financial actions remain excluded.
 - [ ] Resolve exact changed files, native compatibility and nonempty test commands before any code sprint starts.
@@ -52,13 +52,16 @@ updated: 2026-09-09
 ## Remaining
 
 - [ ] Obtain Alex's intended thesis/universe; distinguish proposed long-only index and optional hedge hypothesis.
+- [ ] Inspect the existing index/SEC/transcript/price code, commits and licenses; identify reusable components and gaps before proposing new code.
+- [ ] Define create/retrieve/status/cancel behavior, identity, request ID, input schema, cost ceiling, failures, versioning and retention; resolve exact owning repository and planned code/test paths.
+- [ ] Specify hashed cached input packets, model/prompt/runtime/output provenance and the desired replay guarantee; public IPFS upload needs separate rights/approval.
 - [ ] Define inclusion, weighting, rebalance, corporate actions, delisting and missing-data rules.
-- [ ] Consume PF-68 instrument diligence; record exposure gaps and unavailable names rather than substitute silently.
+- [ ] Record exposure/access unknowns without blocking the API contract on PF-68; add stock-access diligence before any tradability claim.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 
 ## Verification
 
-- [ ] Focused: Two independent calculations reconstruct one sample rebalance exactly.
+- [ ] Focused: Walk valid/invalid/duplicate/interrupted API requests and one sample rebalance against the contract; reproducibility itself is measured in S02.
 - [ ] Integration: from repo root, `python3 docs/plans/check.py; python3 docs/sprints/check.py`; `git diff --check`.
 - [ ] Independently inspect source provenance, calculations and the plan's success/failure/recovery table; document-only checks do not qualify product UI.
 - [ ] Record reviewer, artifact digest, expected versus actual results and observed cases; identify automation as not applicable when none ran. Never invent a test count or pass.

@@ -14,7 +14,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-75-S03"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
 # PF-75-S04 — Two-week pilot operating decision
@@ -53,6 +53,7 @@ updated: 2026-09-09
 
 - [ ] Compare rehearsal results with one-hour review capacity and current WIP; do not add two builders on top of occupied lanes.
 - [ ] Recommend native-as-is, one bounded missing adapter or stop; any scheduler replacement requires separate product approval.
+- [ ] Name the native/adapter ownership seam, coverage gaps, stable retry policy and exact Task Node action/account/consent gate; keep writeback disabled until a separately authorized live acceptance passes.
 - [ ] Propose a two-week schedule and criteria: zero accepted seeded critical defects, no unauthorized external writes, <=60 daily review minutes on at least four of five observed days.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 

@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Read-only checks for this fixed draft portfolio; complements lifecycle checkers."""
+import argparse
 import hashlib
 import json
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--expected-sprints", type=int, default=50)
+args = parser.parse_args()
 plans = sorted(ROOT.glob("docs/plans/proposed/portfolio-*.md"))
 sprints = sorted(ROOT.glob("docs/sprints/current/portfolio-*/*.md"))
 extras = [
@@ -73,7 +77,7 @@ for path in files:
             continue
         if not (path.parent / target).resolve().exists():
             errors.append(f"{path}: broken link {link}")
-if len(plans) != 16 or len(sprints) != 50:
+if len(plans) != 16 or len(sprints) != args.expected_sprints:
     errors.append("incorrect plan/sprint count")
 if {sid[:5] for sid in ids} != {f"PF-{n}" for n in range(60, 76)}:
     errors.append("unexpected feature IDs")

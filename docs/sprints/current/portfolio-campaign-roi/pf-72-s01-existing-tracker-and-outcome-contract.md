@@ -12,9 +12,9 @@ integration_gate: "UNALLOCATED"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-60-S01"
+depends_on: "none"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
 # PF-72-S01 — Existing tracker and outcome contract
@@ -51,9 +51,9 @@ updated: 2026-09-09
 
 ## Remaining
 
-- [ ] Request the actual tracker location/schema from Alex; inspect only authorized surfaces and stop rather than invent an API.
+- [ ] Inspect native `tasknode-session/src/tracker.rs`, `chatwidget/campaign_tracker.rs`, `cli/src/tasknode_cmd.rs` and September 7 tracker QA; ask Alex only for unresolved backend/operator coordinates and export permission.
 - [ ] Define outcome versus activity, attribution window, accepted evidence, reversals and unknown-cost handling.
-- [ ] Map native Task Node/run IDs and PF-60 cost semantics to existing fields; minimize exported context.
+- [ ] Map native Task Node/run IDs and outcome fields; document missing cost semantics for S02 rather than block basic capture/mapping on PF-60. Reuse PF-75's operational boundary and minimize exported context.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 
 ## Verification

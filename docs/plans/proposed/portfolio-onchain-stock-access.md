@@ -51,6 +51,13 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 ## Scope
 
+Latest-call follow-up (00:00–02:09 and 45:00–46:07): PF-68-S01 adds an
+entity/individual eligibility and onboarding-requirements matrix, available
+instrument inventory, minimums, fees and liquidity, all verified from current
+primary sources. The call's numbers and vendor names are leads, not facts.
+No account/entity is opened. PF-70 can design and test a non-trading index API
+without this plan; any later tradability/distribution claim needs its diligence.
+
 - In: Venue and instrument diligence; Read-only user and risk journey; Wrapper economics and launch gate.
 - Out: Opening accounts/entities, trading, signing, deposits, evading eligibility or claiming tokenized exposure equals shareholder ownership.
 

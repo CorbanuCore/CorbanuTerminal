@@ -14,7 +14,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "none"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
 # PF-68-S01 — Venue and instrument diligence
@@ -53,6 +53,8 @@ updated: 2026-09-09
 
 - [ ] Research current primary Felix/Ondo and relevant venue/instrument materials; verify exact products rather than assume transcript names are current.
 - [ ] Record legal instrument, pricing source, trading hours, fees/spread, liquidity, custody, corporate actions, redemption and user eligibility.
+- [ ] Add individual/entity eligibility, jurisdiction, onboarding documents, instrument inventory, minimums and access lead times; date primary sources and mark call-only claims unverified.
+- [ ] Separate read-only index construction from executable instrument access; do not block PF-70's API contract or imply that a candidate index is tradable.
 - [ ] Prepare questions for qualified counsel and Alex; no account actions or contact.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 

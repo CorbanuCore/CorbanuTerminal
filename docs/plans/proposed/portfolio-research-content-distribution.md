@@ -53,6 +53,15 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 ## Scope
 
+Latest-call assignments are recorded in the [research ticket register](../call-followup-2026-09-10.md#research-ticket-register):
+Travis owns SSD research; Alex owns materials/robotics and Apple/hedge research.
+These are meeting-assigned topics, not newly assigned implementation owners.
+All tickets remain not started. S01 selects one bounded exemplar with its owner;
+S02 produces one private memo or draft packet, not all three by implication.
+Use dated primary evidence, explicit countertheses and a no-trade/no-publication
+option. Additional agent assistance requires its own assignment; no fourth
+product initiative or new scheduler job is created by these tickets.
+
 - In: Editorial brief and source contract; One evidence-backed draft packet; Human review and distribution decision.
 - Out: Publishing, investment recommendations tailored to the user, scraping restricted data without rights, growth spam or claims about unshipped features.
 

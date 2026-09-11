@@ -140,6 +140,13 @@ Proposed accountable owner reviews the exact artifact/candidate; Travis or named
 
 ## Documentation
 
+Latest-call follow-up (06:16–06:40): PF-64-S02 defines an owner and update
+trigger for Corbanu API docs covering inference, deep research, newly qualified
+models and capabilities. Inventory the actual website/docs repository before
+editing; check examples and prices against the accepted API contract. Each
+delivery sprint owns its own verified docs (including PF-70-S04); this maintenance
+task neither blocks that delivery nor publishes unfinished features.
+
 Research outputs stay under the declared research/QA paths. Finished-feature docs change only after qualification and name the verified candidate and product-spec citation. Unimplemented possibilities remain proposals.
 
 ## Dependencies, decisions, and blockers

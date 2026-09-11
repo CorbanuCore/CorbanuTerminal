@@ -51,6 +51,13 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 ## Scope
 
+September 10: exchange applicable results with PF-70-S02's replayability
+experiment, but do not equate private inference, verifiable execution, saved-output
+replay and bit-identical fresh inference. PF-70 owns the index experiment;
+PF-65 keeps its privacy threat model. Confirm ambiguous technology names,
+licensing and exact runtime before experimentation. Neither initiative implies
+hardware rental, public IPFS publication or regulatory clearance.
+
 - In: Threat model and evidence review; One bounded reproducible experiment; Feasibility and integration decision.
 - Out: Privacy guarantees, proprietary training data, production deployment or assuming a named technology works from the conversation alone.
 

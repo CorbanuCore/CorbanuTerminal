@@ -14,7 +14,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "none"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
 # PF-75-S01 — Native capability and authority contract
@@ -52,6 +52,12 @@ updated: 2026-09-09
 ## Remaining
 
 - [ ] Map existing orchestration, mailbox/resume, worktree allocation and Task Node evidence surfaces; reproduce current integration gaps read-only.
+- [ ] Inspect `tasknode_cmd.rs`, shared session recovery/client/commands, TUI `tasknode_menu.rs`/`campaign_tracker.rs` and encrypted tracker outbox at the pinned source; locate the existing operator with its owner.
+- [ ] Freeze manager-owned initiative/sprint/task/run/machine/commit mappings; distinguish execution, progress, submitted evidence, human acceptance and server verification/reward.
+- [ ] Inventory TUI, Desktop, standalone CLI and remote-worker capture; `observed_tui` plus empty task IDs is not complete cross-machine attribution.
+- [ ] Reconcile the separate goal-only adapter's auth/outbox ownership; native CLI first where supported, thin adapter only for proven gaps; never invent a `tasknode progress` command.
+- [ ] Specify one private HTML publisher, half-hour source/publication freshness, stale/blocked delivery, rendered sprint/human-test links and independent worker reports; no PF-60 dependency for basic visibility.
+- [ ] Define stable retry IDs and uncertain-write reconciliation, scoped write policy and explicit enrollment/sharing consent; do not pass broad publisher credentials to workers.
 - [ ] Select an already qualified positive recovery journey on the pinned candidate and link its evidence for S02; if unavailable, stop calibration setup or declare the receiving auth prerequisite after baseline reconciliation. PF-75 does not repair auth.
 - [ ] Define planner, builder, independent tester, reviewer and human roles; distinguish task state, review findings and actual authorization.
 - [ ] Specify two-builder ceiling within the global three reserved-sprint limit, a review queue cap of two and at most three daily human decisions.

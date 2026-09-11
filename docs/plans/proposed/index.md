@@ -11,7 +11,8 @@ slot and do not authorize implementation.
 ## September 9 transcript portfolio
 
 The [portfolio map](../portfolio-2026-09-09.md) covers Alex's product discussion
-and adjacent/enabling ideas. All 16 proposals and 50 sprints below remain draft.
+and adjacent/enabling ideas. After the [September 10 follow-up](../call-followup-2026-09-10.md),
+all 16 proposals and 52 sprints below remain draft.
 The [September 10 scrum packet](../scrum-2026-09-10.md) records the receiving
 `main` baseline and remaining activation decisions. No new active slot or worker
 allocation is implied.
@@ -28,7 +29,7 @@ allocation is implied.
 | [Real-time domain fine-tuning feasibility](portfolio-domain-finetuning.md) | P2 proposed | Domain-model research lead (assignment pending) | PF-67; 3 draft sprints; decision |
 | [On-chain stock access and broker-wrapper feasibility](portfolio-onchain-stock-access.md) | P2 proposed | Alex Good (product/commercial lead, proposed) | PF-68; 3 draft sprints; decision |
 | [Cash management and basis-strategy paper validation](portfolio-cash-basis-product.md) | P2 proposed | Alex Good (strategy owner, proposed) | PF-69; 3 draft sprints; decision |
-| [Algorithmic acceleration index paper design](portfolio-acceleration-index.md) | P2 proposed | Alex Good (index owner, proposed) | PF-70; 3 draft sprints; decision |
+| [Index-creation API, replayability and creator ecosystem](portfolio-acceleration-index.md) | P2 proposed | Alex Good (index owner, proposed) | PF-70; 5 draft sprints; gated API candidate / creator decision |
 | [Tokenized options-basket feasibility](portfolio-options-basket.md) | P2 proposed | Alex Good (financialization lead, proposed) | PF-71; 3 draft sprints; decision |
 | [Campaign Tracker and agent ROI integration](portfolio-campaign-roi.md) | P2 proposed | Alex Good (campaign owner, proposed) | PF-72; 3 draft sprints; pilot |
 | [Text-improvement harness qualification](portfolio-text-improvement.md) | P2 proposed | Editorial workflow owner (assignment pending) | PF-73; 3 draft sprints; pilot |

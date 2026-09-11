@@ -98,8 +98,8 @@ All records belong to the single feature **PF-72**. Dependencies are hard prereq
 
 | Sprint | Record / outcome | Depends on | Planned output | Evidence |
 | --- | --- | --- | --- | --- |
-| PF-72-S01 | [Existing tracker and outcome contract](../../sprints/current/portfolio-campaign-roi/pf-72-s01-existing-tracker-and-outcome-contract.md) | PF-60-S01 | docs/research/campaign-roi/contract.md | pending |
-| PF-72-S02 | [Offline attribution and import fixture](../../sprints/current/portfolio-campaign-roi/pf-72-s02-offline-attribution-and-import-fixture.md) | PF-72-S01 | docs/research/campaign-roi/fixture.md | pending |
+| PF-72-S01 | [Existing tracker and outcome contract](../../sprints/current/portfolio-campaign-roi/pf-72-s01-existing-tracker-and-outcome-contract.md) | none | docs/research/campaign-roi/contract.md | pending |
+| PF-72-S02 | [Offline attribution and import fixture](../../sprints/current/portfolio-campaign-roi/pf-72-s02-offline-attribution-and-import-fixture.md) | PF-72-S01, PF-60-S01 | docs/research/campaign-roi/fixture.md | pending |
 | PF-72-S03 | [Native integration decision and pilot handoff](../../sprints/current/portfolio-campaign-roi/pf-72-s03-native-integration-decision-and-pilot-handoff.md) | PF-72-S02 | docs/research/campaign-roi/decision.md | pending |
 
 ## Acceptance flows
@@ -145,6 +145,8 @@ Proposed accountable owner reviews the exact artifact/candidate; Travis or named
 Research outputs stay under the declared research/QA paths. Finished-feature docs change only after qualification and name the verified candidate and product-spec citation. Unimplemented possibilities remain proposals.
 
 ## Dependencies, decisions, and blockers
+
+- September 10: PF-75 owns operational task/run/machine mapping and native recovery/capture qualification. Reuse `tasknode_cmd.rs`, `tasknode-session/src/tracker.rs`, `chatwidget/campaign_tracker.rs` and the September 7 tracker QA. S01 can inventory fields before accounting; only S02's spend-derived attribution requires PF-60-S01. See the [native boundary](../call-followup-2026-09-10.md#native-task-node-boundary).
 
 - Alex identifies the existing tracker/schema and allowed export; use PF-60 accounting definitions before any spend-derived ROI.
 - Before activation: reconcile canonical worktree/release, inherited ledger errors and active slots. The [three-initiative operating-model transition](../scrum-2026-09-10.md#operating-model) is separate from this draft publication; follow the receiving policy until it lands.

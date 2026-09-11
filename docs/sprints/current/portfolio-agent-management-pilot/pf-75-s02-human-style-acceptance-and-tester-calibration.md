@@ -14,7 +14,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-75-S01"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
 # PF-75-S02 — Human-style acceptance and tester calibration
@@ -56,6 +56,9 @@ updated: 2026-09-09
 - [ ] Write user-only journeys for the four seeded negative cases and the S01-selected qualified positive control. Expired-login negatives test defect detection; they do not qualify unfinished auth.
 - [ ] Separate fixture operator from black-box tester; forbid shell repair, hidden profile edits and reading implementation to find recovery controls.
 - [ ] Seed unrecoverable login, silently substituted model, double-counted spend and stale-binary evidence; require tester rejection of each before pilot.
+- [ ] Add Task Node cases for expired login, pending relink/cancel, failed replacement and restart; preserve usable active state and recover only through supported controls.
+- [ ] Add offline/duplicate/uncertain-write replay, wrong profile/account/task mapping, revoked sharing, missing capture and stale dashboard cases; no false completion or hidden credential repair.
+- [ ] Define expected progress/evidence/verification states and safe stop points for each case; fixtures must not post to production or mutate real grants.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 
 ## Verification

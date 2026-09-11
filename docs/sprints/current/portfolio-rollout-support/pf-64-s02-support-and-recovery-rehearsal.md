@@ -14,7 +14,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-64-S01"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
 # PF-64-S02 — Support and recovery rehearsal
@@ -54,6 +54,8 @@ updated: 2026-09-09
 - [ ] Write first-line support scripts for login expiry, account confusion, outage, payments and abandoned sessions.
 - [ ] Tabletop with one tester limited to documented controls and a separate fixture operator; record missing recovery paths.
 - [ ] Define severity, escalation, response coverage and stop-enrollment thresholds; route defects to existing feature owners.
+- [ ] Inventory the Corbanu API docs/page and owning repository; propose a docs owner, release/model-change update trigger and stale-doc escalation, without guessing external paths or publishing.
+- [ ] Define example/auth/error/price/version checks for inference, deep research and new capabilities; PF-70 delivery retains responsibility for its own verified API docs.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 
 ## Verification

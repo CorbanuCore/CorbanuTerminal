@@ -12,9 +12,9 @@ integration_gate: "UNALLOCATED"
 worktree: "UNALLOCATED"
 branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
-depends_on: "PF-72-S01"
+depends_on: "PF-72-S01, PF-60-S01"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
 # PF-72-S02 — Offline attribution and import fixture
@@ -52,6 +52,7 @@ updated: 2026-09-09
 ## Remaining
 
 - [ ] Create a synthetic/redacted export and deterministic transformation specification using existing tracker fields.
+- [ ] Consume accepted PF-60-S01 measured/estimated/unknown cost semantics; unverified activity, missing capture and unknown spend never become numeric ROI.
 - [ ] Exercise duplicate task IDs, parent/child costs, delayed billing, rejected work and corrected outcomes.
 - [ ] Demonstrate idempotent replay and a digest-only evidence link; write no production tracker records.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.

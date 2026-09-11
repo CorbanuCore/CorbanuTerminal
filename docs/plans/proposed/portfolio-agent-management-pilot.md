@@ -81,6 +81,26 @@ No worktree or worker slot is reserved. Before readiness, confirm actual owner, 
 | `codex-rs/core/src/agent/registry.rs` | Existing boundary to inspect/reuse; not a claim that this feature already exists |
 | `codex-rs/tasknode-session/src/lib.rs` | Existing boundary to inspect/reuse; not a claim that this feature already exists |
 | `docs/tmuxHarness.md` | Existing boundary to inspect/reuse; not a claim that this feature already exists |
+| `codex-rs/cli/src/tasknode_cmd.rs` | Native JSON task lifecycle, evidence preflight and returned lifecycle state |
+| `codex-rs/tasknode-session/src/recovery.rs`, `client.rs`, `commands.rs` | Shared scoped login/client and durable task-request recovery |
+| `codex-rs/tasknode-session/src/tracker.rs` | Existing encrypted Campaign Tracker outbox |
+| `codex-rs/tui/src/chatwidget/tasknode_menu.rs`, `campaign_tracker.rs` | Human controls, opt-in TUI capture and explicit coverage limits |
+
+## September 10 native integration amendment
+
+The [call follow-up](../call-followup-2026-09-10.md#native-task-node-boundary)
+records the inspected native interfaces and the required mapping, lifecycle,
+capture-coverage and recovery contract. S01 specifies those boundaries; S02
+freezes user-only tests; S03 rehearses them dry-run; S04 decides whether one
+bounded missing adapter deserves an implementation amendment. No second login
+store, tracker or dispatcher is assumed. Basic operational visibility has no
+PF-60/ROI prerequisite. PF-72 consumes attributable outcomes later.
+
+The HTML map remains a private read-only projection with a single publisher,
+approximately half-hour freshness, machine/coverage labels, blocker and agent
+logs, rendered sprint descriptions and human-test links. An existing external
+goal-only adapter must be reconciled, not treated as absent or as a full task
+lifecycle client. Existing operator code/location must be pinned before reuse.
 
 Research/artifact paths in the sprint table are planned files, not existing implementations. External harness/research locations must be identified by the owner; absence blocks that sprint rather than licensing a guessed rebuild.
 

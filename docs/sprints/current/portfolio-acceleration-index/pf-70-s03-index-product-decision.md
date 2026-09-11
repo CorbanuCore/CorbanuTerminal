@@ -14,7 +14,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-70-S02"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
 # PF-70-S03 — Index product decision
@@ -27,7 +27,7 @@ updated: 2026-09-09
 
 ## Plan linkage
 
-- Plan: [Algorithmic acceleration index paper design](../../../plans/proposed/portfolio-acceleration-index.md)
+- Plan: [Index-creation API, replayability and creator ecosystem](../../../plans/proposed/portfolio-acceleration-index.md)
 - Feature: `PF-70`; acceptance: The next step has a defined audience and authority boundary, or the idea is parked.
 - Upstream/allocation: [plan record](../../../plans/proposed/portfolio-acceleration-index.md#native-lifecycle-and-upstream-touch-record).
 
@@ -54,6 +54,9 @@ updated: 2026-09-09
 - [ ] Summarize thesis evidence, tracking error, implementation gaps, economic costs and reasons to reject.
 - [ ] Separate research publication, paper portfolio and potential financial product as distinct future scopes.
 - [ ] Obtain Alex/Travis decision and legal review requirements for distribution; no launch.
+- [ ] Approve or reject general-purpose API delivery using S01/S02; amend product scope/spec before readiness, retaining creator implementation/payouts as excluded.
+- [ ] Freeze exact owning repository/commit, paths/tests, API identity/price/budget/retry rules, supported replay guarantees and feature flag; record off-by-default entry-point enforcement and rollback.
+- [ ] Allocate S04 only after named implementation/independent acceptance owners, required API/TUI/live-repository tests and release/benchmark applicability are resolved; otherwise leave it draft.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 
 ## Verification

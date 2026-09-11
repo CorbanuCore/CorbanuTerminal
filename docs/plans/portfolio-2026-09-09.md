@@ -12,9 +12,9 @@ outside this merge and is not an active plan on this receiving baseline.
 
 ## Read this first
 
-The recording yields **17 workstreams**: security/recoverable credentials already has active owners; the other **16 proposals contain 50 new single-feature draft sprints (PF-60 through PF-75)**. The adjacent ideas are included, but not silently promoted into Alex's firm requirements.
+The original recording yielded **17 workstreams**: security/recoverable credentials already has active owners. With the [September 10 follow-up](call-followup-2026-09-10.md), the other **16 proposals contain 52 single-feature draft sprints (PF-60 through PF-75)**. Two added PF-70 drafts cover the index API candidate and a later creator decision; research tickets do not create more initiatives.
 
-These are not 50 promises to implement. Delivery plans specify bounded implementation and qualification; uncertain ideas specify the research, paper validation and human decisions needed to make implementation plannable. A no-go is a valid research outcome. An unknown provider, buyer, instrument, data right or existing harness is a hard gate, not permission for an agent to invent one.
+These are not 52 promises to implement. Delivery plans specify bounded implementation and qualification; uncertain ideas specify the research, paper validation and human decisions needed to make implementation plannable. A no-go is a valid research outcome. An unknown provider, buyer, instrument, data right or existing harness is a hard gate, not permission for an agent to invent one.
 
 The proposed priorities and effort ranges are planning hypotheses. Existing P0 security and market-data commitments retain precedence. Current source state must be reconciled before dispatch.
 
@@ -42,16 +42,16 @@ The proposed priorities and effort ranges are planning hypotheses. Existing P0 s
 | PF-67 | [Real-time domain fine-tuning feasibility](proposed/portfolio-domain-finetuning.md) | Research | 3 | Evidence / go-no-go | 02:14:53–02:18:00 |
 | PF-68 | [On-chain stock access and broker-wrapper feasibility](proposed/portfolio-onchain-stock-access.md) | Financial research | 3 | Evidence / go-no-go | 01:00:25–01:03:37 |
 | PF-69 | [Cash management and basis-strategy paper validation](proposed/portfolio-cash-basis-product.md) | Financial research | 3 | Evidence / go-no-go | 01:24:37–01:31:00; 02:26:45–02:28:15 |
-| PF-70 | [Algorithmic acceleration index paper design](proposed/portfolio-acceleration-index.md) | Financial research | 3 | Evidence / go-no-go | 02:28:15–02:31:12 |
+| PF-70 | [Index-creation API, replayability and creator ecosystem](proposed/portfolio-acceleration-index.md) | API / financial research | 5 | Gated API candidate / creator decision | Earlier 02:28:15–02:31:12; latest 02:09–06:16 |
 | PF-71 | [Tokenized options-basket feasibility](proposed/portfolio-options-basket.md) | Financial research | 3 | Evidence / go-no-go | 01:41:00–01:46:46 |
 | PF-72 | [Campaign Tracker and agent ROI integration](proposed/portfolio-campaign-roi.md) | Adjacent | 3 | Evidence / pilot decision | 01:31:00–01:38:00 |
 | PF-73 | [Text-improvement harness qualification](proposed/portfolio-text-improvement.md) | Adjacent | 3 | Evidence / pilot decision | 01:38:00–01:39:36 |
 | PF-74 | [Stock research and content distribution workflow](proposed/portfolio-research-content-distribution.md) | Adjacent | 3 | Evidence / pilot decision | Research/content discussion across the recording; 01:51:57–01:57:29 adoption context |
 | PF-75 | [Native agent management and independent acceptance pilot](proposed/portfolio-agent-management-pilot.md) | Adjacent / enabling | 4 | Evidence / pilot decision | User's management request; Alex 01:46:46–01:49:00 and 02:25:25–02:26:45 |
 
-The main Terminal themes are security, accounting, backend coherence, referrals, benchmarking and rollout/support. The three research bets are private inference, enterprise private Terminal and domain adaptation. Four financial concepts stay paper-only. Campaign ROI, text improvement, research/content distribution and management/QA are adjacent/enabling.
+The main Terminal themes are security, accounting, backend coherence, referrals, benchmarking and rollout/support. The three research bets are private inference, enterprise private Terminal and domain adaptation. PF-68/PF-69/PF-71 stay research/paper-only; PF-70 now plans an explicitly gated, non-trading API candidate. Campaign ROI, text improvement, research/content distribution and management/QA are adjacent/enabling.
 
-PF-74 is an inferred operational packaging of the research/distribution discussion, not a verbatim new feature request. PF-75 primarily responds to the user's workload problem. Validate priority with Alex before either receives a lane.
+PF-74's workflow is an inferred packaging, while its latest-call research topics have explicit meeting owners in the follow-up register. PF-75 primarily responds to the user's workload problem. Validate product priority with Alex before either receives a lane.
 
 ## Existing work: reuse and reconciliation, not duplication
 
@@ -86,13 +86,14 @@ Every plan is serial by default. Each current sprint links one feature, a predec
 | Prerequisite | Enables | Why |
 | --- | --- | --- |
 | Reconciled canonical branch, active slots and existing auth/security state | Any executable draft | Prevent stale baselines, duplicate work and allocations beyond the receiving policy |
-| PF-60-S01 accounting contract | PF-72-S01 campaign contract | Agree measured/estimated/unknown costs before computing ROI |
+| PF-60-S01 accounting contract | PF-72-S02 spend-derived attribution fixture | Agree measured/estimated/unknown costs before computing ROI; not a prerequisite for S01 or PF-75 operational visibility |
 | PF-65-S03 private-inference decision | PF-66-S02 enterprise demonstration brief | Do not sell privacy stronger than the evaluated boundary |
-| PF-68-S03 stock-access decision | PF-70-S01 acceleration-index methodology | Do not assume planned constituents are accessible instruments |
+| PF-70-S03 API product decision | PF-70-S04 API candidate → S05 optional creator decision | Freeze actual repository, contract, replay claims, flags and acceptance before implementation |
 | PF-75-S01 authority contract | PF-75-S02 tester calibration → S03 rehearsal → S04 operating decision | Prove delegation and acceptance behavior before increasing concurrency |
 | Approved S01 contract and completed predecessor | Each plan's later sprints | Resolve unknown paths, inputs, thresholds, budget and test commands before readiness |
 
-No hard dependency is added merely because two subjects are related:
+PF-68-S03 diligence gates future tradability/distribution claims, not PF-70
+API design or non-trading replay experiments. No hard dependency is added merely because two subjects are related:
 accounting does not require rebuilding the Plan backend; the ROI fixture can use
 approved synthetic costs; paper finance research does not require enabling live
 trades; the management rehearsal does not require activating all portfolio plans.
@@ -109,7 +110,7 @@ the seam. Integration tests run on the combined receiving tree, not only each wo
 | First product option | PF-60 accounting; alternatively PF-61 backend audit if current defects make accounting ambiguous | Make spend and existing backend truth inspectable |
 | Then commercial basics | PF-62 referrals and PF-64 support/rollout readiness | Resolve terms and support load before wider marketing |
 | Existing release obligation | Required benchmark cycle from current canonical ledger; PF-63 improves repeatability later | Current benchmark gates are not deferred behind a new proposal |
-| Evidence-only queue | PF-65–PF-74, selected one at a time when ownership and budget exist | Run cheap kill tests; retain only ideas with supporting evidence |
+| Evidence-first queue | PF-65–PF-74, selected one at a time when ownership and budget exist | Run cheap kill tests; PF-70's API delivery remains blocked behind its explicit S03 decision |
 
 There is no deadline commitment for the new proposals. Research sprints propose
 0.5–2 analyst-days after required inputs arrive, code sprints 2–4 builder-days
@@ -206,4 +207,6 @@ baseline; its manifests are not claims about the receiving main tree.
 Publication QA: `qa/portfolio/2026-09-10-main-integration/` records the scoped
 integration checks and independent review. These repository records are not
 promised as public-site links.
+Latest-call amendment QA: `qa/portfolio/2026-09-10-call-followup/`; the earlier
+50-sprint receipts remain historical, not evidence for these 52-sprint amendments.
 No model review of these documents is product acceptance or a release qualification.

@@ -242,11 +242,13 @@ nav:
                   - "PF-69-S01 — Strategy and risk contract": sprints/current/portfolio-cash-basis-product/pf-69-s01-strategy-and-risk-contract.md
                   - "PF-69-S02 — Reproducible paper and stress evaluation": sprints/current/portfolio-cash-basis-product/pf-69-s02-reproducible-paper-and-stress-evaluation.md
                   - "PF-69-S03 — Personal pilot versus product decision": sprints/current/portfolio-cash-basis-product/pf-69-s03-personal-pilot-versus-product-decision.md
-              - "PF-70 — Algorithmic acceleration index paper design":
+              - "PF-70 — Index API, replayability and creators":
                   - Plan: plans/proposed/portfolio-acceleration-index.md
-                  - "PF-70-S01 — Index methodology and tradability": sprints/current/portfolio-acceleration-index/pf-70-s01-index-methodology-and-tradability.md
-                  - "PF-70-S02 — Historical paper index and stresses": sprints/current/portfolio-acceleration-index/pf-70-s02-historical-paper-index-and-stresses.md
+                  - "PF-70-S01 — Existing prototype and API contract": sprints/current/portfolio-acceleration-index/pf-70-s01-index-methodology-and-tradability.md
+                  - "PF-70-S02 — Replayability, paper index and stresses": sprints/current/portfolio-acceleration-index/pf-70-s02-historical-paper-index-and-stresses.md
                   - "PF-70-S03 — Index product decision": sprints/current/portfolio-acceleration-index/pf-70-s03-index-product-decision.md
+                  - "PF-70-S04 — Flag-gated index API candidate": sprints/current/portfolio-acceleration-index/pf-70-s04-flag-gated-index-api-candidate.md
+                  - "PF-70-S05 — Creator ownership and economics decision": sprints/current/portfolio-acceleration-index/pf-70-s05-creator-ownership-and-economics-decision.md
               - "PF-71 — Tokenized options-basket feasibility":
                   - Plan: plans/proposed/portfolio-options-basket.md
                   - "PF-71-S01 — Instrument, rights and operating model": sprints/current/portfolio-options-basket/pf-71-s01-instrument-rights-and-operating-model.md
@@ -277,6 +279,7 @@ nav:
       - Plans:
           - Plan Process: plans/index.md
           - Alex Scrum — September 10: plans/scrum-2026-09-10.md
+          - Latest Call Amendments — September 10: plans/call-followup-2026-09-10.md
           - Upstream Integration Contract: plans/upstream-integration.md
           - Active Plans: plans/active/index.md
           - P0 Security Levels: plans/active/p0-security-levels.md

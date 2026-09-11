@@ -1,6 +1,6 @@
 ---
 sprint_id: "PF-70-S02"
-title: "Historical paper index and stresses"
+title: "Replayability, paper index and stresses"
 status: draft
 plan_file: "docs/plans/proposed/portfolio-acceleration-index.md"
 plan_feature: "PF-70"
@@ -14,10 +14,10 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-70-S01"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
-# PF-70-S02 — Historical paper index and stresses
+# PF-70-S02 — Replayability, paper index and stresses
 
 ## Execution mandate
 
@@ -27,7 +27,7 @@ updated: 2026-09-09
 
 ## Plan linkage
 
-- Plan: [Algorithmic acceleration index paper design](../../../plans/proposed/portfolio-acceleration-index.md)
+- Plan: [Index-creation API, replayability and creator ecosystem](../../../plans/proposed/portfolio-acceleration-index.md)
 - Feature: `PF-70`; acceptance: Returns, drawdown, exposures and turnover reproduce; each untradable exposure is visible.
 - Upstream/allocation: [plan record](../../../plans/proposed/portfolio-acceleration-index.md#native-lifecycle-and-upstream-touch-record).
 
@@ -52,6 +52,9 @@ updated: 2026-09-09
 ## Remaining
 
 - [ ] Run time-correct approved data through the methodology with fees, turnover, liquidity and instrument-basis costs.
+- [ ] Freeze approved cached transcripts, shares, market caps and prices into a hashed local packet; pin model/prompt/runtime/seed/hardware/output provenance and any safely available replay trace.
+- [ ] Recompute independently and across restart; distinguish deterministic arithmetic, saved-output replay and fresh inference reproducibility. Report exact matches, tolerances and counterexamples; no automatic hardware rental.
+- [ ] Test missing/corrupt packets and changed model/data versions; fail visibly. Confirm the transcript's ambiguous inference-library name with Alex before using it.
 - [ ] Compare to an appropriate declared benchmark; include concentration, stale-price and missing-constituent stresses.
 - [ ] Evaluate any hedge separately with its own assumptions; do not label the whole strategy market-neutral by assertion.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
@@ -59,6 +62,7 @@ updated: 2026-09-09
 ## Verification
 
 - [ ] Focused: Audit look-ahead/survivorship and independently recompute sample weights and returns.
+- [ ] Focused: Record repeated-run input/output digests and unsupported guarantees; neither reproducibility nor a reasoning trace establishes privacy or regulatory clearance.
 - [ ] Integration: from repo root, `python3 docs/plans/check.py; python3 docs/sprints/check.py`; `git diff --check`.
 - [ ] Independently inspect source provenance, calculations and the plan's success/failure/recovery table; document-only checks do not qualify product UI.
 - [ ] Record reviewer, artifact digest, expected versus actual results and observed cases; identify automation as not applicable when none ran. Never invent a test count or pass.

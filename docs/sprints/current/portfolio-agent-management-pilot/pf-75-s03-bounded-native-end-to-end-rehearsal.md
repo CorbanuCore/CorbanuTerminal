@@ -14,7 +14,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-75-S02"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 ---
 
 # PF-75-S03 — Bounded native end-to-end rehearsal
@@ -54,6 +54,9 @@ updated: 2026-09-09
 - [ ] Use a disposable authorized fixture workload, existing native agents and one independent reviewer; no unrelated product implementation.
 - [ ] Exercise worker/coordinator interruption, duplicate handoff, blocked approval, model unavailability and two queued review packets; retain native IDs.
 - [ ] Measure human minutes, rework, escaped seeded defects and spend; use a local dry-run Task Node projection until posting is explicitly approved.
+- [ ] Rehearse mapped native task status and evidence lifecycle against fixtures, duplicate/uncertain-write reconciliation and restart; progress must never imply human/server acceptance.
+- [ ] Compare visible activity against a known action ledger for TUI, CLI, Desktop and remote-worker lanes; record supported/partial/missing coverage, never assume complete capture.
+- [ ] Verify one publisher renders machine/blocker/log/test-plan/sprint links and both timestamps; offline or stale reports remain visible and worker reports never overwrite one another.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 
 ## Verification
