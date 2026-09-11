@@ -470,6 +470,15 @@ isolated. Resolve Desktop source and public-board authority before readiness.
 Planning and kickoff do not launch, offer rewards or waive root release policy.
 See the [beta contract](plans/tasknode-beta-program.md).
 
+Travis's September 11 follow-up, relayed by the PF13/provider-reauth owner,
+adds standalone screenshot/inference QA infrastructure under delivery control:
+an isolated fixture driver, strictly validated typed actions, bounded runs and
+candidate-pinned evidence. Queue it after current delivery-control integration;
+do not reactivate provider-auth or add concurrent work. Model output cannot
+authorize arbitrary shell actions, credential access or a denied computer-use
+surface. Live targets and inference endpoints require separate permission;
+fixture success is not native-product acceptance.
+
 ## Measurement targets
 
 No commercial performance numbers have been supplied. The following metrics must be instrumented, with targets set through the decision rights defined above.

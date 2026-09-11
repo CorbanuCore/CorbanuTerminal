@@ -281,6 +281,7 @@ nav:
                   - "PF-75-S04 — Two-week pilot operating decision": sprints/current/portfolio-agent-management-pilot/pf-75-s04-two-week-pilot-operating-decision.md
           - Sprint Template: sprints/SPRINT_TEMPLATE.md
           - "PF-80 — Task Node delivery control": sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md
+          - "PF-81 — Visual QA harness (draft)": sprints/current/initiative-delivery-control/pf-81-s01-visual-test-harness.md
           - "PF-79 — Desktop beta program":
               - "S01 — Beta channel and test contract": sprints/current/initiative-delivery-control/pf-79-s01-beta-channel-and-test-contract.md
               - "S02 — Public beta pilot": sprints/current/initiative-delivery-control/pf-79-s02-public-beta-pilot.md

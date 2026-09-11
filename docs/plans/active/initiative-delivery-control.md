@@ -23,6 +23,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
     branch: "workstream/tasknode-pf80-s01-20260911"
     base_commit: "295aed26e53b17f919f7199ae1c9748b1b1250ba"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
+    branch: "feat/provider-reauth-health"
+    base_commit: "eb7af932bc8cc859122b5b2dbef223fbd45ea25c"
 ---
 
 # 3. Task Node integration and delivery control
@@ -49,7 +52,9 @@ blockers, machine/run reports and human test plans. Workers cannot self-accept.
 ## Scope
 
 PF-80 owns the internal projection/progress adapter; PF-79 owns the subsequent
-public Desktop beta program. No fourth initiative, automatic merge, release,
+public Desktop beta program. PF-81 owns the queued standalone visual QA harness,
+as requested by Travis through the PF13/provider-reauth owner on September 11.
+No fourth initiative, automatic merge, release,
 reward, financial action or private-recording export is authorized.
 
 PF-80 replaces only the recovery operations source's conflicting PF-76 identity.
@@ -75,7 +80,10 @@ owns only its assigned implementation/research/QA paths and per-run report.
 ## Ownership and implementation worktrees
 
 The first checkout above is the manager, the second the Astra High Task Node
-worker. Fast-forward the worker to the merged planning commit before dispatch;
+worker. The third is a verified **draft-only** PF-81 destination, not a running
+allocation or provider-auth reactivation. Reconcile its then-current HEAD and
+pending work before promotion; [handoff](../visual-test-harness-allocation-2026-09-11.md).
+Fast-forward the Task Node worker to the merged planning commit before dispatch;
 record actual HEAD in the kickoff receipt. No raw HTML, remote images, credentials or private logs in
 the projection. Unknown/stale evidence stays visible. OFF hides discovery and
 denies new work while preserving data and supported recovery.
@@ -97,6 +105,7 @@ authority. [Feature delivery contract](../feature-delivery.md).
 | PF-80 | [S01 native delivery-control integration](../../sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md) | Allocated for post-merge kickoff; port/requalify tooling, offline first-event preparation, then separately authorized live acceptance |
 | PF-79 | [S01 Desktop beta channel/test contract](../../sprints/current/initiative-delivery-control/pf-79-s01-beta-channel-and-test-contract.md) | Draft; depends on PF-80-S01; Desktop source/permissions unresolved |
 | PF-79 | [S02 public beta pilot](../../sprints/current/initiative-delivery-control/pf-79-s02-public-beta-pilot.md) | Draft; depends on S01; no public launch |
+| PF-81 | [S01 bounded screenshot/inference QA harness](../../sprints/current/initiative-delivery-control/pf-81-s01-visual-test-harness.md) | Draft; depends on PF-80-S01; existing PF13 task owns later implementation, no new worker |
 
 ## Acceptance flows
 
@@ -113,11 +122,19 @@ enrolled bulk flush is not a safe one-event qualification. Keep posting OFF
 until the operator authorizes the account/destination/scope and exact payload.
 Beta follows the [detailed contract](../tasknode-beta-program.md): isolated exact
 Desktop candidate, public safe cards, independent testing and a bounded pilot.
+PF-81 is another sequential follow-up, not parallel with PF-80 or beta. Its order
+number does not override dependencies or reserve priority over existing beta
+drafts. The manager chooses one eligible sprint at promotion. Only fixture-driven
+QA and endpoint setup instructions are allocated; live control, deployment and
+inference qualification stay gated by explicit target and data permission.
 
 ## Automated evidence
 
 Focused Python/governance suites, negative HTTP fixtures, retained last-good
 publication and source-provenance checks must pass on the receiving tree.
+PF-81 additionally requires deterministic malformed-action, stale-frame,
+out-of-bounds, budget/cancel and replay tests. Model conclusions remain evidence
+for human review, not self-acceptance; preserve blocked/native-not-run outcomes.
 
 ## True-TUI evidence
 
