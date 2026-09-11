@@ -1,0 +1,21 @@
+team-context-cli-tests.log
+Summary [   1.887s] 10 tests run: 10 passed, 260 skipped
+
+team-context-tui-tests.log
+Summary [   0.085s] 9 tests run: 9 passed, 3979 skipped
+
+team-context-skills-tests.log
+Summary [   0.007s] 5 tests run: 5 passed, 0 skipped
+
+team-context-build.log
+Finished `dev` profile [unoptimized + debuginfo] target(s) in 40.89s
+
+terminal Team Context: passed auth, read-only methods, web parity, account isolation, feature gate, grant revocation and session revocation
+team context smoke ok: counts, Vercel GLM 5.3 Flash, reward fanout, opt-in prompt, revocation
+Disposable test database removed.
+
+
+route auth policy smoke ok: 175 policies cover 152 registered literal paths and 8 modes
+
+
+Formatting, portable skills and backend lint passed. Existing sprint checker errors remain; no new PF-76 errors.

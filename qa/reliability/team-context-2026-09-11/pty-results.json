@@ -1,0 +1,36 @@
+[
+  {
+    "repo": "tensorcash",
+    "version": "corbanu 0.1.42",
+    "ok": true,
+    "checks": [
+      "CLI JSON exact report and authenticated route",
+      "Task Node menu entry",
+      "read-only pager with summaries and counts",
+      "previous-report status",
+      "failure and refresh recovery",
+      "cancel rejects late response",
+      "direct slash command",
+      "restart keeps linked account",
+      "no workspace changes or model calls"
+    ],
+    "mode": "real terminal and keys, synthetic HTTP identity/report"
+  },
+  {
+    "repo": "isometricgame",
+    "version": "corbanu 0.1.42",
+    "ok": true,
+    "checks": [
+      "CLI JSON exact report and authenticated route",
+      "Task Node menu entry",
+      "read-only pager with summaries and counts",
+      "previous-report status",
+      "failure and refresh recovery",
+      "cancel rejects late response",
+      "direct slash command",
+      "restart keeps linked account",
+      "no workspace changes or model calls"
+    ],
+    "mode": "real terminal and keys, synthetic HTTP identity/report"
+  }
+]

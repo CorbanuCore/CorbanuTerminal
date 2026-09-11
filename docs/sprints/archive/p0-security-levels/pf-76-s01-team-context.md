@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-76-S01"
 title: "Expose existing Team Context in Corbanu"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-76"
 execution_order: 100
@@ -39,18 +39,24 @@ CLI tasknode_cmd.rs, TUI tasknode_menu child module and event/slash adapters, se
 
 - [x] User authority, active plan, independent scope and exact worktree recorded.
 
+
+- [x] Add the bridge using the existing collaboration route and authenticated terminal account.
+- [x] Add CLI and TUI report access, explicit states and refresh.
+- [x] Verify auth, grant revocation, CLI JSON, TUI snapshots and scope rejection.
+- [x] Run final formatting, tests, build and keyboard workflows in both default disposable repositories.
+- [x] Deploy the server route and verify `corbanu-debug --yolo`; update docs and evidence.
+
+
 ## Remaining
 
-- [ ] Add the bridge using the existing collaboration route and authenticated terminal account.
-- [ ] Add CLI and TUI report access, explicit states and refresh.
-- [ ] Verify auth, grant revocation, CLI JSON, TUI snapshots and scope rejection.
-- [ ] Run final formatting, tests, build and keyboard workflows in both default disposable repositories.
-- [ ] Deploy the server route and verify `corbanu-debug --yolo`; update docs and evidence.
+None.
 
 ## Verification
 
-- [ ] Backend route and Team Context smoke; `just test -p codex-cli` focused helper tests; `just test -p codex-tui` focused tasknode tests. Final true PTY on the candidate, including failure/recovery, cancellation and restart.
+- [x] Backend route and Team Context smoke; `just test -p codex-cli` focused helper tests; `just test -p codex-tui` focused tasknode tests. Final true PTY on the candidate, including failure/recovery, cancellation and restart.
 
 ## Exit evidence
 
-- [ ] Record source commits, exact commands, live backend evidence, installed binary digest, PTY keys/screens and any remaining limitations in `qa/reliability/team-context-2026-09-11/`. Archive after all Remaining items are verified.
+- [x] Record source commits, exact commands, live backend evidence, installed binary digest, PTY keys/screens and any remaining limitations in `qa/reliability/team-context-2026-09-11/`. Archive after all Remaining items are verified.
+
+Implementation: `721d6f974d`; server `39e051c`, live release 737. [Final evidence](../../../../qa/reliability/team-context-2026-09-11/README.md) includes 24 Rust tests, backend permission checks and true PTY workflows in both default repositories.

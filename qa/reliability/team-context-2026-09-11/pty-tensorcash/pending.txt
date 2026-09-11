@@ -1,0 +1,15 @@
+
+• No previous message to edit.
+
+
+  Task Node Team Context
+  Status: pending · 2 members
+  Showing the previous report while a new one is
+  prepared.
+
+› 1. Read full report      Scroll through shared work
+                           summaries and task counts
+  2. Refresh Team Context  Reload the report and current
+                           sharing permissions
+
+  Press enter to confirm or esc to go back
