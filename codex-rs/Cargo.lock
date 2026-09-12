@@ -4230,7 +4230,7 @@ dependencies = [
 
 [[package]]
 name = "codex-secret-broker-service"
-version = "0.1.38"
+version = "0.1.42"
 dependencies = [
  "codex-keyring-store",
  "codex-secret-broker",
