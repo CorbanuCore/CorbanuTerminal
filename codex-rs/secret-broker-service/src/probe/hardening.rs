@@ -36,7 +36,7 @@ fn ambient_is_empty(status: &str) -> io::Result<bool> {
     Ok(u64::from_str_radix(value, 16).map_err(|_| unavailable())? == 0)
 }
 
-fn descriptor_allowlist() -> io::Result<bool> {
+pub(super) fn descriptor_allowlist() -> io::Result<bool> {
     let mut descriptors = Vec::new();
     // Drop this iterator (and its own descriptor) before probing the observed
     // numbers. No new descriptors/threads are opened during the second phase.
@@ -108,6 +108,14 @@ impl std::fmt::Display for Report {
     }
 }
 
+pub(super) fn single_threaded() -> io::Result<bool> {
+    Ok(fs::read_dir("/proc/self/task")?
+        .take(2)
+        .collect::<io::Result<Vec<_>>>()?
+        .len()
+        == 1)
+}
+
 pub(super) fn inspect() -> io::Result<Report> {
     // These setters affect the caller. Never invoke this function from tests
     // in-process or from any future multi-threaded/root supervisor.
@@ -124,11 +132,7 @@ pub(super) fn inspect() -> io::Result<Report> {
             gid.effective.as_raw(),
             gid.saved.as_raw(),
         ],
-    ) || fs::read_dir("/proc/self/task")?
-        .take(2)
-        .collect::<io::Result<Vec<_>>>()?
-        .len()
-        != 1
+    ) || !single_threaded()?
     {
         return Err(unavailable());
     }

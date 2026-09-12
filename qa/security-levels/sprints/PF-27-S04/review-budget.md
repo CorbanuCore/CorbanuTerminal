@@ -53,3 +53,21 @@ Avoid further opinions once no substantive findings remain; proceed to integrati
 Extension accounting: **2 used / 0 available**. Both processes finished.
 Do not silently retry or erase the nonzero Fable result. The portability
 disposition and integration checkpoint are in probe-20260912/README.md.
+
+## Next launcher stage — additional integrator allowance
+
+After verified main `3e8bf6c95`, manager task
+`01a08522-76a1-7ad1-afe6-ad690d55c0d7` explicitly authorized **up to3 additional
+necessary scoped design/code/evidence passes** for the next launcher allocation
+without waiting for11:25Z. This is a separate +3 extension, not a reset of the
+five scheduled passes or the consumed +2 extension. No installation authority.
+
+Scope: [launcher recipe/identity preparation](launcher-next-20260912.md).
+**2 used / 1 available**; review14 dispatched09:15Z, review15 dispatched09:16Z. Prefer
+the required Astra High and Fable5.1High closeout, keeping the third for a
+concrete repair/evidence need. Do not spend a pass just because it is available.
+
+| Review | Reservation UTC | Model / scope | Outcome / evidence |
+| --- | --- | --- | --- |
+| 14 | 2026-09-12 09:14:49Z | Astra High; launcher recipe/preparation over08a32a80e, Rust tree49d901362418ee11232d70e468cebe84ec37abfb | Exit0, findings[]; launcher-20260912/astra-fourteen.json. |
+| 15 | 2026-09-12 09:16:18Z | Fable5.1High Corbanu/privateTMUX; same source plus completed RTX/TMUX evidence | Exit0, findings[]; launcher-20260912/fable-fifteen.json. |

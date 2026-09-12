@@ -704,6 +704,16 @@ Manager granted +2 scoped reviews without resetting history and cleared a main
 window. Source remains unchanged; qualification is RTX-only, not all-Linux/Bazel
 or native eligibility. No additional unchanged-source review is required.
 
+Implemented allocation: [launcher recipe and post-exec identity preparation](../../../qa/security-levels/sprints/PF-27-S04/launcher-next-20260912.md).
+Same PF27-S04 owner/worktree; distinct principals and exact supplementary groups
+are preserved using a single-threaded trusted child bootstrap with safe nix
+setgroups/setresgid/setresuid calls after exec, not unsafe pre-exec hooks.
+Root manifest/pinned execution, actual supervisor/listener/client wiring and
+privileged installation remain separate. Source `f0b1209e0` passes RTX default3,
+synthetic29, affected356 (2 existing skips), scoped lint/parity/build/TMUX;
+Astra14 and Fable15 both exit0 with no findings. Two of manager's +3 extension
+used, one unused. [Exact evidence and native limits](../../../qa/security-levels/sprints/PF-27-S04/launcher-20260912/README.md).
+
 ## Round-five execution amendment — 2026-09-04
 
 The user authorized these three parallel agents and assigned integration to

@@ -1,0 +1,18 @@
+/home/travis/security-round5/evidence/pf27-launch-20260912/verified/candidate/codex-secret-broker-service; printf "\nproduction-exit=%s\n" "$?"
+bash-5.3$ /home/travis/security-round5/evidence/pf27-launch-20260912/verified/candidate/codex-secret-broker-service; printf "\nproduction-exit=%s\n" "$?"
+credential broker service unavailable: qualified OS bootstrap required
+
+production-exit=78
+bash-5.3$ /home/travis/security-round5/evidence/pf27-launch-20260912/verified/candidate/codex-protected-root-probe --inspect-post-exec; printf "\\nprobe-exit=%s\\n" "$?"
+{"no_new_privileges":true,"nondumpable":true,"keepcaps_disabled":true,"capabilities_empty":true,"ambient_empty":true,"supplementary_group_count":3,"descriptor_allowlist":true,"native_eligible":false}
+
+probe-exit=0
+bash-5.3$ /home/travis/security-round5/evidence/pf27-launch-20260912/verified/candidate/codex-protected-root-probe --open-existing; printf "\\nprobe-native-exit=%s\\n" "$?"
+synthetic probe unavailable: native launch is not implemented
+
+probe-native-exit=78
+bash-5.3$ /home/travis/security-round5/evidence/pf27-launch-20260912/verified/candidate/codex-protected-root-probe --prepare-synthetic-child journal 101 201 204; printf "\nprepare-exit=%s\n" "$?"
+synthetic probe unavailable: post-exec inspection failed
+
+prepare-exit=78
+bash-5.3$

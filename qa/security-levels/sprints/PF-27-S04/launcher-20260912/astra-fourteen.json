@@ -1,0 +1,6 @@
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "No actionable defects found in the provided change bundle. The recipe validation, argument parsing, privilege-drop ordering, failure handling, and feature gating match the stated synthetic-only scope. Review used read-only inspection; no tests or privileged operations were run.",
+  "overall_confidence": 0.91
+}
