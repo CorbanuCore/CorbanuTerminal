@@ -266,3 +266,6 @@ impl Attempt {
 
 #[path = "delivery_send_tests.rs"]
 mod tests;
+
+#[path = "delivery_adapter.rs"]
+mod delivery_adapter;

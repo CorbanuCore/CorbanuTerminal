@@ -227,25 +227,7 @@ impl Client {
         path: &str,
         body: Option<&Value>,
     ) -> Result<Response, ClientError> {
-        static HTTP: OnceLock<Result<reqwest::blocking::Client, String>> = OnceLock::new();
-        let http = HTTP
-            .get_or_init(|| {
-                reqwest::blocking::Client::builder()
-                    .redirect(reqwest::redirect::Policy::none())
-                    .connect_timeout(Duration::from_secs(5))
-                    .timeout(REQUEST_TIMEOUT)
-                    .build()
-                    .map_err(|error| error.to_string())
-            })
-            .as_ref()
-            .map_err(|error| ClientError::Transport(error.clone()))?;
-        let mut request = http.request(method, self.url(path)?);
-        if let Some(token) = &self.token {
-            request = request.bearer_auth(token);
-        }
-        if let Some(body) = body {
-            request = request.json(body);
-        }
+        let request = self.blocking_request(method, path, body)?;
         let response = request.send().map_err(transport_error)?;
         let status = response.status().as_u16();
         let mut bytes = Vec::new();
@@ -257,6 +239,53 @@ impl Client {
             return Err(ClientError::InvalidResponse(status));
         }
         decode_response(status, &bytes)
+    }
+
+    fn blocking_http() -> Result<&'static reqwest::blocking::Client, ClientError> {
+        static HTTP: OnceLock<Result<reqwest::blocking::Client, String>> = OnceLock::new();
+        HTTP.get_or_init(|| {
+            reqwest::blocking::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .connect_timeout(Duration::from_secs(5))
+                .timeout(REQUEST_TIMEOUT)
+                .build()
+                .map_err(|error| error.to_string())
+        })
+        .as_ref()
+        .map_err(|error| ClientError::Transport(error.clone()))
+    }
+
+    fn blocking_request(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&Value>,
+    ) -> Result<reqwest::blocking::RequestBuilder, ClientError> {
+        let mut request = Self::blocking_http()?.request(method, self.url(path)?);
+        if let Some(token) = &self.token {
+            request = request.bearer_auth(token);
+        }
+        if let Some(body) = body {
+            request = request.json(body);
+        }
+        Ok(request)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn build_fixture_request(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&Value>,
+    ) -> Result<reqwest::blocking::Request, ClientError> {
+        self.blocking_request(method, path, body)?
+            .build()
+            .map_err(transport_error)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn decode_fixture(status: u16, bytes: &[u8]) -> Result<Response, ClientError> {
+        decode_response(status, bytes)
     }
 }
 
