@@ -1,5 +1,16 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 10:10 UTC, September12
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Boole is implementing C1 fixture activation/admission/retained reads at clean launch4642785db. Explicit setup state preserves all A/B assertions; C2 atomic cleanup/deletion is the fixed next increment, S03 still dependent.
+- [TaskNode PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): corrected immutable feed72854ec77 is reviewed clean and integrated at9a31f3aac;111combinedPython tests pass25.362s. McClintock is executing actual desktop/phone/keyboard cases on synthetic local pages. Independent evidence and Slack sender/reply implementation remain pending, not live.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): manifest2c7c4e6c0 landed and is reconciled. Sole owner has accepted sealed-image preparation next, with two new scoped reviews. No protected exec, loader-trust or installation claim.
+
+No new product question. Routine mapped TaskNode progress is authorized after
+technical qualification, still OFF. The old declined publisher is unchanged
+at app approval-waiting as of this observation; no overlapping sync or live claim.
+Earlier observations below are retained history.
+
 ## Current observation — 10:02 UTC, September12
 
 - [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): reduction B is independently reviewed and integrated at7514be8ec. All330 combined state/TaskNode tests pass. Manager prepares the coupled retention/read/delete/admission allocation, resolving fixture setup explicitly; no new user decision or S03 activation.
