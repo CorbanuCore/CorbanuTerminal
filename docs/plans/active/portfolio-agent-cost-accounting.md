@@ -19,15 +19,15 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "fd46c5897c3c3a1c146a97f544e5bacf4e996f9d"
+    base_commit: "fcd6aad8b9d5f5a571f22a3238f4eb47833fa968"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
     branch: "workstream/accounting-pf60-s01-20260911"
-    base_commit: "fd46c5897c3c3a1c146a97f544e5bacf4e996f9d"
+    base_commit: "fcd6aad8b9d5f5a571f22a3238f4eb47833fa968"
 ---
 
 # 2. Accounting — unified agent cost and usage
 
-Current September12: A and [pure reduction B](../../research/agent-cost-accounting/retention-reduction-next.md) are reviewed clean and integrated at7514be8ec; combined330 state/TaskNode tests pass9.928s. B candidateac5a22d67 changes507lines/131non-test. A and B code passes used; unused correction/history retained. Manager prepares coupled mutation/read/delete/admission with explicit fixture activation compatibility; existing scope remains frozen until allocation. No retention mutation/runtime or S03 activation.
+Current September12: A and [pure reduction B](../../research/agent-cost-accounting/retention-reduction-next.md) are reviewed clean and integrated at7514be8ec; combined330 state/TaskNode tests pass9.928s. B candidateac5a22d67 changes507lines/131non-test. [C1 consumers](../../research/agent-cost-accounting/retention-coupled-next.md) now owns the exact ten-path scope, with explicit fixture activation compatibility and C2 fixed next. Integrator adds one C1 code pass; prior A/B usage and unused correction retained. No retention mutation/runtime or S03 activation.
 
 Policy: repository-root `AGENTS.md`. Lifecycle: [plans](../index.md).
 Portfolio: [source coverage, sequencing and human capacity](../portfolio-2026-09-09.md).
@@ -97,7 +97,7 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Codex accounting retention-plan lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `fd46c5897c3c3a1c146a97f544e5bacf4e996f9d` | PF-60-S02 five-file pure reduction B; exact mandate in retention-reduction-next.md |
+| Codex accounting retention-plan lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `fcd6aad8b9d5f5a571f22a3238f4eb47833fa968` | PF-60-S02 ten-path C1 fixture consumers; exact mandate in retention-coupled-next.md |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
 S02 retains its reservation; Travis approved conservative daily expiry in this
