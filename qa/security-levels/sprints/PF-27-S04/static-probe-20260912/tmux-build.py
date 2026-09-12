@@ -10,9 +10,10 @@ import time
 
 root = Path('/home/travis/security-round5/evidence/pf27-static-probe-20260912')
 choices = {(): ('build-only.sh', ''), ('--openssl-retry',): ('openssl-retry.sh', 'retry-control'),
-           ('--uapi-retry',): ('uapi-retry.sh', 'uapi-control')}
+           ('--uapi-retry',): ('uapi-retry.sh', 'uapi-control'),
+           ('--linkage-retry',): ('linkage-retry.sh', 'linkage-control')}
 if tuple(sys.argv[1:]) not in choices:
-    raise SystemExit('Only --openssl-retry or --uapi-retry is supported')
+    raise SystemExit('Unsupported build attempt selector')
 script, record_name = choices[tuple(sys.argv[1:])]
 record = root / record_name
 if record_name:

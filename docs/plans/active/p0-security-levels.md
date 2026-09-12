@@ -747,7 +747,9 @@ is retained; owner accepted one unchanged-graph retry with private pinned static
 OpenSSL3.5.8, target-scoped settings and no artifact invocation. Its prerequisite
 build stopped2 before Cargo on missing linux/mman.h; a second explicit amendment
 allows private authenticated userspace UAPI headers and same-prerequisite retry,
-not graph changes or weakened checks. Both failed attempts remain. No main window.
+not graph changes or weakened checks. That build passed but linkage rejected the
+musl-gcc injected interpreter; correct command-scoped final linker to pinned
+rust-lld while preserving PIE and all prior artifacts. No main window.
 
 ## Round-five execution amendment — 2026-09-04
 

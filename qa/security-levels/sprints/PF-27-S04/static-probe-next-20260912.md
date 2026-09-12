@@ -81,6 +81,14 @@ musl header overwrite, security-feature suppression or root/global install.
 Preserve both failures and use separate retry paths. Further source/graph or
 security-behavior changes still require a new decision.
 
+The completed UAPI/OpenSSL attempt built the unchanged graph successfully, but
+inspection rejected PT_INTERP. The private musl-gcc specs inject an interpreter
+for static-PIE links. Correct the command-scoped final Rust linker to the pinned
+toolchain's rust-lld, retaining musl-gcc for native C compilation and preserving
+PIE; no binary editing, graph changes or runtime security relaxation. This is a
+build-environment correction within the accepted strategy, recorded before work.
+Retain the failed-linkage candidate and receipts separately.
+
 Only after artifact feasibility is proven, propose the corresponding runtime
 ELF-profile validator, descriptor-bound exec and retained-child supervision as
 separate bounded implementation. A static artifact must not be relabeled as a

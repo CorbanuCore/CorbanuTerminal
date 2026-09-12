@@ -1,4 +1,4 @@
-# PF27 static probe feasibility — initial build blocked
+# PF27 static probe feasibility — build and linkage passed
 
 This is the accepted [build-only allocation](../static-probe-next-20260912.md),
 not a new release target or native execution claim. No Rust, dependency graph,
@@ -68,11 +68,48 @@ second Cargo exit code, installed OpenSSL package, static probe, linkage pass or
 probe invocation to report. Fresh source status remains clean and its lock hash
 still matches the original. The two attempts are in separate directories.
 
-## Next decision and evidence review
+## UAPI completion and linker correction
 
-The receiving owner has the exact error and a proposed bounded private Linux UAPI
-header prerequisite. No headers were copied, secure-memory behavior disabled or
-broad host include directory added. No graph/source change is justified yet.
+The owner accepted private userspace UAPI headers. Ubuntu's installed archive
+keyring verified InRelease; its SHA256 verified the exact Packages index, whose
+linux-libc-dev7.0.0-31.31 amd64 stanza matched downloaded package SHA256
+`b26e3493c7180b0cc8b5e7c2bf819323deca8b7662f34ddffef936b08ffb1456`.
+Only linux/asm-generic/x86-64 asm were extracted into private uapi/include. The
+inventory, signature, metadata and include trace are in rtx/uapi-retry/; no musl
+header overwrite, glibc include leakage or disabled secure-memory check occurred.
+
+OpenSSL then built and unchanged Cargo completed **exit0 in49.18s**. The linkage
+check correctly failed1: the 298,954,552-byte PIE still requested the musl
+interpreter, despite no DT_NEEDED. Its SHA256 is
+`37fb0d7c5fd7e09ca23e9a5b1901b77786b87dfe8a869e191452c571bda7081d`.
+This rejected candidate remains on RTX and its readelf output is retained here.
+Build success alone did not satisfy static acceptance.
+
+The C compiler wrapper's musl-gcc.specs injects a dynamic interpreter when used
+as the final static-PIE linker. The owner accepted using the pinned Rust rust-lld
+as the command-scoped final linker while retaining musl-gcc for C compilation.
+The [pinned Rust target](https://raw.githubusercontent.com/rust-lang/rust/1.95.0/compiler/rustc_target/src/spec/targets/x86_64_unknown_linux_musl.rs)
+defaults to static CRT and supports static PIE; no relocation-model change or
+post-link editing is used. The corrected attempt has separate linkage-retry/
+and linkage-control/ evidence. Cargo completed0 in35.62s; real-key TMUX tooling
+exit0 and read-only static/negative-control inspection passed. The new ELF is
+ET_DYN, FLAGS_1 NOW PIE, without PT_INTERP or DT_NEEDED, size310,247,352 bytes,
+SHA256 `f6ca8e3368dcbc8e5ba92bbbc7860ee825628b9470ac53116c6c3f6996bef3f0`.
+It differs from the rejected wrapper-linked artifact; original failures remain.
+The dynamic GNU control retains both interpreter and external library entries.
+Neither artifact was invoked. This is a dev-profile feasibility candidate,
+not a release build, installed image or native containment proof.
+
+Final linker is Rust1.95.0's LLD22.1.2, SHA256
+`60f305b55da767671e895b231e0c78e87f4ccbf790d7181842039c53bb60281c`;
+the recorded Cargo fingerprint confirms `-C linker-flavor=ld.lld`. Per-target
+linker path and native C compiler separation are in linkage-retry.sh. Rust source
+and Cargo.lock remain unchanged; final source status is empty. All build and
+TMUX sessions finished. No test suite was rerun or claimed by this build-only
+allocation; the original sealed-stage tests remain tied to their GNU candidate.
+
 One build/linkage evidence review is allocated from the old contingency but has
-not yet been dispatched, pending that decision; reviews1–19 remain intact.
-No new main window is granted.
+been reserved as Fable20 before dispatch; reviews1–19 remain intact. It reviews
+this artifact evidence and QA tooling, not unchanged Rust code. No main window
+is granted. Runtime ELF validation, static-dependency/CVE qualification, descriptor
+exec, supervision and exact privileged installation remain subsequent gates.

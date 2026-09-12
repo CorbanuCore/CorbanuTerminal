@@ -1,0 +1,55 @@
+bash /home/travis/security-round5/evidence/pf27-static-probe-20260912/scripts/uapi-retry.sh; printf "\nPF27_BUILD_TOOL_EXIT=%s\n" "$?"
+bash-5.3$ bash /home/travis/security-round5/evidence/pf27-static-probe-20260912/scripts/uapi-retry.sh; printf "\nPF27_BUILD_TOOL_EXIT=%s\n" "$?"
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+100  1.56M 100  1.56M   0      0 853.2k      0   00:01   00:01         132.0k
+2026-09-12T03:54:15-07:00 BUILD START
+2026-09-12T03:55:05-07:00 BUILD EXIT 0
+static: external loader or dependencies remain
+
+PF27_BUILD_TOOL_EXIT=1
+bash-5.3$ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
