@@ -5,4 +5,3 @@ WARNING: For repository 'platforms', the root module requires module version pla
 WARNING: For repository 'rules_cc', the root module requires module version rules_cc@0.2.18, but got rules_cc@0.2.20 in the resolved dependency graph. Please update the version in your MODULE.bazel or set --check_direct_dependencies=off
  no actions running
 <root> (codex@_)
-

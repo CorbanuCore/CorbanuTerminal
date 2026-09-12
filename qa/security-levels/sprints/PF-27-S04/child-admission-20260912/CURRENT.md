@@ -1,4 +1,4 @@
-# Qualified source checkpoint — main integration pending
+# Qualified source checkpoint
 
 September 12, 2026 06:06 UTC. All stage tests/reviews finished. Do not repeat them.
 
@@ -18,11 +18,13 @@ September 12, 2026 06:06 UTC. All stage tests/reviews finished. Do not repeat th
 - Three new slots used, two remain in the current six-hour window. Consult
   `../review-budget.md`; historical six reviews remain spent.
 
-Next: finish docs/checkers, commit/push the checkpoint, and coordinate main
-landing with manager task `01a08522-76a1-7ad1-afe6-ad690d55c0d7`; record final SHA.
-Main was `c065b8b03` at last read. Fetch and verify before any main push.
+Source and evidence are committed and pushed. The manager confirmed the main
+push window is clear; root owns the already-authorized landing. Use current Git
+refs and the monitor's verified handoff for the final receiving SHA. Always
+fetch and coordinate any later main writes with manager task
+`01a08522-76a1-7ad1-afe6-ad690d55c0d7`; do not redo a completed landing.
 
-Then prepare the next bounded source step for actual trusted root/child
+Next prepare the bounded source step for actual trusted root/child
 composition using PF20's unchanged serve_child seam and an exact launch/argv/FD
 contract. This admission library is not a root launcher; the historical v2
 installation proposal is not executable authority. No root listener, accounts,
