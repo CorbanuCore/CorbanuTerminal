@@ -1,6 +1,7 @@
 # PF27 next allocation — inspect the root manifest and executable
 
-**Prepared for integration-owner acceptance; implementation has not started.**
+**Accepted for bounded implementation September12 by integration owner task
+`01a08522-76a1-7ad1-afe6-ad690d55c0d7`. No privileged execution authorized.**
 Preparation follows accepted main `cc931adf6333e8348e03ee5fc801c77548aec138`.
 Product initiative PF-27-S04, sole owner `/root`, worktree
 `/Volumes/CorbanuDrive/Corbanu/worktrees/security-broker-resume-20260911`, branch
@@ -131,8 +132,9 @@ allowance (or the scheduled replenishment) before those dispatches; do not
 silently turn the single contingency into two passes or reset the ledger.
 No automatic design panel or repeat review of accepted unchanged source.
 
-Preparation and branch publication are authorized; implementation awaits the
-receiving owner's acceptance. Main writes require a fresh serialized window.
+The receiving owner accepted this exact implementation boundary and added two
+necessary scoped passes, preserving the old contingency and history. No budget
+wait is required. Main writes still require a fresh serialized window.
 After this inspection stage: actual spawn/retained-Child cleanup, exec binding,
 loader trust, fixed listener/client and synthetic native qualification remain
 separate allocations. The final exact install manifest still needs explicit
