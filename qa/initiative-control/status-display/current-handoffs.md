@@ -1,5 +1,18 @@
 # Current workstream handoffs — September 12
 
+## New decision — 13:14 UTC
+
+[PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md)
+now has an [explicit approval question](pf27-launch-adapter-decision.md), ID
+`pf27-linux-launch-adapter`: authorize a narrow separately audited unsafe/FFI
+adapter while retaining the main broker's unsafe-code prohibition and all live
+authority gates. A concrete libc backend was located; this new trust-boundary
+decision supersedes the earlier manager-only capability search. Recommendation:
+approve bounded implementation and non-root tests, not installation or live use.
+Two independent implementation workers continue: accounting and Slack recovery.
+The decision is recorded for dashboard projection and asked in the manager task;
+Slack is not connected, so no Slack alert is claimed.
+
 ## Current observation — 13:05 UTC, September 12
 
 Two implementation workers are dispatched, not merely a running dashboard timer.
