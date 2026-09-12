@@ -251,12 +251,71 @@ fn alive(pidfd: &File) -> Result<(), RootError> {
     }
 }
 
+// Closed internal choice: callers cannot supply their own authority verifier.
+enum ChildLiveness {
+    Captured(File),
+    #[cfg(all(target_env = "gnu", feature = "synthetic-fixture"))]
+    Retained(codex_linux_pidfd_spawn::ChildIdentity),
+}
+
+impl ChildLiveness {
+    fn check(&self) -> Result<(), RootError> {
+        match self {
+            Self::Captured(pidfd) => alive(pidfd),
+            #[cfg(all(target_env = "gnu", feature = "synthetic-fixture"))]
+            Self::Retained(identity) => identity.check_live().map_err(|_| RootError::Unavailable),
+        }
+    }
+}
+
 impl ControllerRoot {
+    /// Synthetic descriptor compatibility only. The sealed identity comes from
+    /// the retained launch owner, not a worker PID, fd or caller verifier.
+    /// Existing fixed-root construction remains the authority boundary.
+    #[cfg(all(target_env = "gnu", feature = "synthetic-fixture"))]
+    pub fn serve_owned_child(
+        &self,
+        stream: UnixStream,
+        identity: codex_linux_pidfd_spawn::ChildIdentity,
+    ) -> Result<(), RootError> {
+        use std::os::fd::AsFd;
+        use std::os::fd::OwnedFd;
+        identity.check_live().map_err(|_| RootError::Unavailable)?;
+        let mut raw: libc::c_int = -1;
+        let mut len = std::mem::size_of_val(&raw) as libc::socklen_t;
+        // SAFETY: initialized output/length pointers, valid stream descriptor.
+        if unsafe {
+            libc::getsockopt(
+                stream.as_raw_fd(),
+                libc::SOL_SOCKET,
+                libc::SO_PEERPIDFD,
+                (&raw mut raw).cast(),
+                &raw mut len,
+            )
+        } != 0
+        {
+            return Err(RootError::Unsupported);
+        }
+        if raw < 0 {
+            return Err(RootError::Invalid);
+        }
+        // SAFETY: successful SO_PEERPIDFD returns a newly owned descriptor.
+        let peer = unsafe { OwnedFd::from_raw_fd(raw) };
+        if len as usize != std::mem::size_of::<libc::c_int>()
+            || !identity
+                .matches_live_peer(peer.as_fd())
+                .map_err(|_| RootError::Unavailable)?
+        {
+            return Err(RootError::Invalid);
+        }
+        self.serve_channel(stream, ChildLiveness::Retained(identity))
+    }
+
     /// Trusted launcher supplies its actual Child handle, never a worker PID
     /// string. The post-exec connection must belong to that still-live process.
     /// The root's fixed system construction is the authority boundary; this
     /// method does not establish separate-principal containment or activation.
-    pub fn serve_child(&self, mut stream: UnixStream, child: &mut Child) -> Result<(), RootError> {
+    pub fn serve_child(&self, stream: UnixStream, child: &mut Child) -> Result<(), RootError> {
         if child
             .try_wait()
             .map_err(|_| RootError::Unavailable)?
@@ -281,7 +340,16 @@ impl ControllerRoot {
             return Err(RootError::Invalid);
         }
         alive(&pidfd)?;
+        self.serve_channel(stream, ChildLiveness::Captured(pidfd))
+    }
+
+    fn serve_channel(
+        &self,
+        mut stream: UnixStream,
+        identity: ChildLiveness,
+    ) -> Result<(), RootError> {
         configure(&stream)?;
+        identity.check()?;
         let key = Zeroizing::new(rand::random::<[u8; 32]>());
         // This one-time key crosses only the kernel-authenticated live-child
         // channel. It is never stored in argv, environment, logs or worker data.
@@ -293,7 +361,7 @@ impl ControllerRoot {
         };
         loop {
             let request: Request = channel.receive(b"corbanu-anchor-request/v1")?;
-            alive(&pidfd)?;
+            identity.check()?;
             let reply = match request {
                 Request::LoadJournal => {
                     self.require_journal()?;
@@ -314,7 +382,7 @@ impl ControllerRoot {
                     }
                 }
             };
-            alive(&pidfd).map_err(|error| {
+            identity.check().map_err(|error| {
                 if matches!(reply, Reply::Stored) {
                     RootError::Ambiguous
                 } else {

@@ -186,6 +186,78 @@ fn pf27_live_pidfd_stop_and_drop_reap() {
 }
 
 #[test]
+#[ignore = "requires hashed static synthetic hold artifact"]
+fn pf27_retained_identity_does_not_own_child_lifetime() {
+    let before = fd_count();
+    let mut child = launch(artifact("PF27_SYNTHETIC_HOLD"), &[c"probe-test"]).unwrap();
+    let mut other = launch(artifact("PF27_SYNTHETIC_HOLD"), &[c"probe-test"]).unwrap();
+    let identity = child.retain_identity().unwrap();
+    assert!(identity.matches_live_peer(child.pidfd.as_fd()).unwrap());
+    assert!(!identity.matches_live_peer(other.pidfd.as_fd()).unwrap());
+    assert!(
+        identity
+            .matches_live_peer(File::open("/dev/null").unwrap().as_fd())
+            .is_err()
+    );
+    drop(child.retain_identity().unwrap());
+    assert!(child.try_wait().unwrap().is_none());
+    child.terminate().unwrap();
+    wait(&mut child);
+    assert!(identity.check_live().is_err());
+    assert!(child.retain_identity().is_err());
+    drop(child);
+    // Keeping an old identity never authenticates another still-live owner.
+    assert!(identity.matches_live_peer(other.pidfd.as_fd()).is_err());
+    let other_identity = other.retain_identity().unwrap();
+    assert!(other.try_wait().unwrap().is_none());
+    drop(other);
+    assert!(other_identity.check_live().is_err());
+    drop(other_identity);
+    drop(identity);
+    assert_eq!(fd_count(), before);
+    assert_eq!(
+        waitid(WaitId::All, WaitIdOptions::EXITED | WaitIdOptions::NOHANG).err(),
+        Some(rustix::io::Errno::CHILD)
+    );
+}
+
+#[test]
+#[ignore = "isolated OS test temporarily exhausts its own descriptor budget"]
+fn pf27_retained_identity_clone_failure_preserves_owner() {
+    use rustix::process::Resource;
+    use rustix::process::Rlimit;
+    use rustix::process::getrlimit;
+    use rustix::process::setrlimit;
+    let before = fd_count();
+    let mut child = launch(artifact("PF27_SYNTHETIC_HOLD"), &[c"probe-test"]).unwrap();
+    let old = getrlimit(Resource::Nofile);
+    setrlimit(
+        Resource::Nofile,
+        Rlimit {
+            current: Some(128),
+            ..old
+        },
+    )
+    .unwrap();
+    let mut held = Vec::new();
+    while let Ok(fd) = rustix::io::dup(&child.pidfd) {
+        held.push(fd);
+    }
+    let result = child
+        .retain_identity()
+        .err()
+        .map(|error| error.raw_os_error());
+    drop(held);
+    setrlimit(Resource::Nofile, old).unwrap();
+    assert_eq!(result, Some(Some(libc::EMFILE)));
+    assert!(child.try_wait().unwrap().is_none());
+    child.terminate().unwrap();
+    wait(&mut child);
+    drop(child);
+    assert_eq!(fd_count(), before);
+}
+
+#[test]
 #[ignore = "requires hashed existing static probe"]
 fn pf27_all_fixed_recipes_deny_non_root_before_setters() {
     for role in [

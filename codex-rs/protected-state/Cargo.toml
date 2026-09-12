@@ -10,6 +10,12 @@ doctest = false
 [lints]
 workspace = true
 
+[features]
+synthetic-fixture = ["dep:codex-linux-pidfd-spawn", "codex-linux-pidfd-spawn/synthetic-fixture"]
+
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
+codex-linux-pidfd-spawn = { workspace = true, optional = true }
+
 [dependencies]
 codex-config = { workspace = true }
 codex-security-audit = { workspace = true }
