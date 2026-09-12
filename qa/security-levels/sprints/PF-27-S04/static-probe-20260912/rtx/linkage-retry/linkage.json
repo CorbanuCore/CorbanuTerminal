@@ -1,0 +1,23 @@
+{
+  "linkage_passed": true,
+  "artifacts_executed": false,
+  "runtime_or_privileged_qualification": false,
+  "artifacts": [
+    {
+      "name": "static",
+      "path": "/home/travis/security-round5/evidence/pf27-static-probe-20260912/linkage-retry/candidate/codex-protected-root-probe",
+      "size": 310247352,
+      "sha256": "f6ca8e3368dcbc8e5ba92bbbc7860ee825628b9470ac53116c6c3f6996bef3f0",
+      "pt_interp": false,
+      "dt_needed": false
+    },
+    {
+      "name": "dynamic-control",
+      "path": "/home/travis/security-round5/evidence/pf27-sealed-20260912/verified/candidate/codex-protected-root-probe",
+      "size": 311721968,
+      "sha256": "836d74a13c910359ab71abe90523b682211445d355e5c4851164423910d7d555",
+      "pt_interp": true,
+      "dt_needed": true
+    }
+  ]
+}

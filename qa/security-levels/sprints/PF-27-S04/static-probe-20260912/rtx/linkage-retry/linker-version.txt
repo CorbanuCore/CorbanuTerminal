@@ -1,0 +1,1 @@
+LLD 22.1.2 (/checkout/src/llvm-project/llvm 1cb4e3833c1919c2e6fb579a23ac0e2b22587b7e) (compatible with GNU linkers)

@@ -1,0 +1,82 @@
+bash /home/travis/security-round5/evidence/pf27-static-probe-20260912/scripts/build-only.sh; printf "\nPF27_BUILD_TOOL_EXIT=%s\n" "$?"
+bash-5.3$ bash /home/travis/security-round5/evidence/pf27-static-probe-20260912/scripts/build-only.sh; printf "\nPF27_BUILD_TOOL_EXIT=%s\n" "$?"
+Installing isolated pinned Rust 1.95.0 and musl target
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+100  1.03M 100  1.03M   0      0 253.7k      0   00:04   00:04         249.4k
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+100    490 100    490   0      0   2169      0                              0
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+100   1707 100   1707   0      0   7916      0                              0
+2026-09-12T03:42:12-07:00 BUILD START
+2026-09-12T03:42:24-07:00 BUILD EXIT 101
+  cargo:rustc-check-cfg=cfg(ossl111c)
+  cargo:rustc-check-cfg=cfg(ossl111d)
+  cargo:rustc-check-cfg=cfg(ossl300)
+  cargo:rustc-check-cfg=cfg(ossl310)
+  cargo:rustc-check-cfg=cfg(ossl320)
+  cargo:rustc-check-cfg=cfg(ossl330)
+  cargo:rustc-check-cfg=cfg(ossl340)
+  cargo:rerun-if-env-changed=X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_LIB_DIR
+  X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_LIB_DIR unset
+  cargo:rerun-if-env-changed=OPENSSL_LIB_DIR
+  OPENSSL_LIB_DIR unset
+  cargo:rerun-if-env-changed=X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_INCLUDE_DIR
+  X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_INCLUDE_DIR unset
+  cargo:rerun-if-env-changed=OPENSSL_INCLUDE_DIR
+  OPENSSL_INCLUDE_DIR unset
+  cargo:rerun-if-env-changed=X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_DIR
+  X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_DIR unset
+  cargo:rerun-if-env-changed=OPENSSL_DIR
+  OPENSSL_DIR unset
+  cargo:rerun-if-env-changed=OPENSSL_NO_PKG_CONFIG
+  cargo:rerun-if-env-changed=PKG_CONFIG_ALLOW_CROSS_x86_64-unknown-linux-musl
+  cargo:rerun-if-env-changed=PKG_CONFIG_ALLOW_CROSS_x86_64_unknown_linux_musl
+  cargo:rerun-if-env-changed=TARGET_PKG_CONFIG_ALLOW_CROSS
+  cargo:rerun-if-env-changed=PKG_CONFIG_ALLOW_CROSS
+  cargo:rerun-if-env-changed=PKG_CONFIG_x86_64-unknown-linux-musl
+  cargo:rerun-if-env-changed=PKG_CONFIG_x86_64_unknown_linux_musl
+  cargo:rerun-if-env-changed=TARGET_PKG_CONFIG
+  cargo:rerun-if-env-changed=PKG_CONFIG
+  cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR_x86_64-unknown-linux-musl
+  cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR_x86_64_unknown_linux_musl
+  cargo:rerun-if-env-changed=TARGET_PKG_CONFIG_SYSROOT_DIR
+  cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR
+
+
+  Could not find openssl via pkg-config:
+  pkg-config has not been configured to support cross-compilation.
+
+  Install a sysroot for the target platform and configure it via
+  PKG_CONFIG_SYSROOT_DIR and PKG_CONFIG_PATH, or install a
+  cross-compiling wrapper for pkg-config and set it via
+  PKG_CONFIG environment variable.
+
+  cargo:warning=Could not find directory of OpenSSL installation, and this `-sys` crate cannot proceed without this knowledge. If OpenSSL is installed and this crate had trouble finding it,  you can set the `OPENSSL_DIR` environment variable for the compilation process. See stderr section below for further information.
+
+  --- stderr
+
+
+  Could not find directory of OpenSSL installation, and this `-sys` crate cannot
+  proceed without this knowledge. If OpenSSL is installed and this crate had
+  trouble finding it,  you can set the `OPENSSL_DIR` environment variable for the
+  compilation process.
+
+  Make sure you also have the development packages of openssl installed.
+  For example, `libssl-dev` on Ubuntu or `openssl-devel` on Fedora.
+
+  If you're in a situation where you think the directory *should* be found
+  automatically, please open a bug at https://github.com/rust-openssl/rust-openssl
+  and include information about your system as well as this message.
+
+  $HOST = x86_64-unknown-linux-gnu
+  $TARGET = x86_64-unknown-linux-musl
+  openssl-sys = 0.9.111
+
+
+warning: build failed, waiting for other jobs to finish...
+
+PF27_BUILD_TOOL_EXIT=101
+bash-5.3$ 

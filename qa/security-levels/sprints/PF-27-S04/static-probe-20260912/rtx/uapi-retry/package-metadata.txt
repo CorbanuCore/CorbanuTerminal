@@ -1,0 +1,24 @@
+Package: linux-libc-dev
+Source: linux
+Priority: optional
+Section: devel
+Installed-Size: 7919
+Maintainer: Ubuntu Kernel Team <kernel-team@lists.ubuntu.com>
+Architecture: amd64
+Version: 7.0.0-31.31
+Replaces: linux-kernel-headers
+Provides: aufs-dev, linux-kernel-headers
+Conflicts: linux-kernel-headers
+Filename: pool/main/l/linux/linux-libc-dev_7.0.0-31.31_amd64.deb
+Size: 1645192
+MD5sum: 9f55c1aa6e6bbf9600d3fa33797596db
+SHA1: 8f929835b66db82c0717a7c2d694ea0aef13420b
+SHA256: b26e3493c7180b0cc8b5e7c2bf819323deca8b7662f34ddffef936b08ffb1456
+SHA512: d67a557bd7d9d62fce2d4a7949d173056760e1e0a82baa837631a058c5978611d0b2f93038b9578b5065c6d76a34d62d112b66549219394b00116f41ba4c6e9a
+Description: Linux Kernel Headers for development
+Description-md5: d5d143e6dffc891f04a85464446f9451
+Multi-Arch: same
+Origin: Ubuntu
+Bugs: https://bugs.launchpad.net/ubuntu/+filebug
+Build-Essential: yes
+Task: xubuntu-desktop, ubuntustudio-desktop, ubuntu-mate-core, ubuntu-mate-desktop, ubuntu-unity-desktop, edubuntu-desktop-gnome, edubuntu-desktop-gnome-raspi, ubuntucinnamon-desktop-minimal, ubuntucinnamon-desktop

@@ -1,0 +1,285 @@
+
+Command line (with current working directory = .):
+
+    /usr/bin/perl ./Configure linux-x86_64 no-shared no-module no-dso no-async no-tests --prefix=/home/travis/security-round5/evidence/pf27-static-probe-20260912/openssl --openssldir=/home/travis/security-round5/evidence/pf27-static-probe-20260912/openssl/ssl --libdir=lib
+
+Perl information:
+
+    /usr/bin/perl
+    5.40.1 for x86_64-linux-gnu-thread-multi
+
+Enabled features:
+
+    afalgeng
+    apps
+    argon2
+    aria
+    asm
+    atexit
+    autoalginit
+    autoerrinit
+    autoload-config
+    bf
+    blake2
+    bulk
+    cached-fetch
+    camellia
+    capieng
+    cast
+    chacha
+    cmac
+    cmp
+    cms
+    comp
+    ct
+    default-thread-pool
+    deprecated
+    des
+    dgram
+    dh
+    docs
+    dsa
+    dtls
+    ec
+    ec2m
+    ecdh
+    ecdsa
+    ecx
+    engine
+    err
+    filenames
+    gost
+    http
+    idea
+    integrity-only-ciphers
+    legacy
+    makedepend
+    md4
+    mdc2
+    ml-dsa
+    ml-kem
+    multiblock
+    nextprotoneg
+    ocb
+    ocsp
+    padlockeng
+    pic
+    pinshared
+    poly1305
+    posix-io
+    psk
+    quic
+    unstable-qlog
+    rc2
+    rc4
+    rdrand
+    rfc3779
+    rmd160
+    scrypt
+    secure-memory
+    seed
+    siphash
+    siv
+    slh-dsa
+    sm2
+    sm2-precomp
+    sm3
+    sm4
+    sock
+    srp
+    srtp
+    sse2
+    ssl
+    ssl-trace
+    static-engine
+    stdio
+    thread-pool
+    threads
+    tls
+    tls-deprecated-ec
+    ts
+    ui-console
+    whirlpool
+    tls1
+    tls1-method
+    tls1_1
+    tls1_1-method
+    tls1_2
+    tls1_2-method
+    tls1_3
+    dtls1
+    dtls1-method
+    dtls1_2
+    dtls1_2-method
+
+Disabled features:
+
+    acvp-tests             [cascade]        OPENSSL_NO_ACVP_TESTS
+    asan                   [default]        OPENSSL_NO_ASAN
+    async                  [option]         OPENSSL_NO_ASYNC
+    brotli                 [default]        OPENSSL_NO_BROTLI
+    brotli-dynamic         [default]        OPENSSL_NO_BROTLI_DYNAMIC
+    buildtest-c++          [default]        
+    winstore               [not-windows]    OPENSSL_NO_WINSTORE
+    crypto-mdebug          [default]        OPENSSL_NO_CRYPTO_MDEBUG
+    demos                  [default]        OPENSSL_NO_DEMOS
+    h3demo                 [default]        OPENSSL_NO_H3DEMO
+    hqinterop              [default]        OPENSSL_NO_HQINTEROP
+    devcryptoeng           [default]        OPENSSL_NO_DEVCRYPTOENG
+    dso                    [option]         OPENSSL_NO_DSO
+    dynamic-engine         [cascade]        
+    ec_nistp_64_gcc_128    [default]        OPENSSL_NO_EC_NISTP_64_GCC_128
+    egd                    [default]        OPENSSL_NO_EGD
+    external-tests         [default]        OPENSSL_NO_EXTERNAL_TESTS
+    fips                   [default]        
+    fips-securitychecks    [cascade]        OPENSSL_NO_FIPS_SECURITYCHECKS
+    fips-post              [cascade]        OPENSSL_NO_FIPS_POST
+    fips-jitter            [default]        OPENSSL_NO_FIPS_JITTER
+    fuzz-afl               [default]        OPENSSL_NO_FUZZ_AFL
+    fuzz-libfuzzer         [default]        OPENSSL_NO_FUZZ_LIBFUZZER
+    jitter                 [default]        OPENSSL_NO_JITTER
+    ktls                   [default]        OPENSSL_NO_KTLS
+    loadereng              [cascade]        OPENSSL_NO_LOADERENG
+    md2                    [default]        OPENSSL_NO_MD2 (skip crypto/md2)
+    module                 [option]         
+    msan                   [default]        OPENSSL_NO_MSAN
+    pie                    [default]        OPENSSL_NO_PIE
+    rc5                    [default]        OPENSSL_NO_RC5 (skip crypto/rc5)
+    sctp                   [default]        OPENSSL_NO_SCTP
+    shared                 [option]         
+    sslkeylog              [default]        OPENSSL_NO_SSLKEYLOG
+    tests                  [option]         OPENSSL_NO_TESTS
+    tfo                    [default]        OPENSSL_NO_TFO
+    trace                  [default]        OPENSSL_NO_TRACE
+    ubsan                  [default]        OPENSSL_NO_UBSAN
+    unit-test              [default]        OPENSSL_NO_UNIT_TEST
+    uplink                 [no uplink_arch] OPENSSL_NO_UPLINK
+    weak-ssl-ciphers       [default]        OPENSSL_NO_WEAK_SSL_CIPHERS
+    zlib                   [default]        OPENSSL_NO_ZLIB
+    zlib-dynamic           [default]        OPENSSL_NO_ZLIB_DYNAMIC
+    zstd                   [default]        OPENSSL_NO_ZSTD
+    zstd-dynamic           [default]        OPENSSL_NO_ZSTD_DYNAMIC
+    ssl3                   [default]        OPENSSL_NO_SSL3
+    ssl3-method            [default]        OPENSSL_NO_SSL3_METHOD
+
+Config target attributes:
+
+    AR => "ar",
+    ARFLAGS => "qc",
+    CC => "gcc",
+    CFLAGS => "-Wall -O3",
+    CXX => "g++",
+    CXXFLAGS => "-Wall -O3",
+    HASHBANGPERL => "/usr/bin/env perl",
+    OBJCOPY => "objcopy",
+    RANLIB => "ranlib",
+    RC => "windres",
+    asm_arch => "x86_64",
+    bin_cflags => "",
+    bin_lflags => "",
+    bn_ops => "SIXTY_FOUR_BIT_LONG",
+    build_file => "Makefile",
+    build_scheme => [ "unified", "unix" ],
+    cflags => "-pthread -m64",
+    cppflags => "",
+    cxxflags => "-std=c++11 -pthread -m64",
+    defines => [ "OPENSSL_BUILDING_OPENSSL" ],
+    disable => [  ],
+    dso_ldflags => "-Wl,-z,defs",
+    dso_scheme => "dlfcn",
+    enable => [ "afalgeng" ],
+    ex_libs => "-ldl -pthread",
+    includes => [  ],
+    lflags => "",
+    lib_cflags => "",
+    lib_cppflags => "-DOPENSSL_USE_NODELETE -DL_ENDIAN",
+    lib_defines => [  ],
+    module_cflags => "-fPIC",
+    module_cxxflags => undef,
+    module_ldflags => "-Wl,-znodelete -shared -Wl,-Bsymbolic",
+    multilib => "64",
+    perl_platform => "Unix",
+    perlasm_scheme => "elf",
+    shared_cflag => "-fPIC",
+    shared_defflag => "-Wl,--version-script=",
+    shared_defines => [  ],
+    shared_ldflag => "-Wl,-znodelete -shared -Wl,-Bsymbolic",
+    shared_rcflag => "",
+    shared_sonameflag => "-Wl,-soname=",
+    shared_target => "linux-shared",
+    thread_defines => [  ],
+    thread_scheme => "pthreads",
+    unistd => "<unistd.h>",
+
+Recorded environment:
+
+    AR = 
+    ARFLAGS = 
+    AS = 
+    ASFLAGS = 
+    BUILDFILE = 
+    CC = /home/travis/security-round5/evidence/pf27-static-probe-20260912/musl/bin/musl-gcc
+    CFLAGS = 
+    CPP = 
+    CPPDEFINES = 
+    CPPFLAGS = 
+    CPPINCLUDES = 
+    CROSS_COMPILE = 
+    CXX = 
+    CXXFLAGS = 
+    HASHBANGPERL = 
+    LD = 
+    LDFLAGS = 
+    LDLIBS = 
+    MT = 
+    MTFLAGS = 
+    OBJCOPY = 
+    OPENSSL_LOCAL_CONFIG_DIR = 
+    PERL = 
+    RANLIB = 
+    RC = 
+    RCFLAGS = 
+    RM = 
+    WINDRES = 
+    __CNF_CFLAGS = 
+    __CNF_CPPDEFINES = 
+    __CNF_CPPFLAGS = 
+    __CNF_CPPINCLUDES = 
+    __CNF_CXXFLAGS = 
+    __CNF_LDFLAGS = 
+    __CNF_LDLIBS = 
+
+Makevars:
+
+    AR              = ar
+    ARFLAGS         = qc
+    ASFLAGS         = 
+    CC              = /home/travis/security-round5/evidence/pf27-static-probe-20260912/musl/bin/musl-gcc
+    CFLAGS          = -Wall -O3
+    CPPDEFINES      = 
+    CPPFLAGS        = 
+    CPPINCLUDES     = 
+    CXX             = g++
+    CXXFLAGS        = -Wall -O3
+    HASHBANGPERL    = /usr/bin/env perl
+    LDFLAGS         = 
+    LDLIBS          = 
+    OBJCOPY         = objcopy
+    PERL            = /usr/bin/perl
+    RANLIB          = ranlib
+    RC              = windres
+    RCFLAGS         = 
+
+NOTE: These variables only represent the configuration view.  The build file
+template may have processed these variables further, please have a look at the
+build file for more exact data:
+    Makefile
+
+build file:
+
+    Makefile
+
+build file templates:
+
+    Configurations/common0.tmpl
+    Configurations/unix-Makefile.tmpl

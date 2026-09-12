@@ -1,0 +1,42 @@
+openssl-sys v0.9.111
+├── native-tls v0.2.14
+│   ├── hyper-tls v0.6.0
+│   │   └── reqwest v0.12.28
+│   │       ├── codex-http-client v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/http-client)
+│   │       │   ├── codex-api v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/codex-api)
+│   │       │   │   ├── codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/model-provider-info)
+│   │       │   │   │   └── codex-config v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/config)
+│   │       │   │   │       └── codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/protected-state)
+│   │       │   │   │           └── codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/secret-broker-service)
+│   │       │   │   └── codex-otel v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/otel)
+│   │       │   │       └── codex-features v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/features)
+│   │       │   │           └── codex-config v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/config) (*)
+│   │       │   ├── codex-client v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/codex-client)
+│   │       │   │   └── codex-api v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/codex-api) (*)
+│   │       │   ├── codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/protocol)
+│   │       │   │   ├── codex-api v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/codex-api) (*)
+│   │       │   │   ├── codex-config v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/config) (*)
+│   │       │   │   ├── codex-features v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/features) (*)
+│   │       │   │   ├── codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/file-system)
+│   │       │   │   │   ├── codex-config v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/config) (*)
+│   │       │   │   │   └── codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/git-utils)
+│   │       │   │   │       ├── codex-config v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/config) (*)
+│   │       │   │   │       └── codex-secrets v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/secrets)
+│   │       │   │   │           └── codex-vault v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/vault)
+│   │       │   │   │               └── codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/secret-broker-service)
+│   │       │   │   ├── codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/git-utils) (*)
+│   │       │   │   ├── codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/model-provider-info) (*)
+│   │       │   │   └── codex-otel v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/otel) (*)
+│   │       │   └── codex-websocket-client v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/websocket-client)
+│   │       │       └── codex-api v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/codex-api) (*)
+│   │       ├── codex-otel v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/otel) (*)
+│   │       ├── opentelemetry-http v0.31.0
+│   │       │   └── opentelemetry-otlp v0.31.0
+│   │       │       └── codex-otel v0.1.42 (/home/travis/worktrees/security-broker-static-20260912/codex-rs/otel) (*)
+│   │       └── opentelemetry-otlp v0.31.0 (*)
+│   ├── reqwest v0.12.28 (*)
+│   └── tokio-native-tls v0.3.1
+│       ├── hyper-tls v0.6.0 (*)
+│       └── reqwest v0.12.28 (*)
+└── openssl v0.10.75
+    └── native-tls v0.2.14 (*)

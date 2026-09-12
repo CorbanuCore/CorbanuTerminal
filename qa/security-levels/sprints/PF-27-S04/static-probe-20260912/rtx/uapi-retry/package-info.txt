@@ -1,0 +1,21 @@
+ new Debian package, version 2.0.
+ size 1645192 bytes: control archive=25418 bytes.
+     630 bytes,    17 lines      control
+   68938 bytes,  1041 lines      md5sums
+ Package: linux-libc-dev
+ Source: linux
+ Version: 7.0.0-31.31
+ Architecture: amd64
+ Maintainer: Ubuntu Kernel Team <kernel-team@lists.ubuntu.com>
+ Installed-Size: 7919
+ Conflicts: linux-kernel-headers
+ Replaces: linux-kernel-headers
+ Provides: aufs-dev, linux-kernel-headers
+ Section: devel
+ Priority: optional
+ Multi-Arch: same
+ Description: Linux Kernel Headers for development
+  This package provides headers from the Linux kernel.  These headers
+  are used by the installed headers for GNU glibc and other system
+  libraries. They are NOT meant to be used to build third-party modules for
+  your kernel. Use linux-headers-* packages for that.

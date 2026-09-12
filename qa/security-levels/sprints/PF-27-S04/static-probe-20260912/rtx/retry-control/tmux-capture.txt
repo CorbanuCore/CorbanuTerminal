@@ -1,0 +1,55 @@
+bash /home/travis/security-round5/evidence/pf27-static-probe-20260912/scripts/openssl-retry.sh; printf "\nPF27_BUILD_TOOL_EXIT=%s\n" "$?"
+bash-5.3$ bash /home/travis/security-round5/evidence/pf27-static-probe-20260912/scripts/openssl-retry.sh; printf "\nPF27_BUILD_TOOL_EXIT=%s\n" "$?"
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0
+100 50.74M 100 50.74M   0      0  4.26M      0   00:11   00:11          4.69M
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0
+100    931 100    931   0      0   3097      0                              0
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0
+100     87 100     87   0      0    279      0                              0
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+100  45049 100  45049   0      0 136.4k      0                              0
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+100  45873 100  45873   0      0 373.6k      0                              0
+
+PF27_BUILD_TOOL_EXIT=2
+bash-5.3$ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

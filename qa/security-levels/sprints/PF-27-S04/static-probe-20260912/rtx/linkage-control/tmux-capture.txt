@@ -1,0 +1,55 @@
+bash /home/travis/security-round5/evidence/pf27-static-probe-20260912/scripts/linkage-retry.sh; printf "\nPF27_BUILD_TOOL_EXIT=%s\n" "$?"
+bash-5.3$ bash /home/travis/security-round5/evidence/pf27-static-probe-20260912/scripts/linkage-retry.sh; printf "\nPF27_BUILD_TOOL_EXIT=%s\n" "$?"
+2026-09-12T03:58:33-07:00 BUILD START
+2026-09-12T03:59:09-07:00 BUILD EXIT 0
+PF27_STATIC_LINKAGE_PASS; artifacts not executed
+
+PF27_BUILD_TOOL_EXIT=0
+bash-5.3$ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

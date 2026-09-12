@@ -1,0 +1,49 @@
+autoreview target: branch
+branch: feat/security-broker-resume-20260911
+engine: codex
+model: claude-fable-5-1-plan
+thinking: high
+tools: on
+web_search: on
+ref: 140e094adc71da6e74e9017fce5d9b85b92ce956
+Traceback (most recent call last):
+  File "/Users/Neo/.codex/skills/autoreview/scripts/autoreview", line 3578, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/Users/Neo/.codex/skills/autoreview/scripts/autoreview", line 3516, in main
+    bundle = branch_bundle(repo, target_ref)
+  File "/Users/Neo/.codex/skills/autoreview/scripts/autoreview", line 859, in branch_bundle
+    branch_patch = git(
+        repo,
+    ...<4 lines>...
+        f"{base_ref}...HEAD",
+    )
+  File "/Users/Neo/.codex/skills/autoreview/scripts/autoreview", line 557, in git
+    return run(
+           ~~~^
+        [resolve_command("git", repo), "--no-optional-locks", *SAFE_GIT_CONFIG_ARGS, *args],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        env=safe_git_env(),
+        ^^^^^^^^^^^^^^^^^^^
+    ).stdout
+    ^
+  File "/Users/Neo/.codex/skills/autoreview/scripts/autoreview", line 170, in run
+    result = subprocess.run(
+        args,
+    ...<5 lines>...
+        env=env,
+    )
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 557, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2194, in _communicate
+    stdout = self._translate_newlines(stdout,
+                                      self.stdout.encoding,
+                                      self.stdout.errors)
+  File "/opt/homebrew/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1099, in _translate_newlines
+    data = data.decode(encoding, errors)
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0xcc in position 2200442: invalid continuation byte

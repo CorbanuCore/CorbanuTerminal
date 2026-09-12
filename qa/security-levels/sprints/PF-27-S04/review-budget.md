@@ -63,7 +63,8 @@ without waiting for11:25Z. This is a separate +3 extension, not a reset of the
 five scheduled passes or the consumed +2 extension. No installation authority.
 
 Scope: [launcher recipe/identity preparation](launcher-next-20260912.md).
-**2 used / 1 available**; review14 dispatched09:15Z, review15 dispatched09:16Z. Prefer
+**3 used / 0 available**; review14 dispatched09:15Z, review15 dispatched09:16Z;
+the remaining contingency is reserved for static-build evidence review20 below. Prefer
 the required Astra High and Fable5.1High closeout, keeping the third for a
 concrete repair/evidence need. Do not spend a pass just because it is available.
 
@@ -99,3 +100,14 @@ installation, new main window or dynamic-loader trust is authorized.
 | --- | --- | --- | --- |
 | 18 | 2026-09-12 10:12:08Z | Astra High; sealed image over e66438e33, Rust0aa65bd04f5e30f3a21e1309aac7aa6b83336859 | Exit0, findings[]; sealed-20260912/astra-eighteen.json. |
 | 19 | 2026-09-12 10:13:19Z | Fable5.1High Corbanu/privateTMUX; same source and completed RTX/TMUX evidence | Exit0, findings[]; sealed-20260912/fable-nineteen.json. |
+
+## Static probe — use the existing contingency once
+
+The receiving owner assigned the one remaining launcher-stage contingency to
+one build/linkage evidence check, not another unchanged-Rust review. Reviews1–19,
+extensions and scheduled window history are preserved. No additional slot or
+early six-hour reset is introduced; the next scheduled replenishment is11:25:45Z.
+
+| Review | Reservation UTC | Model / scope | Outcome / evidence |
+| --- | --- | --- | --- |
+| 20 | 2026-09-12 11:00:22Z | Fable5.1High Corbanu/privateTMUX; build/linkage evidence and QA tooling, Rust0aa65bd unchanged | Pre-model bundle failure retained; same-pass retry dispatched11:06Z. Exit1, patch correct, one P3 missing rejected-artifact hash receipt; receipt captured on RTX and matched, no code change or extra review. Originals: static-probe-20260912/fable-twenty-retry.json. |

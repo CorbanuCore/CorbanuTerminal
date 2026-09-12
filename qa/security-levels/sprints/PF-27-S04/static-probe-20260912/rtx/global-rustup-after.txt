@@ -1,0 +1,14 @@
+Default host: x86_64-unknown-linux-gnu
+rustup home:  /home/travis/.rustup
+
+installed toolchains
+--------------------
+stable-x86_64-unknown-linux-gnu (active, default)
+1.95.0-x86_64-unknown-linux-gnu
+
+active toolchain
+----------------
+name: stable-x86_64-unknown-linux-gnu
+active because: it's the default toolchain
+installed targets:
+  x86_64-unknown-linux-gnu
