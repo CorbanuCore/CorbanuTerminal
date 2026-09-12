@@ -28,8 +28,13 @@ age; server render timer cannot clear a failed source sync. Private handoff
 manager-continuation.9Id1V1 and dashboard-status.71t9SZ hold current receipts.
 Native latest-quote and validity workers returned uncommitted; both closed and
 awaiting parent review/integration, not human approvals. PF13 owner exclusively
-prepares PF27S04 in security-broker-resume-20260911 at accepted main; no overlapping
-security allocation. Posting OFF; full decision panel/Slack sender still pending.
+resumed PF27S04 in security-broker-resume-20260911 at accepted main; canonical
+allocation ca9774262 cherry-picked locally as25ee15d4b, no staged native service
+commits imported. No overlapping security allocation. Posting OFF; full decision
+panel/Slack sender still pending. Combined dashboard63tests and governance27tests
+pass; 3active/115current/126archived. Imported main's raw QA captures contain
+pre-existing whitespace diagnostics; retained unchanged, not falsely called a
+clean whole-main whitespace run. Dashboard/new manager edits pass scoped checks.
 
 - Owner/worktree: Codex management,
   `/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911`.
