@@ -18,6 +18,13 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Stage A review28 reserved September12 20:18UTC before dispatch: Astra High
+over62956038e, frozen sourcee0eb9eac4/Rustf64820d0ca0312efbb612f208fb20636b6f547cf,
+614 changed code/test/fixture lines and final RTX/TMUX/lint/parity receipts.
+Review29 reserved at the same time: Fable5.1High via Corbanu/private TMUX on
+the same scoped candidate. New manager extension2 reserved/0 unreserved;
+scheduled window prior5 used retained, no reset. Both outcomes pending.
+
 Manager staged disposition now assigns the still-undispatched28/29 extension
 to descriptor-pair-a-allocation-20260912.md (identity and lifecycle only).
 No review consumed to choose the split. StageB needs a later explicit allowance;
