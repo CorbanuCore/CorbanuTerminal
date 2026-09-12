@@ -738,7 +738,11 @@ RTX default3/synthetic39/affected356 (2 existing skips), scoped lint/parity/buil
 and actual-key TMUX passed; Astra18/Fable19 exit0/no findings. See
 [exact evidence](../../../qa/security-levels/sprints/PF-27-S04/sealed-20260912/README.md).
 Dynamic loader trust, exec binding, spawn supervision and installation authority
-remain separate gates. Preserve the unused contingency; no main window yet.
+remain separate gates. Sealed checkpoint `140e094ad` landed and its window was
+released. The receiving owner accepted [static-probe build-only feasibility](../../../qa/security-levels/sprints/PF-27-S04/static-probe-next-20260912.md),
+not a release strategy change: isolated RTX prerequisites and QA only, no source,
+dependency or service changes, no artifact invocation. One existing contingency
+is allocated to its evidence check; history1–19 remains intact. No main window.
 
 ## Round-five execution amendment — 2026-09-04
 

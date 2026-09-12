@@ -1,6 +1,8 @@
 # PF27 next proposal — qualify a self-contained synthetic probe artifact
 
-**Proposal only; receiving-owner acceptance required before implementation.**
+**Accepted September12 by receiving owner task
+`01a08522-76a1-7ad1-afe6-ad690d55c0d7` for build-only feasibility.**
+This does not select a new release artifact strategy or permit image invocation.
 Sealed-image checkpoint `140e094adc71da6e74e9017fce5d9b85b92ce956` is on main;
 its main window is released. Source `ee1ac023c` / Rust
 `0aa65bd04f5e30f3a21e1309aac7aa6b83336859` is unchanged.
@@ -12,7 +14,7 @@ allocation base `d870c92dab2bf3fbb602dc3b8447fe9f3534aecb` unchanged. Product
 heading **Non-negotiable controls**: “Permit agents to reference credentials
 only by label; resolve them solely inside the trusted execution boundary.”
 
-## Decision requested
+## Accepted feasibility decision
 
 Recommend qualifying a statically linked version of the existing synthetic probe
 before designing a dynamic-loader deployment closure. This is an explicit change
@@ -65,7 +67,6 @@ separate bounded implementation. A static artifact must not be relabeled as a
 native-qualified package. Exact privileged installation/execution approval,
 identity/group/FD mapping, launch deadlines, runtime restrictions and all-OS
 qualification remain open. No main window or additional review is assumed here.
-Reviews1–19 and old unused contingency remain preserved. No review has been
-dispatched for this proposal; an accepted build-only evidence check, if needed,
-must be reserved from the existing allowance rather than adding a redundant
-unchanged-Rust code review.
+Reviews1–19 remain preserved. The receiving owner allocated the one old unused
+contingency to one build/linkage evidence review; reserve before dispatch, then
+record its outcome. No duplicate unchanged-Rust code review is authorized.
