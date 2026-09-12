@@ -1,0 +1,3 @@
+cargo clippy --tests {args}
+    Checking codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-elf-20260912/codex-rs/secret-broker-service)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.75s
