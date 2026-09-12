@@ -34,6 +34,12 @@ pre-correction owner checkpoint), not another review of the clean adapter.
 Read the original full-stage contract below as context; do not expand this
 correction into public service wiring or whole-workspace lint repairs.
 
+Closeout complete: [Fable27](fable27.json) exited0/findings[], patch correct;
+the explicit invariant handling preserves the lifecycle contract. [Astra25](astra25.json)
+was clean; [Fable26](fable26.json)'s sole lint finding is accepted and repaired.
+No further review or runtime change. Five scheduled-window slots are spent;
+all historical outcomes remain in the ledger. No human/product release claim.
+
 Allocated synthetic-only increment, not a completed broker or native deployment.
 Original PF-27-S04 owner/branch/base remain unchanged. Product requirement:
 **Non-negotiable controls** — “Permit agents to reference credentials only by
@@ -103,8 +109,7 @@ human acceptance or the two live-product repository release flows.
 
 ## Remaining scope and review
 
-Astra25 and Fable26 results and accepted correction are recorded above. Fable27
-correction closeout is the remaining scheduled allowance, reserved at dispatch.
+Astra25/Fable26 and clean Fable27 correction closeout are recorded above.
 PF-27-S04 remains in_progress: two-child admission composition, native service
 containment, trusted credential migration/data-plane wiring, cross-platform
 qualification, protected activation and final user-facing/live-repository

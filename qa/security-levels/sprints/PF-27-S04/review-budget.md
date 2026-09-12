@@ -38,6 +38,11 @@ Corbanu/private TMUX correction diff overfe007f32b. Rust7e488200 and strict
 Clippy/default3/TMUX focused8/real3/profile2/service52 final-source receipts.
 Window now5 used/0 available; do not repeat a clean pass or reset early.
 
+Review27 completed exit0/findings[], patch correct. Accepted Fable26 lint finding
+is repaired; the feature-enabled strict lint and final-source tests pass.
+No further pass required. Original25/26/27 JSON/text/exit receipts are under
+descriptor-owner-20260912/. All historical budgets/outcomes remain preserved.
+
 Review23 reserved/dispatched September12 17:49UTC: Astra High, adapter source
 30b471a47/Rust2d270c5c overc5b05d9d8, actual OS/TMUX receipts. Window17:25:45Z–
 23:25:45Z now1 used/4 available; history1–22 retained. Review24 Fable remains

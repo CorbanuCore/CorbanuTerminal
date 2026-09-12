@@ -984,13 +984,20 @@ for design provenance; product scope remains in the specification.
 
 September12 receiving owner accepted adapterfb7523f4b for branch continuation
 and allocated the [single-child asynchronous owner](../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-next-20260912.md).
-Exact private reservation/launch/status API and QA lifecycle script are frozen
+Exact private reservation/launch/status API and QA lifecycle script were frozen
 there before implementation; same owner/worktree/branch/base. Literal service
 manifest spawn/sealed/mod seams and synthetic dependency/lock parity only.
 No adapter semantic, children.rs/PF20/Core/Vault/native/dashboard/main changes.
 Permit-before-image, worker-before-spawn, sticky cancellation, no-block caller
-Drop, late-child cleanup and unrecoverable-quarantine evidence are required.
-Two necessary new-source reviews use the remaining scheduled allowance.
+Drop, late-child cleanup and unrecoverable-quarantine proof now pass at
+source4d830cbb3/Rust7e488200: default3/focused8/real3/profile2/service52;
+four standard ignored cases separately covered; actual-key RTX TMUX and strict
+Clippy/Cargo-Bazel parity pass. Astra25 clean, Fable26 lint finding reproduced
+and repaired, Fable27 clean; historical results preserved, five current-window
+slots spent. [Frozen proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-owner-20260912/README.md).
+PF27 remains in_progress. Two-child/native admission, trusted credential wiring,
+all-OS containment and product/release acceptance remain separate unfinished
+scope; no privileged, main or protected-activation action claimed.
 
 September12 17:29UTC: Travis explicitly approved the isolated Linux launch
 adapter; manager relayed execution authority. The [accepted adapter-only
