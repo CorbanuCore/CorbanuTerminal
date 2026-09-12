@@ -730,6 +730,13 @@ failures](../../../qa/security-levels/sprints/PF-27-S04/manifest-20260912/README
 Two new review passes used, prior contingency retained. Main window still
 required; no root-positive, exec-binding, loader-trust or native-eligibility claim.
 
+Manifest checkpoint subsequently landed on main at `2c7c4e6c0`; window released.
+Next [sealed-image preparation proposal](../../../qa/security-levels/sprints/PF-27-S04/sealed-image-next-20260912.md)
+is prepared for receiving-owner review, not implementation: consume the inspected
+image into bounded sealed Linux memory-backed storage and rehash the destination.
+This proposed byte-binding choice does not establish dynamic loader trust, exec,
+spawn supervision or installation authority. Preserve the unused contingency.
+
 ## Round-five execution amendment — 2026-09-04
 
 The user authorized these three parallel agents and assigned integration to
