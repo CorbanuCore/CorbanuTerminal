@@ -22,7 +22,7 @@ Reviews 1–6 are spent; preserve their existing records. Review 6 is documented
 in [resumed service evidence](resume-20260911/README.md).
 
 Window **2026-09-12 05:25:45Z ≤ dispatch < 2026-09-12 11:25:45Z**:
-**3 used / 2 available**: review 9 reserved at 06:02 UTC before dispatch.
+**5 used / 0 available**: review 11 reserved at 06:46 UTC before dispatch.
 
 Record subsequent dispatches below, retaining older windows rather than
 overwriting them. These are reviews of the new stage, not repeated service-stage reviews.
@@ -32,3 +32,5 @@ overwriting them. These are reviews of the new stage, not repeated service-stage
 | 7 | 2026-09-12 05:44Z | Astra High; child-admission local diff over f2e6d77e4 | Exit 1: P1 stale socket/PID reuse, P2 reaper-spawn failure; both accepted in scope. See child-admission-20260912/astra-seven.json. |
 | 8 | 2026-09-12 05:54Z | Fable 5.1 High through Corbanu/TMUX; repaired child stage and final evidence | Exit 1; runtime correct, one P2 kernel-specific test assertion accepted. See child-admission-20260912/fable-eight.json. |
 | 9 | 2026-09-12 06:03Z (reserved 06:02Z) | Fable 5.1 High through Corbanu/TMUX; test-portability repair and final evidence | Exit 0, no findings; child-admission-20260912/fable-nine.json. Stage review closed; no further pass needed. |
+| 10 | 2026-09-12 06:44Z | Astra High; new existing-root adapter over 34bba8814, formatted source; tests running separately | Exit0, findings[]; root-composition-20260912/astra-ten.json. |
+| 11 | 2026-09-12 06:46Z | Fable 5.1 High Corbanu/TMUX; same root adapter and completed exact-tree evidence | Exit1, runtime correct, P3 missing ignored logs in review bundle; explicit tracking verified before commit, no source change. Original root-composition-20260912/fable-eleven.json retained. No duplicate review needed. |

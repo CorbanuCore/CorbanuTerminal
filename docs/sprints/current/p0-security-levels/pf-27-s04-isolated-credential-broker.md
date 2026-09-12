@@ -68,11 +68,11 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 
 - [x] Reconciled and qualified the service construction stage on main/0.1.42: default 1, synthetic 6, full affected 338, Core 6 and supporting TMUX pass. Fable review 6 found no runtime/security issue; one test-only lint finding was reproduced and fixed, strict Clippy and affected proof rerun successfully. Six reviews spent, no seventh; see `qa/security-levels/sprints/PF-27-S04/resume-20260911/README.md`. No native deployment or activation claimed.
 
-- [x] Qualified trusted-child admission/lifetime in source `bd70f0e6b`: socket-associated pidfd checks, fixed child/role ownership, fencing and preallocated cleanup; default 3, synthetic 13, affected 338, strict Clippy/parity and TMUX13+exit78 pass. Astra7 and Fable8 findings repaired; Fable9 clean. [Evidence](../../../../qa/security-levels/sprints/PF-27-S04/child-admission-20260912/README.md). Three new review slots used under the six-hour budget. Native installation, actual root wiring and protected activation remain unimplemented.
+- [x] Qualified admission/lifetime `bd70f0e6b` ([proof](../../../../qa/security-levels/sprints/PF-27-S04/child-admission-20260912/README.md)) and existing-root adapter `794080a4f` ([proof](../../../../qa/security-levels/sprints/PF-27-S04/root-composition-20260912/README.md)): default3/fixture17/affected356 (2 helper skips), scoped Clippy/parity/TMUX17+exit78 pass. Astra10 clean, Fable11 runtime correct with publication finding resolved; inherited transitive telemetry lint debt retained. Five new slots used. No native installation, executable launcher or protected activation.
 
 ## Remaining
 
-- [ ] First implement/qualify existing-only PF20 root composition with owned child roles under the linked bounded contract; then separately allocate native launcher and PF-27-S03 OS identity/IPC/handle qualification. Do not infer native isolation from construction tests.
+- [ ] Next separately allocate the bounded executable probe/launcher under the linked launch contract, then obtain exact native installation approval and qualify PF-27-S03 OS identity/IPC/handles. Do not infer native isolation from construction tests.
 - [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.
 
 - [ ] Keep sentinel keys/raw registries outside agent-accessible processes; test open-channel revocation, upload cancellation, same-run-ID replacement and broker restart with old handles. The proxy's retained RegisteredRun concern requires a native regression, not just a copied new-connection test.
