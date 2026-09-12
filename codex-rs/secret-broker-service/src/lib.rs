@@ -19,3 +19,8 @@ mod children;
 pub use children::ChildRole;
 #[cfg(target_os = "linux")]
 pub use children::TrustedChildRun;
+
+#[cfg(target_os = "linux")]
+mod root;
+#[cfg(target_os = "linux")]
+pub use root::RootChildRun;

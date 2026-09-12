@@ -1,0 +1,9 @@
+{
+  "passed": true,
+  "tests": 17,
+  "production_exit": 78,
+  "candidate": "/home/travis/security-round5/evidence/pf27-root-composition-20260912/verified/candidate/codex-secret-broker-service",
+  "native_isolation_proven": false,
+  "privileged_installation": false,
+  "user_facing_tui": false
+}

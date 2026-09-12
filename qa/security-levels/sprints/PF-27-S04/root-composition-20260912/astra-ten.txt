@@ -1,0 +1,3 @@
+autoreview clean: no accepted/actionable findings reported
+overall: patch is correct (0.9)
+No actionable defects found in the scoped change. The adapter preserves role-based dispatch, root lifetimes, typed terminal errors including Ambiguous, and existing fencing/shutdown semantics. Synthetic tests accurately limit their claims to construction behavior. Tests and qualification commands were not run during this read-only review; the documented qualification gates remain pending.

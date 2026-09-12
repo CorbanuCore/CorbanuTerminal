@@ -24,9 +24,10 @@ refs and the monitor's verified handoff for the final receiving SHA. Always
 fetch and coordinate any later main writes with manager task
 `01a08522-76a1-7ad1-afe6-ad690d55c0d7`; do not redo a completed landing.
 
-Next prepare the bounded source step for actual trusted root/child
-composition using PF20's unchanged serve_child seam and an exact launch/argv/FD
-contract. This admission library is not a root launcher; the historical v2
+The subsequent existing-root composition step is now qualified at `794080a4f`;
+[its current handoff](../root-composition-20260912/CURRENT.md) supersedes this
+earlier next-step instruction. Five review slots used in the current window.
+This admission library is not a root launcher; the historical v2
 installation proposal is not executable authority. No root listener, accounts,
 services, ACL/ownership changes, TPM changes, real Vault migration or protected
 activation without the separate exact-manifest approval. PF27 remains in progress.

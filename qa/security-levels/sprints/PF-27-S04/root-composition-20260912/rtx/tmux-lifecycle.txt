@@ -1,0 +1,35 @@
+/home/travis/security-round5/evidence/pf27-root-composition-20260912/verified/candidate/codex-secret-broker-service; printf "\nproduction-exit=%s\n" "$?"
+bash-5.3$ /home/travis/security-round5/evidence/pf27-root-composition-20260912/verified/candidate/codex-secret-broker-service; printf "\nproduction-exit=%s\n" "$?"
+credential broker service unavailable: qualified OS bootstrap required
+
+production-exit=78
+bash-5.3$ export PATH=/home/travis/security-round5/tools:/home/travis/.cargo/bin:$PATH; export CARGO_TARGET_DIR=/home/travis/repos/CorbanuTerminal-harness/codex-rs/target; export T
+MPDIR=/home/travis/.pf27c-1mz8tyiw; export CARGO_BUILD_JOBS=8 RUST_MIN_STACK=8388608 CORBANU_TEST_NO_NATIVE_KEYRING=1; flock /home/travis/security-round5/locks/build.lock just test
+ -p codex-secret-broker-service --features synthetic-fixture --retries 0 --test-threads 4; printf "\nchildren-exit=%s\n" "$?"
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+────────────
+ Nextest run ID c200f808-99f4-413e-9e05-058fea361097 with nextest profile: local
+    Starting 17 tests across 4 binaries
+        PASS [   0.003s] codex-secret-broker-service children::tests::pf_27_s01_reaper_spawn_failure_returns_both_owned_children
+        PASS [   0.008s] codex-secret-broker-service children::tests::pf_27_s01_early_drop_uses_preallocated_reaper
+        PASS [   0.018s] codex-secret-broker-service root::tests::pf_27_s01_native_root_open_denies_nonroot_and_fences_children
+        PASS [   0.018s] codex-secret-broker-service root::tests::pf_27_s01_root_mapping_uses_child_role_and_shutdown_releases_roots
+        PASS [   0.033s] codex-secret-broker-service root::tests::pf_27_s01_root_open_failures_release_first_root_and_both_children
+        PASS [   0.033s] codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_duplicate_parent_and_wrong_uid_connections_deny
+        PASS [   0.043s] codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_exit_and_handler_failure_fence_generation
+        PASS [   0.059s] codex-secret-broker-service root::tests::pf_27_s01_root_terminal_outcomes_fence_and_preserve_ambiguous_errors
+        PASS [   0.018s] codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_roles_route_independently_and_stalled_handlers_shutdown
+        PASS [   0.002s] codex-secret-broker-service::lifecycle pf_27_s01_production_service_requires_qualified_bootstrap
+        PASS [   0.063s] codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_handler_deadline_fences_without_blocking_supervisor
+        PASS [   0.039s] codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_unknown_peer_and_old_generation_cannot_enter_replacement
+        PASS [   0.086s] codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_peer_mismatch_denies_before_audit
+        PASS [   0.090s] codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_dispatch_uses_vault_and_settles_journal
+        PASS [   0.190s] codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_replay_denies_without_second_audit_or_secret
+        PASS [   0.370s] codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_death_and_restart_refuse_old_channel_and_key
+        PASS [   5.296s] codex-secret-broker-service::lifecycle subprocess::pf_27_s01_signal_during_partial_read_preserves_absolute_deadline
+────────────
+     Summary [   5.364s] 17 tests run: 17 passed, 0 skipped
+
+children-exit=0
+bash-5.3$
