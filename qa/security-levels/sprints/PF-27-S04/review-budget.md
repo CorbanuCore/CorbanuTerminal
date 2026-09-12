@@ -18,6 +18,15 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Owner increment review25 reserved September12 18:42UTC before dispatch:
+Astra High overfb7523f4b, frozen Rust30aebfb77785fe5108276a651a4005fca3c5bae3
+and final RTX/TMUX receipts. Window17:25:45–23:25:45Z now3 used/2 available.
+Review26 Fable5.1High remains allocated but not yet dispatched. No adapter rerun.
+
+Review25 completed exit0/findings[], patch correct. Review26 reserved September12
+18:43:25UTC before dispatch: Fable5.1High via Corbanu/private TMUX on the same
+Rust30aebfb7 and actual execution receipts. Window now4 used/1 available.
+
 Review23 reserved/dispatched September12 17:49UTC: Astra High, adapter source
 30b471a47/Rust2d270c5c overc5b05d9d8, actual OS/TMUX receipts. Window17:25:45Z–
 23:25:45Z now1 used/4 available; history1–22 retained. Review24 Fable remains
