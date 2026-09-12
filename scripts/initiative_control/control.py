@@ -165,6 +165,36 @@ def badge(status):
     return f'<span class="badge {e(status)}">{e(status.replace("_", " "))}</span>'
 
 
+def sprint_status(sprint, data):
+    """Status belongs to the manager's sprint; worker claims never override it."""
+    status, sid = sprint["status"], sprint["sprint_id"]
+    if status not in {"blocked", "in_progress"}:
+        return badge(status), ""
+    target = "status-" + sid
+    reports = sorted((r for r in data["runs"] if r["sprint_id"] == sid),
+                     key=lambda r: (timestamp(r["updated_at"]), r["run_id"]), reverse=True)
+    if status == "blocked":
+        reasons = [t["reason"] for t in data["config"].get("human_tests", [])
+                   if t["sprint_id"] == sid and t.get("status") == "blocked"]
+        reasons += [r["summary"] for r in reports if r["status"] == "blocked"]
+        text = ''.join(f'<li>{e(reason)}</li>' for reason in dict.fromkeys(reasons))
+        details = ('<ul>' + text + '</ul>') if text else '<p>No condensed blocker recorded. Manager must supply the reason; consult the sprint record below.</p>'
+        label = f'<a class="badge blocked" href="#{e(target)}" aria-label="{e(sid)} blocked: view reasons">blocked</a>'
+        title = "Block reasons"
+    else:
+        latest = reports[0] if reports else None
+        summary = ' '.join(latest["summary"].split()) if latest else "No progress report connected; implementation status is manager-recorded, not a live worker signal."
+        short = summary if len(summary) <= 260 else summary[:257].rstrip() + "…"
+        observed = ("Last report " + latest["updated_at"]) if latest else "No report timestamp"
+        stale = latest and (timestamp(now()) - timestamp(latest["updated_at"])).total_seconds() > STALE_SECONDS
+        note = ("STALE · " if stale else "") + short + " · " + observed
+        label = f'<span class="status-hint"><a class="badge in_progress" href="#{e(target)}" aria-describedby="hint-{e(sid)}" aria-label="{e(sid)} in progress: latest notes">in progress</a><span class="status-tooltip" role="tooltip" id="hint-{e(sid)}">{e(note)}</span></span>'
+        details = f'<p>{e(summary)}</p><small>{e(observed)}{" · STALE report" if stale else ""}</small>'
+        title = "Latest progress"
+    details += '<p>' + link(sprint["path"], sid + " — full sprint and remaining gates") + '</p>'
+    return label, f'<article class="test status-detail" id="{e(target)}" tabindex="-1"><h3>{e(sid)} · {title}</h3>{details}<a href="#initiatives">Back to workstreams</a></article>'
+
+
 def page(title, body, collected, generation=""):
     return f'''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -255,10 +285,11 @@ def overview(data):
     reserved = [s for s in sprints["sprints"] if s["status"] in {"in_progress", "blocked"}]
     body = '<section class="heading"><div><p class="eyebrow">DELIVERY / OPERATIONS</p><h1>Initiative map</h1></div>'
     body += f'<div class="counters"><strong>{len(active)} / {plans["active_limit"]}<small>active initiatives</small></strong><strong>{len(reserved)} / 3<small>reserved sprints</small></strong><strong>1<small>sprint per initiative</small></strong></div></section>'
-    body += f'<aside class="notice"><strong>Source boundary</strong> {e(source["label"])} · {e(source["branch"])} · {e(source["commit"][:12])}. {e(source.get("note", ""))}</aside>'
+    body += f'<aside class="notice"><strong>Source boundary</strong> {e(source["label"])} · {e(source["branch"])} · {e(source["commit"][:12])}. {e(source.get("note", ""))}<small>Checkout: {e(source.get("checkout", "not recorded"))} · content {e(source.get("tree_digest", "unknown")[:12])}</small><a href="manifest.json">Exact publication manifest</a></aside>'
     if data["problems"]:
-        body += '<aside class="notice danger"><strong>Manager attention required</strong><ul>' + ''.join(f'<li>{e(p)}</li>' for p in data["problems"][:20]) + '</ul></aside>'
+        body += '<aside class="notice danger"><strong>Manager attention required</strong><ul>' + ''.join(f'<li>{e(p)}</li>' for p in list(dict.fromkeys(data["problems"]))[:20]) + '</ul></aside>'
     body += '<section id="initiatives" aria-label="Active workstreams" class="lanes">'
+    status_details = []
     for plan in active:
         path = "docs/plans/" + plan["path"]
         children = sorted([s for s in sprints["sprints"] if s["plan_file"] == path], key=lambda s: int(s["execution_order"] or 0))
@@ -270,7 +301,10 @@ def overview(data):
         body += '<ol class="sprint-map">'
         ordered = working + [s for s in current if s not in working]
         for sprint in ordered[:4]:
-            body += f'<li>{badge(sprint["status"])} <b>{link(sprint["path"], sprint["sprint_id"])}</b><div>{e(sprint["title"])}</div>'
+            label, detail = sprint_status(sprint, data)
+            if detail:
+                status_details.append(detail)
+            body += f'<li>{label} <b>{link(sprint["path"], sprint["sprint_id"])}</b><div>{e(sprint["title"])}</div>'
             deps = sprint.get("depends_on", "none")
             if deps != "none":
                 body += f'<small>Requires {e(deps)}</small>'
@@ -285,10 +319,13 @@ def overview(data):
         for sprint in children:
             body += f'<li>{link(sprint["path"], sprint["sprint_id"])} · {e(sprint["status"])} · {e(sprint["title"])}<small>← {e(sprint["depends_on"])}</small></li>'
         body += '</ul></details></article>'
-    body += '</section><section id="human"><div class="section-title"><h2>Human test queue</h2><span>Review budget: ~1 hour/day</span></div><div class="test-grid">'
-    for test in config.get("human_tests", []):
-        status = "blocked" if test.get("status") == "blocked" else "pending human acceptance"
-        body += f'<article class="test"><p class="eyebrow">{e(test["sprint_id"])}</p><h3>{link(test["path"],test["title"])}</h3>{badge(status)}<p>{e(test["reason"])}</p></article>'
+    body += '</section><section id="status-details"><h2>Block reasons & latest progress</h2><div class="test-grid">' + ''.join(status_details) + '</div></section>'
+    body += '<section id="human"><div class="section-title"><h2>Human test queue</h2><span>Review budget: ~1 hour/day</span></div><div class="test-grid">'
+    for index, test in enumerate(config.get("human_tests", [])):
+        status = {"blocked": "blocked", "preparing": "manager preparation"}.get(test.get("status"), "pending human acceptance")
+        target = f"human-reason-{index}"
+        label = f'<a class="badge blocked" href="#{target}">blocked</a>' if status == "blocked" else badge(status)
+        body += f'<article class="test"><p class="eyebrow">{e(test["sprint_id"])}</p><h3>{link(test["path"],test["title"])}</h3>{label}<p id="{target}">{e(test["reason"])}</p></article>'
     if not config.get("human_tests"):
         body += '<p>No human test plans mapped. This is missing coverage, not a pass.</p>'
     body += '</div></section><section id="runs"><h2>Runs & machines</h2><p class="muted">Explicit, redacted worker reports. “Finished” does not complete a sprint.</p><div class="table-wrap"><table><thead><tr><th>Sprint / run</th><th>Machine / role</th><th>Agent / session</th><th>Reported state</th><th>Last report</th></tr></thead><tbody>'
@@ -328,6 +365,9 @@ def publish(repo, state, output):
         generation = None
         try:
             data = collect(repo, state)
+            failure = state / "sync-failure.json"
+            if failure.exists() and timestamp(read_json(failure, state)["attempted_at"]) >= timestamp(data["source"]["collected_at"]):
+                raise ValueError("source synchronization failed; require a newer successful collection")
             releases = output / "releases"
             releases.mkdir(exist_ok=True, mode=0o700)
             generation = Path(tempfile.mkdtemp(prefix="build-", dir=releases))

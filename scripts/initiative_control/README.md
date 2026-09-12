@@ -6,8 +6,10 @@ sprints per initiative”. Internal operations only; no release or enablement.
 
 This is the bounded port from recovery delivery control. Provenance and exact
 receiving-tree test results are under `qa/initiative-control/pf-80-s01/`.
-The recovery runbook described a deployed Linux service; this receiving port
-has not been deployed. Source inspection and synthetic tests do not prove live
+The recovery runbook described a deployed Linux service. The September 12 bounded
+dashboard status/source repair has an explicitly authorized receiving-source
+publication path; its exact deployment receipt is separate from native delivery
+qualification. Source inspection and synthetic tests do not prove live
 entitlement, task ownership, enrollment, grants or successful delivery.
 
 ## Offline preparation
@@ -64,8 +66,8 @@ decisions about historical events; see `docs/research/tasknode-integration/`.
 sprints, renders sanitized private HTML and retains the last good publication
 on failures. Stale source and worker ages remain separate. `export.py` exports
 declared document/tooling paths with hashes; it never scans agent homes.
-`activate.py` is the inherited manager-only Linux installer. It is tested with
-synthetic directories and mocked service calls, not executed on a real service.
+`activate.py` is the inherited manager-only Linux installer. Its synthetic
+tests do not by themselves prove a real service update.
 `tick.py` publishes and queues explicitly mapped reports; OFF prevents network
 delivery but does not prevent local report collection or queue preparation.
 `delivery.py` checks candidate/evidence hashes, native flag contracts and human
@@ -78,3 +80,28 @@ feed historical events through capture or use Sync now for one-event approval.
 The manager must allocate a reviewed native transport boundary before live use.
 No new auth store, credential provisioning flow, scheduler or Rust changes are
 introduced here. Workers cannot self-accept reports, close sprints or release.
+
+## Dashboard source maintenance
+
+The manager reconciles canonical plans/sprints, resolved decisions, human-test
+cards and redacted worker reports before each ten-minute sync. The Luna Extra
+High worker runs the existing private wrapper, now selecting the declared manager
+receiving checkout, not recovery. Its nonblocking lock prevents overlapping syncs.
+`sync-source.sh` exports the current HEAD and allowlisted file hashes, validates
+and renders the bundle locally, rechecks branch/revision/content/configuration
+after upload, then verifies the exact server publication. It never pulls, resets
+or rebases an active checkout. Accepted upstream work and intentional source
+moves must be reconciled by the manager and recorded in the same handoff.
+
+The banner names checkout/branch/commit/content digest. Source older than 20
+minutes is stale even if the server renders it again; worker notes have their own
+45-minute stale threshold. Failed source sync keeps last-good pages and marks
+failure through the existing private service when reachable. A failure marker
+cannot be cleared by the backup 30-minute render timer; it needs a newer source
+collection. If the server is unreachable, the unchanged collection timestamp
+still ages and the manager reports the actionable failure.
+
+Blocked sprint labels link to status context and full sprint records. In-progress
+labels expose condensed latest reports on hover/focus and link to full notes for
+click/touch. Missing notes say unknown; reports never override manager status.
+Historical PF76 warnings remain held, not remapped or portrayed as PF80 blockers.

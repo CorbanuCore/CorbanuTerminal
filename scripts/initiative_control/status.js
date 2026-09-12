@@ -16,9 +16,9 @@ async function updateHealth() {
     generation = publishedGeneration;
     const age = Math.max(0, Math.floor((Date.now() - Date.parse(document.body.dataset.collected)) / 60000));
     const publishAge = Math.max(0, Math.floor((Date.now() - Date.parse(health.published_at)) / 60000));
-    const stale = !Number.isFinite(age) || age > 45 || publishAge > 45;
+    const stale = !Number.isFinite(age) || age > 20 || publishAge > 45;
     freshness.className = "freshness" + (stale ? " stale" : "");
-    freshness.textContent = `${stale ? "STALE · " : ""}Source collected ${age} min ago · published ${publishAge} min ago · refresh every 30 min${health.warning_count ? " · data warnings present" : ""}`;
+    freshness.textContent = `${stale ? "STALE · " : ""}Source collected ${age} min ago · published ${publishAge} min ago · manager sync every 10 min${health.warning_count ? " · data warnings present" : ""}`;
     for (const item of document.querySelectorAll("time[data-seen]")) {
       const minutes = Math.floor((Date.now() - Date.parse(item.dataset.seen)) / 60000);
       item.textContent = `${item.dataset.seen} (${minutes} min ago${minutes > 45 ? "; stale" : ""})`;
