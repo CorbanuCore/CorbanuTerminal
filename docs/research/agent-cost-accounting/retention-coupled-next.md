@@ -1,5 +1,21 @@
 # Accepted C2 allocation — September12
 
+Manager scope correction after Mendel's zero-edit return: the historical five-file
+scope froze an interim C1 assertion that valid active deletion MUST fail. That
+contradicts C2's already-approved successful deletion. Authorize a sixth literal
+path, `codex-rs/state/src/runtime/accounting_retention_consumers_tests.rs`, only
+to remove that temporary `coupled maintenance` rejection assertion. Preserve the
+surrounding legacy-read error and complete no-write dump assertion, all subsequent
+same-fixture reader checks, and every other A/B/C1 expectation. Do not delete the
+fixture early and invalidate later tests. Replacement deletion success, atomic
+failure/rollback and two-reopen evidence belong in C2's already-required tests;
+the final receipt must map the superseded assertion to those cases. No skipped
+or weakened deletion requirement. Count removed lines in the unchanged size
+target; no review allowance consumed/reset by this zero-edit return.
+New exact base43e1e7864f5aec056425942e8a16e37fb91ea92a reconciles PF13 parser406
+without changing accounting/TaskNode source. Plan/sprint six-path scope wins over
+the original five-path table below; all other C2 requirements remain unchanged.
+
 This section supersedes historical C1-only dispatch text below, which remains
 preserved. C1 is accepted and integrated into exact base
 afe535c062282f1f1ae50e7feb7e6d8f4d179906; combined335 native tests passed,
