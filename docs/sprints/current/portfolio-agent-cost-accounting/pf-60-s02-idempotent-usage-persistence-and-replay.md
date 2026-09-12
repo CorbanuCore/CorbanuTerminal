@@ -7,11 +7,11 @@ plan_feature: "PF-60"
 execution_order: 2
 owner: "Codex accounting retention-plan lane"
 parallel_lane: "accounting-retention-plan"
-write_scope: "codex-rs/state/src/runtime/accounting_lifecycle.rs, codex-rs/state/src/runtime/accounting_retention_plan.rs, codex-rs/state/src/runtime/accounting_retention_plan_tests.rs, codex-rs/state/src/runtime/accounting_retention_test_support.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/retention-plan-increment.md"
+write_scope: "codex-rs/state/src/runtime/accounting_retention_plan.rs, codex-rs/state/src/runtime/accounting_retention_reduction.rs, codex-rs/state/src/runtime/accounting_retention_reduction_tests.rs, codex-rs/state/src/runtime/accounting_retention_test_support.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/retention-reduction-increment.md"
 integration_gate: "Codex management audits exact five-file read-only retention scope, no-write proof and original-price preservation, reviews once plus substantive corrections and reruns state/governance on receiving. No production migration, retention mutation, live collection or worker commit/push."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
 branch: "workstream/accounting-pf60-s01-20260911"
-base_commit: "87e31f521672e627e6230d48fc16a4cfaa7ff44c"
+base_commit: "fd46c5897c3c3a1c146a97f544e5bacf4e996f9d"
 depends_on: "PF-60-S01"
 created: 2026-09-09
 updated: 2026-09-11
@@ -53,6 +53,8 @@ records approved daily expiry; [latest-quote allocation](../../../research/agent
 
 ## Done
 
+- [x] Read-only input A8eca814f8 reviewed clean and integrated atfd46c5897; combined325 state/TaskNode tests pass9.100s. No reduction/mutation claim. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/retention-plan-increment.md). Original904-line draft preserved; accepted A775lines.
+
 - [x] Canonical receiving fast-forwarded to 87e31f521672e627e6230d48fc16a4cfaa7ff44c with reviewed native prerequisites; prior overlapping Facilities edits preserved privately and reconciled. Integrator authorizes two additional scoped review passes (code plus substantive correction only), preserving prior history.
 
 - [x] Latest quote8b6d629b6 reviewed clean and combined staging04ba6b8b7 passes242state/80TaskNode tests; reader only, no retention mutation. [Evidence](../../../../qa/initiative-control/native-staging-2026-09-12.md). Canonical receiving transfer/publication pending.
@@ -69,7 +71,7 @@ records approved daily expiry; [latest-quote allocation](../../../research/agent
 
 ## Remaining
 
-- [ ] Implement the [read-only retention allocation](../../../research/agent-cost-accounting/retention-plan-next.md) in the five front-matter paths: whole-store plan, strict validation, exact arithmetic, no writes, full snapshots and reopen tests; return for manager review. Coupled mutation/read/delete/admission follows separately; no S03 activation.
+- [ ] Implement [pure retention reduction B](../../../research/agent-cost-accounting/retention-reduction-next.md) in the five front-matter paths; accepted reader remains frozen apart from private registration. Return complete no-write/boundary/reopen proof. Coupled mutation/read/delete/admission follows separately; no S03 activation.
 - [ ] After reviewing the first increment, manager allocates production migration/dispatch/presence/price/retention wiring and complete S02 golden tests separately; do not broaden this worker's scope.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 

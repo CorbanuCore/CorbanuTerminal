@@ -19,15 +19,15 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "87e31f521672e627e6230d48fc16a4cfaa7ff44c"
+    base_commit: "fd46c5897c3c3a1c146a97f544e5bacf4e996f9d"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
     branch: "workstream/accounting-pf60-s01-20260911"
-    base_commit: "87e31f521672e627e6230d48fc16a4cfaa7ff44c"
+    base_commit: "fd46c5897c3c3a1c146a97f544e5bacf4e996f9d"
 ---
 
 # 2. Accounting — unified agent cost and usage
 
-Current September 12 continuation: canonical receiving is reconciled at `87e31f521672e627e6230d48fc16a4cfaa7ff44c`. PF-60-S02 remains in progress, now allocating the five-file retention planner. S03 is not executable until S02 retention, admission/runtime wiring and acceptance are complete. The integrator authorizes one scoped code review plus one correction review if a substantive issue requires it; previous review history is retained under root AGENTS.md's new delegation.
+Current September12: validated-input A8eca814f8 reviewed clean and integrated atfd46c5897; combined325 state/TaskNode tests pass. [Pure reduction B](../../research/agent-cost-accounting/retention-reduction-next.md) is now allocated; same five-file boundary specified there and in S02. A used1 ofprior+2 reviews; integrator adds one B code pass, retaining unused correction/history. No retention mutation/runtime or S03 activation.
 
 Policy: repository-root `AGENTS.md`. Lifecycle: [plans](../index.md).
 Portfolio: [source coverage, sequencing and human capacity](../portfolio-2026-09-09.md).
@@ -97,7 +97,7 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Codex accounting retention-plan lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `87e31f521672e627e6230d48fc16a4cfaa7ff44c` | PF-60-S02 five-file read-only retention planner; exact mandate in retention-plan-next.md |
+| Codex accounting retention-plan lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `fd46c5897c3c3a1c146a97f544e5bacf4e996f9d` | PF-60-S02 five-file pure reduction B; exact mandate in retention-reduction-next.md |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
 S02 retains its reservation; Travis approved conservative daily expiry in this
