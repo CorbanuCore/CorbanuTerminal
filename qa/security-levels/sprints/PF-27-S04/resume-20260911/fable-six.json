@@ -1,0 +1,18 @@
+{
+  "findings": [
+    {
+      "title": "Feature-gated test support violates workspace `unwrap_used = deny`; `just clippy --features synthetic-fixture` fails",
+      "body": "`tests/support/subprocess.rs` uses `.unwrap()` in non-`#[test]` helper fns (`ChildService::with_mode`, `frame`). `clippy.toml`'s `allow-unwrap-in-tests` only exempts `#[test]`/`cfg(test)` items, so the workspace `[lints.clippy] unwrap_used = \"deny\"` applies. The recorded `rtx/fix-service.log` already shows all 12 hits (lines 26\u201376) \u2014 they surfaced as warnings only because `cargo clippy --fix` caps lints to warn; a plain `just clippy -p codex-secret-broker-service --features synthetic-fixture` (the repo's lint recipe, `cargo clippy --tests`) turns them into hard errors. Bazel CI does not build the crate with the feature, so this is invisible to CI but breaks the documented local lint path for exactly the configuration the qualification relies on. Repo convention for integration-test crates is a file-level `#![allow(clippy::unwrap_used)]` (see `exec/tests/suite/*.rs`, `core/tests/common/responses.rs`); add it to `tests/lifecycle.rs` (or the support module) so the reproducible `qualify-rtx.sh` lint step is clean rather than warning-capped.",
+      "priority": "P2",
+      "confidence": 0.6,
+      "category": "maintainability",
+      "code_location": {
+        "file_path": "codex-rs/secret-broker-service/tests/support/subprocess.rs",
+        "line": 26
+      }
+    }
+  ],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "Reviewed the diff from d870c92 to the branch tip against the stated packet. `BrokerService::serve` checks `observed_peer` against the trusted `expected_peer` before `register_session`, and `serve_connection` re-verifies it and owns a `CloseGuard` that cancels the registered generation on every exit path (EOF, deadline, wrong peer, handler error, early return). Binding/MAC/grants come only from the process-owned `TrustedSession`, never from a frame. The EINTR changes preserve the absolute deadline: `read_before` recomputes `remaining` from the fixed `Instant` on `Interrupted` (needed because Linux never restarts socket reads with SO_RCVTIMEO), and `watch_disconnect` ignores EINTR without treating it as closure; `read_exact`/`write_all` already retry EINTR. The fixture binary is a separate `required-features` bin, requires the explicit `--synthetic-inherited-socket` argument, and the production `main.rs` unconditionally exits 78; the default test proves that. `dep:signal-hook` on a target-scoped optional dep is valid Cargo, `MockKeyringStore` is exported from a non-cfg(test) `pub mod`, `cargo_bin` resolves at runtime so the ungated test doesn't need the fixture, and Bazel's `codex_rust_crate` builds the fixture as the feature-less stub. Subprocess tests correctly exercise death/restart/replay (EPIPE is safe since Rust ignores SIGPIPE), peer mismatch with zero journal records, and a 5 s deadline under repeated SIGUSR1. No security regression or main-compatibility break found; documentation/evidence stays within the bounded substage and does not claim native isolation or completion. The only actionable item is a lint-convention gap in the feature-gated test support module that makes the non-fix clippy path fail; it is not a correctness or security blocker.",
+  "overall_confidence": 0.8
+}

@@ -1,0 +1,6 @@
+cargo clippy --fix --tests --allow-dirty {args}
+    Checking codex-utils-absolute-path v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/absolute-path)
+    Checking codex-security-policy v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/security-policy)
+    Checking codex-security-audit v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/security-audit)
+    Checking codex-secret-broker v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/secret-broker)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.68s

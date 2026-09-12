@@ -67,9 +67,9 @@ records exact coordinates, review-six approval and unchanged native setup limits
   Production service, data-plane and all-OS qualification remain open;
   see `qa/security-levels/sprints/PF-27-S04/round5-evidence.md`.
 
-## Remaining
+- [x] Reconciled and qualified the service construction stage on main/0.1.42: default 1, synthetic 6, full affected 338, Core 6 and supporting TMUX pass. Fable review 6 found no runtime/security issue; one test-only lint finding was reproduced and fixed, strict Clippy and affected proof rerun successfully. Six reviews spent, no seventh; see `qa/security-levels/sprints/PF-27-S04/resume-20260911/README.md`. No native deployment or activation claimed.
 
-- [ ] Rolling pipeline service substage: compose a narrow `codex-secret-broker-service` crate around broker/Vault/PF-41 without a dependency cycle; accept only trusted bootstrap handles, preserve unsupported/default-deny behavior and qualify lifecycle with synthetic Linux subprocess fixtures. Coordinator owns shared registration. No service-principal creation, installation, ownership/ACL migration or existing Vault transfer without separate explicit setup authority. Handle EINTR before adding service signal handlers. Provider response streaming remains a separately specified gate.
+## Remaining
 
 - [ ] Implement the completed PF-27-S03 OS identity/IPC/handle design and PF-41-S03 durable-event contract; verify controller/broker state cannot be read or rewritten by the real agent process.
 - [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.

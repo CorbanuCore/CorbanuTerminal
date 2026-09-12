@@ -309,7 +309,7 @@
       <p class="lede">A shareable view of what is finished, what remains under measured qualification, and which dependencies the latest work unlocks.</p>
       <div class="snapshot">
         <span><strong>Snapshot:</strong> 11 September 2026 · human acceptance and main/release reconciliation</span>
-        <span><strong>Integration:</strong> <code>integrate/pf13-main-release-20260911</code> · combined RTX qualification passed; authorized main landing</span>
+        <span><strong>Main:</strong> PF13 and release 0.1.42 reconciled at <code>d870c92da</code>; resumed PF-27 service stage qualified</span>
         <span><strong>Scope:</strong> 84 P0-plan sprint records, including inherited profile/Task Node records; 52 remain current</span>
         <span><strong>Deadline:</strong> 8 October 2026</span>
       </div>
@@ -357,7 +357,7 @@
           <h3>Isolated credential broker</h3>
           <a class="sprint-id" href="docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md">PF-27-S04</a>
           <p>Broker code, durable audit binding, Linux transport and staged service composition are implemented. Production startup still refuses until the protected root and native isolation are qualified.</p>
-          <p><strong>Evidence:</strong> Broker/Vault/proxy 338/338, Core 6/6, subprocess 6/6 and Bazel checks passed. Astra service review is clean; five reviews used. Fresh external service review needs a budget decision. Streaming and all-OS qualification remain open.</p>
+          <p><strong>Evidence:</strong> Fresh main-based broker/Vault/proxy 338/338, Core 6/6, default 1/1, subprocess 6/6, strict Clippy and supporting TMUX passed. Fable review 6 found no runtime/security issue; one test-only lint issue was reproduced and fixed. All six reviews are spent. Native bootstrap, streaming and all-OS qualification remain open. <a href="qa/security-levels/sprints/PF-27-S04/resume-20260911/README.md">Review and final proof</a>.</p>
           <div class="status-line">
             <div class="bar-row"><span>PF-27 archived sprints</span><strong>2 / 4 · 50%</strong></div>
             <div class="track" role="progressbar" aria-label="PF-27 archived completion" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100"><div class="fill" style="width:50%"></div></div>
@@ -497,7 +497,7 @@
       </div>
 
       <div class="footnote">
-        <strong>Human acceptance and integration:</strong> Travis completed PF13 human testing and authorized main landing. The reconciled main/0.1.42 tree passed selected RTX tests, 33 TUI integration tests and packaged tool/recovery journeys. The accepted Mac package remains installed; this is not a new release or a claim that every historical blocked case passed. Next is the staged PF-27 broker service, with one additional Fable 5.1 High review approved (five already spent). Privileged installation is not authorized. Frozen provenance retains its production gates; PF-35 stays external. Other ledgers are unchanged: provenance 5/5, completed UI 3/5, memory plus fixture 5/5 and PF20 2/5. <a href="qa/provider-auth/pf-58/main-integration-20260911/README.md">Current acceptance and test evidence</a>. <a href="humanTest.html">Human guide and historical agent outcomes</a>.
+        <strong>Human acceptance and integration:</strong> Travis completed PF13 human testing; the reconciled main/0.1.42 work is pushed at d870c92da after selected RTX suites, 33 TUI tests and packaged tool/recovery journeys passed. The accepted Mac package remains installed. PF-27 resumed from that baseline and its service construction passed renewed tests and Fable review-six disposition; this is not a completed broker or a new release. The monitor is active. Next is trusted native bootstrap, with privileged setup and future independent review requiring explicit allowances. PF-35 stays external; provenance stays frozen. Ledgers: broker 6/6, provenance 5/5, completed UI 3/5, memory/fixture 5/5, PF20 2/5; PF58 9/9. <a href="qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/RESUME-20260911.md">Current resume handoff</a>. <a href="humanTest.html">Human guide and retained historical outcomes</a>.
       </div>
 
       <details>

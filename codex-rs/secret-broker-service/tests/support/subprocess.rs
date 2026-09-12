@@ -1,0 +1,164 @@
+// Fixture setup must fail immediately; this allowance applies only to test helpers.
+#![allow(clippy::unwrap_used)]
+
+use codex_secret_broker::linux_transport::*;
+use codex_secret_broker::*;
+use pretty_assertions::assert_eq;
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::Read;
+use std::io::Write;
+use std::os::fd::OwnedFd;
+use std::os::unix::net::UnixStream;
+use std::process::Child;
+use std::process::ChildStdout;
+use std::process::Command;
+use std::process::Stdio;
+
+struct ChildService {
+    child: Child,
+    channel: LinuxBrokerChannel,
+    output: BufReader<ChildStdout>,
+    wire: UnixStream,
+}
+impl ChildService {
+    fn start(key: u8) -> Self {
+        Self::with_mode(key, "--normal-peer")
+    }
+    fn with_mode(key: u8, mode: &str) -> Self {
+        let (mut client, server) = UnixStream::pair().unwrap();
+        let peer = observed_peer(&client).unwrap();
+        // Inherited socketpair peer is the creator, not the executed child.
+        assert_eq!(peer.process_id(), std::process::id());
+        let mut child = Command::new(
+            codex_utils_cargo_bin::cargo_bin("codex-secret-broker-service-fixture").unwrap(),
+        )
+        .arg("--synthetic-inherited-socket")
+        .arg(mode)
+        .stdin(Stdio::from(OwnedFd::from(server)))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+        client.write_all(&[key; 32]).unwrap();
+        let mut output = BufReader::new(child.stdout.take().unwrap());
+        let mut ready = String::new();
+        output.read_line(&mut ready).unwrap();
+        assert_eq!(ready, "synthetic-only ready\n");
+        let wire = client.try_clone().unwrap();
+        Self {
+            child,
+            channel: LinuxBrokerChannel::new(client, &peer).unwrap(),
+            output,
+            wire,
+        }
+    }
+}
+impl Drop for ChildService {
+    fn drop(&mut self) {
+        let _ = self.channel.close();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+fn frame(key: u8, sequence: u64) -> SignedBrokerFrame {
+    BrokerChannelMac::from_secret([key; 32])
+        .sign(
+            BrokerBinding {
+                controller_instance: "controller".into(),
+                worker_instance: "worker".into(),
+                session_id: "session".into(),
+                task_id: "task".into(),
+                run_id: "run".into(),
+                run_generation: 1,
+            },
+            sequence,
+            BrokerOperation::OpenAiResponses {
+                credential: CredentialReference::from_sha256_hex("a".repeat(64)).unwrap(),
+                request: OpenAiResponsesOperation::new("/v1/responses").unwrap(),
+            },
+        )
+        .unwrap()
+}
+
+#[test]
+fn pf_27_s01_subprocess_dispatch_uses_vault_and_settles_journal() {
+    let mut service = ChildService::start(9);
+    assert_eq!(
+        service.channel.dispatch(&frame(9, 1)).unwrap(),
+        TypedOperationReceipt {
+            response_status: 204,
+            uploaded_bytes: 0,
+            downloaded_bytes: 0
+        }
+    );
+    service.channel.close().unwrap();
+    let mut output = String::new();
+    service.output.read_to_string(&mut output).unwrap();
+    assert_eq!(output, "synthetic-only journal-records=2\n");
+    assert!(service.child.wait().unwrap().success());
+    assert!(!output.contains("BROKER-SERVICE-SYNTHETIC-ONLY"));
+}
+
+#[test]
+fn pf_27_s01_subprocess_death_and_restart_refuse_old_channel_and_key() {
+    let mut old = ChildService::start(9);
+    assert!(old.channel.dispatch(&frame(9, 1)).is_ok());
+    old.child.kill().unwrap();
+    old.child.wait().unwrap();
+    assert!(old.channel.dispatch(&frame(9, 2)).is_err());
+    assert_eq!(
+        old.channel.dispatch(&frame(9, 2)),
+        Err(BrokerDispatchError::SessionUnavailable)
+    );
+    let restarted = ChildService::start(8);
+    assert!(restarted.channel.dispatch(&frame(9, 1)).is_err());
+    let fresh = ChildService::start(7);
+    assert!(fresh.channel.dispatch(&frame(7, 1)).is_ok());
+}
+
+#[test]
+fn pf_27_s01_subprocess_replay_denies_without_second_audit_or_secret() {
+    let mut service = ChildService::start(9);
+    assert!(service.channel.dispatch(&frame(9, 1)).is_ok());
+    assert!(service.channel.dispatch(&frame(9, 1)).is_err());
+    let mut output = String::new();
+    service.output.read_to_string(&mut output).unwrap();
+    assert_eq!(output, "synthetic-only journal-records=2\n");
+    assert_eq!(service.child.wait().unwrap().code(), Some(78));
+}
+
+#[test]
+fn pf_27_s01_signal_during_partial_read_preserves_absolute_deadline() {
+    let mut service = ChildService::start(9);
+    let start = std::time::Instant::now();
+    service.wire.write_all(&[0]).unwrap();
+    for _ in 0..4 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert!(
+            Command::new("kill")
+                .arg("-USR1")
+                .arg(service.child.id().to_string())
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+    let mut output = String::new();
+    service.output.read_to_string(&mut output).unwrap();
+    assert!(service.child.wait().unwrap().success());
+    assert!(start.elapsed() >= std::time::Duration::from_secs(4));
+    assert!(start.elapsed() < std::time::Duration::from_secs(7));
+    assert_eq!(output, "synthetic-only journal-records=0\n");
+}
+
+#[test]
+fn pf_27_s01_subprocess_peer_mismatch_denies_before_audit() {
+    let mut service = ChildService::with_mode(9, "--wrong-peer");
+    assert!(service.channel.dispatch(&frame(9, 1)).is_err());
+    let mut output = String::new();
+    service.output.read_to_string(&mut output).unwrap();
+    assert_eq!(output, "synthetic-only journal-records=0\n");
+    assert!(service.child.wait().unwrap().success());
+}

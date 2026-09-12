@@ -1,0 +1,50 @@
+/home/travis/security-round5/evidence/pf27-resume-20260911/candidate/codex-secret-broker-service --synthetic-inherited-socket; printf "\nproduction-ex
+it=%s\n" "$?"
+bash-5.3$ /home/travis/security-round5/evidence/pf27-resume-20260911/candidate/codex-secret-broker-service --synthetic-inherited-socket; printf "\npro
+duction-exit=%s\n" "$?"
+bash: /home/travis/security-round5/evidence/pf27-resume-20260911/candidate/codex-secret-broker-service: No such file or directory
+
+production-exit=127
+bash-5.3$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

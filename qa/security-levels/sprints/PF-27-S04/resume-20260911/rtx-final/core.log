@@ -1,0 +1,55 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+warning: function `append_chat_messages_for_response_item` is never used
+    --> core/src/client.rs:3746:4
+     |
+3746 | fn append_chat_messages_for_response_item(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `test_claude_plan_model_info` is never used
+    --> core/src/client_tests.rs:1640:4
+     |
+1640 | fn test_claude_plan_model_info() -> ModelInfo {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `count_cache_control_markers` is never used
+    --> core/src/client_tests.rs:1687:4
+     |
+1687 | fn count_cache_control_markers(value: &serde_json::Value) -> usize {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `test_openrouter_gemini_model_info` is never used
+    --> core/src/client_tests.rs:1926:4
+     |
+1926 | fn test_openrouter_gemini_model_info() -> ModelInfo {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `test_openrouter_anthropic_model_info` is never used
+    --> core/src/client_tests.rs:1959:4
+     |
+1959 | fn test_openrouter_anthropic_model_info() -> ModelInfo {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `submit_inter_agent_communication` is never used
+   --> core/src/agent/control.rs:428:14
+    |
+162 | impl AgentControl {
+    | ----------------- method in this implementation
+...
+428 |     async fn submit_inter_agent_communication(
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-core` (lib test) generated 6 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.30s
+────────────
+ Nextest run ID ddc0df02-5f76-4985-9804-94ae5c07dbf1 with nextest profile: local
+    Starting 6 tests across 1 binary (2411 tests skipped)
+        PASS [   0.007s] (1/6) codex-core config::network_proxy_credential::tests::credential_authority_revoke_during_use_linearizes_after_the_active_resolution
+        PASS [   0.008s] (2/6) codex-core security::broker_client::tests::pf_27_s04_client_drop_closes_the_generation_bound_channel
+        PASS [   0.008s] (3/6) codex-core security::broker_client::tests::pf_27_s04_client_closes_ambiguous_sequence_after_transport_unavailable
+        PASS [   0.008s] (4/6) codex-core config::network_proxy_credential::tests::pf_27_s04_broker_failures_map_without_raw_credential_fallback
+        PASS [   0.006s] (5/6) codex-core security::broker_client::tests::pf_27_s04_client_rejects_unsupported_path_before_transport
+        PASS [   0.007s] (6/6) codex-core security::broker_client::tests::pf_27_s04_client_uses_authenticated_frames_and_closes_without_fallback
+────────────
+     Summary [   0.021s] 6 tests run: 6 passed, 2411 skipped

@@ -1,0 +1,50 @@
+/home/travis/security-round5/evidence/pf27-resume-20260911/candidate/codex-secret-broker-service --synthetic-inherited-socket; printf "\nproduction-ex
+it=%s\n" "$?"
+bash-5.3$ /home/travis/security-round5/evidence/pf27-resume-20260911/candidate/codex-secret-broker-service --synthetic-inherited-socket; printf "\npro
+duction-exit=%s\n" "$?"
+credential broker service unavailable: qualified OS bootstrap required
+
+production-exit=78
+bash-5.3$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,31 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-utils-absolute-path v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/absolute-path)
+   Compiling codex-security-policy v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/security-policy)
+   Compiling codex-utils-rustls-provider v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/rustls-provider)
+   Compiling codex-utils-cache v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/cache)
+   Compiling codex-utils-string v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/string)
+   Compiling codex-async-utils v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/async-utils)
+   Compiling codex-keyring-store v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/keyring-store)
+   Compiling codex-utils-cargo-bin v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/cargo-bin)
+   Compiling codex-utils-image v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/image)
+   Compiling codex-http-client v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/http-client)
+   Compiling codex-utils-home-dir v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/home-dir)
+   Compiling codex-extension-items v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/ext/items)
+   Compiling codex-execpolicy v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/execpolicy)
+   Compiling codex-utils-path-uri v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/utils/path-uri)
+   Compiling codex-network-proxy v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/network-proxy)
+   Compiling codex-security-audit v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/security-audit)
+   Compiling codex-secret-broker v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/secret-broker)
+   Compiling codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/protocol)
+   Compiling codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/file-system)
+   Compiling codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/git-utils)
+   Compiling codex-secrets v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/secrets)
+   Compiling codex-vault v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/vault)
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-resume-20260911/codex-rs/secret-broker-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.66s
+────────────
+ Nextest run ID 123077b8-c503-4daa-b3dd-987aff7f8e06 with nextest profile: local
+    Starting 1 test across 3 binaries
+        PASS [   0.002s] (1/1) codex-secret-broker-service::lifecycle pf_27_s01_production_service_requires_qualified_bootstrap
+────────────
+     Summary [   0.003s] 1 test run: 1 passed, 0 skipped
