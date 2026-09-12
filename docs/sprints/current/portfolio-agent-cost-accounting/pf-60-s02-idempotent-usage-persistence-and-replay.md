@@ -5,13 +5,13 @@ status: in_progress
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 2
-owner: "Codex accounting native-Anthropic lane"
-parallel_lane: "accounting-native-anthropic"
-write_scope: "codex-rs/core/src/lib.rs, codex-rs/core/src/config/mod.rs, codex-rs/core/src/agent/role.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/client.rs, codex-rs/core/src/memory_stage_one.rs, codex-rs/core/src/accounting.rs, codex-rs/core/src/accounting_prices.rs, codex-rs/core/src/accounting_transport.rs, codex-rs/core/src/accounting_tests.rs, codex-rs/core/src/accounting_prices_tests.rs, codex-rs/core/tests/suite/mod.rs, codex-rs/core/tests/suite/accounting_anthropic.rs, codex-rs/core/tests/suite/accounting_anthropic_recovery.rs, codex-rs/core/tests/suite/accounting_anthropic_support.rs, codex-rs/codex-api/src/lib.rs, codex-rs/codex-api/src/endpoint/anthropic_messages.rs, codex-rs/codex-api/src/endpoint/anthropic_accounting.rs, codex-rs/codex-api/src/endpoint/anthropic_accounting_tests.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/anthropic-dispatch-increment.md, codex-rs/login/src/auth/default_client.rs, codex-rs/login/src/auth/default_client_tests.rs, codex-rs/http-client/src/client_builder.rs, codex-rs/http-client/src/client_builder_tests.rs"
-integration_gate: "Review03 clean; exact24-file candidate committedbc9b8b0d8 and receivede9d1345ee, combined security treec5e606fa2. Actual3868/1195 within3900/1450. Mendel owns read-only receiving proof, no source edits; OFF unchanged. Worker71focused pass with flaky/leak; full shared2fail and Core147fail (133baseline-common/14serial-passing extra) retained, not waived. Combined affected native tests/check and separate RTX security proof pending. No S02/S03/live/human completion claim."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
-branch: "workstream/accounting-pf60-s01-20260911"
-base_commit: "c8358dd9b4329036c8f8fb525015bbd795433513"
+owner: "Codex accounting policy-repair lane"
+parallel_lane: "accounting-policy-repair"
+write_scope: "codex-rs/state/src/runtime/accounting_store.rs, codex-rs/state/src/runtime/accounting_store_tests.rs, codex-rs/state/src/runtime/accounting_retention_atomic_test_support.rs, codex-rs/state/src/runtime/accounting_native_tests.rs, codex-rs/state/src/sqlite.rs, codex-rs/codex-api/src/telemetry.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/policy-lint-repair.md"
+integration_gate: "Accepted native receiving71+840 pass and normal check; existing-policy Clippy101 requires exact7-file policy-lint-repair-allocation.md. Target300/150 STOP450/225, one new review plus correction, prior failures preserved. Manager combined affected tests/lint; no S02/S03/live completion, no broad baseline waiver."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-policy-repair-20260912"
+branch: "workstream/accounting-policy-repair-20260912"
+base_commit: "a89a48548f644a64cbb8cd9da090b5b75578c922"
 depends_on: "PF-60-S01"
 created: 2026-09-09
 updated: 2026-09-12
@@ -19,6 +19,7 @@ updated: 2026-09-12
 
 # PF-60-S02 — Idempotent usage persistence and replay
 
+Current mandate: [repair receiving policy lint](../../../research/agent-cost-accounting/policy-lint-repair-allocation.md), exact seven-file scope/new checkout. Native accepted, receiving71+840/normal check pass; Clippy101 is corrective work. Original failures retained; late compact import prepared, not executable.
 17:22UTC: parent accepted review01's dropped role retry/timeout overrides P2 as
 in-scope; first correction queued after the matched baseline run. Same20 paths
 and existing allowance; native child override/mismatched-route proof required.

@@ -5,22 +5,22 @@ status: in_progress
 plan_file: "docs/plans/active/initiative-delivery-control.md"
 plan_feature: "PF-80"
 execution_order: 1
-owner: "Codex Task Node Slack-transport lane"
-parallel_lane: "tasknode-slack-transport"
-write_scope: "scripts/initiative_control/slack_transport.py, scripts/initiative_control/decision_manager.py, scripts/initiative_control/test_slack_transport.py, scripts/initiative_control/test_decision_manager.py, qa/initiative-control/pf-80-s01/decision-projection/slack-fence-recovery-receipt.md"
-integration_gate: "Accepted gated transport b9e671e60; next five-file local loss recovery under slack-fence-recovery-allocation.md. Target450/205 STOP600/260 incremental; review07 plus scoped08 preserves01–06. Manager owns real quiescence/supervisor wiring and receiving combined tests. No historical reply replay, counter reset, canonical cancellation or live authority. Python/Node/governance plus actual connection/phone/restart/CAS/native ACK remain required; live OFF."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-slack-recovery-20260912"
-branch: "workstream/tasknode-slack-recovery-20260912"
-base_commit: "b9e671e60416b952cc20d7b7260d3678080aebd0"
+owner: "Codex Task Node supervised-listener lane"
+parallel_lane: "tasknode-slack-supervisor"
+write_scope: "scripts/initiative_control/slack_transport.py, scripts/initiative_control/decision_manager.py, scripts/initiative_control/test_slack_transport.py, scripts/initiative_control/test_decision_manager.py, qa/initiative-control/pf-80-s01/decision-projection/slack-supervised-quiescence-receipt.md"
+integration_gate: "Manager accepted recovery review07 and combined251 pass at a89a48548. Next exact5-file real supervisor: slack-supervised-quiescence-allocation.md, target700/340 STOP850/400, new reviews08/09 preserve01–07. Manager combined Python/Node/governance and later isolated functional/actual Slack phone CAS native-ACK gates; live OFF."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/slack-supervisor-20260912"
+branch: "workstream/slack-supervisor-20260912"
+base_commit: "a89a48548f644a64cbb8cd9da090b5b75578c922"
 depends_on: "none"
 created: 2026-09-10
-updated: 2026-09-11
+updated: 2026-09-12
 ---
 
 # PF-80-S01 — Native Task Node delivery-control integration
 
+Current mandate: [real supervised quiescence](../../../research/tasknode-integration/slack-supervised-quiescence-allocation.md), exact front-matter scope. Recovery accepted, review07 clean, combined251pass; older port/recovery text is history, not repeated implementation.
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
-Setup/validity decisions approved; manager review/checks precede new dispatch.
 [Native validity allocation](../../../research/tasknode-integration/native-validity-allocation.md)
 and [recovery handoff](../../../research/tasknode-integration/recovery-decision-handoff.md).
 

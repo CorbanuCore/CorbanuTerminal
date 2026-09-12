@@ -23,9 +23,21 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
     branch: "workstream/accounting-pf60-s01-20260911"
     base_commit: "c8358dd9b4329036c8f8fb525015bbd795433513"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-policy-repair-20260912"
+    branch: "workstream/accounting-policy-repair-20260912"
+    base_commit: "a89a48548f644a64cbb8cd9da090b5b75578c922"
 ---
 
 # 2. Accounting — unified agent cost and usage
+
+20:57UTC manager handoff: reviewed Anthropic code is integrated; receiving71
+focused plus840shared tests and normal-library check pass. Existing-policy lint
+fails in accounting fixtures/schema and preexisting API telemetry. The current
+Mendel assignment is [exact seven-file corrective allocation](../../research/agent-cost-accounting/policy-lint-repair-allocation.md)
+in the new policy-repair checkout above, target300/150 STOP450/225. No test
+weakening or baseline waiver; prior full-Core failures remain. Late compact
+import follows after this correction; S02 remains active, S03 draft, collection
+OFF. Earlier native caller allocations below are historical, not new work.
 
 18:44 manager reallocation: review02 confirmed automatic redirects bypassing
 the approved accounting endpoint. Preserving existing client policy needs four

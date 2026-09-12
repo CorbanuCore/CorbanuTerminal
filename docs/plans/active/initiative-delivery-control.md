@@ -23,6 +23,9 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-slack-recovery-20260912"
     branch: "workstream/tasknode-slack-recovery-20260912"
     base_commit: "b9e671e60416b952cc20d7b7260d3678080aebd0"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/slack-supervisor-20260912"
+    branch: "workstream/slack-supervisor-20260912"
+    base_commit: "a89a48548f644a64cbb8cd9da090b5b75578c922"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
     branch: "feat/provider-reauth-health"
     base_commit: "eb7af932bc8cc859122b5b2dbef223fbd45ea25c"
@@ -32,6 +35,14 @@ implementation_worktrees:
 ---
 
 # 3. Task Node integration and delivery control
+
+20:57UTC manager handoff: recovery review07 clean, receiving251 tests pass
+144.128s at a89a48548. [Real owned-listener supervision](../../research/tasknode-integration/slack-supervised-quiescence-allocation.md)
+is the current exact five-file sequential James assignment in the new supervisor
+checkout above. Older allocations below are history, not concurrent mandates.
+Manager accepts the bounded guard-born/legacy-unknown contract and850/400 hard
+ceiling; new reviews08/09 preserve01–07. Actual live Slack/phone/native ACK and
+independent isolated execution remain required before operator-ready acceptance.
 
 September12 next: gated transport/shared registration accepted atb9e671e60.
 The [local fence-loss recovery allocation](../../research/tasknode-integration/slack-fence-recovery-allocation.md)
