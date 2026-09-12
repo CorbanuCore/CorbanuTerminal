@@ -46,7 +46,7 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 - [x] Worker clean fast-forward to8725e1ff755a5fa974058f465f3553b3f9b884eb verified; exact worker/branch/base and17 future paths match plan/allocation. Historical C2 zero-edit scope correction consumed no passes.
 - [x] Travis approved defaults; manager approved separate ledger/sequence, default no-install/collection OFF, typed facade and1900/950 target. One existing worker; one NEW code review plus necessary correction and one allocation review if needed, prior failures/review usage retained. No new product/billing/live authority.
 - [x] Historical native allocation: parent read three documents; native-ownership-allocation-review exited0 clean. Integrated f13e9740a atce8a81980; checkers3/115/126, disjoint sole accounting threads.rs ownership. That six-path dispatch is completed, not current source authorization.
-- [ ] Parent accepts/integrates these three production-store documents and verifies exact17-path disjoint scope before new source dispatch.
+- [x] Parent read all three allocation documents; first production-store-allocation-review exit0 clean. Docs12032acc7 integrated atf32e99f08a6218539c7d2b9d82f38ca038cb3e2f; governance3/115/126pass, exact17-path scope disjoint and no accounting migration/ledger collision. Source dispatch now authorized; parent records actual launch HEAD separately.
 - [x] Parent inspected DayTotals/Decimal visibility and amount/rate parsing distinction; B1 is now reviewed and tested, receipt below.
 
 ## Done
