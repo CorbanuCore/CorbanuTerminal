@@ -1,5 +1,29 @@
 # Workstream continuation — September 11
 
+## Current handoff — September12 22:45UTC
+
+[Current three-lane assignments](../../qa/initiative-control/status-display/current-handoffs.md)
+supersede the earlier22:03 record. Accounting2939d46bf received37f23b991 after
+review01 clean; parent575/575 zero skipped29.165s and six-library check37.26s pass.
+Mendel dispatched at fresh93dc55215 on ten-file Core correction; eight Core lint
+errors and historical full-Core failures remain. S02 active, S03 dependent.
+PF13 exact37f combined25command+suite0 proof accepted; sole owner dispatched on
+fifteen-path private root dispatch, reviews35/36, no production factory widening.
+James implements five private rootless isolation files after actual RTX probes,
+not another Slack runtime rewrite. No complete confined executor or real Slack
+phone/nativeACK acceptance yet; those are manager-owned, not unanswered questions.
+
+Existing responses-api-proxy and exec-server infrastructure was inspected
+read-only for future isolated inference/tool routing. A localhost endpoint or
+remote shell alone is not full confinement: observed proxy reads unbounded body,
+has no request timeout and forwards model payload. No new broker, key access,
+model endpoint or live launch authorized by that inspection. Reuse only after
+actual bounded-route/tool-boundary qualification; no fake sandbox acceptance.
+
+Main unchanged8cfcff990; product work is on the receiving branch, default OFF.
+One Luna sync owns publication and verifies source/hash/feed/Facilities. Previous
+22:06:52 publication remains last known good until its new receipt returns.
+
 ## Current handoff — September12 22:03UTC
 
 [Current three-lane assignments](../../qa/initiative-control/status-display/current-handoffs.md)
