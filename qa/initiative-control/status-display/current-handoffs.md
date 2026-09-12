@@ -1,5 +1,20 @@
 # Current workstream handoffs — September 12
 
+## Current handoff — 21:03 UTC
+
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): recovery review07 clean and locally integrated at a89a48548; all251 receiving tests pass144.128s. James dispatched to implement the real supervised listener in the fresh slack-supervisor-20260912 checkout, source-start179172541. [Exact assignment](../../../docs/research/tasknode-integration/slack-supervised-quiescence-allocation.md). Live Slack/phone/restart/CAS/native-ACK and isolated functional acceptance remain unproven; no user answer needed for this implementation.
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): accepted native implementation passes71focused/840shared receiving tests and normal check. Mendel dispatched to repair concrete policy-lint failures in the fresh accounting-policy-repair-20260912 checkout, source-start179172541. [Exact seven-file assignment](../../../docs/research/agent-cost-accounting/policy-lint-repair-allocation.md). Historical full-Core failures are not waived; compact late import follows, S03 remains draft, collection OFF.
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): combined Stage A proof accepted. Existing sole owner resumed Stage B from30923e30f; initial3 real connector/admission and2 normal tests passed. At measured791 lines the owner stopped appropriately; manager granted same-seven-path hard900 for remaining tests/runner only, runtime frozen. [Disposition and next proof](../../security-levels/sprints/PF-27-S04/descriptor-admission-allocation-20260912.md). Reviews30/31 remain required; no native activation or sprint completion claim.
+
+All three lanes have implementation assignments. Halley separately owns a
+read-only audit of existing isolated-execution runner sources, with a concrete
+infrastructure handoff; no fourth product initiative or qualified sandbox claim.
+Root policy1.7 is already on local main8cfcff990; product work is on the declared
+receiving branch, not claimed merged to main or released. No new human decision.
+Publication of this observation is pending the single Luna synchronization.
+
+## Historical observations
+
 Latest security follow-up: [combined receiving RTX proof](combined-native-20260912-1911.md)
 passed all eight required scoped checks on unchangedc5e606fa2/Rust18cf961a.
 The broader dependency-lint failure remains disclosed. Existing owner is
