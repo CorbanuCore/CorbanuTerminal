@@ -1,0 +1,6 @@
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "No actionable defects found in the provided change bundle. The parser enforces the accepted bounded format contract, preserves sealed-image ownership, and introduces no execution authority. Validation was limited to read-only inspection; tests were not run.",
+  "overall_confidence": 0.92
+}

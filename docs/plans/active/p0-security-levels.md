@@ -982,6 +982,17 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
+September12 receiving owner accepted [sealed-byte ELF profile inspection](../../../qa/security-levels/sprints/PF-27-S04/runtime-elf-next-20260912.md)
+on clean8d1a4f49/incremental97d, original d870 allocation unchanged. Literal service
+`src/launch/manifest/{elf.rs,elf_tests.rs,mod.rs,sealed.rs,sealed_tests.rs}` only,
+QA/runtime-elf-20260912 and existing ledgers. Two scoped closeout reviews granted;
+no invocation/install/main window or runtime qualification. Frozen bounds/tag
+vocabulary, original matrix and exact coordinates remain in that accepted record.
+Implemented635655c34: default3/synthetic44/explicit artifact1/affected356 and
+actual-key TMUX pass after the test-only Fable22 correction; Astra21 clean,
+Fable22 original exit1 retained. [Proof](../../../qa/security-levels/sprints/PF-27-S04/runtime-elf-20260912/README.md)
+awaits manager disposition/integration, not execution authority.
+
 **Isolated credential broker and secretless launch.** One trusted broker owns raw credential resolution and a bounded authenticated IPC surface. All model/exec/child/MCP/plugin/hook/provider-pane launch paths use a secretless allowlist and OS restrictions; unsupported platform containment prevents protected activation.
 
 ### PF-28

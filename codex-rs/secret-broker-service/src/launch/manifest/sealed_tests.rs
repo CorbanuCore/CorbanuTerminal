@@ -256,3 +256,38 @@ fn pf_27_s01_sealed_copy_bounds_and_partial_io_errors() {
     );
     assert_eq!(writer.calls, 2);
 }
+
+#[test]
+fn pf_27_s01_profile_inspection_retains_same_sealed_inode_and_closes_failures() {
+    let data = super::super::elf::tests::fixture();
+    let mut source = inspected();
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("source");
+    std::fs::write(&path, &data).unwrap();
+    source._image = File::open(&path).unwrap();
+    source._stamp = files::stamp(&source._image).unwrap();
+    source._digest = files::image_digest(&mut data.as_slice(), IMAGE_LIMIT).unwrap();
+    let sealed = source.seal().unwrap();
+    let replacement = directory.path().join("replacement");
+    std::fs::write(&replacement, b"not an ELF image").unwrap();
+    std::fs::rename(replacement, &path).unwrap();
+    let original = identity(&sealed._image);
+    let result = sealed.inspect_static_profile().unwrap();
+    assert_eq!(identity(&result._sealed._image), original);
+    drop(result);
+    assert_closed(original);
+    let bad = inspected().seal().unwrap();
+    let fd = identity(&bad._image);
+    assert!(bad.inspect_static_profile().is_err());
+    assert_closed(fd);
+    let bad = SyntheticSealedImage {
+        _image: KernelOps.create().unwrap(),
+        _recipe: inspected()._recipe,
+    };
+    let fd = identity(&bad._image);
+    assert_eq!(
+        bad.inspect_static_profile().err().unwrap().to_string(),
+        "image seals incomplete"
+    );
+    assert_closed(fd);
+}

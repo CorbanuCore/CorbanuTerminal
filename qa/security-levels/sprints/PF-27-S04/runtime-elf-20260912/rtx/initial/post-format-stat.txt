@@ -1,0 +1,6 @@
+ .../src/launch/manifest/elf.rs                     | 103 ++++++++---
+ .../src/launch/manifest/elf_tests.rs               | 189 ++++++++++++++++-----
+ .../src/launch/manifest/mod.rs                     |   1 -
+ .../src/launch/manifest/sealed.rs                  |   9 +-
+ .../src/launch/manifest/sealed_tests.rs            |  25 ++-
+ 5 files changed, 251 insertions(+), 76 deletions(-)

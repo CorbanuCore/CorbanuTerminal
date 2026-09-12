@@ -1,4 +1,5 @@
 //! Fixed-path synthetic inspection only; no executable launch authority.
+mod elf;
 mod files;
 mod schema;
 mod sealed;

@@ -1,0 +1,2 @@
+PF27_EVIDENCE_DIR='/home/travis/security-round5/evidence/pf27-elf-20260912/final' bash '/home/travis/worktrees/security-broker-elf-20260912/qa/security-levels/sprints/PF-27-S04/runtime-elf-20260912/qualify-rtx.sh'; printf '\nparser-exit=%s\n' "$?"
+Enter (separate action)
