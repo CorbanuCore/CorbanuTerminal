@@ -1,5 +1,33 @@
 # Native continuation — staged combined-tree evidence
 
+## Root-adapter main refresh — September 12, 07:22 UTC heartbeat
+
+Previously verified remote main `1b7e9f3df948b355baf60ba9f713a4ab820a8300`
+merged without conflicts into private staging
+`7f9ada31cbd8623bfdadaba9db5ce6d307a544d3`. No manual native or manifest edits;
+accepted security-owner changes only. No duplicate security review. The prior
+Fable11 helper exit1/P3 evidence-bundle disposition and inherited transitive lint
+failure remain attached to the accepted owner's records, not relabeled as clean.
+
+Combined pinned/offline `just test -p codex-state -p codex-tasknode-session`
+exited0: **322 passed (2 leaky), 0 skipped**, 9.191s; nextest
+`7ede92da-2c30-4dc0-9aca-638644899685`. LEAK markers name state extraction tests
+`diff_fields_detects_changes` and `turn_context_sets_permission_profile_metadata`.
+No state/TaskNode/protocol/Core source changed from the preceding staging tree;
+the markers' cause is uninvestigated, not attributed to new accounting code and
+not erased by a repeat run. Complete private log:
+`manager-continuation.9Id1V1/root-adapter-main-staging-tests.log`.
+Dashboard unittest discovery83 pass in4.718s; checkers3active/115current/126archived.
+Mock publication stdout is not server evidence. Normal-library checks were not
+rerun or claimed anew. No tested native bytes changed after these commands.
+
+Manager inspected the now-tracked original PF27 clippy-default.log: three
+codex-api telemetry diagnostics match the reported lines/types; that file is
+unchanged between accepted main checkpoints. This verifies recorded evidence,
+not a new Clippy execution or a repair. Canonical receiving and publication remain
+held; existing next-allocation drafts remain unactivated. No new worker, sync,
+review allowance, human acceptance, source cutover or release claimed.
+
 ## Accepted-main refresh — September 12, 06:22 UTC heartbeat
 
 Remote `refs/heads/main` verified as

@@ -1,5 +1,13 @@
 # Workstream continuation — September 11
 
+September12 07:22UTC: accepted main1b7e9f3df merged cleanly only into private
+staging7f9ada31c. Combined322 tests pass with2 LEAK markers in unchanged state
+extraction tests;83 dashboard tests/checkers pass. See
+[exact evidence](../../qa/initiative-control/native-staging-2026-09-12.md).
+No duplicate PF27 review or clean-transitive-lint claim. Canonical source remains
+held by the unchanged pending publication and Facilities ownership reconciliation.
+Prepared next assignments below remain unactivated; no new implementation workers.
+
 September12 06:22UTC heartbeat: verified remote main
 `bba52cecc996a2f04ec558b7b86514426e67c845` is reconciled only in temporary manager
 staging `64cc30cf19a25f74ae07125eece91f6f766e8ebf`. Two documentation conflicts
