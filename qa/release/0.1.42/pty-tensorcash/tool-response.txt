@@ -1,0 +1,30 @@
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                           │
+│                                                         │
+│ model:       corbanu/deepseek-v4.1-flash high   /model… │
+│ directory:   /mnt/…/corbanu-0.1.42-qa/tensorcash        │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+• Model changed to DeepSeek V4.1 Flash via Corbanu API high
+
+
+› Use exec_command to run pwd in this repository. After
+  reading the result, reply with RELEASE_042_WORKFLOW_OK.
+  Do not modify any files.
+
+
+• Ran pwd
+  └ /mnt/HC_Volume_101713660/pfrpc/scratch/
+    corbanu-0.1.42-qa/tensorcash
+
+───────────────────────────────────────────────────────────
+
+• RELEASE_042_WORKFLOW_OK
+
+───────────────────────────────────────────────────────────
+
+
+› Explain this codebase
+
+  DeepSeek V4.1 Flash high · /mnt/HC_Volume_101713660/pfrp…

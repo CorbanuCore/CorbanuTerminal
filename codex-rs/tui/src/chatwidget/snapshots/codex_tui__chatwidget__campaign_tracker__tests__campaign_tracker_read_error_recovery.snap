@@ -1,0 +1,13 @@
+---
+source: tui/src/chatwidget/campaign_tracker_tests.rs
+assertion_line: 69
+expression: rendered
+---
+  Campaign Tracker
+  Load activity failed. Activity search exceeds 500 UTF-8 bytes.
+
+› 1. Retry        Reload the failed view
+  2. Edit search  Correct the query while retaining its scope
+  3. Overview     Open Campaign Tracker status
+
+  Press enter to confirm or esc to go back

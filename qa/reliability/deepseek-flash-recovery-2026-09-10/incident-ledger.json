@@ -1,0 +1,10 @@
+[
+  {
+    "request_id": "d01af978-5540-4856-9790-6a47b521bdad",
+    "model": "corbanu/deepseek-v4.1-flash",
+    "state": "released",
+    "charged_microusd": "0",
+    "created_at": "2026-09-10T19:33:21.457Z",
+    "settled_at": "2026-09-10T19:33:21.953Z"
+  }
+]

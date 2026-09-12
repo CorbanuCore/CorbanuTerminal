@@ -36,6 +36,10 @@ Good chat prompts include:
 
 After using chat, continue the work. Summarize Task Node's visible answer only when it affects the user-facing decision or the user asked to see it. Do not invent or expose hidden reasoning.
 
+## Collaborator Context
+
+When the user needs collaborators' shared work context, read `"$CORBANU_BIN" tasknode team context --json` after the helper-resolution preamble and the Team Context capability check in `references/tooling.md`. The capability check handles an older installed release alongside a newer debug binary without changing account scope. It exposes the existing web Team Context report with the same account and task-history permissions. Preserve reported freshness and sharing limits. The user's `context get` document is a separate surface; do not conclude that Team Context is unavailable just because it is absent from that document.
+
 ## Context Document
 
 Treat the context document as the user's operating manual. It must stay human-readable, concise, and useful for future agents.

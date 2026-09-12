@@ -31,6 +31,7 @@ use codex_model_provider_info::CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+use codex_model_provider_info::CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL;
 use codex_model_provider_info::CORBANU_API_DEEPSEEK_V4_PRO_MODEL;
 use codex_model_provider_info::CORBANU_API_GLM_5_3_FLASH_MODEL;
 use codex_model_provider_info::CORBANU_API_GLM_5_3_MODEL;
@@ -93,7 +94,7 @@ struct CorbanuApiModelTemplate {
     is_default: bool,
 }
 
-const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 7] = [
+const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 8] = [
     CorbanuApiModelTemplate {
         source_model: VERCEL_GLM_5_3_FLASH_MODEL,
         public_model: CORBANU_API_GLM_5_3_FLASH_MODEL,
@@ -159,6 +160,14 @@ const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 7] = [
         description: Some(
             "At cost: $0.02175/M input · $0/M cache read · $0.00018125/M cache write · $0.0435/M output. Third-party inference.",
         ),
+        provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
+        is_default: false,
+    },
+    CorbanuApiModelTemplate {
+        source_model: CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL,
+        public_model: CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL,
+        display_name: None,
+        description: None,
         provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
         is_default: false,
     },
@@ -553,6 +562,17 @@ impl ChatWidget {
             presets.extend(corbanu_presets);
         }
         presets.retain(|preset| self.model_catalog.preset_is_selectable(preset));
+
+        // Runtime and public API catalog entries may describe the same route.
+        // Keep distinct providers, but show each model/provider pair once.
+        let mut seen = HashSet::new();
+        presets.retain(|preset| {
+            let provider = preset
+                .provider_id
+                .clone()
+                .or_else(|| Self::model_provider_for_selection(&preset.model));
+            seen.insert((preset.model.clone(), provider))
+        });
 
         if presets.is_empty() {
             self.add_info_message(
@@ -1560,7 +1580,7 @@ mod tests {
     }
 
     #[test]
-    fn corbanu_api_presets_preserve_ambient_and_publish_the_six_wallet_funded_routes() {
+    fn corbanu_api_presets_preserve_ambient_and_publish_the_seven_wallet_funded_routes() {
         let source_presets = [
             VERCEL_GLM_5_3_FLASH_MODEL,
             AMBIENT_DEFAULT_MODEL,
@@ -1569,6 +1589,7 @@ mod tests {
             OPENAI_GPT_5_6_SOL_MODEL,
             VERCEL_KIMI_K3_MODEL,
             DEEPSEEK_PRO_MODEL,
+            CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL,
         ]
         .into_iter()
         .map(|model| preset(model, /*show_in_picker*/ true))
@@ -1630,6 +1651,12 @@ mod tests {
                     CORBANU_API_DEEPSEEK_V4_PRO_MODEL,
                     Some(PFTERMINAL_PLAN_PROVIDER_ID),
                     "DeepSeek V4 Pro",
+                    false,
+                ),
+                (
+                    CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL,
+                    Some(PFTERMINAL_PLAN_PROVIDER_ID),
+                    CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL,
                     false,
                 ),
             ]

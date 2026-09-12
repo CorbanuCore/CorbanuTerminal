@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/tasknode_menu/team_context_tests.rs
+assertion_line: 54
+expression: "crate::chatwidget::tests::helpers::render_bottom_popup(&chat, 84)"
+---
+  Task Node Team Context
+  Status: current · 2 members
+
+› 1. Read full report      Scroll through shared work summaries and task counts
+  2. Refresh Team Context  Reload the report and current sharing permissions
+
+  Press enter to confirm or esc to go back

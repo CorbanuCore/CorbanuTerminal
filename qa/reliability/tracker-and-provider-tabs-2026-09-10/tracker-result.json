@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "binary": "/mnt/HC_Volume_101713660/pfrpc/build-cache/cargo-workspaces/corbanu-wallet-launch-hotfix-db67e02208dd/debug/corbanu",
+  "home": "/mnt/HC_Volume_101713660/pfrpc/scratch/ct-en4s_jt8",
+  "checks": [
+    "missing credential guidance",
+    "all three credential aliases enable recording",
+    "failed campaign retains draft",
+    "cancel sends no second write",
+    "corrected draft submits once",
+    "read Retry repeats exact route"
+  ],
+  "modelCalls": 0,
+  "productionWrites": 0
+}

@@ -1,0 +1,20 @@
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                           │
+│                                                         │
+│ model:       corbanu/deepseek-v4.1-flash high   /model… │
+│ directory:   /mnt/…/pfrpc/scratch/corbanu-deepseek41-qa │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+• Model changed to DeepSeek V4.1 Flash via Corbanu API high
+
+
+› Reply with the integration success marker.
+
+
+• FLASH_DROPDOWN_OK
+
+
+› Find and fix a bug in @filename
+
+  DeepSeek V4.1 Flash high · /mnt/HC_Volume_101713660/pfrp…

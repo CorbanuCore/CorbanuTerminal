@@ -1287,6 +1287,54 @@ fn test_model_info() -> ModelInfo {
 }
 
 #[test]
+fn corbanu_flash_request_omits_parallel_control_with_function_tools() {
+    let model = codex_models_manager::bundled_models_response()
+        .expect("bundled catalog")
+        .models
+        .into_iter()
+        .find(|model| model.slug == "corbanu/deepseek-v4.1-flash")
+        .expect("Flash metadata");
+    assert!(!model.supports_parallel_tool_calls);
+    let client = test_model_client(SessionSource::Cli)
+        .for_provider(&ModelProviderInfo::create_pfterminal_plan_provider());
+    let prompt = Prompt {
+        parallel_tool_calls: model.supports_parallel_tool_calls,
+        tools: vec![codex_tools::ToolSpec::Function(
+            codex_tools::ResponsesApiTool {
+                name: "inspect_file".to_string(),
+                description: "Inspect a file".to_string(),
+                strict: false,
+                defer_loading: None,
+                parameters: serde_json::from_value(json!({"type":"object","properties":{}}))
+                    .expect("tool schema"),
+                output_schema: None,
+            },
+        )],
+        ..Default::default()
+    };
+    let metadata = test_responses_metadata_for_client(
+        &client,
+        /*turn_id*/ None,
+        format!("{}:0", client.state.thread_id),
+        /*parent_thread_id*/ None,
+        TestCodexResponsesRequestKind::Turn,
+    );
+    let request = client
+        .build_chat_completions_request(&prompt, &model, /*effort*/ None, &metadata)
+        .expect("Flash request");
+    let body = serde_json::to_value(request).expect("serialized request");
+    assert_eq!(body["model"], "corbanu/deepseek-v4.1-flash");
+    assert_eq!(body["tools"][0]["function"]["name"], "inspect_file");
+    assert_eq!(body["reasoning_effort"], "high");
+    assert!(
+        !body
+            .as_object()
+            .expect("request object")
+            .contains_key("parallel_tool_calls")
+    );
+}
+
+#[test]
 fn zai_required_thinking_models_send_an_enabled_supported_effort() {
     let client = test_model_client(SessionSource::Cli)
         .for_provider(&ModelProviderInfo::create_zai_provider());

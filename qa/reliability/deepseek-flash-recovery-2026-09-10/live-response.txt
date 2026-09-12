@@ -1,0 +1,29 @@
+╭─────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                           │
+│                                                         │
+│ model:       corbanu/deepseek-v4.1-flash high   /model… │
+│ directory:   /mnt/…/pfrpc/scratch/corbanu-deepseek41-qa │
+│ permissions: YOLO mode                                  │
+╰─────────────────────────────────────────────────────────╯
+
+• Model changed to DeepSeek V4.1 Flash via Corbanu API high
+
+
+› Use exec_command to run printf CORBANU_TOOL_OK. After
+  reading its output, reply with FLASH_DROPDOWN_OK. Do not
+  do anything else.
+
+
+• Ran printf CORBANU_TOOL_OK
+  └ CORBANU_TOOL_OK
+
+───────────────────────────────────────────────────────────
+
+• FLASH_DROPDOWN_OK
+
+───────────────────────────────────────────────────────────
+
+
+› Run /review on my current changes
+
+  DeepSeek V4.1 Flash high · /mnt/HC_Volume_101713660/pfrp…

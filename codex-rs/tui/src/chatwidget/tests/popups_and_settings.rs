@@ -22,6 +22,7 @@ use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
+use codex_model_provider_info::CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL;
 use codex_model_provider_info::CORBANU_API_DEEPSEEK_V4_PRO_MODEL;
 use codex_model_provider_info::CORBANU_API_GLM_5_3_FLASH_MODEL;
 use codex_model_provider_info::CORBANU_API_GLM_5_3_MODEL;
@@ -4252,7 +4253,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
 }
 
 #[tokio::test]
-async fn corbanu_api_model_picker_preserves_ambient_and_shows_the_six_public_routes() {
+async fn corbanu_api_model_picker_preserves_ambient_and_shows_the_seven_public_routes() {
     let (mut chat, _rx, _op_rx) =
         make_chatwidget_manual(Some(CORBANU_API_GLM_5_3_FLASH_MODEL)).await;
     chat.thread_id = Some(ThreadId::new());
@@ -4268,6 +4269,7 @@ async fn corbanu_api_model_picker_preserves_ambient_and_shows_the_six_public_rou
 
     assert_chatwidget_snapshot!("corbanu_api_model_picker", popup);
     assert!(popup.contains("[Corbanu API]"), "{popup}");
+    assert_eq!(popup.matches("DeepSeek V4.1 Flash").count(), 1);
     for model in [
         CORBANU_API_GLM_5_3_FLASH_MODEL,
         AMBIENT_DEFAULT_MODEL,
@@ -4276,6 +4278,7 @@ async fn corbanu_api_model_picker_preserves_ambient_and_shows_the_six_public_rou
         CORBANU_API_GPT_5_6_SOL_MODEL,
         CORBANU_API_KIMI_K3_MODEL,
         CORBANU_API_DEEPSEEK_V4_PRO_MODEL,
+        CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL,
     ] {
         assert!(
             popup.contains(model),
@@ -5089,4 +5092,33 @@ async fn reasoning_popup_escape_returns_to_model_popup() {
     let after_escape = render_bottom_popup(&chat, /*width*/ 80);
     assert!(after_escape.contains("Select Model"));
     assert!(!after_escape.contains("Select Reasoning Level"));
+}
+
+#[tokio::test]
+async fn model_picker_runtime_refresh_keeps_claude_out_of_openai_tab() {
+    use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+    let (mut chat, _, _) = make_chatwidget_manual(Some(CLAUDE_FABLE_5_PLAN_MODEL)).await;
+    chat.thread_id = Some(ThreadId::new());
+    chat.model_catalog.sync_runtime_models(
+        ["openai", CLAUDE_PLAN_PROVIDER_ID],
+        Some(CLAUDE_FABLE_5_PLAN_MODEL),
+    );
+    let presets = chat.model_catalog.try_list_models().unwrap();
+    chat.open_all_models_popup(presets);
+    let claude = render_bottom_popup_with_height(&chat, 140, 36);
+    assert!(claude.contains("[Claude Plan]"), "{claude}");
+    assert!(claude.contains(&format!("Model: {CLAUDE_FABLE_5_PLAN_MODEL}.")));
+    for _ in 0..16 {
+        let popup = render_bottom_popup_with_height(&chat, 140, 36);
+        if popup.contains("[OpenAI]") {
+            assert!(
+                !popup.contains(&format!("Model: {CLAUDE_FABLE_5_PLAN_MODEL}.")),
+                "{popup}"
+            );
+            insta::assert_snapshot!("openai_tab_after_claude_runtime_refresh", popup);
+            return;
+        }
+        chat.handle_key_event(KeyEvent::from(KeyCode::Right));
+    }
+    panic!("OpenAI tab unavailable");
 }

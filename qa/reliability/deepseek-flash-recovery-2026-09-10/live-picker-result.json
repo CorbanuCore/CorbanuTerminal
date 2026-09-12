@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "model": "corbanu/deepseek-v4.1-flash",
+  "binary": "/mnt/HC_Volume_101713660/pfrpc/build-cache/cargo-workspaces/corbanu-wallet-launch-hotfix-db67e02208dd/debug/corbanu",
+  "checks": [
+    "visible in Corbanu API",
+    "cancel preserves current model",
+    "selection persists Corbanu provider and model",
+    "High reasoning and streaming request use exact public model",
+    "released attempts retry with a fresh ID",
+    "real tool execution and result round trip",
+    "response renders",
+    "restart retains selected model"
+  ],
+  "gatewayRequests": 3,
+  "statuses": [
+    503,
+    200,
+    200
+  ],
+  "releasedAttemptRotated": true,
+  "realToolResultRoundTrip": true,
+  "productionWrites": 0
+}

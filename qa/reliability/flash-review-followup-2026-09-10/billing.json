@@ -1,0 +1,8 @@
+{
+  "preparationCalls": 3,
+  "upstreamCalls": 2,
+  "balance": "997608",
+  "expectedChargeMicrousd": "2392",
+  "chargedMicrousd": "2392",
+  "productionLedgerWrites": 0
+}

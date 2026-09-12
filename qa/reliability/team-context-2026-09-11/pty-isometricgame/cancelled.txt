@@ -1,0 +1,30 @@
+
+• No previous message to edit.
+
+
+  Task Node
+  GitHub-linked tasks, rewards, and account status.
+  Origin: http://127.0.0.1:43491
+  Linked as fixture
+
+  Search Task Node actions
+  Status                     0 outstanding, 0
+                             verification, 0 requests, 0
+                             rewards
+  Campaign Tracker           Record work, review prompts
+                             and replay shared activity
+  Outstanding tasks (0)      Review and act on open Task
+                             Node work
+  Verification requests (0)  Tasks waiting on
+                             verification evidence
+  Request personal task      Ask Task Node to generate
+                             work from text
+› Team Context               Read collaborators' shared
+                             work summaries
+  Context document           Review or edit the current
+                             Task Node context
+  Chat                       Open Task Node chat threads
+                             or start a Private Thinking
+                             chat
+
+  Press enter to confirm or esc to go back

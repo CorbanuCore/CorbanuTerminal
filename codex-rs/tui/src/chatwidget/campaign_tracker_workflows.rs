@@ -10,13 +10,21 @@ impl ChatWidget {
         match path {
             "/_search" => {
                 let source = data["path"].as_str().unwrap_or("/activity").to_string();
+                let initial = url::Url::parse(&format!("https://tracker.invalid{source}"))
+                    .ok()
+                    .and_then(|url| {
+                        url.query_pairs()
+                            .find(|(key, _)| key == "search")
+                            .map(|(_, value)| value.into_owned())
+                    })
+                    .unwrap_or_default();
                 let tx = self.app_event_tx.clone();
                 self.show_custom_prompt_view(
                     CustomPromptView::new(
                         "Search activity".to_string(),
                         "Search preserved prompts and summaries within your current access."
                             .to_string(),
-                        String::new(),
+                        initial,
                         None,
                         Box::new(move |input| {
                             if let Ok(mut url) =
@@ -44,8 +52,22 @@ impl ChatWidget {
                 );
             }
             "/_mapping" => {
+                let initial = if data["note"].is_string() || data["taskIds"].is_array() {
+                    let tasks = data["taskIds"]
+                        .as_array()
+                        .map(|ids| {
+                            ids.iter()
+                                .filter_map(Value::as_str)
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                        })
+                        .unwrap_or_default();
+                    format!("{tasks}\n{}", data["note"].as_str().unwrap_or(""))
+                } else {
+                    String::new()
+                };
                 let tx = self.app_event_tx.clone();
-                self.show_custom_prompt_view(CustomPromptView::new("Correct task mapping".to_string(), "First line: owned task IDs separated by spaces (empty clears mapping). Following lines: rationale.".to_string(), String::new(), None, Box::new(move |input| {
+                self.show_custom_prompt_view(CustomPromptView::new("Correct task mapping".to_string(), "First line: owned task IDs separated by spaces (empty clears mapping). Following lines: rationale.".to_string(), initial, None, Box::new(move |input| {
                     let mut lines=input.lines();
                     let tasks: Vec<&str> = lines.next().unwrap_or("").split_whitespace().collect();
                     let note=lines.collect::<Vec<_>>().join("\n");
@@ -96,8 +118,17 @@ impl ChatWidget {
                 });
             }
             "/_new_campaign" => {
+                let initial = if data["title"].is_string() {
+                    format!(
+                        "{}\n{}",
+                        data["title"].as_str().unwrap_or(""),
+                        data["objective"].as_str().unwrap_or("")
+                    )
+                } else {
+                    String::new()
+                };
                 let tx = self.app_event_tx.clone();
-                self.show_custom_prompt_view(CustomPromptView::new("Create campaign".to_string(),"First line: campaign name. Following lines: objective.".to_string(),String::new(),Some("Creates a personal campaign. Linking tasks never grants access to prompts.".to_string()),Box::new(move |input|{
+                self.show_custom_prompt_view(CustomPromptView::new("Create campaign".to_string(),"First line: campaign name. Following lines: objective.".to_string(),initial,Some("Creates a personal campaign. Linking tasks never grants access to prompts.".to_string()),Box::new(move |input|{
                     let mut lines=input.lines();let title=lines.next().unwrap_or("").to_string();let objective=lines.collect::<Vec<_>>().join("\n");
                     tx.send(AppEvent::CampaignTrackerOpen {path:"/campaigns".to_string(),body:Some(json!({"title":title,"objective":if objective.is_empty(){title}else{objective},"memberHandles":[],"taskIds":[]}))});
                 })).with_submit_mode(CustomPromptSubmitMode::CtrlD));
@@ -144,12 +175,13 @@ impl ChatWidget {
                 } else {
                     let tx = self.app_event_tx.clone();
                     data["kind"] = json!("review");
+                    let initial = data["note"].as_str().unwrap_or("").to_string();
                     self.show_custom_prompt_view(
                         CustomPromptView::new(
                             "Prompt review rationale".to_string(),
                             "Cite the prompt and available context. Explain the scores."
                                 .to_string(),
-                            String::new(),
+                            initial,
                             Some(
                                 "Human review; versioned against this exact activity record."
                                     .to_string(),

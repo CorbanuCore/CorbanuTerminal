@@ -1,4 +1,5 @@
 use codex_model_provider_info::canonical_catalog_provider;
+use codex_model_provider_info::corrected_catalog_provider;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffort;
@@ -16,6 +17,7 @@ pub(crate) fn include_runtime_model(
     let runtime_provider_id = runtime_provider_id.trim();
     if model.is_empty()
         || runtime_provider_id.is_empty()
+        || corrected_catalog_provider(model, runtime_provider_id).is_some()
         || models.iter().any(|preset| {
             preset.model == model
                 && preset

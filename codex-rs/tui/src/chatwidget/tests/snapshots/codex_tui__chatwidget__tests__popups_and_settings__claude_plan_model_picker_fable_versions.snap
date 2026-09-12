@@ -1,11 +1,12 @@
 ---
 source: tui/src/chatwidget/tests/popups_and_settings.rs
+assertion_line: 3908
 expression: claude_plan_popup
 ---
   Select Model and Effort
   Claude Code plan
 
-  OpenAI  Ambient  Kimi Code  Z.AI  DeepSeek  [Claude Plan]  Anthropic  Meta  Vercel  Baseten  OpenRouter
+  OpenAI  Ambient  Corbanu API  Kimi Code  Z.AI  DeepSeek  [Claude Plan]  Anthropic  Meta  Vercel  Baseten  OpenRouter
 
 › 1. Claude Opus 5 Plan (current)  Model: claude-opus-5-plan. Claude Opus 5 through Claude Code subscription auth in Corbanu Terminal.
   2. Claude Fable 5.1 Plan         Model: claude-fable-5-1-plan. Claude Fable 5.1 through Claude Code subscription auth in Corbanu

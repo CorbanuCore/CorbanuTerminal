@@ -154,3 +154,36 @@ fn claude_current_does_not_seed_local_or_custom_providers_on_manager_refresh() {
         ],
     );
 }
+
+#[test]
+fn runtime_refresh_does_not_clone_models_into_incompatible_provider_tabs() {
+    use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
+    use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
+    use codex_model_provider_info::CLAUDE_PLAN_MODEL;
+    use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+    use codex_model_provider_info::OPENAI_PROVIDER_ID;
+    use codex_model_provider_info::ZAI_DEFAULT_MODEL;
+
+    for model in [
+        CLAUDE_PLAN_MODEL,
+        CLAUDE_FABLE_5_PLAN_MODEL,
+        CLAUDE_FABLE_5_1_PLAN_MODEL,
+        ZAI_DEFAULT_MODEL,
+    ] {
+        let owner = canonical_catalog_provider(model).unwrap();
+        let catalog = ModelCatalog::new(vec![preset(model, Some(owner))]);
+        for _ in 0..2 {
+            catalog.sync_runtime_models(
+                [OPENAI_PROVIDER_ID, CLAUDE_PLAN_PROVIDER_ID],
+                Some(model),
+                owner,
+            );
+        }
+        let models = catalog.try_list_models().unwrap();
+        assert!(
+            models
+                .iter()
+                .all(|p| p.model != model || p.provider_id.as_deref() == Some(owner))
+        );
+    }
+}

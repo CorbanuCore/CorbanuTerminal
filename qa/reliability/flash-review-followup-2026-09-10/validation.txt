@@ -1,0 +1,12 @@
+review-rust-tests.log
+     Summary [   0.421s] 256 tests run: 256 passed, 2372 skipped
+review-api-tests.log
+# tests 91
+# pass 91
+# fail 0
+review-postgres-tests.log
+# tests 16
+# pass 16
+# fail 0
+review-build.log
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 10s

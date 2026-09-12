@@ -1,8 +1,8 @@
 ---
 sprint_id: "PF-58-S01"
 title: "Credential-scoped runtime health and keyboard reauthentication"
-status: in_progress
-plan_file: "docs/plans/active/unified-provider-auth.md"
+status: draft
+plan_file: "docs/plans/proposed/unified-provider-auth.md"
 plan_feature: "PF-58"
 execution_order: 22
 owner: "Codex /root"
@@ -19,6 +19,12 @@ updated: 2026-09-10
 
 # PF-58-S01 — Credential-scoped runtime health and keyboard reauthentication
 
+September 11: Travis reports PF13 human testing complete and authorizes main
+integration. Prior live messages/provider switching produced no Keychain prompts.
+Residual frozen-case/native evidence remains below; no blanket automated pass is
+inferred. Main's three-workstream allocation defers this plan; this record returns
+to draft without deleting implementation, evidence, or its spent nine-review ledger.
+
 ## Execution mandate
 
 - Deliver: trustworthy auth-health status and source-appropriate keyboard recovery for configured providers, including the reported OpenAI connected-app expiry.
@@ -26,7 +32,7 @@ updated: 2026-09-10
 
 ## Plan linkage
 
-- Plan: [Unified provider auth](../../../plans/active/unified-provider-auth.md), feature PF-58.
+- Plan: [Unified provider auth](../../../plans/proposed/unified-provider-auth.md), feature PF-58.
 - Product heading: **Shipping MVP — LIVE**; excerpt: “Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat.”
 - User authorized generalizing reauth on 2026-09-05 after the misleading Active label.
 
@@ -79,7 +85,7 @@ updated: 2026-09-10
 
 - [x] Final Mac prompt-budget unit/native checks and explicitly Ctrl+C-based
   staged TMUX smoke recorded; Escape failures retained rather than waived.
-- [ ] User Keychain allow/no-loop confirmation on the staged replacement.
+- [x] Travis confirmed live messages and provider switching without Keychain prompts; PF13 human acceptance reaffirmed September 11. Historical failed native runs remain recorded.
 
 - [x] Expanded final staged-candidate TMUX 45/45 and actual runtime dependency
   checks pass, including live Fable request/shell execution and installed MCP

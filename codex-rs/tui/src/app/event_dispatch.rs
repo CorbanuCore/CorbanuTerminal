@@ -3627,10 +3627,11 @@ impl App {
             AppEvent::CampaignTrackerResult {
                 path,
                 enrollment,
+                body,
                 result,
             } => {
                 self.chat_widget
-                    .campaign_tracker_result(path, enrollment, result);
+                    .campaign_tracker_result(path, enrollment, body, result);
             }
             AppEvent::CampaignTrackerSync { identity, result } => {
                 self.chat_widget
@@ -3713,6 +3714,24 @@ impl App {
             AppEvent::SubmitTaskNodeTaskRequestResult { result } => {
                 self.chat_widget
                     .handle_submit_tasknode_task_request_result(result);
+            }
+            AppEvent::TaskNodeTeamContextDocument { text } => {
+                let _ = tui.enter_alt_screen();
+                let lines = text.lines().flat_map(|line| {
+                    textwrap::wrap(line, 100).into_iter().map(|line| ratatui::text::Line::from(line.into_owned()))
+                }).collect();
+                self.overlay = Some(Overlay::new_static_with_lines(
+                    lines,
+                    "Task Node Team Context · read only".to_string(),
+                    self.keymap.pager.clone(),
+                ));
+                tui.frame_requester().schedule_frame();
+            }
+            AppEvent::OpenTaskNodeTeamContext => {
+                self.chat_widget.open_tasknode_team_context();
+            }
+            AppEvent::OpenTaskNodeTeamContextResult { result } => {
+                self.chat_widget.handle_tasknode_team_context_result(result);
             }
             AppEvent::OpenTaskNodeContext => {
                 self.chat_widget.open_tasknode_context();
