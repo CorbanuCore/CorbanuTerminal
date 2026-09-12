@@ -1,5 +1,16 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 15:19 UTC
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): two earlier issues corrected with286 passing state tests; the next review found a production deletion-time race under concurrent accounting updates. Mendel is correcting it, with a specifically approved proof-size allowance. No new human answer required; collection OFF.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): James implements real Slack transport/bridge. An independent20-case human-style test design is frozen, not executed. Manager freshly verified the approved private Slack channel and Travis membership; its Agents & apps tab has no bot row, so the historical webhook installation is not a working two-way connection. Registration, bot/setup, private phone access and real reply/ACK proof remain manager-owned.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): [existing isolated-adapter question](pf27-launch-adapter-decision.md) remains open; owner021f82e6 unchanged. Other implementation continues independently.
+
+Last verified publication14:59:46UTC frome0ba52947, generationbuild-vbt9k49f;
+index and Facilities succeeded through remote and local private endpoints.
+Main406aa3c5 is still reconciled. This later semantic update awaits the current
+heartbeat's one Luna sync, not another publication click.
+
 ## Current observation — 14:55 UTC
 
 Two source workers are running; dashboard publication needs no user click.

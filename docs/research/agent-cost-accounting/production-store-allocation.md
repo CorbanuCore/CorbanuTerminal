@@ -1,5 +1,23 @@
 # PF-60-S02 — Opt-in normal-library accounting store allocation
 
+## Manager correction allowance — September 12, 15:19 UTC
+
+Source dispatch occurred at ef13b347c; the original documents-only wording below
+is history. First code review81230 found two P2s; corrected candidate1879total/
+778non-test passed286 state tests with one disclosed LEAK. Corrective review13225
+found one remaining production deletion-time race: time sampled before separate
+cleanup and writer-lock acquisition can lag a concurrent accounting checkpoint.
+Parent inspected and classified it in-scope at the same native deletion boundary.
+
+The sole worker may correct production time sampling after the writer lock,
+preserving explicit test timestamps and adding real reordered-deletion proof.
+Same17 paths; original1900/950 target and1703/1879 candidates remain history.
+Manager grants **2150 total/1000 non-test** solely for this second correction,
+estimated30 runtime+120 regression+20 receipt lines. Report before exceeding;
+never compress or remove proof. One additional corrective code pass is authorized;
+if that fails, reclassify remaining findings under the two-cycle convergence rule.
+No change to product, retention, collector, live authority or owner allocation.
+
 September 12, 2026. Manager-approved single S02 execution unit, not another
 prerequisite chain. This turn authorizes allocation documents only. Parent
 inspects/reviews/integrates them before dispatching source implementation.

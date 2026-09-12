@@ -27,6 +27,14 @@ implementation_worktrees:
 
 # 2. Accounting — unified agent cost and usage
 
+Latest15:19UTC: normal-library candidate's first two review findings corrected,
+286 state tests pass with one disclosed LEAK. Corrective review found a remaining
+production deletion timestamp/lock-order race. Mendel corrects it in the same17
+paths; manager explicitly grants2150total/1000non-test for that bounded proof,
+preserving original1900/950 and1703/1879 history. See the [allocation addendum](../../research/agent-cost-accounting/production-store-allocation.md).
+No code acceptance or collection enablement yet; full S02/S03 remain gated.
+Older accepted native bridge and original allocation evidence follows.
+
 Current September12: native bridge accepted, exact six-file candidate `0eb98e8d3` integrated at `8725e1ff755a5fa974058f465f3553b3f9b884eb`; worker clean fast-forward verified. First independent Astra High `native-ownership-code-review.json/txt`, helper70866, exited0 clean. Parent receiving exec46485 `just test -p codex-state -p codex-tasknode-session` exited0:354/354passed,0skipped14.997s, nextest `ef047f72-80c9-4700-863d-1f1e253b5d75`; no final-summary LEAK,21fixture dead-code warnings(9duplicates). Parent governance3/115/126exit0. [Native receipt](../../../qa/portfolio/agent-cost-accounting/pf-60-s02/native-ownership-increment.md) preserves950total/227non-test and original worker failures/results; parent evidence above is separately attributed.
 
 Accepted C2 history: six-file `b7a3466de` integrated at `d5608c58d91a75396fea78b447477c44091d4625`. First independent Astra High `c2-atomic-review.json` exited0 clean. Parent combined `just test -p codex-state -p codex-tasknode-session` passed346/346,0skipped13.556s, run `06b633c7-51ae-4dd8-bf96-81a2665c2871`; no LEAK marker in final summary, existing11 fixture dead-code warnings remain. [C2 receipt](../../../qa/portfolio/agent-cost-accounting/pf-60-s02/atomic-retention-increment.md) and original failures/review usage stay frozen. Its1519total/190non-test one-candidate disposition is not800compliance; C1's1121-line exception and335passed/2leaky history remain recorded.
