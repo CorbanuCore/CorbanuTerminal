@@ -1,8 +1,11 @@
 # Decision visibility and alerts — PF-80 planning amendment
 
-Status: operational notice rendering implemented separately as a bounded fix;
-canonical decision feed and Slack sender/receiver remain planned, not wired or
-delivery-tested. Product: **Internal delivery control
+Status September12: canonical decision feed and offline Slack recovery are
+reviewed/integrated;169 receiving Python tests pass. Real Slack SDK transport,
+native-agent bridge and manager registration are now allocated in the
+[real transport mandate](../research/tasknode-integration/slack-live-allocation.md).
+Connection/HTTPS/phone reply/restart and actual agent ACK remain unqualified;
+no live alert or reply delivery is claimed. Product: **Internal delivery control
 — TO BUILD**, “Show blockers, rendered sprints, human test plans, machines, run
 logs and freshness.” Travis requested contextual dashboard decisions and Slack
 alerts, selecting AmbientCrypto / private “The Corbanu Project” in this task.

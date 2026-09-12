@@ -1,5 +1,17 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 14:55 UTC
+
+Two source workers are running; dashboard publication needs no user click.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): normal-library store candidate returned with284 tests. Independent review found two real issues: concurrent deletion on default profiles and an aggregate-overflow write that could block later reads/deletion. Mendel corrects both in the existing17-file scope. This is active engineering, not waiting on Travis; collection stays OFF.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): offline Slack recovery is reviewed/integrated at9877c058d;169 receiving Python tests and Facilities pass. James now implements [real Slack SDK transport and native-agent reply bridge](../../../docs/research/tasknode-integration/slack-live-allocation.md) from cleanba3a2457c. Manager owns shared registration and actual connection/phone qualification. Slack is not yet operational.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): [isolated adapter approval](pf27-launch-adapter-decision.md) remains unanswered; owner021f82e6 is unchanged. This existing human hold does not stop the other two initiatives.
+
+[Receiving/review evidence](integration-20260912-1356.md) preserves corrected
+failures and exact acceptance limits. Last verified publication14:22:46UTC from
+b26d1b935; this later observation awaits this heartbeat's one native Luna sync.
+
 ## Current observation — 14:18 UTC
 
 Two source implementation workers are running. [Review/integration ledger](integration-20260912-1356.md)
