@@ -18,6 +18,14 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+CorrectiveFable32 reserved September12 21:26UTC before dispatch, manager251074ef7.
+Frozen repairedsource7839f9f653a3471bb9bbed19ebc7bed43308bbe3/Rust5a4ee88b5fe4c9b946842a4709f9b88f85c54c79;
+review/size baseline remains6d770938c, measured892/same7paths/hard900. Actual
+unchanged-runtime regression failedexit100, repaired focused8/full18exits pass,
+fix/fmt/strictlint/parity/source/locks final. Original30/31 preserved and both
+findings accepted in scope. One corrective extension reserved; none unreserved,
+no reset or additional Astra. Outcome pending; record actual dispatch timestamp.
+
 Reviews30/31 dispatched21:13:07UTC, both completed exit1. Astra30 P2 buffered
 EOF accepted after source/kernel confirmation; manager251074ef7 authorizes only
 the shutdown-check fix and corresponding actual regression within same7/hard900.

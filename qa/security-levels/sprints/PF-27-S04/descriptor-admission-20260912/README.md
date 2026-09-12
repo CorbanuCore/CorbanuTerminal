@@ -2,14 +2,55 @@
 
 Internal synthetic increment only; not a protected service or human-test candidate.
 Product initiative PF-27 / sprint PF-27-S04 remains **in_progress**.
-The initial passing suite below is superseded for readiness by Astra30's
-confirmed buffered-EOF finding. Manager251074ef7 authorizes the bounded repair,
-actual failing regression and corrective Fable32; no final acceptance yet.
+The initial passing suite below was superseded by Astra30's buffered-EOF
+finding. The authorized repair now passes the full suite; corrective Fable32
+is pending. No final acceptance yet.
 Product authority: **Non-negotiable controls** — “Permit agents to reference
 credentials only by label; resolve them solely inside the trusted execution
 boundary.” No credential is used by this increment.
 
-## Frozen scope and candidate
+## Current repaired candidate and proof
+
+Repaired source **`7839f9f653a3471bb9bbed19ebc7bed43308bbe3`**, Rust tree
+**`5a4ee88b5fe4c9b946842a4709f9b88f85c54c79`**, same branch/worktree/base.
+Measured **892** changed lines against accepted6d770938c: pair38, pair_tests23,
+spawn3, admission262, admission_tests486, connector51, runner29. Same7paths,
+hard900; manager251074ef7 authorized the exact runtime exception before edits.
+
+Astra30 exit1/P2 was verified and accepted: unread data masks half-close from
+MSG_PEEK. [Actual unchanged-runtime regression](rtx/buffered-eof-before-fix.log)
+failed with the other role's reader timing out (WouldBlock, exit100, 2.11s);
+both children were cleaned before the assertion. The separate kernel diagnostic
+also records repeated peek returning `x` while RDHUP is already ready.
+Eight runtime lines now poll RDHUP independently of buffered data, treating
+any readiness/error as cancellation; HUP/ERR/NVAL are returned unconditionally.
+Readable healthy data is not itself a shutdown; the existing peek consumes none.
+
+The same connector is unchanged. Test discovery now peeks the marker; two
+duplicate-admission worker round trips preserve healthy buffered connections.
+Ten actual journal/policy EOF/death/receipt/caller scenarios retain empty EOF
+and add buffered EOF for both roles. Only the other reader's marker is drained
+before its blocked read; empty-victim EOF explicitly drains that marker too.
+The repaired [focused replay](rtx/buffered-eof-after-fix.log) passes8 tests.
+
+After scoped fix/format, the exact clean local/RTX source ran the **entire**
+committed runner again in the same private TMUX pane. Every one of the17
+`rtx/repair-tmux/*.exit` files plus `rtx/repair-suite.exit` is zero. Counts match
+the initial table: adapter4+8, default3, pair5+real1, owner8+real3, profiles3,
+admission8, fullservice59 (11exclusions explicitly covered), strict two-crate
+Clippy and read-only parity/unchanged locks/source. [Repair capture](rtx/repair-tmux-capture.txt)
+shows PF27_ADMISSION_B_TMUX_COMPLETE; [provenance](rtx/repair-provenance.txt)
+records exact source/Rust/host. Original runs are not overwritten or relabeled.
+
+Fable31 exit1 judged runtime correct but identified an ignored exit receipt:
+root `bazel-*` excluded the existing `bazel-parity.exit`. Accepted; the original
+exit0 is now force-added, and all repaired receipts are explicitly tracked.
+Both original review JSON/text/exit sets remain alongside this file. These are
+one in-scope runtime defect and one evidence defect, not a new contract.
+Manager authorizes one corrective Fable32 via the same Corbanu/TMUX helper after
+this repaired proof; no repeat Astra or additional opinion on clean code.
+
+## Initial frozen scope and candidate (retained history)
 
 - Sole owner `/root`; local worktree `/Volumes/CorbanuDrive/Corbanu/worktrees/security-broker-resume-20260911`, branch `feat/security-broker-resume-20260911`.
 - Original allocation base `d870c92dab2bf3fbb602dc3b8447fe9f3534aecb` is unchanged.
@@ -27,7 +68,7 @@ duplicates/stale/dead/unrelated peers. The private generation receipt is not PF2
 authority or a claim of perpetual liveness. Sticky cancellation and retained
 shutdown clones fence both channels; A's both-child cleanup/permit rules remain.
 
-## Exact RTX proof
+## Initial exact RTX proof (retained history)
 
 Clean remote checkout `/home/travis/worktrees/security-broker-admission-20260912`
 matched the frozen source/Rust hashes before and after the run. Non-root UID1001,
@@ -104,9 +145,10 @@ selected. These are preserved setup/test defects, not concealed product passes.
 
 ## Reviews and remaining gates
 
-Allocated **30 Astra High and31 Fable5.1 High through Corbanu/private TMUX** review
-only this increment over accepted6d770938c, using this frozen scope and evidence.
-They are not repeat A reviews. Results are pending; see [ledger](../review-budget.md).
+Allocated **30 Astra High and31 Fable5.1 High through Corbanu/private TMUX** reviewed
+only this increment over accepted6d770938c. Both completed; their findings and
+dispositions are above. They were not repeat A reviews. Corrective32 is pending;
+see [ledger](../review-budget.md).
 
 Policy1.7 independent functional execution is accepted. Integrator-accepted N/A
 applies only to this inaccessible synthetic stage. Later protected-user flows
