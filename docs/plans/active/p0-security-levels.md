@@ -982,6 +982,13 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
+22:49UTC: manager accepted exact combined compatibility37f23b991/Rust99265431b6,
+all25 command exits+suite0 and actual RTX/TMUX/locks proof. Next sole-owner
+[fifteen-path private root dispatch](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-dispatch-allocation-20260912.md)
+is allocated from clean12e0bc2d8,740target/800hard. Fresh synthetic root/client
+bridge explicitly approved, no production factory widening; reviews35/36 preserve
+1–34. Earlier compatibility assignments below are historical. No human decision.
+
 Descriptor identity compatibility is qualified for manager receiving, source
 d776e938d8a0c07cc9b50b1d6a818d9f6feb0c11/Rustb48e9c4f9cb89e814b8bdabd6069be86cc47badd.
 [Exact proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-20260912/README.md):
