@@ -982,6 +982,17 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
+Receiving observation18:09UTC: owner adapter evidence fb7523f4b is qualified
+on its branch (source30b471a47, Rust2d270c5c), Astra23/Fable24 clean. RTX proof
+passes; second GNU2.39 host is unsupported rejection only. The integrator has
+allocated the next private synthetic single-child asynchronous cleanup owner
+under the same worktree/branch/base, with two necessary new-source closeouts.
+Exact API/fixture paths must be frozen by that owner before code; no public
+protocol, children.rs/PF20/Core/Vault, privileged installation or protected
+activation. Source/evidence are pending receiving combined-tree integration,
+not a new user blocker. [Current manager handoff](../../../qa/initiative-control/status-display/current-handoffs.md)
+records the distinction; sprint stays in_progress.
+
 September12 17:29UTC: Travis explicitly approved the isolated Linux launch
 adapter; manager relayed execution authority. The [accepted adapter-only
 allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-launch-next-20260912.md)

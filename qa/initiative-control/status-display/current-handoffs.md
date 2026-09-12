@@ -1,5 +1,18 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 18:09 UTC: continuation, not human holds
+
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): adapter handoff fb7523f4b is qualified on the owner's branch; literal Astra23/Fable24 both findings[]. RTX focused3/OS7/service44 (one explicit exclusion)/profile2/TMUX7 pass. Alex's GNU2.39 host proves unsupported rejection only. Manager allocated the next private synthetic single-child asynchronous owner, bounded cancellation/cleanup/quarantine and real late-spawn proof. Sole existing security task is active; no duplicate worker or new user decision. Native source30b471a47 and evidence fb7523f4b remain pending receiving integration; approval allocation c5b05d9d8 is reconciled here.
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): first role-override correction returned3436total/983non-test. API208 and state287 pass,3leaky; Core tests stopped before execution with59 compiler diagnostics following shared-target baseline reuse. Manager authorized exactly32 enumerated recoverable fingerprint moves and locked/offline rebuild; Mendel is dispatched on verification, not a new product contract. All132 original candidate failures also occurred on the matched baseline; zero candidate-only failures in that original comparison does not prove the corrected candidate. Review/integration follow actual tests. Collection OFF.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): lifetime-lock/session-lease correction returned234 passing tests,2558total/990non-test across seven files. Independent Astra High review05 is running on the frozen source; implementation worker returned. Manager owns importing the exact frozen helper into shared status-registration staging, combined tests/review and the separate missing-fence recovery requirement before live connection. Live Slack/posting OFF.
+
+Zero open manager decisions. One security task is active, one accounting
+verification worker dispatched, and one Slack independent review is running.
+No sprint is complete or human-test-ready from these internal results. Last
+verified publication17:26:18UTC, source ef4b8e531/build-d1po25v1; this semantic
+refresh awaits the current heartbeat's single Luna publication. Earlier
+observations below are historical and do not override resolved decisions.
+
 ## Current observation — 17:24 UTC: isolated adapter approved
 
 - [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): Travis explicitly approved the [isolated adapter](pf27-launch-adapter-decision.md). Feed revision9 records resolution against question revision1 at17:23:24UTC. The existing owner was instructed to record/check its allocation and resume adapter implementation, independent review and non-root tests across available configured Linux hosts. Owner acknowledgment is pending; no invented running-worker, privileged-installation or live-credential claim.

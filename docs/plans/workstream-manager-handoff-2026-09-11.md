@@ -1,6 +1,30 @@
 # Workstream continuation — September 11
 
-## Current status source — September 12, 17:24 UTC
+## Current status source — September 12, 18:09 UTC
+
+No human decision is open. The isolated-adapter approval is resolved; do not
+present a publication click or renewed PF27 approval request. Security owner
+closed adapter stage fb7523f4b after clean Astra23/Fable24 and real RTX proof.
+Manager allocated the next synthetic single-child cleanup owner; existing owner
+task is active. Native checkpoint is not yet integrated into this receiving
+branch. Approval allocation c5b05d9d8 is reconciled here, including its previously
+absent proposal; later native integration needs serialized combined-tree proof.
+
+Accounting's role correction is frozen3436total/983non-test. API208/state287
+pass (3 leaky); Core correction tests have not executed because of test-profile
+artifact inconsistency. Manager authorized recoverable invalidation of exactly
+32 verified dependent fingerprints; Mendel is dispatched on that verification.
+Matched original baseline reproduced all132 failures (zero candidate-only),
+not a clean full-Core gate. No source/API redesign or human decision inferred.
+
+Slack returned234 passing tests,2558total/990non-test. The already-authorized
+changed-candidate review05 is running; source is frozen. Manager still owns
+combined shared-registration proof and missing-fence recovery before live
+connection. James's implementation has returned; do not count him as running.
+Live Slack, Task Node posting and collection remain OFF. All three sprints stay
+in progress; PF60S03/PF79/PF81 dependencies remain. See current handoffs below.
+
+## Historical observation — September 12, 17:24 UTC
 
 Travis approved the isolated Linux adapter; decisionpf27-linux-launch-adapter
 resolved17:23:24 against revision1, feedrevision9. Existing security owner was
@@ -25,7 +49,7 @@ There are currently zero source-implementation workers, one diagnostic worker,
 one recovery-design worker and one independent code review. Manager owns the
 next correction/integration, not Travis. Live Slack and collection stay OFF.
 Manager owns shared registration and qualified connection/HTTPS/phone reply/ACK,
-not another generic contract stage. PF27's isolated-adapter question stays open.
+not another generic contract stage. The then-open PF27 question is now resolved.
 Older checkpoint and
 approval-waiting passages below are historical, not current holds.
 
