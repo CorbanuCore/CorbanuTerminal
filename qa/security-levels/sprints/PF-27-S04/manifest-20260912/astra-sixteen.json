@@ -1,0 +1,6 @@
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "No actionable defects found in the provided bundle. The implementation matches the bounded inspection contract: strict schema validation, role-table reuse, checked descriptor-relative opens, bounded reads, metadata stability checks, and sanitized errors. It exposes no execution authority. Review used read-only inspection; tests were not run.",
+  "overall_confidence": 0.91
+}

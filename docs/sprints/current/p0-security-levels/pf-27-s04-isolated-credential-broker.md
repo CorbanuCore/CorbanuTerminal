@@ -69,10 +69,10 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - [x] Qualified admission/lifetime `bd70f0e6b` ([proof](../../../../qa/security-levels/sprints/PF-27-S04/child-admission-20260912/README.md)) and existing-root adapter `794080a4f` ([proof](../../../../qa/security-levels/sprints/PF-27-S04/root-composition-20260912/README.md)): default3/fixture17/affected356 (2 helper skips), scoped Clippy/parity/TMUX17+exit78 pass. Astra10 clean, Fable11 runtime correct with publication finding resolved; inherited transitive telemetry lint debt retained. Five new slots used. No native installation, executable launcher or protected activation.
 
 - [x] Launch recipe/identity preparation `f0b1209e0`: default3/synthetic29/affected356 (2 existing skips), scoped lint/parity/build/TMUX pass; Astra14 and Fable15 exit0/no findings. P3 Python-path fixture follow-up fixed. No actual root-positive or native-eligibility claim; [evidence](../../../../qa/security-levels/sprints/PF-27-S04/launcher-20260912/README.md).
-
+- [x] Fixed manifest/image inspection `099fa6f6d`: default3/synthetic35/affected356 (2 existing skips), scoped lint/parity/build/TMUX pass; Astra16/Fable17 clean. Initial fixture failures retained. No spawn authority or native qualification; [proof](../../../../qa/security-levels/sprints/PF-27-S04/manifest-20260912/README.md).
 ## Remaining
 
-- [ ] Allocate root-owned manifest/executable validation and actual child spawn/supervision before fixed listener/native client wiring; preserve distinct-principal/group/FD and retained-Child rules. Exact installation approval is still required before OS identity/IPC/handle qualification. No full PF27 completion.
+- [ ] Allocate actual spawn/exec binding/loader trust/supervision before listener/client wiring, with bounded storage-stall/launch handling. Preserve identity/group/FD/Child rules; exact privileged installation approval and native qualification remain required. No full PF27 completion.
 - [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.
 
 - [ ] Keep sentinel keys/raw registries outside agent-accessible processes; test open-channel revocation, upload cancellation, same-run-ID replacement and broker restart with old handles. The proxy's retained RegisteredRun concern requires a native regression, not just a copied new-connection test.

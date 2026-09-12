@@ -71,3 +71,17 @@ concrete repair/evidence need. Do not spend a pass just because it is available.
 | --- | --- | --- | --- |
 | 14 | 2026-09-12 09:14:49Z | Astra High; launcher recipe/preparation over08a32a80e, Rust tree49d901362418ee11232d70e468cebe84ec37abfb | Exit0, findings[]; launcher-20260912/astra-fourteen.json. |
 | 15 | 2026-09-12 09:16:18Z | Fable5.1High Corbanu/privateTMUX; same source plus completed RTX/TMUX evidence | Exit0, findings[]; launcher-20260912/fable-fifteen.json. |
+
+## Manifest inspection — scoped integrator extension
+
+September12 manager task `01a08522-76a1-7ad1-afe6-ad690d55c0d7` accepted
+manifest-next-20260912.md and authorized TWO necessary new-stage passes:
+Astra High and Fable5.1High via Corbanu/TMUX. **2 used / 0 available**.
+The prior unused contingency is retained separately; reviews1–15 and the
+scheduled six-hour anchor are unchanged. Reserve each dispatch before starting.
+No root-positive execution, installation or main-write window is granted.
+
+| Review | Reservation UTC | Model / scope | Outcome / evidence |
+| --- | --- | --- | --- |
+| 16 | 2026-09-12 09:51:08Z | Astra High; manifest inspection over919b1652d, Rust5df6837f11abe2b176c18e1e69a53ef27b595194 | Exit0, findings[]; manifest-20260912/astra-sixteen.json. |
+| 17 | 2026-09-12 09:52Z | Fable5.1High Corbanu/privateTMUX; same source and completed RTX/TMUX evidence | Engine started09:52:45Z; exit0/findings[]; manifest-20260912/fable-seventeen.json. |

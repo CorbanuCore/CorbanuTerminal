@@ -714,6 +714,22 @@ synthetic29, affected356 (2 existing skips), scoped lint/parity/build/TMUX;
 Astra14 and Fable15 both exit0 with no findings. Two of manager's +3 extension
 used, one unused. [Exact evidence and native limits](../../../qa/security-levels/sprints/PF-27-S04/launcher-20260912/README.md).
 
+Next allocation accepted by the receiving owner for bounded implementation:
+[root manifest and executable inspection](../../../qa/security-levels/sprints/PF-27-S04/manifest-next-20260912.md).
+Same PF27-S04 owner and coordinates; strict bounded fixed-path schema, checked
+opened ancestry/files and streaming image digest, with private test seams.
+September12 manager acceptance is recorded in the packet. No spawn, privileged installation,
+loader/exec-binding proof, listener, native client or protected activation is
+included. Preserve the unused review contingency; reserve any new stage passes
+under the existing ledger only after acceptance. Accepted launcher checkpoint
+is on main at `cc931adf6333e8348e03ee5fc801c77548aec138`; no repeat review needed.
+Manifest inspection source `099fa6f6d` is now construction-qualified: RTX
+default3/synthetic35/affected356 (2 existing skips), scoped lint/parity/build/TMUX
+pass; Astra16/Fable17 exit0, no findings. [Checkpoint and retained initial fixture
+failures](../../../qa/security-levels/sprints/PF-27-S04/manifest-20260912/README.md).
+Two new review passes used, prior contingency retained. Main window still
+required; no root-positive, exec-binding, loader-trust or native-eligibility claim.
+
 ## Round-five execution amendment — 2026-09-04
 
 The user authorized these three parallel agents and assigned integration to

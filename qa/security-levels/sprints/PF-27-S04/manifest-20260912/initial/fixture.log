@@ -1,0 +1,102 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-manifest-20260912/codex-rs/secret-broker-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.48s
+────────────
+ Nextest run ID 561dee69-05cb-4822-975c-b7ad7e376a15 with nextest profile: local
+    Starting 35 tests across 7 binaries
+        PASS [   0.002s] ( 1/35) codex-secret-broker-service launch::manifest::files::tests::pf_27_s01_file_metadata_and_stability_guards
+        PASS [   0.002s] ( 2/35) codex-secret-broker-service launch::manifest::files::tests::pf_27_s01_digest_bounds_identity_and_read_failures
+        PASS [   0.002s] ( 3/35) codex-secret-broker-service children::tests::pf_27_s01_reaper_spawn_failure_returns_both_owned_children
+        FAIL [   0.002s] ( 4/35) codex-secret-broker-service launch::manifest::tests::pf_27_s01_manifest_every_component_denies_links_modes_and_missing
+  stdout ───
+
+    running 1 test
+    test launch::manifest::tests::pf_27_s01_manifest_every_component_denies_links_modes_and_missing ... FAILED
+
+    failures:
+
+    failures:
+        launch::manifest::tests::pf_27_s01_manifest_every_component_denies_links_modes_and_missing
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'launch::manifest::tests::pf_27_s01_manifest_every_component_denies_links_modes_and_missing' (774608) panicked at secret-broker-service/src/launch/manifest/manifest_tests.rs:187:9:
+    assertion failed: inspect(&t).is_ok()
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.003s] ( 5/35) codex-secret-broker-service launch::manifest::tests::pf_27_s01_manifest_strict_schema_and_role_table
+        FAIL [   0.002s] ( 6/35) codex-secret-broker-service launch::manifest::tests::pf_27_s01_manifest_tree_positive_and_leaf_mutations
+  stdout ───
+
+    running 1 test
+    test launch::manifest::tests::pf_27_s01_manifest_tree_positive_and_leaf_mutations ... FAILED
+
+    failures:
+
+    failures:
+        launch::manifest::tests::pf_27_s01_manifest_tree_positive_and_leaf_mutations
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'launch::manifest::tests::pf_27_s01_manifest_tree_positive_and_leaf_mutations' (774614) panicked at secret-broker-service/src/launch/manifest/manifest_tests.rs:145:5:
+    assertion failed: inspect(&t).is_ok()
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.002s] ( 7/35) codex-secret-broker-service launch::tests::pf_27_s01_preparation_arguments_are_exact_and_canonical
+        PASS [   0.008s] ( 8/35) codex-secret-broker-service children::tests::pf_27_s01_early_drop_uses_preallocated_reaper
+        FAIL [   0.007s] ( 9/35) codex-secret-broker-service launch::manifest::tests::pf_27_s01_manifest_leaf_fifo_socket_and_identity_guard
+  stdout ───
+
+    running 1 test
+    test launch::manifest::tests::pf_27_s01_manifest_leaf_fifo_socket_and_identity_guard ... FAILED
+
+    failures:
+
+    failures:
+        launch::manifest::tests::pf_27_s01_manifest_leaf_fifo_socket_and_identity_guard
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'launch::manifest::tests::pf_27_s01_manifest_leaf_fifo_socket_and_identity_guard' (774609) panicked at secret-broker-service/src/launch/manifest/manifest_tests.rs:223:66:
+    called `Result::unwrap()` on an `Err` value: Error { kind: InvalidInput, message: "path must be shorter than SUN_LEN" }
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.002s] (10/35) codex-secret-broker-service launch::tests::pf_27_s01_recipe_rejects_collisions_and_sentinel_ids
+        PASS [   0.018s] (11/35) codex-secret-broker-service root::tests::pf_27_s01_root_mapping_uses_child_role_and_shutdown_releases_roots
+        PASS [   0.018s] (12/35) codex-secret-broker-service root::tests::pf_27_s01_native_root_open_denies_nonroot_and_fences_children
+        PASS [   0.003s] (13/35) codex-secret-broker-service::launch_recipe_lifecycle pf_27_s01_recipe_transports_exact_args_with_null_stdio_and_no_home
+        PASS [   0.033s] (14/35) codex-secret-broker-service root::tests::pf_27_s01_root_open_failures_release_first_root_and_both_children
+        PASS [   0.033s] (15/35) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_duplicate_parent_and_wrong_uid_connections_deny
+        PASS [   0.059s] (16/35) codex-secret-broker-service root::tests::pf_27_s01_root_terminal_outcomes_fence_and_preserve_ambiguous_errors
+        PASS [   0.043s] (17/35) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_exit_and_handler_failure_fence_generation
+        PASS [   0.002s] (18/35) codex-secret-broker-service::lifecycle pf_27_s01_production_service_requires_qualified_bootstrap
+        PASS [   0.018s] (19/35) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_roles_route_independently_and_stalled_handlers_shutdown
+        PASS [   0.058s] (20/35) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_handler_deadline_fences_without_blocking_supervisor
+        PASS [   0.038s] (21/35) codex-secret-broker-service::lifecycle children_tests::pf_27_s01_child_unknown_peer_and_old_generation_cannot_enter_replacement
+        PASS [   0.108s] (22/35) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_peer_mismatch_denies_before_audit
+        PASS [   0.118s] (23/35) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_dispatch_uses_vault_and_settles_journal
+        PASS [   0.007s] (24/35) codex-secret-broker-service::probe_lifecycle pf_27_s01_preparation_denies_nonroot_and_invalid_invocations
+        PASS [   0.014s] (25/35) codex-secret-broker-service::probe_lifecycle pf_27_s01_probe_hardens_only_its_own_actual_process
+        PASS [   0.007s] (26/35) codex-secret-broker-service::probe_lifecycle pf_27_s01_probe_native_and_invalid_modes_remain_unavailable
+        PASS [   0.019s] (27/35) codex-secret-broker-service::probe_lifecycle pf_27_s01_probe_reports_inherited_synthetic_fd_without_disclosing_it
+        PASS [   0.002s] (28/35) codex-secret-broker-service::bin/codex-protected-root-probe hardening::tests::pf_27_s01_probe_each_failed_kernel_observation_prevents_success
+        PASS [   0.002s] (29/35) codex-secret-broker-service::bin/codex-protected-root-probe hardening::tests::pf_27_s01_probe_identity_requires_nonroot_and_all_saved_ids
+        PASS [   0.002s] (30/35) codex-secret-broker-service::bin/codex-protected-root-probe hardening::tests::pf_27_s01_probe_missing_malformed_or_duplicate_ambient_state_denies
+        PASS [   0.002s] (31/35) codex-secret-broker-service::bin/codex-protected-root-probe prepare::tests::pf_27_s01_preparation_requires_exact_saved_ids_and_groups
+        PASS [   0.002s] (32/35) codex-secret-broker-service::bin/codex-protected-root-probe prepare::tests::pf_27_s01_preparation_stops_at_each_failed_boundary
+        PASS [   0.194s] (33/35) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_replay_denies_without_second_audit_or_secret
+        PASS [   0.417s] (34/35) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_subprocess_death_and_restart_refuse_old_channel_and_key
+        PASS [   5.497s] (35/35) codex-secret-broker-service::lifecycle subprocess::pf_27_s01_signal_during_partial_read_preserves_absolute_deadline
+────────────
+     Summary [   5.571s] 35 tests run: 32 passed, 3 failed, 0 skipped
+        FAIL [   0.002s] ( 4/35) codex-secret-broker-service launch::manifest::tests::pf_27_s01_manifest_every_component_denies_links_modes_and_missing
+        FAIL [   0.002s] ( 6/35) codex-secret-broker-service launch::manifest::tests::pf_27_s01_manifest_tree_positive_and_leaf_mutations
+        FAIL [   0.007s] ( 9/35) codex-secret-broker-service launch::manifest::tests::pf_27_s01_manifest_leaf_fifo_socket_and_identity_guard
+error: test run failed
+error: recipe `test` failed on line 82 with exit code 100

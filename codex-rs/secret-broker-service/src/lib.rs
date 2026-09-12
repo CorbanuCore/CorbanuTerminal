@@ -33,3 +33,5 @@ pub use launch::SyntheticChildIdentity;
 pub use launch::SyntheticChildRole;
 #[cfg(all(target_os = "linux", feature = "synthetic-fixture"))]
 pub use launch::SyntheticLaunchRecipe;
+#[cfg(all(target_os = "linux", feature = "synthetic-fixture"))]
+pub use launch::SyntheticManifestInspection;
