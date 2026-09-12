@@ -21,3 +21,7 @@ fn pf_27_s01_production_service_requires_qualified_bootstrap() {
 #[cfg(feature = "synthetic-fixture")]
 #[path = "support/subprocess.rs"]
 mod subprocess;
+
+#[cfg(feature = "synthetic-fixture")]
+#[path = "support/children_tests.rs"]
+mod children_tests;
