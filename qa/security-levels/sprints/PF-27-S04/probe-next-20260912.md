@@ -47,6 +47,18 @@ These references establish available APIs, not native containment measurements.
 Read the precise structs/implementations again before using them. Do not modify
 the main agent, SSH shell, TMUX server or parent application's hardening state.
 
+Source SHA256 values observed directly on RTX (paths relative to the named
+toolchain's `library/std/` or registry package, not repository source copies):
+
+| Source | SHA256 |
+| --- | --- |
+| Rust1.95 `src/os/unix/process.rs` | `bcabc07a96413b1ec16b44f740b30db2f9e323c06bbe8c1c414ad170651a96ba` |
+| Rust1.95 `src/sys/process/unix/unix.rs` | `cabba94153bcdae7674f5743886d518db848710aee0ee20abfecf8bb159d3c4b` |
+| nix0.30.1 `src/sys/prctl.rs` | `58162ca18f11269bcda2bd24c5c479bf3b21c28c9b7497785ca4abbb2e0f9bdc` |
+| nix0.30.1 `src/unistd.rs` | `26b45c0e0861ca82a9300eb952bc81bf626bbde6d3606fd780ad27fc86360ba7` |
+| rustix1.1.4 `src/thread/libcap.rs` | `73f233865e06180aedea39082a5cf36541147d9faad37b7efc3707bf9de67461` |
+| rustix1.1.4 `src/thread/prctl.rs` | `ebc63d13874b10d93a1c55868e965638192a1184f0d894502ffad2f1623ca549` |
+
 ## Exact initial CLI and result contract
 
 - `--inspect-post-exec`: the only runnable mode in this stage. Require a real
@@ -104,8 +116,9 @@ proof. Add tests to the existing stage suites without relabeling native gates.
 
 ## Integration, review and remaining native boundary
 
-Manager coordination request sent before implementation; verify no conflicting
-registration work. Only scoped branch checkpoints may be pushed without a fresh
+Manager confirmed no conflicting registration changes and preserved root's
+serialized build ownership; this was coordination, not an independent review.
+Only scoped branch checkpoints may be pushed without a fresh
 coordinated main window. Current review window is spent until11:25:45Z; prepare
 source/tests without claiming independent review or landing it beforehand.
 Next review number12; follow the existing fixed-window ledger, no early reset.
