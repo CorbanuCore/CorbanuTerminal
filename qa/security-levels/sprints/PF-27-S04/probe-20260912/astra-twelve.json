@@ -1,0 +1,6 @@
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "No actionable defects found in the provided bundle. The probe checks saved identities and single-threaded execution before changing kernel state, propagates inspection failures, bounds observations, and emits only limited metadata. Native modes remain denied and eligibility remains false. Tests isolate kernel changes in child processes and cover inherited descriptors and argument rejection. Tests were not rerun during this review.",
+  "overall_confidence": 0.89
+}

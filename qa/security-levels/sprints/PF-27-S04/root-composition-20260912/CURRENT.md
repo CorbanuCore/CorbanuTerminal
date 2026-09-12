@@ -24,9 +24,9 @@ Source/evidence landing is coordinated with manager task
 `01a08522-76a1-7ad1-afe6-ad690d55c0d7`; it confirmed a clear main window.
 Use current Git refs and monitor's verified landing SHA, not an assumption that
 landing remains pending. Do not repeat a completed push or qualification.
-Next allocate the smallest executable probe step from the recorded launch contract;
-do not replan or retest this completed adapter. Review12 must respect the next
-window; new source can be prepared but cannot claim independent review beforehand.
+The [post-exec probe step](../probe-20260912/CURRENT.md) now has final-source
+tests and accepted construction reviews under a recorded integrator extension.
+Read that handoff, not this older implementation instruction; do not repeat proof.
 Native installation, launcher, positive native CAS, UID containment and full
 PF27 completion remain open. Default executable still exits78; installed Mac
 app unchanged. The later launcher contract is planning, not runnable argv.

@@ -686,6 +686,24 @@ Clippy fails on inherited codex-api telemetry debt, retained for manager triage.
 Five review slots used this window. Actual launcher, native qualification and
 provider data plane remain open; the adapter is not called by normal startup.
 
+Next source allocation: [synthetic post-exec probe preparation](../../../qa/security-levels/sprints/PF-27-S04/probe-next-20260912.md),
+service `src/probe/`, separate test modules and `tests/probe_lifecycle.rs`, optional
+binary registration and existing rustix thread feature/lock parity. Inspection
+changes only its own non-root process's hardening state and always reports native
+eligibility false. All native-launch modes deny; no root socket, identity change,
+enrollment, Core/PF20/Vault edit or installation. Source/tests can be prepared
+within the existing allocation; independent review must respect the six-hour
+budget. Later actual launcher/group/FD contract remains separately bounded.
+
+Post-exec probe source now passes final RTX default3/fixture23/affected356
+(two inherited helper skips), scoped lint/parity/build and private TMUX proof.
+[Checkpoint](../../../qa/security-levels/sprints/PF-27-S04/probe-20260912/CURRENT.md)
+is construction-accepted after Astra12 exit0 and Fable13 exit1 (patch correct,
+sole P3 fixture Python-path portability explicitly deferred by integration owner).
+Manager granted +2 scoped reviews without resetting history and cleared a main
+window. Source remains unchanged; qualification is RTX-only, not all-Linux/Bazel
+or native eligibility. No additional unchanged-source review is required.
+
 ## Round-five execution amendment — 2026-09-04
 
 The user authorized these three parallel agents and assigned integration to

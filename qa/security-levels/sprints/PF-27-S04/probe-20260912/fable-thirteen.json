@@ -1,0 +1,18 @@
+{
+  "findings": [
+    {
+      "title": "Probe tests hard-code /usr/bin/python3, which this repo already documents as non-portable",
+      "body": "`tests/probe_lifecycle.rs` spawns the probe through `Command::new(\"/usr/bin/python3\")` (twice) to get `close_fds`/`pass_fds` semantics without `unsafe`. The repo already records that this exact path is not guaranteed to exist on Bazel and non-macOS runners (see `codex-rs/exec-server/tests/exec_process.rs` ~line 709, which switched to `/bin/sh` for that reason), and the previous stage of this same sprint (review 8) was sent back for a test-portability defect. On any Linux host/sandbox without `/usr/bin/python3`, both `pf_27_s01_probe_hardens_only_its_own_actual_process` and `pf_27_s01_probe_reports_inherited_synthetic_fd_without_disclosing_it` panic on `.output().unwrap()` rather than exercising the probe. Smallest fix: resolve `python3` via PATH (`Command::new(\"python3\")`) or via a small lookup helper, and fail with a clear message if it is absent. Production probe logic is unaffected; this only concerns the fixture harness. Not a runtime or security defect.",
+      "priority": "P3",
+      "confidence": 0.55,
+      "category": "maintainability",
+      "code_location": {
+        "file_path": "codex-rs/secret-broker-service/tests/probe_lifecycle.rs",
+        "line": 22
+      }
+    }
+  ],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "Reviewed the probe source, tests, manifest and evidence against the review packet's stated concerns. Syscall/error boundary: every failure (nix `Errno`, rustix `Errno`, parse, bound) collapses to a fixed `unavailable()`/exit 78 path and `main` never prints error contents, so no identity, path, descriptor or environment data can leak. Saved-ID check requires all three UIDs and GIDs equal and non-zero via `getresuid/getresgid`. Single-thread assumption is verified from `/proc/self/task` before any per-thread setter (capset, no_new_privs), and no threads/fds are created between check and setters. Capability handling is ordered sensibly (keepcaps off, ambient clear, empty capset, then dumpable off) and re-read via `capget` plus a bounded, strictly-parsed `CapAmb` line; reading `/proc/self/status` and `/proc/self/fd` after `PR_SET_DUMPABLE=0` is valid for the same thread group (`proc_fd_permission`/`ptrace_may_access` same-thread-group exemptions), and the RTX evidence confirms it. Descriptor enumeration drops the `ReadDir` (and its own fd) before the stat phase, uses `stat` on magic links (no open, so no FIFO blocking), treats vanished fds as absent, fails closed on other errors and is bounded at 256 entries. `verified()` intentionally excludes group/FD observations, matching the packet's stated contract. Native/unknown/combined argument forms fall through to exit 78 without any activity, and the arg parsing is exact. rustix 1.1.4 APIs (`clear_ambient_capability_set`, `set_capabilities(Option<Pid>, CapabilitySets)`, `CapabilitySets: PartialEq`) and nix `prctl` under the enabled `process`/`user` features check out. Tests cover the ID matrix, malformed/duplicate/oversized ambient state, per-flag failure of `verified()`, clean-launch, inherited-fd non-disclosure and denial of native modes. The only actionable item is the hard-coded `/usr/bin/python3` in the test harness, which the repo itself flags as non-portable; it is low priority and does not affect probe correctness or safety.",
+  "overall_confidence": 0.82
+}

@@ -34,3 +34,22 @@ overwriting them. These are reviews of the new stage, not repeated service-stage
 | 9 | 2026-09-12 06:03Z (reserved 06:02Z) | Fable 5.1 High through Corbanu/TMUX; test-portability repair and final evidence | Exit 0, no findings; child-admission-20260912/fable-nine.json. Stage review closed; no further pass needed. |
 | 10 | 2026-09-12 06:44Z | Astra High; new existing-root adapter over 34bba8814, formatted source; tests running separately | Exit0, findings[]; root-composition-20260912/astra-ten.json. |
 | 11 | 2026-09-12 06:46Z | Fable 5.1 High Corbanu/TMUX; same root adapter and completed exact-tree evidence | Exit1, runtime correct, P3 missing ignored logs in review bundle; explicit tracking verified before commit, no source change. Original root-composition-20260912/fable-eleven.json retained. No duplicate review needed. |
+
+## Integrator extension — September 12, 08:43 UTC
+
+Manager task `01a08522-76a1-7ad1-afe6-ad690d55c0d7` relayed Travis's explicit
+policy amendment permitting integrator-authorized additional reviews and granted
+**two scoped passes now** for the frozen probe: Astra12 and required Fable13.
+This is **+2**, not a reset: the five scheduled-window passes above remain spent.
+The six-hour replenishment anchor and all historical outcomes are unchanged.
+No new scope, native installation, activation or release authority is granted.
+Avoid further opinions once no substantive findings remain; proceed to integration.
+
+| Review | Reservation UTC | Model / scope | Outcome / evidence |
+| --- | --- | --- | --- |
+| 12 | 2026-09-12 08:43Z; dispatched 08:44Z | Astra High; frozen probe branch diff over a666c6cd9 | Exit0, findings[]; probe-20260912/astra-twelve.json. |
+| 13 | 2026-09-12 08:43Z; dispatched 08:44Z | Fable 5.1 High via Corbanu/private TMUX; same probe | Exit1, patch correct, sole P3 fixture Python-path portability; probe-20260912/fable-thirteen.json. No runtime/security finding. |
+
+Extension accounting: **2 used / 0 available**. Both processes finished.
+Do not silently retry or erase the nonzero Fable result. The portability
+disposition and integration checkpoint are in probe-20260912/README.md.

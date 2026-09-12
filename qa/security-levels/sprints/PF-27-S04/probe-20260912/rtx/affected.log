@@ -1,0 +1,382 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-http-client v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/http-client)
+   Compiling codex-execpolicy v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/execpolicy)
+   Compiling codex-keyring-store v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/keyring-store)
+   Compiling codex-secret-broker v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/secret-broker)
+   Compiling codex-utils-path v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/utils/path-utils)
+   Compiling codex-network-proxy v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/network-proxy)
+   Compiling codex-websocket-client v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/websocket-client)
+   Compiling codex-client v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/codex-client)
+   Compiling codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/protocol)
+   Compiling codex-api v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/codex-api)
+   Compiling codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/file-system)
+   Compiling codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/git-utils)
+   Compiling codex-secrets v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/secrets)
+   Compiling codex-vault v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/vault)
+   Compiling codex-otel v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/otel)
+   Compiling codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/model-provider-info)
+   Compiling codex-features v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/features)
+   Compiling codex-config v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/config)
+   Compiling codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-probe-20260912/codex-rs/protected-state)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 18.58s
+────────────
+ Nextest run ID 4ab61922-d6ab-4da8-8247-77715a9c65c5 with nextest profile: local
+    Starting 356 tests across 7 binaries (2 tests skipped)
+        PASS [   0.002s] (  1/356) codex-network-proxy attribution::tests::attribution_frame_has_bounded_binary_prefix
+        PASS [   0.002s] (  2/356) codex-network-proxy browser_policy::tests::accepts_public_ipv4_and_ordinary_ipv6_only
+        PASS [   0.003s] (  3/356) codex-network-proxy attribution::tests::framed_connection_receives_registered_execution_state
+        PASS [   0.003s] (  4/356) codex-network-proxy browser_policy::tests::allow_returns_exact_connection_addresses_without_network_io
+        PASS [   0.002s] (  5/356) codex-network-proxy browser_policy::tests::canonical_public_urls_preserve_queries_but_not_fragments
+        PASS [   0.003s] (  6/356) codex-network-proxy browser_policy::tests::allowed_host_still_validates_the_exact_resolver_answers
+        PASS [   0.003s] (  7/356) codex-network-proxy browser_policy::tests::existing_denial_wins_without_approval_override
+        PASS [   0.003s] (  8/356) codex-network-proxy browser_policy::tests::explicit_denial_never_calls_the_destination_resolver
+        PASS [   0.002s] (  9/356) codex-network-proxy browser_policy::tests::one_private_dns_answer_denies_the_entire_destination
+        PASS [   0.002s] ( 10/356) codex-network-proxy browser_policy::tests::rejects_non_web_credentials_ports_and_ambiguous_input
+        PASS [   0.002s] ( 11/356) codex-network-proxy browser_policy::tests::rejects_private_obfuscated_and_special_destinations
+        PASS [   0.002s] ( 12/356) codex-network-proxy certs::tests::current_generated_trust_bundle_path_rejects_stale_bundle
+        PASS [   0.005s] ( 13/356) codex-network-proxy certs::tests::generated_trust_bundle_path_requires_matching_content_hash
+        PASS [   0.011s] ( 14/356) codex-network-proxy certs::tests::managed_ca_artifact_pruning_preserves_only_active_certificates
+        PASS [   0.002s] ( 15/356) codex-network-proxy certs::tests::write_atomic_create_new_or_reuse_rejects_matching_symlink_target
+        PASS [   0.002s] ( 16/356) codex-network-proxy config::tests::clamp_bind_addrs_allows_non_loopback_when_enabled
+        PASS [   0.002s] ( 17/356) codex-network-proxy config::tests::clamp_bind_addrs_forces_loopback_when_all_unix_sockets_enabled
+        PASS [   0.002s] ( 18/356) codex-network-proxy config::tests::clamp_bind_addrs_forces_loopback_when_unix_sockets_enabled
+        PASS [   0.002s] ( 19/356) codex-network-proxy config::tests::host_and_port_from_network_addr_defaults_for_empty_string
+        PASS [   0.021s] ( 20/356) codex-network-proxy certs::tests::managed_ca_private_key_is_not_persisted
+        PASS [   0.002s] ( 21/356) codex-network-proxy config::tests::host_and_port_from_network_addr_formats_ipv6
+        PASS [   0.002s] ( 22/356) codex-network-proxy config::tests::managed_proxy_ports_reject_ephemeral_ports
+        PASS [   0.002s] ( 23/356) codex-network-proxy config::tests::network_domain_permissions_serialize_to_effective_map_shape
+        PASS [   0.002s] ( 24/356) codex-network-proxy config::tests::network_proxy_config_uses_struct_defaults_for_missing_fields
+        PASS [   0.002s] ( 25/356) codex-network-proxy config::tests::network_proxy_settings_default_matches_local_use_baseline
+        PASS [   0.002s] ( 26/356) codex-network-proxy config::tests::parse_host_port_defaults_for_empty_string
+        PASS [   0.002s] ( 27/356) codex-network-proxy config::tests::parse_host_port_defaults_for_whitespace
+        PASS [   0.002s] ( 28/356) codex-network-proxy config::tests::parse_host_port_does_not_treat_unbracketed_ipv6_as_host_port
+        PASS [   0.002s] ( 29/356) codex-network-proxy config::tests::parse_host_port_falls_back_to_default_port_when_port_is_invalid
+        PASS [   0.002s] ( 30/356) codex-network-proxy config::tests::parse_host_port_parses_host_port_with_scheme_and_path
+        PASS [   0.002s] ( 31/356) codex-network-proxy config::tests::parse_host_port_parses_ipv6_with_brackets
+        PASS [   0.002s] ( 32/356) codex-network-proxy config::tests::parse_host_port_parses_host_port_without_scheme
+        PASS [   0.002s] ( 33/356) codex-network-proxy config::tests::resolve_addr_falls_back_to_loopback_for_hostnames
+        PASS [   0.002s] ( 34/356) codex-network-proxy config::tests::parse_host_port_strips_userinfo
+        PASS [   0.002s] ( 35/356) codex-network-proxy config::tests::resolve_addr_maps_localhost_to_loopback
+        PASS [   0.002s] ( 36/356) codex-network-proxy config::tests::resolve_addr_parses_ip_literals
+        PASS [   0.002s] ( 37/356) codex-network-proxy config::tests::resolve_addr_parses_ipv6_literals
+        PASS [   0.002s] ( 38/356) codex-network-proxy config::tests::resolve_runtime_accepts_unix_style_absolute_allow_unix_sockets_entries
+        PASS [   0.039s] ( 39/356) codex-network-proxy certs::tests::managed_ca_trust_bundle_appends_startup_file_and_directory_certificates
+        PASS [   0.036s] ( 40/356) codex-network-proxy certs::tests::managed_ca_trust_bundle_skips_inherited_current_bundle
+        PASS [   0.002s] ( 41/356) codex-network-proxy config::tests::resolve_runtime_rejects_relative_allow_unix_sockets_entries
+        PASS [   0.002s] ( 42/356) codex-network-proxy config::tests::set_allowed_domains_preserves_existing_deny_for_same_pattern
+        PASS [   0.002s] ( 43/356) codex-network-proxy connect_policy::tests::direct_connector_allows_non_public_target_when_local_binding_enabled
+        PASS [   0.002s] ( 44/356) codex-network-proxy connect_policy::tests::direct_connector_rejects_non_public_target_when_local_binding_disabled
+        PASS [   0.003s] ( 45/356) codex-network-proxy connect_policy::tests::direct_connector_allows_explicitly_allowlisted_non_public_target
+        PASS [   0.004s] ( 46/356) codex-network-proxy connect_policy::tests::direct_connector_allows_explicitly_allowlisted_localhost_target
+        PASS [   0.002s] ( 47/356) codex-network-proxy connect_policy::tests::resolved_private_address_does_not_match_allowlisted_hostname
+        PASS [   0.002s] ( 48/356) codex-network-proxy credential_broker::tests::child_without_dummy_cannot_use_previous_child_credential
+        PASS [   0.002s] ( 49/356) codex-network-proxy credential_broker::tests::github_cloud_credentials_do_not_bind_to_ghes_host_hint
+        PASS [   0.002s] ( 50/356) codex-network-proxy credential_broker::tests::github_cloud_credentials_match_ghe_com_host_hint
+        PASS [   0.002s] ( 51/356) codex-network-proxy credential_broker::tests::github_enterprise_credentials_bind_to_gh_host
+        PASS [   0.002s] ( 52/356) codex-network-proxy credential_broker::tests::inject_request_headers_requires_dummy_and_preserves_explicit_authorization
+        PASS [   0.002s] ( 53/356) codex-network-proxy credential_broker::tests::inject_request_headers_requires_dummy_to_select_ambiguous_github_credential
+        PASS [   0.002s] ( 54/356) codex-network-proxy credential_broker::tests::pf_27_s04_isolated_route_never_injects_raw_auth_and_supports_fresh_dispatches
+        PASS [   0.002s] ( 55/356) codex-network-proxy credential_broker::tests::virtualize_child_env_preserves_live_dummy_mappings
+        PASS [   0.003s] ( 56/356) codex-network-proxy credential_broker::tests::scoped_openai_stale_authority_and_unsupported_route_fail_closed
+        PASS [   0.004s] ( 57/356) codex-network-proxy credential_broker::tests::scoped_openai_route_injects_once_and_passes_complete_context
+        PASS [   0.004s] ( 58/356) codex-network-proxy credential_broker::tests::scoped_openai_denial_matrix_fails_before_resolution
+        PASS [   0.002s] ( 59/356) codex-network-proxy credential_broker::tests::virtualize_child_env_preserves_unbound_enterprise_token
+        PASS [   0.002s] ( 60/356) codex-network-proxy credential_broker::tests::virtualize_child_env_replaces_supported_credentials
+        PASS [   0.002s] ( 61/356) codex-network-proxy credential_broker::tests::virtualize_child_env_uses_fresh_dummy_capabilities
+        PASS [   0.003s] ( 62/356) codex-network-proxy http_proxy::tests::http_connect_accept_allows_allowlisted_host_in_full_mode
+        PASS [   0.211s] ( 63/356) codex-network-proxy http_proxy::tests::http_connect_accept_defers_brokered_host_mitm_until_protocol_detection
+        PASS [   0.214s] ( 64/356) codex-network-proxy http_proxy::tests::http_connect_accept_blocks_hooked_host_in_full_mode_without_mitm_state
+        PASS [   0.213s] ( 65/356) codex-network-proxy http_proxy::tests::http_connect_accept_blocks_in_limited_mode
+        PASS [   0.002s] ( 66/356) codex-network-proxy http_proxy::tests::http_plain_proxy_blocks_unix_socket_when_method_not_allowed
+        PASS [   0.003s] ( 67/356) codex-network-proxy http_proxy::tests::http_connect_accept_passes_environment_id_to_decider
+        PASS [   0.004s] ( 68/356) codex-network-proxy http_proxy::tests::http_connect_accept_denies_denylisted_host
+        PASS [   0.002s] ( 69/356) codex-network-proxy http_proxy::tests::http_plain_proxy_rejects_absolute_uri_host_header_mismatch
+        PASS [   0.003s] ( 70/356) codex-network-proxy http_proxy::tests::http_plain_proxy_rejects_unix_socket_when_not_allowlisted
+        PASS [   0.002s] ( 71/356) codex-network-proxy http_proxy::tests::remove_hop_by_hop_request_headers_keeps_forwarding_headers
+        PASS [   0.002s] ( 72/356) codex-network-proxy http_proxy::tests::validate_absolute_form_host_header_allows_matching_default_port
+        PASS [   0.004s] ( 73/356) codex-network-proxy http_proxy::tests::plaintext_credential_injection_requires_explicit_opt_in
+        PASS [   0.002s] ( 74/356) codex-network-proxy http_proxy::tests::validate_absolute_form_host_header_rejects_mismatched_host
+        PASS [   0.002s] ( 75/356) codex-network-proxy http_proxy::tests::validate_absolute_form_host_header_rejects_missing_non_default_port
+        PASS [   0.002s] ( 76/356) codex-network-proxy mitm::tests::apply_mitm_hook_actions_replaces_authorization_header
+        PASS [   0.005s] ( 77/356) codex-network-proxy mitm::tests::mitm_policy_blocks_disallowed_method_and_records_telemetry
+        PASS [   0.003s] ( 78/356) codex-network-proxy mitm::tests::mitm_policy_blocks_matching_hooked_write_in_limited_mode
+        PASS [   0.003s] ( 79/356) codex-network-proxy mitm::tests::mitm_policy_rechecks_local_private_target_after_connect
+        PASS [   0.003s] ( 80/356) codex-network-proxy mitm::tests::mitm_policy_rejects_host_mismatch
+        PASS [   0.255s] ( 81/356) codex-network-proxy http_proxy::tests::brokered_connect_forwards_server_first_opaque_protocol_without_mitm
+        PASS [   0.002s] ( 82/356) codex-network-proxy mitm_hook::tests::compile_resolves_env_backed_injected_headers
+        PASS [   0.002s] ( 83/356) codex-network-proxy mitm_hook::tests::compile_resolves_file_backed_injected_headers
+        PASS [   0.002s] ( 84/356) codex-network-proxy mitm_hook::tests::evaluate_allows_literal_values_with_reserved_prefixes
+        PASS [   0.002s] ( 85/356) codex-network-proxy mitm_hook::tests::evaluate_matches_query_and_header_constraints
+        PASS [   0.005s] ( 86/356) codex-network-proxy mitm_hook::tests::evaluate_matches_wildcard_path_query_and_header_constraints
+        PASS [   0.004s] ( 87/356) codex-network-proxy mitm_hook::tests::evaluate_path_wildcard_does_not_cross_segment_boundaries
+        PASS [   0.002s] ( 88/356) codex-network-proxy mitm_hook::tests::evaluate_returns_first_matching_hook
+        PASS [   0.002s] ( 89/356) codex-network-proxy mitm_hook::tests::evaluate_returns_hooked_host_no_match_when_query_constraint_fails
+        PASS [   0.002s] ( 90/356) codex-network-proxy mitm_hook::tests::evaluate_returns_no_hooks_for_unconfigured_host
+        PASS [   0.002s] ( 91/356) codex-network-proxy mitm_hook::tests::evaluate_treats_glob_metacharacters_as_literal_without_glob_prefix
+        PASS [   0.002s] ( 92/356) codex-network-proxy mitm_hook::tests::validate_allows_hooks_in_full_mode
+        PASS [   0.002s] ( 93/356) codex-network-proxy mitm_hook::tests::validate_rejects_body_matchers_for_now
+        PASS [   0.002s] ( 94/356) codex-network-proxy mitm_hook::tests::validate_rejects_dual_secret_sources
+        PASS [   0.002s] ( 95/356) codex-network-proxy mitm_hook::tests::validate_rejects_invalid_wildcard_path_pattern
+        PASS [   0.002s] ( 96/356) codex-network-proxy mitm_hook::tests::validate_rejects_relative_secret_file
+        PASS [   0.002s] ( 97/356) codex-network-proxy mitm_hook::tests::validate_requires_mitm_for_hooks
+        PASS [   0.002s] ( 98/356) codex-network-proxy network_policy::tests::ask_uses_decider_source_and_ask_decision
+        PASS [   0.002s] ( 99/356) codex-network-proxy network_policy::tests::emit_block_decision_audit_event_emits_non_domain_event
+        PASS [   0.003s] (100/356) codex-network-proxy network_policy::tests::evaluate_host_policy_emits_domain_event_for_baseline_deny
+        PASS [   0.002s] (101/356) codex-network-proxy network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_allow_override
+        PASS [   0.003s] (102/356) codex-network-proxy network_policy::tests::evaluate_host_policy_emits_domain_event_for_decider_ask
+        PASS [   0.003s] (103/356) codex-network-proxy network_policy::tests::evaluate_host_policy_emits_execution_id_for_baseline_allow
+        PASS [   0.002s] (104/356) codex-network-proxy network_policy::tests::evaluate_host_policy_emits_metadata_fields
+        PASS [   0.003s] (105/356) codex-network-proxy network_policy::tests::evaluate_host_policy_still_denies_not_allowed_local_without_decider_override
+        PASS [   0.002s] (106/356) codex-network-proxy policy::tests::compile_globset_normalizes_apex_and_subdomains
+        PASS [   0.002s] (107/356) codex-network-proxy policy::tests::compile_globset_normalizes_bracketed_ipv6_literals
+        PASS [   0.003s] (108/356) codex-network-proxy policy::tests::compile_globset_normalizes_trailing_dots
+        PASS [   0.003s] (109/356) codex-network-proxy policy::tests::compile_globset_normalizes_wildcards
+        PASS [   0.003s] (110/356) codex-network-proxy policy::tests::compile_globset_preserves_scoped_ipv6_literals
+        PASS [   0.002s] (111/356) codex-network-proxy policy::tests::compile_globset_supports_mid_label_wildcards
+        PASS [   0.002s] (112/356) codex-network-proxy policy::tests::is_loopback_host_handles_ip_literals
+        PASS [   0.002s] (113/356) codex-network-proxy policy::tests::is_loopback_host_handles_localhost_variants
+        PASS [   0.002s] (114/356) codex-network-proxy policy::tests::is_non_public_ip_rejects_private_and_loopback_ranges
+        PASS [   0.002s] (115/356) codex-network-proxy policy::tests::method_allowed_full_allows_everything
+        PASS [   0.002s] (116/356) codex-network-proxy policy::tests::method_allowed_limited_allows_only_safe_methods
+        PASS [   0.002s] (117/356) codex-network-proxy policy::tests::normalize_host_lowercases_and_trims
+        PASS [   0.002s] (118/356) codex-network-proxy policy::tests::normalize_host_preserves_ipv6_scope_ids
+        PASS [   0.002s] (119/356) codex-network-proxy policy::tests::normalize_host_preserves_unbracketed_ipv6
+        PASS [   0.002s] (120/356) codex-network-proxy policy::tests::normalize_host_strips_brackets_for_ipv6
+        PASS [   0.002s] (121/356) codex-network-proxy policy::tests::normalize_host_strips_port_for_host_port
+        PASS [   0.002s] (122/356) codex-network-proxy policy::tests::normalize_host_strips_trailing_dot
+        PASS [   0.002s] (123/356) codex-network-proxy policy::tests::normalize_host_strips_trailing_dot_with_port
+        PASS [   0.002s] (124/356) codex-network-proxy proxy::tests::apply_proxy_env_overrides_keeps_local_targets_direct_when_local_binding_enabled
+        PASS [   0.002s] (125/356) codex-network-proxy proxy::tests::apply_proxy_env_overrides_preserves_command_scoped_mitm_ca_override
+        PASS [   0.002s] (126/356) codex-network-proxy proxy::tests::apply_proxy_env_overrides_sets_common_tool_vars
+        PASS [   0.002s] (127/356) codex-network-proxy proxy::tests::apply_proxy_env_overrides_sets_mitm_ca_trust_bundle_vars
+        PASS [   0.002s] (128/356) codex-network-proxy proxy::tests::apply_proxy_env_overrides_sets_only_expected_env_keys
+        PASS [   0.002s] (129/356) codex-network-proxy proxy::tests::apply_proxy_env_overrides_uses_http_for_all_proxy_without_socks
+        PASS [   0.002s] (130/356) codex-network-proxy proxy::tests::apply_proxy_env_overrides_uses_plain_http_proxy_url
+        PASS [   0.002s] (131/356) codex-network-proxy proxy::tests::has_proxy_url_env_vars_detects_lowercase_aliases
+        PASS [   0.002s] (132/356) codex-network-proxy proxy::tests::has_proxy_url_env_vars_detects_websocket_proxy_keys
+        PASS [   0.002s] (133/356) codex-network-proxy proxy::tests::managed_proxy_builder_lazily_upgrades_disabled_socks
+        PASS [   0.002s] (134/356) codex-network-proxy proxy::tests::managed_proxy_builder_uses_loopback_ports
+        PASS [   0.002s] (135/356) codex-network-proxy proxy::tests::non_codex_managed_proxy_builder_uses_configured_ports
+        PASS [   0.003s] (136/356) codex-network-proxy proxy::tests::prepare_for_environment_keeps_env_and_sandbox_ports_in_sync
+        PASS [   0.002s] (137/356) codex-network-proxy proxy::tests::proxy_url_env_value_resolves_lowercase_aliases
+        PASS [   0.002s] (138/356) codex-network-proxy proxy::tests::remote_launch_config_carries_execution_scope
+        PASS [   0.003s] (139/356) codex-network-proxy proxy::tests::remote_policy_decider_rechecks_live_policy_and_restores_attribution
+        PASS [   0.002s] (140/356) codex-network-proxy proxy::tests::remote_policy_decider_stops_with_execution_scope
+        PASS [   0.002s] (141/356) codex-network-proxy remote_config::tests::accepts_unsupported_configuration_when_proxy_is_disabled
+        PASS [   0.002s] (142/356) codex-network-proxy remote_config::tests::launch_config_materializes_audit_and_execution_attribution
+        PASS [   0.002s] (143/356) codex-network-proxy remote_config::tests::policy_decision_callback_timeout_round_trips
+        PASS [   0.002s] (144/356) codex-network-proxy remote_config::tests::rejects_unsupported_configuration
+        PASS [   0.002s] (145/356) codex-network-proxy remote_config::tests::round_trip_preserves_supported_effective_settings
+        PASS [   0.002s] (146/356) codex-network-proxy responses::tests::blocked_message_with_policy_returns_human_message
+        PASS [   0.003s] (147/356) codex-network-proxy runtime::tests::add_allowed_domain_rejects_expansion_when_managed_baseline_is_fixed
+        PASS [   0.004s] (148/356) codex-network-proxy runtime::tests::add_allowed_domain_removes_matching_deny_entry
+        PASS [   0.003s] (149/356) codex-network-proxy runtime::tests::add_allowed_domain_succeeds_when_managed_baseline_allows_expansion
+        PASS [   0.003s] (150/356) codex-network-proxy runtime::tests::add_denied_domain_forces_block_with_global_wildcard_allowlist
+        PASS [   0.003s] (151/356) codex-network-proxy runtime::tests::add_denied_domain_rejects_expansion_when_managed_baseline_is_fixed
+        PASS [   0.003s] (152/356) codex-network-proxy runtime::tests::add_denied_domain_removes_matching_allow_entry
+        PASS [   0.002s] (153/356) codex-network-proxy runtime::tests::blocked_request_violation_log_line_serializes_payload
+        PASS [   0.002s] (154/356) codex-network-proxy runtime::tests::blocked_snapshot_does_not_consume_entries
+        PASS [   0.002s] (155/356) codex-network-proxy runtime::tests::build_config_state_allows_bracketed_global_wildcard_allowed_domains
+        PASS [   0.002s] (156/356) codex-network-proxy runtime::tests::build_config_state_allows_global_wildcard_allowed_domains
+        PASS [   0.002s] (157/356) codex-network-proxy runtime::tests::build_config_state_rejects_bracketed_global_wildcard_denied_domains
+        PASS [   0.002s] (158/356) codex-network-proxy runtime::tests::build_config_state_rejects_global_wildcard_denied_domains
+        PASS [   0.002s] (159/356) codex-network-proxy runtime::tests::compile_globset_allows_global_wildcard_when_enabled
+        PASS [   0.211s] (160/356) codex-network-proxy mitm::tests::mitm_policy_allows_matching_hooked_write_in_full_mode
+        PASS [   0.210s] (161/356) codex-network-proxy mitm::tests::mitm_policy_blocks_hook_miss_for_hooked_host_and_records_telemetry_in_full_mode
+        PASS [   0.003s] (162/356) codex-network-proxy runtime::tests::compile_globset_dedupes_patterns_without_changing_behavior
+        PASS [   0.002s] (163/356) codex-network-proxy runtime::tests::compile_globset_includes_apex_for_double_wildcard_patterns
+        PASS [   0.003s] (164/356) codex-network-proxy runtime::tests::compile_globset_excludes_apex_for_subdomain_patterns
+        PASS [   0.003s] (165/356) codex-network-proxy runtime::tests::compile_globset_is_case_insensitive
+        PASS [   0.002s] (166/356) codex-network-proxy runtime::tests::compile_globset_rejects_bracketed_global_wildcard
+        PASS [   0.002s] (167/356) codex-network-proxy runtime::tests::compile_globset_rejects_double_wildcard_bracketed_global_wildcard
+        PASS [   0.002s] (168/356) codex-network-proxy runtime::tests::compile_globset_rejects_global_wildcard
+        PASS [   0.003s] (169/356) codex-network-proxy runtime::tests::compile_globset_rejects_invalid_patterns
+        PASS [   0.003s] (170/356) codex-network-proxy runtime::tests::drain_blocked_returns_buffered_window
+        PASS [   0.003s] (171/356) codex-network-proxy runtime::tests::host_blocked_allows_loopback_when_explicitly_allowlisted_and_local_binding_disabled
+        PASS [   0.002s] (172/356) codex-network-proxy runtime::tests::host_blocked_allows_private_ip_literal_when_explicitly_allowlisted
+        PASS [   0.003s] (173/356) codex-network-proxy runtime::tests::host_blocked_allows_scoped_ipv6_literal_when_explicitly_allowlisted
+        PASS [   0.003s] (174/356) codex-network-proxy runtime::tests::host_blocked_denied_wins_over_allowed
+        PASS [   0.003s] (175/356) codex-network-proxy runtime::tests::host_blocked_denies_scoped_ipv6_literal_before_local_binding
+        PASS [   0.002s] (176/356) codex-network-proxy runtime::tests::host_blocked_rejects_loopback_when_allowlist_empty
+        PASS [   0.004s] (177/356) codex-network-proxy runtime::tests::host_blocked_rejects_allowlisted_hostname_when_dns_lookup_fails
+        PASS [   0.003s] (178/356) codex-network-proxy runtime::tests::host_blocked_rejects_loopback_when_local_binding_disabled
+        PASS [   0.003s] (179/356) codex-network-proxy runtime::tests::host_blocked_rejects_private_ip_literals_when_local_binding_disabled
+        PASS [   0.003s] (180/356) codex-network-proxy runtime::tests::host_blocked_rejects_scoped_ipv6_literal_when_not_allowlisted
+        PASS [   0.003s] (181/356) codex-network-proxy runtime::tests::host_blocked_requires_allowlist_match
+        PASS [   0.003s] (182/356) codex-network-proxy runtime::tests::host_blocked_requires_exact_scoped_ipv6_allowlist_match
+        PASS [   0.003s] (183/356) codex-network-proxy runtime::tests::host_blocked_requires_exact_scoped_ipv6_denylist_match
+        PASS [   0.002s] (184/356) codex-network-proxy runtime::tests::host_resolves_to_non_public_ip_allows_public_resolution
+        PASS [   0.002s] (185/356) codex-network-proxy runtime::tests::host_resolves_to_non_public_ip_blocks_on_dns_lookup_error
+        PASS [   0.004s] (186/356) codex-network-proxy runtime::tests::host_resolves_to_non_public_ip_blocks_on_dns_lookup_timeout
+        PASS [   0.002s] (187/356) codex-network-proxy runtime::tests::host_resolves_to_non_public_ip_blocks_private_resolution
+        PASS [   0.002s] (188/356) codex-network-proxy runtime::tests::reload_rejects_credential_broker_enablement_changes
+        PASS [   0.003s] (189/356) codex-network-proxy runtime::tests::unix_socket_allowlist_is_rejected_on_non_macos
+        PASS [   0.002s] (190/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_allows_allow_all_unix_sockets_when_unmanaged
+        PASS [   0.002s] (191/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_allows_allow_all_unix_sockets_with_managed_opt_in
+        PASS [   0.002s] (192/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_allows_expanding_allowed_domains_when_enabled
+        PASS [   0.002s] (193/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_allows_narrowing_wildcard_allowlist
+        PASS [   0.002s] (194/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_disallows_allow_all_unix_sockets_when_allowlist_is_managed
+        PASS [   0.002s] (195/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_disallows_allow_all_unix_sockets_without_managed_opt_in
+        PASS [   0.002s] (196/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_disallows_allow_local_binding_when_managed_disabled
+        PASS [   0.002s] (197/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_disallows_enabling_when_managed_disabled
+        PASS [   0.002s] (198/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_disallows_expanding_denied_domains_when_fixed
+        PASS [   0.002s] (199/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_disallows_widening_allowed_domains
+        PASS [   0.002s] (200/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_disallows_widening_mode
+        PASS [   0.002s] (201/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_rejects_bracketed_global_wildcard_in_managed_allowlist
+        PASS [   0.002s] (202/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_rejects_double_wildcard_bracketed_global_wildcard_in_managed_allowlist
+        PASS [   0.002s] (203/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_rejects_global_wildcard_in_managed_allowlist
+        PASS [   0.002s] (204/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_rejects_widening_wildcard_allowlist
+        PASS [   0.002s] (205/356) codex-network-proxy runtime::tests::validate_policy_against_constraints_requires_managed_denied_domains_entries
+        PASS [   0.304s] (206/356) codex-network-proxy mitm::tests::tls_prefix_detection_accumulates_fragmented_reads
+        PASS [   0.003s] (207/356) codex-network-proxy socks5::tests::handle_socks5_tcp_blocks_limited_mode_without_mitm_state
+        PASS [   0.003s] (208/356) codex-network-proxy socks5::tests::handle_socks5_tcp_blocks_non_https_in_limited_mode
+        PASS [   0.048s] (209/356) codex-network-proxy socks5::tests::handle_socks5_tcp_blocks_hooked_non_https_host_in_full_mode
+        PASS [   0.003s] (210/356) codex-network-proxy socks5::tests::handle_socks5_tcp_emits_block_decision_for_proxy_disabled
+        PASS [   0.047s] (211/356) codex-network-proxy socks5::tests::handle_socks5_tcp_uses_mitm_for_hooked_host_in_full_mode
+        PASS [   0.047s] (212/356) codex-network-proxy socks5::tests::handle_socks5_tcp_uses_mitm_in_limited_mode
+        PASS [   0.002s] (213/356) codex-network-proxy socks5::tests::inspect_socks5_udp_emits_block_decision_for_mode_guard_deny
+        PASS [   0.002s] (214/356) codex-network-proxy upstream::tests::inherited_upstream_proxy_is_bypassed_for_non_public_targets
+        PASS [   0.145s] (215/356) codex-network-proxy socks5::tests::handle_socks5_tcp_detects_tls_for_brokered_nonstandard_port_in_full_mode
+        PASS [   0.249s] (216/356) codex-network-proxy runtime::tests::host_blocked_global_wildcard_allowlist_allows_public_hosts_except_denylist
+        PASS [   0.002s] (217/356) codex-network-proxy::destination_contract canonicalizes_unusual_ipv4_and_mapped_ipv6
+        PASS [   0.002s] (218/356) codex-network-proxy::destination_contract destination_policy_contract_has_no_runtime_registration
+        PASS [   0.002s] (219/356) codex-network-proxy::destination_contract dns_answer_sets_fail_closed_for_empty_mixed_private_and_literal_mismatch
+        PASS [   0.002s] (220/356) codex-network-proxy::destination_contract exact_and_suffix_rules_resist_host_and_path_confusion
+        PASS [   0.002s] (221/356) codex-network-proxy::destination_contract frozen_fixture_uses_the_compiled_contract_version
+        PASS [   0.002s] (222/356) codex-network-proxy::destination_contract idna_policy_and_request_compare_in_one_ascii_form
+        PASS [   0.002s] (223/356) codex-network-proxy::destination_contract malformed_policy_fails_visibly
+        PASS [   0.002s] (224/356) codex-network-proxy::destination_contract normalizes_idna_case_trailing_dot_default_port_and_path
+        PASS [   0.049s] (225/356) codex-network-proxy upstream::tests::mitm_upstream_client_trusts_startup_custom_ca
+        PASS [   0.002s] (226/356) codex-network-proxy::destination_contract private_service_ip_literal_requires_the_same_literal_and_pinned_answer
+        PASS [   0.002s] (227/356) codex-network-proxy::destination_contract private_service_requires_exact_https_identity_and_approved_addresses
+        PASS [   0.002s] (228/356) codex-network-proxy::destination_contract redirect_semantics_allow_only_explicitly_safe_method_body_combinations
+        PASS [   0.002s] (229/356) codex-network-proxy::destination_contract redirects_deny_downgrade_cross_origin_credentials_and_unsafe_replay
+        PASS [   0.002s] (230/356) codex-network-proxy::destination_contract rejects_userinfo_fragments_backslashes_and_non_http_schemes
+        PASS [   0.002s] (231/356) codex-network-proxy::destination_contract reserved_and_local_address_table_is_never_public
+        PASS [   0.002s] (232/356) codex-network-proxy::destination_contract reserved_names_require_explicit_private_service_identity
+        PASS [   0.002s] (233/356) codex-network-proxy::destination_contract unrestricted_empty_and_wildcard_public_polarities_are_distinct
+        PASS [   0.003s] (234/356) codex-protected-state native::tests::pf20_s03_authenticated_definite_conflict_is_not_ambiguous
+        PASS [   0.002s] (235/356) codex-protected-state native::tests::pf20_s03_lost_reply_consumes_capability_without_retry
+        PASS [   0.002s] (236/356) codex-protected-state native::tests::pf20_s03_native_replay_cross_generation_and_oversized_frames_deny
+        PASS [   0.010s] (237/356) codex-protected-state native::tests::pf20_s03_post_exec_child_native_cas_recovery
+        PASS [   0.002s] (238/356) codex-protected-state native::tests::pf20_s03_saturated_native_backlog_fails_without_waiting
+        PASS [   0.008s] (239/356) codex-protected-state store::tests::pf20_s03_data_rollback_rejected_by_real_pf41_journal
+        PASS [   0.029s] (240/356) codex-protected-state native::tests::pf20_s03_partial_frame_obeys_one_total_deadline
+        PASS [   0.010s] (241/356) codex-protected-state store::tests::pf20_s03_enrollment_cas_restart_and_wrong_namespace
+        PASS [   0.010s] (242/356) codex-protected-state store::tests::pf20_s03_foreign_binding_generation_and_sequence_never_commit
+        PASS [   0.033s] (243/356) codex-protected-state store::tests::pf20_s03_every_failed_durability_boundary_withholds_and_latches
+        PASS [   0.009s] (244/356) codex-protected-state store::tests::pf20_s03_non_regular_root_record_never_blocks_before_rejection
+        PASS [   0.013s] (245/356) codex-protected-state store::tests::pf20_s03_open_directory_permission_drift_latches_unavailable
+        PASS [   0.054s] (246/356) codex-protected-state store::tests::pf20_s03_lost_corrupt_key_registry_head_and_partial_enrollment_deny
+        PASS [   0.016s] (247/356) codex-protected-state store::tests::pf20_s03_policy_anchor_retains_exact_existing_payload
+        PASS [   0.002s] (248/356) codex-protected-state store::tests::pf20_s03_successor_overflow_and_generation_regression_deny
+        PASS [   0.008s] (249/356) codex-protected-state store::tests::pf20_s03_real_second_process_cannot_acquire_controller_lock
+        PASS [   0.002s] (250/356) codex-secret-broker ipc_tests::pf_27_s04_pf_27_s01_authenticated_frame_round_trip_preserves_only_typed_metadata
+        PASS [   0.002s] (251/356) codex-secret-broker ipc_tests::pf_27_s04_pf_27_s01_binding_and_peer_require_canonical_observed_identity
+        PASS [   0.006s] (252/356) codex-protected-state store::tests::pf20_s03_torn_pending_and_symlink_replacements_latch_unavailable
+        PASS [   0.002s] (253/356) codex-secret-broker ipc_tests::pf_27_s04_pf_27_s01_bounds_and_operation_shape_fail_closed
+        PASS [   0.002s] (254/356) codex-secret-broker ipc_tests::pf_27_s04_pf_27_s01_debug_output_is_redacted
+        PASS [   0.002s] (255/356) codex-secret-broker ipc_tests::pf_27_s04_pf_27_s01_wrong_key_and_tampering_fail_authentication
+        PASS [   0.009s] (256/356) codex-secret-broker journal_adapter::tests::pf_27_s01_audit_commits_before_permit_and_minimizes_exact_semantics
+        PASS [   0.007s] (257/356) codex-secret-broker journal_adapter::tests::pf_27_s01_audit_crash_pending_intent_blocks_restart_replay
+        PASS [   0.018s] (258/356) codex-secret-broker journal_adapter::tests::pf_27_s01_audit_all_terminal_outcomes_are_durable
+        PASS [   0.003s] (259/356) codex-secret-broker journal_adapter::tests::pf_27_s01_audit_rejects_binding_changes_before_journal_write
+        PASS [   0.004s] (260/356) codex-secret-broker journal_adapter::tests::pf_27_s01_audit_rejects_unsettleable_or_mismatched_authority
+        PASS [   0.002s] (261/356) codex-secret-broker linux_transport::tests::pf_27_s01_native_child_service_fixture
+        PASS [   0.006s] (262/356) codex-secret-broker journal_adapter::tests::pf_27_s01_audit_unrecovered_or_ambiguous_root_returns_no_permit
+        PASS [   0.002s] (263/356) codex-secret-broker linux_transport::tests::pf_27_s01_native_close_interrupts_inflight_read_and_queued_dispatch
+        PASS [   0.456s] (264/356) codex-network-proxy runtime::tests::host_blocked_subdomain_wildcards_exclude_apex
+        PASS [   0.002s] (265/356) codex-secret-broker linux_transport::tests::pf_27_s01_native_peer_roundtrip_and_eof_cancels_session
+        PASS [   2.009s] (266/356) codex-protected-state native::tests::pf20_s03_inherited_socketpair_does_not_prove_child_identity
+        PASS [   0.063s] (267/356) codex-secret-broker linux_transport::tests::pf_27_s01_native_service_death_closes_client_without_replay
+        PASS [   0.003s] (268/356) codex-secret-broker linux_transport::tests::pf_27_s01_native_wrong_peer_and_oversize_frame_close_before_dispatch
+        PASS [   0.003s] (269/356) codex-secret-broker platform_contract::tests::accepts_complete_current_supported_report
+        PASS [   0.002s] (270/356) codex-secret-broker platform_contract::tests::rejects_claimed_eligibility_with_unsupported_capability
+        PASS [   0.002s] (271/356) codex-secret-broker platform_contract::tests::rejects_duplicate_capability
+        PASS [   0.002s] (272/356) codex-secret-broker platform_contract::tests::rejects_false_ineligibility_claim
+        PASS [   0.002s] (273/356) codex-secret-broker platform_contract::tests::rejects_future_dated_report
+        PASS [   0.002s] (274/356) codex-secret-broker platform_contract::tests::rejects_inconsistent_status_and_observation
+        PASS [   0.002s] (275/356) codex-secret-broker platform_contract::tests::rejects_invalid_expiry
+        PASS [   0.002s] (276/356) codex-secret-broker platform_contract::tests::rejects_malformed_digest_identity
+        PASS [   0.002s] (277/356) codex-secret-broker platform_contract::tests::rejects_missing_capability
+        PASS [   0.002s] (278/356) codex-secret-broker platform_contract::tests::rejects_stale_report
+        PASS [   0.002s] (279/356) codex-secret-broker platform_contract::tests::rejects_unknown_contract_and_fixture_protocol
+        PASS [   0.002s] (280/356) codex-secret-broker platform_contract::tests::rejects_untested_capability
+        PASS [   0.002s] (281/356) codex-secret-broker platform_contract::tests::rejects_wrong_probe_identity
+        PASS [   0.002s] (282/356) codex-secret-broker platform_contract::tests::rejects_wrong_target
+        PASS [   0.002s] (283/356) codex-secret-broker platform_contract_fixture_tests::frozen_result_fixtures_are_consumed_by_the_rust_gate
+        PASS [   0.002s] (284/356) codex-secret-broker platform_contract_fixture_tests::schema_enums_match_the_rust_contract
+        PASS [   0.003s] (285/356) codex-secret-broker resolver_tests::pf_27_s01_native_disconnect_cancels_backend_before_final_fence_check
+        PASS [   0.103s] (286/356) codex-secret-broker resolver_tests::pf_27_s01_native_registered_connection_replacement_and_revocation
+        PASS [   0.003s] (287/356) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_audit_failure_blocks_dispatch_and_ambiguous_resolution_is_visible
+        PASS [   0.002s] (288/356) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_concurrent_revocation_cancels_open_upload_before_effect
+        PASS [   0.002s] (289/356) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_cross_run_reference_theft_expiry_and_revocation_fail_closed
+        PASS [   0.002s] (290/356) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_replay_wrong_peer_and_binding_are_rejected_before_backend
+        PASS [   0.002s] (291/356) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_resource_bounds_fail_without_eviction_or_enumeration
+        PASS [   0.002s] (292/356) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_restart_and_cancel_reject_old_handles_without_fallback
+        PASS [   0.002s] (293/356) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_run_generation_history_is_bounded_without_stale_eviction
+        PASS [   0.002s] (294/356) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_same_run_replacement_invalidates_old_and_stale_connections
+        PASS [   0.002s] (295/356) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_typed_dispatch_is_audited_before_backend_and_resolved
+        PASS [   0.002s] (296/356) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_unsupported_platform_report_cannot_construct_runtime
+        PASS [   0.261s] (297/356) codex-vault capability::tests::callback_error_cancellation_and_panic_are_contained_and_secret_free
+        PASS [   0.085s] (298/356) codex-vault capability::tests::expired_and_revoked_authority_is_revalidated_before_decryption
+        PASS [   0.084s] (299/356) codex-vault capability::tests::managed_claude_token_is_denied_before_the_scoped_callback_runs
+        PASS [   0.002s] (300/356) codex-vault capability::tests::mismatched_label_and_scope_are_rejected_as_stable_errors
+        PASS [   0.242s] (301/356) codex-vault capability::tests::missing_deleted_and_ineligible_credentials_fail_closed
+        PASS [   0.237s] (302/356) codex-vault capability::tests::pf_27_s04_vault_backend_enforces_authorized_method_destination_and_path
+        PASS [   0.084s] (303/356) codex-vault capability::tests::pf_27_s04_vault_backend_resolves_only_inside_typed_broker_dispatch
+        PASS [   0.085s] (304/356) codex-vault capability::tests::scoped_resolution_exposes_secret_only_inside_redacted_callback
+        PASS [   0.003s] (305/356) codex-vault claude_auth::tests::absent_selection_preserves_existing_installations
+        PASS [   0.002s] (306/356) codex-vault claude_auth::tests::claude_login_authority_is_normalized_bound_and_metadata_only
+        PASS [   0.002s] (307/356) codex-vault claude_auth::tests::credentials_file_identity_binds_the_exact_profile_without_exposing_its_path
+        PASS [   0.002s] (308/356) codex-vault claude_auth::tests::duplicate_selected_identity_fails_as_a_deterministic_conflict
+        PASS [   0.002s] (309/356) codex-vault claude_auth::tests::environment_token_authority_is_normalized_bound_and_metadata_only
+        PASS [   0.002s] (310/356) codex-vault claude_auth::tests::exact_healthy_selection_resolves_without_falling_through
+        PASS [   0.560s] (311/356) codex-vault claude_auth::tests::generic_managed_token_removal_invalidates_cache_and_preserves_unrelated_credentials
+        PASS [   0.084s] (312/356) codex-vault claude_auth::tests::generic_vault_writes_cannot_create_or_replace_the_managed_token
+        PASS [   0.003s] (313/356) codex-vault claude_auth::tests::invalid_managed_tokens_fail_without_echoing_input
+        PASS [   0.002s] (314/356) codex-vault claude_auth::tests::invalid_source_ids_are_rejected
+        PASS [   0.002s] (315/356) codex-vault claude_auth::tests::macos_keychain_identity_matches_claude_code_profiles
+        PASS [   0.084s] (316/356) codex-vault claude_auth::tests::managed_enrollment_commits_token_and_exact_selection_together
+        PASS [   0.244s] (317/356) codex-vault claude_auth::tests::managed_enrollment_rolls_back_an_injected_index_write_failure
+        PASS [   0.242s] (318/356) codex-vault claude_auth::tests::managed_enrollment_rolls_back_an_injected_token_write_failure
+        PASS [   0.087s] (319/356) codex-vault claude_auth::tests::managed_token_load_returns_zeroizing_owned_memory
+        PASS [   0.403s] (320/356) codex-vault claude_auth::tests::managed_token_round_trip_status_and_replace_are_metadata_only
+        PASS [   0.002s] (321/356) codex-vault claude_auth::tests::missing_selection_never_auto_selects_an_available_source
+        PASS [   0.003s] (322/356) codex-vault claude_auth::tests::relative_credentials_file_identity_is_bound_to_the_callers_working_directory
+        PASS [   0.085s] (323/356) codex-vault claude_auth::tests::selection_round_trips_in_the_encrypted_store
+        PASS [   0.002s] (324/356) codex-vault claude_auth::tests::serialized_selection_contains_metadata_only
+        PASS [   0.002s] (325/356) codex-vault claude_auth::tests::unhealthy_or_missing_selection_does_not_fall_back
+        PASS [   0.002s] (326/356) codex-vault credential_panic::tests::scoped_credential_panic_guard_restores_nested_and_unwound_scopes
+        PASS [   0.003s] (327/356) codex-vault credential_panic::tests::scoped_credential_panic_hook_is_thread_local_and_preserves_other_panics
+        PASS [   0.084s] (328/356) codex-vault tests::add_duplicate_label_is_rejected
+        PASS [   0.002s] (329/356) codex-vault tests::add_empty_secret_is_rejected
+        PASS [   5.107s] (330/356) codex-secret-broker linux_transport::tests::pf_27_s01_native_partial_prefix_still_has_bounded_deadline
+        PASS [   0.085s] (331/356) codex-vault tests::add_then_reveal_round_trips
+        PASS [   5.252s] (332/356) codex-secret-broker linux_transport::tests::pf_27_s01_native_idle_session_survives_partial_frame_deadline
+        PASS [   5.252s] (333/356) codex-secret-broker linux_transport::tests::pf_27_s01_native_receipt_wait_does_not_timeout_healthy_backend
+        PASS [   0.163s] (334/356) codex-vault tests::copied_vault_in_another_home_cannot_use_the_original_keyring_account
+        PASS [   0.257s] (335/356) codex-vault tests::concurrent_unique_adds_preserve_every_credential
+        PASS [   0.333s] (336/356) codex-vault tests::canonical_home_alias_preserves_keyring_identity_and_label_case
+        PASS [   0.260s] (337/356) codex-vault tests::corrupt_encrypted_state_fails_closed
+        PASS [   0.002s] (338/356) codex-vault tests::invalid_labels_are_rejected
+        PASS [   0.089s] (339/356) codex-vault tests::label_is_trimmed_and_case_preserved
+        PASS [   0.261s] (340/356) codex-vault tests::delete_many_removes_present_credentials_and_ignores_missing_labels
+        PASS [   0.002s] (341/356) codex-vault tests::permissive_security_composition_preserves_vault_programmatic_use_decisions
+        PASS [   0.256s] (342/356) codex-vault tests::delete_removes_credential_and_secret
+        PASS [   0.259s] (343/356) codex-vault tests::distinct_labels_do_not_collide_at_secret_layer
+        PASS [   0.087s] (344/356) codex-vault tests::programmatic_use_accepts_api_keys_under_arbitrary_labels
+        PASS [   0.087s] (345/356) codex-vault tests::programmatic_use_accepts_deployment_credentials_under_arbitrary_labels
+        PASS [   0.173s] (346/356) codex-vault tests::persistence_across_vault_instances
+        PASS [   0.088s] (347/356) codex-vault tests::programmatic_use_accepts_manual_secrets_under_arbitrary_labels
+        PASS [   0.002s] (348/356) codex-vault tests::reveal_missing_label_errors
+        PASS [   0.002s] (349/356) codex-vault tests::timestamp_format_is_iso8601
+        PASS [   0.089s] (350/356) codex-vault tests::programmatic_use_denies_raw_export_outside_permissive_without_reading_the_label
+        PASS [   0.002s] (351/356) codex-vault tests::update_missing_label_errors
+        PASS [   0.261s] (352/356) codex-vault tests::multiple_credential_types_are_supported
+        PASS [   0.087s] (353/356) codex-vault tests::vault_index_is_encrypted_at_rest
+        PASS [   0.089s] (354/356) codex-vault tests::wrong_key_fails_closed_without_replacing_encrypted_state
+        PASS [   0.251s] (355/356) codex-vault tests::programmatic_use_rejects_key_custody_material_without_deleting_it
+        PASS [   0.256s] (356/356) codex-vault tests::update_changes_secret_and_metadata
+────────────
+     Summary [   7.028s] 356 tests run: 356 passed, 2 skipped
