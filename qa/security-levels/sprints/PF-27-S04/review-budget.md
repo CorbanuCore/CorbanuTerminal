@@ -18,6 +18,14 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Adapter stage allocation September12 17:29UTC: current scheduled window is
+17:25:45Z through23:25:45Z, five available and zero dispatched. Plan two necessary
+passes (next numbers23 Astra High,24 Fable5.1High through Corbanu/TMUX), reserving
+each at actual dispatch; this statement consumes no pass. Historical22 and
+earlier outcomes remain unchanged; three remaining slots are contingency, not a
+target. Isolated-adapter implementation authority is separately recorded in the
+accepted descriptor-launch proposal, not inferred from this budget.
+
 Reviews 1–6 are spent; preserve their existing records. Review 6 is documented
 in [resumed service evidence](resume-20260911/README.md).
 
