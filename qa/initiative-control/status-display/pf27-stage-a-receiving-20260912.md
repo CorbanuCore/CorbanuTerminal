@@ -1,4 +1,19 @@
-# PF27 Stage A — local receiving, combined proof pending
+# PF27 Stage A — combined receiving proof accepted
+
+Manager verified the returned exact63cbce998/Rust205e89cd receipt and original
+provenance, all15 exit files, ten test summaries, positive TMUX completion,
+empty final source logs and equal lock hashes. Required adapter4+8/default3/
+pair5+real1/owner8+real3/profiles1+1/service57 pass, five ignored service cases
+executed separately; unsupported GNU2.39 case is historical, not rerun.
+Strict scoped two-crate Clippy and read-only Bazel parity pass. Existing version
+warnings and Bazel's idle-server workspace-switch restart remain in raw logs.
+Initial empty-bundle refusal was corrected before tests, not a product failure.
+Private receipt: manager-continuation.9Id1V1/pf27-stage-a-receiving-63cbce998.md.
+This closes Stage A's combined gate, not PF-27-S04 or functional/native acceptance.
+Next approved [Stage B allocation](../../security-levels/sprints/PF-27-S04/descriptor-admission-allocation-20260912.md)
+retains seven literal paths, hard800 and two new-source reviews30/31 only.
+
+## Original receiving handoff (now satisfied above)
 
 Manager inspected clean owner `6d770938c21f002dc572b084a1b428ad4a4379b0`,
 frozen implementation `e0eb9eac4f48dbf1e2760f8265826825a9cb5519`,
