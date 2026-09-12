@@ -72,7 +72,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 
 ## Remaining
 
-- [ ] Allocate root-owned manifest/executable validation and actual child spawn/supervision before fixed listener/native client wiring; preserve distinct-principal/group/FD and retained-Child rules. Exact installation approval is still required before OS identity/IPC/handle qualification. No full PF27 completion.
+- [ ] Obtain receiving-owner acceptance of [prepared manifest/executable inspection](../../../../qa/security-levels/sprints/PF-27-S04/manifest-next-20260912.md), then implement only that bounded stage. Actual spawn/exec binding/loader trust/supervision and listener/client remain later allocations. Preserve identity/group/FD/Child rules; no privileged installation or full PF27 completion.
 - [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.
 
 - [ ] Keep sentinel keys/raw registries outside agent-accessible processes; test open-channel revocation, upload cancellation, same-run-ID replacement and broker restart with old handles. The proxy's retained RegisteredRun concern requires a native regression, not just a copied new-connection test.
