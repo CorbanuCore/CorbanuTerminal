@@ -7,7 +7,7 @@ use uuid::Uuid;
 /// Exact nonnegative SQLite integer; serde rejects booleans and floating point.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "i64", into = "i64")]
-pub(super) struct Count(i64);
+pub struct Count(i64);
 
 impl TryFrom<i64> for Count {
     type Error = anyhow::Error;
@@ -25,7 +25,7 @@ impl From<Count> for i64 {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
-pub(super) enum Presence {
+pub enum Presence {
     #[default]
     Missing,
     Null,
@@ -46,7 +46,7 @@ impl Presence {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
-pub(super) struct Patch {
+pub struct Patch {
     #[serde(skip_serializing_if = "Presence::is_missing")]
     pub input: Presence,
     #[serde(skip_serializing_if = "Presence::is_missing")]
@@ -62,7 +62,7 @@ pub(super) struct Patch {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub(super) enum Dialect {
+pub enum Dialect {
     Inclusive,
     NativeAnthropic,
     UnknownCompatible,
@@ -70,7 +70,7 @@ pub(super) enum Dialect {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Attempt {
+pub struct Attempt {
     pub attempt_id: Uuid,
     pub request_id: Uuid,
     pub thread_id: ThreadId,
@@ -104,7 +104,7 @@ impl Attempt {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Observation {
+pub struct Observation {
     pub revision: Count,
     pub source: Uuid,
     pub sequence: Count,
@@ -112,7 +112,7 @@ pub(super) struct Observation {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
-pub(super) struct Usage {
+pub struct Usage {
     pub input: Option<i64>,
     pub noncached: Option<i64>,
     pub read: Option<i64>,

@@ -41,8 +41,7 @@ use std::sync::atomic::AtomicI64;
 use std::time::Instant;
 use tracing::warn;
 
-#[cfg(test)]
-mod accounting;
+pub(crate) mod accounting;
 mod agent_mailbox;
 mod backfill;
 mod external_agent_config_imports;

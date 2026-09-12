@@ -1,4 +1,4 @@
-//! Pure synthetic quotation; excluded from production by the journal's cfg(test).
+//! Exact quotation over caller-provided price descriptors; not approval authority.
 use super::types::Attempt;
 use super::types::Count;
 use super::types::Observation;
@@ -15,7 +15,7 @@ use uuid::Uuid;
 /// exact products/sums admit u128 coefficients and up to 24 decimal places.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
 #[serde(try_from = "String")]
-struct Decimal {
+pub struct Decimal {
     coefficient: u128,
     scale: u32,
 }
@@ -120,25 +120,25 @@ impl Decimal {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-struct DisplayAmount {
-    text: String,
-    rounded: bool,
-    nonzero_sub_micro: bool,
+pub struct DisplayAmount {
+    pub text: String,
+    pub rounded: bool,
+    pub nonzero_sub_micro: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-enum Currency {
+pub enum Currency {
     #[serde(rename = "USD")]
     Usd,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-enum Unit {
+pub enum Unit {
     PerMillionTokens,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-enum SourceKind {
+pub enum SourceKind {
     ProviderPublished,
     NativeCatalog,
 }
@@ -146,29 +146,29 @@ enum SourceKind {
 /// Caller-supplied synthetic approval evidence, not production authorization.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct Snapshot {
-    id: Uuid,
-    provider: String,
-    model: String,
-    scope: Uuid,
-    currency: Currency,
-    unit: Unit,
-    rates: Rates,
-    source_reference: Uuid,
-    source_kind: SourceKind,
-    observed_at_ms: Count,
-    approved_at_ms: Count,
-    effective_from_ms: Count,
-    effective_end_ms: Option<Count>,
+pub struct Snapshot {
+    pub id: Uuid,
+    pub provider: String,
+    pub model: String,
+    pub scope: Uuid,
+    pub currency: Currency,
+    pub unit: Unit,
+    pub rates: Rates,
+    pub source_reference: Uuid,
+    pub source_kind: SourceKind,
+    pub observed_at_ms: Count,
+    pub approved_at_ms: Count,
+    pub effective_from_ms: Count,
+    pub effective_end_ms: Option<Count>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct Rates {
-    noncached: Option<Decimal>,
-    read: Option<Decimal>,
-    write: Option<Decimal>,
-    output: Option<Decimal>,
+pub struct Rates {
+    pub noncached: Option<Decimal>,
+    pub read: Option<Decimal>,
+    pub write: Option<Decimal>,
+    pub output: Option<Decimal>,
 }
 
 impl Snapshot {
@@ -194,7 +194,7 @@ impl Snapshot {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-enum BucketQuote {
+pub enum BucketQuote {
     Priced(Decimal),
     MissingUsage,
     MissingRate,
@@ -202,16 +202,16 @@ enum BucketQuote {
 
 /// An observation-bound estimate has no terminal-coverage or billing claim.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-struct ObservationQuote {
-    attempt: Attempt,
-    observations: Vec<Observation>,
-    usage: Usage,
-    snapshot: Option<Snapshot>,
+pub struct ObservationQuote {
+    pub attempt: Attempt,
+    pub observations: Vec<Observation>,
+    pub usage: Usage,
+    pub snapshot: Option<Snapshot>,
     // Disjoint noncached input, cache read, cache write, output, in that order.
-    buckets: [BucketQuote; 4],
-    known_subtotal: Decimal,
-    all_buckets_priced: Option<Decimal>,
-    subtotal_display: DisplayAmount,
+    pub buckets: [BucketQuote; 4],
+    pub known_subtotal: Decimal,
+    pub all_buckets_priced: Option<Decimal>,
+    pub subtotal_display: DisplayAmount,
 }
 
 fn quote_observations(
@@ -280,8 +280,14 @@ fn quote_observations(
     })
 }
 
+#[cfg(test)]
 #[path = "accounting_pricing_tests.rs"]
 mod tests;
 
 #[path = "accounting_estimates.rs"]
 mod storage;
+pub use storage::Current;
+pub use storage::DayTotals;
+pub use storage::Metric;
+pub use storage::RetainedDay;
+pub use storage::RetentionCoverage;

@@ -1,4 +1,4 @@
-//! Retained-detail fixture lifecycle; no native ownership or retention service.
+//! Contribution lifecycle shared by fixtures and atomic normal-library operations.
 use super::*;
 use crate::runtime::accounting::RetentionFixture;
 use crate::runtime::accounting::retention_fixture_on_connection;
@@ -9,16 +9,16 @@ const DAY_MS: i64 = 86_400_000;
 const REPLAY_MS: i64 = 365 * DAY_MS;
 
 #[derive(Debug, PartialEq, Eq)]
-enum Current<T> {
+pub enum Current<T> {
     Ready(T),
     NeedsEstimate,
     NeedsRefresh,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct Metric {
-    known: i64,
-    unknown: i64,
+pub struct Metric {
+    pub known: i64,
+    pub unknown: i64,
 }
 
 impl Metric {
@@ -40,12 +40,12 @@ impl Metric {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct DayTotals {
+pub struct DayTotals {
     // Input, noncached, read, write, output, reasoning, total: never price subsets twice.
-    measured: [Metric; 7],
-    known_usd: Decimal,
-    unknown_estimates: i64,
-    attempts: i64,
+    pub measured: [Metric; 7],
+    pub known_usd: Decimal,
+    pub unknown_estimates: i64,
+    pub attempts: i64,
 }
 
 impl DayTotals {
@@ -84,6 +84,7 @@ struct Lifecycle<'a> {
 }
 
 impl<'a> Lifecycle<'a> {
+    #[cfg(test)]
     async fn create_for_tests(runtime: &'a StateRuntime) -> anyhow::Result<Self> {
         let estimates = EstimateStore::create_for_tests(runtime).await?;
         sqlx::raw_sql(
@@ -107,30 +108,7 @@ impl<'a> Lifecycle<'a> {
             .pool
             .begin_with("BEGIN IMMEDIATE")
             .await?;
-        let result = async {
-            let deleted: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM draft_accounting_tombstones WHERE attempt_id = ?)")
-                .bind(id.to_string()).fetch_one(&mut *tx).await?;
-            ensure!(!deleted, "deleted attempt");
-            let (attempt, observations) = authority(&mut tx, id).await?;
-            let evidence = serde_json::to_string(&observations)?;
-            if EstimateStore::read_on_connection(&mut tx, id, &evidence).await?.is_none() {
-                return Ok(Current::NeedsEstimate);
-            }
-            let old: Option<(String, i64, String)> = sqlx::query_as(
-                "SELECT thread_id, utc_day, evidence FROM draft_accounting_contributions WHERE attempt_id = ?",
-            ).bind(id.to_string()).fetch_optional(&mut *tx).await?;
-            if let Some((thread, day, old_evidence)) = old {
-                validate_reference(&mut tx, &attempt, &thread, day, &old_evidence).await?;
-                if old_evidence == evidence {
-                    return Ok(Current::Ready(()));
-                }
-            }
-            sqlx::query("INSERT INTO draft_accounting_contributions VALUES (?, ?, ?, ?) ON CONFLICT(attempt_id) DO UPDATE SET evidence = excluded.evidence")
-                .bind(id.to_string()).bind(attempt.thread_id.to_string())
-                .bind(i64::from(attempt.dispatched_at_ms) / DAY_MS).bind(evidence)
-                .execute(&mut *tx).await?;
-            anyhow::Ok(Current::Ready(()))
-        }.await;
+        let result = Journal::refresh_contribution_on_connection(&mut tx, id).await;
         match result {
             Ok(value) => {
                 tx.commit().await?;
@@ -277,6 +255,7 @@ async fn owned_attempts(
     Ok(owned)
 }
 
+#[cfg(test)]
 #[path = "accounting_lifecycle_tests.rs"]
 mod tests;
 
@@ -285,3 +264,42 @@ mod compact_values;
 
 #[path = "accounting_retention_plan.rs"]
 mod retention_plan;
+pub use retention_plan::reduction::atomic::RetainedDay;
+pub use retention_plan::reduction::atomic::RetentionCoverage;
+
+impl Journal<'_> {
+    pub(in crate::runtime::accounting) async fn refresh_contribution_on_connection(
+        conn: &mut SqliteConnection,
+        id: Uuid,
+    ) -> anyhow::Result<Current<()>> {
+        let deleted: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM draft_accounting_tombstones WHERE attempt_id = ?)",
+        )
+        .bind(id.to_string())
+        .fetch_one(&mut *conn)
+        .await?;
+        ensure!(!deleted, "deleted attempt");
+        let (attempt, observations) = authority(conn, id).await?;
+        let evidence = serde_json::to_string(&observations)?;
+        if EstimateStore::read_on_connection(conn, id, &evidence)
+            .await?
+            .is_none()
+        {
+            return Ok(Current::NeedsEstimate);
+        }
+        let old: Option<(String, i64, String)> = sqlx::query_as(
+            "SELECT thread_id, utc_day, evidence FROM draft_accounting_contributions WHERE attempt_id = ?",
+        ).bind(id.to_string()).fetch_optional(&mut *conn).await?;
+        if let Some((thread, day, old_evidence)) = old {
+            validate_reference(conn, &attempt, &thread, day, &old_evidence).await?;
+            if old_evidence == evidence {
+                return Ok(Current::Ready(()));
+            }
+        }
+        sqlx::query("INSERT INTO draft_accounting_contributions VALUES (?, ?, ?, ?) ON CONFLICT(attempt_id) DO UPDATE SET evidence = excluded.evidence")
+            .bind(id.to_string()).bind(attempt.thread_id.to_string())
+            .bind(i64::from(attempt.dispatched_at_ms) / DAY_MS).bind(evidence)
+            .execute(&mut *conn).await?;
+        anyhow::Ok(Current::Ready(()))
+    }
+}

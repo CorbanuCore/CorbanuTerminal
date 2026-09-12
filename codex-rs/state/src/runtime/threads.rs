@@ -4,6 +4,12 @@ use codex_protocol::protocol::SessionSource;
 use std::sync::atomic::AtomicI64;
 use std::sync::atomic::Ordering;
 
+enum DeletionTime {
+    AtWriterLock,
+    #[cfg(test)]
+    Explicit(i64),
+}
+
 impl StateRuntime {
     pub async fn get_thread(&self, id: ThreadId) -> anyhow::Result<Option<crate::ThreadMetadata>> {
         let row = sqlx::query(
@@ -1051,18 +1057,24 @@ ON CONFLICT(id) DO UPDATE SET
     /// Spawn edges and thread rows are deleted last so a failed delete can be retried with enough
     /// state left to rediscover the same spawned subtree.
     pub async fn delete_threads_strict(&self, thread_ids: &[ThreadId]) -> anyhow::Result<u64> {
-        self.delete_threads_at(
-            thread_ids,
-            #[cfg(test)]
-            Utc::now().timestamp_millis(),
-        )
-        .await
+        self.delete_threads_with_time(thread_ids, DeletionTime::AtWriterLock)
+            .await
     }
 
+    #[cfg(test)]
     pub(super) async fn delete_threads_at(
         &self,
         thread_ids: &[ThreadId],
-        #[cfg(test)] as_of_ms: i64,
+        as_of_ms: i64,
+    ) -> anyhow::Result<u64> {
+        self.delete_threads_with_time(thread_ids, DeletionTime::Explicit(as_of_ms))
+            .await
+    }
+
+    async fn delete_threads_with_time(
+        &self,
+        thread_ids: &[ThreadId],
+        time: DeletionTime,
     ) -> anyhow::Result<u64> {
         if thread_ids.is_empty() {
             return Ok(0);
@@ -1081,17 +1093,15 @@ ON CONFLICT(id) DO UPDATE SET
             self.thread_goals.delete_thread_goal(*thread_id).await?;
         }
 
-        #[cfg(not(test))]
-        let mut tx = self.pool.begin().await?;
-        #[cfg(test)]
         let mut tx = super::accounting::native::begin_delete(&self.pool).await?;
-        let result = Self::delete_threads_on_connection(
-            &mut tx,
-            thread_ids,
+        // Cleanup and lock acquisition can be overtaken by a later accounting writer.
+        // Capture production time only after serialization; explicit clocks stay strict.
+        let as_of_ms = match time {
+            DeletionTime::AtWriterLock => Utc::now().timestamp_millis(),
             #[cfg(test)]
-            as_of_ms,
-        )
-        .await;
+            DeletionTime::Explicit(as_of_ms) => as_of_ms,
+        };
+        let result = Self::delete_threads_on_connection(&mut tx, thread_ids, as_of_ms).await;
         match result {
             Ok(rows) => {
                 tx.commit().await?;
@@ -1108,9 +1118,8 @@ ON CONFLICT(id) DO UPDATE SET
     pub(super) async fn delete_threads_on_connection(
         conn: &mut sqlx::SqliteConnection,
         thread_ids: &[ThreadId],
-        #[cfg(test)] as_of_ms: i64,
+        as_of_ms: i64,
     ) -> anyhow::Result<u64> {
-        #[cfg(test)]
         super::accounting::native::delete_on_connection(conn, thread_ids, as_of_ms).await?;
         let thread_id_strings = thread_ids
             .iter()
