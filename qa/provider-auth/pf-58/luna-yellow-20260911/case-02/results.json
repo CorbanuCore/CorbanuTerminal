@@ -1,0 +1,72 @@
+{
+  "case_number": 2,
+  "status": "blocked",
+  "summary": "Startup reached a responsive chat composer and /status showed Claude Fable 5.1 Plan via Claude Plan. No onboarding, codex_apps warning, MCP interruption, UI stall, or update message was observed. The case is blocked because startup update checks are disabled by the harness and Code Mode availability was not directly observable through the allowed UI flow.",
+  "observed_checks": [
+    {
+      "check": "Startup reaches chat without forcing /providers",
+      "status": "passed",
+      "observation": "After the visible directory-trust prompt, the app reached the chat composer without provider onboarding or a /providers step.",
+      "evidence_path": "01_startup_composer.txt"
+    },
+    {
+      "check": "Previously selected provider/model is remembered",
+      "status": "passed",
+      "observation": "Startup showed claude-fable-5-1-plan at high effort; /status showed Claude Fable 5.1 Plan and Model provider Claude Plan, with the account connected.",
+      "evidence_path": "02_status.txt"
+    },
+    {
+      "check": "Code Mode is available",
+      "status": "blocked",
+      "observation": "No definitive Code Mode availability indicator appeared in startup, /status, or the visible slash-command list. The absence of a slash command is not treated as proof that the host is missing.",
+      "evidence_path": "03_visible_slash_commands.txt"
+    },
+    {
+      "check": "No codex_apps startup warning",
+      "status": "passed",
+      "observation": "No codex_apps startup warning was visible.",
+      "evidence_path": "01_startup_composer.txt"
+    },
+    {
+      "check": "MCP startup is not interrupted",
+      "status": "passed",
+      "observation": "Startup completed to the composer and /status returned normally; no MCP interruption was visible.",
+      "evidence_path": "02_status.txt"
+    },
+    {
+      "check": "Corbanu does not offer an update to older 0.1.37",
+      "status": "blocked",
+      "observation": "No update offer was visible, but the harness states that startup update checks are disabled, so this criterion cannot be established.",
+      "evidence_path": "01_startup_composer.txt"
+    },
+    {
+      "check": "UI does not stall",
+      "status": "passed",
+      "observation": "The composer accepted /status and the UI returned to a responsive composer; the slash-command list also appeared.",
+      "evidence_path": "04_clean_composer.txt"
+    }
+  ],
+  "blockers": [
+    "Harness disables startup update checks, so absence of an update notice is not evidence of correct version comparison.",
+    "Code Mode availability has no definitive observable checkpoint in the permitted startup/status interaction."
+  ],
+  "actions": [
+    "Started the supplied candidate in the dedicated target TMUX session with the supplied environment.",
+    "Pressed Enter on the visible directory-trust option 1.",
+    "Waited for the composer, then typed /status and pressed Enter.",
+    "Submitted read-only /help to inspect visible command support; it was reported unrecognized.",
+    "Typed / to open the visible slash-command list; no configuration command was submitted.",
+    "Pressed Ctrl-C to clear the composer, then Ctrl-D to exit only the target session."
+  ],
+  "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "platform": "macOS arm64",
+  "limitations": [
+    "No source, binary internals, prior reports, credential files, project policies, or filesystem outside this scratch run were inspected.",
+    "No model request, provider configuration, credential inspection, browser/native access, or external service interaction was performed.",
+    "Only the supplied macOS arm64 candidate was exercised; no Linux inference is made."
+  ],
+  "instruction_ambiguity": [
+    "The instruction requires Code Mode to be available but does not define an allowed visible control or checkpoint for verifying it.",
+    "There is no before-run UI baseline for independently proving the word remembered; this run observes only the preconfigured startup selection and /status output."
+  ]
+}

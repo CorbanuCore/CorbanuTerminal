@@ -1,0 +1,134 @@
+[
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t new-session -d -s target -x 150 -y 48 '/bin/sh /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/start-target.sh'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "  Welcome to Corbanu Terminal, your crypto-native AI terminal\n\n> You are in /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/work\n\n  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection. Trusting the directory\n  allows project-local config, hooks, and exec policies to load.\n\n\u203a 1. Yes, continue\n  2. No, quit\n\n  Press enter to continue\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc 'mkdir -p /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/evidence'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t capture-pane -p -t target > /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/evidence/01-initial-trust-prompt.txt'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t send-keys -t target Enter'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\n\u203a Summarize recent commits\n\n  Claude Fable 5.1 Plan via claude-plan high \u00b7 ~/work \u00b7 Corbanu Terminal \u00b7 TPS: -- tok/s\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t send-keys -t target -l -- 'Write several paragraphs about the history of the telescope.'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t send-keys -t target Enter'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\n\u203a Write several paragraphs about the history of the telescope.\n\n\nWorking (3s \u2022 esc to interrupt)\n\n\n\u203a Summarize recent commits\n\n  Claude Fable 5.1 Plan via claude-plan high \u00b7 ~/work \u00b7 Corbanu Terminal \u00b7 TPS: ~21.2 tok/s\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\n\u203a Write several paragraphs about the history of the telescope.\n\n\n\u2022 The telescope's documented history begins in the Netherlands in 1608, when spectacle maker Hans Lippershey applied for a patent on a device that\n  made distant objects appear near. The claim was contested almost immediately\u2014Jacob Metius and Zacharias Janssen filed similar claims\u2014and the patent\n  was denied on the grounds that the design was too easy to copy. Whatever its exact origin, the instrument spread across Europe with remarkable\n  speed. Within a year Galileo Galilei had heard descriptions of it, worked out the optics himself, and built refractors of roughly 20\u00d7 magnification.\n  His observations of 1609\u20131610\u2014the mountains of the Moon, the four largest moons of Jupiter, the phases of Venus, and the countless stars of the\n  Milky Way\u2014were published in Sidereus Nuncius and turned a curiosity into a scientific instrument. Johannes Kepler soon proposed replacing Galileo's\n  concave eyepiece with a convex one, which gave a wider field of view at the cost of an inverted image; this \"Keplerian\" design became the standard\n  for astronomy.\n\n\n\u203a Summarize recent commits\n\n  Claude Fable 5.1 Plan via claude-plan high \u00b7 ~/work \u00b7 Corbanu Terminal \u00b7 TPS: ~42.9 tok/s\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t send-keys -t target Escape'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\n\u203a Write several paragraphs about the history of the telescope.\n\n\n\u2022 The telescope's documented history begins in the Netherlands in 1608, when spectacle maker Hans Lippershey applied for a patent on a device that\n  made distant objects appear near. The claim was contested almost immediately\u2014Jacob Metius and Zacharias Janssen filed similar claims\u2014and the patent\n  was denied on the grounds that the design was too easy to copy. Whatever its exact origin, the instrument spread across Europe with remarkable\n  speed. Within a year Galileo Galilei had heard descriptions of it, worked out the optics himself, and built refractors of roughly 20\u00d7 magnification.\n  His observations of 1609\u20131610\u2014the mountains of the Moon, the four largest moons of Jupiter, the phases of Venus, and the countless stars of the\n  Milky Way\u2014were published in Sidereus Nuncius and turned a curiosity into a scientific instrument. Johannes Kepler soon proposed replacing Galileo's\n  concave eyepiece with a convex one, which gave a wider field of view at the cost of an inverted image; this \"Keplerian\" design became the standard\n  for astronomy.\n\n  Early refractors suffered from chromatic aberration, the colored fringes produced when a simple lens focuses different wavelengths at different\n  distances. Seventeenth-century astronomers such as Johannes Hevelius and Christiaan Huygens attacked the problem by building telescopes of enormous\n  focal length, some exceeding 40 meters, that were cumbersome to the point of absurdity. Isaac Newton concluded that the problem could not be solved\n  with lenses and in 1668 built the first practical reflecting telescope, using a curved mirror to gather light and a small flat mirror to divert the\n  image to an eyepiece at the side. Metal mirrors tarnished quickly, however, and it took decades of refinement before reflectors were competitive.\n  Meanwhile, in the 1730s, Chester Moor Hall and later John Dollond showed that combining crown and flint glass could cancel most chromatic\n  aberration, producing the achromatic refractor that dominated observatories for the next century.\n\n\u25a0 Conversation interrupted - tell the model what to do differently. Something went wrong? Hit `/feedback` to report the issue.\n\n\n\u203a Summarize recent commits\n\n  Claude Fable 5.1 Plan via claude-plan high \u00b7 ~/work \u00b7 Corbanu Terminal \u00b7 TPS: -- tok/s\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t send-keys -t target -l -- 'Reply with exactly: RECOVERY_OK'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t send-keys -t target Enter'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\n\u203a Write several paragraphs about the history of the telescope.\n\n\n\u2022 The telescope's documented history begins in the Netherlands in 1608, when spectacle maker Hans Lippershey applied for a patent on a device that\n  made distant objects appear near. The claim was contested almost immediately\u2014Jacob Metius and Zacharias Janssen filed similar claims\u2014and the patent\n  was denied on the grounds that the design was too easy to copy. Whatever its exact origin, the instrument spread across Europe with remarkable\n  speed. Within a year Galileo Galilei had heard descriptions of it, worked out the optics himself, and built refractors of roughly 20\u00d7 magnification.\n  His observations of 1609\u20131610\u2014the mountains of the Moon, the four largest moons of Jupiter, the phases of Venus, and the countless stars of the\n  Milky Way\u2014were published in Sidereus Nuncius and turned a curiosity into a scientific instrument. Johannes Kepler soon proposed replacing Galileo's\n  concave eyepiece with a convex one, which gave a wider field of view at the cost of an inverted image; this \"Keplerian\" design became the standard\n  for astronomy.\n\n  Early refractors suffered from chromatic aberration, the colored fringes produced when a simple lens focuses different wavelengths at different\n  distances. Seventeenth-century astronomers such as Johannes Hevelius and Christiaan Huygens attacked the problem by building telescopes of enormous\n  focal length, some exceeding 40 meters, that were cumbersome to the point of absurdity. Isaac Newton concluded that the problem could not be solved\n  with lenses and in 1668 built the first practical reflecting telescope, using a curved mirror to gather light and a small flat mirror to divert the\n  image to an eyepiece at the side. Metal mirrors tarnished quickly, however, and it took decades of refinement before reflectors were competitive.\n  Meanwhile, in the 1730s, Chester Moor Hall and later John Dollond showed that combining crown and flint glass could cancel most chromatic\n  aberration, producing the achromatic refractor that dominated observatories for the next century.\n\n\u25a0 Conversation interrupted - tell the model what to do differently. Something went wrong? Hit `/feedback` to report the issue.\n\n\n\u203a Reply with exactly: RECOVERY_OK\n\n\n\u2022 RECOVERY_OK\n\n\n\u203a Summarize recent commits\n\n  Claude Fable 5.1 Plan via claude-plan high \u00b7 ~/work \u00b7 Corbanu Terminal \u00b7 TPS: 5.1 tok/s\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t capture-pane -p -t target > /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/evidence/02-final-pane.txt'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t capture-pane -p -S - -t target > /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/evidence/03-complete-pane-scrollback.txt'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc \"jq -e '.case_number == 11 and .status == \\\"passed\\\" and (.observed_checks | length == 4)' /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/evidence/results.json\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "true\n"
+  },
+  {
+    "command": "/bin/bash -lc \"rg -n 'Conversation interrupted|RECOVERY_OK|Summarize recent commits' /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/evidence/02-final-pane.txt\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "30:\u25a0 Conversation interrupted - tell the model what to do differently. Something went wrong? Hit `/feedback` to report the issue.\n33:\u203a Reply with exactly: RECOVERY_OK\n36:\u2022 RECOVERY_OK\n39:\u203a Summarize recent commits\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t has-session -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t kill-session -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '! /opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t has-session -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "no server running on /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/tmp/t\n"
+  }
+]

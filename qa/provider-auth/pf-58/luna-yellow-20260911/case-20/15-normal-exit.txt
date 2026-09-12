@@ -1,0 +1,1 @@
+target session absent after Ctrl+D; normal exit observed via dedicated tmux server status

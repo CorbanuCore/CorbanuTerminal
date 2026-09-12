@@ -1,0 +1,48 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       claude-fable-5-1-plan high   /model to cha… │
+│ directory:   ~/work                                      │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+▌ Add Anthropic
+▌ API key — masked
+▌
+▌ Paste your ANTHROPIC_API_KEY API key. Corbanu stores it in the encrypted vault and never adds it to chat. An existing environment variable takes
+▌ precedence; unset it outside Corbanu to use the saved key.
+
+Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

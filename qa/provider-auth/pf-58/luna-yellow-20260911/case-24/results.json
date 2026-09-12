@@ -1,0 +1,62 @@
+{
+  "case_number": 24,
+  "status": "blocked",
+  "summary": "The OpenAI recovery TUI route and cancellation/reopen behavior were observed, but no OpenAI authentication failure occurred and the final device sign-in required an unavailable and unauthorized external browser/device. Successful sign-in refresh could not be verified.",
+  "observed_checks": [
+    {
+      "check": "Working Claude provider remains configured/current",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-24/evidence/02-providers-open.txt",
+      "observation": "Claude Account was visibly Enabled · configured · current; active model was Claude Fable 5.1 Plan/high."
+    },
+    {
+      "check": "Select OpenAI, press r, choose sign-in",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-24/evidence/05-recovery-menu.txt",
+      "observation": "The selected OpenAI row opened Recover OpenAI, and Sign in to OpenAI again was selected."
+    },
+    {
+      "check": "First cancellation changes nothing visibly",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-24/evidence/07-after-first-cancel.txt",
+      "observation": "After cancel, OpenAI remained Enabled · configured and Claude remained Enabled · configured · current."
+    },
+    {
+      "check": "Recovery can be reopened",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-24/evidence/08-recovery-reopened.txt",
+      "observation": "The Recover OpenAI menu and sign-in choice appeared again."
+    },
+    {
+      "check": "OpenAI authentication failure/needs-attention precondition",
+      "status": "blocked",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-24/evidence/15-openai-live-request.txt",
+      "observation": "A harmless live OpenAI request returned OK; no authentication failure or needs-attention state was observed."
+    },
+    {
+      "check": "Finish sign-in and verify status/app connection refresh without changing the active model",
+      "status": "blocked",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-24/evidence/09-signin-second-open.txt",
+      "observation": "The reopened flow stopped at an external device-login page; no successful sign-in or refresh was observed."
+    }
+  ],
+  "blockers": [
+    "No OpenAI authentication failure was observed; the harmless live request succeeded.",
+    "External browser/device login is required and is unavailable and unauthorized for this executor."
+  ],
+  "actions": [
+    "Started the supplied candidate in the dedicated target tmux session.",
+    "Used raw tmux keys to open /providers, select OpenAI, press r, choose sign-in, cancel once, reopen, and launch sign-in again.",
+    "Ran one harmless OpenAI request for live-auth observation; it returned OK.",
+    "Restored Claude Fable 5.1 Plan/high and terminated only the target session."
+  ],
+  "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "platform": "macOS arm64",
+  "limitations": [
+    "Plaintext tmux captures only; no native desktop screenshot.",
+    "Browser/native login completion and Applications/Desktop shortcut were inaccessible.",
+    "Credential values and login codes were not recorded; code lines in captures are redacted.",
+    "No Linux inference."
+  ],
+  "test_instruction_ambiguity": "The instruction assumes an OpenAI authentication failure and a needs-attention state, but the live OpenAI request succeeded and the UI showed configured. This was treated as an unavailable prerequisite, not an invented failure."
+}

@@ -1,0 +1,48 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       claude-fable-5-plan high   /model to change │
+│ directory:   ~/work                                      │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+• Unrecognized command '/help'. Type "/" for a list of supported commands.
+
+• Model changed to Claude Fable 5 Plan via Claude Plan high
+
+
+› Reply with exactly READY.
+
+
+• READY
+
+
+› Summarize recent commits
+
+  Claude Fable 5 Plan via claude-plan high · ~/work · Corbanu Terminal · TPS: 1.7 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,45 @@
+{
+  "case_number": 6,
+  "status": "passed",
+  "summary": "Raw TMUX execution of /model switched from Claude Fable 5.1 Plan high to OpenAI GPT-5.6-Sol low and back to Claude Fable 5.1 Plan max. The boxed model indicator and footer agreed at each completed selection, with no observed restart, extra prompt, or premature label change.",
+  "observed_checks": [
+    {
+      "name": "Alternate provider/model selection",
+      "status": "passed",
+      "observation": "The visible /model menu exposed OpenAI and GPT-5.6-Sol; after confirmation the boxed indicator showed gpt-5.6-sol low and the footer showed GPT-5.6-Sol low.",
+      "evidence_path": "04-openai-model-menu.txt; 06-openai-selected.txt"
+    },
+    {
+      "name": "Return to Fable 5.1 Max",
+      "status": "passed",
+      "observation": "The visible Claude flow selected Claude Fable 5.1 Plan and then Max; after completion the boxed indicator showed claude-fable-5-1-plan max and the footer showed Claude Fable 5.1 Plan via claude-plan max.",
+      "evidence_path": "08-fable-selection-reasoning-menu.txt; 10-more-reasoning-menu.txt; 11-fable-max-selected.txt"
+    },
+    {
+      "name": "Boxed indicator/footer agreement and update timing",
+      "status": "passed",
+      "observation": "The immediate post-confirmation pane captures showed matching model/effort labels for both completed selections. No mismatch, premature change, redraw action, restart, or additional prompt was observed.",
+      "evidence_path": "05-after-openai-selection.txt; 06-openai-selected.txt; 08-fable-selection-reasoning-menu.txt; 11-fable-max-selected.txt; 12-final-scrollback.txt"
+    }
+  ],
+  "blockers": [],
+  "actions": [
+    "Started the supplied target session using the provided dedicated TMUX socket and command.",
+    "Pressed Enter on the visible trust prompt.",
+    "Typed /model and pressed Enter.",
+    "Pressed Right, selected GPT-5.6-Sol (default), and confirmed Low (default).",
+    "Typed /model and pressed Enter.",
+    "Pressed Left, selected Claude Fable 5.1 Plan, chose More reasoning…, and confirmed Max.",
+    "Captured named plaintext pane checkpoints and the executed action history.",
+    "Exited only the target session created for this run."
+  ],
+  "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "platform": "macOS arm64",
+  "limitations": [
+    "Only visible TUI behavior was tested through raw TMUX interactions.",
+    "No source, binary internals, credentials, prior reports, or external guidance were inspected.",
+    "The result does not infer behavior on Linux.",
+    "The UI represents Fable 5.1 Max as Claude Fable 5.1 Plan plus Max reasoning; that interpretation is recorded in report.md."
+  ],
+  "test_instruction_ambiguity": "The instruction says Fable 5.1 Max, while the UI shows Claude Fable 5.1 Plan and a separate Max reasoning choice; the visible combination was used as the target."
+}

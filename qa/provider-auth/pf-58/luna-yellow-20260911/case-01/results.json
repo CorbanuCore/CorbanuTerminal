@@ -1,0 +1,26 @@
+{
+  "case_number": 1,
+  "status": "blocked",
+  "summary": "The native Corbanu Terminal Launcher shortcut and macOS Desktop 3 placement could not be accessed through this interface; the required acceptance criterion was not exercised.",
+  "observed_checks": [
+    {
+      "check": "Applications shortcut opens a new Terminal window on Desktop 3 in the first free position of the 2 x 3 card grid",
+      "status": "blocked",
+      "evidence": "evidence/initial-pane.txt",
+      "evidence_path": "evidence/initial-pane.txt"
+    }
+  ],
+  "blockers": [
+    "Native Applications shortcut and macOS Desktop placement are inaccessible through the provided interface.",
+    "tmux windows cannot substitute for the native-launch criterion."
+  ],
+  "actions": "evidence/actions.txt",
+  "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "platform": "macOS arm64",
+  "limitations": [
+    "No observation of Desktop 3, grid position, overlap, build-missing message, or shortcut behavior.",
+    "No Linux inference permitted.",
+    "The tmux pane capture is harness setup only and is not evidence of native launch behavior."
+  ],
+  "ambiguity": "None identified."
+}

@@ -1,0 +1,84 @@
+{
+  "case_number": 20,
+  "status": "passed",
+  "summary": "On macOS arm64, the supplied candidate allowed read-only permissions inspection and cancellation, switched from the visible Claude Plan session to the visible OpenAI GPT-5.6-Sol model, returned OK to a harmless request, exited normally with Ctrl+D, restarted with the selected model retained, and allowed read-only /security inspection and cancellation with no visible policy change.",
+  "observed_checks": [
+    {
+      "check": "Ordinary session launched",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/02-session.txt"
+    },
+    {
+      "check": "/permissions inspection and cancellation",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/03-permissions-open.txt",
+      "supporting_evidence": [
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/04-permissions-cancelled.txt"
+      ]
+    },
+    {
+      "check": "Model/provider switching through /model",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/08-openai-selected.txt",
+      "supporting_evidence": [
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/05-model-picker.txt",
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/06-model-openai-tab.txt",
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/07-openai-effort-or-active.txt"
+      ]
+    },
+    {
+      "check": "Harmless request produced an assistant reply",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/09-openai-request.txt"
+    },
+    {
+      "check": "Normal exit and restart",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/15-normal-exit.txt",
+      "supporting_evidence": [
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/11-restarted.txt"
+      ]
+    },
+    {
+      "check": "/security read-only inspection and cancellation",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/13-security-inspected.txt",
+      "supporting_evidence": [
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/12-security-open.txt",
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/14-security-closed.txt"
+      ]
+    },
+    {
+      "check": "No visible policy change survived restart",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/11-restarted.txt",
+      "supporting_evidence": [
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/13-security-inspected.txt",
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/14-security-closed.txt"
+      ]
+    }
+  ],
+  "blockers": [],
+  "actions": [
+    "Accepted the visible trust prompt with Enter.",
+    "Opened /permissions and pressed Escape; did not select or apply a permission option.",
+    "Opened /model, switched to the visible OpenAI tab, selected GPT-5.6-Sol, and accepted Low reasoning.",
+    "Sent the harmless prompt: Reply with exactly: OK.",
+    "Pressed Ctrl+D at an empty composer; the dedicated target session exited.",
+    "Started a fresh target session.",
+    "Opened /security, inspected the highlighted Permissive profile, and pressed Escape without mutation.",
+    "Pressed Ctrl+D at an empty composer and verified the target session was absent."
+  ],
+  "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "platform": "macOS arm64",
+  "limitations": [
+    "The UI reported effective protection as unverified and protected modes as blocked; no protected-mode test was attempted.",
+    "Evidence is limited to the macOS arm64 tmux TUI; no native desktop behavior was claimed.",
+    "Only the selected OpenAI model's live usability was confirmed by an assistant reply; no credential values were accessed or recorded."
+  ],
+  "instruction_ambiguity": [
+    "The instruction to repeat /security did not specify whether to enter the highlighted profile; the visible read-only inspect flow was followed.",
+    "The instruction did not name which already-configured provider/model to select; the visible OpenAI default was used after recording both provider tabs.",
+    "The phrase normal Permissive test session differs from the visible /permissions labels YOLO mode and Full Access (current); both were recorded without equating them."
+  ]
+}

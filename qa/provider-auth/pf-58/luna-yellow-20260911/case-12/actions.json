@@ -1,0 +1,434 @@
+[
+  {
+    "command": "/bin/bash -lc \"mkdir -p /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence && /opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t new-session -d -s target -x 150 -y 48 '/bin/sh /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/start-target.sh'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "  Welcome to Corbanu Terminal, your crypto-native AI terminal\n\n> You are in /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/work\n\n  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt injection. Trusting the directory\n  allows project-local config, hooks, and exec policies to load.\n\n\u203a 1. Yes, continue\n  2. No, quit\n\n  Press enter to continue\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target Enter'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc 'sleep 1; /opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\n\u203a Summarize recent commits\n\n  Claude Fable 5.1 Plan via claude-plan high \u00b7 ~/work \u00b7 Corbanu Terminal \u00b7 TPS: -- tok/s\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -l -- '/help'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target Enter'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc 'sleep 0.8; /opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n\u203a /help\n\n  Claude Fable 5.1 Plan via claude-plan high \u00b7 ~/work \u00b7 Corbanu Terminal \u00b7 TPS: -- tok/s\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -l -- '/'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n\u203a //help\n\n  Claude Fable 5.1 Plan via claude-plan high \u00b7 ~/work \u00b7 Corbanu Terminal \u00b7 TPS: -- tok/s\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target C-u'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -l -- '/'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n\u203a //help\n\n  Claude Fable 5.1 Plan via claude-plan high \u00b7 ~/work \u00b7 Corbanu Terminal \u00b7 TPS: -- tok/s\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target BSpace BSpace BSpace BSpace BSpace BSpace'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n\u203a /help\n\n  Claude Fable 5.1 Plan via claude-plan high \u00b7 ~/work \u00b7 Corbanu Terminal \u00b7 TPS: -- tok/s\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target BSpace'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n\u203a /help\n\n  Claude Fable 5.1 Plan via claude-plan high \u00b7 ~/work \u00b7 Corbanu Terminal \u00b7 TPS: -- tok/s\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target C-a C-k'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n\u203a Summarize recent commits\n\n  Claude Fable 5.1 Plan via claude-plan high \u00b7 ~/work \u00b7 Corbanu Terminal \u00b7 TPS: -- tok/s\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -l -- '/'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n\u203a /\n\n  /model         choose what model and reasoning effort to use\n  /gpu           rent, inspect, or terminate GPU capacity\n  /ide           include current selection, open files, and other context from your IDE\n  /permissions   choose what Corbanu Terminal is allowed to do\n  /security      explore security profiles and protection readiness (read only)\n  /keymap        remap TUI shortcuts\n  /vim           toggle Vim mode for the composer\n  /experimental  toggle experimental features\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target C-a C-k'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -l -- '/keymap'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target Enter'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc 'sleep 0.8; /opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n  Keymap\n  All configurable shortcuts.\n  110 actions, 0 customized, 3 unbound.\n\n  [All]  Common  Customized (0)  Unbound (3)  App  Composer  Editor  Vim  Navigation  Approval  Debug\n\n  Type to search shortcuts\n\u203a Global         Open Transcript            ctrl-t\n  Global         Open External Editor       ctrl-g\n  Global         Copy                       ctrl-o\n  Global         Clear Terminal             ctrl-l\n  Global       - Toggle Vim Mode            unbound\n  Global       - Toggle Fast Mode           unbound\n  Global         Toggle Raw Output          alt-r\n  Global         Toggle Side Conversation   ctrl-/\n\n  left/right group \u00b7 enter edit shortcut \u00b7 * custom \u00b7 - unbound \u00b7 esc close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target Right Right Right Right'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n  Keymap\n  Global and chat-level shortcuts.\n  12 actions.\n\n  All  Common  Customized (0)  Unbound (3)  [App]  Composer  Editor  Vim  Navigation  Approval  Debug\n\n  Type to search shortcuts\n\u203a Global         Open Transcript            ctrl-t\n  Global         Open External Editor       ctrl-g\n  Global         Copy                       ctrl-o\n  Global         Clear Terminal             ctrl-l\n  Global       - Toggle Vim Mode            unbound\n  Global       - Toggle Fast Mode           unbound\n  Global         Toggle Raw Output          alt-r\n  Global         Toggle Side Conversation   ctrl-/\n\n  left/right group \u00b7 enter edit shortcut \u00b7 * custom \u00b7 - unbound \u00b7 esc close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target Down Down Down Down Down Down Down Down'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n  Keymap\n  Global and chat-level shortcuts.\n  12 actions.\n\n  All  Common  Customized (0)  Unbound (3)  [App]  Composer  Editor  Vim  Navigation  Approval  Debug\n\n  Type to search shortcuts\n  Global         Open External Editor       ctrl-g\n  Global         Copy                       ctrl-o\n  Global         Clear Terminal             ctrl-l\n  Global       - Toggle Vim Mode            unbound\n  Global       - Toggle Fast Mode           unbound\n  Global         Toggle Raw Output          alt-r\n  Global         Toggle Side Conversation   ctrl-/\n\u203a Chat           Interrupt Turn             esc\n\n  left/right group \u00b7 enter edit shortcut \u00b7 * custom \u00b7 - unbound \u00b7 esc close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target Down Down Down Down Down Down Down Down'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n  Keymap\n  Global and chat-level shortcuts.\n  12 actions.\n\n  All  Common  Customized (0)  Unbound (3)  [App]  Composer  Editor  Vim  Navigation  Approval  Debug\n\n  Type to search shortcuts\n  Global         Open Transcript            ctrl-t\n  Global         Open External Editor       ctrl-g\n  Global         Copy                       ctrl-o\n  Global         Clear Terminal             ctrl-l\n\u203a Global       - Toggle Vim Mode            unbound\n  Global       - Toggle Fast Mode           unbound\n  Global         Toggle Raw Output          alt-r\n  Global         Toggle Side Conversation   ctrl-/\n\n  left/right group \u00b7 enter edit shortcut \u00b7 * custom \u00b7 - unbound \u00b7 esc close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -l -- 'window'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n  Keymap\n  Global and chat-level shortcuts.\n  12 actions.\n\n  All  Common  Customized (0)  Unbound (3)  [App]  Composer  Editor  Vim  Navigation  Approval  Debug\n\n  window\n  no matches\n\n  left/right group \u00b7 enter edit shortcut \u00b7 * custom \u00b7 - unbound \u00b7 esc close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target C-a C-k'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -l -- 'new'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n  Keymap\n  Global and chat-level shortcuts.\n  12 actions.\n\n  All  Common  Customized (0)  Unbound (3)  [App]  Composer  Editor  Vim  Navigation  Approval  Debug\n\n  windownew\n  no matches\n\n  left/right group \u00b7 enter edit shortcut \u00b7 * custom \u00b7 - unbound \u00b7 esc close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -N 10 BSpace'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n  Keymap\n  Global and chat-level shortcuts.\n  12 actions.\n\n  All  Common  Customized (0)  Unbound (3)  [App]  Composer  Editor  Vim  Navigation  Approval  Debug\n\n  Type to search shortcuts\n\u203a Global         Open Transcript            ctrl-t\n  Global         Open External Editor       ctrl-g\n  Global         Copy                       ctrl-o\n  Global         Clear Terminal             ctrl-l\n  Global       - Toggle Vim Mode            unbound\n  Global       - Toggle Fast Mode           unbound\n  Global         Toggle Raw Output          alt-r\n  Global         Toggle Side Conversation   ctrl-/\n\n  left/right group \u00b7 enter edit shortcut \u00b7 * custom \u00b7 - unbound \u00b7 esc close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -l -- 'launch'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n  Keymap\n  Global and chat-level shortcuts.\n  12 actions.\n\n  All  Common  Customized (0)  Unbound (3)  [App]  Composer  Editor  Vim  Navigation  Approval  Debug\n\n  launch\n  no matches\n\n  left/right group \u00b7 enter edit shortcut \u00b7 * custom \u00b7 - unbound \u00b7 esc close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -N 6 BSpace && /opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -l -- 'session'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n  Keymap\n  Global and chat-level shortcuts.\n  12 actions.\n\n  All  Common  Customized (0)  Unbound (3)  [App]  Composer  Editor  Vim  Navigation  Approval  Debug\n\n  session\n  no matches\n\n  left/right group \u00b7 enter edit shortcut \u00b7 * custom \u00b7 - unbound \u00b7 esc close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -N 7 BSpace'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target Left Left Left Left'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n  Keymap\n  All configurable shortcuts.\n  110 actions, 0 customized, 3 unbound.\n\n  [All]  Common  Customized (0)  Unbound (3)  App  Composer  Editor  Vim  Navigation  Approval  Debug\n\n  Type to search shortcuts\n\u203a Global         Open Transcript            ctrl-t\n  Global         Open External Editor       ctrl-g\n  Global         Copy                       ctrl-o\n  Global         Clear Terminal             ctrl-l\n  Global       - Toggle Vim Mode            unbound\n  Global       - Toggle Fast Mode           unbound\n  Global         Toggle Raw Output          alt-r\n  Global         Toggle Side Conversation   ctrl-/\n\n  left/right group \u00b7 enter edit shortcut \u00b7 * custom \u00b7 - unbound \u00b7 esc close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -l -- 'new'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n  Keymap\n  All configurable shortcuts.\n  110 actions, 0 customized, 3 unbound.\n\n  [All]  Common  Customized (0)  Unbound (3)  App  Composer  Editor  Vim  Navigation  Approval  Debug\n\n  new\n\u203a Editor         Insert Newline           ctrl-j, ctrl-m, enter, shift-enter, alt-enter\n  Vim normal     Open Line Below          o\n  Vim normal     Open Line Above          shift-o\n  Vim normal     Move Down                j, down\n\n  left/right group \u00b7 enter edit shortcut \u00b7 * custom \u00b7 - unbound \u00b7 esc close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -N 3 BSpace'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -l -- 'open'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n  Keymap\n  All configurable shortcuts.\n  110 actions, 0 customized, 3 unbound.\n\n  [All]  Common  Customized (0)  Unbound (3)  App  Composer  Editor  Vim  Navigation  Approval  Debug\n\n  open\n\u203a Global         Open Transcript          ctrl-t\n  Global         Open External Editor     ctrl-g\n  Composer       History Search Previous  ctrl-r\n  Vim normal     Open Line Below          o\n  Vim normal     Open Line Above          shift-o\n  Approval       Open Fullscreen          ctrl-a, ctrl-shift-a\n  Approval       Open Thread              o\n\n  left/right group \u00b7 enter edit shortcut \u00b7 * custom \u00b7 - unbound \u00b7 esc close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -N 4 BSpace'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target Right'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n  Keymap\n  Frequently customized shortcuts.\n  21 actions.\n\n  All  [Common]  Customized (0)  Unbound (3)  App  Composer  Editor  Vim  Navigation  Approval  Debug\n\n  Type to search shortcuts\n\u203a Composer       Submit                   enter\n  Chat           Interrupt Turn           esc\n  Editor         Insert Newline           ctrl-j, ctrl-m, enter, shift-enter, alt-enter\n  Composer       Queue                    tab\n  Global       - Toggle Fast Mode         unbound\n  Global         Open External Editor     ctrl-g\n  Global         Copy                     ctrl-o\n  Global       - Toggle Vim Mode          unbound\n\n  left/right group \u00b7 enter edit shortcut \u00b7 * custom \u00b7 - unbound \u00b7 esc close\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target Escape'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n\u203a Summarize recent commits\n\n  Claude Fable 5.1 Plan via claude-plan high \u00b7 ~/work \u00b7 Corbanu Terminal \u00b7 TPS: -- tok/s\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target > /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence/01_tui_start.txt'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -l -- '/model'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target Enter'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc 'sleep 0.8; /opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n  Select Model and Effort\n  Claude Code plan\n\n  OpenAI  [Claude Plan]\n\n  1. Claude Opus 5 Plan               Model: claude-opus-5-plan. Claude Opus 5 through Claude Code subscription auth in Corbanu Terminal.\n\u203a 2. Claude Fable 5.1 Plan (current)  Model: claude-fable-5-1-plan. Claude Fable 5.1 through Claude Code subscription auth in Corbanu Terminal.\n  3. Claude Fable 5 Plan              Model: claude-fable-5-plan. Claude Fable 5 through Claude Code subscription auth in Corbanu Terminal.\n\n  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target Down'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target Enter'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc 'sleep 0.8; /opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-1-plan high   /model to cha\u2026 \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\n  Select Reasoning Level for Claude Fable 5 Plan\n\n  1. Low              Lower latency and token use for narrow edits.\n  2. Medium           Moderate reasoning for everyday coding.\n\u203a 3. High (default)   Default Fable 5 reasoning for complex coding.\n  4. Extra high       Deeper reasoning for difficult implementation work.\n  5. More reasoning\u2026  Max consumes usage limits faster\n\n  Press enter to confirm or esc to go back\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target Enter'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc 'sleep 0.8; /opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-plan high   /model to change \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\u2022 Model changed to Claude Fable 5 Plan via Claude Plan high\n\n\n\u203a Summarize recent commits\n\n  Claude Fable 5 Plan via claude-plan high \u00b7 ~/work \u00b7 Corbanu Terminal \u00b7 TPS: -- tok/s\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc \"/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target -l -- 'Reply with exactly READY.'\"",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target Enter'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc 'sleep 2; /opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "\u256d\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e\n\u2502 >_ Corbanu Terminal (v0.1.41)                            \u2502\n\u2502                                                          \u2502\n\u2502 model:       claude-fable-5-plan high   /model to change \u2502\n\u2502 directory:   ~/work                                      \u2502\n\u2502 permissions: YOLO mode                                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f\n\n\u2022 Unrecognized command '/help'. Type \"/\" for a list of supported commands.\n\n\u2022 Model changed to Claude Fable 5 Plan via Claude Plan high\n\n\n\u203a Reply with exactly READY.\n\n\n\u2022 READY\n\n\n\u203a Summarize recent commits\n\n  Claude Fable 5 Plan via claude-plan high \u00b7 ~/work \u00b7 Corbanu Terminal \u00b7 TPS: 1.7 tok/s\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target > /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence/02_tui_model_switch_request.txt'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t capture-pane -p -t target > /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence/03_final_state.txt'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t send-keys -t target C-d'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": ""
+  },
+  {
+    "command": "/bin/bash -lc '/opt/homebrew/bin/tmux -S /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t has-session -t target'",
+    "exit_code": 1,
+    "status": "failed",
+    "aggregated_output": "no server running on /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/tmp/t\n"
+  },
+  {
+    "command": "/bin/bash -lc 'rg --files /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence/02_tui_model_switch_request.txt\n/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence/03_final_state.txt\n/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence/01_tui_start.txt\n"
+  },
+  {
+    "command": "/bin/bash -lc 'jq empty /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence/results.json && rg --files /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence'",
+    "exit_code": 0,
+    "status": "completed",
+    "aggregated_output": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence/actions.log\n/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence/02_tui_model_switch_request.txt\n/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence/03_final_state.txt\n/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence/results.json\n/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence/report.md\n/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/evidence/01_tui_start.txt\n"
+  }
+]
