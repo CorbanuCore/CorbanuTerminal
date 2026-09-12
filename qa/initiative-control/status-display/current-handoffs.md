@@ -1,5 +1,19 @@
 # Current workstream handoffs — September 12
 
+## PF-27-S04 follow-up — 12:42 UTC
+
+[Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md)
+has a concrete technical hold on its next launch implementation. The manager
+read owner checkpoint1b4ac697: inspected safe APIs either replace the caller or
+return a PID without the proposed stable process-ownership guarantee. No real
+supported backend yet meets the complete selected contract. The manager owns
+backend qualification and assessment of which API constraints are actually
+required; no safety guarantee is waived, no mock-only implementation is accepted,
+and no new question is waiting on Travis. Accounting allocation and dashboard
+browser verification continue independently. This is not a failure of the
+already-landed parser. Dashboard publication fromd19e34b16 succeeded12:37:35Z;
+this later observation awaits the next scheduled sync.
+
 ## Current observation — 12:32 UTC, September 12
 
 Publication approval remains resolved; no user click or new answer is needed.
