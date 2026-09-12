@@ -29,9 +29,14 @@ Parent serializes these shared seams. Adapter is a private child of delivery_sen
 and wholly test-only. No resolver decisions, auth/storage behavior, public API,
 Client URL/redirect/timeout/response-limit changes. No delivery_goal, lib.rs,
 old tests/evidence, CLI/TUI, dependencies, BUILD, lockfiles or shared-plan writes.
-Budget <=300 adapter, <=90 Client, <=20 resolver/registration, <=300 tests,
-<=60 evidence; hard <=500 non-test / <=800 total additions plus deletions.
-Re-slice if exceeded; no compressed validation or production test backdoors.
+Manager receipt-stage reallocation, September 12: permit <=435 test lines within
+the unchanged hard <=500 non-test / <=800 total additions plus deletions.
+Returned scope is260 adapter +67 Client +13 resolver/registration +433 tests
++26 evidence =799,366 non-test. Smaller implementation funds the additional
+required test matrices; no path, behavior, authority or hard-budget expansion.
+The original300-test sub-budget was exceeded and the worker correctly stopped;
+this explicit manager reallocation resolves that allocation-only hold, not review
+or acceptance. Re-slice if hard limits are exceeded; never omit/compress checks.
 
 ## Concrete result and source contracts
 

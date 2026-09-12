@@ -31,7 +31,22 @@ promise to integrate later. New allocation/policy changes receive their own revi
 
 ## Current queue and owners
 
-Latest receiving checkpoint, September 12 01:07 UTC:
+Latest received increments, September 12 01:47 UTC:
+`56295f66825e87dc924705d86fcbcebf258ba7f9` combines accounting storage
+`d898fbac0` and Task Node native adapter `d7bf73a52`. Each exact candidate passed
+its first independent Astra High review with no findings. Final combined run
+`8456cb98-c9fc-48d1-8e7b-b177c0e31206`:283 passed,0 skipped,7.439s; no process-leak
+markers in retained full log. Earlier two warnings remain unattributed, not
+retroactively resolved. Both normal libraries passed offline check in26.59s;
+129 Python/governance tests passed. No formatter changed accepted bytes afterward.
+Task Node's worker correctly stopped at433 tests against its300-line sub-budget;
+manager explicitly reallocated435 test lines using smaller implementation,
+preserving all required cases and unchanged hard500non-test/800total:799 actual.
+This resolves allocation only; the clean review and tests supply separate evidence.
+Original worker stop receipt is retained, not rewritten as compliant-at-return.
+No production collection, sender, UI, human or release acceptance is claimed.
+
+Earlier receiving checkpoint, September 12 01:07 UTC:
 `486d2fb9481c01f7d73a6f8d9992c6e1b96359dd` includes exact quotation
 `e8ffdad4e` and bound one-event engine `7e25982b5`. Both received a clean first
 independent Astra High review, then parent verified hashes and integrated them
@@ -65,8 +80,8 @@ production collection, UI, live repository, benchmark or human acceptance.
 | Workstream | Completed | Next action | Who owns the gate? |
 | --- | --- | --- | --- |
 | PF13 | No new completion inferred | Preserve owner task and paused security allowance | Existing PF13 owner / Travis; do not reactivate here |
-| Accounting PF-60-S02 | S01 archived; journal/quotation reviewed and integrated | Immutable estimate storage allocated, test-only | Manager dispatches; no repeated product question |
-| Task Node PF-80-S01 | Port/preparation/engine reviewed and integrated | Native schema/build-only Client adapter allocated | Manager follows returned work; no live authority delegated |
+| Accounting PF-60-S02 | S01 archived; journal/quotation/storage reviewed and integrated | Retained contributions/recorded-attempt deletion allocated | Manager dispatches; approved defaults unchanged |
+| Task Node PF-80-S01 | Native adapter reviewed and integrated | Exact-goal observation reconciliation allocated | Offline work continues while operator design answers are pending |
 
 Missing preparation, allocation or receiving evidence is manager work. It is
 not a request for Travis to coordinate workers. The scheduled parent must keep
@@ -156,26 +171,35 @@ No upstream upgrade qualification is claimed.
 ## Current next assignments
 
 Both active plans and sprints now record receiving base
-`486d2fb9481c01f7d73a6f8d9992c6e1b96359dd`. After this allocation's independent
+`56295f66825e87dc924705d86fcbcebf258ba7f9`. After this allocation's independent
 review, parent fast-forwards idle clean workers to its committed HEAD and records
 actual agent IDs/launch HEAD in the private continuation receipt. One Astra High
 worker per lane; no additional reserved sprint. Earlier literal allocations above
 and in old handoffs are historical, not permission to edit those files now.
 
-Accounting: [five-file immutable storage](../research/agent-cost-accounting/estimate-storage-allocation.md),
-using accepted journal/quotation with exact serialization and atomic snapshot/
-binding/evidence versions. Test-only; retention/deletion qualification then
-precedes OFF-preserving production promotion and dispatch/presence wiring.
+Accounting: [five-file contributions/deletion](../research/agent-cost-accounting/contribution-deletion-allocation.md),
+retained-detail one-version contribution reduction and atomic recorded-attempt
+deletion/tombstones. Private storage child, exact connection-reader/journal guard
+seams only. Compaction/cutoff/native ownership and production promotion follow.
 No repeated policy question, live price fetch or billing. S03 remains gated.
 
-Task Node: [native schema-to-request adapter](../research/tasknode-integration/native-adapter-allocation.md),
-six literal paths including evidence directory. Actual inner-resolver/codec and
-Client request construction, entirely in-memory fixtures with no send. Only
-Client's unchanged-behavior builder extraction touches production flow; tiny
-test-only accessors do not change auth decisions. Unknown native null expiry
-remains held, not fabricated or relaxed. A later exact human/operator packet
-must resolve validity and supported Proposed lifecycle before live activation.
+Task Node: [five-file exact-goal reconciliation](../research/tasknode-integration/native-reconciliation-allocation.md),
+build real exact-ID activity GET in memory and consume pinned injected response.
+No Client/recovery changes, sender or retry.404 remains uncertain, never proof of
+absence or permission to resend. Unknown native null expiry stays held.
 No queue, automatic retry, production sender or live qualification is implied.
+
+Parent delivered two grouped questions to Travis on September12: approve local
+manual publisher/setup direction with existing account/Proposed PF-80 target,
+and a separately reviewed native validity design for server-issued null expiry.
+Record answers when received, without treating design approval as credential,
+enrollment or exact-post authority. No answer is needed for current offline work.
+These are delivered questions, not just a private blocker note; do not re-ask
+historical account/task creation or approved accounting defaults.
+Human packet must preserve an observed native trap: paused tracker recording
+does not stop pending TUI sync. Do not launch linked production TUI as read-only.
+Exact CLI cancel/status controls and unsupported event-retry commands are
+documented in the new allocation; no shell credential repair or invented control.
 
 Live entitlement/enrollment/ownership checks and a send still require a
 separate exact account/origin/workspace/target/payload decision. Do not request
