@@ -628,19 +628,16 @@ async fn separate_store_failures_preserve_retry_graph_without_global_rollback_cl
         let runtime =
             StateRuntime::init_for_testing(home.to_path_buf(), "synthetic".into()).await?;
         seed(&runtime, &home).await?;
-        let memory = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(
-                sqlx::sqlite::SqliteConnectOptions::new()
-                    .filename(runtime.sqlite.memories_db_path()),
-            )
-            .await?;
-        let goals = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(
-                sqlx::sqlite::SqliteConnectOptions::new().filename(runtime.sqlite.goals_db_path()),
-            )
-            .await?;
+        let memory = crate::sqlite::open_pool_for_testing(
+            sqlx::sqlite::SqlitePoolOptions::new().max_connections(1),
+            sqlx::sqlite::SqliteConnectOptions::new().filename(runtime.sqlite.memories_db_path()),
+        )
+        .await?;
+        let goals = crate::sqlite::open_pool_for_testing(
+            sqlx::sqlite::SqlitePoolOptions::new().max_connections(1),
+            sqlx::sqlite::SqliteConnectOptions::new().filename(runtime.sqlite.goals_db_path()),
+        )
+        .await?;
         sqlx::query("INSERT INTO logs (ts, ts_nanos, level, target, feedback_log_body, thread_id) VALUES (1, 0, 'INFO', 'synthetic', 'fixture', ?)")
             .bind(owner(7).to_string()).execute(runtime.logs_pool.as_ref()).await?;
         sqlx::query("INSERT INTO stage1_outputs (thread_id, source_updated_at, raw_memory, rollout_summary, generated_at) VALUES (?, 1, 'synthetic', 'synthetic', 1)")

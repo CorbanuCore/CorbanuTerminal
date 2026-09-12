@@ -1,6 +1,7 @@
 //! Explicit, versioned accounting storage. No collection or user-facing activation switch.
 use super::Journal;
 use super::StateRuntime;
+use anyhow::Context;
 use anyhow::ensure;
 use codex_protocol::ThreadId;
 use sqlx::SqliteConnection;
@@ -194,7 +195,7 @@ pub(super) async fn validate_on_connection(conn: &mut SqliteConnection) -> anyho
             let name = statement
                 .split_whitespace()
                 .nth(2)
-                .expect("embedded CREATE name");
+                .context("embedded accounting CREATE statement missing object name")?;
             let actual: Option<String> =
                 sqlx::query_scalar("SELECT sql FROM sqlite_schema WHERE name = ?")
                     .bind(name)

@@ -21,10 +21,11 @@ pub(super) async fn peer(runtime: &StateRuntime) -> anyhow::Result<StateRuntime>
         .busy_timeout(std::time::Duration::ZERO);
     let mut other = runtime.clone();
     other.pool = std::sync::Arc::new(
-        sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(options)
-            .await?,
+        crate::sqlite::open_pool_for_testing(
+            sqlx::sqlite::SqlitePoolOptions::new().max_connections(1),
+            options,
+        )
+        .await?,
     );
     Ok(other)
 }

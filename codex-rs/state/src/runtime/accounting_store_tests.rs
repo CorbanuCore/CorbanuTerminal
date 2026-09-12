@@ -251,7 +251,10 @@ async fn store_commit_failure_is_not_admission_and_rolls_back_complete_state() -
     Journal::store_on_connection(&mut tx, a.thread_id, &a, &[], Some(&[snapshot()]), 1).await?;
     let error = tx.commit().await.unwrap_err();
     assert_eq!(
-        error.as_database_error().and_then(|e| e.code()).as_deref(),
+        error
+            .as_database_error()
+            .and_then(sqlx::error::DatabaseError::code)
+            .as_deref(),
         Some("787")
     );
     assert!(error.to_string().contains("FOREIGN KEY"));
@@ -325,15 +328,14 @@ async fn store_rejections_preserve_clock_native_rows_and_original_binding() -> a
 async fn peer(runtime: &StateRuntime) -> anyhow::Result<StateRuntime> {
     let mut peer = runtime.clone();
     peer.pool = Arc::new(
-        sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect_with(
-                sqlx::sqlite::SqliteConnectOptions::new()
-                    .filename(runtime.sqlite().state_db_path())
-                    .foreign_keys(true)
-                    .busy_timeout(std::time::Duration::ZERO),
-            )
-            .await?,
+        crate::sqlite::open_pool_for_testing(
+            sqlx::sqlite::SqlitePoolOptions::new().max_connections(1),
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(runtime.sqlite().state_db_path())
+                .foreign_keys(true)
+                .busy_timeout(std::time::Duration::ZERO),
+        )
+        .await?,
     );
     Ok(peer)
 }
@@ -376,21 +378,23 @@ async fn public_deletion_samples_time_after_cleanup_and_writer_acquisition() -> 
         };
         // Pool checkout is a controlled async barrier, not a production clock hook.
         let blocked_pool = Arc::new(
-            sqlx::sqlite::SqlitePoolOptions::new()
-                .max_connections(1)
-                .before_acquire(move |_, _| {
-                    let held = held_tx.lock().unwrap().take();
-                    let gate = Arc::clone(&gate);
-                    Box::pin(async move {
-                        if let Some(held) = held {
-                            held.send(()).unwrap();
-                            gate.notified().await;
-                        }
-                        Ok(true)
-                    })
-                })
-                .connect_with(options.as_ref().clone())
-                .await?,
+            crate::sqlite::open_pool_for_testing(
+                sqlx::sqlite::SqlitePoolOptions::new()
+                    .max_connections(1)
+                    .before_acquire(move |_, _| {
+                        let held = held_tx.lock().unwrap().take();
+                        let gate = Arc::clone(&gate);
+                        Box::pin(async move {
+                            if let Some(held) = held {
+                                held.send(()).unwrap();
+                                gate.notified().await;
+                            }
+                            Ok(true)
+                        })
+                    }),
+                options.as_ref().clone(),
+            )
+            .await?,
         );
         if pause_at_writer {
             delayed.pool = Arc::clone(&blocked_pool);
@@ -641,7 +645,9 @@ async fn price_bound_admission_and_native_delete_contend_in_both_orders_with_sna
             .downcast_ref::<sqlx::Error>()
             .expect("actual SQLite contention");
         assert!(matches!(
-            sql.as_database_error().and_then(|e| e.code()).as_deref(),
+            sql.as_database_error()
+                .and_then(sqlx::error::DatabaseError::code)
+                .as_deref(),
             Some("5" | "6" | "517")
         ));
         assert_eq!(whole(&mut read).await?, before);
@@ -762,7 +768,7 @@ fn process_interruption_recovers_install_and_activation() -> anyhow::Result<()> 
             store.admit(a.thread_id, &a, &[snapshot()], 1).await?;
             let success = rows(&runtime).await?;
             runtime.close().await;
-            reopens(&path, &success).await
+            reopens(path, &success).await
         })?;
     }
     Ok(())

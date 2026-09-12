@@ -1,4 +1,5 @@
 //! These tests link the normal library, never include private implementation/fixture DDL.
+use anyhow::Context;
 use codex_protocol::ThreadId;
 use codex_protocol::protocol::SessionSource;
 use codex_state::SqliteConfig;
@@ -34,31 +35,38 @@ async fn open(path: &Path) -> anyhow::Result<Arc<StateRuntime>> {
 }
 
 async fn connection(runtime: &StateRuntime) -> anyhow::Result<SqliteConnection> {
-    SqliteConnection::connect_with(
-        &sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(runtime.sqlite().state_db_path())
-            .foreign_keys(true),
-    )
-    .await
-    .map_err(Into::into)
+    let pool = runtime
+        .sqlite()
+        .open_read_write_pool(&runtime.sqlite().state_db_path())
+        .await?;
+    // Detach ownership before closing the pool; callers explicitly close the connection.
+    let mut conn = pool.acquire().await?.detach();
+    pool.close().await;
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("PRAGMA foreign_keys")
+            .fetch_one(&mut conn)
+            .await?,
+        1
+    );
+    Ok(conn)
 }
 
-fn attempt(id: u128, time: i64) -> Attempt {
-    Attempt {
+fn attempt(id: u128, time: i64) -> anyhow::Result<Attempt> {
+    Ok(Attempt {
         attempt_id: Uuid::from_u128(id),
         request_id: Uuid::from_u128(id + 100),
-        thread_id: ThreadId::from_string(&Uuid::from_u128(7).to_string()).unwrap(),
+        thread_id: ThreadId::from_string(&Uuid::from_u128(7).to_string())?,
         turn: "fixture".into(),
         retry_of: None,
         provider: "synthetic".into(),
         model: "fixture".into(),
         scope: Uuid::nil(),
         dialect: Dialect::NativeAnthropic,
-        dispatched_at_ms: time.try_into().unwrap(),
-    }
+        dispatched_at_ms: time.try_into()?,
+    })
 }
 
-fn snapshot() -> Snapshot {
+fn snapshot() -> anyhow::Result<Snapshot> {
     serde_json::from_value(json!({
         "id":Uuid::from_u128(1000), "provider":"synthetic", "model":"fixture",
         "scope":Uuid::nil(), "currency":"USD", "unit":"PerMillionTokens",
@@ -66,19 +74,19 @@ fn snapshot() -> Snapshot {
         "source_reference":Uuid::from_u128(1001), "source_kind":"ProviderPublished",
         "observed_at_ms":0,"approved_at_ms":0,"effective_from_ms":0,"effective_end_ms":null
     }))
-    .unwrap()
+    .context("synthetic original-price snapshot")
 }
 
-fn observation(a: &Attempt, revision: i64, input: i64) -> Observation {
-    Observation {
-        revision: revision.try_into().unwrap(),
+fn observation(a: &Attempt, revision: i64, input: i64) -> anyhow::Result<Observation> {
+    Ok(Observation {
+        revision: revision.try_into()?,
         source: a.attempt_id,
-        sequence: revision.try_into().unwrap(),
+        sequence: revision.try_into()?,
         patch: Patch {
-            input: Presence::Number(input.try_into().unwrap()),
+            input: Presence::Number(input.try_into()?),
             ..Patch::default()
         },
-    }
+    })
 }
 
 async fn native(runtime: &StateRuntime, owner: ThreadId) -> anyhow::Result<()> {
@@ -86,7 +94,7 @@ async fn native(runtime: &StateRuntime, owner: ThreadId) -> anyhow::Result<()> {
     let mut builder = ThreadMetadataBuilder::new(
         owner,
         path.join("synthetic.jsonl"),
-        chrono::DateTime::from_timestamp(1_700_000_000, 0).unwrap(),
+        chrono::DateTime::from_timestamp(1_700_000_000, 0).context("synthetic native timestamp")?,
         SessionSource::Cli,
     );
     builder.cwd = path.to_path_buf();
@@ -105,7 +113,7 @@ async fn ordinary(conn: &mut SqliteConnection) -> anyhow::Result<Vec<(i64, Vec<u
 async fn normal_default_profiles_do_not_install_and_opt_in_keeps_ordinary_history()
 -> anyhow::Result<()> {
     let path = home();
-    let a = attempt(1, 0);
+    let a = attempt(1, 0)?;
     let runtime = open(&path).await?;
     let mut conn = connection(&runtime).await?;
     let history = ordinary(&mut conn).await?;
@@ -141,10 +149,10 @@ async fn normal_default_profiles_do_not_install_and_opt_in_keeps_ordinary_histor
             .await?,
         "ok"
     );
-    let intent = store.admit(a.thread_id, &a, &[snapshot()], 0).await?;
+    let intent = store.admit(a.thread_id, &a, &[snapshot()?], 0).await?;
     assert_eq!(intent.usage, Usage::default());
     assert_eq!(intent.all_buckets_priced, None);
-    assert_eq!(intent.snapshot, Some(snapshot()));
+    assert_eq!(intent.snapshot, Some(snapshot()?));
     let totals = store.read_day(a.thread_id, 0, 0).await?;
     assert_eq!(
         totals,
@@ -185,13 +193,13 @@ async fn original_price_null_unknown_zero_and_reordered_replay_survive_restart()
 -> anyhow::Result<()> {
     let path = home();
     let runtime = open(&path).await?;
-    let a = attempt(1, 0);
-    let missing = attempt(2, 0);
+    let a = attempt(1, 0)?;
+    let missing = attempt(2, 0)?;
     native(&runtime, a.thread_id).await?;
     let store = AccountingStore::open(&runtime, 0).await?;
-    store.admit(a.thread_id, &a, &[snapshot()], 0).await?;
+    store.admit(a.thread_id, &a, &[snapshot()?], 0).await?;
     store.admit(missing.thread_id, &missing, &[], 0).await?;
-    let patch = observation(&a, 2, 1);
+    let patch = observation(&a, 2, 1)?;
     let quote = store.observe(a.thread_id, &a, &[patch.clone()], 0).await?;
     assert_eq!(
         serde_json::to_value(quote.known_subtotal)?,
@@ -206,14 +214,14 @@ async fn original_price_null_unknown_zero_and_reordered_replay_survive_restart()
     );
     assert_eq!(quote.all_buckets_priced, None);
     store
-        .observe(a.thread_id, &a, &[observation(&a, 1, 0)], 0)
+        .observe(a.thread_id, &a, &[observation(&a, 1, 0)?], 0)
         .await?;
     let expected = store.observe(a.thread_id, &a, &[patch], 0).await?;
     let null = store
-        .admit(missing.thread_id, &missing, &[snapshot()], 0)
+        .admit(missing.thread_id, &missing, &[snapshot()?], 0)
         .await?;
     assert_eq!(null.snapshot, None);
-    let mut zero = observation(&missing, 1, 0);
+    let mut zero = observation(&missing, 1, 0)?;
     zero.patch = serde_json::from_value(
         json!({"input":0,"read":0,"write":0,"output":0,"reasoning":0,"total":0}),
     )?;
@@ -227,7 +235,7 @@ async fn original_price_null_unknown_zero_and_reordered_replay_survive_restart()
     for _ in 0..2 {
         let runtime = open(&path).await?;
         let store = AccountingStore::open(&runtime, 0).await?;
-        let mut later = snapshot();
+        let mut later = snapshot()?;
         later.id = Uuid::from_u128(2000);
         later.rates.noncached = Some("99".to_owned().try_into()?);
         assert_eq!(
@@ -258,8 +266,8 @@ async fn installed_deletion_without_store_handle_removes_raw_and_compact_in_norm
     let path = home();
     let runtime = open(&path).await?;
     let now = chrono::Utc::now().timestamp_millis();
-    let a = attempt(1, now - 90 * DAY);
-    let mut other = attempt(2, now - 1);
+    let a = attempt(1, now - 90 * DAY)?;
+    let mut other = attempt(2, now - 1)?;
     other.thread_id = ThreadId::new();
     for owner in [a.thread_id, other.thread_id] {
         native(&runtime, owner).await?;
@@ -270,7 +278,7 @@ async fn installed_deletion_without_store_handle_removes_raw_and_compact_in_norm
             .admit(
                 a.thread_id,
                 &a,
-                &[snapshot()],
+                &[snapshot()?],
                 i64::from(a.dispatched_at_ms),
             )
             .await?;
@@ -278,13 +286,13 @@ async fn installed_deletion_without_store_handle_removes_raw_and_compact_in_norm
             .observe(
                 a.thread_id,
                 &a,
-                &[observation(&a, 1, 1)],
+                &[observation(&a, 1, 1)?],
                 i64::from(a.dispatched_at_ms),
             )
             .await?;
         store.maintain(now - 1).await?;
         store
-            .admit(other.thread_id, &other, &[snapshot()], now - 1)
+            .admit(other.thread_id, &other, &[snapshot()?], now - 1)
             .await?;
     }
     runtime.close().await;

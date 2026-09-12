@@ -353,6 +353,15 @@ impl SqliteConfig {
     }
 }
 
+/// Keep fault-fixture connection options and checkout barriers intact at the SQLite boundary.
+#[cfg(test)]
+pub(crate) async fn open_pool_for_testing(
+    pool_options: SqlitePoolOptions,
+    connect_options: SqliteConnectOptions,
+) -> Result<SqlitePool, Error> {
+    pool_options.connect_with(connect_options).await
+}
+
 async fn rename_if_source_still_exists(source: &Path, destination: &Path) -> anyhow::Result<()> {
     match tokio::fs::rename(source, destination).await {
         Ok(()) => Ok(()),
