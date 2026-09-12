@@ -36,6 +36,13 @@ implementation_worktrees:
 
 # 3. Task Node integration and delivery control
 
+22:03UTC: supervisor review08 clean; exact5-file c7a1b9690 received92d6eb261.
+All261 combined tests pass187.549s; Facilities/governance pass, original failures
+retained. [Integration and next owner](../../../qa/initiative-control/status-display/slack-supervisor-integration-20260912.md).
+James now verifies existing isolated-execution proposal against actual available
+machine/tools, private evidence only; manager owns final infrastructure allocation
+and actual Slack/phone/nativeACK qualification. Live remains OFF, no user decision.
+
 20:57UTC manager handoff: recovery review07 clean, receiving251 tests pass
 144.128s at a89a48548. [Real owned-listener supervision](../../research/tasknode-integration/slack-supervised-quiescence-allocation.md)
 is the current exact five-file sequential James assignment in the new supervisor
@@ -49,7 +56,7 @@ The [local fence-loss recovery allocation](../../research/tasknode-integration/s
 owns five paths in the fresh second worktree above, one sequential James worker.
 Old worker checkout is frozen, not concurrently active. Manager approved
 loss-record retention and historical alert-revision refusal, not new authority.
-Actual supervisor/quiescence wiring and live/phone/ACK remain unqualified.
+Supervisor/quiescence wiring is now integrated above; live/phone/ACK remain unqualified.
 
 18:41: combined review06 clean,244 staging tests and Facilities/governance pass
 on3561ebcc2. Manager imported13 exact code/receipt/guidance files into receiving,

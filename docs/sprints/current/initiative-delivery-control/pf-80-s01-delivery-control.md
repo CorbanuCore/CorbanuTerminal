@@ -8,7 +8,7 @@ execution_order: 1
 owner: "Codex Task Node supervised-listener lane"
 parallel_lane: "tasknode-slack-supervisor"
 write_scope: "scripts/initiative_control/slack_transport.py, scripts/initiative_control/decision_manager.py, scripts/initiative_control/test_slack_transport.py, scripts/initiative_control/test_decision_manager.py, qa/initiative-control/pf-80-s01/decision-projection/slack-supervised-quiescence-receipt.md"
-integration_gate: "Manager accepted recovery review07 and combined251 pass at a89a48548. Next exact5-file real supervisor: slack-supervised-quiescence-allocation.md, target700/340 STOP850/400, new reviews08/09 preserve01–07. Manager combined Python/Node/governance and later isolated functional/actual Slack phone CAS native-ACK gates; live OFF."
+integration_gate: "Manager accepted supervisor review08 and combined261 pass at92d6eb261,187.549s; Facilities/governance pass. Exact5-file814/343 inside850/400, review09 unspent; preserve01–08. Manager owns next isolated functional and actual Slack phone CAS native-ACK qualification; James verifies existing machine/tool prerequisites privately. Live OFF."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/slack-supervisor-20260912"
 branch: "workstream/slack-supervisor-20260912"
 base_commit: "a89a48548f644a64cbb8cd9da090b5b75578c922"
@@ -19,7 +19,7 @@ updated: 2026-09-12
 
 # PF-80-S01 — Native Task Node delivery-control integration
 
-Current mandate: [real supervised quiescence](../../../research/tasknode-integration/slack-supervised-quiescence-allocation.md), exact front-matter scope. Recovery accepted, review07 clean, combined251pass; older port/recovery text is history, not repeated implementation.
+Current mandate: [supervisor integration accepted](../../../../qa/initiative-control/status-display/slack-supervisor-integration-20260912.md); review08 clean, combined261pass. Manager owns isolated/actual-service qualification; James verifies machine feasibility. Older port/recovery text is history, not repeated implementation.
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
 [Native validity allocation](../../../research/tasknode-integration/native-validity-allocation.md)
 and [recovery handoff](../../../research/tasknode-integration/recovery-decision-handoff.md).
@@ -51,7 +51,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact owner, worker worktree/base and disjoint scope allocated; dispatch waits for the verified main merge and worker fast-forward.
 
 ## Done
-
+- [x] Exact reviewed supervisor c7a1b9690 received92d6eb261;261 receiving tests pass187.549s, Facilities/governance pass. Review08 clean,09 unspent; internal-only N/A, actual Slack and independent functional acceptance remain open.
 - [x] Gated real-SDK transport/shared status3561ebcc2 reviewed clean (combined06);244 staging tests pass, receiving243 plus exact source-guard rerun1 pass. [Integration limits/evidence](../../../../qa/initiative-control/status-display/slack-integration-20260912.md). Missing-fence and actual live/phone/ACK qualification remain; no S01 completion.
 - [x] Offline recovery730577f1d integrated9877c058d after clean review04;169 receiving Python/Facilities/governance pass. Manager accepts1506/638; original1151/1274/1412 and three failed reviews remain. [Review ledger](../../../../qa/initiative-control/status-display/integration-20260912-1356.md).
 - [x] Corrected F01 age1a6d9c8df reviewed/integrated at60c5671b9;122Python/Facilities Node pass. Initial review P2 ID collision corrected, one added corrective review clean; prior usage retained. [Receiving proof](../../../../qa/initiative-control/status-display/integration-20260912-1232.md). Actual browser/evidence qualification remains separate.
@@ -76,7 +76,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact-goal reconciliation177ec93fc reviewed clean and integrated at3898eaa65;73 native tests pass there. In-memory exact-ID GET, strict injected observation and preserved404uncertainty; no send/retry/live claim. [Receipt](../../../../qa/initiative-control/pf-80-s01/native-reconciliation/receipt.md).
 
 ## Remaining
-- [ ] Implement [local loss recovery](../../../research/tasknode-integration/slack-fence-recovery-allocation.md); accepted transport remains OFF. Manager owns actual quiescence/connection/phone/restart/CAS/native ACK qualification, not fixture acceptance.
+- [ ] Qualify integrated supervisor/recovery with actual isolated execution, Slack identity/connection/phone/restart/CAS/native ACK. Manager owns this gate; James gathers existing machine/tool feasibility. OFF until qualified, no duplicate recovery implementation.
 - [ ] Resolve retained DEC021 mixed-feed useful-content failure and baseline-provenance limit without rewriting cases; [completed independent check](../../../../qa/initiative-control/status-display/age-evidence-20260912.md) supports F01 age/collision only. No human-readiness claim or blocking independent Slack implementation; DEC025 remains advisory.
 - [ ] Manager scopes accessible recovery/input/retention and restart/cross-process fences before the later CLI allocation; this is manager work, not unanswered product approval.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.

@@ -1,5 +1,22 @@
 # Workstream continuation — September 11
 
+## Current handoff — September12 22:03UTC
+
+[Current three-lane assignments](../../qa/initiative-control/status-display/current-handoffs.md)
+supersede older observations. PF13 combined Stage B accepted; sole owner at
+8eeabe2cc acknowledged descriptor compatibility and began its bounded code.
+Manager amendment459efbc4c adds one actual static relay fixture, eleven paths
+inside unchanged800, no root composition/activation. Reviews33/34 allocated.
+
+Accounting resumes exact eight-file policy correction at8cccd477a after first
+575/105/normal-check pass and eight explicit external-test Clippy errors.
+Mendel retains exclusive Mac target. First independent review still next.
+Slack clean review08 accepted, exactc7a1b9690 received92d6eb261;261 combined tests
+pass187.549s with frozen source, Facilities/governance pass. James now owns
+read-only actual-machine isolation feasibility, not another source rewrite.
+Manager owns next feasible infrastructure allocation/independent execution and
+actual Slack/phone/nativeACK qualification. No new user decision; live stays OFF.
+
 ## Current status source — September 12, 19:11 heartbeat
 
 19:18 follow-up: accounting clean-reviewedbc9b8b0d8 receivede9d1345ee; security

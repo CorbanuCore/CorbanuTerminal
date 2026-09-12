@@ -1,5 +1,16 @@
 # Current workstream handoffs — September 12
 
+## Current handoff — 22:03 UTC
+
+- [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): exact combined Stage B RTX proof accepted, all17 command exits+suite0. Sole owner acknowledged clean next launch8eeabe2cc and is implementing [descriptor identity compatibility](../../security-levels/sprints/PF-27-S04/descriptor-root-compat-allocation-20260912.md). Manager allocated PF20 compatibility and one realistic test relay, eleven paths/hard800; no new human approval or native activation.
+- [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): first correction passed575full/105focused tests and normal check; Clippy exposed eight errors in one external test file. Mendel resumed at8cccd477a with [exact eight-file correction](../../../docs/research/agent-cost-accounting/policy-lint-repair-allocation.md), same450/225 ceiling. Changes are underway; first review remains next, prior failures retained. S03 remains dependent and collection OFF.
+- [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): supervisor review08 clean and integrated92d6eb261; all261 receiving tests pass187.549s. [Evidence and limitations](slack-supervisor-integration-20260912.md). James now checks actual machine/tool feasibility for the existing isolated-execution proposal. Manager owns subsequent isolation and live Slack/phone/native-ACK qualification; alerts are not yet operational.
+
+All three lanes have assigned next actions. No decision is awaiting Travis.
+These are local integration/implementation observations, not full-sprint, human,
+main or release acceptance. Publication is verified separately by one Luna sync.
+Earlier dated observations below are history, not competing current statuses.
+
 ## Current handoff — 21:03 UTC
 
 - [PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): recovery review07 clean and locally integrated at a89a48548; all251 receiving tests pass144.128s. James dispatched to implement the real supervised listener in the fresh slack-supervisor-20260912 checkout, source-start179172541. [Exact assignment](../../../docs/research/tasknode-integration/slack-supervised-quiescence-allocation.md). Live Slack/phone/restart/CAS/native-ACK and isolated functional acceptance remain unproven; no user answer needed for this implementation.
