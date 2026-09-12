@@ -22,7 +22,7 @@ d870c92dab2bf3fbb602dc3b8447fe9f3534aecb unchanged. New unit source base is clea
 record actual launch HEAD before editing. Manager serializes the following PF20
 compatibility/dependency surfaces; no accounting/Slack worker owns these paths.
 
-## Ten exact implementation/test/receipt paths
+## Eleven exact implementation/test/receipt paths
 
 - codex-rs/linux-pidfd-spawn/src/spawn.rs
 - codex-rs/linux-pidfd-spawn/src/lib.rs
@@ -34,6 +34,15 @@ compatibility/dependency surfaces; no accounting/Slack worker owns these paths.
 - MODULE.bazel.lock
 - qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-20260912/qualify-rtx.sh
 - qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-20260912/README.md
+- qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-20260912/relay.c
+
+22:03 amendment: owner acknowledged launch8eeabe2cc178d41f0fec9ce65c233b062bb4a08f
+and correctly stopped before this extra fixture. Manager accepts one static
+post-exec relay (estimated60–90 lines) forwarding bytes between its authenticated
+root connection and a parent synthetic test-client connection. Actual descriptor
+peer identity, existing framed/HMAC client, temporary roots only; hash/static ELF
+profile inspection before invocation. This is test-only, no production arbitrary
+command or new authority constructor. Hard800 unchanged; reviews33/34 unchanged.
 
 Target580 changed lines, hard800 including tests, runner, registration and
 receipt; verbatim raw evidence separately preserved. Only the direct dependency

@@ -37,7 +37,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - Sources and archive disposition: [PF-27 reconciliation](../../../plans/security-source-reconciliation.md#pf-27).
 
 ## Code boundaries
-- Current narrower mandate: [descriptor identity compatibility](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-allocation-20260912.md), ten exact paths/hard800 from6b393f134, including serialized PF20 native.rs/native_tests.rs/Cargo.toml and derived locks. The broader scope does not authorize unrelated edits.
+- Current narrower mandate: [descriptor identity compatibility](../../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-allocation-20260912.md), eleven exact paths/hard800 from6b393f134, including serialized PF20 native.rs/native_tests.rs/Cargo.toml, derived locks and static test relay. The broader scope does not authorize unrelated edits.
 - OpenClaw adoption reference: [OC-1](../../../plans/openclaw-source-review-2026-08-28.md#oc-1), [OC-2](../../../plans/openclaw-source-review-2026-08-28.md#oc-2) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; see the review for named functions, callers, tests and limits. Reference tests are not candidate evidence.
 
 - Existing/foundation: codex-rs/vault/src/lib.rs; codex-rs/network-proxy/src/credential_broker.rs; PF-13 Core capability store.
