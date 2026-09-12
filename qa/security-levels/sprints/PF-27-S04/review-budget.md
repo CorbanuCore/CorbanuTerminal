@@ -76,7 +76,12 @@ concrete repair/evidence need. Do not spend a pass just because it is available.
 
 September12 manager task `01a08522-76a1-7ad1-afe6-ad690d55c0d7` accepted
 manifest-next-20260912.md and authorized TWO necessary new-stage passes:
-Astra High and Fable5.1High via Corbanu/TMUX. **0 used / 2 available**.
+Astra High and Fable5.1High via Corbanu/TMUX. **2 used / 0 available**.
 The prior unused contingency is retained separately; reviews1–15 and the
 scheduled six-hour anchor are unchanged. Reserve each dispatch before starting.
 No root-positive execution, installation or main-write window is granted.
+
+| Review | Reservation UTC | Model / scope | Outcome / evidence |
+| --- | --- | --- | --- |
+| 16 | 2026-09-12 09:51:08Z | Astra High; manifest inspection over919b1652d, Rust5df6837f11abe2b176c18e1e69a53ef27b595194 | Exit0, findings[]; manifest-20260912/astra-sixteen.json. |
+| 17 | 2026-09-12 09:52Z | Fable5.1High Corbanu/privateTMUX; same source and completed RTX/TMUX evidence | Engine started09:52:45Z; exit0/findings[]; manifest-20260912/fable-seventeen.json. |

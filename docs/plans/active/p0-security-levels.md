@@ -723,6 +723,12 @@ loader/exec-binding proof, listener, native client or protected activation is
 included. Preserve the unused review contingency; reserve any new stage passes
 under the existing ledger only after acceptance. Accepted launcher checkpoint
 is on main at `cc931adf6333e8348e03ee5fc801c77548aec138`; no repeat review needed.
+Manifest inspection source `099fa6f6d` is now construction-qualified: RTX
+default3/synthetic35/affected356 (2 existing skips), scoped lint/parity/build/TMUX
+pass; Astra16/Fable17 exit0, no findings. [Checkpoint and retained initial fixture
+failures](../../../qa/security-levels/sprints/PF-27-S04/manifest-20260912/README.md).
+Two new review passes used, prior contingency retained. Main window still
+required; no root-positive, exec-binding, loader-trust or native-eligibility claim.
 
 ## Round-five execution amendment — 2026-09-04
 
