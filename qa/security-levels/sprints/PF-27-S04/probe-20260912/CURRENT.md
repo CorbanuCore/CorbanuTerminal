@@ -23,11 +23,10 @@ staged source. Candidate and raw proof remain in
 Private review scripts/results remain in local
 `.codex-work/pf27-probe-review-20260912`; structured results are published here.
 
-The next bounded step is allocated in [launcher-next](../launcher-next-20260912.md):
-launch recipe and child identity preparation, not the full root supervisor.
-Manager granted up to3 necessary new review passes; none dispatched for it yet.
-Probe landed at `3e8bf6c95` and its main window was released. A later frozen
-installation manifest still requires separate approval.
+The [launcher recipe/preparation stage](../launcher-20260912/CURRENT.md) now
+has final RTX/TMUX proof and clean Astra14/Fable15 reviews. Read that checkpoint,
+not the old allocation, to continue. Probe landed at `3e8bf6c95`; its main window
+was released. A later frozen installation manifest still needs separate approval.
 Do not infer permission for privileged setup, fixed listener, enrollment,
 identity changes, real Vault access, native CAS, protected activation or an
 installed-app update. Default service/native modes still exit78; inspection

@@ -42,7 +42,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - OpenClaw adoption reference: [OC-1](../../../plans/openclaw-source-review-2026-08-28.md#oc-1), [OC-2](../../../plans/openclaw-source-review-2026-08-28.md#oc-2) at `13adff02ca3897768d80d2bca18f5acf08c55d91`; see the review for named functions, callers, tests and limits. Reference tests are not candidate evidence.
 
 - Existing/foundation: codex-rs/vault/src/lib.rs; codex-rs/network-proxy/src/credential_broker.rs; PF-13 Core capability store.
-- Next bounded source: service `src/launch/`, `src/probe/`, narrow registration and separate tests; [launcher recipe/identity preparation contract](../../../../qa/security-levels/sprints/PF-27-S04/launcher-next-20260912.md). No fixed listener, native client, PF20/Core/Vault edit or privileged execution in this step.
+- Completed bounded source: service `src/launch/`, `src/probe/`, narrow registration and separate tests; [launcher recipe/identity preparation proof](../../../../qa/security-levels/sprints/PF-27-S04/launcher-20260912/README.md). No fixed listener, native client, PF20/Core/Vault edit or privileged execution.
 - Tests: planned colocated Rust test modules prefixed `pf_27_s01`; fixtures use synthetic secrets and fake services only.
 
 ## Preconditions
@@ -54,8 +54,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 ## Done
 
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
-- [x] Recovered reviewed broker leaves from `cdb821289` in provenance commit
-  `90ae3a0cf`, without overwriting the current allocation or shared registrations.
+- [x] Recovered reviewed broker leaves from `cdb821289` in provenance commit `90ae3a0cf`, without overwriting the current allocation or shared registrations.
 - [x] Implemented digest-bound PF-41 journal integration and bounded native Linux
   peer/framing/channel teardown primitives, including concurrent disconnect
   cancellation and bounded partial-frame deadlines without idle timeouts.
@@ -63,16 +62,17 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
   focused Core tests; Cargo/Bazel parity passes. Astra and Fable repairs are
   verified; final Fable review has no blocking findings and one deferred P3
   signal-interruption follow-up (helper exit 1). Four of five reviews used.
-  Production service, data-plane and all-OS qualification remain open;
-  see `qa/security-levels/sprints/PF-27-S04/round5-evidence.md`.
+  Production service, data-plane and all-OS qualification remain open; see `qa/security-levels/sprints/PF-27-S04/round5-evidence.md`.
 
 - [x] Reconciled and qualified the service construction stage on main/0.1.42: default 1, synthetic 6, full affected 338, Core 6 and supporting TMUX pass. Fable review 6 found no runtime/security issue; one test-only lint finding was reproduced and fixed, strict Clippy and affected proof rerun successfully. Six reviews spent, no seventh; see `qa/security-levels/sprints/PF-27-S04/resume-20260911/README.md`. No native deployment or activation claimed.
 
 - [x] Qualified admission/lifetime `bd70f0e6b` ([proof](../../../../qa/security-levels/sprints/PF-27-S04/child-admission-20260912/README.md)) and existing-root adapter `794080a4f` ([proof](../../../../qa/security-levels/sprints/PF-27-S04/root-composition-20260912/README.md)): default3/fixture17/affected356 (2 helper skips), scoped Clippy/parity/TMUX17+exit78 pass. Astra10 clean, Fable11 runtime correct with publication finding resolved; inherited transitive telemetry lint debt retained. Five new slots used. No native installation, executable launcher or protected activation.
 
+- [x] Launch recipe/identity preparation `f0b1209e0`: default3/synthetic29/affected356 (2 existing skips), scoped lint/parity/build/TMUX pass; Astra14 and Fable15 exit0/no findings. P3 Python-path fixture follow-up fixed. No actual root-positive or native-eligibility claim; [evidence](../../../../qa/security-levels/sprints/PF-27-S04/launcher-20260912/README.md).
+
 ## Remaining
 
-- [ ] Implement allocated launcher recipe and synthetic post-exec identity preparation; preserve distinct UID/GID/groups/FD contract, reject invalid IDs/nonroot callers, add private failure and actual subprocess/TMUX cases. Prior probe accepted on main3e8bf6c95; carry P3 test interpreter follow-up into touched fixtures. No privileged execution/native activation; follow [next allocation](../../../../qa/security-levels/sprints/PF-27-S04/launcher-next-20260912.md).
+- [ ] Allocate root-owned manifest/executable validation and actual child spawn/supervision before fixed listener/native client wiring; preserve distinct-principal/group/FD and retained-Child rules. Exact installation approval is still required before OS identity/IPC/handle qualification. No full PF27 completion.
 - [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.
 
 - [ ] Keep sentinel keys/raw registries outside agent-accessible processes; test open-channel revocation, upload cancellation, same-run-ID replacement and broker restart with old handles. The proxy's retained RegisteredRun concern requires a native regression, not just a copied new-connection test.
