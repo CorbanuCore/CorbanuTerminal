@@ -31,11 +31,25 @@ promise to integrate later. New allocation/policy changes receive their own revi
 
 ## Current queue and owners
 
+Native receiving checkpoint (September 12 UTC / September 11 local):
+`c33d47f6ccd00a64fcb05a057472d8ca9f0139d4` combines accounting
+`3f39d7a65` and Task Node `2b281975a`. Both exact worker patches passed one
+independent Astra High structured review with no findings before local
+integration. Final combined native run `62b85020-a5cc-451c-bc1a-c07b0603c9bb`
+passed all 244 tests (202 state, 42 Task Node), no skips, 6.415s. The earlier
+worker-only LEAK marker on an unchanged state extraction test did not recur.
+Combined Python/governance regressions passed 129 tests, plus two pinned
+cross-language goldens; checkers report 3 active plans, 115 current / 122 archived.
+Worker formatting limitations remain disclosed in their receipts; the integrated
+Rust bytes match those formatted/reviewed candidates, with no formatter edits
+after the final tests. This proves bounded native increments, not full sprint,
+production collection, UI, live repository, benchmark or human acceptance.
+
 | Workstream | Completed | Next action | Who owns the gate? |
 | --- | --- | --- | --- |
 | PF13 | No new completion inferred | Preserve owner task and paused security allowance | Existing PF13 owner / Travis; do not reactivate here |
-| Accounting PF-60-S02 | S01 accepted/archived after reviewed handoff, tests and approved defaults | Implement isolated native-state journal, then independent review | Manager dispatches; no repeated product question |
-| Task Node PF-80-S01 | Reviewed offline port, corrections, local combined-tree tests | Native pure preparation worker running, then independent review | Manager follows returned work; no live authority needed |
+| Accounting PF-60-S02 | S01 archived; native journal reviewed/integrated with combined-tree tests | Exact quotation helper allocated, still test-only | Manager dispatches; no repeated product question |
+| Task Node PF-80-S01 | Offline port and native preparation reviewed/integrated with combined-tree tests | Bound one-event fixture engine allocated, no production sender | Manager follows returned work; no live authority delegated |
 
 Missing preparation, allocation or receiving evidence is manager work. It is
 not a request for Travis to coordinate workers. The scheduled parent must keep
@@ -71,7 +85,7 @@ independently reviewed, S01 accepted/archived and S02's first test-only incremen
 allocated. Later production wiring still needs its own evidence. Do not ask
 Travis this same question again or claim that he enabled billing/live collection.
 
-## Task Node next assignment
+## Prior Task Node assignment — received, no longer writable
 
 Same feature/sprint: PF-80 / PF-80-S01, in progress. Same worker checkout/branch:
 `/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911`,
@@ -122,18 +136,27 @@ manager-owned registration line. No upstream protocol/history/permission or
 provider-wire change; retain existing crate behavior with full crate tests.
 No upstream upgrade qualification is claimed.
 
-## Following assignments, not activated
+## Current next assignments
 
-Accounting S02 starts with the five-file test-only native journal in its current
-sprint. The manager follows review/testing and prepares the next same-sprint
-production-wiring allocation; a journal pass alone does not complete S02 or
-activate S03. Runtime human testing, collection and billing remain OFF.
+Both active plans and sprints now record receiving base
+`c33d47f6ccd00a64fcb05a057472d8ca9f0139d4`. After this allocation's independent
+review, parent fast-forwards idle clean workers to its committed HEAD and records
+actual agent IDs/launch HEAD in the private continuation receipt. One Astra High
+worker per lane; no additional reserved sprint. Earlier literal allocations above
+and in old handoffs are historical, not permission to edit those files now.
 
-After native preparation review, manager allocates profile-bound one-event
-transport using the existing Client, with explicit account/origin/event/digest
-checks and no bulk queue path. Preparing that allocation is manager work;
-implement only after recording its exact boundaries and tests. Existing profile
-link/expiry/recovery mechanisms must be reused, not redesigned.
+Accounting: [four-file exact quotation](../research/agent-cost-accounting/exact-pricing-allocation.md),
+using approved snapshots and the accepted journal reducer. Pure test-only exact
+amounts precede durable estimate storage; storage/retention/deletion qualification
+then precedes OFF-preserving production promotion and dispatch/presence wiring.
+No repeated policy question, live price fetch or billing. S03 remains gated.
+
+Task Node: [bound one-event engine](../research/tasknode-integration/native-one-event-allocation.md),
+four literal paths, fixture-only authority and transport, entire module test-only.
+It proves request/receipt fencing and ambiguous outcome handling before a later
+native outer profile/preflight/Client adapter. Synthetic facts are not a new
+production authority API. Existing profile link/expiry/recovery remains unchanged.
+No queue, automatic retry, production sender or live qualification is implied.
 
 Live entitlement/enrollment/ownership checks and a send still require a
 separate exact account/origin/workspace/target/payload decision. Do not request

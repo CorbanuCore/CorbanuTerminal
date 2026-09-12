@@ -19,10 +19,10 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "265bf0c3e164e497d172f1a8e5a56bf4cd54ed46"
+    base_commit: "c33d47f6ccd00a64fcb05a057472d8ca9f0139d4"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
     branch: "workstream/accounting-pf60-s01-20260911"
-    base_commit: "265bf0c3e164e497d172f1a8e5a56bf4cd54ed46"
+    base_commit: "c33d47f6ccd00a64fcb05a057472d8ca9f0139d4"
 ---
 
 # 2. Accounting — unified agent cost and usage
@@ -30,7 +30,7 @@ implementation_worktrees:
 Policy: repository-root `AGENTS.md`. Lifecycle: [plans](../index.md).
 Portfolio: [source coverage, sequencing and human capacity](../portfolio-2026-09-09.md).
 This is active workstream 2. S01 is accepted/archived; S02's first isolated
-native-state journal increment is allocated. Production wiring, live collection
+native-state journal increment is reviewed and integrated locally. Production wiring, live collection
 and runtime human acceptance remain gated. The first checkout is the receiving
 manager; the second is the reused independent accounting worker.
 Dispatch follows the verified main merge; an allocation is not a running-agent claim.
@@ -41,6 +41,9 @@ locally at `0415a00dc3`; 48 fixture tests pass on the combined tree. The
 records Travis's explicit approval of the v1 defaults in this task. Do not
 re-ask that decision. The reviewed [S02 handoff](../../research/agent-cost-accounting/s02-allocation.md)
 resolves exact first-increment boundaries; S01 is now archived and S02 is selected.
+Native candidate `3f39d7a65` passed independent Astra High review and was received
+at `c33d47f6c`; all 202 state tests passed there. The manager owns the next
+same-sprint allocation; this is not full S02 or user-interface readiness.
 
 ## Activation record
 
@@ -82,13 +85,14 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Astra High accounting native journal | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `265bf0c3e164e497d172f1a8e5a56bf4cd54ed46` | PF-60-S02 five-file test-only native-state increment |
+| Astra High accounting exact pricing | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `c33d47f6ccd00a64fcb05a057472d8ca9f0139d4` | PF-60-S02 four-file test-only exact quotation increment |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
-S02 is allocated to one Astra High subagent. Its literal five-file scope is in
-the sprint and reviewed handoff; the manager serially delegates only its test
-module declaration in runtime.rs. No production migrations, API/Core wiring,
-manifests or other state writers are allocated. The idle worker fast-forwards to
+S02 is allocated to one Astra High subagent. The next literal four-file scope is
+in the sprint and [exact-pricing allocation](../../research/agent-cost-accounting/exact-pricing-allocation.md);
+the manager serially delegates only the child module declaration in accounting.rs.
+No production migrations, API/Core wiring, manifests or other state writers are
+allocated. The idle worker fast-forwards to
 the reviewed receiving allocation before dispatch; its historical branch name
 does not change sprint ownership. Manager owns shared plans/integration.
 
@@ -118,7 +122,7 @@ All records belong to the single feature **PF-60**. Dependencies are hard prereq
 | Sprint | Record / outcome | Depends on | Planned output | Evidence |
 | --- | --- | --- | --- | --- |
 | PF-60-S01 | [Accounting contract and golden fixtures](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md) | none | docs/research/agent-cost-accounting/contract.md | Accepted local contract/fixtures and reviewed handoff; archived |
-| PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Test-only native-state journal, exact five-file scope | First increment allocated; implementation/testing pending |
+| PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Native journal then exact quotation, still test-only | Journal reviewed/integrated; 202 state tests pass; pricing allocated, full S02 pending |
 | PF-60-S03 | [Inspectable run and campaign totals](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md) | PF-60-S02 | codex-rs/tui/src/chatwidget/usage.rs | pending |
 | PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03 | qa/portfolio/agent-cost-accounting/qualification.md | pending |
 
@@ -170,7 +174,7 @@ Research outputs stay under the declared research/QA paths. Finished-feature doc
 ## Dependencies, decisions, and blockers
 
 - Approved defaults are recorded; reconcile the receiving branch and finish exact adapter/schema allocation before selecting the next migration number.
-- Activation is authorized; allocate S01 after this planning merge. S01 proposes the vocabulary/retention contract using synthetic inputs; approval gates S02 runtime, not preparation of that proposal.
+- S01 is accepted/archived and defaults approved. S02's first native journal increment is reviewed/integrated; manager allocates the next bounded increment, with production/live scope still OFF.
 - Before each next sprint: predecessor evidence accepted/archived, its handoff resolves concrete inputs and any newly discovered decisions; otherwise stop.
 - Cross-plan IDs in the table must exist and be completed in the receiving ledger. A draft dependency does not activate either plan.
 - Before dispatch: agreed budget, named human acceptance owner, exact scope and privacy permissions. No capacity or deadline is assumed from hardware ownership alone.
