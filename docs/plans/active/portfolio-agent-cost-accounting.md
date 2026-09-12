@@ -19,10 +19,10 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "c8d46d7097d27a75c0cad51049468ea172f277c2"
+    base_commit: "99001e9b79676f78b6bd941125c2a8fcfca6d90e"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
     branch: "workstream/accounting-pf60-s01-20260911"
-    base_commit: "c8d46d7097d27a75c0cad51049468ea172f277c2"
+    base_commit: "99001e9b79676f78b6bd941125c2a8fcfca6d90e"
 ---
 
 # 2. Accounting — unified agent cost and usage
@@ -92,14 +92,16 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Codex management; Travis retention-boundary decision | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `c8d46d7097d27a75c0cad51049468ea172f277c2` | PF-60-S02 previous B1 scope frozen; no current worker |
+| Codex accounting latest-quote lane | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `99001e9b79676f78b6bd941125c2a8fcfca6d90e` | PF-60-S02 three-file latest-quote reader; dispatch after reviewed allocation |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
-S02 retains its reservation while blocked on the delivered retention-boundary
-decision. The [compact-value allocation](../../research/agent-cost-accounting/compact-values-allocation.md)
+S02 retains its reservation; Travis approved conservative daily expiry in this
+task. The [compact-value allocation](../../research/agent-cost-accounting/compact-values-allocation.md)
 is accepted and frozen, not a new worker assignment. The
 [retention design handoff](../../research/agent-cost-accounting/retention-design-handoff.md)
-records the exact question, recommendation and manager's next design/test work.
+records the approved policy. The [latest-quote allocation](../../research/agent-cost-accounting/latest-quote-allocation.md)
+owns the next exact three-file prerequisite; manager review/checks precede dispatch.
+Custom range/interval filtering is recorded in S03 draft, not implemented here.
 No production migrations, API/Core wiring, manifests or other state writers are
 allocated. The idle worker fast-forwards to
 the reviewed receiving allocation before dispatch; its historical branch name
@@ -131,7 +133,7 @@ All records belong to the single feature **PF-60**. Dependencies are hard prereq
 | Sprint | Record / outcome | Depends on | Planned output | Evidence |
 | --- | --- | --- | --- | --- |
 | PF-60-S01 | [Accounting contract and golden fixtures](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md) | none | docs/research/agent-cost-accounting/contract.md | Accepted local contract/fixtures and reviewed handoff; archived |
-| PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Retention mutation after exact compact values, test-only | B1 reviewed/integrated;237 state tests pass; blocked on boundary-day decision, full S02 pending |
+| PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Latest-quote reader before retention mutation, test-only | B1 accepted; expiry approved; manager allocation review/dispatch, full S02 pending |
 | PF-60-S03 | [Inspectable run and campaign totals](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md) | PF-60-S02 | codex-rs/tui/src/chatwidget/usage.rs | pending |
 | PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03 | qa/portfolio/agent-cost-accounting/qualification.md | pending |
 

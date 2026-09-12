@@ -14,7 +14,7 @@ branch: "UNALLOCATED"
 base_commit: "UNALLOCATED"
 depends_on: "PF-60-S02"
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-11
 ---
 
 # PF-60-S03 — Inspectable run and campaign totals
@@ -48,12 +48,17 @@ updated: 2026-09-09
 ## Done
 
 - [x] Draft sprint created and linked to one feature; no implementation completed.
+- [x] Travis requested user-selected ranges and grouping intervals; recorded below without starting S03 or extending retention.
 
 ## Remaining
 
 - [ ] Render root versus descendant totals, provider/model breakdown, estimate/billed distinctions and freshness.
+- [ ] Add custom start/end filtering and selectable grouping intervals (proposed hour/day/week/month). Show requested range, effective coverage, timezone and bucket boundaries explicitly; use half-open start-inclusive/end-exclusive queries and reject reversed/invalid ranges.
+- [ ] Offer sub-day precision only where retained raw detail supports it. Older UTC-day aggregates cannot supply hourly values or arbitrary partial-day amounts: show unsupported precision/partial coverage and offer whole-UTC-day bounds, never silently round, prorate, fabricate zeros or extend detail retention.
+- [ ] Show oldest retained aggregate day and separate 90-day drill-down cutoff. For mixed raw/compact ranges preserve exact sums, unknown populations, estimate labels and no double count. Manager freezes timezone/week/month alignment and exact query allocation before readiness.
 - [ ] Keep historical sessions inspectable; expose missing-price and unavailable-backend states with user-visible next steps.
 - [ ] Add narrow-screen, mixed-provider, no-usage, stale-estimate and current-command regression tests.
+- [ ] Test exact boundaries, partial days, timezone/DST transitions, empty versus unavailable ranges, deleted history, mixed retention coverage and interval switching through supported user controls; no hidden storage repair.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 
 ## Verification

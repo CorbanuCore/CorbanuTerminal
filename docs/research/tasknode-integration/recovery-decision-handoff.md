@@ -9,7 +9,8 @@ exists. No further test-only wrapper is a justified substitute for runtime desig
 
 ## Concrete gates and owners
 
-Two questions were already delivered to Travis in this task and remain unanswered:
+Both directions were approved by Travis in this task on September 11 local /
+September 12 UTC; they are no longer human blockers:
 
 - Setup direction: manually operated publisher on this Mac, existing IridiumMaster /
   @iridiumeagle account, goal-only updates to the existing Proposed PF-80 task;
@@ -18,12 +19,12 @@ Two questions were already delivered to Travis in this task and remain unanswere
   using fresh native identity/account/profile/origin and revocation checks, without
   inventing a TTL. Recommend this design direction; current ExpiryUnknown stays held.
 
-Do not repeat these questions or infer approval from silence. Answering them approves
+Do not repeat these questions. These explicit answers approve
 design/setup only, not secret access, enrollment or the exact first post. Existing
 account creation approval is not revoked or requested again. The known historical
 target is `task_789a0f3bd75b41d1eca20cae698f04cf`, not a live ownership/status check.
 
-Manager next action after answers: scope a reviewed operator-accessible recovery
+Manager next action: scope a reviewed operator-accessible recovery
 contract and exact implementation allocation, then prepare qualification inputs.
 The manager owns record/input/retention and restart/fence design, exact executable
 identity, current account/profile/origin, target lifecycle/audience/entitlement and
@@ -67,6 +68,6 @@ now, bulk flush, task-request retry, logout or encrypted-state shell repair.
 Source provenance/control details remain in the accepted native reconciliation
 allocation and pinned first-party source record. No live checks were run here.
 
-PF-80-S01 retains its reserved slot while blocked on these delivered decisions;
+PF-80-S01 retains its reserved slot during manager-owned allocation preparation;
 PF-79 beta/PF-81 remain dependent drafts. Dashboard recovery-source publication is
 separate and unchanged. No main/push, source cutover, human or release acceptance.

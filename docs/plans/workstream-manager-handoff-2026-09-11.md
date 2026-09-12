@@ -31,6 +31,20 @@ promise to integrate later. New allocation/policy changes receive their own revi
 
 ## Current queue and owners
 
+Latest decisions, September 11 local / September 12 UTC: Travis approved
+conservative daily aggregate expiry, this Mac/existing publisher for now, and
+native server-backed no-expiry validity design. Those human blockers are resolved.
+New exact latest-quote/native-validity allocations use99001e9b7 baseline; review,
+checks and actual dispatch IDs follow in the private current receipt. No native
+implementation is claimed running merely because these records say in_progress.
+Custom range/interval filters are planned in S03, not started. Dashboard decision
+cards and AmbientCrypto/private The Corbanu Project alerts are specified in the
+[escalation amendment](decision-escalation.md), not deployed. Existing ten-minute
+heartbeat now requires explicit stopped-lane escalation, not question cards alone.
+PF13 owner reports new user-authorized reconciliation/human testing; that owner
+alone handles main/release writes. Manager does not infer reopened review budgets
+or verified new security allocation from that report.
+
 Latest receiving checkpoint, September 12 02:50 UTC:
 `c8d46d7097d27a75c0cad51049468ea172f277c2` adds exact compact values B1.
 Four paths,649add/0delete,206non-test; parent read all code/tests/receipt and verified
@@ -104,9 +118,9 @@ production collection, UI, live repository, benchmark or human acceptance.
 
 | Workstream | Completed | Next action | Who owns the gate? |
 | --- | --- | --- | --- |
-| PF13 | No new completion inferred | Preserve owner task and paused security allowance | Existing PF13 owner / Travis; do not reactivate here |
-| Accounting PF-60-S02 | B1 compact values also reviewed/integrated; worker closed | Blocked on newly delivered boundary-day availability decision; then exact retention allocation | Travis answers narrow tradeoff; manager owns source/admission/read design |
-| Task Node PF-80-S01 | Reconciliation reviewed/integrated; worker closed | Blocked on already delivered setup/validity decisions; then manager runtime design | Travis answers existing questions; manager owns design/qualification packet |
+| PF13 | Owner reports human acceptance; no automated gaps relabeled | Owner-owned reconciliation/main integration; avoid concurrent main writes | Existing PF13 owner / Travis; no manager restart/review reset |
+| Accounting PF-60-S02 | B1 accepted; conservative daily expiry approved | Review/check/dispatch three-file latest-quote reader; then atomic retention | Manager; not waiting on Travis's approved policy |
+| Task Node PF-80-S01 | Reconciliation accepted; publisher/validity approved | Review/check/dispatch native validity; dashboard/Slack then recovery facade follow-up | Manager; live scope remains a separate later exact packet |
 
 Missing preparation, allocation or receiving evidence is manager work. It is
 not a request for Travis to coordinate workers. The scheduled parent must keep
@@ -195,33 +209,34 @@ No upstream upgrade qualification is claimed.
 
 ## Current next assignments
 
-Accounting plan/sprint now record receiving base
-`c8d46d7097d27a75c0cad51049468ea172f277c2`; Task Node keeps its accepted
-`3898eaa658924361b94cdbfc6751f930550ddee4` checkpoint. Both workers are closed;
-no current native write assignment. Earlier literal scopes are frozen historical
-allocations. A recorded decision and reviewed exact allocation precede dispatch.
+Both plan/sprint allocations now use receiving base
+`99001e9b79676f78b6bd941125c2a8fcfca6d90e`. Earlier literal scopes remain
+frozen historical allocations. The new three-file accounting reader and six-file
+Task Node validity mandates are linked from their current sprints. Review/checks
+and clean worker fast-forward precede dispatch; actual launch HEAD/IDs go in the
+private current receipt. These are same-sprint continuations, not full acceptance.
 
 Accounting: [retention design/test handoff](../research/agent-cost-accounting/retention-design-handoff.md).
 B1 is integrated; exact daily sums cannot subtract individually expired members
 after detail deletion. Manager delivered a NEW narrow question to Travis: allow
 daily expiry at UTC-day-start+365days, losing under24h history while never retaining
-a contribution too long? Recommend yes with visible oldest day; answer pending.
-This is not reapproval of the existing defaults, and is not secretly chosen.
+a contribution too long? Travis approved option1 with visible oldest day.
+This is not reapproval of the existing defaults; do not ask again.
 90-day detail/exact365-day replay remain unchanged. Source/admission/read/ownership
 design and patch sizing stay manager work. No speculative fixture lane; S03 gated.
 
 Task Node: [runtime recovery handoff](../research/tasknode-integration/recovery-decision-handoff.md)
-now records the concrete next design/operator boundary and human test plan. Current
-offline chain is accepted; no distinct new native increment is justified without
-the delivered decisions and manager-owned production contract/allocation. Preserve
-404 uncertainty and ExpiryUnknown; no fixture-only busywork or implicit sender.
+now records approved directions and the concrete operator boundary/human test plan.
+Current offline chain is accepted; the native-validity allocation supplies the
+next production-compiled private transport path without enabling a caller.
+Preserve404 uncertainty and existing ExpiryUnknown; no implicit sender.
 
 Parent delivered two grouped questions to Travis on September12: approve local
 manual publisher/setup direction with existing account/Proposed PF-80 target,
 and a separately reviewed native validity design for server-issued null expiry.
-Record answers when received, without treating design approval as credential,
-enrollment or exact-post authority. The offline chain is now integrated; those
-answers gate Task Node's next runtime design, not independent accounting work.
+Travis answered both explicitly: approved publisher for now and proposed native
+validity path. Design approval is not credential, enrollment or exact-post
+authority. Manager runtime design is now unblocked, as is accounting preparation.
 These are delivered questions, not just a private blocker note; do not re-ask
 historical account/task creation or approved accounting defaults.
 Human packet must preserve an observed native trap: paused tracker recording

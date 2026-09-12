@@ -4,15 +4,16 @@ Planning only, not an executable allocation. Product: **Product measurement**,
 “No commercial performance numbers have been supplied.” The approved accounting
 defaults stand; this resolves their implementation without enabling collection.
 
-## One newly delivered product decision
+## Approved product decision
 
 On September 12 the manager asked Travis whether each daily aggregate may expire
 when its UTC day start reaches 365 days old. Recommendation: approve conservative
 daily expiry, with the oldest retained day explicitly visible. This never retains
 a contribution past 365 days, but can discard a newer member up to 24 hours early.
 Alternative: require exact rolling availability and revisit aggregate representation.
-Status: unanswered. Do not infer approval, repeatedly ask, or implement either
-behavior. This is not another request to approve the existing 90/365-day defaults.
+Status: approved by Travis in this task on September 11 local / September 12 UTC
+("I'm fine with option 1"). Implement conservative daily expiry; do not ask again.
+This is not another request to approve the existing 90/365-day defaults.
 
 Why it requires a decision: after raw detail is removed, A+B for two requests on
 the same day cannot yield B alone when A expires earlier. UUID+expiry tombstones
@@ -21,7 +22,7 @@ the accepted detail-retention boundary. Whole-day early loss or late retention
 changes availability or privacy, so neither is a silent engineering choice.
 The exact rolling 365-day replay horizon and 90-day detail boundary do not change.
 
-## Manager-owned design after the answer
+## Manager-owned design after approval
 
 Use independently deletable thread/day aggregate values, not global-only sums.
 Reuse B1's exact CompactValues codec; a separate thread/day/snapshot reference set

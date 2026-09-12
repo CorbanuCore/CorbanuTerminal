@@ -468,6 +468,14 @@ features, successor preparation and concrete decision escalation under the
 sprint execution process. This is not blanket main-push, release, deployment,
 live-posting or product-contract acceptance authority.
 
+Travis requested persistent, contextual decision cards on this dashboard and
+Slack alerts when human decisions stop work. He selected a dedicated private
+"The Corbanu Project" channel in AmbientCrypto. The manager owns one decision
+record with affected work, options, recommendation, impact and resolution;
+dashboard and alerts are projections. Slack connection, exact destination and
+delivery require verification; a question card or dashboard refresh is not proof
+the human was alerted. No arbitrary Slack reply grants operational authority.
+
 Travis additionally requested an ongoing public manual-testing beta program
 under Task Node integration: a separate Corbanu Desktop beta branch/channel,
 candidate-pinned public assignments, independent evidence review and bounded

@@ -103,6 +103,16 @@ as waiting on the human. Deliver newly required decisions to the human; a note
 hidden in a private packet does not count as asking. Continue independent work
 inside the approved sprint while waiting, without manufacturing busywork.
 
+When a decision stops implementation, also give a plain-language escalation in
+the user-facing response: stopped lane, running-worker count, exact question,
+recommendation, owner and consequence of waiting. A question card alone is not
+sufficient, especially when Travis is away. Maintain a stable manager-owned
+decision record for dashboard/approved alert projection; distinguish requested,
+sent, failed, delivery-uncertain, acknowledged and resolved. Missing alert
+integration must be explicit, never reported as delivered. Dashboard maintenance
+success does not mean product implementation is running. Process explicit answers
+into canonical records and the unlocked next action without another continue ask.
+
 Existing review limits remain binding; one fresh independent review of each new
 material candidate plus scoped corrections is the normal closeout, not repeated
 reviews of unchanged clean code. Do not reset exhausted budgets or resume paused

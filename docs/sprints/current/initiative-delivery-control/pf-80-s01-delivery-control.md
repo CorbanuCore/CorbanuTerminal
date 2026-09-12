@@ -1,17 +1,17 @@
 ---
 sprint_id: "PF-80-S01"
 title: "Native Task Node delivery-control integration"
-status: blocked
+status: in_progress
 plan_file: "docs/plans/active/initiative-delivery-control.md"
 plan_feature: "PF-80"
 execution_order: 1
-owner: "Codex management; Travis setup/validity decisions"
-parallel_lane: "tasknode-reconciliation"
-write_scope: "codex-rs/tasknode-session/src/delivery_reconcile.rs, codex-rs/tasknode-session/src/delivery_reconcile_tests.rs, codex-rs/tasknode-session/src/delivery_send.rs, qa/initiative-control/pf-80-s01/native-reconciliation/receipt.md, qa/initiative-control/pf-80-s01/native-reconciliation/SHA256SUMS"
+owner: "Codex Task Node native-validity lane"
+parallel_lane: "tasknode-native-validity"
+write_scope: "codex-rs/tasknode-session/src/session_validity.rs, codex-rs/tasknode-session/src/session_validity_tests.rs, codex-rs/tasknode-session/src/client.rs, codex-rs/tasknode-session/src/lib.rs, qa/initiative-control/pf-80-s01/native-validity/receipt.md, qa/initiative-control/pf-80-s01/native-validity/SHA256SUMS"
 integration_gate: "Codex management audits the source-port manifest and literal worker diff, reruns control and governance suites on the combined tree, reviews the immutable queue migration/one-event preview, and owns CI registration and any later live source cutover; no worker main push or external mutation."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
 branch: "workstream/tasknode-pf80-s01-20260911"
-base_commit: "3898eaa658924361b94cdbfc6751f930550ddee4"
+base_commit: "99001e9b79676f78b6bd941125c2a8fcfca6d90e"
 depends_on: "none"
 created: 2026-09-10
 updated: 2026-09-11
@@ -21,8 +21,9 @@ updated: 2026-09-11
 
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
 The previous literal write scope is frozen, not an active worker assignment.
-Blocked on already delivered setup/validity decisions; manager owns next runtime
-contract/allocation. [Decision and human-test handoff](../../../research/tasknode-integration/recovery-decision-handoff.md).
+Setup/validity decisions approved; manager review/checks precede new dispatch.
+[Native validity allocation](../../../research/tasknode-integration/native-validity-allocation.md)
+and [recovery handoff](../../../research/tasknode-integration/recovery-decision-handoff.md).
 
 ## Execution mandate
 
@@ -42,7 +43,7 @@ contract/allocation. [Decision and human-test handoff](../../../research/tasknod
 - Port: `scripts/initiative_control/` from the recovery source; audit every file, no state/auth/credential directories.
 - Planned contract and tests: `docs/research/tasknode-integration/`, `qa/initiative-control/pf-80-s01/`, focused tests beside the ported scripts.
 - Manager alone owns plan/sprint allocation, CI registration and live dashboard state; submit a handoff for any needed shared changes.
-- Previous worker scope is frozen. No current native writes; a reviewed new allocation is required after design gates, with no inferred live authority.
+- Previous reconciliation scope is frozen. Front matter allocates private native validity/client byte reader; review/checks precede dispatch. No live authority inferred.
 
 ## Preconditions
 
@@ -52,6 +53,7 @@ contract/allocation. [Decision and human-test handoff](../../../research/tasknod
 
 ## Done
 
+- [x] Travis approved this Mac/existing publisher for now and native server-backed no-expiry validity design; no credential/enrollment/post permission inferred.
 - [x] Recovery source implemented and independently reviewed the internal dashboard; historical evidence retained without claiming a main-tree port pass.
 - [x] Verified native account setup and generated task IDs; no seed/password needed, no task accepted or completed.
 - [x] Recorded collision-free PF-80 receiving identity and two dependent PF-79 beta drafts.
@@ -66,7 +68,9 @@ contract/allocation. [Decision and human-test handoff](../../../research/tasknod
 
 ## Remaining
 
-- [ ] Record answers to the two already delivered setup/validity questions; manager scopes accessible recovery/input/retention and restart/fence design before the next runtime allocation. Do not repeat questions or add fixture busywork.
+- [ ] Implement/prove the exact private native-validity allocation; preserve ExpiryUnknown in the existing engine and no public entry/live caller.
+- [ ] Then allocate contextual dashboard decisions and private AmbientCrypto Slack alerts per [amendment](../../../plans/decision-escalation.md); no deployment/connection claim from planning alone.
+- [ ] Manager scopes accessible recovery/input/retention and restart/cross-process fences before the later CLI allocation; this is manager work, not unanswered product approval.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.
 - [ ] Give manager exact credential-scope/destination, enrollment, task-lifecycle and first-payload decisions; remain OFF if missing authority. Never inspect real credential stores as a worker.
 - [ ] After separate approval, qualify one live goal event and recovery; do not treat fixtures as delivery proof.
@@ -75,7 +79,7 @@ contract/allocation. [Decision and human-test handoff](../../../research/tasknod
 ## Verification
 
 - [ ] Focused: `python3 -m unittest discover -s scripts/initiative_control -p 'test_*.py'`; install only pinned requirements in a disposable venv.
-- [ ] Native: delivery_reconcile, delivery_adapter, delivery_send and delivery_goal selectors, full crate via just test and normal-library check after guarded formatting; private test-only child.
+- [ ] Native: session_validity plus existing delivery/recovery selectors, full crate via just test and normal-library check after guarded formatting; production-compiled private module, no public caller.
 - [ ] Governance: `python3 docs/plans/check.py`, `python3 docs/sprints/check.py`, `git diff --check`.
 - [ ] Independent final-tree review and source manifest; inspect any registration/config changes before integration.
 - [ ] Actual-key native `/tasknode` success/cancel/expiry/relink if interactive runtime changes; otherwise record not applicable with reason.

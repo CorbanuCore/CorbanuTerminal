@@ -1,17 +1,17 @@
 ---
 sprint_id: "PF-60-S02"
 title: "Idempotent usage persistence and replay"
-status: blocked
+status: in_progress
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 2
-owner: "Codex management; Travis retention-boundary decision"
-parallel_lane: "accounting-compact-values"
-write_scope: "codex-rs/state/src/runtime/accounting_lifecycle.rs, codex-rs/state/src/runtime/accounting_compact_values.rs, codex-rs/state/src/runtime/accounting_compact_values_tests.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/compact-values-increment.md"
-integration_gate: "Codex management reviews exact codec/composition, serializes child registration and reruns state/governance tests on combined tree. No retention mutation, production, worker commit/merge/push or live collection."
+owner: "Codex accounting latest-quote lane"
+parallel_lane: "accounting-latest-quote"
+write_scope: "codex-rs/state/src/runtime/accounting_estimates.rs, codex-rs/state/src/runtime/accounting_latest_quote_tests.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/latest-quote-increment.md"
+integration_gate: "Codex management reviews exact reader/no-repricing proof, serializes sibling test registration and reruns state/governance tests on combined tree. No retention mutation, production, worker commit/merge/push or live collection."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
 branch: "workstream/accounting-pf60-s01-20260911"
-base_commit: "c8d46d7097d27a75c0cad51049468ea172f277c2"
+base_commit: "99001e9b79676f78b6bd941125c2a8fcfca6d90e"
 depends_on: "PF-60-S01"
 created: 2026-09-09
 updated: 2026-09-11
@@ -21,13 +21,13 @@ updated: 2026-09-11
 
 S01 is archived; journal/quotation/storage/contributions/deletion are integrated.
 Exact compact values are reviewed/integrated; the worker is closed and previous
-literal scope frozen. No current native writes. The
+literal scope frozen. The next reader starts after allocation review/checks. The
 [retention handoff](../../../research/agent-cost-accounting/retention-design-handoff.md)
-records the newly delivered boundary-day decision and gated next design/test work.
+records approved daily expiry; [latest-quote allocation](../../../research/agent-cost-accounting/latest-quote-allocation.md) owns the new exact mandate.
 
 ## Execution mandate
 
-- Next: record retention-boundary answer and manager's reviewed exact mutation allocation before dispatch. Full S02 still owes compaction/retention, native owner/admission wiring and complete goldens.
+- Next: caller-transaction latest quote using immutable bindings without repricing or writes. Full S02 still owes compaction/retention, native owner/admission wiring and complete goldens.
 - Excludes: Changing prices, rebilling historical customers, collecting prompts, restoring legacy Plan allowances, or silently converting allowance to cash.
 - Budget proposal: 2–4 builder-days plus independent testing; not a commitment. Stop and re-slice if the bound is exceeded.
 
@@ -40,19 +40,20 @@ records the newly delivered boundary-day decision and gated next design/test wor
 ## Code boundaries
 
 - Existing, read before work: `codex-rs/state/migrations/0041_provider_request_cache_usage.sql`; `codex-rs/app-server/src/request_processors/token_usage_replay.rs`; `codex-rs/tui/src/chatwidget/usage.rs`; `codex-rs/tui/src/token_usage.rs`.
-- Previous output: front-matter paths are frozen B1 scope, not a new allocation. Parent must specify/review exact paths before any retention mutation.
+- Output: front-matter paths are the three-file reader allocation; reviewed B1 paths remain frozen. Parent must separately allocate any retention mutation.
 - Tests/evidence: accepted compact-values receipt; preserve it. Native ABI, dependencies, production migrations and collectors remain excluded.
 
 ## Preconditions
 
 - [x] Plan active under Travis's standing continuation authority; reservation transferred from completed S01, no fourth lane.
 - [x] S01 accepted/archived after defaults approval, combined-tree fixture proof and independently reviewed technical handoff.
-- [x] Exact worker/branch/base and four-file B1 scope match plan; parent must clean-fast-forward and record launch HEAD at dispatch.
+- [x] Exact worker/branch/base and three-file reader scope match plan; parent must clean-fast-forward and record launch HEAD at dispatch.
 - [x] Travis approved the default policy; synthetic/local tests only, no billing/live collection. Bound this allocation to one worker, at most 500 non-test lines, one independent review plus scoped corrections; no exhausted allowance reset.
 - [x] Parent inspected DayTotals/Decimal visibility and amount/rate parsing distinction; B1 is now reviewed and tested, receipt below.
 
 ## Done
 
+- [x] Travis approved conservative UTC-day-start+365-day aggregate expiry; no reapproval needed. Detail90/replay365 policies unchanged; S03 requested range/interval filters remain draft.
 - [x] First test-only journal and native SQLite regressions reviewed clean and integrated at c33d47f6c (worker 3f39d7a65); 202 state tests pass on combined tree. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/first-increment.md).
 - [x] Real on-disk close/reopen, duplicate/reordered revision, rollback, concurrent writer, unknown/zero and partial Anthropic regressions pass; no process-kill or production claim.
 - [x] Exact quotation e8ffdad4e reviewed clean and integrated at 486d2fb94; 214 state tests pass there. Prospective snapshots, exact arithmetic/half-even, unknowns and journal replay covered. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/exact-pricing-increment.md).
@@ -64,7 +65,7 @@ records the newly delivered boundary-day decision and gated next design/test wor
 
 ## Remaining
 
-- [ ] Record Travis's answer to the newly delivered conservative daily-expiry question; keep the 90-day detail and exact 365-day replay policies unchanged. No silent early loss or extended retention.
+- [ ] Implement and prove the exact latest-quote reader allocation; preserve immutable bindings, validate all versions and leave all rows unchanged.
 - [ ] Manager resolves daily/rolling expiry coverage, stale/unquoted source and late-import semantics before allocating any compaction mutation; no repeated defaults question.
 - [ ] After reviewing the first increment, manager allocates production migration/dispatch/presence/price/retention wiring and complete S02 golden tests separately; do not broaden this worker's scope.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
