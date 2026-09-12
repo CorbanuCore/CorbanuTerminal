@@ -117,8 +117,9 @@ Root AGENTS.md's September 12 delegation lets the named integrator extend review
 allowances to unblock work, preserving prior usage and recording each extension.
 One fresh independent review of a material candidate plus scoped corrections is
 normal, not repeated reviews of unchanged clean code. Move on when reviews have
-no substantive unresolved issues. The security owner retains sole execution
-ownership; only review-budget/time holds may be lifted by this delegation.
+no substantive unresolved issues. The security owner retains sole implementation
+ownership; applicable functional acceptance is independently executed under the
+root policy. Only review-budget/time holds may be lifted by this delegation.
 Main merges/pushes, releases, deployments, live Task Node
 actions, new product contracts and paid-service commitments still need their
 separate authority. Current assignments/evidence are in the
@@ -130,8 +131,9 @@ separate authority. Current assignments/evidence are in the
 4. Execute only `Remaining` items; move verified work to `Done` with `[x]`.
 5. Run formatting before final affected tests and true-TUI QA.
    For user-facing work, collect the root policy's code-blind functional design
-   before disclosing test results, then execute its cases and reconcile every
-   disposition before human handoff. Link the record and shared review budget.
+   before disclosing test results, then assign independent permission-isolated
+   execution and reconcile every disposition before human handoff. Link schema-2
+   execution/isolation receipts, separate evidence review and shared review budget.
 6. Complete every verification and exit-evidence checkbox.
 7. Set status to `completed`, move the file to `archive/<plan-slug>/`, and remove
    it from current MkDocs navigation.

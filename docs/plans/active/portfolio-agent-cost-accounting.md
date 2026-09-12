@@ -210,6 +210,17 @@ All records belong to the single feature **PF-60**. Dependencies are hard prereq
 3. **Inspectable run and campaign totals:** The user can explain each displayed total using constituent requests without inspecting storage.
 4. **Cost-accounting acceptance and handoff:** All cost flows pass on one recorded binary; unknown/estimated values remain visibly distinct.
 
+## Independent functional execution — September 12
+
+The next applicable user-facing handoff follows the mandatory
+[isolated execution gate](../../../qa/code-blind-functional/isolated-execution.md).
+The named integrator owns packet/isolation provisioning and separate executor
+and reviewer assignments; implementation owners do not execute acceptance cases.
+Record increment-specific internal-only N/A with later functional gate, not a
+plan-wide exemption. Missing isolation is manager work, not unanswered approval.
+Existing evidence stays historical; dependencies, feature flags and live authority
+are unchanged. See the linked rollout table for this lane's next acceptance.
+
 ## Automated evidence
 
 - Every sprint: `python3 docs/plans/check.py; python3 docs/sprints/check.py` from repository root; `git diff --check`.

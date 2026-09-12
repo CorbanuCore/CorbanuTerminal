@@ -234,6 +234,17 @@ drafts. The manager chooses one eligible sprint at promotion. Only fixture-drive
 QA and endpoint setup instructions are allocated; live control, deployment and
 inference qualification stay gated by explicit target and data permission.
 
+## Independent functional execution — September 12
+
+The next applicable user-facing handoff follows the mandatory
+[isolated execution gate](../../../qa/code-blind-functional/isolated-execution.md).
+The named integrator owns packet/isolation provisioning and separate executor
+and reviewer assignments; implementation owners do not execute acceptance cases.
+Record increment-specific internal-only N/A with later functional gate, not a
+plan-wide exemption. Missing isolation is manager work, not unanswered approval.
+Existing evidence stays historical; dependencies, feature flags and live authority
+are unchanged. See the linked rollout table for this lane's next acceptance.
+
 ## Automated evidence
 
 Focused Python/governance suites, negative HTTP fixtures, retained last-good

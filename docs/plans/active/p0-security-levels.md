@@ -1243,6 +1243,17 @@ index rather than inherited historical snapshot arithmetic.
    finished-only guidance and release/benchmark evidence. Planning completeness
    is not implementation, release readiness or a promised ship date.
 
+## Independent functional execution — September 12
+
+The next applicable user-facing handoff follows the mandatory
+[isolated execution gate](../../../qa/code-blind-functional/isolated-execution.md).
+The named integrator owns packet/isolation provisioning and separate executor
+and reviewer assignments; implementation owners do not execute acceptance cases.
+Record increment-specific internal-only N/A with later functional gate, not a
+plan-wide exemption. Missing isolation is manager work, not unanswered approval.
+Existing evidence stays historical; dependencies, feature flags and live authority
+are unchanged. See the linked rollout table for this lane's next acceptance.
+
 ## Automated evidence
 
 Run fix and formatting tools before the final affected tests.

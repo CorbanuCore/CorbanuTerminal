@@ -85,7 +85,7 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - [ ] Add named `pf_27_s01` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
 
 ## Verification
-
+- [ ] Apply [independent isolated execution](../../../../qa/code-blind-functional/isolated-execution.md) to affected functional handoff; record schema-2 proof or integrator-accepted internal-only N/A and later gate. Historical tests are not upgraded.
 - [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
 - [ ] Focused: `cd codex-rs && just test -p codex-secret-broker pf_27_s01 && just test -p codex-core pf_27_s01`; confirm tests actually ran.
 - [ ] Integration: full affected crate suites via `just test -p <affected-crate>`; update Bazel locks when manifests change.

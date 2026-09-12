@@ -85,6 +85,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [ ] Manager receives reviewed commit/evidence and controls source-sync cutover; existing remote service stays untouched by worker.
 
 ## Verification
+- [ ] Apply [independent isolated execution](../../../../qa/code-blind-functional/isolated-execution.md) to affected functional handoff; record schema-2 proof or integrator-accepted internal-only N/A and later gate. Historical tests are not upgraded.
 - [ ] Focused: `python3 -m unittest discover -s scripts/initiative_control -p 'test_*.py'`; install only pinned requirements in a disposable venv.
 - [ ] Native: session_validity plus existing delivery/recovery selectors, full crate via just test and normal-library check after guarded formatting; production-compiled private module, no public caller.
 - [ ] Governance: `python3 docs/plans/check.py`, `python3 docs/sprints/check.py`, `git diff --check`.
@@ -93,7 +94,6 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [ ] Named human accepts dashboard/recovery and first-live-event evidence; all protected/financial actions remain excluded.
 
 ## Exit evidence
-
 - [ ] Port commit, hashes, actual nonzero test counts, negative cases and candidate/contract pins recorded.
 - [ ] Historical IDs, pending queue and receiving state reconciled without changing old receipts.
 - [ ] Human/live gates complete before marking sprint completed or allowing PF-79 readiness.

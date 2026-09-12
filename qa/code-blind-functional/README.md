@@ -1,4 +1,4 @@
-# Code-blind functional test design
+# Code-blind functional design and isolated execution
 
 Catch ordinary user-visible failures before asking a human to test a feature.
 Policy is owned by [AGENTS.md](../../AGENTS.md#code-blind-functional-test-design).
@@ -40,8 +40,12 @@ the design before showing it implementation tests/results; do not include secret
 Amendments are additive and explain which original case they supersede. Keep the
 original design and rerun affected tests after any accepted expectation change.
 
-The implementation owner turns applicable cases into durable regression tests
-and real-key TMUX/native workflows. Test the final packaged executable, matching
+The implementation owner may add durable regression tests and fix defects, but
+must not perform the acceptance execution. Dispatch a separate fresh-context
+executor using [the executor prompt](executor-prompt.md) after the coordinator
+has verified the [isolated execution contract](isolated-execution.md). Supply
+only frozen cases, neutral navigation, test fixtures and read-only packaged assets.
+Neither the coordinator nor implementer may coach a preferred outcome. Test the final packaged executable, matching
 helpers and actual launcher path—not a different binary with the same version.
 Cover both clean setup and representative existing profiles; enumerate platform
 and profile variants as distinct case IDs when outcomes differ. Use synthetic
@@ -59,7 +63,8 @@ out of scope with that acceptance; do not quietly delete them.
 
 ## 3. Check evidence before human handoff
 
-Give an independent agent (normally the same designer) the frozen proposals,
+Give an independent agent (normally the same designer, never the executor or
+implementer) the frozen proposals,
 final candidate manifest, dispositions and execution evidence, still without
 source code. Ask it to verify that evidence demonstrates each expected outcome,
 that no case vanished, and that platform/profile variants and prerequisites are
@@ -88,7 +93,9 @@ stale candidate references, unresolved failures/prerequisites, an unaccepted
 scope exclusion, absent independent evidence check or an exceeded review budget.
 It never executes an artifact, reads a credential store, modifies a save or
 checks human-acceptance boxes. Its success is structural traceability—not proof
-that an agent was genuinely blind or that a result is truthful.
+that an agent was genuinely blind or that a result is truthful. Schema 2 also
+requires per-case independent execution identities and candidate-bound isolation
+receipts. Legacy records remain history and cannot pass the stronger current gate.
 
 Only after the evidence check and checker pass may the owner call this feature
 ready for unqualified human testing. A user-approved limited test remains labeled
@@ -96,7 +103,14 @@ limited and the checker remains non-green for its blocked cases. Copy unresolved
 items into the human guide, not into its pass count. Existing release-authority
 exceptions in AGENTS.md are unchanged.
 
-## Adoption record
+## September 12 isolated-execution adoption
+
+Travis explicitly made independent, permission-isolated execution mandatory.
+[Rollout and recovered pilot](isolated-execution.md#rollout-and-recovered-pilot)
+record what exists, what does not, and each active lane's next gate. No historical
+pilot, instruction-only native run or owner-executed case is relabeled compliant.
+
+## September 10 historical adoption record
 
 Authorized September 10, 2026 following repeated provider/model and native
 credential-prompt misses. This is a development-process change, not an application
@@ -105,7 +119,7 @@ future user-facing work here. Existing PF-58 results predate this procedure;
 they have not been relabeled as independently designed or human-accepted. Its
 already-used five reviews are not reset by this amendment.
 
-Validation of this process implementation: 13 checker regression tests pass;
+Historical validation of the original process implementation: 13 checker regression tests passed;
 the portable skill mirror and skill validator pass; plan validation passes.
 The global sprint checker still reports pre-existing PF-43/44/45 identifier,
 link and execution-order conflicts, unrelated to this amendment. No Rust build

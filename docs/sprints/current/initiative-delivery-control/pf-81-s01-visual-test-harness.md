@@ -65,7 +65,7 @@ No additional agent/reviewer is allocated. Existing beta drafts are unchanged.
 - [ ] Document seeded successes/failures, cancellation and fresh-start recovery; never relabel synthetic or denied native cases as real product passes.
 
 ## Verification
-
+- [ ] Apply [independent isolated execution](../../../../qa/code-blind-functional/isolated-execution.md) to affected functional handoff; record schema-2 proof or integrator-accepted internal-only N/A and later gate. Historical tests are not upgraded.
 - [ ] Focused planned command: `python3 -m unittest discover -s qa/visual-test-harness -p 'test_*.py'`; report actual nonzero test count.
 - [ ] Cover invalid/unknown actions and keys, shell payloads, stale frames, coordinate bounds, malformed/oversize responses, timeout, endpoint denial, retry caps and cancel without another action.
 - [ ] Prove fixture mode cannot access the network, credentials or native surfaces; restart does not silently replay an action.

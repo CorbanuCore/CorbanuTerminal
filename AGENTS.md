@@ -2,8 +2,8 @@
 
 | Field             | Value                                                                                                                    |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Policy version    | 1.6                                                                                                                      |
-| Updated           | 2026-09-10                                                                                                               |
+| Policy version    | 1.7                                                                                                                      |
+| Updated           | 2026-09-12                                                                                                               |
 | Policy owner      | Lead developer, as assigned in the [product roles table](docs/corbanu-product-spec.md#ownership-and-decision-rights)     |
 | Product authority | The decision roles in the product specification                                                                          |
 | Amendment rule    | Changes to product scope or hard release gates require the product decision process defined in the product specification |
@@ -124,6 +124,16 @@ For non-user-facing work, record a reasoned not-applicable decision.
 - Freeze its original, prioritized starting-state/action/observable-result cases
   before comparing them with implementation tests. Preserve ambiguities and
   subsequent amendments; do not coach it toward a preferred answer.
+- September 12, 2026 amendment authorized by Travis: acceptance execution must
+  use a separate fresh-context, code-blind agent, not the implementer, with only
+  frozen human cases, neutral navigation instructions and the exact read-only
+  binary package/assets. A binary-only working directory or prompt restriction
+  alone is insufficient: enforce filesystem, tool, process/IPC and network
+  boundaries; deny repository/history/prior findings and real credential access.
+  Record negative access probes from the actual executor and its children,
+  positive package/PTY controls, isolated per-run state and mediated inference.
+  Missing enforcement blocks applicable functional handoff, not unrelated
+  internal implementation. Never bypass a tool denial to complete a test.
 - Map every proposed case to execution evidence or an explicit disposition.
   Exercise the exact packaged candidate through real keys and representative
   fresh/existing profiles on applicable platforms. Screenshots alone cannot
@@ -133,10 +143,16 @@ For non-user-facing work, record a reasoned not-applicable decision.
   and recorded acceptance by product authority, not unilateral deletion by the
   implementing agent. A human may explicitly agree to limited testing around
   a named prerequisite; preserve that limitation rather than calling it passed.
+- The evidence reviewer must be independent of both implementer and executor;
+  the original designer may review. Preserve raw attempts, timeouts, fixture
+  defects and separate fresh replays; corrections never overwrite old results.
+  Internal-only stages need a reasoned, integrator-accepted N/A with the later
+  functional gate named. Unit tests cannot qualify an affected user workflow.
 - Normally use one independent design pass and one brief evidence check, both
   charged to the existing per-track review budget (default maximum five total,
   including code/external reviews). Do not reset the budget for this step.
-  Additional reviews may be authorized by the named integrator under the
+  Record execution sessions/cost separately; execution is mandatory test work,
+  not an additional opinion review. Additional reviews may be authorized by the named integrator under the
   September 12 delegation below; a spent budget never waives a required gate.
 
 ### Integrator review discretion
