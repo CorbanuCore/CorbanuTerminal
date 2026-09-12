@@ -1,0 +1,18 @@
+{
+  "findings": [
+    {
+      "title": "External-loader tag denial test cannot distinguish vocabulary rejection from missing DT_NULL",
+      "body": "In `pf_27_s01_elf_profile_dynamic_vocabulary_and_termination`, the first loop writes the external/unknown tag (DT_NEEDED, RPATH, RUNPATH, FILTER, AUXILIARY, AUDIT, DEPAUDIT, 0xdead) at offset 400 while the fixture's PT_DYNAMIC size remains 32 bytes (two entries). That leaves the table with no DT_NULL terminator, so `inspect` would deny even a fully supported tag via `require(terminated && pie)`. The assertion therefore passes for the wrong reason and does not prove the contract's \"each external-loader tag denied independently\" row. The duplicate-FLAGS_1 case (`put(400, 0x6ffffffb)`) has the same shape. The later supported-tag loop already shows the correct pattern (size 48 with a trailing zero entry); apply that to these cases so the vocabulary match arm is what is actually exercised.",
+      "priority": "P3",
+      "confidence": 0.85,
+      "category": "test_gap",
+      "code_location": {
+        "file_path": "codex-rs/secret-broker-service/src/launch/manifest/elf_tests.rs",
+        "line": 122
+      }
+    }
+  ],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "The new parser is a narrow, bounded static-PIE format check: header offsets match the ELF64 layout, all file/virtual ranges use checked arithmetic, program-header count and dynamic-entry count are capped, reads are fixed-size seeks with sanitized errors, LOAD file/virtual overlap and single-backing for PT_DYNAMIC are enforced, PT_INTERP/unknown headers and unknown dynamic tags deny, and DT_NULL trailers must be all-zero. `inspect_static_profile` consumes the sealed image, re-verifies seals, parses from the held memfd (so pathname replacement after sealing cannot influence it) and drops the descriptor on any failure; the returned type is non-Clone and not publicly constructible. The sealed-test helpers, `IMAGE_LIMIT`, `denied`, `files::stamp/image_digest`, `KernelOps` and the `just fix/fmt/clippy/test` recipes referenced by the QA script all exist. The only issue found is a test-strength gap: the external-tag and duplicate-FLAGS_1 cases are denied by the missing terminator rather than by the vocabulary check, so they do not independently prove the contract row they are meant to cover. No security or functional defect that blocks landing.",
+  "overall_confidence": 0.82
+}

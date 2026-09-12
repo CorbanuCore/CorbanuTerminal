@@ -116,9 +116,12 @@ early six-hour reset is introduced; the next scheduled replenishment is11:25:45Z
 
 Receiving owner accepted runtime-elf-next-20260912.md and authorized +2 necessary
 source/security closeout passes: Astra High21 and Fable5.1High22 through existing
-review tooling/private TMUX. **2 reserved / 0 unreserved**, September12 11:35Z.
+review tooling/private TMUX. **2 used / 0 available**, September12 11:35Z dispatch.
 Review21 Astra High uses the established Codex helper; review22 Fable5.1High
 uses the established Corbanu wrapper. Both inspect new parser Rust9033b2ed over97d.
-Results pending; original outputs will be retained under runtime-elf-20260912.
+Originals under runtime-elf-20260912: Astra21 exit0/findings[]; Fable22 exit1,
+patch correct, sole P3 independently isolate dynamic-tag rejection tests.
+Test-only12-line correction635655c34 retains runtime unchanged; rerun in repaired/.
+Manager accepted direct evidence disposition after rerun, no extra review.
 History1–20, spent old contingency, six-hour anchor and scheduled replenishment
 are unchanged. This extension is not a reset or permission for unchanged reviews.

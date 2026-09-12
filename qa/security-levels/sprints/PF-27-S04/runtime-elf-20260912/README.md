@@ -1,4 +1,4 @@
-# PF27 sealed-byte format inspection — tests complete, reviews pending
+# PF27 sealed-byte format inspection — qualified, integration disposition pending
 
 Frozen source1b7ce9ea0, Rust `9033b2ed07c12d1375c3f817d864a031acf952b5`.
 Five exact Rust paths,458 additions (197 runtime/wiring,261 tests). RTX final
@@ -38,3 +38,17 @@ formatting only was synchronized back. Preserve initial outputs; the subsequent
 pathname-replacement test update requires final-tree rerun before closeout.
 Reviews are limited to the two manager-authorized new-parser passes. No UX,
 code-blind designer or live-repository benchmark applies to this uncalled API.
+
+Astra21 is clean (exit0/findings[]). Fable22 returned exit1, patch correct, sole
+P3: external/duplicate dynamic-tag rejection fixtures also lacked DT_NULL.
+The12-line test-only correction635655c34 gives those tables48 bytes, leaving a
+zero terminator; a supported-tag positive control proves validity before each
+mutation. An explicit separate missing-terminator case remains. Runtime is
+byte-identical to both reviews; new Rust tree2edd1107d9590195956a30cf2b6a84c6cfb7c0f0.
+The manager will inspect the repaired evidence directly; no extra opinion or
+clean-Fable claim. Original JSON/text/exit files are retained verbatim.
+Repaired final-tree proof: default3/synthetic44/explicit artifact1/affected356,
+scoped lint and fix/format pass with unchanged source; TMUX parser-exit0.
+See rtx/repaired, including the literal12-line test-only-repair.patch. Runtime
+diff from reviewed3d98b23de to635655c34 is empty; five Rust files now470 additions
+(197 runtime/wiring,273 tests). Two existing affected skips remain disclosed.
