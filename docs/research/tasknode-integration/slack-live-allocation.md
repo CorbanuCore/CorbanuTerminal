@@ -59,6 +59,20 @@ Code-blind design/evidence remain required before human-ready handoff, not waive
 
 ## Implementation contract
 
+18:14 manager review05 disposition: candidate2558/990 passed234 tests; Astra
+returned one accepted P2 in qualify(): a failed initial auth attempt leaves
+hold=qualifying but no binding/session, so retry demands a session listen cannot
+create. Literal qualify/gate/listen paths confirm this same-owner setup recovery
+bug. Authorize a narrow provably-never-qualified retry, preserving journals,
+fence and all existing event/attempt/lifecycle evidence. Never waive an actual
+outage, missing fence or prior binding/session. Test transient auth/credentials/
+scope failures then successful retry plus adverse state denying that exception.
+Same seven worker files; no reset/migration/recovery-send architecture. Increment
+allowance by100total/40non-test for these necessary recovery regressions:
+worker2700/1140, unchanged parent650/500, combined3350/1640. Preserve all234tests
+and review01–05 history. One changed-candidate review06 authorized; any remaining
+contract/scope break returns to the manager, not a renewed user approval.
+
 September12 17:22 manager disposition after the source-sync freeze released:
 approve ONLY the listener-lifecycle portion of the private recovery proposal,
 not its new quarantine/reaffirmation/recovery-send/migration architecture.

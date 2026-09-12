@@ -33,6 +33,13 @@ implementation_worktrees:
 
 # 3. Task Node integration and delivery control
 
+18:14 review05 found a same-owner initial-qualification retry deadlock after
+transient auth failure. Manager authorizes its narrow correction and recovery
+regressions under the [allocation](../../research/tasknode-integration/slack-live-allocation.md):
+same seven paths, worker2700/1140, parent650/500, combined3350/1640, one necessary
+changed-candidate review06. No erased journals, expanded recovery architecture
+or live authority; preserve234 passing tests and all earlier review history.
+
 17:22 manager classification: the [allocation](../../research/tasknode-integration/slack-live-allocation.md)
 now authorizes the narrow lifetime-lock/session-lease correction only, same
 seven worker paths. Worker2600/1100, combined3250/1600 and one changed-candidate

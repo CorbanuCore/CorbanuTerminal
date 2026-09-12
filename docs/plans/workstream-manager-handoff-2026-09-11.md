@@ -2,6 +2,12 @@
 
 ## Current status source — September 12, 18:09 UTC
 
+18:14 follow-up: Slack review05 returned one accepted initial-qualification
+retry deadlock. James is dispatched on the narrow same-owner correction and
+regressions; one changed-candidate review06 is allocated. Current bounds and
+preserved history are in slack-live-allocation.md. This supersedes the running
+review05 observation below; live is OFF and no human decision is needed.
+
 No human decision is open. The isolated-adapter approval is resolved; do not
 present a publication click or renewed PF27 approval request. Security owner
 closed adapter stage fb7523f4b after clean Astra23/Fable24 and real RTX proof.
