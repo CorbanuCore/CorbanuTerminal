@@ -111,7 +111,7 @@ pub(super) struct Observation {
     pub patch: Patch,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
 pub(super) struct Usage {
     pub input: Option<i64>,
     pub noncached: Option<i64>,

@@ -7,6 +7,7 @@ use super::types::replay;
 use anyhow::Context;
 use anyhow::ensure;
 use serde::Deserialize;
+use serde::Serialize;
 use std::collections::HashSet;
 use uuid::Uuid;
 
@@ -118,32 +119,32 @@ impl Decimal {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 struct DisplayAmount {
     text: String,
     rounded: bool,
     nonzero_sub_micro: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 enum Currency {
     #[serde(rename = "USD")]
     Usd,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 enum Unit {
     PerMillionTokens,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 enum SourceKind {
     ProviderPublished,
     NativeCatalog,
 }
 
 /// Caller-supplied synthetic approval evidence, not production authorization.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Snapshot {
     id: Uuid,
@@ -161,7 +162,7 @@ struct Snapshot {
     effective_end_ms: Option<Count>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct Rates {
     noncached: Option<Decimal>,
@@ -192,7 +193,7 @@ impl Snapshot {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 enum BucketQuote {
     Priced(Decimal),
     MissingUsage,
@@ -200,7 +201,7 @@ enum BucketQuote {
 }
 
 /// An observation-bound estimate has no terminal-coverage or billing claim.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 struct ObservationQuote {
     attempt: Attempt,
     observations: Vec<Observation>,
@@ -281,3 +282,6 @@ fn quote_observations(
 
 #[path = "accounting_pricing_tests.rs"]
 mod tests;
+
+#[path = "accounting_estimates.rs"]
+mod storage;
