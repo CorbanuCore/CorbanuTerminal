@@ -23,6 +23,12 @@ Review23 reserved/dispatched September12 17:49UTC: Astra High, adapter source
 23:25:45Z now1 used/4 available; history1–22 retained. Review24 Fable remains
 planned, not yet dispatched.
 
+Review23 completed exit0/findings[]; adapter source/evidence judged correct under
+its explicit preconditions. Review24 reserved/dispatched September12 17:52UTC:
+Fable5.1High through established Corbanu wrapper in private TMUX, unchanged
+Rust2d270c5c plus final OS receipts. Current window2 used/3 available; no further
+pass planned absent an actionable finding.
+
 Adapter stage allocation September12 17:29UTC: current scheduled window is
 17:25:45Z through23:25:45Z, five available and zero dispatched. Plan two necessary
 passes (next numbers23 Astra High,24 Fable5.1High through Corbanu/TMUX), reserving
