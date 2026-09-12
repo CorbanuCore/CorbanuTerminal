@@ -30,6 +30,13 @@ implementation_worktrees:
 
 # 2. Accounting — unified agent cost and usage
 
+21:48 manager continuation: first policy repair193/101 passes575full/105focused
+and normal check. Eight newly exposed lint errors in the external normal-library
+accounting_store test are now explicitly added as the eighth path in the same
+[correction allocation](../../research/agent-cost-accounting/policy-lint-repair-allocation.md).
+Use existing public SQLite shim and Result propagation; no new API/test weakening.
+Same450/225 ceiling and unspent first review; implementation resumes, no human hold.
+
 20:57UTC manager handoff: reviewed Anthropic code is integrated; receiving71
 focused plus840shared tests and normal-library check pass. Existing-policy lint
 fails in accounting fixtures/schema and preexisting API telemetry. The current

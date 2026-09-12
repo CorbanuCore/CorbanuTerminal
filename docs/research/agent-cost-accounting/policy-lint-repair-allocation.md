@@ -1,5 +1,30 @@
 # PF-60-S02 — receiving policy-lint repair
 
+## 21:48 heartbeat — external normal-library test correction
+
+First seven-file candidate returned193total/101non-test,575 full and105 focused
+tests pass, normal check passes. Scoped Clippy101 now exposes eight errors in
+codex-rs/state/tests/accounting_store.rs: direct connect_with plus seven unwraps.
+Manager read the full external test and literal diagnostics. Add ONLY that eighth
+path to this same correction; same worker/branch/base, target300/150 STOP450/225,
+no review spent yet. Original frozen candidate/logs remain preserved.
+
+Use the existing PUBLIC SqliteConfig::open_read_write_pool and an owned acquired
+connection, explicitly releasing/closing the pool/connection before reopen.
+Keep required write-capable schema-fault tests, foreign keys, original native
+owner IDs/time/amounts, all assertions and normal-library linkage. No private
+implementation include, cfg(test) dependency, new production helper/API or lint
+allowance. Replace fallible fixture unwraps with Result/context propagation and
+call-site ?, not alternate/default values. Existing fixture databases are
+disposable; this does not change production SQLite options. Verify any changed
+fixture connection semantics and close/reopen behavior with the full target.
+
+Then fmt, all four external cases and full575 state/API/TaskNode gate, scoped
+six-crate existing-policy Clippy and normal check. Preserve first101 and575/105
+receipts, no baseline waiver. First independent code review remains unspent;
+freeze the whole corrected eight-file candidate before parent dispatch. Any
+new path, public API or ceiling overrun returns to manager before edits.
+
 Manager allocation, September12. Bounded corrective unit within active PF-60,
 specification **Product measurement**, “No commercial performance numbers have
 been supplied.” Restore existing lint policy without changing accounting,

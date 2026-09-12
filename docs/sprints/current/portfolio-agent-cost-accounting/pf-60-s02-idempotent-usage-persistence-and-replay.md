@@ -7,8 +7,8 @@ plan_feature: "PF-60"
 execution_order: 2
 owner: "Codex accounting policy-repair lane"
 parallel_lane: "accounting-policy-repair"
-write_scope: "codex-rs/state/src/runtime/accounting_store.rs, codex-rs/state/src/runtime/accounting_store_tests.rs, codex-rs/state/src/runtime/accounting_retention_atomic_test_support.rs, codex-rs/state/src/runtime/accounting_native_tests.rs, codex-rs/state/src/sqlite.rs, codex-rs/codex-api/src/telemetry.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/policy-lint-repair.md"
-integration_gate: "Accepted native receiving71+840 pass and normal check; existing-policy Clippy101 requires exact7-file policy-lint-repair-allocation.md. Target300/150 STOP450/225, one new review plus correction, prior failures preserved. Manager combined affected tests/lint; no S02/S03/live completion, no broad baseline waiver."
+write_scope: "codex-rs/state/src/runtime/accounting_store.rs, codex-rs/state/src/runtime/accounting_store_tests.rs, codex-rs/state/src/runtime/accounting_retention_atomic_test_support.rs, codex-rs/state/src/runtime/accounting_native_tests.rs, codex-rs/state/src/sqlite.rs, codex-rs/codex-api/src/telemetry.rs, codex-rs/state/tests/accounting_store.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/policy-lint-repair.md"
+integration_gate: "First correction193/101 passes575full/105focused/normalcheck; Clippy101 exposes external test lints. Manager adds eighth path under policy-lint-repair-allocation.md, same300/150target450/225STOP and unspent review+correction. Preserve tests/failures, no new public API or S02/S03/live acceptance. Manager owns combined proof."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-policy-repair-20260912"
 branch: "workstream/accounting-policy-repair-20260912"
 base_commit: "a89a48548f644a64cbb8cd9da090b5b75578c922"
@@ -19,7 +19,7 @@ updated: 2026-09-12
 
 # PF-60-S02 — Idempotent usage persistence and replay
 
-Current mandate: [repair receiving policy lint](../../../research/agent-cost-accounting/policy-lint-repair-allocation.md), exact seven-file scope/new checkout. Native accepted, receiving71+840/normal check pass; Clippy101 is corrective work. Original failures retained; late compact import prepared, not executable.
+Current mandate: [repair receiving policy lint](../../../research/agent-cost-accounting/policy-lint-repair-allocation.md), amended exact eight-file scope/same checkout. First575full/105focused pass; external-test Clippy101 is allocated corrective work. Original failures retained; late compact import prepared, not executable.
 17:22UTC: parent accepted review01's dropped role retry/timeout overrides P2 as
 in-scope; first correction queued after the matched baseline run. Same20 paths
 and existing allowance; native child override/mismatched-route proof required.
