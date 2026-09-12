@@ -3,8 +3,9 @@
 Internal synthetic increment only; not a protected service or human-test candidate.
 Product initiative PF-27 / sprint PF-27-S04 remains **in_progress**.
 The initial passing suite below was superseded by Astra30's buffered-EOF
-finding. The authorized repair now passes the full suite; corrective Fable32
-is pending. No final acceptance yet.
+finding. The authorized repair passes the full suite; corrective Fable32 found
+no blocking runtime defect. Its sole P3 table-count issue is corrected below.
+This increment is ready for manager receiving, not whole-product acceptance.
 Product authority: **Non-negotiable controls** — “Permit agents to reference
 credentials only by label; resolve them solely inside the trusted execution
 boundary.” No credential is used by this increment.
@@ -47,8 +48,16 @@ root `bazel-*` excluded the existing `bazel-parity.exit`. Accepted; the original
 exit0 is now force-added, and all repaired receipts are explicitly tracked.
 Both original review JSON/text/exit sets remain alongside this file. These are
 one in-scope runtime defect and one evidence defect, not a new contract.
-Manager authorizes one corrective Fable32 via the same Corbanu/TMUX helper after
-this repaired proof; no repeat Astra or additional opinion on clean code.
+Corrective Fable32 ran through the same Corbanu/TMUX helper after this repaired
+proof. Its original [JSON](fable32.json), [text](fable32.txt) and [exit1](fable32.exit)
+are retained: patch correct, no blocking runtime defect; only a stale eight/ten
+count in the case map. That documentation-only issue is now fixed against the
+actual ten-scenario test and repaired log. No runtime change or extra review.
+Do not misreport the helper as exit0. Invocation used `--engine codex`, the
+established Corbanu wrapper, `--model claude-fable-5-1-plan --thinking high
+--mode branch --base 6d770938c21f002dc572b084a1b428ad4a4379b0` with this README
+as the repo-relative prompt. It was dispatched21:27:12UTC in private
+`pf27admissionreview20260912:fable32` against proof freeze46dde9c6a.
 
 ## Initial frozen scope and candidate (retained history)
 
@@ -105,7 +114,8 @@ its automatic idle-server restart for the changed checkout are preserved.
 
 ## Required-case mapping
 
-All names below use the `pf_27_s01_admission_` prefix in the final admission log.
+All names below use the `pf_27_s01_admission_` prefix in the
+[repaired admission log](rtx/repair-tmux/admission.log).
 
 | Required behavior | Case suffix and observation |
 | --- | --- |
@@ -115,7 +125,7 @@ All names below use the `pf_27_s01_admission_` prefix in the final admission log
 | Success already formed, then cancellation/receiver loss | `late_success_and_lost_receiver_close_channels`: queued success cannot survive late cancellation or ticket drop; retained shutdown clone closes socket. |
 | Worker cannot deliver a formed success | `worker_lost_success_receiver`: receiver deliberately absent, real socket verification with private identity doubles forms a receipt, worker send fails, clone exists and socket closes. |
 | Credential/clone/identity/poll failures and pre-delivery cancel/deadline | `kernel_faults_and_pre_delivery_cancellation`: actual ENOTSOCK; process-isolated zero fd limit produces actual poll and clone EINVAL; explicit identity error and cancellation/deadline during identity work reject without installing any channel. Limits restored before assertions. |
-| Either remote EOF or process death, receipt or caller drop | `real_peer_eof_death_receipt_drop_and_caller_drop`: eight actual journal/policy cases; synthetic `e` closes remote writes while process stays alive, `x` exits; shutdown wakes the other role's blocked reader; both children reaped. |
+| Either remote EOF or process death, receipt or caller drop | `real_peer_eof_death_receipt_drop_and_caller_drop`: ten actual journal/policy cases, including empty EOF and buffered (unread-marker) EOF/death for both roles; synthetic `e` closes remote writes while process stays alive, `x` exits; shutdown wakes the other role's blocked reader; both children reaped. |
 | Actual pair pending result / deadline cleanup | `real_pending_ticket_and_deadline_reap_both`: no early reservation reuse, both real children reaped, unconsumed result cannot return a stale success. Pending means not consumed; the worker may already have formed its reply. |
 
 A pair and owner suites retain asymmetric signal/wait, late spawn, caller drop,
@@ -147,7 +157,7 @@ selected. These are preserved setup/test defects, not concealed product passes.
 
 Allocated **30 Astra High and31 Fable5.1 High through Corbanu/private TMUX** reviewed
 only this increment over accepted6d770938c. Both completed; their findings and
-dispositions are above. They were not repeat A reviews. Corrective32 is pending;
+dispositions are above. They were not repeat A reviews. Corrective32 is complete;
 see [ledger](../review-budget.md).
 
 Policy1.7 independent functional execution is accepted. Integrator-accepted N/A

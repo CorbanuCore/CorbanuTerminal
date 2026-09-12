@@ -18,6 +18,15 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Review32 dispatched21:27:12UTC and completedexit1: patchcorrect/no blocking
+runtime defect; independent checks confirm repairedhash/892lines/all18tracked
+zeroexits and logs. SoleP3 stale case-map count eight vs ten verified and fixed
+as documentation-only; no runtime change or additional opinion. Original
+descriptor-admission-20260912/fable32.{json,txt,exit} retained. Corrective
+extension used1/remaining0; no reset, no claim helperexit0. All1–32 preserved.
+StageB source7839f9f65/Rust5a4ee88b remains exact final tested source; qualified
+private increment handed to manager for receiving, no push/native permission.
+
 CorrectiveFable32 reserved September12 21:26UTC before dispatch, manager251074ef7.
 Frozen repairedsource7839f9f653a3471bb9bbed19ebc7bed43308bbe3/Rust5a4ee88b5fe4c9b946842a4709f9b88f85c54c79;
 review/size baseline remains6d770938c, measured892/same7paths/hard900. Actual

@@ -982,6 +982,17 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
+StageB private descriptor admission is qualified for manager receiving at
+source7839f9f653a3471bb9bbed19ebc7bed43308bbe3/Rust5a4ee88b5fe4c9b946842a4709f9b88f85c54c79,
+892changed lines/same7paths within amended900. [Literal proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-admission-20260912/README.md):
+all18 repairedexits0, admission8/tenactualpeer scenarios, fullservice59 with11
+exclusions explicitly covered, preservedA/adapter suites, strict scopedlint,
+read-onlyparity/source/locks and actual-key RTX TMUX pass. Astra30 P2 bufferedEOF
+reproduced/repaired; Fable31 missingreceipt fixed; Fable32 patchcorrect/exit1
+soleP3 tablecount fixed without runtime change or extra review. Originals
+preserved, no sourcepush/native/protected/product acceptance. Manager owns
+receiving/combinedproof and next allocation; policy1.7 N/A only this increment.
+
 StageB now allocated by manager67273f7e19f3d515086147c7f8408245e986369d after
 accepted combinedA63cbce998 proof. [Literal admission allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-admission-allocation-20260912.md):
 seven exact paths, hard900 additions/deletions against qualified6d770938c;
