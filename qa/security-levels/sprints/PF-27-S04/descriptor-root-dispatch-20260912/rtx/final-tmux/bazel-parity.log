@@ -1,0 +1,10 @@
+WARNING: Running Bazel server needs to be killed, because the following startup options are different:
+  - Only in old server: bazel(security-broker-compat-receiving-37f23b991) --workspace_directory=/home/travis/worktrees/security-broker-compat-receiving-37f23b991
+  - Only in new server: --workspace_directory=/home/travis/worktrees/security-broker-root-dispatch-20260912 bazel(security-broker-root-dispatch-20260912)
+Starting local Bazel server (9.0.0) and connecting to it...
+INFO: Invocation ID: 0f4678bf-07dd-487f-b72a-5ac50d9417d0
+WARNING: For repository 'platforms', the root module requires module version platforms@1.0.0, but got platforms@1.1.0 in the resolved dependency graph. Please update the version in your MODULE.bazel or set --check_direct_dependencies=off
+WARNING: For repository 'rules_cc', the root module requires module version rules_cc@0.2.18, but got rules_cc@0.2.20 in the resolved dependency graph. Please update the version in your MODULE.bazel or set --check_direct_dependencies=off
+ no actions running
+<root> (codex@_)
+

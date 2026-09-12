@@ -18,6 +18,15 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Descriptor-pair dispatch reviews35 AstraHigh and36 Fable5.1High Corbanu/TMUX
+reserved September12 23:14UTC, manager allocation23d8e54a1. Two scoped extension
+slots reserved / zero unreserved; actual dispatch timestamps/outcomes follow.
+Frozen sourcec7d48e4822293ec0899311be63fbd08848516ba0, Rustbd56b597e348d2924da21706c594c20a868bace4,
+base12e0bc2d8a6f207bddfa79916b3f2b2eb24f65c8. Final actual RTX TMUX28 command
+exits plus suite0, strict affected lint and invariant locks/source, actual
+six-case dispatch complete. Preserve historical1–34, all failures and original
+six-hour accounting; no reset, extra opinion, main/push or native authority.
+
 Reviews33/34 actually dispatched 2026-09-12 22:19:22 UTC and completed exit0,
 findings[], patch correct (Astra confidence0.92, Fable0.80). Both inspect the same
 frozen d776e938d/Rustb48e9c4f source and final evidence; no runtime changes or

@@ -1,0 +1,2 @@
+a510a0787db823bed77d55cd9860284fecf2aefe7e60efc329c50fdf426b48a4  /home/travis/worktrees/security-broker-root-dispatch-20260912/qa/security-levels/sprints/PF-27-S04/descriptor-admission-20260912/connector.c
+4b1e56b4bab25158d089197e5fe02c1523e9e52ad77075acba9c7ee96bb3fa17  /home/travis/security-round5/evidence/pf27-root-dispatch-20260912/final-tmux/connector
