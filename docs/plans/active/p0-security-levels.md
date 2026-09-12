@@ -667,6 +667,16 @@ the six-hour ledger governs later work. PF27-S04 remains in progress, with
 actual PF20 root wiring, native setup/containment and provider data-plane still
 open. No new principal, service or protected activation was installed.
 
+Next bounded source allocation is the [existing-root composition adapter](../../../qa/security-levels/sprints/PF-27-S04/root-composition-next-20260912.md):
+`secret-broker-service/src/root.rs`, separate `root_tests.rs`, library exports,
+one Linux dependency on existing `codex-protected-state`, and serialized lock
+parity within PF27's existing scope. Connect owned `TrustedChildRun` roles to
+unchanged PF20 existing-only factories and `serve_child`; preserve default exit78.
+The linked launch/argv/FD target is a subsequent synthetic probe contract, not
+implemented syntax or native deployment authority. No PF20/Core/Vault changes,
+identity dropping, listener creation or enrollment in this adapter step.
+Coordinate shared registrations with the other integration owners before edits.
+
 ## Round-five execution amendment — 2026-09-04
 
 The user authorized these three parallel agents and assigned integration to
