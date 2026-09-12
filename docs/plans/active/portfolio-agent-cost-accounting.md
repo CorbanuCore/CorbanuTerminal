@@ -27,12 +27,14 @@ implementation_worktrees:
 
 # 2. Accounting — unified agent cost and usage
 
-Latest15:19UTC: normal-library candidate's first two review findings corrected,
-286 state tests pass with one disclosed LEAK. Corrective review found a remaining
-production deletion timestamp/lock-order race. Mendel corrects it in the same17
-paths; manager explicitly grants2150total/1000non-test for that bounded proof,
-preserving original1900/950 and1703/1879 history. See the [allocation addendum](../../research/agent-cost-accounting/production-store-allocation.md).
-No code acceptance or collection enablement yet; full S02/S03 remain gated.
+Latest15:45UTC: normal-library store accepted at6b2dbcab5 and integrated into
+receiving9518184ac after clean independent review03. All367 combined state/TaskNode
+tests pass (one leaky, zero skipped,16.922s); worker287-test evidence and earlier
+failed reviews remain in the [receipt](../../../qa/portfolio/agent-cost-accounting/pf-60-s02/production-store-increment.md).
+Exact17-path candidate2057total/829non-test fits the specifically granted2150/1000
+correction allowance. Mendel prepares actual provider/runtime caller allocation;
+this preparation is manager-owned, not a new human blocker. Collection stays OFF;
+full S02/S03 remain gated. Earlier store allocation text below is historical.
 Older accepted native bridge and original allocation evidence follows.
 
 Current September12: native bridge accepted, exact six-file candidate `0eb98e8d3` integrated at `8725e1ff755a5fa974058f465f3553b3f9b884eb`; worker clean fast-forward verified. First independent Astra High `native-ownership-code-review.json/txt`, helper70866, exited0 clean. Parent receiving exec46485 `just test -p codex-state -p codex-tasknode-session` exited0:354/354passed,0skipped14.997s, nextest `ef047f72-80c9-4700-863d-1f1e253b5d75`; no final-summary LEAK,21fixture dead-code warnings(9duplicates). Parent governance3/115/126exit0. [Native receipt](../../../qa/portfolio/agent-cost-accounting/pf-60-s02/native-ownership-increment.md) preserves950total/227non-test and original worker failures/results; parent evidence above is separately attributed.

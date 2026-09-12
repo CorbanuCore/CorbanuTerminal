@@ -185,6 +185,14 @@ provider JSON, balance-as-invoice or post-hoc original-price invention.
 
 ## Remaining caller/import gaps and authority
 
+September12 15:45 receiving acceptance: exact17-path candidate6b2dbcab5 merged at
+9518184ac. First reviews81230/13225 found concrete races/overflow; two bounded
+corrections retained, review03/helper85655 exited0 clean. Final2057total/829non-test
+fits2150/1000 allowance; earlier1900/950 and1703/1879 histories stay intact.
+Worker287passed; parent combined state/TaskNode367passed,1leaky,0skipped16.922s.
+No repeat review of unchanged clean store. Next actual runtime allocation is
+manager-owned preparation, not extra product approval or automatic S03 activation.
+
 Real collection stays OFF and outside this store unit. Core run_sampling_request
 must own logical identity across retries; core/client.rs adds auth/history/413
 retry loops, and codex-api/endpoint/session.rs sends after auth inside transport

@@ -1,12 +1,13 @@
 # Workstream continuation — September 11
 
-## Current status source — September 12, 14:55 UTC
+## Current status source — September 12, 15:45 UTC
 
 Use [current workstream handoffs](../../qa/initiative-control/status-display/current-handoffs.md)
 for current assignments, reviews and publication. Approval recovery is resolved:
-no click required. Offline Slack recovery is reviewed/integrated; James implements
-real Slack transport and the native-agent manager bridge fromba3a2457c. Mendel
-corrects two independently found production-store issues; collection remains OFF.
+no click required. Accounting store is reviewed/integrated at9518184ac, with367
+combined native tests passing (one leaky). Mendel prepares actual runtime caller
+allocation. James corrects four independently found Slack ingress/recovery issues
+and restores the agreed scope/listener behavior; live Slack and collection stay OFF.
 Manager owns shared registration and qualified connection/HTTPS/phone reply/ACK,
 not another generic contract stage. PF27's isolated-adapter question stays open.
 Older checkpoint and

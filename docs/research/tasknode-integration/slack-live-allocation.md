@@ -53,6 +53,23 @@ Code-blind design/evidence remain required before human-ready handoff, not waive
 
 ## Implementation contract
 
+September12 15:45 correction allocation: first frozen seven-path candidate was
+1381total/688non-test with198 passing Python tests, not live qualification.
+Independent review46183 found four in-scope blockers: lost ingress hold under
+lock contention, outbound bot echoes stopping reception, expired qualification
+preventing retained-event drain, and threaded-parent receipt recovery. Manager
+read/classified these and dispatched one coherent first correction to James.
+Also restore the agreed OAuth scope boundary and separate first60s proof from
+ongoing manager-owned listening with bounded reconnect; production time must
+advance. No new Slack permissions or live actions are authorized by this repair.
+Integrator grants worker1900total/900non-test, parent600/450 reserve, combined
+17-path ceiling2500/1350 for this correction plus shared registration. Preserve
+original1800/1000 target1900/1050 stop and all earlier counts/reviews. One scoped
+corrective review follows this changed candidate; no unchanged repeat review.
+Shared registration remains manager-owned and must receive independent combined
+review before acceptance; the integrator grants that one additional material-diff
+pass, without resetting earlier offline/code-blind/F01 review usage.
+
 1. Real synchronous `slack_sdk.WebClient.chat_postMessage` and built-in
    `slack_sdk.socket_mode.SocketModeClient`; no webhook fallback or new scheduler.
    Pin `slack-sdk==3.44.1`: [official package](https://pypi.org/project/slack-sdk/3.44.1/),

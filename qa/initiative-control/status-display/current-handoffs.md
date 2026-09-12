@@ -1,5 +1,15 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 15:45 UTC
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): normal-library store reviewed clean and integrated at9518184ac;367 combined state/TaskNode tests pass, one leaky. Mendel prepares the exact actual provider/runtime caller assignment. Collection remains OFF; S02 is not complete and S03 remains dependent. No new human blocker.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): first real-SDK candidate passed198 Python tests, but independent review found four ingress/recovery bugs. James is assigned their coherent correction plus the agreed narrow scopes and ongoing listener behavior. Manager owns shared registration, actual Slack/phone/agent-ACK qualification; live Slack is not operational.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): the [isolated-adapter question](pf27-launch-adapter-decision.md) remains the existing user decision, not dashboard publication approval. No approval is inferred from “press on.”
+
+Last verified publication15:23:11UTC, generationbuild-mla2tqxg, source21c8da489;
+remote and local private index/Facilities returned200. This update is queued for
+the normal Luna sync; no user click is needed. The dated observations below are history.
+
 ## Current observation — 15:19 UTC
 
 - [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): two earlier issues corrected with286 passing state tests; the next review found a production deletion-time race under concurrent accounting updates. Mendel is correcting it, with a specifically approved proof-size allowance. No new human answer required; collection OFF.
