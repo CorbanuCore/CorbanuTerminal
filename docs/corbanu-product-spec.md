@@ -477,6 +477,11 @@ and freshness; preserve the last good publication on failure. Task Node receives
 only explicitly mapped, supported progress; no automatic reward, signing,
 financial action or task-completion claim is implied.
 
+Facilities is the private static operator link index for the existing media
+interfaces on RTX PRO 6000 and Drone, with upstream repository links. Travis's
+September 12 brief requests preserving this page across dashboard source moves;
+it is not a model service or a claim of current service availability.
+
 On September 11 Travis authorized correcting stalled orchestration: the manager
 owns local receiving-branch integration, exact allocations within approved
 features, successor preparation and concrete decision escalation under the

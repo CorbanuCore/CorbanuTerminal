@@ -80,6 +80,44 @@ class ControlTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 control.read_file(path, Path(tmp))
 
+    def test_facilities_page_indexes_all_machine_interfaces(self):
+        with patch.object(socket, "create_connection", side_effect=AssertionError("static index must not probe services")):
+            body = control.facilities()
+        for name, endpoint in (("ComfyUI", "http://100.99.88.49:8188/"),
+                               ("YuE2 (YuE)", "http://100.99.88.49:7861/"),
+                               ("ACE-Step", "http://100.99.88.49:7862/"),
+                               ("RVC", "http://100.81.145.102:7865/"),
+                               ("ACE-Step fallback", "http://100.81.145.102:7866/")):
+            self.assertIn(name, body)
+            self.assertEqual(body.count(f'href="{endpoint}"'), 3)  # title, action, table
+        for repository in ("comfyanonymous/ComfyUI", "multimodal-art-projection/YuE",
+                           "ace-step/ACE-Step-1.5", "RVC-Project/Retrieval-based-Voice-Conversion-WebUI"):
+            self.assertIn(f'href="https://github.com/{repository}"', body)
+        self.assertEqual(body.count('<article class="test">'), 5)
+        self.assertIn("At a glance", body)
+        self.assertIn("Service availability is not checked", body)
+        self.assertNotIn("Verified during this publication", body)
+
+    def test_top_navigation_links_facilities(self):
+        for title in ("Initiative map", "Facilities", "Sprint document"):
+            self.assertIn('href="facilities.html">Facilities</a>', control.page(title, "", control.now()))
+
+    def test_facilities_published_atomically_and_failure_keeps_previous_page(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data = dict(documents={}, source={"collected_at": control.now()}, runs=[], problems=[])
+            with patch.object(control, "collect", return_value=data), patch.object(control, "overview", return_value="map"):
+                control.publish(root, root, root)
+                current = (root / "current").resolve()
+                body = (root / "current/facilities.html").read_text()
+                self.assertIn("Facilities", body)
+                self.assertIn(f'data-generation="{current.name}"', body)
+                with patch.object(control, "facilities", side_effect=ValueError("fixture failure")):
+                    with self.assertRaises(ValueError):
+                        control.publish(root, root, root)
+                self.assertEqual((root / "current").resolve(), current)
+                self.assertEqual((root / "current/facilities.html").read_text(), body)
+
     def test_failed_publication_retains_old_generation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -307,6 +345,8 @@ class RefreshTests(unittest.TestCase):
             root = Path(tmp)
             (root / "current").mkdir()
             (root / "current/index.html").write_text("<h1>Synthetic fixture</h1>")
+            facility_body = control.page("Facilities", control.facilities(), control.now())
+            (root / "current/facilities.html").write_text(facility_body)
             control.atomic_json(root / "health.json", {"ok": True})
             with socket.socket() as sock:
                 sock.bind(("127.0.0.1", 0))
@@ -325,6 +365,22 @@ class RefreshTests(unittest.TestCase):
                         time.sleep(0.02)
                 else:
                     self.fail("fixture server did not start")
+                for method in ("GET", "HEAD"):
+                    request = urllib.request.Request(base + "/facilities.html", method=method)
+                    with urllib.request.urlopen(request, timeout=1) as response:
+                        self.assertEqual(response.status, 200)
+                        self.assertEqual(response.headers["X-Corbanu-Control"], "1")
+                        self.assertEqual(int(response.headers["Content-Length"]), len(facility_body.encode()))
+                        self.assertEqual(response.read(), b"" if method == "HEAD" else facility_body.encode())
+                    for path, host, code in (("/facilities.html", "evil.invalid", 403),
+                                             ("/%2e%2e/control.json", "127.0.0.1", 404),
+                                             ("/state/control.json", "127.0.0.1", 404),
+                                             ("/facilitiesXhtml", "127.0.0.1", 404)):
+                        request = urllib.request.Request(base + path, method=method, headers={"Host": host})
+                        with self.assertRaises(urllib.error.HTTPError) as caught:
+                            urllib.request.urlopen(request, timeout=1)
+                        self.assertEqual(caught.exception.code, code)
+                        caught.exception.close()
                 cases = [urllib.request.Request(base, headers={"Host": "evil.invalid"}),
                          urllib.request.Request(base + "/%2e%2e/control.json"),
                          urllib.request.Request(base + "/state/control.json"),

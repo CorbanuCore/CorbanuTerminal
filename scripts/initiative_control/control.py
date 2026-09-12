@@ -22,6 +22,7 @@ import uuid
 from markdown_it import MarkdownIt
 from activity import latest_reports, presentation
 from attention import notices
+from facilities import facilities
 
 HERE = Path(__file__).resolve().parent
 MAX_FILE = 1024 * 1024
@@ -217,7 +218,7 @@ def page(title, body, collected, generation=""):
 <link rel="stylesheet" href="style.css"><script src="status.js" defer></script></head>
 <body data-collected="{e(collected)}" data-generation="{e(generation)}"><a class="skip" href="#main">Skip to content</a>
 <header><a class="brand" href="index.html">CORBANU <span>CONTROL</span></a>
-<nav aria-label="Sections"><a href="index.html#initiatives">Workstreams</a><a href="index.html#human">Human tests</a><a href="index.html#runs">Runs & machines</a><a href="index.html#tasknode">Task Node</a></nav></header>
+<nav aria-label="Sections"><a href="index.html#initiatives">Workstreams</a><a href="facilities.html">Facilities</a><a href="index.html#human">Human tests</a><a href="index.html#runs">Runs & machines</a><a href="index.html#tasknode">Task Node</a></nav></header>
 <div class="freshness" id="freshness" role="status">Source collected {e(collected)} · checking publisher health</div>
 <main id="main">{body}</main><footer>Private operations view · worker reports are claims, not acceptance · no dispatch or approval controls</footer></body></html>'''
 
@@ -396,6 +397,7 @@ def publish(repo, state, output):
                 body = '<p><a href="index.html">← Initiative map</a></p><article class="document">' + safe_markdown(text, path, data["documents"]) + '</article><p id="unpublished" class="muted">Unpublished source links require the repository. They are not copied automatically.</p>'
                 (generation / route(path)).write_text(page(path, body, data["source"]["collected_at"], generation.name), encoding="utf-8")
             (generation / "index.html").write_text(page("Initiative map", overview(data), data["source"]["collected_at"], generation.name), encoding="utf-8")
+            (generation / "facilities.html").write_text(page("Facilities", facilities(), data["source"]["collected_at"], generation.name), encoding="utf-8")
             atomic_json(generation / "manifest.json", {"published_at": now(), "source": data["source"], "documents": sorted(data["documents"]), "run_count": len(data["runs"])})
             pending = output / (".current-" + uuid.uuid4().hex)
             pending.symlink_to(generation.relative_to(output))
@@ -419,6 +421,9 @@ def publish(repo, state, output):
 
 def serve(output, port):
     class Handler(BaseHTTPRequestHandler):
+        def do_HEAD(self):
+            self.do_GET()  # Same validation and headers, without a response body.
+
         def do_GET(self):
             try:
                 host = urlsplit("//" + self.headers.get("Host", "")).hostname
@@ -428,7 +433,7 @@ def serve(output, port):
                 self.send_error(403)
                 return  # DNS-rebinding protection for a private loopback service.
             path = unquote(urlsplit(self.path).path).lstrip("/") or "index.html"
-            if not re.fullmatch(r"(?:index\.html|style\.css|status\.js|health\.json|manifest\.json|doc-[0-9a-f]{20}\.html)", path):
+            if not re.fullmatch(r"(?:index\.html|facilities\.html|style\.css|status\.js|health\.json|manifest\.json|doc-[0-9a-f]{20}\.html)", path):
                 self.send_error(404)
                 return
             file = output / "health.json" if path == "health.json" else output / "current" / path
@@ -447,7 +452,8 @@ def serve(output, port):
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
             self.end_headers()
-            self.wfile.write(payload)
+            if self.command != "HEAD":
+                self.wfile.write(payload)
 
         def log_message(self, *_):
             pass  # No URL/query/header/session logging.
