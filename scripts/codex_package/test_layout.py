@@ -243,7 +243,9 @@ class PackageLayoutTest(unittest.TestCase):
                 alias_path = package_dir / "bin" / alias
                 self.assertTrue(alias_path.is_symlink(), alias)
                 self.assertFalse(os.path.isabs(os.readlink(alias_path)), alias)
-                self.assertEqual(alias_path.resolve(), (package_dir / "bin" / target).resolve())
+                self.assertEqual(
+                    alias_path.resolve(), (package_dir / "bin" / target).resolve()
+                )
             for canonical in ("corbanu", "corbanu-acp", "corbanu-walletd"):
                 self.assertFalse((package_dir / "bin" / canonical).is_symlink())
             for legacy in (
@@ -269,7 +271,9 @@ class PackageLayoutTest(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
 
-    @unittest.skipUnless(os.name == "posix" and shutil.which("cc"), "Unix C compiler is required")
+    @unittest.skipUnless(
+        os.name == "posix" and shutil.which("cc"), "Unix C compiler is required"
+    )
     def test_unix_native_binaries_are_stripped_with_external_sidecars(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -321,7 +325,12 @@ class PackageLayoutTest(unittest.TestCase):
             )
             for name in ("codex-app-server", "codex-code-mode-host"):
                 sidecar = (
-                    symbols_dir / f"{name}.dSYM" / "Contents" / "Resources" / "DWARF" / name
+                    symbols_dir
+                    / f"{name}.dSYM"
+                    / "Contents"
+                    / "Resources"
+                    / "DWARF"
+                    / name
                     if sys.platform == "darwin"
                     else symbols_dir / f"{name}.debug"
                 )

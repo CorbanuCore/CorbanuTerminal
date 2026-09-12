@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "canonical_origin": "https://chatgpt.com",
+  "synthetic_tls_fixture": true,
+  "same_process_recovery": true,
+  "unrelated_model_unchanged": true,
+  "candidate": "/home/travis/security-round5/evidence/pf13-main-release-20260911/candidate/bin/corbanu",
+  "sha256": "d67c21f401fc50ff6b751287434cf0c3303df81bea60b8fa9d74df8d8f1524af",
+  "human_acceptance": false
+}

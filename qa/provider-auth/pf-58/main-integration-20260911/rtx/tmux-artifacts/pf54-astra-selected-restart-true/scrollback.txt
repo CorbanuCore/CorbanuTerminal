@@ -1,0 +1,57 @@
+
+╭───────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                     │
+│                                                   │
+│ model:     loading   /model to change             │
+│ directory: ~/worktrees/pf13-main-release-20260911 │
+╰───────────────────────────────────────────────────╯
+
+
+› Find and fix a bug in @filename
+
+  GPT-6 Astra default · ~/worktrees/pf13-main-release-20260911 · Corbanu Terminal · TPS: -- tok/s
+
+╭───────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                     │
+│                                                   │
+│ model:     gpt-6-astra high   /model to change    │
+│ directory: ~/worktrees/pf13-main-release-20260911 │
+╰───────────────────────────────────────────────────╯
+
+
+› Check the selected model.
+
+
+• astra selector request succeeded
+
+
+› Find and fix a bug in @filename
+
+  GPT-6 Astra high · ~/worktrees/pf13-main-release-20260911 · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

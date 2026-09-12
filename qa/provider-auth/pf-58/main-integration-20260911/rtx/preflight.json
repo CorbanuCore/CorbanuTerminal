@@ -1,0 +1,34 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "check": "corbanu",
+      "passed": true,
+      "detail": {
+        "path": "/home/travis/security-round5/evidence/pf13-main-release-20260911/candidate/bin/corbanu",
+        "sha256": "d67c21f401fc50ff6b751287434cf0c3303df81bea60b8fa9d74df8d8f1524af"
+      }
+    },
+    {
+      "check": "codex-code-mode-host",
+      "passed": true,
+      "detail": {
+        "path": "/home/travis/security-round5/evidence/pf13-main-release-20260911/candidate/bin/codex-code-mode-host",
+        "sha256": "c32fe53e37bb9a63c95db0a5dc3b4d219d917e291b8985a42a52a0d8ccebdb8b"
+      }
+    },
+    {
+      "check": "corbanu-walletd",
+      "passed": true,
+      "detail": {
+        "path": "/home/travis/security-round5/evidence/pf13-main-release-20260911/candidate/bin/corbanu-walletd",
+        "sha256": "a03344feffcd97a2fd863f51c2e4922a1439755f5aeac597fcfebad7940e652f"
+      }
+    },
+    {
+      "check": "candidate starts",
+      "passed": true,
+      "detail": "corbanu 0.1.42"
+    }
+  ]
+}

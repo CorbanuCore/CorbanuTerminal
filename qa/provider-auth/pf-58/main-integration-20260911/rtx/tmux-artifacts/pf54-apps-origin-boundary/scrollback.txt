@@ -1,0 +1,57 @@
+
+╭───────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                     │
+│                                                   │
+│ model:     loading   /model to change             │
+│ directory: ~/worktrees/pf13-main-release-20260911 │
+╰───────────────────────────────────────────────────╯
+
+
+› Explain this codebase
+
+  fixture-model via pf54-primary default · ~/worktrees/pf13-main-release-20260911 · Corbanu Terminal · TPS: -- tok/s
+
+╭───────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                     │
+│                                                   │
+│ model:     fixture-model   /model to change       │
+│ directory: ~/worktrees/pf13-main-release-20260911 │
+╰───────────────────────────────────────────────────╯
+
+⚠ MCP client for `codex_apps` failed to start: MCP startup failed: handshaking with MCP server failed: Send message error Transport
+  [rmcp::transport::worker::WorkerTransport<rmcp::transport::streamable_http_client::StreamableHttpClientWorker<codex_rmcp_client::http_clie
+  nt_adapter::StreamableHttpClientAdapter>>] error: unexpected server response: HTTP 403: {"error":"synthetic untrusted Apps endpoint"},
+  when send initialize request
+
+⚠ MCP startup incomplete (failed: codex_apps)
+
+
+› model remains usable despite off-origin apps failure
+
+
+⚠ Model metadata for `fixture-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+
+• PF58 healthy model unchanged
+
+
+› Explain this codebase
+
+  fixture-model via pf54-primary default · ~/worktrees/pf13-main-release-20260911 · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

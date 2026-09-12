@@ -1,0 +1,179 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-keyring-store v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/keyring-store)
+   Compiling codex-uds v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/uds)
+   Compiling codex-process-hardening v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/process-hardening)
+   Compiling codex-wallet v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/wallet)
+   Compiling codex-wallet-daemon v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/wallet-daemon)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.94s
+────────────
+ Nextest run ID b0e4ebd2-43ad-4a97-bf70-e0a00eee8005 with nextest profile: local
+    Starting 13 tests across 1 binary
+        PASS [   0.003s] ( 1/13) codex-wallet-daemon client::tests::wallet_daemon_uses_packaged_name_for_all_terminal_entrypoints
+        PASS [   0.003s] ( 2/13) codex-wallet-daemon client::tests::wallet_daemon_uses_the_shipped_package_name_and_legacy_fallback
+        FAIL [   0.003s] ( 3/13) codex-wallet-daemon client::tests::an_accepted_request_that_never_replies_times_out
+  stdout ───
+
+    running 1 test
+    test client::tests::an_accepted_request_that_never_replies_times_out ... FAILED
+
+    failures:
+
+    failures:
+        client::tests::an_accepted_request_that_never_replies_times_out
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'client::tests::an_accepted_request_that_never_replies_times_out' (547382) panicked at wallet-daemon/src/client.rs:386:14:
+    bind socket: Error { kind: InvalidInput, message: "path must be shorter than SUN_LEN" }
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.003s] ( 4/13) codex-wallet-daemon client::upgrade_tests::legacy_and_incompatible_daemons_are_rejected_before_secrets_or_operations_are_sent
+  stdout ───
+
+    running 1 test
+    test client::upgrade_tests::legacy_and_incompatible_daemons_are_rejected_before_secrets_or_operations_are_sent ... FAILED
+
+    failures:
+
+    failures:
+        client::upgrade_tests::legacy_and_incompatible_daemons_are_rejected_before_secrets_or_operations_are_sent
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'client::upgrade_tests::legacy_and_incompatible_daemons_are_rejected_before_secrets_or_operations_are_sent' (547381) panicked at wallet-daemon/src/client_upgrade_tests.rs:15:68:
+    called `Result::unwrap()` on an `Err` value: Error { kind: InvalidInput, message: "path must be shorter than SUN_LEN" }
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.002s] ( 5/13) codex-wallet-daemon protocol::tests::legacy_timed_unlock_requests_remain_compatible
+        PASS [   0.002s] ( 6/13) codex-wallet-daemon protocol::tests::corbanu_api_operations_round_trip_without_erasing_the_operation_boundary
+        FAIL [   0.003s] ( 7/13) codex-wallet-daemon client::upgrade_tests::legacy_daemon_can_still_be_locked_without_protocol_negotiation
+  stdout ───
+
+    running 1 test
+    test client::upgrade_tests::legacy_daemon_can_still_be_locked_without_protocol_negotiation ... FAILED
+
+    failures:
+
+    failures:
+        client::upgrade_tests::legacy_daemon_can_still_be_locked_without_protocol_negotiation
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'client::upgrade_tests::legacy_daemon_can_still_be_locked_without_protocol_negotiation' (547391) panicked at wallet-daemon/src/client_upgrade_tests.rs:15:68:
+    called `Result::unwrap()` on an `Err` value: Error { kind: InvalidInput, message: "path must be shorter than SUN_LEN" }
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   0.003s] ( 8/13) codex-wallet-daemon client::upgrade_tests::matching_daemon_protocol_is_accepted
+  stdout ───
+
+    running 1 test
+    test client::upgrade_tests::matching_daemon_protocol_is_accepted ... FAILED
+
+    failures:
+
+    failures:
+        client::upgrade_tests::matching_daemon_protocol_is_accepted
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.00s
+
+  stderr ───
+
+    thread 'client::upgrade_tests::matching_daemon_protocol_is_accepted' (547393) panicked at wallet-daemon/src/client_upgrade_tests.rs:15:68:
+    called `Result::unwrap()` on an `Err` value: Error { kind: InvalidInput, message: "path must be shorter than SUN_LEN" }
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        PASS [   0.002s] ( 9/13) codex-wallet-daemon protocol::tests::new_one_action_request_is_accepted_by_the_legacy_wire_shape
+        FAIL [   1.047s] (10/13) codex-wallet-daemon server::tests::second_daemon_cannot_remove_the_live_daemon_socket
+  stdout ───
+
+    running 1 test
+    test server::tests::second_daemon_cannot_remove_the_live_daemon_socket ... FAILED
+
+    failures:
+
+    failures:
+        server::tests::second_daemon_cannot_remove_the_live_daemon_socket
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 1.04s
+
+  stderr ───
+
+    thread 'server::tests::second_daemon_cannot_remove_the_live_daemon_socket' (547405) panicked at wallet-daemon/src/server.rs:760:9:
+    assertion failed: error.to_string().contains("another wallet daemon owns")
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   2.090s] (11/13) codex-wallet-daemon server::tests::remove_wallet_requires_the_current_address_and_clears_daemon_state
+  stdout ───
+
+    running 1 test
+    test server::tests::remove_wallet_requires_the_current_address_and_clears_daemon_state ... FAILED
+
+    failures:
+
+    failures:
+        server::tests::remove_wallet_requires_the_current_address_and_clears_daemon_state
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 2.09s
+
+  stderr ───
+
+    thread 'server::tests::remove_wallet_requires_the_current_address_and_clears_daemon_state' (547404) panicked at wallet-daemon/src/server.rs:800:39:
+    status: Unavailable("required wallet daemon executable is missing from this Corbanu Terminal installation: /home/travis/repos/CorbanuTerminal-harness/codex-rs/target/debug/deps/corbanu-walletd")
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   2.090s] (12/13) codex-wallet-daemon server::tests::unlock_capability_remains_scoped_for_its_ttl_and_global_lock_is_real
+  stdout ───
+
+    running 1 test
+    test server::tests::unlock_capability_remains_scoped_for_its_ttl_and_global_lock_is_real ... FAILED
+
+    failures:
+
+    failures:
+        server::tests::unlock_capability_remains_scoped_for_its_ttl_and_global_lock_is_real
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 2.09s
+
+  stderr ───
+
+    thread 'server::tests::unlock_capability_remains_scoped_for_its_ttl_and_global_lock_is_real' (547408) panicked at wallet-daemon/src/server.rs:576:39:
+    status: Unavailable("required wallet daemon executable is missing from this Corbanu Terminal installation: /home/travis/repos/CorbanuTerminal-harness/codex-rs/target/debug/deps/corbanu-walletd")
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+        FAIL [   2.093s] (13/13) codex-wallet-daemon server::tests::one_action_capability_locks_after_the_first_signing_attempt
+  stdout ───
+
+    running 1 test
+    test server::tests::one_action_capability_locks_after_the_first_signing_attempt ... FAILED
+
+    failures:
+
+    failures:
+        server::tests::one_action_capability_locks_after_the_first_signing_attempt
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 2.09s
+
+  stderr ───
+
+    thread 'server::tests::one_action_capability_locks_after_the_first_signing_attempt' (547403) panicked at wallet-daemon/src/server.rs:716:14:
+    one-action unlock: Unavailable("required wallet daemon executable is missing from this Corbanu Terminal installation: /home/travis/repos/CorbanuTerminal-harness/codex-rs/target/debug/deps/corbanu-walletd")
+    note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+────────────
+     Summary [   2.099s] 13 tests run: 5 passed, 8 failed, 0 skipped
+        FAIL [   0.003s] ( 3/13) codex-wallet-daemon client::tests::an_accepted_request_that_never_replies_times_out
+        FAIL [   0.003s] ( 4/13) codex-wallet-daemon client::upgrade_tests::legacy_and_incompatible_daemons_are_rejected_before_secrets_or_operations_are_sent
+        FAIL [   0.003s] ( 7/13) codex-wallet-daemon client::upgrade_tests::legacy_daemon_can_still_be_locked_without_protocol_negotiation
+        FAIL [   0.003s] ( 8/13) codex-wallet-daemon client::upgrade_tests::matching_daemon_protocol_is_accepted
+        FAIL [   1.047s] (10/13) codex-wallet-daemon server::tests::second_daemon_cannot_remove_the_live_daemon_socket
+        FAIL [   2.090s] (11/13) codex-wallet-daemon server::tests::remove_wallet_requires_the_current_address_and_clears_daemon_state
+        FAIL [   2.090s] (12/13) codex-wallet-daemon server::tests::unlock_capability_remains_scoped_for_its_ttl_and_global_lock_is_real
+        FAIL [   2.093s] (13/13) codex-wallet-daemon server::tests::one_action_capability_locks_after_the_first_signing_attempt
+error: test run failed
+error: recipe `test` failed on line 82 with exit code 100

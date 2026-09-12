@@ -1,0 +1,81 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-utils-absolute-path v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/absolute-path)
+   Compiling codex-security-policy v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/security-policy)
+   Compiling codex-content-security v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/content-security)
+   Compiling codex-security-audit v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/security-audit)
+   Compiling codex-secret-broker v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/secret-broker)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.12s
+────────────
+ Nextest run ID 4f77fd19-a21c-448f-a92e-fbfc0cb85481 with nextest profile: local
+    Starting 69 tests across 2 binaries
+        PASS [   0.002s] ( 1/69) codex-content-security contract::tests::pf_34_s04_cancellation_erases_segments_and_blocks_allow
+        PASS [   0.002s] ( 2/69) codex-content-security contract::tests::pf_34_s04_contract_version_mismatch_is_unavailable
+        PASS [   0.002s] ( 3/69) codex-content-security contract::tests::pf_34_s04_content_digest_hex_encoding_is_stable
+        PASS [   0.002s] ( 4/69) codex-content-security contract::tests::pf_34_s04_corrupt_reassembled_bytes_are_unavailable
+        PASS [   0.002s] ( 5/69) codex-content-security contract::tests::pf_34_s04_cross_segment_attack_is_screened_only_after_reassembly
+        PASS [   0.002s] ( 6/69) codex-content-security contract::tests::pf_34_s04_fixture_schema_and_content_hashes_are_frozen
+        PASS [   0.002s] ( 7/69) codex-content-security contract::tests::pf_34_s04_duplicate_segment_is_sticky_against_forced_allow
+        PASS [   0.002s] ( 8/69) codex-content-security contract::tests::pf_34_s04_identifiers_and_versions_reject_malformed_metadata
+        PASS [   0.002s] ( 9/69) codex-content-security contract::tests::pf_34_s04_malformed_empty_segment_is_unavailable
+        PASS [   0.002s] (10/69) codex-content-security contract::tests::pf_34_s04_mismatched_model_or_threshold_cannot_authorize_release
+        PASS [   0.002s] (11/69) codex-content-security contract::tests::pf_34_s04_mismatched_verdict_cannot_authorize_release
+        PASS [   0.002s] (12/69) codex-content-security contract::tests::pf_34_s04_missing_stale_and_future_verdicts_are_unavailable
+        PASS [   0.002s] (13/69) codex-content-security contract::tests::pf_34_s04_partial_input_never_releases_a_prefix
+        PASS [   0.002s] (14/69) codex-content-security contract::tests::pf_34_s04_reassembly_digest_mismatch_is_unavailable
+        PASS [   0.002s] (15/69) codex-content-security contract::tests::pf_34_s04_releases_only_complete_reassembled_content
+        PASS [   0.002s] (16/69) codex-content-security contract::tests::pf_34_s04_segment_count_and_index_are_bound
+        PASS [   0.002s] (17/69) codex-content-security contract::tests::pf_34_s04_size_and_segment_budgets_fail_closed
+        PASS [   0.002s] (18/69) codex-content-security contract::tests::pf_34_s04_source_binding_mismatch_is_unavailable
+        PASS [   0.002s] (19/69) codex-content-security contract::tests::pf_34_s04_timeout_is_sticky_against_late_allow
+        PASS [   0.002s] (20/69) codex-content-security contract::tests::pf_34_s04_suspicious_hostile_and_unavailable_all_withhold
+        PASS [   0.002s] (21/69) codex-content-security contract::tests::pf_34_s04_transformation_version_mismatch_is_unavailable
+        PASS [   0.001s] (22/69) codex-content-security contract::tests::pf_35_s01_model_artifact_and_threshold_mismatches_fail_closed
+        PASS [   0.002s] (23/69) codex-secret-broker ipc_tests::pf_27_s04_pf_27_s01_binding_and_peer_require_canonical_observed_identity
+        PASS [   0.002s] (24/69) codex-secret-broker ipc_tests::pf_27_s04_pf_27_s01_authenticated_frame_round_trip_preserves_only_typed_metadata
+        PASS [   0.002s] (25/69) codex-secret-broker ipc_tests::pf_27_s04_pf_27_s01_bounds_and_operation_shape_fail_closed
+        PASS [   0.002s] (26/69) codex-secret-broker ipc_tests::pf_27_s04_pf_27_s01_debug_output_is_redacted
+        PASS [   0.002s] (27/69) codex-secret-broker ipc_tests::pf_27_s04_pf_27_s01_wrong_key_and_tampering_fail_authentication
+        PASS [   0.002s] (28/69) codex-secret-broker journal_adapter::tests::pf_27_s01_audit_rejects_binding_changes_before_journal_write
+        PASS [   0.007s] (29/69) codex-secret-broker journal_adapter::tests::pf_27_s01_audit_crash_pending_intent_blocks_restart_replay
+        PASS [   0.005s] (30/69) codex-secret-broker journal_adapter::tests::pf_27_s01_audit_rejects_unsettleable_or_mismatched_authority
+        PASS [   0.009s] (31/69) codex-secret-broker journal_adapter::tests::pf_27_s01_audit_commits_before_permit_and_minimizes_exact_semantics
+        PASS [   0.002s] (32/69) codex-secret-broker linux_transport::tests::pf_27_s01_native_child_service_fixture
+        PASS [   0.002s] (33/69) codex-secret-broker linux_transport::tests::pf_27_s01_native_close_interrupts_inflight_read_and_queued_dispatch
+        PASS [   0.006s] (34/69) codex-secret-broker journal_adapter::tests::pf_27_s01_audit_unrecovered_or_ambiguous_root_returns_no_permit
+        PASS [   0.002s] (35/69) codex-secret-broker linux_transport::tests::pf_27_s01_native_peer_roundtrip_and_eof_cancels_session
+        PASS [   0.019s] (36/69) codex-secret-broker journal_adapter::tests::pf_27_s01_audit_all_terminal_outcomes_are_durable
+        PASS [   0.062s] (37/69) codex-secret-broker linux_transport::tests::pf_27_s01_native_service_death_closes_client_without_replay
+        PASS [   0.002s] (38/69) codex-secret-broker linux_transport::tests::pf_27_s01_native_wrong_peer_and_oversize_frame_close_before_dispatch
+        PASS [   0.001s] (39/69) codex-secret-broker platform_contract::tests::accepts_complete_current_supported_report
+        PASS [   0.002s] (40/69) codex-secret-broker platform_contract::tests::rejects_claimed_eligibility_with_unsupported_capability
+        PASS [   0.001s] (41/69) codex-secret-broker platform_contract::tests::rejects_duplicate_capability
+        PASS [   0.002s] (42/69) codex-secret-broker platform_contract::tests::rejects_false_ineligibility_claim
+        PASS [   0.002s] (43/69) codex-secret-broker platform_contract::tests::rejects_future_dated_report
+        PASS [   0.002s] (44/69) codex-secret-broker platform_contract::tests::rejects_inconsistent_status_and_observation
+        PASS [   0.001s] (45/69) codex-secret-broker platform_contract::tests::rejects_invalid_expiry
+        PASS [   0.002s] (46/69) codex-secret-broker platform_contract::tests::rejects_malformed_digest_identity
+        PASS [   0.002s] (47/69) codex-secret-broker platform_contract::tests::rejects_missing_capability
+        PASS [   0.002s] (48/69) codex-secret-broker platform_contract::tests::rejects_stale_report
+        PASS [   0.002s] (49/69) codex-secret-broker platform_contract::tests::rejects_unknown_contract_and_fixture_protocol
+        PASS [   0.002s] (50/69) codex-secret-broker platform_contract::tests::rejects_untested_capability
+        PASS [   0.001s] (51/69) codex-secret-broker platform_contract::tests::rejects_wrong_probe_identity
+        PASS [   0.001s] (52/69) codex-secret-broker platform_contract::tests::rejects_wrong_target
+        PASS [   0.002s] (53/69) codex-secret-broker platform_contract_fixture_tests::frozen_result_fixtures_are_consumed_by_the_rust_gate
+        PASS [   0.002s] (54/69) codex-secret-broker platform_contract_fixture_tests::schema_enums_match_the_rust_contract
+        PASS [   0.002s] (55/69) codex-secret-broker resolver_tests::pf_27_s01_native_disconnect_cancels_backend_before_final_fence_check
+        PASS [   0.102s] (56/69) codex-secret-broker resolver_tests::pf_27_s01_native_registered_connection_replacement_and_revocation
+        PASS [   0.002s] (57/69) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_audit_failure_blocks_dispatch_and_ambiguous_resolution_is_visible
+        PASS [   0.002s] (58/69) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_concurrent_revocation_cancels_open_upload_before_effect
+        PASS [   0.002s] (59/69) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_cross_run_reference_theft_expiry_and_revocation_fail_closed
+        PASS [   0.002s] (60/69) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_replay_wrong_peer_and_binding_are_rejected_before_backend
+        PASS [   0.002s] (61/69) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_resource_bounds_fail_without_eviction_or_enumeration
+        PASS [   0.002s] (62/69) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_restart_and_cancel_reject_old_handles_without_fallback
+        PASS [   0.002s] (63/69) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_run_generation_history_is_bounded_without_stale_eviction
+        PASS [   0.002s] (64/69) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_same_run_replacement_invalidates_old_and_stale_connections
+        PASS [   0.002s] (65/69) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_typed_dispatch_is_audited_before_backend_and_resolved
+        PASS [   0.002s] (66/69) codex-secret-broker resolver_tests::pf_27_s04_pf_27_s01_unsupported_platform_report_cannot_construct_runtime
+        PASS [   5.252s] (67/69) codex-secret-broker linux_transport::tests::pf_27_s01_native_idle_session_survives_partial_frame_deadline
+        PASS [   5.252s] (68/69) codex-secret-broker linux_transport::tests::pf_27_s01_native_receipt_wait_does_not_timeout_healthy_backend
+        PASS [   5.507s] (69/69) codex-secret-broker linux_transport::tests::pf_27_s01_native_partial_prefix_still_has_bounded_deadline
+────────────
+     Summary [   5.530s] 69 tests run: 69 passed, 0 skipped

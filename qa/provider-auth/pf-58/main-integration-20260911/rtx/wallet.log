@@ -1,0 +1,20 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
+────────────
+ Nextest run ID d4afb400-2284-45a7-93be-3d4f26c5dd82 with nextest profile: local
+    Starting 13 tests across 1 binary
+        PASS [   0.003s] ( 1/13) codex-wallet-daemon client::tests::wallet_daemon_uses_packaged_name_for_all_terminal_entrypoints
+        PASS [   0.003s] ( 2/13) codex-wallet-daemon client::tests::wallet_daemon_uses_the_shipped_package_name_and_legacy_fallback
+        PASS [   0.004s] ( 3/13) codex-wallet-daemon client::upgrade_tests::legacy_and_incompatible_daemons_are_rejected_before_secrets_or_operations_are_sent
+        PASS [   0.003s] ( 4/13) codex-wallet-daemon client::upgrade_tests::legacy_daemon_can_still_be_locked_without_protocol_negotiation
+        PASS [   0.003s] ( 5/13) codex-wallet-daemon client::upgrade_tests::matching_daemon_protocol_is_accepted
+        PASS [   0.002s] ( 6/13) codex-wallet-daemon protocol::tests::corbanu_api_operations_round_trip_without_erasing_the_operation_boundary
+        PASS [   0.002s] ( 7/13) codex-wallet-daemon protocol::tests::legacy_timed_unlock_requests_remain_compatible
+        PASS [   0.002s] ( 8/13) codex-wallet-daemon protocol::tests::new_one_action_request_is_accepted_by_the_legacy_wire_shape
+        PASS [   0.029s] ( 9/13) codex-wallet-daemon client::tests::an_accepted_request_that_never_replies_times_out
+        PASS [   0.029s] (10/13) codex-wallet-daemon server::tests::second_daemon_cannot_remove_the_live_daemon_socket
+        PASS [   1.063s] (11/13) codex-wallet-daemon server::tests::remove_wallet_requires_the_current_address_and_clears_daemon_state
+        PASS [   2.091s] (12/13) codex-wallet-daemon server::tests::one_action_capability_locks_after_the_first_signing_attempt
+        PASS [   3.191s] (13/13) codex-wallet-daemon server::tests::unlock_capability_remains_scoped_for_its_ttl_and_global_lock_is_real
+────────────
+     Summary [   3.221s] 13 tests run: 13 passed, 0 skipped

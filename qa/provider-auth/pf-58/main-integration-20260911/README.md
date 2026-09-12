@@ -68,6 +68,9 @@ unchanged qualification evidence. No feature is added by this identity repair.
 PF58's nine approved reviews remain exhausted. No tenth review was performed.
 The separate broker service checkpoint `cd7457da7` is not part of this accepted
 merge: its external service-stage review and native setup gates remain separate.
+Travis explicitly approved one sixth Fable 5.1 High review via Corbanu/TMUX for
+that staged PF-27 service. This is not a PF58 budget increase and does not
+authorize privileged installation. The next allocation will preserve this ledger.
 No accounts, ACLs, system services, real Vault data or user credentials are changed.
 
 ## Combined-tree verification
@@ -78,6 +81,11 @@ Build uses the existing shared lock and target, eight jobs and a fresh on-disk
 temporary directory. Existing dirty remote checkouts and local installed Mac
 candidate are untouched. Results and candidate hashes are appended after the
 combined run; previous 0.1.41 acceptance is not new 0.1.42 acceptance.
+
+The exact locally committed and remotely staged `codex-rs` trees both resolve
+to `1318700f913163bb9b6476cbbade710fc6739004`. The build is a debug-profile
+integration QA package, not a replacement for the accepted signed Mac package
+or a public release asset. Version alone does not identify the binary.
 
 Local checks so far: plan/sprint checkers pass (3 active plans, 115 current and
 125 archived records); their 27 regression tests pass; portable skills match
@@ -103,3 +111,46 @@ socket path or user home was changed to make the fixture pass.
 The release's incomplete competitor benchmark and historical live/platform
 limitations remain disclosed in `qa/release/0.1.42/RELEASE.md`. This merge does
 not issue or claim a newly qualified cross-platform release.
+
+## Final integration results — September 11
+
+All commands below finished after fix/format, on the exact Rust tree above.
+The reproducible commands are [qualify-rtx.sh](qualify-rtx.sh) and
+[qualify-extra.sh](qualify-extra.sh); complete selected-run logs, pane captures
+and synthetic endpoint assertions are in [rtx/](rtx/).
+
+| Check | Result |
+| --- | --- |
+| Provider auth | 73/73 |
+| Wallet daemon | 13/13 |
+| API | 189/189 |
+| Provider/model catalogue | 65/65 |
+| Selected TUI unit tests | 70/70; 3,934 unrelated tests skipped |
+| Selected Core tests | 17/17; 2,400 unrelated tests skipped |
+| Broker/content-security | 69/69 |
+| Provider TUI integration suite | 33/33, including 31 actual-key flows and two harness assertions; 57 unrelated tests skipped |
+| Team Context CLI and vault-auth helper parsing | 2/2; 268 unrelated tests skipped |
+| Packaging Python / preflight gate | 28/28 and 11/11 on Linux; same suites pass on Mac |
+| Cargo build, packaging and wallet production-client startup probe | Pass |
+| Code Mode + shell + MCP actual execution | Four verified round trips, three concurrent instances, same-home restart; pass |
+| Streaming cancellation and recovery | Pass, using Escape |
+| Permissions/security cancel, narrow Claude guidance, Claude/Anthropic catalogues | Pass |
+| Canonical-origin Apps rejection and same-process reauth | Pass against synthetic TLS fixture; unrelated model unchanged |
+| Cargo/Bazel lock update and governance | Pass; three active plans retained |
+
+The first CLI selector targeted the library rather than the executable and ran
+no tests; it is not counted as a pass. Corrected executable selection ran both
+intended tests. The packaging probe initially used an obsolete example name;
+the actual released `package_client_probe` target then built and passed.
+Those invocation failures, the socket-path failure and the initial picker
+fixture failure remain preserved alongside the successful reruns.
+
+Candidate: `/home/travis/security-round5/evidence/pf13-main-release-20260911/candidate/bin/corbanu`,
+version 0.1.42, SHA-256
+`d67c21f401fc50ff6b751287434cf0c3303df81bea60b8fa9d74df8d8f1524af`.
+Code Mode host `c32fe53e37bb9a63c95db0a5dc3b4d219d917e291b8985a42a52a0d8ccebdb8b`;
+wallet daemon `a03344feffcd97a2fd863f51c2e4922a1439755f5aeac597fcfebad7940e652f`.
+The canonical package also includes ACP and bubblewrap. No live wallet or
+provider account was used by this qualification. No Mac shortcut was changed.
+Historical unresolved native/Luna cases remain visible in the human guide;
+these Linux results do not turn them into passes.

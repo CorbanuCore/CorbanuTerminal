@@ -1,0 +1,187 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+warning: variant `OpenPlans` is never constructed
+   --> tui/src/app_event.rs:318:5
+    |
+313 | pub(crate) enum WalletUnlockContinuation {
+    |                 ------------------------ variant in this enum
+...
+318 |     OpenPlans {
+    |     ^^^^^^^^^
+    |
+    = note: `WalletUnlockContinuation` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variants `ProviderCredentialStatusesReady`, `OpenWalletPlanReceipt`, and `WalletRecoverPlanRequested` are never constructed
+    --> tui/src/app_event.rs:1764:5
+     |
+ 395 | pub(crate) enum AppEvent {
+     |                 -------- variants in this enum
+...
+1764 |     ProviderCredentialStatusesReady {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1930 |     OpenWalletPlanReceipt {
+     |     ^^^^^^^^^^^^^^^^^^^^^
+...
+1934 |     WalletRecoverPlanRequested,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `AppEvent` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: variant `Checking` is never constructed
+   --> tui/src/chatwidget/claude_code_login.rs:186:5
+    |
+185 | pub(crate) enum ClaudeCodePlanStatus {
+    |                 -------------------- variant in this enum
+186 |     Checking,
+    |     ^^^^^^^^
+    |
+    = note: `ClaudeCodePlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: variants `Checking`, `Active`, `WalletOnly`, `ConnectedStatusUnavailable`, `NotConnected`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:7:5
+   |
+ 6 | pub(crate) enum PfTerminalPlanStatus {
+   |                 -------------------- variants in this enum
+ 7 |     Checking,
+   |     ^^^^^^^^
+ 8 |     Active {
+   |     ^^^^^^
+...
+12 |     WalletOnly {
+   |     ^^^^^^^^^^
+...
+15 |     ConnectedStatusUnavailable {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+18 |     NotConnected,
+   |     ^^^^^^^^^^^^
+19 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `PfTerminalPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `load` is never used
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:22:21
+   |
+22 | pub(crate) async fn load(
+   |                     ^^^^
+
+warning: constant `PROVIDER_STATUS_TIMEOUT` is never used
+  --> tui/src/chatwidget/provider_credentials.rs:33:7
+   |
+33 | const PROVIDER_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
+   |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `AvailableFromEnvironment`, `Stored`, `NotConfigured`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/provider_credentials.rs:38:5
+   |
+36 | pub(crate) enum ProviderApiKeyStatus {
+   |                 -------------------- variants in this enum
+37 |     Checking,
+38 |     AvailableFromEnvironment,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+39 |     Stored,
+   |     ^^^^^^
+40 |     NotConfigured,
+   |     ^^^^^^^^^^^^^
+41 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `ProviderApiKeyStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `open_provider_credentials_menu` and `refresh_provider_credentials_status_in_background` are never used
+   --> tui/src/chatwidget/provider_credentials.rs:108:19
+    |
+107 | impl ChatWidget {
+    | --------------- methods in this implementation
+108 |     pub(crate) fn open_provider_credentials_menu(&mut self) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+137 |     fn refresh_provider_credentials_status_in_background(&self) {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `provider_api_key_statuses` is never used
+   --> tui/src/chatwidget/provider_credentials.rs:380:4
+    |
+380 | fn provider_api_key_statuses(codex_home: &Path) -> Vec<(String, ProviderApiKeyStatus)> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `provider_api_key_unavailable_statuses` is never used
+   --> tui/src/chatwidget/provider_credentials.rs:409:4
+    |
+409 | fn provider_api_key_unavailable_statuses() -> Vec<(String, ProviderApiKeyStatus)> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `New`, `Onboarding`, and `Upgrade` are never constructed
+  --> tui/src/chatwidget/wallet_menu.rs:55:5
+   |
+54 | pub(crate) enum WalletPlanPurchaseMode {
+   |                 ---------------------- variants in this enum
+55 |     New,
+   |     ^^^
+56 |     Onboarding {
+   |     ^^^^^^^^^^
+...
+59 |     Upgrade {
+   |     ^^^^^^^
+   |
+   = note: `WalletPlanPurchaseMode` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `wallet_address` is never read
+   --> tui/src/chatwidget/wallet_menu.rs:114:16
+    |
+113 | pub(crate) struct WalletPlanStatus {
+    |                   ---------------- field in this struct
+114 |     pub(crate) wallet_address: String,
+    |                ^^^^^^^^^^^^^^
+    |
+    = note: `WalletPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `latest_plan_receipt` is never used
+   --> tui/src/chatwidget/wallet_receipt.rs:190:15
+    |
+190 | pub(super) fn latest_plan_receipt(
+    |               ^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-tui` (lib) generated 13 warnings
+   Compiling codex-tui v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/tui)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.07s
+────────────
+ Nextest run ID d754c471-0551-487a-b12f-72706cbfe3ac with nextest profile: local
+    Starting 33 tests across 1 binary (57 tests skipped)
+        PASS [   3.541s] ( 1/33) codex-tui::all suite::claude_auth::tmux_claude_auth_compatibility_selects_existing_login
+        PASS [   7.248s] ( 2/33) codex-tui::all suite::claude_auth::tmux_first_run_anthropic_account_selects_claude_login_after_success
+        PASS [  11.463s] ( 3/33) codex-tui::all suite::claude_auth::tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume
+        PASS [  11.389s] ( 4/33) codex-tui::all suite::provider_convergence::tmux_command_auth_is_visible_validated_and_has_no_enrollment_ui
+        PASS [  12.077s] ( 5/33) codex-tui::all suite::provider_convergence::tmux_custom_environment_provider_converges_across_hosts_picker_and_request
+        PASS [   6.541s] ( 6/33) codex-tui::all suite::provider_convergence::tmux_duplicate_model_slug_uses_exact_provider_identity
+        PASS [  11.863s] ( 7/33) codex-tui::all suite::provider_convergence::tmux_exact_replacement_persists_restart_and_request
+        PASS [   6.450s] ( 8/33) codex-tui::all suite::provider_convergence::tmux_existing_install_upgrade_preserves_current_and_request
+        PASS [  17.488s] ( 9/33) codex-tui::all suite::provider_convergence::tmux_fresh_a_then_b_preserves_first_success_across_restart
+        PASS [  11.036s] (10/33) codex-tui::all suite::provider_convergence::tmux_inactive_current_cancel_blocks_request_without_switch
+        PASS [  15.098s] (11/33) codex-tui::all suite::provider_convergence::tmux_inactive_noncurrent_is_managed_but_not_pickable_then_reactivates
+        PASS [  18.691s] (12/33) codex-tui::all suite::provider_convergence::tmux_managed_custom_key_survives_restart_and_request
+        PASS [   6.267s] (13/33) codex-tui::all suite::provider_convergence::tmux_missing_profile_current_never_silently_switches
+        PASS [   9.493s] (14/33) codex-tui::all suite::provider_convergence::tmux_native_spawn_picker_and_parent_request_share_exact_custom_runtime
+        PASS [   6.670s] (15/33) codex-tui::all suite::provider_convergence::tmux_permission_reload_preserves_active_runtime_over_saved_default
+        PASS [   7.762s] (16/33) codex-tui::all suite::provider_convergence::tmux_resumed_main_session_retains_exact_runtime_identity
+        PASS [   0.003s] (17/33) codex-tui::all suite::provider_management::binary_mtime_is_representable_for_evidence
+        PASS [  18.377s] (18/33) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_api_key_failure_cancel_replace_and_same_session_request
+        PASS [   9.586s] (19/33) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_environment_guidance_does_not_offer_vault_override
+        PASS [  11.109s] (20/33) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_openai_account_cancel_then_request_without_model_change
+        PASS [   6.479s] (21/33) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_openai_environment_key_preserves_external_ownership
+        PASS [   6.942s] (22/33) codex-tui::all suite::provider_management::reauthentication_apps::tmux_untrusted_apps_origin_preserves_account_and_healthy_model_route
+        PASS [   0.004s] (23/33) codex-tui::all suite::provider_management::selection_parser_accepts_exact_and_inline_replacement_rows
+        PASS [   6.881s] (24/33) codex-tui::all suite::provider_management::tmux_ambient_model_picker_offers_only_glm
+        PASS [   9.738s] (25/33) codex-tui::all suite::provider_management::tmux_astra_selection_cancel_restart_and_request
+        PASS [  10.471s] (26/33) codex-tui::all suite::provider_management::tmux_current_deactivate_cancel_is_inert
+        PASS [  21.512s] (27/33) codex-tui::all suite::provider_management::tmux_current_exact_replacement_is_persisted_before_deactivation
+        PASS [  10.094s] (28/33) codex-tui::all suite::provider_management::tmux_environment_copy_and_eligibility_never_delete_credentials
+        PASS [  28.303s] (29/33) codex-tui::all suite::provider_management::tmux_noncurrent_deactivate_reactivate_restart_retains_request_credential
+        PASS [  14.865s] (30/33) codex-tui::all suite::provider_management::tmux_pf50_api_key_setup_and_recovery_are_reused
+        PASS [   8.938s] (31/33) codex-tui::all suite::provider_management::tmux_pf51_openai_account_cancel_and_retry_are_correlated
+        PASS [  13.289s] (32/33) codex-tui::all suite::provider_management::tmux_pf52_claude_recovery_cancel_and_retry_are_reused
+        PASS [  18.282s] (33/33) codex-tui::all suite::provider_management::tmux_shared_and_custom_catalog_have_management_status_parity
+────────────
+     Summary [ 346.489s] 33 tests run: 33 passed, 57 skipped

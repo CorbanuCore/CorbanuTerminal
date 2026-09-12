@@ -1,0 +1,249 @@
+   Compiling codex-http-client v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/http-client)
+   Compiling codex-network-proxy v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/network-proxy)
+   Compiling codex-utils-path-uri v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/path-uri)
+   Compiling codex-aws-auth v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/aws-auth)
+   Compiling codex-wallet v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/wallet)
+   Compiling codex-responses-api-proxy v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/responses-api-proxy)
+   Compiling codex-websocket-client v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/websocket-client)
+   Compiling codex-client v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/codex-client)
+   Compiling codex-wallet-daemon v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/wallet-daemon)
+   Compiling codex-protocol v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/protocol)
+   Compiling codex-browser-isolation v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/browser-isolation)
+   Compiling codex-api v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/codex-api)
+   Compiling codex-file-system v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/file-system)
+   Compiling codex-shell-command v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/shell-command)
+   Compiling codex-agent-identity v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/agent-identity)
+   Compiling codex-utils-output-truncation v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/output-truncation)
+   Compiling codex-code-mode-protocol v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/code-mode-protocol)
+   Compiling codex-state v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/state)
+   Compiling codex-context-fragments v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/context-fragments)
+   Compiling codex-git-utils v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/git-utils)
+   Compiling codex-exec-server-protocol v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/exec-server-protocol)
+   Compiling codex-app-server-protocol v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/app-server-protocol)
+   Compiling codex-skills v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/skills)
+   Compiling codex-secrets v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/secrets)
+   Compiling codex-code-mode v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/code-mode)
+   Compiling codex-shell-escalation v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/shell-escalation)
+   Compiling codex-prompts v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/prompts)
+   Compiling codex-vault v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/vault)
+   Compiling codex-rollout-trace v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/rollout-trace)
+   Compiling codex-otel v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/otel)
+   Compiling codex-model-provider-info v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/model-provider-info)
+   Compiling codex-response-debug-context v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/response-debug-context)
+   Compiling codex-agent-graph-store v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/agent-graph-store)
+   Compiling codex-memories-read v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/memories/read)
+   Compiling codex-utils-cli v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/cli)
+   Compiling codex-utils-sandbox-summary v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/sandbox-summary)
+   Compiling codex-gpu-market v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/gpu-market)
+   Compiling codex-tasknode-session v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/tasknode-session)
+   Compiling codex-utils-approval-presets v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/approval-presets)
+   Compiling codex-code-mode-runtime v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/code-mode-runtime)
+   Compiling codex-features v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/features)
+   Compiling codex-windows-sandbox v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/windows-sandbox-rs)
+   Compiling codex-rollout v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/rollout)
+   Compiling codex-config v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/config)
+   Compiling codex-sandboxing v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/sandboxing)
+   Compiling codex-code-mode-host v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/code-mode-host)
+   Compiling codex-exec-server v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/exec-server)
+   Compiling codex-linux-sandbox v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/linux-sandbox)
+   Compiling codex-login v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/login)
+   Compiling codex-protected-state v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/protected-state)
+   Compiling codex-message-history v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/message-history)
+   Compiling codex-utils-plugins v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/plugins)
+   Compiling codex-rmcp-client v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/rmcp-client)
+   Compiling codex-plugin v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/plugin)
+   Compiling codex-apply-patch v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/apply-patch)
+   Compiling codex-hooks v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/hooks)
+   Compiling codex-models-manager v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/models-manager)
+   Compiling codex-feedback v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/feedback)
+   Compiling codex-connectors v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/connectors)
+   Compiling codex-arg0 v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/arg0)
+   Compiling codex-model-provider v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/model-provider)
+   Compiling codex-provider-auth v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/provider-auth)
+   Compiling codex-tools v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/tools)
+   Compiling codex-mcp v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/codex-mcp)
+   Compiling codex-analytics v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/analytics)
+   Compiling codex-thread-store v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/thread-store)
+   Compiling codex-backend-client v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/backend-client)
+   Compiling codex-core-skills v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/core-skills)
+   Compiling codex-cloud-tasks-client v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/cloud-tasks-client)
+   Compiling codex-cloud-tasks-mock-client v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/cloud-tasks-mock-client)
+   Compiling codex-extension-api v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/extension-api)
+   Compiling codex-core-plugins v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/core-plugins)
+   Compiling codex-git-attribution v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/git-attribution)
+   Compiling codex-home v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/codex-home)
+   Compiling codex-skills-extension v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/skills)
+   Compiling codex-core v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/core)
+   Compiling codex-connectors-extension v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/connectors)
+   Compiling codex-image-generation-extension v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/image-generation)
+   Compiling codex-app-server-transport v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/app-server-transport)
+   Compiling codex-memories-write v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/memories/write)
+   Compiling codex-guardian v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/guardian)
+   Compiling codex-chatgpt v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/chatgpt)
+   Compiling codex-goal-extension v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/goal)
+   Compiling codex-mcp-extension v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/mcp)
+   Compiling codex-agent-extension v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/agent)
+   Compiling codex-cloud-config v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/cloud-config)
+   Compiling codex-memories-extension v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/memories)
+   Compiling codex-web-search-extension v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/web-search)
+   Compiling codex-external-agent-migration v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/external-agent-migration)
+   Compiling codex-ollama v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ollama)
+   Compiling codex-lmstudio v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/lmstudio)
+   Compiling codex-mcp-server v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/mcp-server)
+   Compiling codex-app-server-test-client v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/app-server-test-client)
+   Compiling codex-app-server-daemon v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/app-server-daemon)
+   Compiling codex-app-server v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/app-server)
+   Compiling codex-utils-oss v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/oss)
+   Compiling codex-app-server-client v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/app-server-client)
+   Compiling codex-tui v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/tui)
+   Compiling codex-telegram v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/telegram)
+   Compiling codex-exec v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/exec)
+warning: variant `OpenPlans` is never constructed
+   --> tui/src/app_event.rs:318:5
+    |
+313 | pub(crate) enum WalletUnlockContinuation {
+    |                 ------------------------ variant in this enum
+...
+318 |     OpenPlans {
+    |     ^^^^^^^^^
+    |
+    = note: `WalletUnlockContinuation` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variants `ProviderCredentialStatusesReady`, `OpenWalletPlanReceipt`, and `WalletRecoverPlanRequested` are never constructed
+    --> tui/src/app_event.rs:1764:5
+     |
+ 395 | pub(crate) enum AppEvent {
+     |                 -------- variants in this enum
+...
+1764 |     ProviderCredentialStatusesReady {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1930 |     OpenWalletPlanReceipt {
+     |     ^^^^^^^^^^^^^^^^^^^^^
+...
+1934 |     WalletRecoverPlanRequested,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `AppEvent` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: variant `Checking` is never constructed
+   --> tui/src/chatwidget/claude_code_login.rs:186:5
+    |
+185 | pub(crate) enum ClaudeCodePlanStatus {
+    |                 -------------------- variant in this enum
+186 |     Checking,
+    |     ^^^^^^^^
+    |
+    = note: `ClaudeCodePlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: variants `Checking`, `Active`, `WalletOnly`, `ConnectedStatusUnavailable`, `NotConnected`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:7:5
+   |
+ 6 | pub(crate) enum PfTerminalPlanStatus {
+   |                 -------------------- variants in this enum
+ 7 |     Checking,
+   |     ^^^^^^^^
+ 8 |     Active {
+   |     ^^^^^^
+...
+12 |     WalletOnly {
+   |     ^^^^^^^^^^
+...
+15 |     ConnectedStatusUnavailable {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+18 |     NotConnected,
+   |     ^^^^^^^^^^^^
+19 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `PfTerminalPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `load` is never used
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:22:21
+   |
+22 | pub(crate) async fn load(
+   |                     ^^^^
+
+warning: constant `PROVIDER_STATUS_TIMEOUT` is never used
+  --> tui/src/chatwidget/provider_credentials.rs:33:7
+   |
+33 | const PROVIDER_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
+   |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `AvailableFromEnvironment`, `Stored`, `NotConfigured`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/provider_credentials.rs:38:5
+   |
+36 | pub(crate) enum ProviderApiKeyStatus {
+   |                 -------------------- variants in this enum
+37 |     Checking,
+38 |     AvailableFromEnvironment,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+39 |     Stored,
+   |     ^^^^^^
+40 |     NotConfigured,
+   |     ^^^^^^^^^^^^^
+41 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `ProviderApiKeyStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `open_provider_credentials_menu` and `refresh_provider_credentials_status_in_background` are never used
+   --> tui/src/chatwidget/provider_credentials.rs:108:19
+    |
+107 | impl ChatWidget {
+    | --------------- methods in this implementation
+108 |     pub(crate) fn open_provider_credentials_menu(&mut self) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+137 |     fn refresh_provider_credentials_status_in_background(&self) {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `provider_api_key_statuses` is never used
+   --> tui/src/chatwidget/provider_credentials.rs:380:4
+    |
+380 | fn provider_api_key_statuses(codex_home: &Path) -> Vec<(String, ProviderApiKeyStatus)> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `provider_api_key_unavailable_statuses` is never used
+   --> tui/src/chatwidget/provider_credentials.rs:409:4
+    |
+409 | fn provider_api_key_unavailable_statuses() -> Vec<(String, ProviderApiKeyStatus)> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `New`, `Onboarding`, and `Upgrade` are never constructed
+  --> tui/src/chatwidget/wallet_menu.rs:55:5
+   |
+54 | pub(crate) enum WalletPlanPurchaseMode {
+   |                 ---------------------- variants in this enum
+55 |     New,
+   |     ^^^
+56 |     Onboarding {
+   |     ^^^^^^^^^^
+...
+59 |     Upgrade {
+   |     ^^^^^^^
+   |
+   = note: `WalletPlanPurchaseMode` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `wallet_address` is never read
+   --> tui/src/chatwidget/wallet_menu.rs:114:16
+    |
+113 | pub(crate) struct WalletPlanStatus {
+    |                   ---------------- field in this struct
+114 |     pub(crate) wallet_address: String,
+    |                ^^^^^^^^^^^^^^
+    |
+    = note: `WalletPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `latest_plan_receipt` is never used
+   --> tui/src/chatwidget/wallet_receipt.rs:190:15
+    |
+190 | pub(super) fn latest_plan_receipt(
+    |               ^^^^^^^^^^^^^^^^^^^
+
+   Compiling codex-cloud-tasks v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/cloud-tasks)
+   Compiling codex-cli v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/cli)
+warning: `codex-tui` (lib) generated 13 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 24s

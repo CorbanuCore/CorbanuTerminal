@@ -309,7 +309,7 @@
       <p class="lede">A shareable view of what is finished, what remains under measured qualification, and which dependencies the latest work unlocks.</p>
       <div class="snapshot">
         <span><strong>Snapshot:</strong> 11 September 2026 · human acceptance and main/release reconciliation</span>
-        <span><strong>Integration:</strong> <code>integrate/pf13-main-release-20260911</code> · main push pending final tests</span>
+        <span><strong>Integration:</strong> <code>integrate/pf13-main-release-20260911</code> · combined RTX qualification passed; authorized main landing</span>
         <span><strong>Scope:</strong> 84 P0-plan sprint records, including inherited profile/Task Node records; 52 remain current</span>
         <span><strong>Deadline:</strong> 8 October 2026</span>
       </div>
@@ -497,7 +497,7 @@
       </div>
 
       <div class="footnote">
-        <strong>Human-test checkpoint ready:</strong> Controller and memory dependencies are integrated, tested and archived. The combined human-memory fixture passed 16/16 Rust and 2/2 Python tests; its expected-owner-exit false-negative was corrected and final Astra review is clean. Checks 21–23 now have pinned assisted-testing instructions; no human acceptance is claimed. Broker launcher composition and its review-budget decision remain open. Frozen provenance retains its production gates; PF-35 remains external. Reviews used: broker 5/5, frozen provenance 5/5, completed UI 3/5, memory plus fixture 5/5 and PF20 2/5. Integration is pushed separately, not merged to main. <a href="humanTest.html">Test the exact RTX candidate</a>. <a href="qa/security-levels/planning/parallel-handoffs-2026-09-04-round-5/README.md">Coordination and evidence ledger</a>.
+        <strong>Human acceptance and integration:</strong> Travis completed PF13 human testing and authorized main landing. The reconciled main/0.1.42 tree passed selected RTX tests, 33 TUI integration tests and packaged tool/recovery journeys. The accepted Mac package remains installed; this is not a new release or a claim that every historical blocked case passed. Next is the staged PF-27 broker service, with one additional Fable 5.1 High review approved (five already spent). Privileged installation is not authorized. Frozen provenance retains its production gates; PF-35 stays external. Other ledgers are unchanged: provenance 5/5, completed UI 3/5, memory plus fixture 5/5 and PF20 2/5. <a href="qa/provider-auth/pf-58/main-integration-20260911/README.md">Current acceptance and test evidence</a>. <a href="humanTest.html">Human guide and historical agent outcomes</a>.
       </div>
 
       <details>
@@ -506,6 +506,7 @@
           <ul>
             <li>“Completed” means a sprint is accepted and archived—not merely planned, drafted or partially coded.</li>
             <li>Feature percentages count only that feature’s sprint records; a dependency completed in another feature does not inflate the percentage.</li>
+            <li>Phase and lane breakdowns retain their round-five scope; the headline count includes the later inherited profile and Task Node records.</li>
             <li>The 35% integration reserve is provisional until midpoint estimates replace it with the plan’s worker-day formula.</li>
             <li>Protected-mode activation remains unavailable; this dashboard reports engineering progress, not release readiness.</li>
           </ul>

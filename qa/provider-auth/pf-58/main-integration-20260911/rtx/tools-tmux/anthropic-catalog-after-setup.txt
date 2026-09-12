@@ -1,0 +1,50 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                            │
+│                                                          │
+│ model:       claude-fable-5-1-plan high   /model to cha… │
+│ directory:   /home/travis/…/pf13-main-release-20260911   │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+
+  Select Model and Effort
+  Anthropic API key
+
+  OpenAI  Claude Plan  [Anthropic]
+
+› 1. Claude Opus 5     Model: claude-opus-5. Claude Opus 5 through the Anthropic Messages API.
+  2. Claude Fable 5.1  Model: claude-fable-5-1. Claude Fable 5.1 through the Anthropic Messages API.
+  3. Claude Fable 5    Model: claude-fable-5. Claude Fable 5 through the Anthropic Messages API.
+
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

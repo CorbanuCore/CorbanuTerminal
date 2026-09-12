@@ -1,0 +1,17 @@
+{
+  "stream_cancel_key": "Escape",
+  "passed": true,
+  "candidate": "/home/travis/security-round5/evidence/pf13-main-release-20260911/candidate/bin/corbanu",
+  "sha256": "d67c21f401fc50ff6b751287434cf0c3303df81bea60b8fa9d74df8d8f1524af",
+  "host_sha256": "c32fe53e37bb9a63c95db0a5dc3b4d219d917e291b8985a42a52a0d8ccebdb8b",
+  "human_acceptance": false,
+  "tool_round_trips": 4,
+  "concurrent_processes": 3,
+  "same_home_restart": true,
+  "stream_cancel_recovery": true,
+  "permissions_security_cancel_inert": true,
+  "claude_guidance_40_columns": true,
+  "claude_catalog_after_setup_and_restart": true,
+  "anthropic_management_entry_present": true,
+  "anthropic_catalog_after_api_setup": true
+}

@@ -1,0 +1,510 @@
+cargo clippy --fix --tests --allow-dirty {args}
+    Checking codex-tui v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/tui)
+    Checking codex-wallet-daemon v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/wallet-daemon)
+warning: variant `OpenPlans` is never constructed
+   --> tui/src/app_event.rs:318:5
+    |
+313 | pub(crate) enum WalletUnlockContinuation {
+    |                 ------------------------ variant in this enum
+...
+318 |     OpenPlans {
+    |     ^^^^^^^^^
+    |
+    = note: `WalletUnlockContinuation` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variants `ProviderCredentialStatusesReady`, `OpenWalletPlanReceipt`, and `WalletRecoverPlanRequested` are never constructed
+    --> tui/src/app_event.rs:1764:5
+     |
+ 395 | pub(crate) enum AppEvent {
+     |                 -------- variants in this enum
+...
+1764 |     ProviderCredentialStatusesReady {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1930 |     OpenWalletPlanReceipt {
+     |     ^^^^^^^^^^^^^^^^^^^^^
+...
+1934 |     WalletRecoverPlanRequested,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `AppEvent` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: variant `Checking` is never constructed
+   --> tui/src/chatwidget/claude_code_login.rs:186:5
+    |
+185 | pub(crate) enum ClaudeCodePlanStatus {
+    |                 -------------------- variant in this enum
+186 |     Checking,
+    |     ^^^^^^^^
+    |
+    = note: `ClaudeCodePlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: variants `Checking`, `Active`, `WalletOnly`, `ConnectedStatusUnavailable`, `NotConnected`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:7:5
+   |
+ 6 | pub(crate) enum PfTerminalPlanStatus {
+   |                 -------------------- variants in this enum
+ 7 |     Checking,
+   |     ^^^^^^^^
+ 8 |     Active {
+   |     ^^^^^^
+...
+12 |     WalletOnly {
+   |     ^^^^^^^^^^
+...
+15 |     ConnectedStatusUnavailable {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+18 |     NotConnected,
+   |     ^^^^^^^^^^^^
+19 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `PfTerminalPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `load` is never used
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:22:21
+   |
+22 | pub(crate) async fn load(
+   |                     ^^^^
+
+warning: constant `PROVIDER_STATUS_TIMEOUT` is never used
+  --> tui/src/chatwidget/provider_credentials.rs:33:7
+   |
+33 | const PROVIDER_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
+   |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `AvailableFromEnvironment`, `Stored`, `NotConfigured`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/provider_credentials.rs:38:5
+   |
+36 | pub(crate) enum ProviderApiKeyStatus {
+   |                 -------------------- variants in this enum
+37 |     Checking,
+38 |     AvailableFromEnvironment,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+39 |     Stored,
+   |     ^^^^^^
+40 |     NotConfigured,
+   |     ^^^^^^^^^^^^^
+41 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `ProviderApiKeyStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `open_provider_credentials_menu` and `refresh_provider_credentials_status_in_background` are never used
+   --> tui/src/chatwidget/provider_credentials.rs:108:19
+    |
+107 | impl ChatWidget {
+    | --------------- methods in this implementation
+108 |     pub(crate) fn open_provider_credentials_menu(&mut self) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+137 |     fn refresh_provider_credentials_status_in_background(&self) {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `provider_api_key_statuses` is never used
+   --> tui/src/chatwidget/provider_credentials.rs:380:4
+    |
+380 | fn provider_api_key_statuses(codex_home: &Path) -> Vec<(String, ProviderApiKeyStatus)> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `provider_api_key_unavailable_statuses` is never used
+   --> tui/src/chatwidget/provider_credentials.rs:409:4
+    |
+409 | fn provider_api_key_unavailable_statuses() -> Vec<(String, ProviderApiKeyStatus)> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `New`, `Onboarding`, and `Upgrade` are never constructed
+  --> tui/src/chatwidget/wallet_menu.rs:55:5
+   |
+54 | pub(crate) enum WalletPlanPurchaseMode {
+   |                 ---------------------- variants in this enum
+55 |     New,
+   |     ^^^
+56 |     Onboarding {
+   |     ^^^^^^^^^^
+...
+59 |     Upgrade {
+   |     ^^^^^^^
+   |
+   = note: `WalletPlanPurchaseMode` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `wallet_address` is never read
+   --> tui/src/chatwidget/wallet_menu.rs:114:16
+    |
+113 | pub(crate) struct WalletPlanStatus {
+    |                   ---------------- field in this struct
+114 |     pub(crate) wallet_address: String,
+    |                ^^^^^^^^^^^^^^
+    |
+    = note: `WalletPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `latest_plan_receipt` is never used
+   --> tui/src/chatwidget/wallet_receipt.rs:190:15
+    |
+190 | pub(super) fn latest_plan_receipt(
+    |               ^^^^^^^^^^^^^^^^^^^
+
+warning: this function has too many arguments (8/7)
+    --> tui/src/chatwidget/wallet_menu.rs:1408:5
+     |
+1408 | /     pub(crate) fn on_wallet_plan_credential_persistence_finished(
+1409 | |         &mut self,
+1410 | |         attempt_id: WalletPlanPersistenceAttemptId,
+1411 | |         operation: WalletPlanProvisioningOperation,
+...    |
+1416 | |         result: Result<(), WalletPlanCredentialPersistenceError>,
+1417 | |     ) {
+     | |_____^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#too_many_arguments
+     = note: `#[warn(clippy::too_many_arguments)]` on by default
+
+warning: `codex-tui` (lib) generated 14 warnings
+    Checking codex-cloud-tasks v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/cloud-tasks)
+    Checking codex-cli v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/cli)
+warning: variants `ProviderCredentialStatusesReady`, `OpenWalletPlanReceipt`, and `WalletRecoverPlanRequested` are never constructed
+    --> tui/src/app_event.rs:1764:5
+     |
+ 395 | pub(crate) enum AppEvent {
+     |                 -------- variants in this enum
+...
+1764 |     ProviderCredentialStatusesReady {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1930 |     OpenWalletPlanReceipt {
+     |     ^^^^^^^^^^^^^^^^^^^^^
+...
+1934 |     WalletRecoverPlanRequested,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `AppEvent` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variants `Checking`, `ConnectedStatusUnavailable`, `NotConnected`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:7:5
+   |
+ 6 | pub(crate) enum PfTerminalPlanStatus {
+   |                 -------------------- variants in this enum
+ 7 |     Checking,
+   |     ^^^^^^^^
+...
+15 |     ConnectedStatusUnavailable {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+18 |     NotConnected,
+   |     ^^^^^^^^^^^^
+19 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `PfTerminalPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: variants `Onboarding` and `Upgrade` are never constructed
+  --> tui/src/chatwidget/wallet_menu.rs:56:5
+   |
+54 | pub(crate) enum WalletPlanPurchaseMode {
+   |                 ---------------------- variants in this enum
+55 |     New,
+56 |     Onboarding {
+   |     ^^^^^^^^^^
+...
+59 |     Upgrade {
+   |     ^^^^^^^
+   |
+   = note: `WalletPlanPurchaseMode` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: constant `OTHER_TOOLTIP` is never used
+  --> tui/src/tooltips.rs:20:7
+   |
+20 | const OTHER_TOOLTIP: &str = "*New* Build faster with the **Desktop app**. Run 'codex app' or visit https://chatgpt.com/codex?app-lan...
+   |       ^^^^^^^^^^^^^
+
+warning: constant `OTHER_TOOLTIP_NON_MAC` is never used
+  --> tui/src/tooltips.rs:22:7
+   |
+22 | const OTHER_TOOLTIP_NON_MAC: &str = "*New* Build faster with Codex.";
+   |       ^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `FREE_GO_TOOLTIP` is never used
+  --> tui/src/tooltips.rs:24:7
+   |
+24 | const FREE_GO_TOOLTIP: &str =
+   |       ^^^^^^^^^^^^^^^
+
+warning: function `get_update_action` is never used
+  --> tui/src/update_action.rs:59:8
+   |
+59 | pub fn get_update_action() -> Option<UpdateAction> {
+   |        ^^^^^^^^^^^^^^^^^
+
+warning: function `get_upgrade_version` is never used
+  --> tui/src/updates.rs:23:8
+   |
+23 | pub fn get_upgrade_version(config: &Config) -> Option<String> {
+   |        ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CORBANU_LATEST_RELEASE_URL` is never used
+  --> tui/src/updates.rs:56:7
+   |
+56 | const CORBANU_LATEST_RELEASE_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CORBANU_RELEASE_BY_TAG_URL` is never used
+  --> tui/src/updates.rs:58:7
+   |
+58 | const CORBANU_RELEASE_BY_TAG_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `LEGACY_PFTERMINAL_LATEST_RELEASE_URL` is never used
+  --> tui/src/updates.rs:60:7
+   |
+60 | const LEGACY_PFTERMINAL_LATEST_RELEASE_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `LEGACY_PFTERMINAL_RELEASE_BY_TAG_URL` is never used
+  --> tui/src/updates.rs:62:7
+   |
+62 | const LEGACY_PFTERMINAL_RELEASE_BY_TAG_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `RELEASE_VALIDATION_TIMEOUT` is never used
+  --> tui/src/updates.rs:64:7
+   |
+64 | const RELEASE_VALIDATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `check_for_update` is never used
+  --> tui/src/updates.rs:71:10
+   |
+71 | async fn check_for_update(
+   |          ^^^^^^^^^^^^^^^^
+
+warning: function `get_upgrade_version_for_popup` is never used
+   --> tui/src/updates.rs:161:14
+    |
+161 | pub async fn get_upgrade_version_for_popup(config: &Config) -> Option<String> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: holding a disallowed type across an await point `tokio::sync::MutexGuard`
+   --> tui/src/app/tests/dispatch_integration.rs:579:13
+    |
+579 |         let store_guard = store.lock().await;
+    |             ^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#await_holding_invalid_type
+    = note: requested on the command line with `-D clippy::await-holding-invalid-type`
+
+warning: used `expect()` on a `Result` value
+   --> tui/src/ide_context/ipc.rs:963:23
+    |
+963 |         let tempdir = tempfile::tempdir().expect("tempdir");
+    |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+    = note: requested on the command line with `-D clippy::expect-used`
+
+warning: used `expect()` on a `Result` value
+   --> tui/src/ide_context/ipc.rs:964:9
+    |
+964 | /         std::fs::set_permissions(tempdir.path(), std::fs::Permissions::from_mode(0o700))
+965 | |             .expect("set private tempdir permissions");
+    | |______________________________________________________^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+warning: used `expect()` on an `Option` value
+  --> tui/src/tui/terminal_ownership_tests.rs:58:26
+   |
+58 |       let diagnostic_dir = std::env::var_os(DIAGNOSTIC_DIR_ENV)
+   |  __________________________^
+59 | |         .map(std::path::PathBuf::from)
+60 | |         .expect("diagnostic directory passed to child");
+   | |_______________________________________________________^
+   |
+   = note: if this value is `None`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+  --> tui/src/tui/terminal_ownership_tests.rs:61:5
+   |
+61 |     panic_diagnostics::configure(diagnostic_dir).expect("configure panic diagnostics");
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+  --> tui/src/tui/terminal_ownership_tests.rs:65:5
+   |
+65 | /     set_modes_with_ownership(TerminalOwnership::Acquire(&mut restore_guard))
+66 | |         .expect("acquire terminal modes");
+   | |_________________________________________^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+  --> tui/src/tui/terminal_ownership_tests.rs:68:25
+   |
+68 |       let _stderr_guard = super::terminal_stderr::TerminalStderrGuard::install()
+   |  _________________________^
+69 | |         .expect("install terminal stderr guard");
+   | |________________________________________________^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+  --> tui/src/tui/terminal_ownership_tests.rs:73:27
+   |
+73 |               let runtime = tokio::runtime::Builder::new_multi_thread()
+   |  ___________________________^
+74 | |                 .worker_threads(2)
+75 | |                 .thread_name("contained-panic-worker")
+76 | |                 .enable_all()
+77 | |                 .build()
+78 | |                 .expect("contained panic runtime");
+   | |__________________________________________________^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+  --> tui/src/tui/terminal_ownership_tests.rs:89:13
+   |
+89 | /             restore_guard
+90 | |                 .restore()
+91 | |                 .expect("restore after contained panic");
+   | |________________________________________________________^
+   |
+   = note: if this value is an `Err`, it will panic
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+   --> tui/src/tui/terminal_ownership_tests.rs:107:36
+    |
+107 |     let mut command = Command::new(std::env::current_exe().expect("current test executable"));
+    |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+   --> tui/src/tui/terminal_ownership_tests.rs:117:28
+    |
+117 |         .stdin(Stdio::from(slave.try_clone().expect("clone slave stdin")))
+    |                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+   --> tui/src/tui/terminal_ownership_tests.rs:118:29
+    |
+118 |         .stdout(Stdio::from(slave.try_clone().expect("clone slave stdout")))
+    |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+   --> tui/src/tui/terminal_ownership_tests.rs:119:29
+    |
+119 |         .stderr(Stdio::from(slave.try_clone().expect("clone slave stderr")));
+    |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+   --> tui/src/tui/terminal_ownership_tests.rs:120:21
+    |
+120 |     let mut child = command.spawn().expect("spawn terminal ownership child");
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+   --> tui/src/tui/terminal_ownership_tests.rs:141:18
+    |
+141 |     let status = child.wait().expect("wait for terminal ownership child");
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+warning: used `expect()` on a `Result` value
+   --> tui/src/tui/terminal_ownership_tests.rs:144:18
+    |
+144 |     let output = output_reader.join().expect("join pty output reader");
+    |                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#expect_used
+
+warning: `codex-tui` (lib test) generated 41 warnings (10 duplicates)
+warning: this function has too many arguments (8/7)
+   --> tui/tests/suite/claude_auth.rs:371:1
+    |
+371 | / fn session_spec(
+372 | |     name: &str,
+373 | |     codex: &Path,
+374 | |     repo_root: &Path,
+...   |
+379 | |     provide_openai_fixture: bool,
+380 | | ) -> SessionSpec {
+    | |________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#too_many_arguments
+    = note: `#[warn(clippy::too_many_arguments)]` on by default
+
+warning: used `unwrap()` on a `Result` value
+   --> tui/tests/suite/multi_provider_onboarding.rs:100:35
+    |
+100 |                 let (stream, _) = listener.accept().await.unwrap();
+    |                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: consider using `expect()` to provide a better panic message
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+    = note: requested on the command line with `-D clippy::unwrap-used`
+
+warning: used `unwrap()` on a `Result` value
+   --> tui/tests/suite/multi_provider_onboarding.rs:103:17
+    |
+103 |                 BufReader::new(read).read_line(&mut line).await.unwrap();
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: consider using `expect()` to provide a better panic message
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+   --> tui/tests/suite/multi_provider_onboarding.rs:104:50
+    |
+104 |                 let request: serde_json::Value = serde_json::from_str(&line).unwrap();
+    |                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: consider using `expect()` to provide a better panic message
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+
+warning: used `unwrap()` on a `Result` value
+   --> tui/tests/suite/multi_provider_onboarding.rs:122:17
+    |
+122 | /                 write
+123 | |                     .write_all(format!("{response}\n").as_bytes())
+124 | |                     .await
+125 | |                     .unwrap();
+    | |_____________________________^
+    |
+    = note: if this value is an `Err`, it will panic
+    = help: consider using `expect()` to provide a better panic message
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#unwrap_used
+
+warning: `codex-tui` (test "all") generated 5 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 23.88s

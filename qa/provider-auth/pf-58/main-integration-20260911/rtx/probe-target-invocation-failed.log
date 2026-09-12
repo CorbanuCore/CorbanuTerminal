@@ -1,0 +1,3 @@
+error: no example target named `wallet_client_package_probe` in `codex-wallet-daemon`, ... packages
+help: available example targets:
+    package_client_probe

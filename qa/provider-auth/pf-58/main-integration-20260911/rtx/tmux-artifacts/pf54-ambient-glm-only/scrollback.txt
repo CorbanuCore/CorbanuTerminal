@@ -1,0 +1,57 @@
+
+╭───────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                     │
+│                                                   │
+│ model:     loading   /model to change             │
+│ directory: ~/worktrees/pf13-main-release-20260911 │
+╰───────────────────────────────────────────────────╯
+
+
+› Find and fix a bug in @filename
+
+  Ambient GLM 5.2 via ambient standard · ~/worktrees/pf13-main-release-20260911 · Corbanu Terminal · TPS: -- tok/s
+
+╭───────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                     │
+│                                                   │
+│ model:     z-ai/glm-5.2   /model to change        │
+│ directory: ~/worktrees/pf13-main-release-20260911 │
+╰───────────────────────────────────────────────────╯
+
+
+  Select Model and Effort
+  Ambient coding plan
+
+  OpenAI  [Ambient]
+
+› 1. Ambient GLM 5.2 (current)  Model: z-ai/glm-5.2. Ambient: GLM 5.2 - $0.76/M input, $0.14/M cached input, $2.42/M output.
+
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

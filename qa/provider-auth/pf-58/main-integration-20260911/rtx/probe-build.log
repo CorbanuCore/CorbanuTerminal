@@ -1,0 +1,13 @@
+   Compiling zbus v4.4.0
+   Compiling tokio-native-tls v0.3.1
+   Compiling tokio-rustls v0.26.4
+   Compiling codex-uds v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/uds)
+   Compiling hyper-tls v0.6.0
+   Compiling hyper-rustls v0.27.7
+   Compiling reqwest v0.12.28
+   Compiling secret-service v4.0.0
+   Compiling keyring v3.6.3
+   Compiling codex-keyring-store v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/keyring-store)
+   Compiling codex-wallet v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/wallet)
+   Compiling codex-wallet-daemon v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/wallet-daemon)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.53s

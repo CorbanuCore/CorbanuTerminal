@@ -1,0 +1,44 @@
+╭───────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                     │
+│                                                   │
+│ model:     fixture-model   /model to change       │
+│ directory: ~/worktrees/pf13-main-release-20260911 │
+╰───────────────────────────────────────────────────╯
+
+
+› Improve documentation in @filename
+
+  fixture-model via pf55-a default · ~/worktrees/pf13-main-release-20260911 · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
