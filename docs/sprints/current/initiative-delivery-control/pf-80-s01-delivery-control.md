@@ -5,20 +5,20 @@ status: in_progress
 plan_file: "docs/plans/active/initiative-delivery-control.md"
 plan_feature: "PF-80"
 execution_order: 1
-owner: "Codex Task Node decision-projection lane"
-parallel_lane: "tasknode-decision-projection"
-write_scope: "scripts/initiative_control/attention.py, scripts/initiative_control/status.js, scripts/initiative_control/test_attention.py, scripts/initiative_control/test_decision_feed.py, qa/initiative-control/pf-80-s01/decision-projection/age-followup-receipt.md"
-integration_gate: "Manager audits F01 oldest-age correction, immutable timestamp and safe-text preservation, full Python/Node regressions, one new-code review and targeted actual-browser evidence/recheck. Receipt prepares exact Slack successor; no live state, sync/deploy, credentials, Slack or posting."
+owner: "Codex Task Node Slack-recovery lane"
+parallel_lane: "tasknode-slack-recovery"
+write_scope: "scripts/initiative_control/decision_alerts.py, scripts/initiative_control/decision_replies.py, scripts/initiative_control/test_decision_alerts.py, scripts/initiative_control/test_decision_replies.py, qa/initiative-control/pf-80-s01/decision-projection/slack-contract-receipt.md"
+integration_gate: "Manager accepts exact offline Slack recovery allocation before dispatch; five new files, target1200total/650non-test explicit coherent-unit exception, one new-code review plus necessary correction preserving prior usage. Verify durable intent/uncertainty/reply CAS/handoff restart and synthetic identity/redaction failures; final combined Python/Node/governance. No live transport, registration, credentials, shared state, TaskNode or agent tool calls."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
 branch: "workstream/tasknode-pf80-s01-20260911"
-base_commit: "adb36c528153247e252cb90bb23050298f8ebbe0"
+base_commit: "0368ed402a9dac4276b427313b9d7335670ee91c"
 depends_on: "none"
 created: 2026-09-10
 updated: 2026-09-11
 ---
 
 # PF-80-S01 — Native Task Node delivery-control integration
-September12: original feed/browser evidence checked independently:24supported/DEC021partial/DEC025advisory, additional F01 relative-age defect confirmed. [Age follow-up](../../../research/tasknode-integration/decision-age-followup.md) allocates the five-file correction and exact Slack successor preparation. No live Slack or unqualified human-readiness claim.
+September12: F01 corrected/reviewed; actual browser packet returned, independent evidence check running. DEC021partial/DEC025advisory remain. [Slack recovery allocation](../../../research/tasknode-integration/slack-recovery-allocation.md) owns the next five new files; manager review/integration precedes dispatch. No live Slack or unqualified human-readiness claim.
 
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
 The previous literal write scope is frozen, not an active worker assignment.
@@ -44,7 +44,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - Port: `scripts/initiative_control/` from the recovery source; audit every file, no state/auth/credential directories.
 - Planned contract and tests: `docs/research/tasknode-integration/`, `qa/initiative-control/pf-80-s01/`, focused tests beside the ported scripts.
 - Manager alone owns plan/sprint allocation, CI registration and live dashboard state; submit a handoff for any needed shared changes.
-- Previous reconciliation scope is frozen. Front matter now allocates offline contextual decision records and renderer; native validity scope is frozen. No live authority inferred.
+- Previous native/projection/age scopes are frozen. Front matter allocates offline Slack sender/reply recovery; reuse decisions.py CAS unchanged. No live authority inferred.
 
 ## Preconditions
 
@@ -76,7 +76,8 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact-goal reconciliation177ec93fc reviewed clean and integrated at3898eaa65;73 native tests pass there. In-memory exact-ID GET, strict injected observation and preserved404uncertainty; no send/retry/live claim. [Receipt](../../../../qa/initiative-control/pf-80-s01/native-reconciliation/receipt.md).
 
 ## Remaining
-- [ ] Complete F01 actual browser/history/redaction evidence and targeted independent recheck under [mandate](../../../research/tasknode-integration/decision-age-followup.md); preserve DEC001..026. Manager allocates prepared Slack sender/reply successor. Slack stays unconnected, DEC025 advisory; no human-readiness claim.
+- [ ] Implement [Slack recovery](../../../research/tasknode-integration/slack-recovery-allocation.md) after dispatch: durable parent/thread intent, verified-envelope intake, exact revision-bound manager CAS and restart-safe handoff with injected transports; complete failure/concurrency proof and concrete live-I/O successor. Target1200/650, no compressed proof or silent overage.
+- [ ] Complete independent check of returned F01 browser/history/redaction packet; preserve DEC001..026 and DEC021partial/DEC025advisory. No human-readiness claim or blocking independent Slack implementation.
 - [ ] Manager scopes accessible recovery/input/retention and restart/cross-process fences before the later CLI allocation; this is manager work, not unanswered product approval.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.
 - [ ] Give manager exact credential-scope/destination, enrollment, task-lifecycle and first-payload decisions; remain OFF if missing authority. Never inspect real credential stores as a worker.
@@ -84,7 +85,6 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [ ] Manager receives reviewed commit/evidence and controls source-sync cutover; existing remote service stays untouched by worker.
 
 ## Verification
-
 - [ ] Focused: `python3 -m unittest discover -s scripts/initiative_control -p 'test_*.py'`; install only pinned requirements in a disposable venv.
 - [ ] Native: session_validity plus existing delivery/recovery selectors, full crate via just test and normal-library check after guarded formatting; production-compiled private module, no public caller.
 - [ ] Governance: `python3 docs/plans/check.py`, `python3 docs/sprints/check.py`, `git diff --check`.

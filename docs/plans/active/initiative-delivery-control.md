@@ -19,10 +19,10 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "adb36c528153247e252cb90bb23050298f8ebbe0"
+    base_commit: "0368ed402a9dac4276b427313b9d7335670ee91c"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/tasknode-pf80-s01-20260911"
     branch: "workstream/tasknode-pf80-s01-20260911"
-    base_commit: "adb36c528153247e252cb90bb23050298f8ebbe0"
+    base_commit: "0368ed402a9dac4276b427313b9d7335670ee91c"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
     branch: "feat/provider-reauth-health"
     base_commit: "eb7af932bc8cc859122b5b2dbef223fbd45ea25c"
@@ -30,7 +30,7 @@ implementation_worktrees:
 
 # 3. Task Node integration and delivery control
 
-Current September12: corrected F01 age candidate1a6d9c8df reviewed/integrated at60c5671b9;122Python tests and Facilities Node regression pass. First review found a concrete legal decision-ID collision, fixed within five paths; integrator added one corrective code pass and it returned clean. Original code/design/evidence history remains spent, not reset. [Receipt](../../../qa/initiative-control/pf-80-s01/decision-projection/age-followup-receipt.md) retains original hashes and concrete Slack successor proposal. Laplace executes exact-package age/history/redaction proof; original24supported/DEC021partial/DEC025advisory dispositions are not relabeled. Targeted independent evidence check and Slack allocation/configuration remain; no live connection or human-readiness claim.
+Current September12: F01 age1a6d9c8df reviewed/integrated;122Python/Facilities Node pass. Laplace returned exact-package browser proof: age and legal-ID history regression pass;152 no-exposure trials, DEC021mixed-feed useful-content expectation still partial. Darwin independently checks the packet; no new human-readiness claim. Earlier code/design/evidence usage and corrected P2 remain recorded. [Slack recovery allocation](../../research/tasknode-integration/slack-recovery-allocation.md) now owns five new files, target1200total/650non-test with explicit coherent-unit exception, one new-code review plus necessary correction. Manager reviews/integrates allocation before Astra High dispatch; real Slack/Task Node stay OFF. UI evidence does not block this independent offline successor.
 
 ## Activation record
 
@@ -93,7 +93,7 @@ owns the now-reviewed production-compiled private path bda5b35b4. Combined stagi
 The [dashboard decision/Slack amendment](../decision-escalation.md) is queued within
 PF-80-S01. Channel setup and publication qualification are separate from this code.
 The [prepared projection allocation](../../research/tasknode-integration/decision-projection-next.md)
-records the current five-file ownership, tests and dispatch gates; the manager receipt records actual running state.
+is historical. [Slack recovery allocation](../../research/tasknode-integration/slack-recovery-allocation.md) records current five-file ownership and tests; the manager receipt records actual dispatch, not plan prose.
 The [runtime recovery handoff](../../research/tasknode-integration/recovery-decision-handoff.md)
 records manager design work, recommendations and the gated human test plan.
 
@@ -113,7 +113,7 @@ recovery source, not this main baseline. PF-80-S01 must port the bounded tooling
 qualify it here and prepare a reviewed first-event path. The port and corrections
 are now integrated locally at the receiving base recorded above; remote main and
 the current publisher remain distinct. September12 cutover already selected
-the manager receiving checkout; the old publisher was declined and its termination is being verified before fresh sync. Canonical source reconciliation no longer waits for publication. Do not copy the whole
+the manager receiving checkout; obsolete publishers were archived and normal native Luna publication recovered, most recently d19e34b16 at12:37:35Z. No user click remains. Do not copy the whole
 recovery branch or any auth/session/state directory.
 
 ## Invariants
