@@ -18,7 +18,6 @@ updated: 2026-09-12
 ---
 
 # PF-27-S04 — Isolated credential broker process
-
 September 11 resumption: fresh main-based allocation after human acceptance.
 The earlier missing-checkout report was stale: `security-round5-broker` is clean
 at pushed `cd7457da7`. Reconcile its existing service stage; do not redo it.
@@ -30,7 +29,6 @@ The [resume handoff](../../../../qa/security-levels/planning/parallel-handoffs-2
 - Excludes: adjacent feature implementation, Permissive policy changes, and unlisted integrations.
 
 ## Plan linkage
-
 - Plan: [P0 `/security` levels](../../../plans/active/p0-security-levels.md#pf-27).
 - Feature: `PF-27`.
 - Product citation: **Non-negotiable controls** — “Permit agents to reference credentials only by label; resolve them solely inside the trusted execution boundary.”
