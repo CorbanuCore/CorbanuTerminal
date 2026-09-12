@@ -18,6 +18,13 @@ Recorded at **2026-09-12 05:25:45 UTC** (September 11, 22:25:45 Phoenix).
 
 ## History and current window
 
+Reviews35/36 dispatched2026-09-12 23:15:26UTC and both completed exit0,
+findings[], patch correct, confidence0.90/0.82. Original descriptor-root-dispatch-
+20260912/{astra35,fable36}.{json,txt,exit,started.txt} retained. Same frozen
+c7d48e482/Rustbd56b597 and exact final proof; no source repairs or extra opinion.
+This scoped extension used2/remaining0; preserve1–34 and all original failures.
+Manager receiving and next literal allocation are separate; no native authority.
+
 Descriptor-pair dispatch reviews35 AstraHigh and36 Fable5.1High Corbanu/TMUX
 reserved September12 23:14UTC, manager allocation23d8e54a1. Two scoped extension
 slots reserved / zero unreserved; actual dispatch timestamps/outcomes follow.
