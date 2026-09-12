@@ -1,5 +1,19 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 12:32 UTC, September 12
+
+Publication approval remains resolved; no user click or new answer is needed.
+Last verified publication was12:04:01Z from3ba7b121. The following newer receiving
+results await this heartbeat's single native Luna sync; no live result inferred.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): complete C2 atomic retention/deletion passed independent review and was integrated atd5608c58d;346 combined state/TaskNode tests passed. Mendel now prepares the exact native ownership/deletion bridge allocation, not another retention prerequisite. No implementation of that successor is claimed yet; S03 still depends on full S02.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): F01 age fix1a6d9c8df is reviewed/integrated,122Python tests and Facilities Node regression pass. Review caught a legal decision-ID collision; corrected before integration and rerun clean. Laplace executes actual desktop/phone/history/redaction proof now. Slack sender/reply proposal is prepared; manager allocation and live configuration still pending, not user approval.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): parser406aa3c5 is reconciled. Sole owner returned concrete read-only descriptor preflight atb496da56 after the empty task readbacks. Report identifies process-launch fallback/cleanup ownership choices for manager disposition; no code/build/invocation or new execution authorization is inferred. Manager reviews the proposal next, not waiting on your answer.
+
+[Review and receiving evidence](integration-20260912-1232.md) distinguishes these
+accepted increments from full sprint, live integration or human-test readiness.
+The following older observations are retained history, not current assignments.
+
 ## Current observation — 11:56 UTC heartbeat, September 12
 
 Native Luna publication succeeded at11:40:05Z fromafe535c06, including Music

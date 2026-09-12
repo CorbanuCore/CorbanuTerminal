@@ -53,6 +53,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact owner, worker worktree/base and disjoint scope allocated; dispatch waits for the verified main merge and worker fast-forward.
 
 ## Done
+- [x] Corrected F01 age1a6d9c8df reviewed/integrated at60c5671b9;122Python/Facilities Node pass. Initial review P2 ID collision corrected, one added corrective review clean; prior usage retained. [Receiving proof](../../../../qa/initiative-control/status-display/integration-20260912-1232.md). Actual browser/evidence qualification remains separate.
 - [x] All26 original browser cases executed at72854ec77; independent check verified714filehashes,24supported/DEC021partial/DEC025advisory. F01 and Facilities phone-table observation retained; original evidence not relabeled as acceptance of newer code.
 - [x] Feed72854ec77 accepted590lines/281non-test after reproduced destination-less export failure, compatibility correction and clean additional review;111combined tests pass including actual server. [Receipt](../../../../qa/initiative-control/pf-80-s01/decision-projection/feed-receipt.md). Prior reviews preserved; independent evidence remains pending.
 - [x] Offline revision-bound decisions4ff73485c accepted after clean correction review;777lines,100combinedPython tests pass. Original VoltaDEC001..026 preserved; full UI/feed proof remains. [Receipt](../../../../qa/initiative-control/pf-80-s01/decision-projection/receipt.md).
@@ -75,8 +76,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact-goal reconciliation177ec93fc reviewed clean and integrated at3898eaa65;73 native tests pass there. In-memory exact-ID GET, strict injected observation and preserved404uncertainty; no send/retry/live claim. [Receipt](../../../../qa/initiative-control/pf-80-s01/native-reconciliation/receipt.md).
 
 ## Remaining
-
-- [ ] Correct F01 under [five-path mandate](../../../research/tasknode-integration/decision-age-followup.md), preserve original DEC001..026 and immutable timestamps; new-code review plus targeted actual browser/redaction evidence/recheck. Prepare exact Slack sender/reply successor in receipt. Slack stays unconnected, DEC025 remains advisory.
+- [ ] Complete F01 actual browser/history/redaction evidence and targeted independent recheck under [mandate](../../../research/tasknode-integration/decision-age-followup.md); preserve DEC001..026. Manager allocates prepared Slack sender/reply successor. Slack stays unconnected, DEC025 advisory; no human-readiness claim.
 - [ ] Manager scopes accessible recovery/input/retention and restart/cross-process fences before the later CLI allocation; this is manager work, not unanswered product approval.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.
 - [ ] Give manager exact credential-scope/destination, enrollment, task-lifecycle and first-payload decisions; remain OFF if missing authority. Never inspect real credential stores as a worker.

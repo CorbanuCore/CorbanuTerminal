@@ -30,7 +30,7 @@ implementation_worktrees:
 
 # 3. Task Node integration and delivery control
 
-Current September12: original feed/browser packet independently checked:24cases supported, DEC021partial redaction evidence, DEC025advisory scanning. Additional F01 relative-age defect is confirmed. [Five-file age correction](../../research/tasknode-integration/decision-age-followup.md) is the next exact allocation, including concrete Slack sender/reply successor preparation. Integrator adds one new-code review and one targeted evidence recheck, preserving all earlier usage. Facilities/source repair published separately; no live Task Node or Slack connection enabled.
+Current September12: corrected F01 age candidate1a6d9c8df reviewed/integrated at60c5671b9;122Python tests and Facilities Node regression pass. First review found a concrete legal decision-ID collision, fixed within five paths; integrator added one corrective code pass and it returned clean. Original code/design/evidence history remains spent, not reset. [Receipt](../../../qa/initiative-control/pf-80-s01/decision-projection/age-followup-receipt.md) retains original hashes and concrete Slack successor proposal. Laplace executes exact-package age/history/redaction proof; original24supported/DEC021partial/DEC025advisory dispositions are not relabeled. Targeted independent evidence check and Slack allocation/configuration remain; no live connection or human-readiness claim.
 
 ## Activation record
 

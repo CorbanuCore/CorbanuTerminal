@@ -1,5 +1,13 @@
 # Workstream continuation — September 11
 
+## Current status source — September 12, 12:32 UTC
+
+Use [current workstream handoffs](../../qa/initiative-control/status-display/current-handoffs.md)
+for current assignments, reviews and publication. Approval recovery is resolved:
+no click required. C2 and corrected decision-age increments are integrated locally;
+native accounting allocation and browser proof continue. Older checkpoint and
+approval-waiting passages below are historical, not current holds.
+
 ## September 12 — integrator discretion and resumed execution
 
 This supersedes older staging-only, allocation-pending and review-budget holds
