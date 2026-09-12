@@ -67,6 +67,101 @@ def cli_child(root, feed, endpoint):
 
 
 class ManagerTests(fixtures.LiveFixture):
+    def fence_recovery_flow(self, consumed):
+        key = self.retained_ack()
+        if consumed:
+            self.assertTrue(m.finish(self.store, self.feed_root, key, self.transport, lambda: OWNER, NOW)["work_ready"])
+        old_alert = self.key
+        self.quiesce()
+        case = self.lose_fence()
+        before = self.store.read("transport")
+        replies = (self.root / "replies.json").read_bytes()
+        feed = d.load_fixture(self.feed_root, NOW)
+        feed_bytes = (self.feed_root / "decisions.fixture.json").read_bytes()
+        result = s.recover_missing_fence(self.store, PIN, expected_digest=case, evidence="fixture-loss-reviewed",
+                                         now=NOW, quiesce_listener=self.quiesce)
+        self.assertEqual(result["state"], "held")
+        self.assertEqual((self.feed_root / "decisions.fixture.json").read_bytes(), feed_bytes)
+        self.assertEqual(m.project_status(self.store, NOW, True)["state"], "held")
+        retired = self.store.read("alerts")
+        tampered = copy.deepcopy(retired)
+        tampered[old_alert]["cancelled"] = False
+        self.store.write("alerts", tampered)  # Corrupt fixture: qualification must positively revalidate retirement.
+        calls = len(self.calls)
+        with self.assertRaises(d.Invalid):
+            self.transport.qualify(fixtures.ui_evidence())
+        self.assertEqual(len(self.calls), calls)
+        self.store.write("alerts", retired)
+        self.owner = s.Session(self.store)
+        self.owner.update("connected")
+        self.addCleanup(self.owner.release)
+        self.review_gap()
+        self.assertEqual((self.root / "replies.json").read_bytes(), replies)
+        self.assertFalse(m.finish(self.store, self.feed_root, key, self.transport, lambda: OWNER, NOW)["work_ready"])
+        self.assertFalse(m.dispatch(self.store, self.feed_root, key, self.transport, None, lambda: OWNER, NOW)["work_ready"])
+        for name in ("posts", "bridges", "events", "routes"):
+            self.assertEqual(self.store.read("transport")[name], before[name])
+        self.assertEqual(d.load_fixture(self.feed_root, NOW), feed)
+        with self.assertRaises(d.Invalid):
+            a.notice(self.store, old_alert, "clarification", "fixture", PIN, self.transport.exchange)
+        self.feed = revision(feed)  # An explicitly new fixture question, never answer-copy/reissue recovery.
+        d.save_fixture(self.feed_root, self.feed, d.digest(feed), NOW)
+        self.key = self.enqueue(self.feed)
+        self.assertNotEqual(self.key, old_alert)
+        row = self.sending()
+        self.assertNotEqual(row["parent"]["receipt"]["ts"], a.inspect(self.store, old_alert)["parent"]["receipt"]["ts"])
+        self.callback(fixtures.payload("EvFresh", thread_ts=row["parent"]["receipt"]["ts"], ts="105.000001", event_ts="105.000001"))
+        self.assertEqual(s.drain(self.store), 1)
+        manager = dict(actor="manager-fixture", answer="New explicit answer", scope="New synthetic question only", alert=self.key,
+                       context_digest=row["intent"]["context_digest"], audit=r.snapshot(self.store, self.key)["audit"],
+                       owner=OWNER, interpretation="answer")
+        scoped = m.ResolutionStore(self.transport)
+        fresh = r.interpret(scoped, self.feed_root, "EvFresh", manager, OWNER, NOW)
+        self.assertEqual(r.resume(scoped, self.feed_root, fresh, OWNER, NOW), "queued")
+        process = self.start(fresh)
+        outbound = self.line(process)
+        self.write(process, accepted(outbound))
+        self.write(process, assistant(outbound))
+        self.assertTrue(self.line(process)["result"]["work_ready"])
+        process.wait(5)
+        self.assertEqual(process.returncode, 0)
+        self.assertFalse(m.finish(self.store, self.feed_root, fresh, self.transport, lambda: OWNER, NOW)["work_ready"])
+        self.assertEqual(self.store.read("transport")["bridges"][key], before["bridges"][key])
+
+    def test_fence_recovery_refuses_historical_late_ack_and_allows_new_question(self):
+        self.fence_recovery_flow(False)
+
+    def test_fence_recovery_preserves_consumed_permit_and_allows_new_question(self):
+        self.fence_recovery_flow(True)
+
+    def test_local_fence_registration_has_no_implicit_runtime_credentials_or_sdk(self):
+        self.quiesce()
+        case = self.lose_fence()
+        incoming, writer = os.pipe()
+        reader, outgoing = os.pipe()
+        data = dict(binding=PIN, case_digest=case, evidence="fixture-loss-reviewed", stopped=True)
+        def forbidden():
+            self.fail("local recovery accessed live credentials or native tools")
+        try:
+            with os.fdopen(incoming, "rb") as source, os.fdopen(outgoing, "wb") as sink:
+                for operation, hook in (("inspect-fence-loss", None), ("recover-missing-fence", None),
+                                        ("recover-missing-fence", self.quiesce)):
+                    os.write(writer, d.canonical(data) + b"\n")
+                    args = [operation, "--store", str(self.root)]
+                    kwargs = dict(stdin=source, stdout=sink, credentials=forbidden, observe_owner=forbidden, now=lambda: NOW)
+                    before = self.store.read("transport")
+                    with patch.object(s.Transport, "web", side_effect=AssertionError("SDK accessed")):
+                        if operation == "recover-missing-fence" and hook is None:
+                            with self.assertRaises(d.Invalid):
+                                m.main(args, **kwargs)
+                            self.assertEqual(self.store.read("transport"), before)
+                            continue
+                        self.assertEqual(m.main(args, quiesce_listener=hook, **kwargs)["state"], "held")
+                    self.assertEqual(json.loads(os.read(reader, 4096))["type"], "result")
+        finally:
+            os.close(writer)
+            os.close(reader)
+
     def retained_ack(self):
         key = self.queue()
         process = self.start(key, "acceptance-crash")

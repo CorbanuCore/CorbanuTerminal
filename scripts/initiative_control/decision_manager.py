@@ -231,10 +231,10 @@ class ResolutionStore(a.Store):
                 d.require(s.observe_session_locked(self, self.read("transport")) == session_pin)
 
 
-def main(argv=None, *, credentials=None, observe_owner=None, stdin=None, stdout=None, now=None):
+def main(argv=None, *, credentials=None, observe_owner=None, stdin=None, stdout=None, now=None, quiesce_listener=None):
     clock = now or (lambda: dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices="status init-transport qualify send listen drain interpret resume dispatch reconcile project-status".split())
+    parser.add_argument("operation", choices="status init-transport qualify send listen drain interpret resume dispatch reconcile project-status inspect-fence-loss recover-missing-fence".split())
     parser.add_argument("--store", required=True)
     parser.add_argument("--feed")
     parser.add_argument("--live", action="store_true")
@@ -248,9 +248,15 @@ def main(argv=None, *, credentials=None, observe_owner=None, stdin=None, stdout=
     if args.operation == "init-transport":
         s.initialize(store)
         return project_status(store, clock(), True)
-    d.require(args.live or args.operation == "drain")
+    d.require(args.live or args.operation in ("drain", "inspect-fence-loss", "recover-missing-fence"))
     channel = Stdio(stdin, stdout)
     data = channel.read()  # Owner input, not a Slack envelope; no credentials/config file.
+    if args.operation in ("inspect-fence-loss", "recover-missing-fence"):
+        result = (s.inspect_fence_loss(store, data["binding"]) if args.operation == "inspect-fence-loss" else
+                  s.recover_missing_fence(store, data["binding"], expected_digest=data["case_digest"], evidence=data["evidence"],
+                                         quiesce_listener=quiesce_listener, now=clock()))
+        Stdio(stdin, stdout).emit(dict(type="result", result=result))
+        return result
     owner = observe_owner or channel.owner
     credentials = credentials or (lambda: (os.environ["CORBANU_SLACK_BOT_TOKEN"], os.environ["CORBANU_SLACK_APP_TOKEN"]))
     transport = s.Transport(store, data["binding"], credentials, live=args.live, now=clock)

@@ -2,8 +2,11 @@
 import copy
 from contextlib import contextmanager, nullcontext
 import fcntl
+import hashlib
 import logging
 import os
+import stat
+import tempfile
 import threading
 import time
 import uuid
@@ -73,9 +76,167 @@ def locked(store):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         value = store.read("transport")
         fields = "binding last_verified hold watermark events posts routes bridges gap_reviews ingress ui_evidence"
-        d.shape(value, fields + (" schema lifecycle" if "schema" in value else ""))
+        d.shape(value, fields + (" schema lifecycle" if "schema" in value else "")
+                + (" fence_losses" if "fence_losses" in value else ""))
         d.require(type(value["watermark"]) is int and value["watermark"] >= 0)
+        losses(value)
         yield value
+
+
+def losses(value):
+    records = value.get("fence_losses", [])
+    d.require(type(records) is list)
+    d.require(not records or value.get("schema") == 2)
+    seen = set()
+    for record in records:
+        d.shape(record, "intent intent_digest phase")
+        d.require(record["intent_digest"] == d.digest(record["intent"]) and record["phase"] in ("prepared", "restored"))
+        intent = record["intent"]
+        d.shape(intent, "id root binding ingress watermark lifecycle retired barrier_size barrier_digest transport_digest replies_digest prior_hold evidence at")
+        d.require(type(intent["id"]) is str and len(intent["id"]) == 64 and intent["id"] not in seen)
+        seen.add(intent["id"])
+        d.require(type(intent["ingress"]) is int and 0 <= intent["ingress"] < d.MAX_BYTES - 65)
+        d.require(type(intent["retired"]) is dict)
+        for prior in intent["retired"].values():
+            d.shape(prior, "digest intent_digest cancelled reason")
+    return records
+
+
+def loss_ready(value, store=None):
+    for record in losses(value):
+        d.require(record["phase"] == "restored")
+        if store is not None:  # Qualification caller holds store -> transport.
+            rows = store.read("alerts")
+            for key, prior in record["intent"]["retired"].items():
+                row = a.alert(rows, key)
+                d.require(row["cancelled"] is True and row["reason"] == "cancelled"
+                          and row["intent_digest"] == prior["intent_digest"])
+
+
+def loss_case(store, binding, journal):
+    d.require(journal.get("schema") == 2 and journal["binding"] == a.identity(binding)
+              and journal["last_verified"] is not None)
+    rows, replies = store.read("alerts"), store.read("replies")
+    for key in rows:
+        a.alert(rows, key)
+    return d.digest([str(store.root), binding, rows, replies, journal])
+
+
+def inspect_fence_loss(store, binding):
+    with store.lock(), locked(store) as value:
+        case = loss_case(store, binding, value)
+        pending = [r for r in losses(value) if r["phase"] == "prepared"]
+        d.require(len(pending) <= 1)
+        if pending:
+            case = pending[0]["intent"]["id"]
+        else:
+            d.require(not os.path.lexists(store.root / ".ingress.fence"))
+        return dict(case_digest=case, retained_ingress=value["ingress"], watermark=value["watermark"],
+                    affected_alert_count=len(store.read("alerts")), state="held")
+
+
+def recover_missing_fence(store, binding, *, expected_digest, evidence, quiesce_listener=None, now,
+                          checkpoint=lambda _: None):
+    """Trusted hook stops/joins actual runtime OUTSIDE locks; no production hook supplied.
+
+    The synthetic barrier records loss, not recovered arrivals. Every repair
+    returns held. Unpublished crash staging files remain; a published duplicate
+    name is removed only after exact inode/content validation. Neither is old ingress.
+    """
+    d.require(callable(quiesce_listener))
+    d.require(quiesce_listener() is None)  # A stopped=True/PID assertion is not this trusted integration seam.
+    a.token(evidence)
+    d.stamp(now)
+    with store.lock(), locked(store) as value:
+        case = loss_case(store, binding, value)
+        fd = owner_file(store, value)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            records = losses(value)
+            matches = [r for r in records if r["intent"]["id"] == expected_digest]
+            d.require(len(matches) <= 1)
+            path = store.root / ".ingress.fence"
+            if matches:
+                record = matches[0]
+                intent = record["intent"]
+                d.require(intent["binding"] == binding and intent["root"] == str(store.root) and intent["evidence"] == evidence)
+                if record["phase"] == "restored":
+                    ingress_count(store)  # A new disappearance needs a new incident, not replay of this one.
+                    loss_ready(value, store)
+                    return dict(loss_id=expected_digest, state="held", retired_count=len(intent["retired"]))
+            else:
+                loss_ready(value, store)
+                d.require(case == expected_digest and not os.path.lexists(path))
+                d.require(type(value["ingress"]) is int and 0 <= value["ingress"] < d.MAX_BYTES - 65)
+                retired = {key: dict(digest=d.digest(row), intent_digest=row["intent_digest"],
+                           cancelled=row["cancelled"], reason=row["reason"]) for key, row in store.read("alerts").items()}
+                barrier = b"!" * value["ingress"] + b"?" + case.encode("ascii")
+                intent = dict(id=case, root=str(store.root), binding=copy.deepcopy(binding), ingress=value["ingress"],
+                    watermark=value["watermark"], lifecycle=copy.deepcopy(value["lifecycle"]), retired=retired,
+                    barrier_size=len(barrier), barrier_digest=hashlib.sha256(barrier).hexdigest(),
+                    transport_digest=d.digest(value), replies_digest=d.digest(store.read("replies")),
+                    prior_hold=value["hold"], evidence=evidence, at=now)
+                record = dict(intent=intent, intent_digest=d.digest(intent), phase="prepared")
+                value.setdefault("fence_losses", []).append(record)
+                value["hold"] = "fence-repair-pending"
+                store.write("transport", value)
+                checkpoint("prepared")
+            d.require(value["hold"] == "fence-repair-pending" and value["ingress"] == intent["ingress"]
+                      and value["watermark"] == intent["watermark"] and value["lifecycle"] == intent["lifecycle"])
+            rows = store.read("alerts")
+            d.require(set(rows) == set(intent["retired"]))
+            for key, prior in intent["retired"].items():
+                row = a.alert(rows, key)
+                d.require(row["intent_digest"] == prior["intent_digest"])
+                row.update(cancelled=True, reason="cancelled")  # Only these fields change; all attempts remain exact.
+            store.write("alerts", rows)
+            checkpoint("cancelled")
+            barrier = b"!" * intent["ingress"] + b"?" + intent["id"].encode("ascii")
+            d.require(0 < len(barrier) < d.MAX_BYTES and len(barrier) == intent["barrier_size"]
+                      and hashlib.sha256(barrier).hexdigest() == intent["barrier_digest"])
+            if not os.path.lexists(path):
+                staging_fd, staging = tempfile.mkstemp(prefix=".ingress-repair-" + intent["id"] + "-", dir=store.root)
+                with os.fdopen(staging_fd, "wb") as stream:
+                    stream.write(barrier[:1])
+                    stream.flush()
+                    checkpoint("partial")
+                    stream.write(barrier[1:])
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                checkpoint("staged")
+                os.link(staging, path, follow_symlinks=False)  # No replacement of an unrelated file.
+                checkpoint("linked")
+            barrier_fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(barrier_fd, "rb") as stream:
+                info = os.fstat(stream.fileno())
+                d.require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_mode & 0o077 == 0)
+                d.require(stream.read(d.MAX_BYTES + 1) == barrier)
+                if info.st_nlink == 2:  # Recover only our exact interrupted no-replace publication.
+                    with os.scandir(store.root) as entries:
+                        linked = []
+                        for count, entry in enumerate(entries):
+                            d.require(count < 256)
+                            other = entry.stat(follow_symlinks=False)
+                            if entry.name.startswith(".ingress-repair-" + intent["id"] + "-") and (other.st_dev, other.st_ino) == (info.st_dev, info.st_ino):
+                                linked.append(entry.path)
+                    d.require(len(linked) == 1)
+                    os.unlink(linked[0])  # Duplicate name only; the complete final barrier remains.
+                d.owner_only(os.fstat(stream.fileno()))
+                os.fsync(stream.fileno())
+            directory = os.open(store.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+            checkpoint("synced")
+            record["phase"] = "restored"
+            value["hold"] = "outage-gap"
+            loss_ready(value, store)
+            store.write("transport", value)
+            checkpoint("restored")
+            return dict(loss_id=intent["id"], state="held", retired_count=len(rows))
+        finally:
+            os.close(fd)
 
 
 def hold(store, reason):
@@ -105,6 +266,7 @@ def observe_session_locked(store, journal):
     An independently opened descriptor must encounter the lifetime owner's flock.
     """
     try:
+        loss_ready(journal)
         fd = owner_file(store, journal)
         try:
             try:
@@ -132,6 +294,7 @@ class Session:
         self.store, self.fd, self.id = store, None, uuid.uuid4().hex
         try:
             with locked(store) as journal:
+                loss_ready(journal)
                 self.fd = owner_file(store, journal)
                 fcntl.flock(self.fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 life = journal["lifecycle"]
@@ -197,6 +360,7 @@ class Transport:
         with locked(self.store) as value:
             d.require(value["binding"] == self.binding and value["last_verified"] is not None)
             if not local:
+                loss_ready(value)
                 age = (d.stamp(self.now()) - d.stamp(value["last_verified"])).total_seconds()
                 d.require(0 <= age <= 900 and (allow_hold or value["hold"] is None))
                 if not allow_hold:
@@ -211,7 +375,9 @@ class Transport:
         d.require(ui_evidence["binding"] == self.binding and ui_evidence["checks"] == UI_CHECKS
                   and d.stamp(ui_evidence["observed_at"]) <= d.stamp(self.now()))
         a.token(ui_evidence["receipt"])
-        with locked(self.store) as value:
+        ingress_count(self.store)  # Preserve missing-file refusal; authority still rechecks under both locks below.
+        with self.store.lock(), locked(self.store) as value:
+            loss_ready(value, self.store)
             d.require(value.get("schema") == 2)
             previous_hold, watermark = value["hold"], value["watermark"]
             session_pin = observe_session_locked(self.store, value) if value["lifecycle"]["session"] else None
@@ -235,7 +401,8 @@ class Transport:
         d.require(auth["team_id"] == pin["team"] and auth["bot_id"] == pin["bot"])
         scopes = {s.strip() for s in auth.headers.get("x-oauth-scopes", "").split(",")}
         d.require(SCOPES <= scopes)
-        with locked(self.store) as value:
+        with self.store.lock(), locked(self.store) as value:
+            loss_ready(value, self.store)
             d.require(session_pin == (observe_session_locked(self.store, value) if value["lifecycle"]["session"] else None))
             d.require(value["binding"] in (None, pin))
             d.require(value["hold"] == "qualifying" and value["watermark"] == watermark)

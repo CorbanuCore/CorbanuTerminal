@@ -21,7 +21,7 @@ import decision_alerts as a
 import decision_replies as r
 import slack_transport as s
 from test_decisions import NOW, revision
-from test_decision_alerts import SlackFixture, PIN, OWNER
+from test_decision_alerts import SlackFixture, PIN, OWNER, REMOTE
 
 
 def payload(event_id="Ev001", **changes):
@@ -146,6 +146,32 @@ def failed_lifecycle_process(root, phase, ready, release):
             owner.release()
 
 
+def joined_callbacks():
+    stopped = threading.Event()
+    callback = threading.Thread(target=stopped.wait)
+    callback.start()
+    stopped.set()
+    callback.join(2)
+    assert not callback.is_alive()  # Owned runtime fixture, not a production supervisor qualification.
+
+
+def crash_fence_repair(root, case, stage):
+    s.recover_missing_fence(a.Store(root), PIN, expected_digest=case, evidence="fixture-loss-reviewed", now=NOW,
+        quiesce_listener=joined_callbacks, checkpoint=lambda where: os._exit(61) if where == stage else None)
+
+
+def old_inode_callback(root, ready, stop):
+    owner = s.Session(a.Store(root))
+    owner.update("connected")
+    fd = os.open(os.path.join(root, ".ingress.fence"), os.O_WRONLY | os.O_APPEND)
+    ready.set()
+    assert stop.wait(10)
+    os.write(fd, b"!")  # Complete an already-open callback against the lost inode before join returns.
+    os.fsync(fd)
+    os.close(fd)
+    owner.close()
+
+
 class LiveFixture(SlackFixture):
     def setUp(self):
         super().setUp()
@@ -249,11 +275,172 @@ class LiveFixture(SlackFixture):
                           binding=d.digest(PIN), evidence="fixture-reviewed-gap")
         self.transport.qualify(ui_evidence(), dict(review, **self.session_review()))
 
+    def quiesce(self):
+        self.transport.active = False
+        if self.transport.socket:
+            self.transport.socket.close()
+        self.owner.close()
+
+    def lose_fence(self, store=None):
+        store = store or self.store
+        covered = s.ingress_count(store, mark=True)
+        with s.locked(store) as journal:
+            journal["ingress"] = covered
+            store.write("transport", journal)
+        s.ingress_count(store, mark=True)  # An uncovered arrival existed before the destructive failure.
+        with patch.object(s.os, "write", side_effect=OSError("fixture append-before-bytes")), self.assertRaises(OSError):
+            s.ingress_count(store, mark=True)
+        self.assertFalse((store.root / ".ingress.fence").exists())
+        return s.inspect_fence_loss(store, PIN)["case_digest"]
+
     def callback(self, value=None, envelope_id="envelope-1"):
         self.transport.callback(self.client, SocketModeRequest(type="events_api", envelope_id=envelope_id, payload=value or payload()))
 
 
 class TransportTests(LiveFixture):
+    def test_fence_repair_real_crash_boundaries_preserve_loss_and_all_old_data(self):
+        for stage in ("prepared", "cancelled", "partial", "staged", "linked", "synced", "restored"):
+            with self.subTest(stage=stage):
+                transport = self.initial_transport(stage)
+                transport.qualify(ui_evidence())
+                store = transport.store
+                key = a.enqueue(store, self.feed, "choice-1", REMOTE, PIN, OWNER, NOW)
+                with store.lock():
+                    rows = store.read("alerts")
+                    rows[key]["parent"].update(state="sending", request=a.request_for(key, rows[key], "parent"))
+                    store.write("alerts", rows)
+                case = self.lose_fence(store)
+                before, replies = store.read("transport"), (store.root / "replies.json").read_bytes()
+                worker = multiprocessing.get_context("spawn").Process(target=crash_fence_repair, args=(str(store.root), case, stage))
+                worker.start()
+                worker.join(5)
+                self.assertEqual(worker.exitcode, 61)
+                after = store.read("transport")
+                if stage != "restored":
+                    with self.assertRaises(d.Invalid):
+                        s.Session(store)
+                    missing = not os.path.lexists(store.root / ".ingress.fence")
+                    with self.assertRaises(FileNotFoundError if missing else d.Invalid):
+                        transport.qualify(ui_evidence())
+                    with self.assertRaises(d.Invalid):
+                        s.initialize(store)
+                    with s.locked(store) as journal, self.assertRaises(d.Invalid):
+                        s.observe_session_locked(store, journal)
+                result = s.recover_missing_fence(a.Store(store.root), PIN, expected_digest=case,
+                    evidence="fixture-loss-reviewed", now=NOW, quiesce_listener=joined_callbacks)
+                self.assertEqual(result, dict(loss_id=case, state="held", retired_count=1))
+                after = store.read("transport")
+                self.assertEqual(after["ingress"], before["ingress"])
+                self.assertGreater(s.ingress_count(store), before["ingress"])
+                self.assertEqual(len(after["fence_losses"]), 1)
+                prior = after["fence_losses"][0]["intent"]["retired"][key]
+                self.assertEqual(prior["digest"], d.digest(rows[key]))
+                self.assertEqual(prior["cancelled"], rows[key]["cancelled"])
+                for field in before:
+                    if field != "hold":
+                        self.assertEqual(after[field], before[field])
+                self.assertEqual(store.read("alerts")[key], dict(rows[key], cancelled=True, reason="cancelled"))
+                self.assertEqual((store.root / "replies.json").read_bytes(), replies)
+                self.assertEqual(d.load_fixture(self.feed_root, NOW), self.feed)
+                with self.assertRaises(d.Invalid):
+                    transport.gate()
+                s.recover_missing_fence(store, PIN, expected_digest=case, evidence="fixture-loss-reviewed", now=NOW,
+                                       quiesce_listener=joined_callbacks)
+                self.assertEqual(store.read("transport"), after)
+
+    def test_repair_waits_for_real_old_inode_callback_and_rejects_stale_preview(self):
+        self.quiesce()
+        ctx = multiprocessing.get_context("spawn")
+        ready, stop = ctx.Event(), ctx.Event()
+        process = ctx.Process(target=old_inode_callback, args=(str(self.root), ready, stop))
+        process.start()
+        self.assertTrue(ready.wait(5))
+        case = self.lose_fence()
+        def join_runtime():
+            stop.set()
+            process.join(5)
+            self.assertEqual(process.exitcode, 0)
+        try:
+            before = self.store.read("transport")
+            with self.assertRaises(d.Invalid):
+                s.recover_missing_fence(self.store, PIN, expected_digest=case, evidence="fixture-loss-reviewed", now=NOW,
+                                       quiesce_listener=joined_callbacks)
+            self.assertEqual(self.store.read("transport"), before)  # Another real process still owns the runtime.
+            with self.assertRaises(d.Invalid):
+                s.recover_missing_fence(self.store, PIN, expected_digest=case, evidence="fixture-loss-reviewed", now=NOW,
+                                       quiesce_listener=join_runtime)
+            self.assertFalse((self.root / ".ingress.fence").exists())
+            case = s.inspect_fence_loss(self.store, PIN)["case_digest"]
+            s.recover_missing_fence(self.store, PIN, expected_digest=case, evidence="fixture-loss-reviewed", now=NOW,
+                                   quiesce_listener=join_runtime)
+            self.assertEqual(self.store.read("transport")["fence_losses"][0]["phase"], "restored")
+        finally:
+            if process.is_alive():
+                process.kill()
+                process.join(3)
+
+    def test_repair_refusals_and_failed_publication_keep_incident_held(self):
+        self.quiesce()
+        case = self.lose_fence()
+        before = self.store.read("transport")
+        def repair(**kwargs):
+            return s.recover_missing_fence(self.store, PIN, expected_digest=case, evidence="fixture-loss-reviewed", now=NOW, **kwargs)
+        for hook in (None, True, lambda: True):
+            with self.assertRaises(d.Invalid):
+                repair(quiesce_listener=hook)
+            self.assertEqual(self.store.read("transport"), before)
+        with patch.object(self.store, "write", side_effect=OSError("fixture disk full")), self.assertRaises(d.Invalid):
+            repair(quiesce_listener=self.quiesce)
+        self.assertEqual(self.store.read("transport"), before)
+        with patch.object(s.os, "link", side_effect=OSError("fixture link failure")), self.assertRaises(d.Invalid):
+            repair(quiesce_listener=self.quiesce)
+        pending = self.store.read("transport")
+        self.assertEqual(pending["fence_losses"][0]["phase"], "prepared")
+        path = self.root / ".ingress.fence"
+        path.symlink_to(self.root / "alerts.json")
+        with self.assertRaises(d.Invalid):
+            repair(quiesce_listener=self.quiesce)
+        path.unlink()
+        path.write_bytes(b"unrelated fixture")
+        path.chmod(0o600)
+        with self.assertRaises(d.Invalid):
+            repair(quiesce_listener=self.quiesce)
+        self.assertEqual(path.read_bytes(), b"unrelated fixture")
+        self.assertEqual(self.store.read("transport"), pending)
+
+    def test_repair_snapshot_binding_inode_capacity_and_sync_failure(self):
+        self.quiesce()
+        case = self.lose_fence()
+        before = self.store.read("transport")
+        args = dict(expected_digest=case, evidence="fixture-loss-reviewed", now=NOW, quiesce_listener=self.quiesce)
+        for binding, extra in ((dict(PIN, human="another-human"), {}), (PIN, {"expected_digest": "0" * 64})):
+            with self.assertRaises(d.Invalid):
+                s.recover_missing_fence(self.store, binding, **dict(args, **extra))
+            self.assertEqual(self.store.read("transport"), before)
+        with s.locked(self.store) as journal:
+            journal["ingress"] = d.MAX_BYTES - 65
+            self.store.write("transport", journal)
+        args["expected_digest"] = s.inspect_fence_loss(self.store, PIN)["case_digest"]
+        with self.assertRaises(d.Invalid):
+            s.recover_missing_fence(self.store, PIN, **args)
+        self.assertNotIn("fence_losses", self.store.read("transport"))
+        self.store.write("transport", before)  # Fixture restoration only; no production reset API.
+        args["expected_digest"] = case
+        def fail_after_link(stage):
+            if stage == "linked":
+                raise OSError("fixture directory sync failure")
+        with self.assertRaises(d.Invalid):
+            s.recover_missing_fence(self.store, PIN, checkpoint=fail_after_link, **args)
+        with patch.object(s.os, "fsync", side_effect=OSError("fixture fsync")), self.assertRaises(d.Invalid):
+            s.recover_missing_fence(self.store, PIN, **args)
+        self.assertEqual(self.store.read("transport")["fence_losses"][0]["phase"], "prepared")
+        owner = self.root / ".listener.owner.lock"
+        owner.rename(self.root / "retained-owner")
+        owner.touch(mode=0o600)
+        with self.assertRaises(d.Invalid):
+            s.recover_missing_fence(self.store, PIN, **args)
+        self.assertEqual(self.store.read("transport")["fence_losses"][0]["phase"], "prepared")
+
     def initial_transport(self, name):
         root = self.root / name
         root.mkdir(mode=0o700)
