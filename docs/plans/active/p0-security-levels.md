@@ -748,8 +748,14 @@ OpenSSL3.5.8, target-scoped settings and no artifact invocation. Its prerequisit
 build stopped2 before Cargo on missing linux/mman.h; a second explicit amendment
 allows private authenticated userspace UAPI headers and same-prerequisite retry,
 not graph changes or weakened checks. That build passed but linkage rejected the
-musl-gcc injected interpreter; correct command-scoped final linker to pinned
-rust-lld while preserving PIE and all prior artifacts. No main window.
+musl-gcc injected interpreter. Pinned rust-lld corrected final linkage while
+preserving PIE: dev artifact f6ca8e3368dc passes size, noPT_INTERP/noDT_NEEDED and
+GNU negative-control checks through actual-key TMUX; source/locks unchanged.
+Fable20 exit1/patch correct identified one P3 rejected-artifact receipt gap,
+resolved by exact RTX hash/size capture without another review. All failures
+remain preserved. [Final proof and limits](../../../qa/security-levels/sprints/PF-27-S04/static-probe-20260912/CURRENT.md).
+This is build feasibility, not a release/static-runtime strategy decision or
+execution authority. No main window is granted.
 
 ## Round-five execution amendment — 2026-09-04
 

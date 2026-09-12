@@ -110,4 +110,4 @@ early six-hour reset is introduced; the next scheduled replenishment is11:25:45Z
 
 | Review | Reservation UTC | Model / scope | Outcome / evidence |
 | --- | --- | --- | --- |
-| 20 | 2026-09-12 11:00:22Z | Fable5.1High Corbanu/privateTMUX; build/linkage evidence and QA tooling, Rust0aa65bd unchanged | Initial helper exited1 in branch_bundle before model dispatch: raw non-UTF8 GPG status. Same reserved pass retries after binary artifact classification; result pending. |
+| 20 | 2026-09-12 11:00:22Z | Fable5.1High Corbanu/privateTMUX; build/linkage evidence and QA tooling, Rust0aa65bd unchanged | Pre-model bundle failure retained; same-pass retry dispatched11:06Z. Exit1, patch correct, one P3 missing rejected-artifact hash receipt; receipt captured on RTX and matched, no code change or extra review. Originals: static-probe-20260912/fable-twenty-retry.json. |

@@ -108,11 +108,16 @@ and Cargo.lock remain unchanged; final source status is empty. All build and
 TMUX sessions finished. No test suite was rerun or claimed by this build-only
 allocation; the original sealed-stage tests remain tied to their GNU candidate.
 
-One build/linkage evidence review is allocated from the old contingency but has
-been reserved as Fable20 before dispatch; reviews1–19 remain intact. It reviews
-this artifact evidence and QA tooling, not unchanged Rust code. No main window
-is granted. Runtime ELF validation, static-dependency/CVE qualification, descriptor
-exec, supervision and exact privileged installation remain subsequent gates.
+The one contingency evidence review20 is complete: [original Fable result](fable-twenty-retry.json),
+text and exit1 are retained. It found the patch correct, with one P3 evidence gap:
+the rejected UAPI candidate digest was only in README prose. A fresh read-only
+RTX hash/size capture now supplies [candidate.sha256](rtx/uapi-retry/candidate.sha256)
+and candidate.size, matching the previously stated values exactly. This resolves
+the publication gap without changing code, binaries, prior logs or invoking the
+artifact. No extra review was run and the original result is not relabeled clean.
+Reviews1–20 remain intact; no main window is granted. Runtime ELF validation,
+static-dependency/CVE qualification, descriptor exec, supervision and exact
+privileged installation remain subsequent gates.
 
 The first review-helper attempt failed while decoding the Git diff, before model
 dispatch. Raw GPG status includes non-UTF8 bytes; it remains byte-for-byte intact
@@ -120,4 +125,8 @@ and is now classified as a binary Git artifact. An ASCII-only VALIDSIG receipt
 is provided separately. Original helper failure/exit is retained; retrying this
 pre-dispatch infrastructure failure uses the same reserved review20, not another
 model opinion or another Rust review. Candidate/source and test evidence do not
-change with this artifact-classification correction.
+change with this artifact-classification correction. The raw status SHA256 is
+`73a650000720bbf2ca1c397822b0e0386e9589836791d6083a68d49366d83eb4`, bound in
+rtx/openssl-retry/signature-status.sha256; signature-validsig.txt retains signing
+subkey and verified primary fingerprint. This receipt is signature-verification
+evidence, not a claim of complete runtime dependency security.

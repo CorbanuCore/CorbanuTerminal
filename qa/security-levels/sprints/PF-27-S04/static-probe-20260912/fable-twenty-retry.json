@@ -1,0 +1,18 @@
+{
+  "findings": [
+    {
+      "title": "Rejected interpreter-bearing candidate SHA256 stated in README has no machine-generated receipt in the bundle",
+      "body": "README.md (\"UAPI completion and linker correction\") asserts the rejected uapi-retry artifact's SHA256 `37fb0d7c5fd7e09ca23e9a5b1901b77786b87dfe8a869e191452c571bda7081d` and size 298,954,552. The size is corroborated by rtx/uapi-retry/static-readelf.txt (section header offset 298952184 + 37\u00d764), but the digest appears only in README prose: inspect-linkage.py raises SystemExit on the PT_INTERP check before writing linkage.json, so no receipt (linkage.json, a .sha256 file, or run.log line) for that digest exists under rtx/uapi-retry/. Every other digest in the record (initial integrity, linker, OpenSSL, UAPI package, passing candidate, dynamic control) is backed by a hash file. Smallest fix: add a `rtx/uapi-retry/candidate.sha256` (or equivalent receipt captured on RTX) for the rejected artifact, or reword the README to state the digest is recorded only on RTX and not in this bundle.",
+      "priority": "P3",
+      "confidence": 0.7,
+      "category": "test_gap",
+      "code_location": {
+        "file_path": "qa/security-levels/sprints/PF-27-S04/static-probe-20260912/README.md",
+        "line": 84
+      }
+    }
+  ],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "Within the build-only evidence boundary the record is internally consistent. Rust subtree and Cargo.lock are unchanged (source.txt = 140e094a/0aa65bd0; lock-before/after both ef3d5d1d\u2026; source-status.txt empty) across all four attempts. The six QA scripts only invoke build/inspection tooling; tmux-build.py sends the script command with `send-keys -l` and a separate Enter, never executes either probe, and records keys/capture/result; inspect-linkage.py uses readelf only (no ldd, no exec). Preserved failures are intact: initial build.exit/run.exit/TMUX=101 (openssl-sys cross pkg-config), openssl-retry run.exit/TMUX=2 before Cargo, uapi-retry build.exit=0 but run.exit/TMUX=1 with static-readelf.txt showing PT_INTERP /lib/ld-musl-x86_64.so.1, matching the musl-gcc.specs `*link` unconditional `-dynamic-linker`. Final linkage-retry: cargo-fingerprint.json rustflags `-C linker-flavor=ld.lld`, linker.sha256/linker-version.txt pin rust-lld LLD 22.1.2, build 0 in 35.62s, static-readelf.txt shows ELF64/LE/x86-64 ET_DYN, FLAGS_1 NOW PIE, no INTERP/NEEDED, size 310,247,352 and digest f6ca8e\u2026 in linkage.json; the dynamic control (836d74\u2026) matches the sealed-stage binaries.sha256 and retains INTERP + four NEEDED entries. Prerequisite provenance (musl 1.2.6 fingerprint 8364\u2026450F, OpenSSL 3.5.8 checksum + VALIDSIG B146\u20262D40, Ubuntu InRelease/Packages/deb SHA256 chain) is recorded with hashes; global rustup still defaults to stable with GNU-only targets. README correctly disclaims runtime, libc-version, CVE, installation and release suitability. The only gap is a README-stated digest for the rejected artifact with no in-bundle receipt (P3).",
+  "overall_confidence": 0.8
+}
