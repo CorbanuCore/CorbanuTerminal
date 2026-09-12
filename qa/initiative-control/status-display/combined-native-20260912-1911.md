@@ -1,5 +1,28 @@
 # Local receiving integration — September 12, 19:18 UTC
 
+## Security receiving gate — subsequently verified
+
+Owner returned the complete private receiving receipt; manager read it and
+verified all eight required zero exit receipts and test-log summaries. Exact
+c5e606fa2/Rust18cf961a remains the current receiving native tree. Non-root RTX
+default3, focused8, real-owner3, hold1, inspect1 and service52 pass; the four
+normal service skips were run explicitly. Counts overlap, not69 unique tests.
+Service-scoped strict Clippy `--no-deps -- -D warnings` and read-only Bazel parity
+pass with unchanged combined locks. Accounting's receiving suite is separate.
+
+Original broader lint exit101 remains: unchanged protocol/security.rs:28
+large_enum_variant, identical accepted/receiving blob. Original TMUX runner's
+FAILED checks=1 marker is preserved, not relabeled; the scoped gate is supported
+by the eight actual zero exits. This is not whole-workspace lint cleanliness.
+Evidence is retained privately as pf27-receiving-c5e606fa2-receipt.md and its raw
+directory in the manager continuation packet; no raw credential data exported.
+
+Owner is now freezing the approved eleven-file synthetic pair allocation before
+implementation, hard800 code/build/fixture lines. New28AstraHigh/29Fable5.1High
+reviews are an explicit +2 extension, not erased prior usage. Existing
+children.rs/root.rs/PF20/Core/Vault and protected activation remain outside this
+stage. No new human approval, whole-sprint completion or main/release claim.
+
 Manager-owned local integration only, not main, release or runtime enablement.
 Receiving c5e606fa2df329e40d731dce3fe24a846d3e2e2e has Rust tree
 18cf961a79b4959baa005bd7f9577c04e9b798f6.

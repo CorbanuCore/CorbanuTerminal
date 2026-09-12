@@ -1,5 +1,12 @@
 # Current workstream handoffs — September 12
 
+Latest security follow-up: [combined receiving RTX proof](combined-native-20260912-1911.md)
+passed all eight required scoped checks on unchangedc5e606fa2/Rust18cf961a.
+The broader dependency-lint failure remains disclosed. Existing owner is
+freezing the already-approved pair-stage allocation, then implementing within
+hard800 lines; no user decision or whole-PF27 acceptance. Accounting receiving
+verification and Slack recovery remain their separate ongoing assignments.
+
 ## Current observation — 19:18 UTC
 
 - [PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): review03 clean; exact24-file accounting candidate locally integrated. Mendel dispatched on combined receiving verification, not another source correction. Prior full Core/shared failures remain visible; serial targeted passes do not erase them.
