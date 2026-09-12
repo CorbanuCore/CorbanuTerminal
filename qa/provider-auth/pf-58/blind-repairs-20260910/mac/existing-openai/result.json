@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "candidate": "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-blind-repairs-20260910/bin/corbanu",
+  "sha256": "865731588b5fd0447b0d7f60ad04ca4a544a8ab39a8ae48eb2764f37c90abb4d",
+  "launches": [
+    {
+      "pid": "90120",
+      "menu_seconds": 1.66,
+      "live_reply": true
+    },
+    {
+      "pid": "90272",
+      "menu_seconds": 1.64,
+      "live_reply": true
+    }
+  ],
+  "human_acceptance": false,
+  "config_before_sha256": "6dac857755a44baad33e784dfb75c297711b4d75798bc4bf967a265864e4099d",
+  "config_after_sha256": "6dac857755a44baad33e784dfb75c297711b4d75798bc4bf967a265864e4099d",
+  "configuration_unchanged": true
+}

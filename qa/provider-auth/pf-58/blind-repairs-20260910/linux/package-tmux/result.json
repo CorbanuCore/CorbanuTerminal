@@ -1,0 +1,17 @@
+{
+  "stream_cancel_key": "Escape",
+  "passed": true,
+  "candidate": "/home/travis/security-round5/evidence/blind-repairs-20260910/candidate/bin/codex",
+  "sha256": "aef2b6d258bd31645660f3d701abd7e9460d246da38e08b15c086e2ea1069872",
+  "host_sha256": "8a541f36059090b84d26c13476e360d85ccdb1dc0bf39b5a68b2203668007ae8",
+  "human_acceptance": false,
+  "tool_round_trips": 4,
+  "concurrent_processes": 3,
+  "same_home_restart": true,
+  "stream_cancel_recovery": true,
+  "permissions_security_cancel_inert": true,
+  "claude_guidance_40_columns": true,
+  "claude_catalog_after_setup_and_restart": true,
+  "anthropic_management_entry_present": true,
+  "anthropic_catalog_after_api_setup": true
+}

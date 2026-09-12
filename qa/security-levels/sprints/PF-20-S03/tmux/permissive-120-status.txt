@@ -1,0 +1,47 @@
+╭──────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.38)                │
+│                                              │
+│ model:     gpt-5.6-terra   /model to change  │
+│ directory: ~/worktrees/security-local-anchor │
+╰──────────────────────────────────────────────╯
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.38)                                                           │
+│                                                                                          │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date                            │
+│ information on rate limits and credits                                                   │
+│                                                                                          │
+│  Model:                GPT-5.6-Terra (reasoning medium, summaries auto)                  │
+│  Directory:            ~/worktrees/security-local-anchor                                 │
+│  Permissions:          Workspace (Ask for approval)                                      │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            AGENTS.md                                                         │
+│  Account:              OpenAI API key configured (run corbanu login to use ChatGPT)      │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a0701e-98ac-7281-a271-82e7b8d282d3                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Use /skills to list available skills
+
+  GPT-5.6-Terra default · ~/worktrees/security-local-anchor · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,18 @@
+{
+  "findings": [
+    {
+      "title": "Default realtime websocket transport bypasses the protected source-admission guard",
+      "body": "`check_source_admission` was added only to `ModelClient::create_realtime_call_with_headers` (WebRTC). In `core/src/realtime_conversation.rs`, `ConversationStartTransport::Websocket` is the default (`prepare_realtime_start` falls back to `Websocket`, and `sdp` is `None`), and that branch calls `RealtimeWebsocketClient::connect(session_config, ...)` directly at ~line 604 without touching `ModelClient`, so a Moderate/Aggressive session opens a provider realtime connection (session instructions, then user text/audio and Codex handoff output) with no admission check and before any fail-closed error. The QA record added in this diff (`qa/security-levels/sprints/PF-30-S01-typed-source-envelope/README.md`: \"Memory and realtime alternate input routes also fail closed\") and the review scope (\"Transport changes must preserve the guard\") therefore overstate the boundary. Smallest pre-merge fix: either call `model_client.check_source_admission(&Prompt::default())` (or an equivalent `pub(crate)` guard on `ModelClient`) before the websocket `connect` in `RealtimeStart` handling, or narrow the README/sprint claim to the WebRTC call route only. Note that adding the guard requires editing `core/src/realtime_conversation.rs`, which is outside this lane's recorded `write_scope`; that scope expansion should be recorded rather than silently absorbed.",
+      "priority": "P2",
+      "confidence": 0.62,
+      "category": "security",
+      "code_location": {
+        "file_path": "codex-rs/core/src/client.rs",
+        "line": 1187
+      }
+    }
+  ],
+  "overall_correctness": "patch is incorrect",
+  "overall_explanation": "Verified both Astra review-1 fixes: `Cargo.lock` now carries the `codex-content-security` edge under `codex-core` (package entry already present; Bazel derives deps from Cargo), and `Session::build_model_client_for_configuration` constructs the replacement client with the same `self.thread_id` and calls `with_native_ingress_from`, which shares the `Arc<StdMutex<NativeIngress>>` only on matching thread identity; `for_provider`/`new_session` also clone the ingress fields. `source_admission_level` takes `max(configured, live snapshot)` (SecurityLevel derives Ord Permissive<Moderate<Aggressive) and an unbound/uninitialized policy errors rather than degrading to Permissive; all three wire builders (used by the responses HTTP/websocket, chat, anthropic, and compact paths) route through `source_admitted_input`, and Permissive returns the original `get_formatted_input_for_request` output. Envelope deserialization is strict (`deny_unknown_fields`, untrusted-only authority, lineage/digest recomputation), tool origins are registered only by the router/MCP dispatcher, projection is deterministic, capacity/oversize mark the registry unavailable rather than evicting, and the 8,192-byte JSON projection bound is enforced after escaping (normalized text \u22642,048 bytes, so worst case stays well under the 10k-token hard cap while plausibly exceeding 1,000 tokens, as disclosed). Diagnostics are static strings. The one landability issue found: the default realtime websocket transport never passes through `ModelClient`, so the diff's own QA claim that realtime routes fail closed does not hold for that path. Read-only inspection; no tests run or files modified.",
+  "overall_confidence": 0.7
+}

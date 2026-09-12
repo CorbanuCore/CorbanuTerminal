@@ -1,0 +1,56 @@
+{
+  "case_number": 15,
+  "status": "passed",
+  "summary": "The API-key guidance and OpenAI device-login guidance were observed in the visible provider UI; both flows were canceled without entering credentials or completing login.",
+  "observed_checks": [
+    {
+      "check": "Startup prerequisite and provider-management UI available",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15-replay/evidence/01-after-prerequisite.txt"
+    },
+    {
+      "check": "API-key guidance names the environment variable, credential storage, and chat exclusion",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15-replay/evidence/04-anthropic-api-key-entry.txt"
+    },
+    {
+      "check": "API-key entry canceled without supplying a key",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15-replay/evidence/05-after-api-key-cancel.txt"
+    },
+    {
+      "check": "OpenAI account setup action exposes device link and remote-device guidance",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15-replay/evidence/09-openai-sign-in.txt"
+    },
+    {
+      "check": "OpenAI link remains represented as a terminal hyperlink in the narrow wrapped view",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15-replay/evidence/13-openai-sign-in-narrow-ansi.txt"
+    },
+    {
+      "check": "OpenAI login canceled and no repeated keychain prompt appeared",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15-replay/evidence/15-final-provider-list.txt"
+    }
+  ],
+  "blockers": [],
+  "actions": [
+    "Started only the supplied target TMUX session.",
+    "Accepted the visible directory-trust prerequisite.",
+    "Opened /providers and inspected Anthropic API-key setup, then pressed Escape.",
+    "Opened OpenAI management and its advertised recovery action.",
+    "Inspected the OpenAI device-login panel, redacting the device code in saved evidence, then pressed Escape.",
+    "Resized the target pane to 40 columns for the wrapping check and restored it to 150 columns.",
+    "Entered no credential, completed no login, and made no external purchase or permission change.",
+    "Returned to the empty chat composer and exited the dedicated target session with Ctrl+D."
+  ],
+  "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "platform": "macOS arm64",
+  "limitations": [
+    "Evidence is limited to visible raw-TMUX UI captures on macOS arm64.",
+    "The URL itself fit on one line at 40 columns; the surrounding device guidance wrapped.",
+    "Actual mouse activation or browser/native launch was not performed."
+  ],
+  "test_instruction_ambiguity": "The phrase 'clickable when wrapped' is ambiguous because the 40-column view wrapped the explanatory text but not the URL itself; the capture does show the URL enclosed by OSC 8 hyperlink metadata."
+}

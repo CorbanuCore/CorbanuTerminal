@@ -1,0 +1,34 @@
+Black-box action history for case 3
+
+Launch
+- Started the supplied candidate with the exact target tmux command and supplied environment.
+- Startup screen: accepted the visible “Yes, continue” trust choice with Enter.
+
+Provider catalog
+- Typed /providers with tmux send-keys -l, then pressed Enter.
+- Opened OpenAI with Enter; returned with Escape.
+- Moved to Claude Account with Down; opened with Enter; returned with Escape.
+- Moved to Corbanu API with Down; opened with Enter; returned with Escape.
+- Moved to Anthropic with Down; opened with Enter; returned with Escape.
+- Moved to Ambient with Down; opened with Enter; returned with Escape.
+- Moved to Kimi Code with Down; opened with Enter; returned with Escape.
+- Moved to Z.AI with Down; opened with Enter; returned with Escape.
+- Moved to DeepSeek with Down; opened with Enter; returned with Escape.
+- Pressed Escape to return to the main TUI.
+
+Wallet
+- Typed /wallet with tmux send-keys -l, then pressed Enter.
+- Observed the no-local-wallet screen; did not create or restore a wallet.
+- Pressed Escape to return to the main TUI.
+
+Model catalog
+- Typed /model with tmux send-keys -l, then pressed Enter.
+- Pressed Down through the visible OpenAI model list; observed Down wrap from item 5 to item 1.
+- Pressed Right once; no visible catalog change.
+- Pressed Escape to cancel the model menu.
+
+Exit
+- Pressed Ctrl-C once to cancel the model menu and return to the main TUI.
+- Pressed Ctrl-C a second time to exit the target application/session.
+
+No credential values, login codes, wallet recovery material, or browser content were entered or recorded.

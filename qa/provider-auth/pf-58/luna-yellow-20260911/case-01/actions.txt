@@ -1,0 +1,8 @@
+Action history (2026-09-11, macOS arm64)
+
+1. Started the provided `target` tmux session on the dedicated socket with the supplied compiled candidate command.
+2. Captured the target pane to `initial-pane.txt`; the visible UI showed the Corbanu Terminal trust prompt.
+3. Sent raw tmux key `C-c` once; the app advanced to its main TUI.
+4. Sent raw tmux key `C-c` a second time; the target session exited. Confirmed the dedicated tmux server was no longer running.
+
+No native Applications shortcut or macOS Desktop interaction was possible through this interface. No credentials or login codes were accessed.

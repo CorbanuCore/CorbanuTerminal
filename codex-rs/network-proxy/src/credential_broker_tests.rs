@@ -618,3 +618,82 @@ fn scoped_openai_stale_authority_and_unsupported_route_fail_closed() {
         ScopedCredentialRouteError::InvalidAuthority
     );
 }
+
+#[derive(Default)]
+struct IsolatedTestDispatcher {
+    calls: Mutex<Vec<String>>,
+}
+
+impl IsolatedCredentialDispatcher for IsolatedTestDispatcher {
+    fn dispatch(
+        &self,
+        request: &IsolatedCredentialUse<'_>,
+    ) -> Result<IsolatedCredentialReceipt, IsolatedCredentialDispatchError> {
+        self.calls
+            .lock()
+            .expect("calls")
+            .push(request.path.to_string());
+        Ok(IsolatedCredentialReceipt {
+            response_status: 200,
+            uploaded_bytes: 10,
+            downloaded_bytes: 20,
+        })
+    }
+}
+
+#[test]
+fn pf_27_s04_isolated_route_never_injects_raw_auth_and_supports_fresh_dispatches() {
+    let broker = CredentialBroker::new(/*enabled*/ true);
+    let dispatcher = Arc::new(IsolatedTestDispatcher::default());
+    let route = IsolatedCredentialRoute::new(
+        CapabilityId::from_sha256_hex("f".repeat(64)).expect("capability id"),
+        scoped_authority(),
+        dispatcher.clone(),
+    )
+    .expect("isolated route");
+    broker
+        .install_isolated_openai_route(route)
+        .expect("install route");
+    assert!(broker.scoped_openai_enabled());
+    assert!(broker.scoped_openai_matches_host("API.OPENAI.COM"));
+    assert!(!broker.scoped_openai_matches_host("attacker.example"));
+    let mut env = env_map([("OPENAI_API_KEY", "sk-raw-must-not-enter-proxy")]);
+    broker.virtualize_child_env(&mut env);
+    let dummy = env.get("OPENAI_API_KEY").expect("dummy");
+    assert_ne!(dummy, "sk-raw-must-not-enter-proxy");
+
+    let mut headers = headers_with_bearer(dummy);
+    assert_eq!(
+        broker.inject_request_headers_for_request(
+            "https",
+            "api.openai.com",
+            443,
+            "POST",
+            "/v1/responses",
+            &mut headers,
+        ),
+        Err(ScopedCredentialInjectionError::IsolatedBrokerRequired)
+    );
+    assert!(!format!("{headers:?}").contains("sk-raw-must-not-enter-proxy"));
+
+    for _ in 0..2 {
+        assert_eq!(
+            broker
+                .dispatch_isolated_openai("https", "API.OPENAI.COM", 443, "POST", "/v1/responses",)
+                .expect("broker receipt")
+                .response_status,
+            200
+        );
+    }
+    assert_eq!(dispatcher.calls.lock().expect("calls").len(), 2);
+    assert_eq!(
+        broker.dispatch_isolated_openai(
+            "https",
+            "api.openai.com",
+            443,
+            "POST",
+            "/v1/chat/completions",
+        ),
+        Err(IsolatedCredentialDispatchError::Denied)
+    );
+}

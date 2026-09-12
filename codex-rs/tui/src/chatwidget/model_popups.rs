@@ -31,6 +31,7 @@ use codex_model_provider_info::CLAUDE_PLAN_LEGACY_OPUS_4_8_MODEL;
 #[cfg(test)]
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+use codex_model_provider_info::CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL;
 use codex_model_provider_info::CORBANU_API_DEEPSEEK_V4_PRO_MODEL;
 use codex_model_provider_info::CORBANU_API_GLM_5_3_FLASH_MODEL;
 use codex_model_provider_info::CORBANU_API_GLM_5_3_MODEL;
@@ -93,7 +94,7 @@ struct CorbanuApiModelTemplate {
     is_default: bool,
 }
 
-const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 7] = [
+const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 8] = [
     CorbanuApiModelTemplate {
         source_model: VERCEL_GLM_5_3_FLASH_MODEL,
         public_model: CORBANU_API_GLM_5_3_FLASH_MODEL,
@@ -159,6 +160,14 @@ const CORBANU_API_MODEL_TEMPLATES: [CorbanuApiModelTemplate; 7] = [
         description: Some(
             "At cost: $0.02175/M input · $0/M cache read · $0.00018125/M cache write · $0.0435/M output. Third-party inference.",
         ),
+        provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
+        is_default: false,
+    },
+    CorbanuApiModelTemplate {
+        source_model: CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL,
+        public_model: CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL,
+        display_name: None,
+        description: None,
         provider_id: PFTERMINAL_PLAN_PROVIDER_ID,
         is_default: false,
     },
@@ -554,6 +563,17 @@ impl ChatWidget {
         }
         presets.retain(|preset| self.model_catalog.preset_is_selectable(preset));
 
+        // Runtime and public API catalog entries may describe the same route.
+        // Keep distinct providers, but show each model/provider pair once.
+        let mut seen = HashSet::new();
+        presets.retain(|preset| {
+            let provider = preset
+                .provider_id
+                .clone()
+                .or_else(|| Self::model_provider_for_selection(&preset.model));
+            seen.insert((preset.model.clone(), provider))
+        });
+
         if presets.is_empty() {
             self.add_info_message(
                 "No additional models are available right now.".to_string(),
@@ -589,7 +609,10 @@ impl ChatWidget {
 
         let (items, tabs, initial_tab_id, footer_hint) = if provider_items.len() > 1 {
             let selected_model = purpose.selected_model(self.current_model());
-            let current_provider = self.resolved_model_provider(selected_model);
+            let current_provider = match purpose {
+                ModelSelectionPurpose::Session => Some(self.config.model_provider_id.clone()),
+                _ => self.resolved_model_provider(selected_model),
+            };
             let current_group = Self::model_picker_provider_group(current_provider.as_deref());
             let initial_tab_id = current_group
                 .filter(|group| {
@@ -648,10 +671,27 @@ impl ChatWidget {
         purpose: ModelSelectionPurpose,
     ) -> SelectionItem {
         let description = Self::model_description_for_preset(&preset);
-        let is_current = preset.model.as_str() == purpose.selected_model(self.current_model());
+        let selected_model = purpose.selected_model(self.current_model());
+        let selected_provider = match &purpose {
+            ModelSelectionPurpose::Session => Some(self.config.model_provider_id.clone()),
+            _ => self.resolved_model_provider(selected_model),
+        };
+        let preset_provider = preset
+            .provider_id
+            .clone()
+            .or_else(|| Self::model_provider_for_selection(&preset.model));
+        let is_current = preset.model == selected_model && preset_provider == selected_provider;
         let direct_select = preset.supported_reasoning_efforts.len() <= 1;
         let preset_for_action = preset.clone();
-        let display_name = Self::model_display_label_for_preset(&preset);
+        let mut display_name = Self::model_display_label_for_preset(&preset);
+        // The Other tab can contain identical model IDs from distinct routes.
+        // Keep their provider identity visible before the user selects one.
+        if Self::model_picker_provider_group(preset_provider.as_deref())
+            .is_some_and(|group| group.id == "other")
+            && let Some(provider) = preset_provider.as_deref()
+        {
+            display_name = format!("{display_name} via {provider}");
+        }
         let model = preset.model.clone();
         let actions: Vec<SelectionAction> = vec![Box::new(move |tx| {
             let preset_for_event = preset_for_action.clone();
@@ -996,7 +1036,7 @@ impl ChatWidget {
                                 effort: selected_effort,
                             });
                     } else {
-                        self.apply_model_and_effort(selected_model, selected_effort);
+                        self.apply_model_and_effort(selected_model, provider, selected_effort);
                     }
                 }
                 ModelSelectionPurpose::CodexPane { .. } => {
@@ -1340,8 +1380,12 @@ impl ChatWidget {
         ))
     }
 
-    fn apply_model_and_effort(&self, model: String, effort: Option<ReasoningEffortConfig>) {
-        let provider = self.resolved_model_provider(&model);
+    fn apply_model_and_effort(
+        &self,
+        model: String,
+        provider: Option<String>,
+        effort: Option<ReasoningEffortConfig>,
+    ) {
         let warning = effort
             .as_ref()
             .and_then(|effort| self.ultra_reasoning_concurrency_warning(effort));
@@ -1536,7 +1580,7 @@ mod tests {
     }
 
     #[test]
-    fn corbanu_api_presets_preserve_ambient_and_publish_the_six_wallet_funded_routes() {
+    fn corbanu_api_presets_preserve_ambient_and_publish_the_seven_wallet_funded_routes() {
         let source_presets = [
             VERCEL_GLM_5_3_FLASH_MODEL,
             AMBIENT_DEFAULT_MODEL,
@@ -1545,6 +1589,7 @@ mod tests {
             OPENAI_GPT_5_6_SOL_MODEL,
             VERCEL_KIMI_K3_MODEL,
             DEEPSEEK_PRO_MODEL,
+            CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL,
         ]
         .into_iter()
         .map(|model| preset(model, /*show_in_picker*/ true))
@@ -1606,6 +1651,12 @@ mod tests {
                     CORBANU_API_DEEPSEEK_V4_PRO_MODEL,
                     Some(PFTERMINAL_PLAN_PROVIDER_ID),
                     "DeepSeek V4 Pro",
+                    false,
+                ),
+                (
+                    CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL,
+                    Some(PFTERMINAL_PLAN_PROVIDER_ID),
+                    CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL,
                     false,
                 ),
             ]

@@ -1,0 +1,40 @@
+{
+  "findings": [
+    {
+      "title": "Cancel the registered session when the client disconnects during dispatch",
+      "body": "While `handler.dispatch` runs synchronously, nothing observes socket EOF or invokes `handler.close`. If the client closes, dies, or times out while the backend is paused before an upload, the runtime's cancellation fence remains active and the backend can still perform the request. Cancellation happens only after dispatch returns and the receipt write fails. Observe connection closure concurrently with backend execution and cancel the registered session promptly; this can be verified with a backend paused before its final cancellation check.",
+      "priority": "P1",
+      "confidence": 0.99,
+      "category": "security",
+      "code_location": {
+        "file_path": "codex-rs/secret-broker/src/linux_transport.rs",
+        "line": 100
+      }
+    },
+    {
+      "title": "Reject mandate bindings before reserving an unresolvable dispatch",
+      "body": "`JournalBrokerAudit::new` accepts `AuthorityIdentity::Mandate`, but all known terminal outcomes supply `mandate_receipt: None`. `ReferenceJournal::resolve_dispatch` explicitly rejects that combination for mandate authority. Consequently, an accepted dispatch can execute successfully and then deterministically return `AuditCommitUnknown`, invalidate its session, and leave an unresolved durable intent. The smallest scoped fix is to reject mandate bindings during construction until this adapter can supply the required receipt.",
+      "priority": "P2",
+      "confidence": 1.0,
+      "category": "bug",
+      "code_location": {
+        "file_path": "codex-rs/secret-broker/src/journal_adapter.rs",
+        "line": 173
+      }
+    },
+    {
+      "title": "Validate the journal grant identity against the bound request",
+      "body": "Construction checks session, task, and generation correlation but never compares `binding.authority` with `binding.request.context.grant_id`. A request naming grant A paired with `AuthorityIdentity::Grant { grant_id: B }` therefore receives a durable permit and records B as the authority. Neither `AuthorizationRequest::validate` nor `ReferenceJournal::reserve_dispatch` checks this association. Hashing the request preserves the inconsistency rather than rejecting it, so the journal can attribute a credential use to the wrong grant even when backend authorization succeeds. Reject conflicting grant identities before accepting the binding.",
+      "priority": "P2",
+      "confidence": 0.95,
+      "category": "bug",
+      "code_location": {
+        "file_path": "codex-rs/secret-broker/src/journal_adapter.rs",
+        "line": 75
+      }
+    }
+  ],
+  "overall_correctness": "patch is incorrect",
+  "overall_explanation": "The scoped contracts contain an in-flight disconnect cancellation gap and two journal authority handling defects. These findings do not require production activation, platform completion, or pending shared registrations. Review used read-only inspection; no tests or nested reviewers were run.",
+  "overall_confidence": 0.97
+}

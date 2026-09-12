@@ -1,0 +1,591 @@
+{
+  "design_sha256": "3dc2a4237e5614c8da9199ee06237a83d094729c68852daa96eb95559c75107e",
+  "implementer": "/root",
+  "candidate": {
+    "version": "0.1.41",
+    "source": "da77f7c03827d56284d62a3dadb477aed36bb6ce; source-equivalent existing package",
+    "platform": "macOS arm64",
+    "binary_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+    "package_manifest": {
+      "path": "candidate-manifest.md",
+      "sha256": "476b8198624ce2b1a9306fd8698acaff38fc24c1c9f986dad32ceab8a98d2c31"
+    }
+  },
+  "cases": [
+    {
+      "id": "PF58-F01",
+      "disposition": "blocked",
+      "summary": "Fresh setup fixtures exist on Linux, but the full empty-profile inventory/cancel journey is not covered on both platforms.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F02",
+      "disposition": "blocked",
+      "summary": "Synthetic OpenAI expired-account cancel/recovery is exercised on Linux; fresh real-account login, selection and same-session request are not verified here.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F03",
+      "disposition": "blocked",
+      "summary": "Linux fake Claude login/compatibility setup is exercised; subscription inference after that login is not verified.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F04",
+      "disposition": "blocked",
+      "summary": "Managed-token form/catalog/restart are exercised on both packages; successful subscription inference after setup is not verified.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F05",
+      "disposition": "blocked",
+      "summary": "Anthropic masked setup and model catalog are exercised on both packages; actual Anthropic request routing after setup is not verified.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F06",
+      "disposition": "blocked",
+      "summary": "Linux custom environment/command/managed routing fixtures are exercised; a bounded complete provider list and requests for every supported provider are missing.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F07",
+      "disposition": "blocked",
+      "summary": "Separate Claude/Anthropic setup and catalogs are exercised. Crossed credential types, repair-one/use-both and billing-route receipts are missing.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F08",
+      "disposition": "blocked",
+      "summary": "Empty/whitespace inputs stay in the form; a deliberately invalid saved key becomes Enabled \u00b7 configured on both platforms. Whether this meets the proposed no-false-success expectation is unresolved; stored is not validated. A healthy-other-provider request after each attempt is also missing.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F09",
+      "disposition": "blocked",
+      "summary": "Synthetic API form masking/cancel/scrollback pass on both packages; all secret-bearing routes, edit operations and long-token paste variants are not covered.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F10",
+      "disposition": "blocked",
+      "summary": "API and account cancellation fixtures run on Linux, and masked cancellation on both; preservation of an unfinished composer message and every route is not proven.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F11",
+      "disposition": "blocked",
+      "summary": "Linux rejection/recovery and eligibility fixtures cover subsets; simultaneous checking/expired/disabled status and full menu/chat parity on both platforms are missing.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F12",
+      "disposition": "blocked",
+      "summary": "Linux synthetic API/account rejection and same-session recovery are exercised; complete cross-route/profile/platform recovery, message-count and other-provider assertions are missing.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F13",
+      "disposition": "blocked",
+      "summary": "Separate setup leaves the selected Claude model unchanged in package probes. Nonselected credential replacement followed by requests to both providers is not proven.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F14",
+      "disposition": "blocked",
+      "summary": "Linux actual-key deactivation/reactivation/current-cancel/replacement fixtures run; the complete equivalent Mac sequence is missing.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F15",
+      "disposition": "blocked",
+      "summary": "Both packages show distinct Claude and Anthropic catalog entries. Linux duplicate-slug/current-identity tests run; the complete Mac duplicate-custom-provider and effort combination is not proven.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F16",
+      "disposition": "blocked",
+      "summary": "Linux Astra model/effort request and restart are covered; switching among incompatible/no-effort models with matching wire evidence is missing.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F17",
+      "disposition": "blocked",
+      "summary": "Linux Astra effort cancellation/confirmation/request and exact identity fixtures run; cancel at every provider/model/effort level with an existing conversation on Mac is missing.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F18",
+      "disposition": "blocked",
+      "summary": "Synthetic package restart and two real-profile Mac menu launches pass. Native Applications shortcut invocation, disabled-state persistence and live requests in that same full journey are missing.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F19",
+      "disposition": "blocked",
+      "summary": "Linux existing-config/custom/resume fixtures run; visible provider/model state is consistent across two real Mac profile launches. Historical migration range and live chat on that existing Mac profile are not proven.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F20",
+      "disposition": "blocked",
+      "summary": "Two existing-profile Mac processes reached menus without password entry; no native Applications launch or controlled Keychain deny/cancel/allow recovery was performed. Linux is not the platform for this native case; the overall Mac prerequisite remains open.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F21",
+      "disposition": "blocked",
+      "summary": "Linux tests run through SSH with real tmux keys and same-home restart. Client detach/reattach plus the complete account-login handoff sequence is not demonstrated. External-environment recovery guidance explicitly requires restarting; this is an observed limitation, not same-process recovery.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "Linux-specific; not applicable to Mac execution; see Linux record for overall prerequisite"
+    },
+    {
+      "id": "PF58-F22",
+      "disposition": "blocked",
+      "summary": "Both packages complete real Code Mode/shell/MCP calls against synthetic servers. Independent expired tool vs model credentials, inverse cases and live codex_apps reconnect are not proven by that smoke test.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F23",
+      "disposition": "blocked",
+      "summary": "Auth rejection/retry fixtures run on Linux. Distinct timeout, offline, rate-limit and server-error status/recovery matrix is missing.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F24",
+      "disposition": "blocked",
+      "summary": "Both packages show token guidance at 40 columns. Short-height navigation, long custom names and last-item/resize-back behavior are not fully exercised.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F25",
+      "disposition": "blocked",
+      "summary": "Many actual-key open/select/cancel paths run; exhaustive entry/menu boundary and repeat-cycle coverage is not established.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    },
+    {
+      "id": "PF58-F26",
+      "disposition": "blocked",
+      "summary": "No new controlled delayed-health-result UI race journey was executed. Historical unit tests are not a substitute for this proposed observable flow.",
+      "candidate_sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+      "supporting_evidence": [
+        {
+          "path": "mac-package/result.json",
+          "sha256": "d3fc2977bc6cb021b406f242225e31513da5499b3a136f3388b11dd89202f199"
+        },
+        {
+          "path": "mac-existing/result.json",
+          "sha256": "22393946f3b38a6cee0a481ff07b76aea608fbd7822b354e81d7d4d4113223d4"
+        },
+        {
+          "path": "mac-inputs-ready/result.json",
+          "sha256": "9929c67e63b5b9708e412b782d047ef1681e223489f8bd531240c695bfb34b16"
+        }
+      ],
+      "applicability": "applicable"
+    }
+  ],
+  "human_acceptance": false,
+  "evidence_check": {
+    "agent": "/root/blind_functional_designer",
+    "verdict": "fail",
+    "artifact": {
+      "path": "evidence-check.md",
+      "sha256": "0b4fb9450b76d6d8ba0c0f964b84849f894032ac78ccd41bab6bd265f16898a5"
+    }
+  },
+  "execution_manifest": {
+    "path": "execution-artifacts.json",
+    "sha256": "36ddb4fed1b91020dae7d292a031b60ee52f9308586bb4726ba84efbb175b891"
+  },
+  "review_budget": {
+    "used": 7,
+    "limit": 5,
+    "ledger": {
+      "path": "review-ledger.md",
+      "sha256": "72761c1002ac88f92ee04759087cead6ce0ab0a7b8ef77acfbf663630cfecdf6"
+    },
+    "extension": {
+      "by": "Travis Good (user)",
+      "reason": "Explicit approval for two additional passes only",
+      "artifact": {
+        "path": "budget-amendment.md",
+        "sha256": "ca55cb2946a21b64e4cb29152131759f60a0faec27022f85ea8d2cbf9a392b75"
+      }
+    }
+  }
+}

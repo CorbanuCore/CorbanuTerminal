@@ -1,0 +1,44 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)               │
+│                                             │
+│ model:       gpt-6-astra   /model to change │
+│ directory:   /mnt/…/candidate-pty/workspace │
+│ permissions: YOLO mode                      │
+╰─────────────────────────────────────────────╯
+
+
+  Wallet
+  No local wallet. Secrets stay outside chat and model co
+
+› 1. Create wallet   Create a new Solana mainnet wallet
+  2. Restore wallet  Restore from recovery material
+
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

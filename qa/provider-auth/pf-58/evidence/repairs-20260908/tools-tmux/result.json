@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "candidate": "/home/travis/security-round5/evidence/provider-reauth-health-final/candidate-repaired-qualified/bin/codex",
+  "sha256": "fa2b710733a57787cb0cfbd250be903ef9d2fe1f08b981dd49196697eae14fb8",
+  "host_sha256": "5dba47e51d4152f39c738a282502aeceab8df615b78d90dabf01cbc8b7393a03",
+  "human_acceptance": false,
+  "tool_round_trips": 4,
+  "concurrent_processes": 3,
+  "same_home_restart": true,
+  "stream_cancel_recovery": true,
+  "permissions_security_cancel_inert": true,
+  "claude_guidance_40_columns": true
+}

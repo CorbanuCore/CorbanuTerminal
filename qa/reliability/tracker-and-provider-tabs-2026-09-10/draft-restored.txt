@@ -1,0 +1,19 @@
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────╯
+
+• Campaign Tracker recording enabled for this workspace.
+Prompts are preserved; sharing needs an explicit history
+grant.
+
+• Campaign Tracker recording paused for this workspace.
+
+▌ Create campaign
+▌ Creates a personal campaign. Linking tasks never grants a
+▌
+▌ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+▌ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+▌ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+▌ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+▌ Retain this objective
+
+Press ctrl + d when done editing, enter for newline, or esc

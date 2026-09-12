@@ -1,0 +1,69 @@
+{
+  "package": "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-final9-20260910",
+  "files": [
+    {
+      "path": "bin/codex-code-mode-host",
+      "size": 70978896,
+      "sha256": "8a639920ecf103ecd9464cb3ae9484f2c00d1ce1bc0a620b73a3397cc4b42b80"
+    },
+    {
+      "path": "bin/corbanu",
+      "size": 293988000,
+      "sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e"
+    },
+    {
+      "path": "bin/corbanu-acp",
+      "size": 503312,
+      "sha256": "2437b700f3408749970356dda9cadfdab4dee079a277b183d83eef26a9045651"
+    },
+    {
+      "path": "bin/corbanu-debug",
+      "link": "corbanu"
+    },
+    {
+      "path": "bin/corbanu-walletd",
+      "size": 7168480,
+      "sha256": "8ea4322cad67911d7f3c94d26bed6aea6713092393398bb29fe065b65834ec68"
+    },
+    {
+      "path": "codex-package.json",
+      "size": 357,
+      "sha256": "db972a82ac761d4b06c908e38c385ae0dc607ab798c91c5d695a733eaeff6751"
+    },
+    {
+      "path": "codex-path/rg",
+      "size": 4014576,
+      "sha256": "a326a1fb48074202e9ad41e4cd1e389eeea372c8c6f7d7e80da81176d5d9430e"
+    },
+    {
+      "path": "codex-resources/telegram/dist/AGENTS.md.template",
+      "size": 353,
+      "sha256": "94e3706786495a29882454105caf6ef32978bf362fcaa0eae8faee9f25409f62"
+    },
+    {
+      "path": "codex-resources/telegram/dist/corbanu-terminal-telegram.service",
+      "size": 722,
+      "sha256": "7b2486a9fb015dc0864851fd6095b7fdd75a57ca9587a3a7d0540513ff05128b"
+    },
+    {
+      "path": "codex-resources/telegram/dist/org.corbanu.terminal.telegram.plist",
+      "size": 803,
+      "sha256": "ece6bb7f40216ac0af6eeb0ec433264d4bcf868e39b5d65a06337c6138bf69d6"
+    },
+    {
+      "path": "codex-resources/telegram/install-telegram-task.ps1",
+      "size": 1505,
+      "sha256": "a5467b26fdadc62e34b0bfd2f73725fda579ad934ba273951cd02f21b94e0645"
+    },
+    {
+      "path": "codex-resources/telegram/setup-telegram.sh",
+      "size": 23373,
+      "sha256": "ce9c2a653f88efb4d888edeeca036bf908ebc364990783851bb015d9203ceb4b"
+    },
+    {
+      "path": "codex-resources/zsh/bin/zsh",
+      "size": 737520,
+      "sha256": "db6fe1a78eaceaff3b0f0cde25fc25afe466d61b0bf76b4ebe35812e4bc8dd71"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+╭──────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                    │
+│                                                  │
+│ model:       gpt-5.6-sol   /model to change      │
+│ directory:   /mnt/…/corbanu-deepseek41-review-qa │
+│ permissions: YOLO mode                           │
+╰──────────────────────────────────────────────────╯
+
+
+  Select Model and Effort
+  At-cost, wallet-funded API balance
+
+  OpenAI  [Corbanu API]  Other
+
+› 1. DeepSeek V4.1 Flash   Model: corbanu/deepseek-v4.1-
+                           flash. At cost: $0.22/M input
+                           · $0.007/M cache read · $0.66/
+                           M output + $0.0001/request.
+                           Third-party inference.
+  2. Ambient GLM 5.2       Model: z-ai/glm-5.2. Ambient:
+                           GLM 5.2 - $0.76/M input,
+                           $0.14/M cached input, $2.42/M
+                           output.
+  3. Claude Fable 5        Model: claude-fable-5. Claude
+                           Fable 5 through the Anthropic
+                           Messages API.
+  4. GPT-5.6 Luna (xhigh)  Model: corbanu/gpt-5.6-luna.
+                           At cost: $0.20/M input ·
+                           $0.02/M cache read · $0.25/M
+                           cache write · $1.20/M output.
+                           At 272K+ context: $0.40/M ·
+                           $0.04/M · $0.50/M · $1.80/M.
+                           Third-party inference.
+  5. GPT-5.6 Sol           Model: corbanu/gpt-5.6-sol. At
+                           cost: $2.00/M input · $0.20/M
+                           cache read · $2.50/M cache
+                           write · $10.00/M output. At
+                           272K+ context: $4.00/M ·
+                           $0.40/M · $5.00/M · $15.00/M.
+                           Third-party inference.
+
+  Use Left/Right to switch providers. Press Enter to confir

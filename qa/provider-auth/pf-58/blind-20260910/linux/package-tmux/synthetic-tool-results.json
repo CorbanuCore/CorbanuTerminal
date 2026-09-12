@@ -1,0 +1,114 @@
+[
+  [
+    {
+      "type": "custom_tool_call_output",
+      "id": "ctco_01a08e1d-9070-7463-b03d-e738a0a096a2",
+      "call_id": "handoff-call",
+      "output": [
+        {
+          "type": "input_text",
+          "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"
+        },
+        {
+          "type": "input_text",
+          "text": "HOST_HANDOFF_OK"
+        },
+        {
+          "type": "input_text",
+          "text": "{\"chunk_id\":\"09d774\",\"wall_time_seconds\":0.000027192,\"exit_code\":0,\"original_token_count\":4,\"output\":\"SHELL_HANDOFF_OK\"}"
+        },
+        {
+          "type": "input_text",
+          "text": "{\"content\":[{\"type\":\"text\",\"text\":\"MCP_HANDOFF_OK\"}]}"
+        }
+      ],
+      "internal_chat_message_metadata_passthrough": {
+        "turn_id": "01a08e1d-8fe3-7433-98dc-0db14094bc39"
+      }
+    }
+  ],
+  [
+    {
+      "type": "custom_tool_call_output",
+      "id": "ctco_01a08e1d-94b7-7ea0-b27b-48ca4466b786",
+      "call_id": "handoff-call",
+      "output": [
+        {
+          "type": "input_text",
+          "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"
+        },
+        {
+          "type": "input_text",
+          "text": "HOST_HANDOFF_OK"
+        },
+        {
+          "type": "input_text",
+          "text": "{\"chunk_id\":\"860a5e\",\"wall_time_seconds\":0.000016871,\"exit_code\":0,\"original_token_count\":4,\"output\":\"SHELL_HANDOFF_OK\"}"
+        },
+        {
+          "type": "input_text",
+          "text": "{\"content\":[{\"type\":\"text\",\"text\":\"MCP_HANDOFF_OK\"}]}"
+        }
+      ],
+      "internal_chat_message_metadata_passthrough": {
+        "turn_id": "01a08e1d-9427-75e1-ab45-1318db179302"
+      }
+    }
+  ],
+  [
+    {
+      "type": "custom_tool_call_output",
+      "id": "ctco_01a08e1d-9b26-70e2-86dd-ed1a015de89c",
+      "call_id": "handoff-call",
+      "output": [
+        {
+          "type": "input_text",
+          "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"
+        },
+        {
+          "type": "input_text",
+          "text": "HOST_HANDOFF_OK"
+        },
+        {
+          "type": "input_text",
+          "text": "{\"chunk_id\":\"e6bb57\",\"wall_time_seconds\":0.000016511,\"exit_code\":0,\"original_token_count\":4,\"output\":\"SHELL_HANDOFF_OK\"}"
+        },
+        {
+          "type": "input_text",
+          "text": "{\"content\":[{\"type\":\"text\",\"text\":\"MCP_HANDOFF_OK\"}]}"
+        }
+      ],
+      "internal_chat_message_metadata_passthrough": {
+        "turn_id": "01a08e1d-9a98-7c63-a170-6d86341f1bf9"
+      }
+    }
+  ],
+  [
+    {
+      "type": "custom_tool_call_output",
+      "id": "ctco_01a08e1d-9e37-70c0-9a92-26170223ea9f",
+      "call_id": "handoff-call",
+      "output": [
+        {
+          "type": "input_text",
+          "text": "Script completed\nWall time 0.1 seconds\nOutput:\n"
+        },
+        {
+          "type": "input_text",
+          "text": "HOST_HANDOFF_OK"
+        },
+        {
+          "type": "input_text",
+          "text": "{\"chunk_id\":\"d4ffa5\",\"wall_time_seconds\":0.000018795,\"exit_code\":0,\"original_token_count\":4,\"output\":\"SHELL_HANDOFF_OK\"}"
+        },
+        {
+          "type": "input_text",
+          "text": "{\"content\":[{\"type\":\"text\",\"text\":\"MCP_HANDOFF_OK\"}]}"
+        }
+      ],
+      "internal_chat_message_metadata_passthrough": {
+        "turn_id": "01a08e1d-9da2-7123-a453-14969b8bdfe6"
+      }
+    }
+  ]
+]

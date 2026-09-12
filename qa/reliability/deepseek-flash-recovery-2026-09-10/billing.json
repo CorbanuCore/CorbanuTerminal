@@ -1,0 +1,7 @@
+{
+  "upstreamCalls": 3,
+  "balance": "998272",
+  "expectedChargeMicrousd": "1728",
+  "chargedMicrousd": "1728",
+  "productionLedgerWrites": 0
+}

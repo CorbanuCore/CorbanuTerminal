@@ -1,4 +1,5 @@
 use crate::client::ModelClient;
+use crate::client_common::Prompt;
 use crate::context::ContextualUserFragment;
 use crate::context::RealtimeDelegation;
 use crate::context::RealtimeDelegationSource;
@@ -411,6 +412,7 @@ impl RealtimeResponseCreateQueue {
 }
 
 struct RealtimeInputTask {
+    model_client: ModelClient,
     writer: RealtimeWebsocketWriter,
     events: RealtimeWebsocketEvents,
     text_rx: Receiver<ConversationTextParams>,
@@ -532,6 +534,10 @@ impl RealtimeConversationManager {
             model_client,
             sdp,
         } = start;
+        // Neither realtime transport has a screened native projection yet.
+        // Check the effective policy before session instructions or initial items
+        // can reach either the direct WebSocket or WebRTC provider.
+        model_client.check_source_admission(&Prompt::default())?;
         let event_parser = session_config.event_parser;
         let session_kind = match event_parser {
             RealtimeEventParser::V1 | RealtimeEventParser::FramelessBidi => RealtimeSessionKind::V1,
@@ -585,6 +591,7 @@ impl RealtimeConversationManager {
                 )
                 .await?;
             let task = spawn_webrtc_sideband_input_task(RealtimeWebrtcSidebandInputTask {
+                model_client,
                 client,
                 session_config,
                 call_id: call.call_id,
@@ -610,6 +617,7 @@ impl RealtimeConversationManager {
                 .await
                 .map_err(map_api_error)?;
             let task = spawn_realtime_input_task(RealtimeInputTask {
+                model_client,
                 writer: connection.writer(),
                 events: connection.events(),
                 text_rx: input_channels.text_rx,
@@ -1674,6 +1682,7 @@ fn spawn_realtime_input_task(input: RealtimeInputTask) -> JoinHandle<()> {
 }
 
 struct RealtimeWebrtcSidebandInputTask {
+    model_client: ModelClient,
     client: RealtimeWebsocketClient,
     session_config: RealtimeSessionConfig,
     call_id: String,
@@ -1691,6 +1700,7 @@ struct RealtimeWebrtcSidebandInputTask {
 
 fn spawn_webrtc_sideband_input_task(input: RealtimeWebrtcSidebandInputTask) -> JoinHandle<()> {
     let RealtimeWebrtcSidebandInputTask {
+        model_client,
         client,
         session_config,
         call_id,
@@ -1708,6 +1718,13 @@ fn spawn_webrtc_sideband_input_task(input: RealtimeWebrtcSidebandInputTask) -> J
 
     tokio::spawn(async move {
         if !realtime_active.load(Ordering::Relaxed) {
+            return;
+        }
+
+        if admit_realtime_operation(&model_client, &events_tx)
+            .await
+            .is_err()
+        {
             return;
         }
 
@@ -1738,6 +1755,7 @@ fn spawn_webrtc_sideband_input_task(input: RealtimeWebrtcSidebandInputTask) -> J
         }
 
         run_realtime_input_task(RealtimeInputTask {
+            model_client,
             writer: connection.writer(),
             events: connection.events(),
             text_rx: input_channels.text_rx,
@@ -1757,6 +1775,7 @@ fn spawn_webrtc_sideband_input_task(input: RealtimeWebrtcSidebandInputTask) -> J
 
 async fn run_realtime_input_task(input: RealtimeInputTask) {
     let RealtimeInputTask {
+        model_client,
         writer,
         events,
         text_rx,
@@ -1778,16 +1797,18 @@ async fn run_realtime_input_task(input: RealtimeInputTask) {
         let result = tokio::select! {
             _ = stop_token.cancelled() => break,
             // Text input that should be sent into realtime.
-            text = text_rx.recv() => {
+            text = text_rx.recv() => async {
+                admit_realtime_operation(&model_client, &events_tx).await?;
                 handle_text_input(
                     text,
                     &writer,
                     &events_tx,
                 )
                     .await
-            }
+            }.await,
             // Background agent progress or final output that should be sent back to realtime.
-            background_agent_output = handoff_output_rx.recv() => {
+            background_agent_output = handoff_output_rx.recv() => async {
+                admit_realtime_operation(&model_client, &events_tx).await?;
                 handle_handoff_output(
                     background_agent_output,
                     &writer,
@@ -1797,9 +1818,10 @@ async fn run_realtime_input_task(input: RealtimeInputTask) {
                     &mut response_create_queue,
                 )
                     .await
-            }
+            }.await,
             // Events received from the realtime server.
-            realtime_event = events.next_event() => {
+            realtime_event = events.next_event() => async {
+                admit_realtime_operation(&model_client, &events_tx).await?;
                 handle_realtime_server_event(
                     realtime_event,
                     &writer,
@@ -1810,12 +1832,13 @@ async fn run_realtime_input_task(input: RealtimeInputTask) {
                     &mut response_create_queue,
                 )
                 .await
-            }
+            }.await,
             // Audio frames captured from the user microphone.
-            user_audio_frame = audio_rx.recv() => {
+            user_audio_frame = audio_rx.recv() => async {
+                admit_realtime_operation(&model_client, &events_tx).await?;
                 handle_user_audio_input(user_audio_frame, &writer, &events_tx)
                     .await
-            }
+            }.await,
         };
         if result.is_err() {
             break;
@@ -1823,6 +1846,9 @@ async fn run_realtime_input_task(input: RealtimeInputTask) {
     }
 
     if flush_transcript_tail_on_session_end
+        && model_client
+            .check_source_admission(&Prompt::default())
+            .is_ok()
         && let Some(transcript_delta) =
             realtime_transcript_delta(&events.take_transcript_tail().await)
     {
@@ -1834,6 +1860,22 @@ async fn run_realtime_input_task(input: RealtimeInputTask) {
             ))
             .await;
     }
+}
+
+// Re-check after receiving each input/event, not before waiting on the queue:
+// a stream started in Permissive may outlive a live policy increase. This is a
+// per-operation boundary, not revocation of frames already sent to the provider.
+async fn admit_realtime_operation(
+    model_client: &ModelClient,
+    events_tx: &Sender<RealtimeEvent>,
+) -> anyhow::Result<()> {
+    if let Err(error) = model_client.check_source_admission(&Prompt::default()) {
+        let _ = events_tx
+            .send(RealtimeEvent::Error(error.to_string()))
+            .await;
+        return Err(error.into());
+    }
+    Ok(())
 }
 
 async fn handle_text_input(

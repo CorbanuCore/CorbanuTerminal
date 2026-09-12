@@ -57,6 +57,11 @@ mod credential_panic;
 
 pub use capability::ScopedCredentialCallbackError;
 pub use capability::ScopedCredentialError;
+pub use capability::SystemVaultBrokerClock;
+pub use capability::VaultBrokerBackend;
+pub use capability::VaultBrokerBackendError;
+pub use capability::VaultBrokerClock;
+pub use capability::VaultBrokerTransport;
 pub use capability::VaultCredentialRef;
 pub use claude_auth::CREDENTIALS_FILE_CLAUDE_AUTH_SOURCE_ID;
 pub use claude_auth::ClaudeAuthHealth;

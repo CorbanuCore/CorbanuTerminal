@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "binary": "/mnt/HC_Volume_101713660/pfrpc/scratch/corbanu-wallet-package-qa/released/bin/corbanu",
+  "checks": [
+    "cold startup",
+    "cancel and reopen",
+    "missing daemon error",
+    "Retry recovers after file restored",
+    "cold restart"
+  ],
+  "modelCalls": 0,
+  "walletsCreated": 0,
+  "payments": 0
+}

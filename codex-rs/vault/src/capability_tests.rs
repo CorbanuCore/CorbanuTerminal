@@ -2,6 +2,19 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use codex_keyring_store::tests::MockKeyringStore;
+use codex_secret_broker::BrokerAuditError;
+use codex_secret_broker::BrokerAuditIntent;
+use codex_secret_broker::BrokerAuditResolution;
+use codex_secret_broker::BrokerBinding;
+use codex_secret_broker::BrokerChannelMac;
+use codex_secret_broker::BrokerCredentialGrant;
+use codex_secret_broker::BrokerOperation;
+use codex_secret_broker::BrokerRuntime;
+use codex_secret_broker::BrokerRuntimeConfig;
+use codex_secret_broker::DurableBrokerAudit;
+use codex_secret_broker::ObservedPeer;
+use codex_secret_broker::OpenAiResponsesOperation;
+use codex_secret_broker::platform_contract::*;
 use codex_security_policy::ActorChain;
 use codex_security_policy::AuthorizationContext;
 use codex_security_policy::AuthorizationRequest;
@@ -24,6 +37,8 @@ use codex_security_policy::RevocationReason;
 use codex_security_policy::RevocationState;
 use codex_security_policy::RevocationTarget;
 use pretty_assertions::assert_eq;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use tracing_test::traced_test;
 
 use super::*;
@@ -52,7 +67,24 @@ fn actors() -> ActorChain {
 }
 
 fn request(label: &str, scope: &str, revocations: &RevocationState) -> CredentialCapabilityRequest {
-    let destination = CredentialDestination::https("api.openai.com", 443).expect("destination");
+    request_for(
+        label,
+        scope,
+        revocations,
+        CredentialHttpMethod::Post,
+        CredentialDestination::https("api.openai.com", 443).expect("destination"),
+        "/v1/responses",
+    )
+}
+
+fn request_for(
+    label: &str,
+    scope: &str,
+    revocations: &RevocationState,
+    method: CredentialHttpMethod,
+    destination: CredentialDestination,
+    path: &str,
+) -> CredentialCapabilityRequest {
     let credential = CredentialReference::new(label, scope).expect("reference");
     let authorization = AuthorizationRequest::new(
         actors(),
@@ -95,9 +127,9 @@ fn request(label: &str, scope: &str, revocations: &RevocationState) -> Credentia
         authorization,
         grant,
         credential,
-        CredentialHttpMethod::Post,
+        method,
         destination,
-        "/v1/responses",
+        path,
         100,
         180,
         revocations,
@@ -343,6 +375,251 @@ const _: fn() = || {
     impl<T: ?Sized + serde::Serialize> AmbiguousIfSerialize<ImplementsSerialize> for T {}
     let _ = <VaultCredentialRef as AmbiguousIfSerialize<_>>::marker;
 };
+
+struct FixedBrokerClock;
+
+impl VaultBrokerClock for FixedBrokerClock {
+    fn now_unix_seconds(&self) -> Result<i64, BackendDispatchError> {
+        Ok(110)
+    }
+}
+
+#[derive(Default)]
+struct TestBrokerTransport {
+    calls: AtomicUsize,
+}
+
+impl VaultBrokerTransport for Arc<TestBrokerTransport> {
+    fn execute_openai_responses(
+        &self,
+        raw_credential: &str,
+        operation: &OpenAiResponsesOperation,
+        cancellation: &CancellationFence,
+    ) -> Result<TypedOperationReceipt, BackendDispatchError> {
+        assert_eq!(raw_credential, SECRET);
+        assert_eq!(operation.path(), "/v1/responses");
+        cancellation.ensure_active()?;
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(TypedOperationReceipt {
+            response_status: 200,
+            uploaded_bytes: 12,
+            downloaded_bytes: 24,
+        })
+    }
+}
+
+struct TestAudit;
+
+impl DurableBrokerAudit for TestAudit {
+    type Permit = ();
+
+    fn reserve(&self, _intent: &BrokerAuditIntent) -> Result<Self::Permit, BrokerAuditError> {
+        Ok(())
+    }
+
+    fn resolve(
+        &self,
+        _permit: Self::Permit,
+        _resolution: BrokerAuditResolution,
+    ) -> Result<(), BrokerAuditError> {
+        Ok(())
+    }
+}
+
+fn broker_authorization() -> ProtectedModeAuthorization {
+    let capabilities = REQUIRED_CAPABILITIES
+        .iter()
+        .copied()
+        .map(|capability| CapabilityResult {
+            capability,
+            status: CapabilityStatus::Supported,
+            observation: Observation::Denied,
+            mechanism: "synthetic-vault-test",
+            detail_code: "denied",
+        })
+        .collect::<Vec<_>>();
+    validate_protected_mode_report(
+        &PlatformReport {
+            contract_version: CONTRACT_VERSION,
+            fixture_protocol: FIXTURE_PROTOCOL_VERSION,
+            probe_sha256: "b".repeat(64).as_str(),
+            target_id: "c".repeat(64).as_str(),
+            measured_at_unix_seconds: 100,
+            expires_at_unix_seconds: 200,
+            capabilities: &capabilities,
+            protected_mode_eligible: true,
+        },
+        "c".repeat(64).as_str(),
+        "b".repeat(64).as_str(),
+        110,
+    )
+    .expect("authorization")
+}
+
+#[test]
+fn pf_27_s04_vault_backend_resolves_only_inside_typed_broker_dispatch() {
+    let (_directory, vault) = test_vault(CredentialType::BearerToken);
+    let revocations = Arc::new(RwLock::new(RevocationState::new()));
+    let request = request(LABEL, SCOPE, &revocations.read().expect("revocations"));
+    let credential = reference(request);
+    let broker_reference =
+        BrokerCredentialReference::from_sha256_hex("a".repeat(64)).expect("reference");
+    let transport = Arc::new(TestBrokerTransport::default());
+    let backend = VaultBrokerBackend::with_clock(
+        Arc::new(vault),
+        vec![(broker_reference.clone(), credential)],
+        revocations,
+        transport.clone(),
+        FixedBrokerClock,
+    )
+    .expect("backend");
+    let runtime = BrokerRuntime::new(
+        "d".repeat(64),
+        BrokerRuntimeConfig::bounded(1, 1).expect("config"),
+        broker_authorization(),
+        backend,
+        TestAudit,
+    )
+    .expect("runtime");
+    let binding = BrokerBinding {
+        controller_instance: "controller-1".to_string(),
+        worker_instance: "worker-1".to_string(),
+        session_id: "session-1".to_string(),
+        task_id: "task-1".to_string(),
+        run_id: "run-1".to_string(),
+        run_generation: 1,
+    };
+    let peer = ObservedPeer::from_os("worker-uid-501", 42).expect("peer");
+    let handle = runtime
+        .register_session(
+            binding.clone(),
+            peer.clone(),
+            BrokerChannelMac::from_secret([9; 32]),
+            vec![
+                BrokerCredentialGrant::expiring(broker_reference.clone(), i64::MAX).expect("grant"),
+            ],
+        )
+        .expect("session");
+    let frame = BrokerChannelMac::from_secret([9; 32])
+        .sign(
+            binding,
+            1,
+            BrokerOperation::OpenAiResponses {
+                credential: broker_reference,
+                request: OpenAiResponsesOperation::new("/v1/responses").expect("operation"),
+            },
+        )
+        .expect("frame");
+    assert_eq!(
+        runtime
+            .dispatch(&handle, &peer, &frame)
+            .expect("receipt")
+            .response_status,
+        200
+    );
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 1);
+}
+
+fn assert_broker_operation_outside_authority_is_denied(
+    request: CredentialCapabilityRequest,
+    operation_path: &str,
+) {
+    let (_directory, vault) = test_vault(CredentialType::BearerToken);
+    let revocations = Arc::new(RwLock::new(RevocationState::new()));
+    let credential = reference(request);
+    let broker_reference =
+        BrokerCredentialReference::from_sha256_hex("a".repeat(64)).expect("reference");
+    let transport = Arc::new(TestBrokerTransport::default());
+    let backend = VaultBrokerBackend::with_clock(
+        Arc::new(vault),
+        vec![(broker_reference.clone(), credential)],
+        revocations,
+        transport.clone(),
+        FixedBrokerClock,
+    )
+    .expect("backend");
+
+    let runtime = BrokerRuntime::new(
+        "e".repeat(64),
+        BrokerRuntimeConfig::bounded(1, 1).expect("config"),
+        broker_authorization(),
+        backend,
+        TestAudit,
+    )
+    .expect("runtime");
+    let binding = BrokerBinding {
+        controller_instance: "controller-authority-test".to_string(),
+        worker_instance: "worker-authority-test".to_string(),
+        session_id: "session-authority-test".to_string(),
+        task_id: "task-authority-test".to_string(),
+        run_id: "run-authority-test".to_string(),
+        run_generation: 1,
+    };
+    let peer = ObservedPeer::from_os("worker-uid-501", 43).expect("peer");
+    let handle = runtime
+        .register_session(
+            binding.clone(),
+            peer.clone(),
+            BrokerChannelMac::from_secret([8; 32]),
+            vec![
+                BrokerCredentialGrant::expiring(broker_reference.clone(), i64::MAX).expect("grant"),
+            ],
+        )
+        .expect("session");
+    let frame = BrokerChannelMac::from_secret([8; 32])
+        .sign(
+            binding,
+            1,
+            BrokerOperation::OpenAiResponses {
+                credential: broker_reference,
+                request: OpenAiResponsesOperation::new(operation_path).expect("operation"),
+            },
+        )
+        .expect("frame");
+    assert_eq!(
+        runtime.dispatch(&handle, &peer, &frame),
+        Err(codex_secret_broker::BrokerDispatchError::BackendFailed)
+    );
+    assert_eq!(transport.calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn pf_27_s04_vault_backend_enforces_authorized_method_destination_and_path() {
+    let revocations = RevocationState::new();
+    assert_broker_operation_outside_authority_is_denied(
+        request_for(
+            LABEL,
+            SCOPE,
+            &revocations,
+            CredentialHttpMethod::Get,
+            CredentialDestination::https("api.openai.com", 443).expect("destination"),
+            "/v1/responses",
+        ),
+        "/v1/responses",
+    );
+    assert_broker_operation_outside_authority_is_denied(
+        request_for(
+            LABEL,
+            SCOPE,
+            &revocations,
+            CredentialHttpMethod::Post,
+            CredentialDestination::https("api.anthropic.com", 443).expect("destination"),
+            "/v1/responses",
+        ),
+        "/v1/responses",
+    );
+    assert_broker_operation_outside_authority_is_denied(
+        request_for(
+            LABEL,
+            SCOPE,
+            &revocations,
+            CredentialHttpMethod::Post,
+            CredentialDestination::https("api.openai.com", 443).expect("destination"),
+            "/v1/chat/completions",
+        ),
+        "/v1/responses",
+    );
+}
 
 const _: fn() = || {
     trait AmbiguousIfDisplay<A> {

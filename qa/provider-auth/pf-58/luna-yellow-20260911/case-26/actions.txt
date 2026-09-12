@@ -1,0 +1,30 @@
+Start target; initial screen showed directory trust prompt.
+Typed /providers in chat composer.
+Selected visible OpenAI provider (first entry) and pressed r for recovery.
+Confirmed OpenAI recovery after visible confirmation.
+Cancelled OpenAI device login without entering the code.
+Opened OpenAI manage screen to inspect visible credential-source metadata.
+Pressed Escape from OpenAI manage screen.
+Moved selection from OpenAI to visible Claude Account entry.
+Selected Claude Account and pressed r for recovery.
+Confirmed Claude Account recovery after visible confirmation.
+Pressed Escape from Claude recovery source chooser without selecting or entering credentials.
+Pressed Escape from Providers back to chat.
+Typed /model in chat composer.
+Pressed Right once in model picker to inspect next provider tab.
+Pressed Right again in model picker to test whether another provider tab is present.
+Pressed Escape from model picker without changing model.
+Resized target window to 40 columns by 48 rows for narrow-terminal repetition.
+Narrow repeat: typed /providers.
+Narrow repeat: selected OpenAI and pressed r.
+Narrow repeat: confirmed OpenAI recovery; captured device-login state and will redact its code.
+Narrow repeat: cancelled OpenAI device login without completing it.
+Narrow repeat: moved to Claude Account and pressed r.
+Narrow repeat: confirmed Claude Account recovery; captured source chooser.
+Narrow repeat: moved to alternate Claude Code login option.
+Narrow repeat: confirmed Claude Code login option; capture any TUI-generated login instructions only.
+Narrow repeat: pressed Escape from Claude authentication chooser.
+Narrow repeat: pressed Escape from Providers to chat.
+Narrow repeat: typed /status to inspect visible session/provider metadata.
+Restoring target window to 150 columns after narrow repetition.
+Typed /vault list for metadata-only credential-source inspection.

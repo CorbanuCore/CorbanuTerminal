@@ -1,0 +1,36 @@
+{
+  "case": "ProviderSwitch",
+  "source": "01a0707a-16d4-7e22-99cf-ebbf5e04efc1",
+  "canary_requests": 1,
+  "source_outputs": 0,
+  "provider_change_denied": true,
+  "foreground_b": true,
+  "restarted": false,
+  "source_failure_reasons": [
+    "provider_changed"
+  ],
+  "pending_exit_elapsed_ms": null,
+  "pending_window_remaining_seconds": 0,
+  "routes": [
+    {
+      "endpoint": "A",
+      "model": "memory-fixture-a",
+      "kind": "memory"
+    },
+    {
+      "endpoint": "A",
+      "model": "memory-fixture-a",
+      "kind": "foreground"
+    },
+    {
+      "endpoint": "B",
+      "model": "memory-fixture-b",
+      "kind": "foreground"
+    },
+    {
+      "endpoint": "B",
+      "model": "memory-fixture-a",
+      "kind": "other"
+    }
+  ]
+}

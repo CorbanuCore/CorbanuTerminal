@@ -1,0 +1,18 @@
+{
+  "findings": [
+    {
+      "title": "Keep consolidation configuration paired with its provider helper",
+      "body": "If the owner switches providers before stage one starts or between stage-one completion and this check, this shadows `config` with the new provider configuration. However, `MemoryStartupContext.provider` still holds the startup provider, and `phase2::agent::get_config` uses that old provider to choose the consolidation model. For example, an OpenAI-to-Z.ai switch can send `gpt-5.6-terra` to the Z.ai endpoint, causing consolidation to fail. The smallest scoped fix is to use this refresh as a policy gate without replacing phase two's original, internally consistent configuration/provider pair.",
+      "priority": "P2",
+      "confidence": 0.98,
+      "category": "regression",
+      "code_location": {
+        "file_path": "codex-rs/memories/write/src/start.rs",
+        "line": 81
+      }
+    }
+  ],
+  "overall_correctness": "patch is incorrect",
+  "overall_explanation": "The dispatch guards and completion checks address the scoped denial boundary, but passing refreshed configuration into consolidation introduces a concrete provider/model mismatch. Review used read-only source inspection and recorded qualification evidence; no tests were run.",
+  "overall_confidence": 0.94
+}

@@ -1,0 +1,49 @@
+
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       claude-fable-5-1-plan max   /model to chan… │
+│ directory:   ~/work                                      │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+• Model changed to Claude Fable 5.1 Plan via Claude Plan max
+
+
+› FABLE_51_OK
+
+
+• Acknowledged. What would you like me to do?
+
+
+› Use /skills to list available skills
+
+  Claude Fable 5.1 Plan via claude-plan max · ~/work · Corbanu Terminal · TPS: 21.9 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

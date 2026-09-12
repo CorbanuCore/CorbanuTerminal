@@ -1,0 +1,44 @@
+{
+  "case_number": 11,
+  "status": "passed",
+  "summary": "A multi-paragraph response visibly streamed, Escape interrupted it cleanly, the same session returned exactly RECOVERY_OK, and the composer remained responsive.",
+  "observed_checks": [
+    {
+      "name": "multi_paragraph_stream_visible",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/evidence/02-final-pane.txt"
+    },
+    {
+      "name": "escape_interrupts_cleanly",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/evidence/02-final-pane.txt"
+    },
+    {
+      "name": "exact_recovery_response",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/evidence/02-final-pane.txt"
+    },
+    {
+      "name": "composer_remains_responsive",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/evidence/02-final-pane.txt"
+    }
+  ],
+  "blockers": [],
+  "actions": [
+    "Started the instructed target TMUX session.",
+    "Pressed Enter at the visible trust prompt.",
+    "Typed and submitted a harmless several-paragraph request.",
+    "Pressed Escape while response text was visibly streaming.",
+    "Typed and submitted exactly: Reply with exactly: RECOVERY_OK",
+    "Captured named pane checkpoints and action history."
+  ],
+  "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "platform": "macOS arm64",
+  "limitations": [
+    "Observed only in the supplied compiled candidate through the visible TMUX TUI.",
+    "The first response was intentionally interrupted before completion; its full answer was not evaluated.",
+    "No Linux inference or native-only UI claim is made."
+  ],
+  "test_instruction_ambiguity": "The subject and exact count for several paragraphs were unspecified; a harmless telescope-history prompt produced multiple visible paragraphs."
+}

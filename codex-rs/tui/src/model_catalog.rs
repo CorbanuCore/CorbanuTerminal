@@ -1,4 +1,5 @@
 use codex_model_provider_info::canonical_catalog_provider;
+use codex_model_provider_info::corrected_catalog_provider;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelPreset;
 use codex_protocol::openai_models::ReasoningEffort;
@@ -16,6 +17,7 @@ pub(crate) fn include_runtime_model(
     let runtime_provider_id = runtime_provider_id.trim();
     if model.is_empty()
         || runtime_provider_id.is_empty()
+        || corrected_catalog_provider(model, runtime_provider_id).is_some()
         || models.iter().any(|preset| {
             preset.model == model
                 && preset
@@ -131,20 +133,46 @@ impl ModelCatalog {
         }
     }
 
+    pub(crate) fn update_provider_statuses(
+        &self,
+        statuses: &[codex_provider_auth::ProviderStatusSnapshot],
+    ) {
+        if let Some(policy) = self
+            .provider_policy
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_mut()
+        {
+            policy.update_statuses(statuses);
+        }
+    }
+
     pub(crate) fn sync_runtime_models<'a>(
         &self,
         runtime_provider_ids: impl IntoIterator<Item = &'a str>,
         preferred_model: Option<&str>,
+        current_provider: &str,
     ) {
         let mut runtime_provider_ids = runtime_provider_ids.into_iter().collect::<Vec<_>>();
         runtime_provider_ids.sort_unstable();
+        let builtins =
+            codex_model_provider_info::built_in_model_providers(/*openai_base_url*/ None);
         let mut models = self
             .models
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         for runtime_provider_id in runtime_provider_ids {
             let Some(model) = codex_model_provider_info::resolve_model_for_provider(
-                preferred_model.map(str::to_owned),
+                // Never project a curated model onto unrelated runtimes or seed
+                // idle local servers. Preserve the established shared opaque-model
+                // flow for explicitly configured custom gateways.
+                preferred_model
+                    .filter(|model| {
+                        runtime_provider_id == current_provider
+                            || (canonical_catalog_provider(model).is_none()
+                                && !builtins.contains_key(runtime_provider_id))
+                    })
+                    .map(str::to_owned),
                 runtime_provider_id,
             ) else {
                 continue;

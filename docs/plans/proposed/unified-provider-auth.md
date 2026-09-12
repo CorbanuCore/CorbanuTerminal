@@ -17,6 +17,9 @@ product_spec:
   heading: "Shipping MVP — LIVE"
   requirement_excerpt: "Encrypted `/vault`, masked entry, metadata-only inspection, and operational credential use without placing raw values in chat."
 implementation_worktrees:
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
+    branch: "feat/provider-reauth-health"
+    base_commit: "1b6921112d73217e1e2a78b5adc43e8ce24764ab"
   - path: "/home/pfrpc/repos/worktrees/corbanu-release-0.1.38-reconcile"
     branch: "integration/reconcile-release-0.1.38"
     base_commit: "43f4f187ba585e231b0bafed2bbcd9d9b4bffa54"
@@ -66,6 +69,66 @@ active-plan slot.
 
 ## User pain
 
+September 10 picker follow-up (user: “Please fix these and create regression
+coverage”): PF-58 also repairs TUI model-catalog synchronization, exact
+provider/model current markers, and asynchronous health refresh. Do not invent
+model availability or bypass credential eligibility. Preserve Anthropic API
+versus Claude subscription ownership. Add regressions and packaged TMUX proof;
+continue Developer ID signing without changing credential ACLs.
+
+Final follow-up evidence: `qa/provider-auth/pf-58/picker-repair-20260910.md`.
+The signed native Mac and RTX packages pass catalog/setup/restart TMUX; 58 TUI,
+72 provider-auth and 32 Linux integration tests pass. Two unattended Mac
+existing-profile menu launches complete with successful Keychain reads.
+Human acceptance and the separate documented release/live-platform gates remain open.
+
+September 10 Mac Keychain amendment (user: “Can you fix it?”): PF-58 also
+owns `codex-rs/keyring-store/` for bounded native permission prompting. Permit
+at most one interactive operation per credential per process; subsequent native
+operations must remain fresh reads/writes but fail rather than prompt again.
+Do not cache credential values, change Keychain ACLs, erase credentials, or add
+fallback storage. A new process resets the interaction budget. Native Mac
+builds/tests are authorized by the user's September 8 dual-platform request;
+Linux remains the preferred location for portable rebuilds. Verify native
+allow/deny/repeated-read behavior and preserve explicit human sign-off gaps.
+
+September 8 repair amendment: the expanded candidate gate exposed a silent
+Claude manager recovery cancellation when no credential source is selected.
+PF-58 must expose the existing explicit method/replacement choice in this case,
+while retaining known-source recovery restrictions and external ownership.
+The user's request to fix failing tests authorizes this repair; the adjacent
+bounded packaging and native-pane inheritance repairs are recorded separately
+under `qa/provider-auth/pf-58/product-repairs-20260908.md`.
+
+2026-09-05 user amendment: identify the credential rejected by `codex_apps`
+and generalize actionable reauthentication across providers. PF-58 owns this
+follow-up; it does not reopen completed PF-48–PF-57 or activate protected modes.
+An enabled provider is not necessarily authenticated. Show credential-specific
+health separately from activation/current selection, and offer keyboard recovery
+using the existing typed setup adapter. Recoverable expiry should refresh before
+requesting human sign-in; rejected refresh requires explicit recovery. Environment,
+command, AWS and no-auth/local sources need truthful source-specific guidance,
+not an invented browser-login flow. Never silently switch credential, account,
+provider, model or billing context. Transient network/rate/permission failures
+are not credential revocation. Clear a failure only after matching recovery or
+validated success, rejecting stale results from an older credential/turn.
+
+The affected RTX process used its saved ChatGPT account: no connector-token,
+OpenAI API-key or Codex API-key environment override was present. Its open state
+files identify `~/.corbanu`, not the separate `~/.codex` store. Corbanu's logs
+record proactive refresh failures including `refresh_token_reused`; the server
+also reported an expired access token. The exact vault token expiry has not been
+inspected. An earlier expiry observation from `~/.codex` was not this credential.
+No raw token, account identifier or private response is recorded in this plan.
+
+PF-58 owner/integrator is Codex /root in the newly listed worktree. Build/test
+registration also covers the existing provider-journey nextest rule
+and mechanical Cargo/Bazel lock reconciliation after the requested main merge.
+No new dependency or runtime policy is introduced by that registration.
+PF-58 retains RTX-only builds and a separate receiving integration boundary. Review allocation for this
+new feature is an initial Astra High plus Fable5.1 High Corbanu/TMUX pair,
+at most five total, superseding historical PF-56 model choices for PF-58 only.
+The security monitor remains paused; no main merge is authorized by this amendment.
 The user's 2026-09-05 Luna/Kimi K3 delegation attempt was refused because the
 generated authorized-runtime list exposed only Sol and Terra. PF-55-S04 repairs
 the native child-runtime catalog/selection boundary under the existing PF-55
@@ -330,6 +393,7 @@ OpenAI schema, provider authorization or credential format is rewritten.
 | `PF-55` | Mixed-model native subagent runtime convergence | [PF-55-S04](../../sprints/archive/unified-provider-auth/pf-55-s04-subagent-runtime-convergence.md) | completed; [exact child/runtime TUI evidence](../../../qa/release/0.1.38/subagent-runtime.md) |
 | `PF-56` | Integrated qualification, review, docs, and release evidence | [PF-56-S01](../../sprints/archive/unified-provider-auth/pf-56-s01-final-qualification.md) | completed at `fd8a9c900e` |
 | `PF-57` | Latest-main integration, regression preservation, and credential-store liveness | [PF-57-S01](../../sprints/archive/unified-provider-auth/pf-57-s01-latest-main-integration.md) | completed at `a935e507b` |
+| `PF-58` | Credential-scoped runtime health and keyboard reauthentication | [PF-58-S01](../../sprints/current/unified-provider-auth/pf-58-s01-credential-health-and-reauth.md) | Draft residual qualification; implementation human-accepted for main integration September 11; historical blocked cases retained |
 | `PF-57` | Reconciled release credential-lifecycle regressions | [PF-57-S02](../../sprints/archive/unified-provider-auth/pf-57-s02-reconciliation-auth-repairs.md) | completed; [Astra repair evidence](../../../qa/release/0.1.38/astra-fixes.md) |
 | `PF-57` | Reconcile Travis's provider UX/catalog changes with repaired release | [PF-57-S03](../../sprints/archive/unified-provider-auth/pf-57-s03-travis-release-reconciliation.md) | completed; [combined-tree evidence](../../../qa/release/0.1.38/travis-reconciliation.md) at `c37eb277d9` |
 
@@ -444,6 +508,14 @@ Run fix and formatting tools before the final affected tests.
 | PF-57 combined recovery matrix | `23f37955…33d2` | isolated startup/provider fixtures on remote Linux | Run all 12 PF-55 journeys plus PF-53 configure-many and cancel | fresh versus established recovery, current-provider blocking, restart, lazy command auth | PASS: 14 flows in 147.84s | [PF-57 ledger](../../qa/provider-auth/pf-57/qualification.md) |
 
 ## Live-repository applicability
+
+PF-58 changes home-level authentication health and recovery, not project contents,
+coding tasks or repository execution. Like PF-57-S02, neither default live
+repository adds a distinct feature boundary here. Its final proof uses isolated
+homes and loopback auth/model endpoints with real TMUX keys. This is a human-test
+candidate, not release qualification; prior live-repository or benchmark results
+are not claimed as rerun. The 2026-09-08 candidate incorporates main `3cec54d99`
+through integration commit `472b8fed5`, preserving the security branch history.
 
 | Repository | Applicable to this initiative? | Resolved checkout/test worktree | Base commit | Reason or result |
 | --- | --- | --- | --- | --- |

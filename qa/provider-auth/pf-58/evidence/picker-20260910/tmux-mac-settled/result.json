@@ -1,0 +1,17 @@
+{
+  "stream_cancel_key": "C-c",
+  "passed": true,
+  "candidate": "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-picker-final-20260910/bin/corbanu",
+  "sha256": "8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669",
+  "host_sha256": "dc9d05cff406d18f1f6720b777a776d74f949b49c6df9d8a7c0bd654187b1fcf",
+  "human_acceptance": false,
+  "tool_round_trips": 4,
+  "concurrent_processes": 3,
+  "same_home_restart": true,
+  "stream_cancel_recovery": true,
+  "permissions_security_cancel_inert": true,
+  "claude_guidance_40_columns": true,
+  "claude_catalog_after_setup_and_restart": true,
+  "anthropic_management_entry_present": true,
+  "anthropic_catalog_after_api_setup": true
+}

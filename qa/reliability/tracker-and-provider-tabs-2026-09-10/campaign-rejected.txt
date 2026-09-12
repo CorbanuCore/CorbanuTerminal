@@ -1,0 +1,20 @@
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────╯
+
+• Campaign Tracker recording enabled for this workspace.
+Prompts are preserved; sharing needs an explicit history
+grant.
+
+• Campaign Tracker recording paused for this workspace.
+
+
+  Campaign Tracker
+  Create campaign failed. Campaign name exceeds 200 UTF-8
+  bytes. Shorten it and submit again.
+  Review saved items before submitting again.
+
+› 1. Edit draft  Restore your input for review and
+                 correction
+  2. Overview    Open Campaign Tracker status
+
+  Press enter to confirm or esc to go back

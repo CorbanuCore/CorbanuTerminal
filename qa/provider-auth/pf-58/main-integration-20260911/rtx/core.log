@@ -1,0 +1,150 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-utils-absolute-path v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/absolute-path)
+   Compiling codex-utils-rustls-provider v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/rustls-provider)
+   Compiling codex-security-policy v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/security-policy)
+   Compiling codex-utils-cache v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/cache)
+   Compiling codex-utils-string v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/string)
+   Compiling codex-async-utils v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/async-utils)
+   Compiling codex-utils-pty v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/pty)
+   Compiling codex-keyring-store v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/keyring-store)
+   Compiling codex-http-client v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/http-client)
+   Compiling codex-aws-auth v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/aws-auth)
+   Compiling codex-utils-home-dir v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/home-dir)
+   Compiling codex-utils-image v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/image)
+   Compiling codex-utils-path-uri v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/path-uri)
+   Compiling codex-extension-items v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/items)
+   Compiling codex-execpolicy v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/execpolicy)
+   Compiling codex-utils-path v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/path-utils)
+   Compiling codex-install-context v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/install-context)
+   Compiling codex-file-search v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/file-search)
+   Compiling codex-content-security v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/content-security)
+   Compiling codex-utils-cargo-bin v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/cargo-bin)
+   Compiling codex-websocket-client v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/websocket-client)
+   Compiling codex-client v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/codex-client)
+   Compiling codex-network-proxy v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/network-proxy)
+   Compiling codex-security-audit v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/security-audit)
+   Compiling codex-secret-broker v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/secret-broker)
+   Compiling codex-protocol v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/protocol)
+   Compiling codex-browser-isolation v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/browser-isolation)
+   Compiling codex-api v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/codex-api)
+   Compiling codex-file-system v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/file-system)
+   Compiling codex-shell-command v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/shell-command)
+   Compiling codex-agent-identity v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/agent-identity)
+   Compiling codex-utils-output-truncation v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/output-truncation)
+   Compiling codex-code-mode-protocol v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/code-mode-protocol)
+   Compiling codex-state v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/state)
+   Compiling codex-context-fragments v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/context-fragments)
+   Compiling codex-skills v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/skills)
+   Compiling codex-git-utils v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/git-utils)
+   Compiling codex-exec-server-protocol v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/exec-server-protocol)
+   Compiling codex-app-server-protocol v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/app-server-protocol)
+   Compiling codex-shell-escalation v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/shell-escalation)
+   Compiling codex-code-mode v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/code-mode)
+   Compiling codex-secrets v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/secrets)
+   Compiling codex-agent-graph-store v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/agent-graph-store)
+   Compiling codex-prompts v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/prompts)
+   Compiling codex-rollout-trace v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/rollout-trace)
+   Compiling codex-vault v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/vault)
+   Compiling codex-otel v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/otel)
+   Compiling codex-model-provider-info v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/model-provider-info)
+   Compiling codex-response-debug-context v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/response-debug-context)
+   Compiling codex-memories-read v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/memories/read)
+   Compiling codex-windows-sandbox v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/windows-sandbox-rs)
+   Compiling codex-features v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/features)
+   Compiling codex-rollout v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/rollout)
+   Compiling codex-sandboxing v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/sandboxing)
+   Compiling codex-exec-server v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/exec-server)
+   Compiling codex-config v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/config)
+   Compiling codex-linux-sandbox v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/linux-sandbox)
+   Compiling codex-utils-plugins v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/utils/plugins)
+   Compiling codex-apply-patch v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/apply-patch)
+   Compiling codex-exec-server-test-support v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/exec-server/tests/support)
+   Compiling codex-login v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/login)
+   Compiling codex-rmcp-client v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/rmcp-client)
+   Compiling codex-plugin v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/plugin)
+   Compiling codex-protected-state v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/protected-state)
+   Compiling codex-hooks v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/hooks)
+   Compiling codex-arg0 v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/arg0)
+   Compiling codex-test-binary-support v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/test-binary-support)
+   Compiling codex-feedback v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/feedback)
+   Compiling codex-models-manager v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/models-manager)
+   Compiling codex-connectors v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/connectors)
+   Compiling codex-model-provider v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/model-provider)
+   Compiling codex-tools v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/tools)
+   Compiling codex-thread-store v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/thread-store)
+   Compiling codex-mcp v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/codex-mcp)
+   Compiling codex-analytics v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/analytics)
+   Compiling codex-core-skills v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/core-skills)
+   Compiling codex-extension-api v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/extension-api)
+   Compiling codex-core-plugins v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/core-plugins)
+   Compiling codex-home v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/codex-home)
+   Compiling codex-skills-extension v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/skills)
+   Compiling codex-core v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/core)
+   Compiling core_test_support v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/core/tests/common)
+   Compiling codex-image-generation-extension v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/image-generation)
+   Compiling codex-web-search-extension v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/ext/web-search)
+warning: function `append_chat_messages_for_response_item` is never used
+    --> core/src/client.rs:3746:4
+     |
+3746 | fn append_chat_messages_for_response_item(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `test_claude_plan_model_info` is never used
+    --> core/src/client_tests.rs:1640:4
+     |
+1640 | fn test_claude_plan_model_info() -> ModelInfo {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `count_cache_control_markers` is never used
+    --> core/src/client_tests.rs:1687:4
+     |
+1687 | fn count_cache_control_markers(value: &serde_json::Value) -> usize {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `test_openrouter_gemini_model_info` is never used
+    --> core/src/client_tests.rs:1926:4
+     |
+1926 | fn test_openrouter_gemini_model_info() -> ModelInfo {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `test_openrouter_anthropic_model_info` is never used
+    --> core/src/client_tests.rs:1959:4
+     |
+1959 | fn test_openrouter_anthropic_model_info() -> ModelInfo {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `submit_inter_agent_communication` is never used
+   --> core/src/agent/control.rs:428:14
+    |
+162 | impl AgentControl {
+    | ----------------- method in this implementation
+...
+428 |     async fn submit_inter_agent_communication(
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-core` (lib test) generated 6 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 28s
+────────────
+ Nextest run ID 9942bacd-b30a-451e-b5af-0dd8126407d1 with nextest profile: local
+    Starting 17 tests across 1 binary (2400 tests skipped)
+        PASS [   0.008s] ( 1/17) codex-core config::tests::corbanu_auth_helper_recognizes_all_supported_cli_names_without_path_lookup
+        PASS [   0.008s] ( 2/17) codex-core config::tests::corbanu_auth_helper_rejects_an_unrelated_runtime_without_a_sibling_cli
+        PASS [   0.010s] ( 3/17) codex-core config::tests::claude_plan_auth_uses_the_runtime_executable_without_path_lookup
+        PASS [   0.011s] ( 4/17) codex-core client::tests::corbanu_flash_request_omits_parallel_control_with_function_tools
+        PASS [   0.007s] ( 5/17) codex-core config::tests::corbanu_auth_helper_uses_an_installed_sibling_cli
+        PASS [   0.008s] ( 6/17) codex-core config::tests::corbanu_plan_provider_alias_normalizes_to_legacy_persisted_id
+        PASS [   0.023s] ( 7/17) codex-core memory_stage_one::tests::pf_30_s04_kill_switch_denies_an_existing_worker_binding
+        PASS [   0.046s] ( 8/17) codex-core memory_stage_one::tests::pf_30_s04_binding_is_owner_specific_and_missing_policy_denies
+        PASS [   0.041s] ( 9/17) codex-core memory_stage_one::tests::pf_30_s04_inherited_policy_is_not_weakened_by_permissive_worker_configuration
+        PASS [   0.054s] (10/17) codex-core memory_stage_one::tests::pf_30_s04_http_attempt_guard_withholds_canary_after_live_change
+        PASS [   0.043s] (11/17) codex-core memory_stage_one::tests::pf_30_s04_live_protected_floor_denies_without_a_request
+        PASS [   0.027s] (12/17) codex-core memory_stage_one::tests::pf_30_s04_live_strengthening_is_sticky_through_later_downgrade
+        PASS [   0.027s] (13/17) codex-core memory_stage_one::tests::pf_30_s04_provider_change_invalidates_bound_client
+        PASS [   0.009s] (14/17) codex-core security::integration_tests::host_ingress_does_not_accept_self_labelled_provenance
+        PASS [   0.025s] (15/17) codex-core memory_stage_one::tests::pf_30_s04_termination_and_dropped_owner_fail_closed
+        PASS [   0.066s] (16/17) codex-core memory_stage_one::tests::pf_30_s04_owner_termination_cancels_pending_http_without_a_retry
+        PASS [   0.302s] (17/17) codex-core memory_stage_one::tests::pf_30_s04_websocket_connect_race_denies_before_first_frame
+────────────
+     Summary [   0.391s] 17 tests run: 17 passed, 2400 skipped

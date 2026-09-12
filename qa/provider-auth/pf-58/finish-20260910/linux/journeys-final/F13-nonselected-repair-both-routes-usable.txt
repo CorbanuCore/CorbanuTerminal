@@ -1,0 +1,44 @@
+
+› Retry after service restoration 500
+
+
+• JOURNEY_REPLY_15
+
+
+› Controlled rejected credential
+
+
+⚠ QA Route A (qa-a) credential was rejected. Open /providers, select QA Route A, and press r to recover. Other providers are unchanged.
+
+■ unexpected status 401 Unauthorized: Synthetic controlled failure, url: http://127.0.0.1:45997/a/responses
+
+
+› Continue after explicit credential repair
+
+
+• JOURNEY_REPLY_17
+
+
+› Nonselected repair must not change current routing
+
+
+• JOURNEY_REPLY_18
+
+• Model changed to fixture-model via QA Route B default
+
+
+› Use the explicitly selected repaired route
+
+
+• JOURNEY_REPLY_19
+
+
+› Implement {feature}
+
+  fixture-model via qa-b default · /home/travis/worktrees/provider-reauth-health-final · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+

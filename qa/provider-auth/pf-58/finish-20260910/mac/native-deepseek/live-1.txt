@@ -1,0 +1,45 @@
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                        │
+│                                                      │
+│ model:     deepseek-v4-flash high   /model to change │
+│ directory: /Volumes/CorbanuDrive/Corbanu             │
+╰──────────────────────────────────────────────────────╯
+
+
+› Reply only with PF58, NATIVE, LIVE, OK joined by underscores. Do not use tools.
+
+
+• PF58_NATIVE_LIVE_OK
+
+
+› Write tests for @filename
+
+  DeepSeek V4 Flash 0731 (Direct) via deepseek high · /Volumes/CorbanuDrive/Corbanu · Corbanu Terminal · TPS: 7.5 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

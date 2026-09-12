@@ -1,0 +1,57 @@
+
+╭─────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                       │
+│                                                     │
+│ model:     loading   /model to change               │
+│ directory: ~/worktrees/provider-reauth-health-final │
+╰─────────────────────────────────────────────────────╯
+
+
+› Implement {feature}
+
+  fixture-model via pf54-primary default · ~/worktrees/provider-reauth-health-final · Corbanu Terminal · TPS: -- tok/s
+
+╭─────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                       │
+│                                                     │
+│ model:     fixture-model   /model to change         │
+│ directory: ~/worktrees/provider-reauth-health-final │
+╰─────────────────────────────────────────────────────╯
+
+
+  Providers
+  Configure providers and control whether they are eligible for use.
+  Configured means credentials are present, not verified by the provider.
+
+  12. Vercel                   Not configured · unavailable
+  13. Amazon Bedrock           Not configured · unavailable
+  14. Ollama                   Enabled · configured
+  15. LM Studio                Enabled · configured
+  16. PF54 Broken Environment  Credential needs attention · r recover · unavailable
+  17. PF54 Environment         Enabled · configured
+  18. PF54 Managed             Not configured · unavailable
+› 19. PF54 Primary             Enabled · configured · current
+
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

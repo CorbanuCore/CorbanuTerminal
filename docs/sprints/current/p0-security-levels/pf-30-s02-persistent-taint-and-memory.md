@@ -11,7 +11,7 @@ branch: "feat/p0-security-levels"
 base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
 depends_on: "PF-30-S01"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-09-04
 ---
 
 # PF-30-S02 — Persistent taint across summaries and memory
@@ -49,6 +49,8 @@ updated: 2026-08-28
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 
 ## Remaining
+
+- [ ] Resolve the accepted round-five stage-one memory policy-binding gap using the [scoped follow-up](../../../../qa/security-levels/sprints/PF-30-S01-typed-source-envelope/memory-stage-one-follow-up.md). Decide the host-owned inherited/live binding contract before allocating worker/Core public API edits; a config-only floor is insufficient. This draft handoff grants no implementation authority or protected-memory readiness.
 
 - [ ] Test provenance-store capacity rejection before wrapped file commit, filename/path aliases including memory/dreaming, and out-of-band changed content against read-time digests. Do not encode the outside review's disproven OpenClaw capacity exploit as an observed fact.
 

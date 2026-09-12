@@ -42,6 +42,7 @@ enum Case {
     MissingCurrent,
     Resume,
     NativeSpawn,
+    ActiveRuntimePermissions,
     CommandAuth,
     DuplicateSlug,
 }
@@ -71,6 +72,7 @@ tmux_cases! {
     tmux_missing_profile_current_never_silently_switches => ("PF-55 missing profile current", Case::MissingCurrent),
     tmux_resumed_main_session_retains_exact_runtime_identity => ("PF-55 resumed session identity", Case::Resume),
     tmux_native_spawn_picker_and_parent_request_share_exact_custom_runtime => ("PF-55 native spawn provider", Case::NativeSpawn),
+    tmux_permission_reload_preserves_active_runtime_over_saved_default => ("active runtime permission reload", Case::ActiveRuntimePermissions),
     tmux_command_auth_is_visible_validated_and_has_no_enrollment_ui => ("PF-55 command auth provider", Case::CommandAuth),
     tmux_duplicate_model_slug_uses_exact_provider_identity => ("PF-55 duplicate model slug identity", Case::DuplicateSlug),
 }
@@ -103,8 +105,30 @@ async fn run_open_case(case: Case, fixture: &Fixture, pane: &TmuxPane<'_>) -> Re
             require_authorization(&fixture.server, &fixture.a_key).await?;
             ensure!(current_provider(fixture.home.path())? == A);
         }
+        Case::ActiveRuntimePermissions => {
+            let path = fixture.home.path().join("config.toml");
+            let mut saved: toml::Value = toml::from_str(&fs::read_to_string(&path)?)?;
+            saved["model"] = toml::Value::String("gpt-6-astra".into());
+            saved["model_provider"] = toml::Value::String("claude-plan".into());
+            fs::write(path, toml::to_string(&saved)?)?;
+            submit_and_wait(
+                pane,
+                "use the active runtime, not saved defaults",
+                "PF55 response",
+            )?;
+            require_authorization(&fixture.server, &fixture.a_key).await?;
+            ensure!(pane.capture_viewport()?.contains(MODEL));
+            pane.send_literal("/mcp")?;
+            pane.send_key(TmuxKey::Enter)?;
+            pane.wait_stable_contains("No MCP servers configured.", READY_TIMEOUT)?;
+            ensure!(
+                !pane
+                    .capture_viewport()?
+                    .contains("Failed to load MCP inventory")
+            );
+        }
         Case::Environment => {
-            inspect_provider(pane, "PF55 Environment", "Active · current")?;
+            inspect_provider(pane, "PF55 Environment", "Enabled · configured · current")?;
             open_model_picker(pane)?;
             pane.wait_stable_contains(MODEL, READY_TIMEOUT)?;
             pane.send_key(TmuxKey::Escape)?;
@@ -127,7 +151,7 @@ async fn run_open_case(case: Case, fixture: &Fixture, pane: &TmuxPane<'_>) -> Re
             open_manager(pane)?;
             select_label(pane, "PF55 B")?;
             select_label(pane, "Reactivate")?;
-            pane.wait_stable_contains("Active", READY_TIMEOUT)?;
+            pane.wait_stable_contains("Enabled · configured", READY_TIMEOUT)?;
             pane.send_key(TmuxKey::Escape)?;
             wait_chat_ready(pane)?;
         }
@@ -164,7 +188,7 @@ async fn run_open_case(case: Case, fixture: &Fixture, pane: &TmuxPane<'_>) -> Re
             select_label(pane, "Nazgul")?;
             select_label(pane, "Create Nazgul pane")?;
             pane.wait_stable_contains(MODEL, READY_TIMEOUT)?;
-            select_label(pane, MODEL)?;
+            select_label(pane, &format!("{MODEL} via {A}"))?;
             pane.wait_stable_contains("Spawned Corbanu Terminal Nazgul pane", READY_TIMEOUT)?;
             pane.send_literal("/agent")?;
             pane.send_key(TmuxKey::Enter)?;
@@ -193,6 +217,7 @@ async fn run_open_case(case: Case, fixture: &Fixture, pane: &TmuxPane<'_>) -> Re
             require_authorization(&fixture.server, &fixture.command_key).await?;
         }
         Case::DuplicateSlug => {
+            pane.wait_stable_contains("via pf55-duplicate-b", READY_TIMEOUT)?;
             submit_and_wait(pane, "duplicate slug exact request", "PF55 response")?;
             require_authorization(&fixture.server, &fixture.dup_b_key).await?;
             ensure!(!authorization_seen(&fixture.server, &fixture.dup_a_key).await);
@@ -235,7 +260,7 @@ async fn run_managed_restart(fixture: &Fixture, tmux: &TmuxServer) -> Result<()>
         let session = tmux.new_session(fixture.session(name, false))?;
         let pane = session.primary_pane();
         wait_chat_ready(pane)?;
-        inspect_provider(pane, "PF55 Managed", "Active · current")?;
+        inspect_provider(pane, "PF55 Managed", "Enabled · configured · current")?;
         if index == 1 {
             submit_and_wait(pane, "managed restart request", "PF55 response")?;
             require_authorization(&fixture.server, &fixture.managed_key).await?;
@@ -313,11 +338,7 @@ struct Fixture {
 impl Fixture {
     async fn new(case: Case) -> Result<Self> {
         let repo_root = codex_utils_cargo_bin::repo_root()?;
-        let binary = repo_root.join("codex-rs/target/debug/codex");
-        ensure!(
-            binary.is_file(),
-            "build target/debug/codex before PF-55 TMUX"
-        );
+        let binary = codex_utils_cargo_bin::cargo_bin("codex")?;
         let home = tempdir()?;
         let server = MockServer::start().await;
         responses::mount_sse_repeating(&server, response("PF55 response")).await;

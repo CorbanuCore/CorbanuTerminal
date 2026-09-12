@@ -1,0 +1,37 @@
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────╯
+
+• Campaign Tracker recording enabled for this workspace.
+Prompts are preserved; sharing needs an explicit history
+grant.
+
+• Campaign Tracker recording paused for this workspace.
+
+• Campaign Tracker change saved.
+
+
+  Campaign Tracker
+  Prompts + summaries · permissioned history · observed T
+
+
+› Activity totals                 Observed prompts, runs,
+                                  actions and verified
+                                  task outcomes
+  My activity                     Preserved prompts,
+                                  compact summaries and
+                                  observed actions
+  Access & replay                 View explicit history
+                                  grants and
+                                  collaborators
+  Access audit                    See who read, exported
+                                  or changed your history
+  Direct reports & collaborators  Choose a Task Node
+                                  handle to share or
+                                  inspect activity
+  Campaigns                       Group work around a
+                                  named objective
+  Create campaign                 Name the outcome you
+                                  are working toward
+  Fixed campaign                  Retain this objective
+
+  Press enter to confirm or esc to go back

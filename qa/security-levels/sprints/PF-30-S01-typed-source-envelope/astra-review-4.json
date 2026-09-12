@@ -1,0 +1,6 @@
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "No actionable defects found in the scoped delta. Segmentation preserves complete-input source/digest/count binding, atomic refusal, original-index reassembly and provider shaping. The unchanged projection can exceed 1,000 tokens and still requires manual attention. This read-only review did not rerun tests or qualify production screening or unfinished source coverage.",
+  "overall_confidence": 0.94
+}

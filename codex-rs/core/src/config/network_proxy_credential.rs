@@ -1,7 +1,15 @@
 use super::NetworkProxySpec;
+use crate::security::broker_client::BrokerClientError;
+use crate::security::broker_client::BrokerClientTransport;
+use crate::security::broker_client::IsolatedBrokerClient;
 use crate::security::credential_capability::AuthorizedCredentialCapability;
 use crate::security::credential_capability::CredentialClock;
 use crate::security::credential_capability::SystemCredentialClock;
+use codex_network_proxy::IsolatedCredentialDispatchError;
+use codex_network_proxy::IsolatedCredentialDispatcher;
+use codex_network_proxy::IsolatedCredentialReceipt;
+use codex_network_proxy::IsolatedCredentialRoute;
+use codex_network_proxy::IsolatedCredentialUse;
 use codex_network_proxy::NetworkProxyAuditMetadata;
 use codex_network_proxy::NetworkProxyState;
 use codex_network_proxy::ScopedCredentialCallbackError as ProxyCredentialCallbackError;
@@ -9,6 +17,9 @@ use codex_network_proxy::ScopedCredentialResolver;
 use codex_network_proxy::ScopedCredentialResolverError;
 use codex_network_proxy::ScopedCredentialRoute;
 use codex_network_proxy::ScopedCredentialUse;
+use codex_secret_broker::BrokerBinding;
+use codex_secret_broker::BrokerChannelMac;
+use codex_secret_broker::CredentialReference as BrokerCredentialReference;
 use codex_security_policy::ActionReceipt;
 use codex_security_policy::BoundedText;
 use codex_security_policy::CredentialCapabilityRequest;
@@ -228,6 +239,92 @@ impl NetworkProxySpec {
                 "scoped OpenAI credential route is unavailable",
             )
         })?;
+        Ok(state)
+    }
+}
+
+#[allow(dead_code)]
+struct BrokerNetworkCredentialDispatcher {
+    client: Arc<IsolatedBrokerClient>,
+    capability_id: codex_security_policy::CapabilityId,
+    authority: CredentialCapabilityRequest,
+}
+
+impl IsolatedCredentialDispatcher for BrokerNetworkCredentialDispatcher {
+    fn dispatch(
+        &self,
+        request: &IsolatedCredentialUse<'_>,
+    ) -> Result<IsolatedCredentialReceipt, IsolatedCredentialDispatchError> {
+        if request.capability_id != &self.capability_id
+            || request.authority != &self.authority
+            || request.scheme != "https"
+            || request.host != "api.openai.com"
+            || request.port != 443
+            || request.method != "POST"
+            || request.path != self.authority.path.as_str()
+        {
+            return Err(IsolatedCredentialDispatchError::Denied);
+        }
+        self.client
+            .dispatch_openai_responses(request.path)
+            .map(|receipt| IsolatedCredentialReceipt {
+                response_status: receipt.response_status,
+                uploaded_bytes: receipt.uploaded_bytes,
+                downloaded_bytes: receipt.downloaded_bytes,
+            })
+            .map_err(map_broker_client_error)
+    }
+}
+
+#[allow(dead_code)]
+fn map_broker_client_error(error: BrokerClientError) -> IsolatedCredentialDispatchError {
+    match error {
+        BrokerClientError::Denied
+        | BrokerClientError::InvalidBinding
+        | BrokerClientError::UnsupportedOperation
+        | BrokerClientError::Authentication => IsolatedCredentialDispatchError::Denied,
+        BrokerClientError::Cancelled | BrokerClientError::Closed => {
+            IsolatedCredentialDispatchError::Cancelled
+        }
+        BrokerClientError::OutcomeUnknown => IsolatedCredentialDispatchError::OutcomeUnknown,
+        BrokerClientError::SequenceExhausted
+        | BrokerClientError::State
+        | BrokerClientError::Unavailable => IsolatedCredentialDispatchError::Unavailable,
+    }
+}
+
+impl NetworkProxySpec {
+    /// Build the protected route without placing Vault or raw credential
+    /// material in Core or the proxy process.
+    #[allow(dead_code, clippy::too_many_arguments)]
+    pub(crate) fn build_state_with_isolated_openai_credential(
+        &self,
+        audit_metadata: NetworkProxyAuditMetadata,
+        authorized: AuthorizedCredentialCapability,
+        binding: BrokerBinding,
+        channel_mac: BrokerChannelMac,
+        transport: Arc<dyn BrokerClientTransport>,
+    ) -> std::io::Result<NetworkProxyState> {
+        let capability_id = authorized.capability_id;
+        let authority = authorized.request;
+        let credential =
+            BrokerCredentialReference::from_sha256_hex(capability_id.as_str().to_string())
+                .map_err(|_| std::io::Error::other("broker credential reference is invalid"))?;
+        let client = Arc::new(
+            IsolatedBrokerClient::new(binding, credential, channel_mac, transport)
+                .map_err(|_| std::io::Error::other("isolated broker client is unavailable"))?,
+        );
+        let dispatcher = Arc::new(BrokerNetworkCredentialDispatcher {
+            client,
+            capability_id: capability_id.clone(),
+            authority: authority.clone(),
+        });
+        let route = IsolatedCredentialRoute::new(capability_id, authority, dispatcher)
+            .map_err(|_| std::io::Error::other("isolated credential route is invalid"))?;
+        let state = self.build_state_with_audit_metadata(audit_metadata)?;
+        state
+            .install_isolated_credential_route(route)
+            .map_err(|_| std::io::Error::other("isolated credential route is unavailable"))?;
         Ok(state)
     }
 }

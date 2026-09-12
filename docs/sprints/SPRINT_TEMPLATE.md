@@ -51,17 +51,20 @@ updated: YYYY-MM-DD
 
 - [ ] `<ordered implementation task>`
 - [ ] `<regression task>`
+- [ ] Code-blind functional design frozen before test-result disclosure, or non-user-facing N/A reason recorded.
 
 ## Verification
 
 - [ ] Focused test: `<final-tree command>`
 - [ ] Integration test: `<final-tree command>`
 - [ ] TUI applicability resolved; if applicable, keys and checkpoints recorded.
+- [ ] Every code-blind case dispositioned; exact-package evidence and independent evidence check linked within the shared review budget.
 
 ## Exit evidence
 
 - [ ] Implementation commit recorded.
 - [ ] Final-tree test output linked.
+- [ ] Code-blind handoff checker passes, or explicit limited-testing agreement/blocker recorded; no automatic human acceptance.
 - [ ] Parallel handoff, if applicable: commit, contract versions, scope audit and combined-tree test evidence recorded.
 - [ ] `Done` and `Remaining` ledgers reflect reality.
 - [ ] Completed record moved to `docs/sprints/archive/<plan-slug>/`.

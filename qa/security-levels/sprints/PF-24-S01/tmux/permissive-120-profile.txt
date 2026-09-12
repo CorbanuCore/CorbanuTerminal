@@ -1,0 +1,21 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.38)               │
+│                                             │
+│ model:     gpt-5.6-terra   /model to change │
+│ directory: ~/worktrees/security-round5-ui   │
+╰─────────────────────────────────────────────╯
+
+Security profiles — read only
+Requested: Permissive (configuration only)
+Effective protection: unverified. Live security status is unavailable.
+Protected modes are blocked; required controls are not qualified.
+
+> Permissive
+  Moderate
+  Aggressive
+
+No additional security controls. Existing approvals, sandbox, vault, wallet, tool, network and agent policies remain
+unchanged.
+Nothing changed. Applying profiles is not available in this build.
+
+↑/↓ explore · enter inspect · esc close

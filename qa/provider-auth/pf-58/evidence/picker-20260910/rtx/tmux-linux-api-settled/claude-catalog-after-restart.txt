@@ -1,0 +1,50 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       claude-fable-5-1-plan high   /model to cha… │
+│ directory:   /home/travis/…/picker-repair-20260910       │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+
+  Select Model and Effort
+  Claude Code plan
+
+  OpenAI  [Claude Plan]
+
+  1. Claude Opus 5 Plan               Model: claude-opus-5-plan. Claude Opus 5 through Claude Code subscription auth
+                                      in Corbanu Terminal.
+› 2. Claude Fable 5.1 Plan (current)  Model: claude-fable-5-1-plan. Claude Fable 5.1 through Claude Code subscription
+                                      auth in Corbanu Terminal.
+  3. Claude Fable 5 Plan              Model: claude-fable-5-plan. Claude Fable 5 through Claude Code subscription auth
+                                      in Corbanu Terminal.
+
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,64 @@
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                          │
+│                                                        │
+│ model:       loading   /model to change                │
+│ directory:   /home/travis/…/pf13-main-release-20260911 │
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+
+
+› Use /skills to list available skills
+
+  GPT-6 Astra default · /home/travis/worktrees/pf13-main-release-20260911 · Corbanu Terminal · TPS: -- tok/s
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                          │
+│                                                        │
+│ model:       gpt-6-astra   /model to change            │
+│ directory:   /home/travis/…/pf13-main-release-20260911 │
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+
+
+› Perform the synthetic handoff tool check
+
+
+• Ran printf SHELL_HANDOFF_OK
+  └ SHELL_HANDOFF_OK
+
+• Called handoff.echo({})
+  └ MCP_HANDOFF_OK
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• HANDOFF_EXECUTION_PASSED
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› Use /skills to list available skills
+
+  GPT-6 Astra default · /home/travis/worktrees/pf13-main-release-20260911 · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

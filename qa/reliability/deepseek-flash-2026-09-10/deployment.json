@@ -1,0 +1,28 @@
+{
+  "app": "pfterminal-plan-gateway",
+  "version": 33,
+  "machines": [
+    {
+      "id": "784503db5e0398",
+      "state": "started",
+      "image": "registry.fly.io/pfterminal-plan-gateway:deployment-01M26C1NCTA8MBWQ4PR6EHX7NT",
+      "checks": [
+        {
+          "name": "servicecheck-00-http-8080",
+          "status": "passing"
+        }
+      ]
+    },
+    {
+      "id": "2870663bd33de8",
+      "state": "started",
+      "image": "registry.fly.io/pfterminal-plan-gateway:deployment-01M26C1NCTA8MBWQ4PR6EHX7NT",
+      "checks": [
+        {
+          "name": "servicecheck-00-http-8080",
+          "status": "passing"
+        }
+      ]
+    }
+  ]
+}

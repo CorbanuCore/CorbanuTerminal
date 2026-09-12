@@ -1,0 +1,6 @@
+{
+  "ok": true,
+  "check": "Final release gate rejects a zero-exit daemon that never serves requests",
+  "exitCode": 1,
+  "probeCleanedUp": true
+}

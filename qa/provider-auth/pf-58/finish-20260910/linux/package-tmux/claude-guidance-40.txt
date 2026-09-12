@@ -1,0 +1,94 @@
+
+╭───────────────────────────────────────
+───────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)
+                   │
+│
+                   │
+│ model:       loading   /model to chang
+e                  │
+│ directory:   /home/travis/…/provider-r
+eauth-health-final │
+│ permissions: YOLO mode
+                   │
+╰───────────────────────────────────────
+───────────────────╯
+
+
+› Run /review on my current changes
+
+  GPT-6 Astra default · /home/travis/wor
+ktrees/provider-reauth-health-final · Co
+rbanu Terminal · TPS: -- tok/s
+
+╭───────────────────────────────────────
+───────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)
+                   │
+│
+                   │
+│ model:       gpt-6-astra   /model to c
+hange              │
+│ directory:   /home/travis/…/provider-r
+eauth-health-final │
+│ permissions: YOLO mode
+                   │
+╰───────────────────────────────────────
+───────────────────╯
+
+
+› Perform the synthetic handoff tool che
+ck
+
+
+• Ran printf SHELL_HANDOFF_OK
+  └ SHELL_HANDOFF_OK
+
+• Called handoff.echo({})
+  └ MCP_HANDOFF_OK
+
+────────────────────────────────────────
+────────────────────────────────────────
+────────────────────────────────────────
+
+• HANDOFF_EXECUTION_PASSED
+
+────────────────────────────────────────
+────────────────────────────────────────
+────────────────────────────────────────
+
+
+› Start the cancellable stream
+
+
+• STREAM_ACTIVE
+
+■ Conversation interrupted - tell the mo
+del what to do differently. Something we
+nt wrong? Hit `/feedback` to report the
+issue.
+
+
+› Reply after cancellation
+
+
+• STREAM_RECOVERY_OK
+
+▌ Save Claude subscription token
+
+▌ Save Claude subscription token
+▌ Long-lived token — masked
+▌
+▌ In a separate private terminal,
+▌ run `claude setup-token`. Paste its
+▌ token here; Corbanu never captures
+▌ the command output or adds the token
+▌ to chat.
+
+Press enter to confirm or esc to go back
+
+
+
+
+
+

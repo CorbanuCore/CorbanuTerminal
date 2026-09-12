@@ -2506,7 +2506,8 @@
     },
     "McpServerStartupFailureReason": {
       "enum": [
-        "reauthenticationRequired"
+        "reauthenticationRequired",
+        "openAiAccountReauthenticationRequired"
       ],
       "type": "string"
     },

@@ -1,0 +1,41 @@
+Corbanu Terminal 0.1.42 versioned validation
+
+just test -p codex-api --lib
+PASS [   0.045s] (184/189) codex-api telemetry::tests::corbanu_retry_rotates_only_confirmed_released_attempts
+Summary [   0.378s] 189 tests run: 189 passed, 0 skipped
+
+just test -p codex-client -p codex-models-manager -p codex-core --lib -E test(released)|test(corbanu_api)|test(flash)
+PASS [   0.028s] (4/7) codex-core client::tests::corbanu_flash_request_omits_parallel_control_with_function_tools
+PASS [   0.078s] (7/7) codex-models-manager manager::tests::corbanu_api_public_models_inherit_exact_catalog_metadata
+Summary [   0.089s] 7 tests run: 7 passed, 2432 skipped
+
+python3 scripts/install/test_corbanu_release_contract.py
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.348s
+
+OK
+
+python3 scripts/check_portable_skills.py
+portable skills: 25 files match .codex/skills
+
+just bazel-lock-update (output_user_root on mounted data volume)
+bazel mod deps --lockfile_mode=update
+Extracting Bazel installation...
+Starting local Bazel server (9.0.0) and connecting to it...
+INFO: Invocation ID: 782367d0-0f20-4ebf-985b-8c42264ce9ed
+WARNING: For repository 'platforms', the root module requires module version platforms@1.0.0, but got platforms@1.1.0 in the resolved dependency graph. Please update the version in your MODULE.bazel or set --check_direct_dependencies=off
+WARNING: For repository 'rules_cc', the root module requires module version rules_cc@0.2.18, but got rules_cc@0.2.20 in the resolved dependency graph. Please update the version in your MODULE.bazel or set --check_direct_dependencies=off
+ no actions running
+ no actions running
+<root> (codex@_)
+
+
+just fmt: passed
+Workflow YAML and versioned release notes path: passed
+MODULE.bazel.lock: unchanged after refresh
+External Cargo dependency entries: unchanged
+Packaged wallet production-client startup: wallet-client-package-ok
+Real keyboard-driven TUI workflows: passed in both recorded disposable repositories; fixture inference, actual shell execution
+Due full benchmark cycle: incomplete
+Sprint documentation checker: failed; see sprint-check.txt

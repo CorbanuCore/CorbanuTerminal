@@ -1,0 +1,48 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       claude-fable-5-1-plan high   /model to cha… │
+│ directory:   ~/work                                      │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+
+  Corbanu API
+  Not configured · unavailable
+
+› 1. Set up with Corbanu API  Corbanu API
+
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

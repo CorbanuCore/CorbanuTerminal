@@ -1,0 +1,8 @@
+literal: Run the synthetic foreground fixture.
+key: Enter
+literal: /exit
+key: Enter
+literal: /status
+key: Enter
+literal: /exit
+key: Enter

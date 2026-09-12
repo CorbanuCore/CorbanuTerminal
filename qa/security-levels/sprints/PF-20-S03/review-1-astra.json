@@ -1,0 +1,18 @@
+{
+  "findings": [
+    {
+      "title": "[P2] Bound connection establishment before starting the handshake",
+      "body": "`UnixStream::connect` runs before any timeout is configured. If the root listener's backlog fills and it stops accepting connections, this call can block indefinitely; the ten-second frame deadlines never start. Linux explicitly waits for queue space during blocking Unix-stream connection establishment ([kernel implementation](https://raw.githubusercontent.com/torvalds/linux/master/net/unix/af_unix.c)). This leaves the production bootstrap outside the required bounded transport behavior. Create and configure the socket before connecting, using a bounded connection deadline or nonblocking failure, while preserving the existing no-reconnect semantics.",
+      "priority": "P2",
+      "confidence": 0.98,
+      "category": "bug",
+      "code_location": {
+        "file_path": "codex-rs/protected-state/src/native.rs",
+        "line": 305
+      }
+    }
+  ],
+  "overall_correctness": "patch is incorrect",
+  "overall_explanation": "The native production factory has an unbounded connection-establishment path. The remaining reviewed changes preserve the accepted staged composition and consumer ordering. Review used read-only inspection; no tests or nested reviewers were run.",
+  "overall_confidence": 0.93
+}

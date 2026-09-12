@@ -1,0 +1,6 @@
+{
+  "findings": [],
+  "overall_correctness": "patch is correct",
+  "overall_explanation": "The narrow fixture change matches the Core denial strings and failure logger. It permits exact owner termination while retaining rejection of provider changes, mixed or other source failures, expired windows, missing requests, and persisted outputs. New status diagnostics contain only fixed labels. No actionable defect was found in the supplied delta. Review was read-only; tests were not run.",
+  "overall_confidence": 0.91
+}

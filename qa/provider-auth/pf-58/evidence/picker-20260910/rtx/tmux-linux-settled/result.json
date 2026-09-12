@@ -1,0 +1,17 @@
+{
+  "stream_cancel_key": "C-c",
+  "passed": true,
+  "candidate": "/home/travis/security-round5/evidence/picker-20260910/candidate-final/bin/codex",
+  "sha256": "5ecd62f90574e1b6208625220abf93e431d347c1f2a91c9111c3512e81448062",
+  "host_sha256": "b580c89d1300d891bacd2f8fe8118dc859e944e2f755594cae90138f80c8a4fd",
+  "human_acceptance": false,
+  "tool_round_trips": 4,
+  "concurrent_processes": 3,
+  "same_home_restart": true,
+  "stream_cancel_recovery": true,
+  "permissions_security_cancel_inert": true,
+  "claude_guidance_40_columns": true,
+  "claude_catalog_after_setup_and_restart": true,
+  "anthropic_management_entry_present": true,
+  "anthropic_catalog_after_api_setup": true
+}

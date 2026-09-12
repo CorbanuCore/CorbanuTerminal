@@ -1,0 +1,25 @@
+---
+source: tui/src/bottom_pane/security_view_tests.rs
+expression: "snapshot(&view, 40)"
+---
+Security profiles — read only
+Requested: Unknown — cannot verify
+configuration
+Effective protection: unverified. Live
+security status is unavailable.
+Protected modes are blocked; required
+controls are not qualified.
+
+  Permissive
+> Moderate
+  Aggressive
+
+Planned: isolate credentials, treat
+external content as untrusted, protect
+sensitive data, preview protected
+actions, and support audit and
+revocation. Not available yet.
+Nothing changed. Applying profiles is
+not available in this build.
+
+↑/↓ explore · enter inspect · esc close

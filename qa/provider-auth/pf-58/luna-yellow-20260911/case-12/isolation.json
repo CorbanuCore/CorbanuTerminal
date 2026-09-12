@@ -1,0 +1,71 @@
+{
+  "probes": [
+    {
+      "label": "repository-denied",
+      "command": [
+        "/bin/cat",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health/AGENTS.md"
+      ],
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "cat: /Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health/AGENTS.md: Operation not permitted\n",
+      "passed": true
+    },
+    {
+      "label": "other-repository-denied",
+      "command": [
+        "/bin/ls",
+        "/Volumes/CorbanuDrive/Corbanu/CorbanuTerminal"
+      ],
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "ls: /Volumes/CorbanuDrive/Corbanu/CorbanuTerminal: Operation not permitted\n",
+      "passed": true
+    },
+    {
+      "label": "prior-results-denied",
+      "command": [
+        "/bin/cat",
+        "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health/qa/provider-auth/pf-58/finish-20260910/dispositions.md"
+      ],
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "cat: /Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health/qa/provider-auth/pf-58/finish-20260910/dispositions.md: Operation not permitted\n",
+      "passed": true
+    },
+    {
+      "label": "symlink-escape-denied",
+      "command": [
+        "/bin/cat",
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/work/forbidden-link"
+      ],
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "cat: /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/work/forbidden-link: Operation not permitted\n",
+      "passed": true
+    },
+    {
+      "label": "package-runs",
+      "command": [
+        "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-12/package/bin/corbanu",
+        "--version"
+      ],
+      "returncode": 0,
+      "stdout": "corbanu 0.1.41\n",
+      "stderr": "",
+      "passed": true
+    },
+    {
+      "label": "tmux-runs",
+      "command": [
+        "/opt/homebrew/bin/tmux",
+        "-V"
+      ],
+      "returncode": 0,
+      "stdout": "tmux 3.7c\n",
+      "stderr": "",
+      "passed": true
+    }
+  ],
+  "passed": true
+}

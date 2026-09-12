@@ -1,0 +1,26 @@
+        PASS [   0.030s] ( 1/25) codex-tui model_catalog::tests::runtime_sync_is_idempotent_deterministic_and_preserves_exact_provider_identity
+        PASS [   0.030s] ( 2/25) codex-tui model_catalog::tests::runtime_refresh_does_not_clone_models_into_incompatible_provider_tabs
+        PASS [   0.033s] ( 3/25) codex-tui app::tests::model_catalog::model_migration_prompt_respects_hide_flag_and_self_target
+        PASS [   0.034s] ( 4/25) codex-tui app::tests::model_catalog::select_model_availability_nux_returns_none_when_all_models_are_exhausted
+        PASS [   0.034s] ( 5/25) codex-tui app::tests::model_catalog::model_migration_prompt_skips_when_target_missing_or_hidden
+        PASS [   0.034s] ( 6/25) codex-tui app::tests::model_catalog::select_model_availability_nux_does_not_fall_back_to_older_announcement
+        PASS [   0.035s] ( 7/25) codex-tui app::tests::model_catalog::select_model_availability_nux_picks_only_eligible_model
+        PASS [   0.039s] ( 8/25) codex-tui app::tests::model_catalog::accepted_model_migration_persists_target_default_reasoning_effort
+        PASS [   0.044s] ( 9/25) codex-tui app::tests::model_catalog::model_migration_prompt_shows_for_hidden_model
+        PASS [   0.030s] (10/25) codex-tui model_catalog::tests::resumed_session_recovery_is_consumed_once
+        PASS [   0.031s] (11/25) codex-tui model_catalog::tests::duplicate_model_slugs_retain_exact_catalog_provider_identity
+        PASS [   0.047s] (12/25) codex-tui app::tests::model_catalog::prepare_startup_tooltip_override_suppresses_model_availability_nux
+        PASS [   0.047s] (13/25) codex-tui model_catalog::tests::configured_runtime_model_is_added_with_exact_provider_identity
+        PASS [   0.032s] (14/25) codex-tui model_catalog::tests::configured_runtime_model_does_not_duplicate_existing_exact_or_inferred_provider
+        PASS [   0.032s] (15/25) codex-tui model_catalog::tests::runtime_refresh_replaces_only_gpu_models
+        PASS [   0.050s] (16/25) codex-tui app::tests::model_catalog::select_model_availability_nux_uses_existing_model_order_as_priority
+        PASS [   0.035s] (17/25) codex-tui app::tests::model_catalog::model_migration_prompt_skips_hidden_gpt_targets
+        PASS [   0.068s] (18/25) codex-tui chatwidget::campaign_tracker::tests::campaign_tracker_failed_request_preserves_a_retry_path
+        PASS [   0.082s] (19/25) codex-tui chatwidget::campaign_tracker::tests::campaign_tracker_enrollment_retry_does_not_retain_a_credential
+        PASS [   0.083s] (20/25) codex-tui chatwidget::campaign_tracker::tests::campaign_tracker_refresh_replaces_view_instead_of_growing_the_stack
+        PASS [   0.084s] (21/25) codex-tui chatwidget::campaign_tracker::tests::campaign_tracker_summary_only_replay_does_not_offer_prompt_review
+        PASS [   0.084s] (22/25) codex-tui chatwidget::campaign_tracker::tests::campaign_tracker_failed_forms_restore_drafts_without_repeating_writes
+        PASS [   0.085s] (23/25) codex-tui chatwidget::campaign_tracker::tests::campaign_tracker_read_retry_preserves_route_and_search_scope
+        PASS [   0.090s] (24/25) codex-tui chatwidget::campaign_tracker::tests::campaign_tracker_overview_shows_recording_state_and_recovery
+        PASS [   0.114s] (25/25) codex-tui chatwidget::tests::popups_and_settings::model_picker_runtime_refresh_keeps_claude_out_of_openai_tab
+     Summary [   0.132s] 25 tests run: 25 passed, 4037 skipped

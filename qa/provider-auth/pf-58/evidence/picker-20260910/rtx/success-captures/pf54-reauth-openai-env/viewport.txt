@@ -1,0 +1,44 @@
+╭─────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                       │
+│                                                     │
+│ model:     fixture-model   /model to change         │
+│ directory: ~/worktrees/provider-reauth-health-final │
+╰─────────────────────────────────────────────────────╯
+
+
+  Recover OpenAI
+  Keep the current provider and model. Esc cancels without changing credentials.
+  Environment credential: update it in the launching shell, then restart Corbanu. A vault key cannot override it.
+
+  no matches
+
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,44 @@
+╭─────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                       │
+│                                                     │
+│ model:     fixture-model   /model to change         │
+│ directory: ~/worktrees/provider-reauth-health-final │
+╰─────────────────────────────────────────────────────╯
+
+
+› exercise synthetic credential failure
+
+
+⚠ Model metadata for `fixture-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+
+⚠ A provider credential was rejected. Open /providers, select the affected provider, and press r to recover. Other providers are unchanged.
+
+■ unexpected status 401 Unauthorized: Synthetic credential rejected, url: http://127.0.0.1:37787/v1/responses
+
+
+› prove the replacement credential is used
+
+
+• PF58 recovered without restart
+
+
+› Use /skills to list available skills
+
+  fixture-model default · ~/worktrees/provider-reauth-health-final · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

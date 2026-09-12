@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Human acceptance checks for the Corbanu Terminal 0.1.38 reconciliation candidate">
+  <meta name="description" content="Human acceptance checks for the Corbanu Terminal 0.1.41 PF-58 reauthentication candidate">
   <link rel="icon" href="data:,">
   <title>Corbanu Terminal — Human Test Plan</title>
   <style>
@@ -129,7 +129,24 @@
     .test p { margin-bottom: 9px; color: #d0d2d6; }
     .test p:last-child { margin-bottom: 0; }
     .expected { color: var(--green) !important; }
+    .test .agent-result, .agent-results-legend {
+      color: #c7e3ff !important;
+      background: #142a43;
+      border-left: 4px solid #79baff;
+      border-radius: 6px;
+      padding: 12px 14px;
+      font-size: .9rem;
+    }
+    .agent-result a, .agent-results-legend a { color: #a7d4ff; text-decoration: underline; }
+    .agent-results-legend { margin-bottom: 24px; }
     .failure { color: var(--red) !important; }
+    .test.prerequisite, .test.prerequisite:has(input:checked) {
+      border: 2px solid #f5d547;
+      background: #302b16;
+    }
+    .test.prerequisite input { accent-color: #f5d547; outline: 2px solid #f5d547; outline-offset: 2px; }
+    .prerequisite-note { color: #ffe881 !important; font-size: .9rem; }
+    .prerequisite-legend { margin-bottom: 24px; padding: 16px 20px; border: 2px solid #f5d547; border-radius: 12px; background: #302b16; color: #ffe881; }
 
     .keys, .tag {
       display: inline-block;
@@ -194,27 +211,42 @@
       .actions { display: none; }
       .test, .map, .metric, details { break-inside: avoid; }
       details > div { display: block; }
+      .test.prerequisite, .prerequisite-legend { background: #fff5bc; border-color: #927000; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .prerequisite-note, .prerequisite-legend { color: #594500 !important; }
+      .test .agent-result, .agent-results-legend { color: #173d64 !important; background: #edf5ff; border-color: #286ba9; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .agent-result a, .agent-results-legend a { color: #174d80; }
     }
   </style>
 </head>
 <body>
   <main>
+    <aside class="agent-results-legend" role="status"><strong>Human acceptance recorded · September 11, 2026.</strong> Travis reports PF13 human testing complete and authorizes main integration. The presented Mac candidate is the 0.1.41 package identified below. Reconciliation with main and the actual 0.1.42 release passed the selected RTX suites, 33 TUI tests and packaged Code Mode/MCP/recovery journeys; it is not a new human-tested Mac binary. Historical yellow items and blue agent outcomes remain unchanged. <a href="qa/provider-auth/pf-58/main-integration-20260911/README.md">Acceptance, reconciliation and current integration record</a>.</aside>
+    <aside style="border:1px solid var(--amber);border-radius:12px;padding:18px;margin-bottom:24px;color:var(--amber)" role="status">
+      <strong>Historical September 10 replacement handoff.</strong>
+      The branch reconciles main through <code>295aed26e</code>. Both replacement builds report 0.1.41; the Mac CLI hash begins <code>4a8eba7b1019</code>.
+      Twelve expanded TMUX journeys and trusted Apps recovery pass on both platforms. Eight live Mac launches/replies pass across OpenAI, Claude, Ambient and DeepSeek.
+      The Applications shortcut now points to this tested replacement. Yellow prerequisites still block an unqualified 26-case round: native consent variants, missing live API credentials and the remaining frozen variants. Existing human checkmarks are unchanged; no merge or acceptance is claimed.
+      <a href="qa/provider-auth/pf-58/finish-20260910/report.html" style="color:inherit">Latest replacement evidence and yellow prerequisites</a> ·
+      <a href="qa/provider-auth/pf-58/blind-20260910/report.html" style="color:inherit">Independent case-by-case report</a> ·
+      <a href="qa/provider-auth/pf-58/main-reconciliation-20260910.md" style="color:inherit">Reconciliation record</a>
+    </aside>
     <header>
       <p class="eyebrow">Corbanu Terminal · human QA</p>
-      <h1>Provider setup should feel boring now.</h1>
-      <p class="lede">A 35–45 minute human acceptance pass for the combined PF-48–PF-57 and 0.1.37 release-line candidate. Work from top to bottom using the Corbanu window opened for you. Stop at the first failure and record the exact visible message—never a credential.</p>
+      <h1>Provider and security acceptance</h1>
+      <p class="lede"><strong>The presented PF13 candidate is human-accepted for integration.</strong> The retained checklist and candidate details below describe that test round. All 26 checks have a machine-coverage entry. Historical automated results and remaining live/platform evidence are recorded in the <a href="qa/provider-auth/pf-58/handoff-readiness.md">readiness report</a>; missing evidence is not a pass. No human checkboxes have been changed automatically.</p>
       <div class="release-strip">
-        <span><strong>Candidate:</strong> Corbanu 0.1.38</span>
-        <span><strong>Combined lines:</strong> <code>a935e507b</code> + <code>rust-v0.1.37</code></span>
-        <span><strong>Integration base:</strong> <code>6dd9ad646</code></span>
-        <span><strong>UX parity follow-up:</strong> 4 Sep 2026 (Phoenix)</span>
-        <span><strong>Runtime:</strong> stable release build on CorbanuDrive</span>
+        <span><strong>Candidate:</strong> Corbanu 0.1.41 · PF-58</span>
+        <span><strong>Main incorporated:</strong> <code>0d1c3240d</code></span>
+        <span><strong>Combined base:</strong> <code>acfc9f205</code></span>
+        <span><strong>Recovery/picker follow-up:</strong> 10 Sep 2026 (Phoenix)</span>
+        <span><strong>Machine:</strong> RTX · <code>travis@100.99.88.49</code></span>
+        <span><strong>Branch:</strong> <code>feat/provider-reauth-health</code> · not merged to main</span>
       </div>
       <div class="actions">
         <button type="button" onclick="window.print()">Print / save PDF</button>
         <button type="button" id="reset">Reset checks</button>
-        <div class="progress-shell" id="progressShell" role="progressbar" aria-label="Test progress" aria-valuemin="0" aria-valuemax="15" aria-valuenow="0"><div class="progress-bar" id="progress"></div></div>
-        <span class="progress-label" id="progressLabel" aria-live="polite">0 / 15</span>
+        <div class="progress-shell" id="progressShell" role="progressbar" aria-label="Test progress" aria-valuemin="0" aria-valuemax="26" aria-valuenow="0"><div class="progress-bar" id="progress"></div></div>
+        <span class="progress-label" id="progressLabel" aria-live="polite">0 / 26</span>
       </div>
     </header>
 
@@ -251,39 +283,47 @@
 
     <aside class="callout">
       <strong>Credential safety:</strong> retrieve the long-lived Anthropic credential from <code>Documents/clAuth.txt</code> only when a masked provider-entry field asks for it. Never paste it into chat, this page, notes, screenshots, logs, or a bug report. Close the file immediately after copying. Use normal launcher logging: do not enable debug/trace logging when typing real credentials, because a pre-existing key-event logging issue is documented in the provider UX audit.
-      <p><strong>Candidate startup:</strong> if 0.1.38 offers an “update” to 0.1.37, choose <strong>2. Skip</strong>. Do not install the downgrade. The existing release-recall heuristic mistakes this unpublished candidate for a recalled release; that separate issue is documented in the audit.</p>
+      <p><strong>Use the replacement:</strong> the PF-58 candidate is based on main 0.1.41 plus the security integration. Older 0.1.38 terminals do not contain the credential-health correction. The historical evidence below remains labeled with its original build; do not use its old launch command for checks 24–26.</p>
     </aside>
 
     <section aria-labelledby="checks-title">
       <h2 id="checks-title">Core acceptance checks</h2>
+      <aside class="prerequisite-legend"><strong>Yellow = original prerequisite / historical-failure group (12 checks).</strong> Highlighted checks are 1, 2, 3, 5, 6, 7, 11, 12, 15, 20, 24 and 26. Their latest agent results are now recorded below in blue; yellow highlighting and your saved human checkmarks are preserved. Unhighlighted checks have earlier automated baseline evidence, not automatic human acceptance.</aside>
+      <aside class="agent-results-legend" id="agent-results"><strong>Blue = agent execution evidence · September 11, 2026.</strong> Green “Pass” text describes the expected behavior, not a recorded result. Sequential Luna Max TMUX runs used the signed macOS 0.1.41 candidate (SHA-256 <code>4a8eba7b…510e</code>) in isolated profiles. Latest outcomes across the 12 yellow checks: <strong>4 passed, 6 blocked, 2 timed out</strong>. Two earlier invalid attempts are preserved separately. The other 14 checks were not rerun in this batch. Native Computer Use evidence is separately limited. No checkbox or human acceptance was inferred. <a href="qa/provider-auth/pf-58/luna-yellow-20260911/report.html">Full agent report and evidence</a>.</aside>
       <div class="checklist">
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="launch">
           <span>
+            <p class="prerequisite-note"><strong>Native launch remains unverified.</strong> The Applications target resolves to the signed replacement package; that file check does not prove which desktop a launch uses.</p>
             <h3>1. Launch from the app shortcut</h3>
-            <p>Use the <strong>Corbanu Terminal Launcher</strong> window opened for this run. If you need to relaunch, use the same app shortcut—not a shell command or debug launcher.</p>
+            <p>Open a new window using <strong>Corbanu Terminal Launcher</strong> in Applications. Existing windows keep their older running binary; use the app shortcut—not a shell command or debug launcher—to test the new Mac package.</p>
             <p class="expected">Pass: a new Terminal window opens on Desktop 3 in the first free position of the 2 × 3 card grid.</p>
+            <p class="agent-result" data-agent-case="1"><strong>Agent result: BLOCKED — native launch unconfirmed.</strong> TMUX cannot observe Desktop 3. A separate Luna Computer Use attempt reached the Applications launcher, but Terminal inspection was denied by the tool, so placement could not be verified. Your report that the second launch opens on another desktop remains an open failure. <a href="qa/provider-auth/pf-58/luna-yellow-20260911/native-disposition.md">Native evidence and limits</a>.</p>
             <p class="failure">Fail: it opens beside Codex on another desktop, overlaps an existing terminal, says the build is missing, or opens a debug build.</p>
           </span>
         </label>
 
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="startup">
           <span>
+            <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> complete startup through the intended app launcher, including the update notice. RTX helper availability, installed MCPs and the live connected-app inventory already passed; the complete launcher flow is not yet certified.</p>
             <h3>2. Verify startup identity and remembered setup</h3>
             <p>Wait for the composer, then run <span class="keys">/status</span>. Note the current provider and model. Do not configure anything yet.</p>
             <p class="expected">Pass: startup reaches chat without forcing <code>/providers</code>, your previously selected provider/model is remembered, Code Mode is available, no <code>codex_apps</code> startup warning appears, and Corbanu does not offer an “update” to the older 0.1.37 release.</p>
+            <p class="agent-result" data-agent-case="2"><strong>Agent result: BLOCKED — partial startup evidence.</strong> Chat and /status were responsive, with the expected configured model and no visible MCP/onboarding warning. The harness disabled update checks and did not establish Code Mode availability. Its initial credential-fixture defect also prevents treating these observations as proof of live Claude authentication. <a href="qa/provider-auth/pf-58/luna-yellow-20260911/case-02/report.md">Run evidence</a>.</p>
             <p class="failure">Fail: provider onboarding appears despite a valid prior setup, the provider silently changes, Code Mode host is missing, MCP startup is interrupted, an update-to-0.1.37 message appears, or the UI stalls.</p>
           </span>
         </label>
 
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="catalog">
           <span>
+            <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> inspect all wallet balance, top-up, pricing and key-management actions, and confirm obsolete plan-sales actions are absent. Inspection does not require making a payment.</p>
             <h3>3. Inspect the unified provider catalog</h3>
             <p>Run <span class="keys">/providers</span>. Move through the list, inspecting OpenAI, Anthropic/Claude, Corbanu API, API-key providers, and any local/custom entries. Then run <span class="keys">/wallet</span> and inspect the Corbanu API entry.</p>
             <p>In <span class="keys">/model</span>, select Ambient: its only offered model should be GLM 5.2. Kimi 2.7 should not appear under Ambient; other providers' Kimi models are unchanged.</p>
             <p class="expected">Pass: the lists open promptly; configured, active, current, unavailable, and recovery states make sense; the wallet offers dollar balance, top-up, model prices, and API-key management without Starter/Basic/Power/Pro plan-sale actions.</p>
+            <p class="agent-result" data-agent-case="3"><strong>Agent result: BLOCKED — wallet and Ambient prerequisites missing.</strong> Provider details opened and Corbanu API was present, with no visible secrets. No wallet or Ambient credential was provisioned, so their required actions and model catalog were not qualified. Claude unavailability in this run was a fixture defect, not an established product regression. <a href="qa/provider-auth/pf-58/luna-yellow-20260911/case-03/report.md">Run evidence</a>.</p>
             <p class="failure">Fail: statuses contradict startup, secrets are visible, key navigation pauses repeatedly, the vault hangs, Corbanu API is absent, or a legacy Corbanu Plan purchase/recovery/details action is visible.</p>
           </span>
         </label>
@@ -298,32 +338,38 @@
           </span>
         </label>
 
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="fable">
           <span>
+            <p class="prerequisite-note"><strong>Historical prerequisite now exercised by the agent replay.</strong> The picker-to-live-request result is recorded below; human acceptance remains separate.</p>
             <h3>5. Select Fable 5.1 Max and make a live request</h3>
             <p>Run <span class="keys">/model</span>, select <strong>Claude Fable 5.1</strong> at <strong>Max</strong>, then send <span class="keys">Reply with exactly: FABLE_51_OK</span>. Type the prompt and press Return separately.</p>
             <p class="expected">Pass: Fable 5.1 is offered, both model labels change immediately, the response is <code>FABLE_51_OK</code>, and no missing-environment or provider-auth-command error appears.</p>
+            <p class="agent-result" data-agent-case="5"><strong>Agent result: PASSED — corrected replay.</strong> Selected Fable 5.1 Max in /model, observed both labels update, and sent the full prescribed prompt. The live response was exactly <code>FABLE_51_OK</code>, with no provider-auth error. The original attempt sent the wrong prompt and remains recorded as invalid, not a product failure. <a href="qa/provider-auth/pf-58/luna-yellow-20260911/case-05-replay/report.md">Replay evidence</a>.</p>
             <p class="failure">Fail: Fable 5.1 is absent, the header and footer disagree, the request uses another model, or authentication fails.</p>
           </span>
         </label>
 
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="model-sync">
           <span>
+            <p class="prerequisite-note"><strong>Historical prerequisite now exercised by the agent.</strong> Header/footer agreement was observed through both provider switches.</p>
             <h3>6. Switch models and compare both labels</h3>
             <p>Use <span class="keys">/model</span> to select a different provider/model, then switch back to Fable 5.1 Max. Watch the boxed model indicator near the top and the footer throughout.</p>
             <p class="expected">Pass: both labels update immediately after each selection and always agree—no redraw, restart, or prompt is required.</p>
+            <p class="agent-result" data-agent-case="6"><strong>Agent result: PASSED.</strong> Switched Claude Fable 5.1 high → OpenAI GPT-5.6-Sol low → Claude Fable 5.1 Max. Boxed and footer labels agreed after each completed selection, without a restart or extra prompt. <a href="qa/provider-auth/pf-58/luna-yellow-20260911/case-06/report.md">Run evidence</a>.</p>
             <p class="failure">Fail: the footer changes while the boxed indicator remains on the previous model, or either label changes before selection is complete.</p>
           </span>
         </label>
 
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="restart">
           <span>
+            <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> restart via the actual app launcher, retain the real selected provider/model, and complete a live request. Synthetic same-home restart tests already passed.</p>
             <h3>7. Restart and confirm provider persistence</h3>
             <p>Quit this Corbanu window normally, relaunch from the app shortcut, and run <span class="keys">/status</span>. Send <span class="keys">Reply with exactly: RESTART_OK</span>.</p>
             <p class="expected">Pass: startup goes directly to chat, the selected provider/model and active providers are preserved, and the response is <code>RESTART_OK</code>.</p>
+            <p class="agent-result" data-agent-case="7"><strong>Agent result: BLOCKED — native relaunch not exercised.</strong> Harness relaunches preserved the visible Claude provider/model and returned <code>RESTART_OK</code>. This proves the tested TMUX subset, not relaunch through the Applications shortcut. <a href="qa/provider-auth/pf-58/luna-yellow-20260911/case-07/report.md">Run evidence</a>.</p>
             <p class="failure">Fail: <code>/providers</code> appears automatically, authentication is lost, a different provider is silently selected, or the request fails.</p>
           </span>
         </label>
@@ -358,22 +404,26 @@
           </span>
         </label>
 
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="stream">
           <span>
+            <p class="prerequisite-note"><strong>Historical stream failure now passes on the replacement.</strong> Earlier Mac/Linux automated evidence is supplemented by the Luna live-stream run below.</p>
             <h3>11. Cancel a stream and continue the same session</h3>
             <p>Ask for several paragraphs. While text is streaming, press <span class="keys">Escape</span>, then send <span class="keys">Reply with exactly: RECOVERY_OK</span>.</p>
             <p class="expected">Pass: streaming stops cleanly, the second response is <code>RECOVERY_OK</code>, and the composer remains responsive.</p>
+            <p class="agent-result" data-agent-case="11"><strong>Agent result: PASSED.</strong> A multi-paragraph response visibly streamed; Escape interrupted it cleanly. The next request returned exactly <code>RECOVERY_OK</code> in the same responsive session. <a href="qa/provider-auth/pf-58/luna-yellow-20260911/case-11/report.md">Run evidence</a>.</p>
             <p class="failure">Fail: Corbanu panics, exits, stalls, duplicates output, or displays <code>OutputTextDelta without active item</code>.</p>
           </span>
         </label>
 
-        <label class="test">
+        <label class="test prerequisite">
           <input type="checkbox" data-check="grid-soak">
           <span>
+            <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> three actual Mac windows on Desktop 3 must occupy distinct slots and remain independent. Three concurrent RTX terminal processes already passed; Mac window placement has not.</p>
             <h3>12. Open three concurrent launcher windows</h3>
             <p>Use the app shortcut twice more. On Desktop 3, send a short request in each of the three windows and switch models in one of them.</p>
             <p class="expected">Pass: the windows occupy distinct card slots, remain independently usable, and no launch replaces, overlaps, or moves another session.</p>
+            <p class="agent-result" data-agent-case="12"><strong>Agent result: BLOCKED — three native windows not tested.</strong> A single TMUX session remained usable, but it cannot prove Desktop 3 placement, independent slots or overlap behavior. The native attempt was also inconclusive; the reported wrong-desktop issue remains open. <a href="qa/provider-auth/pf-58/luna-yellow-20260911/native-disposition.md">Native disposition</a>.</p>
             <p class="failure">Fail: any window lands on the wrong desktop, overlaps, reuses an existing session, or becomes unresponsive under concurrent use.</p>
           </span>
         </label>
@@ -393,10 +443,122 @@
           <p>In Claude's token entry, submit exactly <code>not a valid token</code>, including the spaces. Spaces make it fail the local format check before storage. Do not substitute a whitespace-free dummy string: that could replace your saved token. Read the error, choose Retry authentication, and then press Escape.</p>
           <p class="expected">Pass: the error explains why setup failed and how to obtain a token. Retry reopens masked entry. Escape returns cleanly, and your previously configured account still works.</p>
         </span></label>
-        <label class="test"><input type="checkbox" data-check="auth-parity"><span>
+        <label class="test prerequisite"><input type="checkbox" data-check="auth-parity"><span>
+          <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> click the wrapped real browser login link and confirm macOS Keychain does not repeatedly prompt.</p>
           <h3>15. Check API-key and browser guidance</h3>
           <p>Inspect an API-key provider's entry screen, then cancel. If an OpenAI account setup action is available, open it and inspect the login link and device-code guidance, then cancel.</p>
           <p class="expected">Pass: API-key guidance identifies its environment variable and credential storage, and says it is never added to chat. The OpenAI link remains clickable when wrapped, and explains signing in from another device. No repeated keychain prompts appear during this pass.</p>
+          <p class="agent-result" data-agent-case="15"><strong>Agent result: BLOCKED — guidance passed; native/link checks incomplete.</strong> The corrected /providers replay observed the API-key privacy/storage text, OpenAI device-login instructions and clean cancellation. It did not click the link, make the URL itself wrap, or exercise native Keychain access. The agent’s original full-pass claim is therefore narrowed to partial evidence. <a href="qa/provider-auth/pf-58/luna-yellow-20260911/report.html">Report with coordinator correction</a>.</p>
+        </span></label>
+      </div>
+    </section>
+
+    <section aria-labelledby="security-round5-title" style="margin-top:42px">
+      <h2 id="security-round5-title">Round five: understand your protection</h2>
+      <p><strong>Historical round-five evidence.</strong> The original combined candidate passed its automated and actual-key TMUX gates.
+        The existing Mac Apps shortcut has not been changed by this security round.
+        Do not mistake its matching version number for the new build: record the supplied candidate commit and machine before checks 16–23.</p>
+      <p>The original launch path is retained for traceability, not for the new reauthentication checks.
+        This is commit <code>b12e32db398c83854271e2e70f29e5290278af8b</code>, Corbanu <code>0.1.38</code>; it is not yet merged to main.</p>
+      <pre><code>/home/travis/security-round5/evidence/anchor/combined-b12e32d/candidate/codex</code></pre>
+      <details><summary>Candidate identity and automated evidence</summary>
+        <p>SHA-256: <code>c567826ff5f15fccd71f8294c93210a158217a2ba31224c55d7d78269b1d2bea</code>.
+          Final combined controller 18/18, Core 127/127, audit 46/46, config 229/229, memory-write 44/44, memory-read 3/3, UI 235/235 and actual-key TMUX 4/4 passed, including four memory scenarios and four restarts.
+          <a href="qa/security-levels/sprints/PF-20-S03/combined-b12e32d/README.md">Exact run IDs and evidence</a>.
+          Human checks below remain yours to perform; no human acceptance is implied.</p>
+      </details>
+      <p>This slice is observation-only. It cannot activate Moderate or Aggressive, grant permissions or downgrade protection.
+        Memory-worker policy binding is now qualified as a denial-only boundary. Broker service isolation, production screening, full persisted memory provenance and all-platform qualification remain unfinished.
+        <a href="securityProgress.html">See progress and remaining gates</a>.</p>
+      <div class="checklist">
+        <label class="test"><input type="checkbox" data-check="security-requested-effective"><span>
+          <h3>16. Read requested versus effective protection</h3>
+          <p>In the supplied round-five candidate, type <code>/security</code> and press Enter. Read the configured level and the effective-protection message.</p>
+          <p class="expected">Pass: the view clearly distinguishes requested configuration from unverified or unavailable protection. It never claims that a protected mode is working merely because it is selected or configured.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="security-inert-navigation"><span>
+          <h3>17. Explore the three profiles without changing policy</h3>
+          <p>Use Up and Down to explore Permissive, Moderate and Aggressive. Press Enter twice on a different profile.</p>
+          <p class="expected">Pass: explanations change with the highlight, but Enter does not apply a setting, grant access or claim activation. Existing permissions remain unchanged.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="security-cancel-reopen"><span>
+          <h3>18. Cancel, reopen and check status</h3>
+          <p>Press Escape. Open <code>/security</code> again, cancel, then open <code>/status</code>.</p>
+          <p class="expected">Pass: cancellation is clean; the configured request is unchanged. Status communicates the same unverified-protection boundary rather than a healthy Moderate/Aggressive badge.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="security-narrow"><span>
+          <h3>19. Shrink the terminal</h3>
+          <p>Resize to approximately 40 columns. Inspect <code>/security</code> and <code>/status</code>, then restore the normal width.</p>
+          <p class="expected">Pass: the requested/effective warning and profile descriptions remain readable. Navigation and Escape still work; no critical warning is silently truncated.</p>
+        </span></label>
+        <label class="test prerequisite"><input type="checkbox" data-check="security-permissive-regression"><span>
+          <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> combine permission cancellation and same-home security restart in one journey, confirming the effective policy is unchanged. Separate component checks already passed.</p>
+          <h3>20. Continue your ordinary session</h3>
+          <p>In the normal Permissive test session, inspect <code>/permissions</code> and cancel without changing it. Use <code>/model</code> to switch between already-configured providers, send a harmless message, then restart and repeat <code>/security</code>.</p>
+          <p class="expected">Pass: ordinary provider, permission and session behavior is unchanged. Viewing profiles creates no policy change that survives restart. Do not edit your real config to manufacture a protected-mode test.</p>
+          <p class="agent-result" data-agent-case="20"><strong>Agent result: PASSED — observable TUI journey.</strong> Inspected and cancelled permissions, switched providers, received <code>OK</code>, then restarted with the selected model retained. Read-only /security inspection and cancellation showed no visible policy change. This is black-box UI evidence, not an internal enforcement audit. <a href="qa/provider-auth/pf-58/luna-yellow-20260911/case-20/report.md">Run evidence</a>.</p>
+        </span></label>
+      </div>
+      <p><strong>Automated evidence, not human proof:</strong> isolated fixtures cover unknown-config rejection, protected-input withholding, forged source metadata, and broker peer/death/revocation cases.
+        This checklist does not certify those boundaries or the separate PF-35 detector campaign.</p>
+    </section>
+
+    <section aria-labelledby="memory-acceptance-title" style="margin-top:42px">
+      <h2 id="memory-acceptance-title">Memory-enabled session regression checks</h2>
+      <p><strong>Checks 21–23 are ready for assisted testing on RTX.</strong> Ask us to start a fresh disposable fixture for each check, then attach using its generated command. The <a href="qa/security-levels/sprints/PF-30-S04/human-fixture/README.md">tested operator guide and pinned launch command</a> use the exact RTX candidate above, synthetic history and two fake local providers. No provider account is needed. Each session allows ten minutes; switch/exit actions have a two-minute window. Leave checks unticked until you perform them. Do not change real settings or import private history.</p>
+      <p>Combined rehearsal passed <strong>16/16 Rust tests and 2/2 Python tests</strong>, including startup, provider replacement, exit/restart, cancellation and timeout. Final Astra review is clean; the memory track used all five reviews. <a href="qa/security-levels/sprints/PF-30-S04/human-fixture/combined-67fec6a6/README.md">Evidence and exact runner identity</a>. Automated rehearsal is not human acceptance.</p>
+      <div class="checklist">
+        <label class="test"><input type="checkbox" data-check="memory-startup"><span>
+          <h3>21. Start with memory enabled</h3>
+          <p>Attach to the prepared <code>startup</code> session. Type <code>HUMAN_FOREGROUND synthetic fixture</code>, then press Enter separately. That nonempty turn triggers memory startup. Wait for “A foreground complete” and the coordinator's job counters, then type <code>/exit</code>.</p>
+          <p class="expected">Pass: chat remains responsive, with one canary request and one successful source output. The fixture reports successful completion and cleans up. Record its outcome, not just the chat answer.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="memory-provider-switch"><span>
+          <h3>22. Change providers during the session</h3>
+          <p>In a new <code>provider-switch</code> fixture, send the same synthetic prompt and wait for one pending canary. Within two minutes: <code>/providers</code> → Memory Fixture A → Deactivate → choose Memory Fixture B as replacement. Escape to chat, then <code>/model</code> → Memory Fixture b model → confirm effort. Send the synthetic prompt again, observe “B foreground complete”, then <code>/exit</code>. These changes affect only the disposable fixture.</p>
+          <p class="expected">Pass: the new foreground request reaches endpoint B with model <code>memory-fixture-b</code>; the original memory job is denied for provider change and produces zero successful outputs. Have us confirm the routing log. This does not certify direct custom-provider switching through <code>/model</code>; <a href="qa/security-levels/sprints/PF-30-S04/human-fixture/adjacent-model-picker-findings.md">known picker issues remain separate</a>.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="memory-owner-exit"><span>
+          <h3>23. Exit while memory work is pending, then restart</h3>
+          <p>In a new <code>pending-exit</code> fixture, send the synthetic prompt and wait for one pending canary with zero outputs. Type <code>/exit</code> within two minutes. Ask us to trigger its explicit same-home restart, attach again, run <code>/status</code>, then <code>/exit</code>. Do not send another ordinary prompt after restart.</p>
+          <p class="expected">Pass: exit/restart does not hang or panic. The source retains exactly one canary request and zero successful outputs, with successful fixture completion and cleanup. A missed window is not a pass; a request already sent before exit cannot be recalled.</p>
+        </span></label>
+      </div>
+      <p><strong>Security limit:</strong> automated fake-provider tests prove zero raw-history requests and zero outputs for Moderate/Aggressive. These manual regression checks do not activate protected modes or certify missing isolation/classifier gates.</p>
+    </section>
+
+    <section aria-labelledby="reauth-title" style="margin-top:42px">
+      <h2 id="reauth-title">Provider reauthentication — PF-58 candidate</h2>
+      <p><strong>Repaired package, not the old replacement.</strong> It includes matching Code Mode and wallet helpers, the RTX plugin runtime launcher, Claude recovery and native-pane fixes, and model/provider-preserving configuration reloads. The old user sessions remain untouched. Full acceptance still requires the readiness report's remaining prerequisites. Never include a credential or login code in your notes.</p>
+      <p><strong>Historical picker candidate below—not the installed replacement.</strong> Use the <a href="qa/provider-auth/pf-58/finish-20260910/report.html">latest replacement report</a> for exact package paths, hashes and yellow prerequisites. Only the limited native-launch check is requested now.</p>
+      <p>Previous Linux binary: <code>/home/travis/security-round5/evidence/picker-20260910/candidate-final/bin/codex</code><br>
+      SHA-256: <code>5ecd62f90574e1b6208625220abf93e431d347c1f2a91c9111c3512e81448062</code></p>
+      <p>Launch through <code>qa/provider-auth/pf-58/launch-candidate.sh</code> in the RTX worktree, passing the package's <code>bin</code> directory. That wrapper checks companion binaries and supplies the installed plugins' Node PATH. A separately copied executable does not qualify.</p>
+      <p><strong>Final native Mac signed replacement (10 September, 17:52).</strong> Open <strong>Corbanu Terminal Launcher</strong> in Applications. Its links now resolve to <code>/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-picker-final-20260910/bin/corbanu</code>, version 0.1.41. Corbanu and its three matching helpers have verified Developer ID signatures and unchanged stable identifiers.<br>
+      Mac SHA-256: <code>8275923c4ee9c0bfc7e52109f742564c5a429631d765e15b6f0643b4cb7d3669</code>.<br>
+      Final results: 58 TUI unit/snapshot regressions, 72 provider-auth tests, and 32 Linux integration tests passed. Both complete packages passed real-key TMUX setup, all three Claude subscription models, exactly one current model, repeated manager visits, restart, independent Anthropic API setup, four host/shell/MCP round trips, three concurrent processes and Ctrl+C recovery. The older Mac package fails the same catalog regression. <a href="qa/provider-auth/pf-58/picker-repair-20260910.md">Current evidence and limitations</a>.</p>
+      <p><strong>Provider/model retest:</strong> in <code>/providers</code>, wait for setup to say configured. In <code>/model</code>, Claude Plan should offer Opus 5, Fable 5.1 and Fable 5 with only the actual provider/model pair marked current. There should be no invented Claude copies under Other. Anthropic remains a separate API-key route: it is always available for setup in <code>/providers</code>, but its models become selectable only after its own API credential is configured. A Claude subscription token does not authorize billed API use.</p>
+      <p><strong>Keychain verification:</strong> the final signed package opened the existing Mac profile twice without password entry, displayed the correct provider/model menus, and recorded successful account/vault reads. The automated probe left configuration unchanged and sent no model request. Your earlier four- and two-prompt experiences remain recorded; this is not automatic human acceptance. Open a new shortcut window; existing windows retain the old binary. If macOS asks for initial access, enter the password yourself only if you trust this build. Separate account and vault items can each need an initial permission. Do not keep entering your password through a repeated loop—report the exact item text if it recurs. No credential permissions or saved checkmarks were changed. Escape cancellation remains the separate yellow check 11.</p>
+      <p><strong>Scope:</strong> repaired-runtime evidence is separate from human acceptance, platform qualification and release sign-off. This branch is not merged to main. See <a href="qa/provider-auth/pf-58/README.md">qualification and limitations</a>.</p>
+      <div class="tests">
+        <label class="test prerequisite"><input type="checkbox" data-check="pf58-account"><span>
+          <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> complete live OpenAI account reauthentication and reconnect codex_apps without restart or provider/model changes. A healthy live connection and synthetic reauthentication passed, but that combined live recovery has not been performed.</p>
+          <strong>24. Recover the affected account, not the current model</strong>
+          <p>After an OpenAI connected-app authentication failure, open <code>/providers</code>. OpenAI should need attention while the working Claude provider remains configured. Select OpenAI, press <kbd>r</kbd>, and choose sign-in. Cancel once, reopen, then finish sign-in.</p>
+          <p class="expected">Pass: cancellation changes nothing; successful sign-in refreshes status and the app connection without restarting or changing provider/model.</p>
+          <p class="agent-result" data-agent-case="24"><strong>Agent result: TIMED OUT — recovery remains unverified.</strong> The agent recorded the recovery route and cancel/reopen behavior, but the supplied credential was healthy: no expired-token failure was exercised. Browser sign-in completion was unavailable, and the process timed out after saving partial evidence. <a href="qa/provider-auth/pf-58/luna-yellow-20260911/case-24/report.md">Partial report</a>.</p>
+        </span></label>
+        <label class="test"><input type="checkbox" data-check="pf58-api"><span>
+          <strong>25. Replace a rejected saved API key</strong>
+          <p>Use our isolated synthetic fixture, not a production key. After its deliberate rejection, select the affected provider and press <kbd>r</kbd>. Cancel the masked form once, reopen it, and replace the key. Send another request in the same session.</p>
+          <p class="expected">Pass: the new key is used immediately; no secret appears in chat; the model, other providers, and any deliberately disabled provider remain unchanged.</p>
+        </span></label>
+        <label class="test prerequisite"><input type="checkbox" data-check="pf58-external"><span>
+          <p class="prerequisite-note"><strong>Unverified prerequisite:</strong> exercise narrow recovery screens with actual keyboard input for command/AWS and local providers; unit/snapshot evidence alone does not cover this journey.</p>
+          <strong>26. Recover according to the credential source</strong>
+          <p>Press <kbd>r</kbd> on an environment-backed provider, an external command/AWS provider, and a local provider where configured. Repeat in a narrow terminal window.</p>
+          <p class="expected">Pass: clear, readable instructions identify the owning shell/tool or local model server. Corbanu does not offer a fake browser login or a vault override for an environment credential. “Configured” does not claim a successful remote validation.</p>
+          <p class="agent-result" data-agent-case="26"><strong>Agent result: TIMED OUT — no final result.</strong> Environment, command/AWS and local-server test fixtures were not provisioned. The agent timed out without a final report; unrelated account menus cannot qualify these recovery paths. Captures are retained, but no pass or product failure is inferred. <a href="qa/provider-auth/pf-58/luna-yellow-20260911/report.html">Execution record</a>.</p>
         </span></label>
       </div>
     </section>
@@ -432,7 +594,7 @@ git merge-base --is-ancestor rust-v0.1.37 HEAD &amp;&amp; echo "0.1.37 release l
       <div class="signoff">
         <label class="field">Tester<input type="text" data-note="tester" placeholder="Your name"></label>
         <label class="field">Date<input type="date" data-note="date"></label>
-        <label class="field">Platform<input type="text" data-note="platform" value="macOS · local CorbanuDrive"></label>
+        <label class="field">Platform<input type="text" data-note="platform" value="Linux RTX via SSH/TMUX; Mac launcher checks require separate evidence"></label>
         <label class="field">Result<input type="text" data-note="result" placeholder="PASS or FAIL at step …"></label>
         <label class="field wide">Notes<textarea data-note="notes" placeholder="Record the first failed step, visible behavior, and exact non-secret message. Never record a credential."></textarea></label>
       </div>
@@ -446,7 +608,7 @@ git merge-base --is-ancestor rust-v0.1.37 HEAD &amp;&amp; echo "0.1.37 release l
   <script>
     const boxes = [...document.querySelectorAll('[data-check]')];
     const notes = [...document.querySelectorAll('[data-note]')];
-    const key = 'corbanu-human-test-0-1-38-reconciliation';
+    const key = 'corbanu-human-test-pf58-0-1-41';
 
     function loadState() {
       try {

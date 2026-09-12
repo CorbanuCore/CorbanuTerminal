@@ -1,0 +1,8 @@
+final-tests.log
+     Summary [   0.417s] 83 tests run: 83 passed, 3968 skipped
+api-tests.log
+# tests 37
+# pass 37
+# fail 0
+terminal-build-final.log
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 59s

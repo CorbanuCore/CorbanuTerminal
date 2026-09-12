@@ -1,0 +1,301 @@
+{
+  "candidate": "/home/travis/security-round5/evidence/provider-reauth-health-final/candidate-preflight/codex",
+  "sha256": "37511bb9348e3793255ce67806d23060f3436cee53ef0a041b921420b201da35",
+  "checklist_sha256": "7afcbed98e78578628a50eb7da6da7006c6b360cd1482ed7904d24372bf67fa8",
+  "human_acceptance": false,
+  "ready": false,
+  "suites": {
+    "packaged-runtime": {
+      "passed": false,
+      "candidate": "/home/travis/security-round5/evidence/provider-reauth-health-final/candidate-preflight/codex",
+      "sha256": "37511bb9348e3793255ce67806d23060f3436cee53ef0a041b921420b201da35",
+      "host_sha256": "b91e5ab7e7af108b5651cf30a73dae98d2e98c49ecc6a87aaed8154ef92179a5",
+      "human_acceptance": false
+    },
+    "provider-management": {
+      "passed": true,
+      "count": 10,
+      "failed": [],
+      "skipped": [],
+      "exit_code": 0
+    },
+    "provider-convergence": {
+      "passed": false,
+      "count": 12,
+      "failed": [
+        "suite::provider_convergence::tmux_native_spawn_picker_and_parent_request_share_exact_custom_runtime"
+      ],
+      "skipped": [],
+      "exit_code": 100
+    },
+    "multi-provider": {
+      "passed": false,
+      "count": 10,
+      "failed": [
+        "suite::multi_provider_onboarding::tmux_deferred_corbanu_api_cancel_with_fallback_continues_to_chat",
+        "suite::multi_provider_onboarding::tmux_fresh_wallet_api_cancel_without_fallback_returns_to_setup",
+        "suite::multi_provider_onboarding::tmux_fresh_wallet_api_handoff_preserves_existing_current_provider",
+        "suite::multi_provider_onboarding::tmux_fresh_wallet_api_key_success_activates_without_restart",
+        "suite::multi_provider_onboarding::tmux_locked_wallet_api_unlocks_and_cancels",
+        "suite::multi_provider_onboarding::tmux_only_corbanu_api_cancel_returns_to_shared_provider_list"
+      ],
+      "skipped": [],
+      "exit_code": 100
+    },
+    "claude-auth": {
+      "passed": false,
+      "count": 3,
+      "failed": [
+        "suite::claude_auth::tmux_claude_auth_compatibility_selects_existing_login",
+        "suite::claude_auth::tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume",
+        "suite::claude_auth::tmux_first_run_anthropic_account_selects_claude_login_after_success"
+      ],
+      "skipped": [],
+      "exit_code": 100
+    },
+    "stream": {
+      "passed": true,
+      "count": 1,
+      "failed": [],
+      "skipped": [],
+      "exit_code": 0
+    },
+    "security": {
+      "passed": true,
+      "count": 2,
+      "failed": [],
+      "skipped": [],
+      "exit_code": 0
+    },
+    "memory": {
+      "passed": true,
+      "count": 2,
+      "failed": [],
+      "skipped": [],
+      "exit_code": 0
+    }
+  },
+  "checks": {
+    "launch": {
+      "ready": false,
+      "suites": [
+        "packaged-runtime"
+      ],
+      "remaining": [
+        "Mac Apps shortcut resolves this exact candidate; Desktop 3 and first free grid slot verified with computer use."
+      ]
+    },
+    "startup": {
+      "ready": false,
+      "suites": [
+        "packaged-runtime",
+        "provider-management",
+        "provider-convergence"
+      ],
+      "remaining": [
+        "Actual installed MCP set initializes under the intended launcher PATH; real codex_apps credential works; update check does not recommend an older release."
+      ]
+    },
+    "catalog": {
+      "ready": false,
+      "suites": [
+        "provider-management",
+        "multi-provider"
+      ],
+      "remaining": [
+        "Inspect wallet balance/top-up/prices/key actions and absence of old plan-sales actions on this candidate."
+      ]
+    },
+    "same-session-key": {
+      "ready": false,
+      "suites": [
+        "provider-management",
+        "multi-provider"
+      ],
+      "remaining": []
+    },
+    "fable": {
+      "ready": false,
+      "suites": [
+        "claude-auth"
+      ],
+      "remaining": [
+        "Fable 5.1 Max offered and selected; live FABLE_51_OK request routed to Claude, not just synthetic auth storage."
+      ]
+    },
+    "model-sync": {
+      "ready": false,
+      "suites": [
+        "provider-management"
+      ],
+      "remaining": [
+        "Assert header and footer immediately agree for Claude-to-OpenAI and back, before another prompt."
+      ]
+    },
+    "restart": {
+      "ready": false,
+      "suites": [
+        "packaged-runtime",
+        "provider-management",
+        "provider-convergence"
+      ],
+      "remaining": [
+        "Actual launcher restart preserves the real selected provider and sends a live request."
+      ]
+    },
+    "inactive": {
+      "ready": false,
+      "suites": [
+        "provider-management",
+        "provider-convergence"
+      ],
+      "remaining": []
+    },
+    "current-guard": {
+      "ready": false,
+      "suites": [
+        "provider-management"
+      ],
+      "remaining": []
+    },
+    "missing-current": {
+      "ready": false,
+      "suites": [
+        "provider-convergence",
+        "provider-management"
+      ],
+      "remaining": []
+    },
+    "stream": {
+      "ready": false,
+      "suites": [
+        "stream"
+      ],
+      "remaining": [
+        "Cancel an in-progress stream and assert a successful next turn in the same process."
+      ]
+    },
+    "grid-soak": {
+      "ready": false,
+      "suites": [
+        "packaged-runtime"
+      ],
+      "remaining": [
+        "Mac Desktop 3: three independently responsive windows in non-overlapping grid slots; model switch in one does not replace another session."
+      ]
+    },
+    "claude-guidance": {
+      "ready": false,
+      "suites": [
+        "claude-auth",
+        "provider-management"
+      ],
+      "remaining": [
+        "40-column actual TUI token instructions readable, masked, and Escape returns to manager."
+      ]
+    },
+    "auth-error-retry": {
+      "ready": false,
+      "suites": [
+        "claude-auth",
+        "provider-management"
+      ],
+      "remaining": []
+    },
+    "auth-parity": {
+      "ready": false,
+      "suites": [
+        "provider-management"
+      ],
+      "remaining": [
+        "Wrapped real browser link is clickable; Mac keychain does not repeatedly prompt."
+      ]
+    },
+    "security-requested-effective": {
+      "ready": false,
+      "suites": [
+        "security"
+      ],
+      "remaining": []
+    },
+    "security-inert-navigation": {
+      "ready": false,
+      "suites": [
+        "security"
+      ],
+      "remaining": []
+    },
+    "security-cancel-reopen": {
+      "ready": false,
+      "suites": [
+        "security"
+      ],
+      "remaining": []
+    },
+    "security-narrow": {
+      "ready": false,
+      "suites": [
+        "security"
+      ],
+      "remaining": []
+    },
+    "security-permissive-regression": {
+      "ready": false,
+      "suites": [
+        "security",
+        "provider-management",
+        "packaged-runtime"
+      ],
+      "remaining": [
+        "/permissions cancel and same-home /security restart preserve policy in one integrated journey."
+      ]
+    },
+    "memory-startup": {
+      "ready": false,
+      "suites": [
+        "memory"
+      ],
+      "remaining": []
+    },
+    "memory-provider-switch": {
+      "ready": false,
+      "suites": [
+        "memory"
+      ],
+      "remaining": []
+    },
+    "memory-owner-exit": {
+      "ready": false,
+      "suites": [
+        "memory"
+      ],
+      "remaining": []
+    },
+    "pf58-account": {
+      "ready": false,
+      "suites": [
+        "provider-management"
+      ],
+      "remaining": [
+        "Live codex_apps reconnect after account reauthentication, with no MCP startup errors or provider/model change."
+      ]
+    },
+    "pf58-api": {
+      "ready": false,
+      "suites": [
+        "provider-management"
+      ],
+      "remaining": []
+    },
+    "pf58-external": {
+      "ready": false,
+      "suites": [
+        "provider-management",
+        "provider-convergence"
+      ],
+      "remaining": [
+        "Actual-key narrow recovery views for command/AWS and local providers (unit/snapshot support alone is insufficient)."
+      ]
+    }
+  }
+}

@@ -1,0 +1,36 @@
+[
+  {
+    "repo": "tensorcash",
+    "worktree": "/mnt/HC_Volume_101713660/pfrpc/scratch/corbanu-0.1.42-qa/tensorcash",
+    "base": "dd6e92024254090de0f596b090bd5c74c4d97b90",
+    "version": "0.1.42",
+    "mode": "real PTY and tool execution; synthetic inference and release headers",
+    "statuses": [
+      503,
+      200,
+      200
+    ],
+    "rotatedReleasedId": true,
+    "toolsPresent": true,
+    "parallelControlAbsent": true,
+    "selectionCancelAndRestart": true,
+    "repositoryUnchanged": true
+  },
+  {
+    "repo": "isometricgame",
+    "worktree": "/mnt/HC_Volume_101713660/pfrpc/scratch/corbanu-0.1.42-qa/isometricgame",
+    "base": "a5427fc7a44c59b9985462e19603210ca649475f",
+    "version": "0.1.42",
+    "mode": "real PTY and tool execution; synthetic inference and release headers",
+    "statuses": [
+      503,
+      200,
+      200
+    ],
+    "rotatedReleasedId": true,
+    "toolsPresent": true,
+    "parallelControlAbsent": true,
+    "selectionCancelAndRestart": true,
+    "repositoryUnchanged": true
+  }
+]

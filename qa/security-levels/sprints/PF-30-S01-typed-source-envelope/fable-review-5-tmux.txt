@@ -1,0 +1,28 @@
+autoreview target: branch
+branch: feat/security-round5-provenance
+engine: codex
+model: claude-fable-5-1-plan
+thinking: high
+tools: on
+web_search: on
+ref: 72f5de657
+bundle: 52796 chars
+autoreview clean: no accepted/actionable findings reported
+overall: patch is correct (0.9)
+Inspected the scoped delta in core/src/security/ingress/mod.rs against the actual callers (native.rs observe/screening_candidate/admit_scree
+ned/project) and the codex-content-security ScreeningSession contract. Segmentation is a pure byte-chunk view (chunks of ≤512 bytes) over th
+e already-normalized, nonempty, ≤2,048-byte input; it introduces no new state, IDs, or allocation, so cache/input byte stability holds (segm
+ents().concat() == normalized bytes). The new empty-input refusal in PendingSource::prepare is unreachable from the native path (item_bytes
+serializes the whole ResponseItem) and only affects direct callers; no existing caller passes empty input. Admission now requires source bin
+ding equality, exact segment_count == ceil(len/512), and the complete-content digest equal to the envelope's content_digest, so a ScreenedCo
+ntent produced under a different segmentation contract or from a different source is rejected and the pending candidate is consumed (native
+admit_screened removes it before admit). The reassembler independently enforces per-segment source/transformation/reassembly-digest/count/in
+dex checks, duplicate/out-of-range/empty/oversize rejection, fail-closed state after any error, original-index concatenation, and whole-cont
+ent digest verification before any Release; Release still only yields untrusted bytes with no authority. Fixture budget (max_segments = 2048
+/512 = 4, max_segment_bytes 512, max_content_bytes 8192) passes ScreeningBudget::validate and covers every possible candidate. Whole-input 2
+,048-byte and 8,192-byte projection bounds are unchanged; provider shaping is unchanged. Test-only edits (client_tests, provenance suite, ne
+w segmentation_tests) use the synthetic fixture and public SegmentEnvelope fields correctly. No new interaction with the PF-30-S04 memory-wo
+rker gap observed. Not verified here: production classifier behavior or test execution (relied on recorded RTX 27/27 and 22/22 results); the
+ >1,000-token projection remains as disclosed and unchanged.
+
+Review 5 completed: exit 0. Press Enter to close this private fixture.

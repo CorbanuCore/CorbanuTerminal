@@ -1,0 +1,7 @@
+{
+  "binary": "/mnt/HC_Volume_101713660/pfrpc/build-cache/cargo-workspaces/corbanu-wallet-launch-hotfix-db67e02208dd/debug/corbanu",
+  "sha256": "282ded9f59427ede9999309154396ff944d3b7d6d55e4d944903c92b1aef5f02",
+  "version": "corbanu 0.1.41",
+  "launcher": "/home/pfrpc/.local/bin/corbanu-debug",
+  "publicRelease": false
+}

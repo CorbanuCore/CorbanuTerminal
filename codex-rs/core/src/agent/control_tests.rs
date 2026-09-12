@@ -748,6 +748,72 @@ async fn spawn_agent_internal_treats_roles_as_profiles_and_enforces_structural_d
 }
 
 #[tokio::test]
+async fn direct_native_pane_inherits_live_security_policy_before_first_turn() {
+    let harness = AgentControlHarness::new().await;
+    let (root_id, root) = harness.start_thread().await;
+    let control = &root.session.services.agent_control;
+    let parent = control
+        .effective_security_policy()
+        .snapshot_for_agent(root_id)
+        .unwrap();
+    let child = harness
+        .manager
+        .start_thread_with_options(StartThreadOptions {
+            config: harness.config.clone(),
+            allow_provider_model_fallback: false,
+            history_mode: None,
+            initial_history: InitialHistory::New,
+            session_source: Some(role_spawn_source(
+                root_id,
+                /*depth*/ 1,
+                "/root/pane",
+                "worker",
+            )),
+            thread_source: Some(ThreadSource::Subagent),
+            dynamic_tools: Vec::new(),
+            metrics_service_name: None,
+            parent_trace: None,
+            environments: Some(Vec::new()),
+            thread_extension_init: ExtensionDataInit::default(),
+            supports_openai_form_elicitation: false,
+        })
+        .await
+        .expect("direct human pane");
+    let policy = child
+        .thread
+        .session
+        .services
+        .agent_control
+        .effective_security_policy();
+    let snapshot = policy
+        .snapshot_for_agent(child.thread_id)
+        .expect("bound before first turn");
+    assert_eq!(snapshot.level, parent.level);
+    assert_eq!(snapshot.session_id, parent.session_id);
+    assert!(snapshot.actor_chain.extends(&parent.actor_chain));
+    assert_eq!(snapshot.kill_switch_active, parent.kill_switch_active);
+    child
+        .thread
+        .session
+        .services
+        .model_client()
+        .check_source_admission(&crate::client_common::Prompt::default())
+        .expect("permissive native pane can submit");
+
+    let controller = control.trusted_security_controller().unwrap();
+    let confirmation = controller
+        .confirm_level_change(
+            SecurityLevel::Moderate,
+            codex_security_policy::RevocationState::new(),
+        )
+        .unwrap();
+    controller.apply_confirmed_change(confirmation).unwrap();
+    let updated = policy.snapshot_for_agent(child.thread_id).unwrap();
+    assert_eq!(updated.level, SecurityLevel::Moderate);
+    assert_eq!(updated.epoch, 1);
+}
+
+#[tokio::test]
 async fn security_inheritance_flows_through_live_spawn_path() {
     let harness = AgentControlHarness::new().await;
     let (root_thread_id, root_thread) = harness.start_thread().await;

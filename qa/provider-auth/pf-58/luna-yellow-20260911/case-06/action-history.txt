@@ -1,0 +1,12 @@
+1. Started the supplied target session with the provided TMUX command.
+2. Pressed Enter on the visible trust prompt.
+3. Typed `/model`, pressed Enter.
+4. Pressed Right to switch from Claude Plan to the visible OpenAI provider tab.
+5. Pressed Enter on the visible `GPT-5.6-Sol (default)` model.
+6. Pressed Enter on the visible `Low (default)` reasoning level.
+7. Typed `/model`, pressed Enter.
+8. Pressed Left to switch from OpenAI back to the visible Claude Plan provider tab.
+9. Pressed Down, then Enter, to select the visible `Claude Fable 5.1 Plan` model.
+10. Pressed Down twice, then Enter, to select the visible `More reasoning…` path.
+11. Pressed Enter on the visible `Max` reasoning option.
+12. Captured visible pane checkpoints after each relevant state.

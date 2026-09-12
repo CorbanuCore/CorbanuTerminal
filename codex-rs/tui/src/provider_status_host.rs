@@ -125,6 +125,7 @@ pub(crate) struct ProviderStatusHost {
     current: Arc<RwLock<CurrentProviderSelection>>,
     account: Arc<RwLock<ProviderAccountMetadata>>,
     authorizations: ProviderRuntimeAuthorizations,
+    health: Arc<RwLock<codex_provider_auth::ProviderCredentialHealth>>,
 }
 
 impl ProviderStatusHost {
@@ -137,6 +138,7 @@ impl ProviderStatusHost {
             ))),
             account: Arc::new(RwLock::new(account)),
             authorizations: ProviderRuntimeAuthorizations::default(),
+            health: Arc::default(),
         }
     }
     pub(crate) fn set_runtime_authorizations(&mut self, value: ProviderRuntimeAuthorizations) {
@@ -152,12 +154,14 @@ impl ProviderStatusHost {
             .unwrap_or_else(std::sync::PoisonError::into_inner) = account;
     }
     pub(crate) fn mark_openai_api_key(&self) {
+        self.credential_changed("openai");
         self.account
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .openai = OpenAiAuthMetadata::ApiKey;
     }
     pub(crate) fn mark_openai_account(&self) {
+        self.credential_changed("openai");
         self.account
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -167,6 +171,7 @@ impl ProviderStatusHost {
         &self,
         source: codex_provider_auth::ClaudeCredentialSource,
     ) {
+        self.credential_changed(codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID);
         self.account
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -233,7 +238,49 @@ impl ProviderStatusHost {
         );
         self.authorizations
             .apply_to_status_catalog(&self.catalog, &mut statuses);
+        self.health
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .apply(&mut statuses);
         statuses
+    }
+
+    pub(crate) fn begin_credential_attempt(&self, scope: String, runtime_provider: &str) {
+        let Some(entry) = self.catalog.entries().iter().find(|entry| {
+            entry
+                .runtime_provider_ids
+                .iter()
+                .any(|id| id.as_str() == runtime_provider)
+        }) else {
+            return;
+        };
+        if let Some(status) = self.resolve_provider(entry.id.as_str()) {
+            self.health
+                .write()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .begin(scope, &status);
+        }
+    }
+
+    pub(crate) fn reject_credential_attempt(&self, scope: &str) -> Option<String> {
+        self.health
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .reject_provider(scope)
+    }
+
+    pub(crate) fn finish_credential_attempt(&self, scope: &str) {
+        self.health
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .finish(scope);
+    }
+
+    pub(crate) fn credential_changed(&self, provider: &str) {
+        self.health
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .credential_changed(provider);
     }
 
     pub(crate) fn resolve_provider(&self, provider_id: &str) -> Option<ProviderStatusSnapshot> {

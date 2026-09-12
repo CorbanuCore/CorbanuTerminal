@@ -1,0 +1,35 @@
+[
+  {
+    "text": "Verify unrelated healthy model"
+  },
+  {
+    "key": "Enter"
+  },
+  {
+    "text": "/providers"
+  },
+  {
+    "key": "Enter"
+  },
+  {
+    "key": "r"
+  },
+  {
+    "key": "Enter"
+  },
+  {
+    "key": "Escape"
+  },
+  {
+    "text": "Exercise recovered tool"
+  },
+  {
+    "key": "Enter"
+  },
+  {
+    "text": "/exit"
+  },
+  {
+    "key": "Enter"
+  }
+]

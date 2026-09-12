@@ -6,12 +6,14 @@ September 11 recovery-source cards. Canonical sprints remain authoritative.
 ## Workstream 1 — PF13 / security
 
 PF13 owner reports Travis completed the human test and authorized integration.
-Checkpoint 1238e1f7b is on integrate/pf13-main-release-20260911, not yet main at
-this observation. RTX build/package/wallet preflight passed per owner; actual-key
-provider tests and tool/trusted-app journeys remain underway. PF35 external classifier
+Owner verified main d870c92dab2bf3fbb602dc3b8447fe9f3534aecb after RTX531 selected
+Rust passes, package28/gate11, build/package/wallet startup and actual-key provider,
+tool/trusted-app journeys. Manager receiving source reconciles this accepted main
+without discarding newer accounting/TaskNode work. PF35 external classifier
 qualification is separate and not proven by PF13 human acceptance. Manager must
-reconcile the receiving security records after the owner returns accepted main
-coordinates; do not silently mark the whole security program complete.
+retain the owner's new PF27S04 allocation as a separate continuation; do not
+silently mark the whole security program complete. PF35's engineering reservation
+is draft/external in accepted main; no detector qualification claim.
 Human next action: none requested by this dashboard repair.
 
 ## Workstream 2 — Accounting

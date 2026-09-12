@@ -1,0 +1,300 @@
+{
+  "candidate": "/home/travis/security-round5/evidence/provider-reauth-health-final/candidate-repaired-qualified/bin/codex",
+  "sha256": "fa2b710733a57787cb0cfbd250be903ef9d2fe1f08b981dd49196697eae14fb8",
+  "host_sha256": "5dba47e51d4152f39c738a282502aeceab8df615b78d90dabf01cbc8b7393a03",
+  "coverage_sha256": "646ce8f2e4ec60cf1bed22d0911ba9924961e173e39510156d10a6f72acd46cb",
+  "checklist_sha256": "f347a2bcaedf297366055746c4d47fa843a9c5d7b40f0e8363233593f43e8481",
+  "human_acceptance": false,
+  "ready": false,
+  "suites": {
+    "packaged-runtime": {
+      "passed": true,
+      "candidate": "/home/travis/security-round5/evidence/provider-reauth-health-final/candidate-repaired-qualified/bin/codex",
+      "sha256": "fa2b710733a57787cb0cfbd250be903ef9d2fe1f08b981dd49196697eae14fb8",
+      "host_sha256": "5dba47e51d4152f39c738a282502aeceab8df615b78d90dabf01cbc8b7393a03",
+      "human_acceptance": false,
+      "tool_round_trips": 4,
+      "concurrent_processes": 3,
+      "same_home_restart": true,
+      "stream_cancel_recovery": true,
+      "permissions_security_cancel_inert": true,
+      "claude_guidance_40_columns": true
+    },
+    "provider-management": {
+      "passed": true,
+      "count": 10,
+      "failed": [],
+      "skipped": [],
+      "exit_code": 0
+    },
+    "reauthentication": {
+      "passed": true,
+      "count": 4,
+      "failed": [],
+      "skipped": [],
+      "exit_code": 0
+    },
+    "provider-convergence": {
+      "passed": true,
+      "count": 13,
+      "failed": [],
+      "skipped": [],
+      "exit_code": 0
+    },
+    "multi-provider": {
+      "passed": true,
+      "count": 10,
+      "failed": [],
+      "skipped": [],
+      "exit_code": 0
+    },
+    "claude-auth": {
+      "passed": true,
+      "count": 3,
+      "failed": [],
+      "skipped": [],
+      "exit_code": 0
+    },
+    "stream": {
+      "passed": true,
+      "count": 1,
+      "failed": [],
+      "skipped": [],
+      "exit_code": 0
+    },
+    "security": {
+      "passed": true,
+      "count": 2,
+      "failed": [],
+      "skipped": [],
+      "exit_code": 0
+    },
+    "memory": {
+      "passed": true,
+      "count": 2,
+      "failed": [],
+      "skipped": [],
+      "exit_code": 0
+    }
+  },
+  "checks": {
+    "launch": {
+      "ready": false,
+      "suites": [
+        "packaged-runtime"
+      ],
+      "remaining": [
+        "Mac Apps shortcut resolves this exact candidate; Desktop 3 and first free grid slot verified with computer use."
+      ]
+    },
+    "startup": {
+      "ready": false,
+      "suites": [
+        "packaged-runtime",
+        "provider-management",
+        "provider-convergence"
+      ],
+      "remaining": [
+        "Actual installed MCP set initializes under the intended launcher PATH; real codex_apps credential works; update check does not recommend an older release."
+      ]
+    },
+    "catalog": {
+      "ready": false,
+      "suites": [
+        "provider-management",
+        "multi-provider"
+      ],
+      "remaining": [
+        "Inspect wallet balance/top-up/prices/key actions and absence of old plan-sales actions on this candidate."
+      ]
+    },
+    "same-session-key": {
+      "ready": true,
+      "suites": [
+        "provider-management",
+        "multi-provider"
+      ],
+      "remaining": []
+    },
+    "fable": {
+      "ready": false,
+      "suites": [
+        "claude-auth"
+      ],
+      "remaining": [
+        "Fable 5.1 Max offered and selected; live FABLE_51_OK request routed to Claude, not just synthetic auth storage."
+      ]
+    },
+    "model-sync": {
+      "ready": false,
+      "suites": [
+        "provider-management"
+      ],
+      "remaining": [
+        "Assert header and footer immediately agree for Claude-to-OpenAI and back, before another prompt."
+      ]
+    },
+    "restart": {
+      "ready": false,
+      "suites": [
+        "packaged-runtime",
+        "provider-management",
+        "provider-convergence"
+      ],
+      "remaining": [
+        "Actual launcher restart preserves the real selected provider and sends a live request."
+      ]
+    },
+    "inactive": {
+      "ready": true,
+      "suites": [
+        "provider-management",
+        "provider-convergence"
+      ],
+      "remaining": []
+    },
+    "current-guard": {
+      "ready": true,
+      "suites": [
+        "provider-management"
+      ],
+      "remaining": []
+    },
+    "missing-current": {
+      "ready": true,
+      "suites": [
+        "provider-convergence",
+        "provider-management"
+      ],
+      "remaining": []
+    },
+    "stream": {
+      "ready": true,
+      "suites": [
+        "stream",
+        "packaged-runtime"
+      ],
+      "remaining": []
+    },
+    "grid-soak": {
+      "ready": false,
+      "suites": [
+        "packaged-runtime"
+      ],
+      "remaining": [
+        "Mac Desktop 3: three independently responsive windows in non-overlapping grid slots; model switch in one does not replace another session."
+      ]
+    },
+    "claude-guidance": {
+      "ready": true,
+      "suites": [
+        "packaged-runtime",
+        "provider-management"
+      ],
+      "remaining": []
+    },
+    "auth-error-retry": {
+      "ready": true,
+      "suites": [
+        "claude-auth",
+        "provider-management"
+      ],
+      "remaining": []
+    },
+    "auth-parity": {
+      "ready": false,
+      "suites": [
+        "provider-management"
+      ],
+      "remaining": [
+        "Wrapped real browser link is clickable; Mac keychain does not repeatedly prompt."
+      ]
+    },
+    "security-requested-effective": {
+      "ready": true,
+      "suites": [
+        "security"
+      ],
+      "remaining": []
+    },
+    "security-inert-navigation": {
+      "ready": true,
+      "suites": [
+        "security"
+      ],
+      "remaining": []
+    },
+    "security-cancel-reopen": {
+      "ready": true,
+      "suites": [
+        "security"
+      ],
+      "remaining": []
+    },
+    "security-narrow": {
+      "ready": true,
+      "suites": [
+        "security"
+      ],
+      "remaining": []
+    },
+    "security-permissive-regression": {
+      "ready": false,
+      "suites": [
+        "security",
+        "provider-management",
+        "packaged-runtime"
+      ],
+      "remaining": [
+        "/permissions cancel and same-home /security restart preserve policy in one integrated journey."
+      ]
+    },
+    "memory-startup": {
+      "ready": true,
+      "suites": [
+        "memory"
+      ],
+      "remaining": []
+    },
+    "memory-provider-switch": {
+      "ready": true,
+      "suites": [
+        "memory"
+      ],
+      "remaining": []
+    },
+    "memory-owner-exit": {
+      "ready": true,
+      "suites": [
+        "memory"
+      ],
+      "remaining": []
+    },
+    "pf58-account": {
+      "ready": false,
+      "suites": [
+        "reauthentication"
+      ],
+      "remaining": [
+        "Live codex_apps reconnect after account reauthentication, with no MCP startup errors or provider/model change."
+      ]
+    },
+    "pf58-api": {
+      "ready": true,
+      "suites": [
+        "reauthentication"
+      ],
+      "remaining": []
+    },
+    "pf58-external": {
+      "ready": false,
+      "suites": [
+        "reauthentication",
+        "provider-convergence"
+      ],
+      "remaining": [
+        "Actual-key narrow recovery views for command/AWS and local providers (unit/snapshot support alone is insufficient)."
+      ]
+    }
+  }
+}

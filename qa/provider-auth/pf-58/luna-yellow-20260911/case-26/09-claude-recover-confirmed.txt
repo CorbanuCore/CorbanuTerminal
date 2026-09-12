@@ -1,0 +1,48 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       claude-fable-5-1-plan high   /model to cha… │
+│ directory:   ~/work                                      │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+
+  Claude Plan authentication
+  Choose one source; Corbanu never falls back to another account.
+
+› Long-lived subscription token (Recommended)  Run `claude setup-token` in a private terminal, then paste its approximately one-year token here
+                                               (Pro, Max, Team, or Enterprise).
+  Claude Code login                            Use Claude Code's rotating login state; reauthorization may be needed more often.
+
+  Your account and billing path change only after success. Esc keeps the current method.
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

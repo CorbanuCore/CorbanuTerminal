@@ -100,6 +100,26 @@ impl ProviderAccountAuthHost {
             ProviderAuthAction::ClaudeAccount(ClaudeAccountAction::Retry)
         );
         let transition = self.controller.dispatch(action);
+        // Only the reducer's correlated-success transition invalidates old
+        // credential observations. Cancel/unknown outcomes merely reread metadata.
+        if transition.disposition == codex_provider_auth::ProviderAuthDisposition::Applied {
+            match &transition.snapshot {
+                ProviderAuthFlowSnapshot::OpenAiAccount(
+                    codex_provider_auth::OpenAiAccountSnapshot::Reconciling { flow, .. },
+                ) => {
+                    self.status_host
+                        .credential_changed(flow.target.provider_id.as_str());
+                }
+                ProviderAuthFlowSnapshot::ClaudeAccount(ClaudeAccountSnapshot::Reconciling {
+                    flow,
+                    ..
+                }) => {
+                    self.status_host
+                        .credential_changed(flow.target.provider_id.as_str());
+                }
+                _ => {}
+            }
+        }
         if claude_retry
             && matches!(
                 &transition.snapshot,

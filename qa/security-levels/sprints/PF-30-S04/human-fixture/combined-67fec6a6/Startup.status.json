@@ -1,0 +1,29 @@
+{
+  "case": "Startup",
+  "source": "01a0707a-107b-79f2-9a0a-9a1d950823e3",
+  "canary_requests": 1,
+  "source_outputs": 1,
+  "provider_change_denied": false,
+  "foreground_b": false,
+  "restarted": false,
+  "source_failure_reasons": [],
+  "pending_exit_elapsed_ms": null,
+  "pending_window_remaining_seconds": 29,
+  "routes": [
+    {
+      "endpoint": "A",
+      "model": "memory-fixture-a",
+      "kind": "memory"
+    },
+    {
+      "endpoint": "A",
+      "model": "memory-fixture-a",
+      "kind": "foreground"
+    },
+    {
+      "endpoint": "A",
+      "model": "memory-fixture-a",
+      "kind": "other"
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:     claude-fable-5-1-plan high   /model to change │
+│ directory: /Volumes/CorbanuDrive/Corbanu                 │
+╰──────────────────────────────────────────────────────────╯
+
+
+› Reply only with PF58, NATIVE, LIVE, OK joined by underscores. Do not use tools.
+
+
+• PF58_NATIVE_LIVE_OK
+
+
+› Run /review on my current changes
+
+  Claude Fable 5.1 Plan via claude-plan high · /Volumes/CorbanuDrive/Corbanu · Corbanu Terminal · TPS: 8.4 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

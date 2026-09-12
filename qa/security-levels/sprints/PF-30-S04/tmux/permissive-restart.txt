@@ -1,0 +1,33 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.38)                   │
+│                                                 │
+│ model:     gpt-5.4   /model to change           │
+│ directory: ~/worktrees/security-memory-dispatch │
+╰─────────────────────────────────────────────────╯
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.38)                                                           │
+│                                                                                          │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date                            │
+│ information on rate limits and credits                                                   │
+│                                                                                          │
+│  Model:                gpt-5.4 (reasoning medium, summaries auto)                        │
+│  Model provider:       OpenAI - http://127.0.0.1:41369/v1                                │
+│  Directory:            ~/worktrees/security-memory-dispatch                              │
+│  Permissions:          Workspace (Ask for approval)                                      │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            AGENTS.md                                                         │
+│  Account:              OpenAI API key configured (run corbanu login to use ChatGPT)      │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a06fd1-dcba-7400-980b-cbc1576d73b5                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Run /review on my current changes
+
+  gpt-5.4 default · ~/worktrees/security-memory-dispatch · Corbanu Terminal · TPS: -- tok/s

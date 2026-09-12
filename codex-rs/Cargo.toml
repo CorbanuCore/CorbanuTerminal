@@ -83,6 +83,7 @@ members = [
     "network-proxy",
     "ollama",
     "process-hardening",
+    "protected-state",
     "provider-auth",
     "product-brand",
     "protocol",
@@ -146,7 +147,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.41"
+version = "0.1.42"
 # Track the edition for all workspace crates in one place. Individual
 # crates can still override this value, but keeping it here means new
 # crates created with `cargo new -w ...` automatically inherit the 2024
@@ -188,6 +189,7 @@ codex-home = { path = "codex-home" }
 codex-http-client = { path = "http-client" }
 codex-websocket-client = { path = "websocket-client" }
 codex-config = { path = "config" }
+codex-content-security = { path = "content-security" }
 codex-connectors = { path = "connectors" }
 codex-agent-extension = { path = "ext/agent" }
 codex-connectors-extension = { path = "ext/connectors" }
@@ -240,6 +242,7 @@ codex-otel = { path = "otel" }
 codex-plugin = { path = "plugin" }
 codex-model-provider = { path = "model-provider" }
 codex-process-hardening = { path = "process-hardening" }
+codex-protected-state = { path = "protected-state" }
 codex-protocol = { path = "protocol" }
 codex-product-brand = { path = "product-brand" }
 codex-prompts = { path = "prompts" }

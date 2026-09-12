@@ -1,0 +1,8 @@
+error: docs/sprints/current/p0-security-levels/pf-43-s01-provider-profile-persistence.md: linked plan does not define feature PF-43
+error: docs/sprints/current/p0-security-levels/pf-43-s01-provider-profile-persistence.md: linked plan is missing sprint backlink '../../sprints/current/p0-security-levels/pf-43-s01-provider-profile-persistence.md'
+error: docs/sprints/current/p0-security-levels/pf-44-s01-tasknode-reliability.md: linked plan does not define feature PF-44
+error: docs/sprints/current/p0-security-levels/pf-44-s01-tasknode-reliability.md: linked plan is missing sprint backlink '../../sprints/current/p0-security-levels/pf-44-s01-tasknode-reliability.md'
+error: docs/sprints/archive/claude-subscription-auth/pf-43-s01-managed-token-lifecycle.md: duplicate sprint_id 'PF-43-S01' also used by docs/sprints/current/p0-security-levels/pf-43-s01-provider-profile-persistence.md
+error: docs/sprints/archive/claude-subscription-auth/pf-44-s01-platform-auth-resolution.md: duplicate sprint_id 'PF-44-S01' also used by docs/sprints/current/p0-security-levels/pf-44-s01-tasknode-reliability.md
+error: docs/sprints/archive/p0-security-levels/pf-45-s01-campaign-tracker.md: duplicate sprint_id 'PF-45-S01' also used by docs/sprints/archive/claude-subscription-auth/pf-45-s01-auth-choice-and-recovery.md
+sprints: current 110; archived 121

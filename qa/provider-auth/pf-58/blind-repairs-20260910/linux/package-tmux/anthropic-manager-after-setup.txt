@@ -1,0 +1,50 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       claude-fable-5-1-plan high   /model to cha… │
+│ directory:   /home/travis/…/picker-repair-20260910       │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+
+  Providers
+  Configure providers and control whether they are eligible for use.
+  Configured means credentials are present, not verified by the provider.
+
+  1. OpenAI          Enabled · configured
+  2. Claude Account  Enabled · configured · current
+  3. Corbanu API     Not configured · unavailable
+› 4. Anthropic       Enabled · configured
+  5. Ambient         Not configured · unavailable
+  6. Kimi Code       Not configured · unavailable
+  7. Z.AI            Not configured · unavailable
+  8. DeepSeek        Not configured · unavailable
+
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

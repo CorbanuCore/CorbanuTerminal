@@ -1,0 +1,230 @@
+ Nextest run ID 5ea99720-bbeb-4c96-b34b-11557dafe3e2 with nextest profile: local
+    Starting 226 tests across 2 binaries (3842 tests skipped)
+        PASS [   0.003s] (  1/226) codex-provider-auth credential_health::tests::no_auth_local_provider_is_not_given_a_login_failure
+        PASS [   0.003s] (  2/226) codex-provider-auth credential_health::tests::changed_credential_rejects_stale_failure_and_cancel_does_not_clear_failure
+        PASS [   0.003s] (  3/226) codex-provider-auth credential_health::tests::old_source_failure_does_not_poison_replacement_source
+        PASS [   0.003s] (  4/226) codex-provider-auth credential_health::tests::rejected_credential_preserves_selection_activation_and_unrelated_provider
+        PASS [   0.003s] (  5/226) codex-provider-auth credential_health::tests::rejection_identity_is_captured_and_consumed_once
+        PASS [   0.009s] (  6/226) codex-tui app::tests::active_turn_interrupt_race_extracts_actual_turn_id_from_mismatch
+        PASS [   0.019s] (  7/226) codex-tui app::tests::interrupt_failure_message_is_pane_local
+        PASS [   0.025s] (  8/226) codex-tui app::provider_management_status::tests::manager_open_syncs_configured_runtime_models_before_policy_refresh
+        PASS [   0.018s] (  9/226) codex-tui app::tests::interrupted_turn_never_dispatches_even_with_complete_blocks
+        PASS [   0.010s] ( 10/226) codex-tui app::tests::model_catalog::accepted_model_migration_persists_target_default_reasoning_effort
+        PASS [   0.010s] ( 11/226) codex-tui app::tests::model_catalog::model_migration_prompt_respects_hide_flag_and_self_target
+        PASS [   0.009s] ( 12/226) codex-tui app::tests::model_catalog::model_migration_prompt_skips_hidden_gpt_targets
+        PASS [   0.013s] ( 13/226) codex-tui app::tests::model_catalog::model_migration_prompt_shows_for_hidden_model
+        PASS [   0.009s] ( 14/226) codex-tui app::tests::model_catalog::model_migration_prompt_skips_when_target_missing_or_hidden
+        PASS [   0.009s] ( 15/226) codex-tui app::tests::model_catalog::select_model_availability_nux_does_not_fall_back_to_older_announcement
+        PASS [   0.015s] ( 16/226) codex-tui app::tests::model_catalog::prepare_startup_tooltip_override_suppresses_model_availability_nux
+        PASS [   0.010s] ( 17/226) codex-tui app::tests::model_catalog::select_model_availability_nux_picks_only_eligible_model
+        PASS [   0.009s] ( 18/226) codex-tui app::tests::model_catalog::select_model_availability_nux_returns_none_when_all_models_are_exhausted
+        PASS [   0.011s] ( 19/226) codex-tui app::tests::model_catalog::select_model_availability_nux_uses_existing_model_order_as_priority
+        PASS [   0.007s] ( 20/226) codex-tui app::tests::provider_manager_claude_intent_uses_typed_status_and_recovery_source
+        PASS [   0.019s] ( 21/226) codex-tui app::tests::native_spawn_turn_interrupt_updates_status_without_closing_app
+        PASS [   0.010s] ( 22/226) codex-tui app::tests::provider_manager_open_preserves_lazy_command_authorization_without_shared_state
+        PASS [   0.017s] ( 23/226) codex-tui app::tests::provider_manager_reuses_policy_health_after_setup_handle_is_cleared
+        PASS [   0.026s] ( 24/226) codex-tui app::tests::replayed_interrupted_turn_restores_queued_input_to_composer
+        PASS [   0.169s] ( 25/226) codex-tui app::tests::interrupt_without_active_turn_is_treated_as_handled
+        PASS [   0.123s] ( 26/226) codex-tui app::tests::provider_picker_refresh::provider_manager_late_refresh_updates_picker_without_reopening_dismissed_menu
+        PASS [   0.127s] ( 27/226) codex-tui app::tests::provider_manager_stale_api_key_completion_is_inert_and_current_settles
+        PASS [   0.129s] ( 28/226) codex-tui app::tests::stale_provider_manager_claude_recovery_source_is_inert
+        PASS [   0.019s] ( 29/226) codex-tui app::tests::token_usage_update_refreshes_status_line_with_runtime_context_window
+        PASS [   0.244s] ( 30/226) codex-tui app::tests::safety_buffering::active_turn_interrupt_is_nonblocking_and_coalesces_repeated_requests
+        PASS [   0.008s] ( 31/226) codex-tui bottom_pane::app_link_view::tests::regular_app_link_does_not_require_terminal_title_action
+        PASS [   0.008s] ( 32/226) codex-tui bottom_pane::app_link_view::tests::tool_suggestion_requires_terminal_title_action
+        PASS [   0.009s] ( 33/226) codex-tui bottom_pane::chat_composer::effort_tests::effort_transition_does_not_queue_a_missing_outgoing_status_line
+        PASS [   0.008s] ( 34/226) codex-tui bottom_pane::chat_composer::tests::status_line_hyperlink_marks_pr_number_cells
+        PASS [   0.009s] ( 35/226) codex-tui bottom_pane::effort_status_line::tests::clock_waits_for_the_first_visible_frame
+        PASS [   0.007s] ( 36/226) codex-tui bottom_pane::effort_status_line::tests::label_and_refreshed_line_appear_in_order
+        PASS [   0.007s] ( 37/226) codex-tui bottom_pane::effort_status_line::tests::palette_status_line_colors_survive_the_fade
+        PASS [   0.009s] ( 38/226) codex-tui bottom_pane::effort_status_line::tests::outgoing_status_line_moves_right_and_clips_at_the_edge
+        PASS [   0.007s] ( 39/226) codex-tui bottom_pane::effort_status_line::tests::transition_frames_snapshot
+        PASS [   0.008s] ( 40/226) codex-tui bottom_pane::effort_status_line::tests::ultra_letters_start_wide_at_the_edges_and_converge_to_the_center
+        PASS [   0.007s] ( 41/226) codex-tui bottom_pane::effort_status_line::tests::unicode_and_span_boundaries_are_safe_on_narrow_rows
+        PASS [   0.008s] ( 42/226) codex-tui bottom_pane::footer::tests::footer_status_line_truncates_to_keep_mode_indicator
+        PASS [   0.012s] ( 43/226) codex-tui bottom_pane::list_selection_view::tests::snapshot_model_picker_width_80
+        PASS [   0.009s] ( 44/226) codex-tui bottom_pane::pending_input_preview::tests::render_one_pending_steer_with_remapped_interrupt_binding
+        PASS [   0.007s] ( 45/226) codex-tui bottom_pane::request_user_input::tests::esc_in_notes_mode_without_options_interrupts
+        PASS [   0.008s] ( 46/226) codex-tui bottom_pane::request_user_input::tests::esc_in_options_mode_interrupts
+        PASS [   0.007s] ( 47/226) codex-tui bottom_pane::request_user_input::tests::interrupt_discards_queued_requests_and_emits_interrupt
+        PASS [   0.008s] ( 48/226) codex-tui bottom_pane::request_user_input::tests::request_user_input_freeform_remapped_interrupt_snapshot
+        PASS [   0.008s] ( 49/226) codex-tui bottom_pane::request_user_input::tests::request_user_input_uses_remapped_interrupt_binding_while_notes_are_visible
+        PASS [   0.006s] ( 50/226) codex-tui bottom_pane::status_line_setup::tests::brand_is_selectable_id
+        PASS [   0.008s] ( 51/226) codex-tui bottom_pane::status_line_setup::tests::context_remaining_is_selectable_id
+        PASS [   0.009s] ( 52/226) codex-tui bottom_pane::status_line_setup::tests::context_used_accepts_context_usage_legacy_id
+        PASS [   0.006s] ( 53/226) codex-tui bottom_pane::status_line_setup::tests::git_summary_items_are_selectable_ids
+        PASS [   0.008s] ( 54/226) codex-tui bottom_pane::status_line_setup::tests::model_is_canonical_and_accepts_model_name_legacy_id
+        PASS [   0.008s] ( 55/226) codex-tui bottom_pane::status_line_setup::tests::parse_status_line_items_accepts_title_only_variants
+        PASS [   0.012s] ( 56/226) codex-tui bottom_pane::status_line_setup::tests::preview_includes_thread_title
+        PASS [   0.012s] ( 57/226) codex-tui bottom_pane::status_line_setup::tests::preview_uses_placeholders_when_runtime_values_are_missing
+        PASS [   0.012s] ( 58/226) codex-tui bottom_pane::status_line_setup::tests::preview_uses_runtime_values
+        PASS [   0.009s] ( 59/226) codex-tui bottom_pane::status_line_setup::tests::project_name_is_canonical_and_accepts_legacy_ids
+        PASS [   0.007s] ( 60/226) codex-tui bottom_pane::status_line_setup::tests::reasoning_is_selectable_id
+        PASS [   0.007s] ( 61/226) codex-tui bottom_pane::status_line_setup::tests::run_state_is_canonical_and_accepts_status_legacy_id
+        PASS [   0.007s] ( 62/226) codex-tui bottom_pane::status_line_style::tests::pull_request_number_uses_link_style
+        PASS [   0.007s] ( 63/226) codex-tui bottom_pane::status_line_style::tests::status_line_segments_can_disable_theme_colors
+        PASS [   0.015s] ( 64/226) codex-tui bottom_pane::status_line_setup::tests::setup_view_snapshot_uses_runtime_preview_values
+        PASS [   0.006s] ( 65/226) codex-tui bottom_pane::status_line_style::tests::status_line_segments_dim_separators_and_use_theme_styles_first
+        PASS [   0.006s] ( 66/226) codex-tui bottom_pane::status_line_style::tests::status_line_segments_preserve_order_and_plain_text
+        PASS [   0.007s] ( 67/226) codex-tui bottom_pane::status_line_style::tests::status_line_segments_soften_rgb_theme_styles_without_dimming_text
+        PASS [   0.008s] ( 68/226) codex-tui bottom_pane::status_line_style::tests::status_line_segments_return_none_when_empty
+        PASS [   0.009s] ( 69/226) codex-tui bottom_pane::tests::esc_dismisses_slash_command_popup_without_interrupting_task
+        PASS [   0.008s] ( 70/226) codex-tui bottom_pane::tests::esc_interrupts_running_task_when_no_popup
+        PASS [   0.007s] ( 71/226) codex-tui bottom_pane::tests::esc_release_after_dismissing_agent_picker_does_not_interrupt_task
+        PASS [   0.008s] ( 72/226) codex-tui bottom_pane::tests::esc_with_agent_command_without_popup_does_not_interrupt_task
+        PASS [   0.007s] ( 73/226) codex-tui bottom_pane::tests::esc_with_skill_popup_does_not_interrupt_task
+        PASS [   0.008s] ( 74/226) codex-tui bottom_pane::tests::remapped_interrupt_turn_uses_configured_key_including_agent_drafts
+        PASS [   0.007s] ( 75/226) codex-tui bottom_pane::title_setup::tests::parse_terminal_title_items_accepts_kebab_case_variants
+        PASS [   0.006s] ( 76/226) codex-tui bottom_pane::title_setup::tests::parse_terminal_title_items_preserves_order
+        PASS [   0.006s] ( 77/226) codex-tui bottom_pane::title_setup::tests::parse_terminal_title_items_rejects_invalid_ids
+        PASS [   0.008s] ( 78/226) codex-tui branch_summary::tests::status_line_pr_fallback_searches_parent_repo_first
+        PASS [   0.008s] ( 79/226) codex-tui branch_summary::tests::status_line_pr_view_parser_requires_open_pr
+        PASS [   0.007s] ( 80/226) codex-tui chatwidget::interrupts::tests::remove_resolved_prompt_keeps_lifecycle_events
+        PASS [   0.006s] ( 81/226) codex-tui chatwidget::interrupts::tests::remove_resolved_prompt_matches_exec_approval_id
+        PASS [   0.006s] ( 82/226) codex-tui chatwidget::interrupts::tests::remove_resolved_prompt_removes_matching_user_input_only
+        PASS [   0.008s] ( 83/226) codex-tui chatwidget::model_popups::tests::model_picker_display_label_uses_catalog_name_with_slug_in_description
+        PASS [   0.007s] ( 84/226) codex-tui chatwidget::model_popups::tests::model_picker_groups_models_by_user_facing_provider
+        PASS [   0.018s] ( 85/226) codex-tui chatwidget::provider_health::tests::late_turn_failure_names_original_provider_and_ignores_recovered_attempt
+        PASS [   0.026s] ( 86/226) codex-tui chatwidget::provider_health::tests::apps_rejection_marks_openai_not_current_claude_and_r_opens_recovery
+        PASS [   0.007s] ( 87/226) codex-tui chatwidget::provider_health::tests::only_definite_typed_auth_rejections_require_reauthentication
+        PASS [   0.007s] ( 88/226) codex-tui chatwidget::provider_manager::tests::external_credential_copy_never_claims_deletion
+        PASS [   0.016s] ( 89/226) codex-tui chatwidget::provider_manager::tests::opening_provider_actions_keeps_manager_as_the_parent_view
+        PASS [   0.019s] ( 90/226) codex-tui chatwidget::provider_manager::tests::provider_manager_uses_shared_status_copy_snapshot
+        PASS [   0.018s] ( 91/226) codex-tui chatwidget::provider_manager::tests::refresh_preserves_provider_selection_by_identity_and_falls_back_when_removed
+        PASS [   0.018s] ( 92/226) codex-tui chatwidget::tests::composer_submission::escape_interrupts_stream_when_progress_indicator_is_hidden
+        PASS [   0.018s] ( 93/226) codex-tui chatwidget::tests::composer_submission::interrupt_prepends_queued_messages_before_existing_composer_text
+        PASS [   0.017s] ( 94/226) codex-tui chatwidget::tests::composer_submission::interrupt_restores_queued_messages_into_composer
+        PASS [   0.018s] ( 95/226) codex-tui chatwidget::tests::composer_submission::interrupted_turn_restore_keeps_active_mode_for_resubmission
+        PASS [   0.018s] ( 96/226) codex-tui chatwidget::tests::composer_submission::output_free_ctrl_c_interrupt_keeps_prompt_and_opens_blank_composer
+        PASS [   0.019s] ( 97/226) codex-tui chatwidget::tests::composer_submission::output_free_esc_interrupt_keeps_prompt_and_opens_blank_composer
+        PASS [   0.016s] ( 98/226) codex-tui chatwidget::tests::composer_submission::pending_steer_interrupt_uses_remapped_binding
+        PASS [   0.569s] ( 99/226) codex-tui app::tests::safety_buffering::safety_retry_replays_older_interruption_notices
+        PASS [   0.018s] (100/226) codex-tui chatwidget::tests::exec_flow::interrupt_preserves_unified_exec_processes
+        PASS [   0.602s] (101/226) codex-tui app::tests::safety_buffering::safety_retry_preserves_a_committed_steer_from_the_interrupted_turn
+        PASS [   0.019s] (102/226) codex-tui chatwidget::tests::exec_flow::interrupt_preserves_unified_exec_wait_streak_snapshot
+        PASS [   0.022s] (103/226) codex-tui chatwidget::tests::popups_and_settings::codex_pane_model_picker_uses_provider_tabs_and_opens_name_prompt
+        PASS [   0.022s] (104/226) codex-tui chatwidget::tests::popups_and_settings::corbanu_api_model_picker_preserves_ambient_and_shows_the_six_public_routes
+        PASS [   0.085s] (105/226) codex-tui chatwidget::tests::popups_and_settings::model_picker_hides_fake_openai_models_and_shows_curated_provider_models
+        PASS [   0.018s] (106/226) codex-tui chatwidget::tests::popups_and_settings::model_picker_hides_show_in_picker_false_models_from_cache
+        PASS [   0.160s] (107/226) codex-tui chatwidget::tests::popups_and_settings::model_picker_dismisses_after_selecting_openrouter_model_without_effort_choices
+        PASS [   0.019s] (108/226) codex-tui chatwidget::tests::popups_and_settings::model_picker_opens_vercel_glm_reasoning_modes
+        PASS [   0.019s] (109/226) codex-tui chatwidget::tests::popups_and_settings::model_picker_same_slug_marks_only_exact_provider_current
+        PASS [   0.162s] (110/226) codex-tui chatwidget::tests::popups_and_settings::model_picker_opens_openrouter_reasoning_options_for_gemini
+        PASS [   0.015s] (111/226) codex-tui chatwidget::tests::review_mode::ctrl_c_interrupts_without_arming_quit_when_double_press_disabled
+        PASS [   0.297s] (112/226) codex-tui chatwidget::tests::popups_and_settings::model_picker_claude_recovery_refresh_restores_full_subscription_catalog
+        PASS [   0.465s] (113/226) codex-tui chatwidget::provider_model_policy::tests::custom_provider_selection_tracks_shared_active_policy
+        PASS [   0.018s] (114/226) codex-tui chatwidget::tests::review_mode::esc_interrupt_sends_all_pending_steers_immediately_and_keeps_existing_draft
+        PASS [   0.016s] (115/226) codex-tui chatwidget::tests::review_mode::esc_with_pending_steers_overrides_agent_command_interrupt_behavior
+        PASS [   0.019s] (116/226) codex-tui chatwidget::tests::review_mode::esc_with_review_queued_steers_shows_warning_and_does_not_interrupt
+        PASS [   0.018s] (117/226) codex-tui chatwidget::tests::review_mode::interrupted_turn_after_goal_budget_limited_uses_budget_message_snapshot
+        PASS [   0.019s] (118/226) codex-tui chatwidget::tests::review_mode::interrupted_turn_error_message_snapshot
+        PASS [   0.018s] (119/226) codex-tui chatwidget::tests::review_mode::interrupted_turn_pending_steers_message_snapshot
+        PASS [   0.017s] (120/226) codex-tui chatwidget::tests::review_mode::interrupted_turn_restores_queued_messages_with_images_and_elements
+        PASS [   0.050s] (121/226) codex-tui chatwidget::tests::review_mode::interrupt_exec_marks_failed_snapshot
+        PASS [   0.018s] (122/226) codex-tui chatwidget::tests::review_mode::manual_interrupt_restores_pending_steer_mention_bindings_to_composer
+        PASS [   0.018s] (123/226) codex-tui chatwidget::tests::review_mode::manual_interrupt_restores_pending_steers_before_queued_messages
+        PASS [   0.018s] (124/226) codex-tui chatwidget::tests::review_mode::manual_interrupt_restores_pending_steers_to_composer
+        PASS [   0.018s] (125/226) codex-tui chatwidget::tests::side::side_context_label_preserves_status_line_snapshot
+        PASS [   0.181s] (126/226) codex-tui chatwidget::tests::popups_and_settings::model_picker_selects_kimi_k3_with_required_max_reasoning
+        PASS [   0.017s] (127/226) codex-tui chatwidget::tests::side::suppressed_interrupted_turn_notice_skips_history_warning
+        PASS [   0.016s] (128/226) codex-tui chatwidget::tests::status_and_layout::ctrl_c_interrupts_agent_turn_even_if_bottom_pane_running_state_is_stale
+        PASS [   0.017s] (129/226) codex-tui chatwidget::tests::status_and_layout::ctrl_c_interrupt_pauses_active_goal_turn
+        PASS [   0.020s] (130/226) codex-tui chatwidget::tests::slash_commands::interrupted_merged_message_history_encodes_mentions_once
+        PASS [   0.016s] (131/226) codex-tui chatwidget::tests::status_and_layout::default_status_line_includes_product_brand
+        PASS [   0.017s] (132/226) codex-tui chatwidget::tests::status_and_layout::gpu_spend_indicator_is_visible_when_status_line_has_no_configured_items
+        PASS [   0.020s] (133/226) codex-tui chatwidget::tests::status_and_layout::esc_interrupt_pauses_active_goal_turn
+        PASS [   0.055s] (134/226) codex-tui chatwidget::tests::slash_commands::interrupt_disambiguates_same_sized_goal_pastes
+        PASS [   0.017s] (135/226) codex-tui chatwidget::tests::status_and_layout::interrupted_turn_clears_visible_running_hook
+        PASS [   0.018s] (136/226) codex-tui chatwidget::tests::status_and_layout::raw_output_status_line_value_only_shows_when_enabled
+        PASS [   0.020s] (137/226) codex-tui chatwidget::tests::status_and_layout::request_user_input_interrupt_pauses_active_goal_turn
+        PASS [   0.017s] (138/226) codex-tui chatwidget::tests::status_and_layout::stale_status_line_git_summary_update_is_ignored
+        PASS [   0.016s] (139/226) codex-tui chatwidget::tests::status_and_layout::status_line_and_terminal_title_reasoning_render_only_effort
+        PASS [   0.015s] (140/226) codex-tui chatwidget::tests::status_and_layout::status_line_branch_changes_render_no_changes
+        PASS [   0.018s] (141/226) codex-tui chatwidget::tests::status_and_layout::status_line_branch_refreshes_after_interrupt
+        PASS [   0.016s] (142/226) codex-tui chatwidget::tests::status_and_layout::status_line_branch_refreshes_after_turn_complete
+        PASS [   0.018s] (143/226) codex-tui chatwidget::tests::status_and_layout::status_line_branch_state_resets_when_git_branch_disabled
+        PASS [   0.016s] (144/226) codex-tui chatwidget::tests::status_and_layout::status_line_context_remaining_renders_labeled_percent
+        PASS [   0.017s] (145/226) codex-tui chatwidget::tests::status_and_layout::status_line_context_used_renders_labeled_percent
+        PASS [   0.019s] (146/226) codex-tui chatwidget::tests::status_and_layout::status_line_fast_mode_footer_snapshot
+        PASS [   0.015s] (147/226) codex-tui chatwidget::tests::status_and_layout::status_line_five_hour_item_omits_weekly_only_limit
+        PASS [   0.018s] (148/226) codex-tui chatwidget::tests::status_and_layout::status_line_fast_mode_renders_on_and_off
+        PASS [   0.015s] (149/226) codex-tui chatwidget::tests::status_and_layout::status_line_git_summary_items_render_values
+        PASS [   0.019s] (150/226) codex-tui chatwidget::tests::status_and_layout::status_line_goal_active_token_budget_footer_snapshot
+        PASS [   0.017s] (151/226) codex-tui chatwidget::tests::status_and_layout::status_line_goal_complete_elapsed_footer_snapshot
+        PASS [   0.017s] (152/226) codex-tui chatwidget::tests::status_and_layout::status_line_identifies_custom_provider_with_shared_model_slug
+        PASS [   0.018s] (153/226) codex-tui chatwidget::tests::status_and_layout::status_line_invalid_items_warn_once
+        PASS [   0.016s] (154/226) codex-tui chatwidget::tests::status_and_layout::status_line_legacy_context_usage_renders_context_used_percent
+        PASS [   0.016s] (155/226) codex-tui chatwidget::tests::status_and_layout::status_line_legacy_limit_items_prefer_matching_windows
+        PASS [   0.020s] (156/226) codex-tui chatwidget::tests::status_and_layout::status_line_model_uses_active_external_pane_model
+        PASS [   0.019s] (157/226) codex-tui chatwidget::tests::status_and_layout::status_line_model_with_reasoning_context_remaining_footer_snapshot
+        PASS [   0.019s] (158/226) codex-tui chatwidget::tests::status_and_layout::status_line_model_with_reasoning_fast_footer_snapshot
+        PASS [   0.019s] (159/226) codex-tui chatwidget::tests::status_and_layout::status_line_model_with_reasoning_includes_fast_for_fast_capable_models
+        PASS [   0.018s] (160/226) codex-tui chatwidget::tests::status_and_layout::status_line_model_with_reasoning_plan_mode_footer_snapshot
+        PASS [   0.017s] (161/226) codex-tui chatwidget::tests::status_and_layout::status_line_model_with_reasoning_updates_on_mode_switch_without_manual_refresh
+        PASS [   0.016s] (162/226) codex-tui chatwidget::tests::status_and_layout::status_line_reasoning_updates_on_mode_switch_without_manual_refresh
+        PASS [   0.015s] (163/226) codex-tui chatwidget::tests::status_and_layout::status_line_secondary_only_non_weekly_limit_omits_primary_limit_item
+        PASS [   0.018s] (164/226) codex-tui chatwidget::tests::status_and_layout::status_line_shows_secondary_non_weekly_when_primary_is_weekly
+        PASS [   0.018s] (165/226) codex-tui chatwidget::tests::status_and_layout::status_line_single_monthly_primary_omits_weekly_limit_item
+        PASS [   0.018s] (166/226) codex-tui chatwidget::tests::status_and_layout::status_line_tps_updates_during_active_streaming
+        PASS [   0.018s] (167/226) codex-tui chatwidget::tests::status_and_layout::status_line_tps_updates_from_completed_turn_average
+        PASS [   0.018s] (168/226) codex-tui chatwidget::tests::status_and_layout::status_line_tps_updates_when_usage_arrives_after_completion
+        PASS [   0.018s] (169/226) codex-tui chatwidget::tests::status_and_layout::status_line_tps_uses_streamed_text_when_usage_is_missing
+        PASS [   0.018s] (170/226) codex-tui chatwidget::tests::status_and_layout::status_line_uses_secondary_fallback_for_unsupported_window
+        PASS [   0.016s] (171/226) codex-tui chatwidget::tests::status_and_layout::status_line_workspace_headline_omits_when_unavailable
+        PASS [   0.016s] (172/226) codex-tui chatwidget::tests::status_and_layout::status_line_workspace_headline_renders_cached_value
+        PASS [   0.016s] (173/226) codex-tui chatwidget::tests::status_and_layout::terminal_title_model_updates_on_model_change_without_manual_refresh
+        PASS [   0.019s] (174/226) codex-tui chatwidget::tests::status_surface_previews::status_line_setup_popup_hardcoded_only_snapshot
+        PASS [   0.021s] (175/226) codex-tui chatwidget::tests::status_surface_previews::status_line_setup_popup_live_only_snapshot
+        PASS [   0.020s] (176/226) codex-tui chatwidget::tests::status_surface_previews::status_line_setup_popup_mixed_snapshot
+        PASS [   0.019s] (177/226) codex-tui chatwidget::tests::status_surface_previews::status_line_setup_popup_rate_limits_snapshot
+        PASS [   0.017s] (178/226) codex-tui chatwidget::tests::status_surface_previews::terminal_title_app_name_uses_corbanu_identity
+        PASS [   0.021s] (179/226) codex-tui chatwidget::tests::status_surface_previews::status_line_setup_popup_workspace_headline_snapshot
+        PASS [   0.017s] (180/226) codex-tui chatwidget::tests::status_surface_previews::terminal_title_preview_uses_title_truncation_for_live_values
+        PASS [   0.020s] (181/226) codex-tui chatwidget::tests::status_surface_previews::terminal_title_setup_popup_hardcoded_only_snapshot
+        PASS [   0.019s] (182/226) codex-tui chatwidget::tests::status_surface_previews::terminal_title_setup_popup_live_only_snapshot
+        PASS [   0.019s] (183/226) codex-tui chatwidget::tests::status_surface_previews::terminal_title_setup_popup_mixed_snapshot
+        PASS [   0.018s] (184/226) codex-tui chatwidget::tests::status_surface_previews::terminal_title_setup_popup_rate_limits_snapshot
+        PASS [   0.048s] (185/226) codex-tui chatwidget::tests::terminal_title::terminal_title_action_required_blinks_when_animations_are_enabled
+        PASS [   0.049s] (186/226) codex-tui chatwidget::tests::terminal_title::terminal_title_action_required_respects_spinner_setting
+        PASS [   0.048s] (187/226) codex-tui chatwidget::tests::terminal_title::terminal_title_shows_action_required_while_exec_approval_is_pending
+        PASS [   0.053s] (188/226) codex-tui chatwidget::tests::terminal_title::terminal_title_activity_indicators_do_not_animate_when_animations_are_disabled
+        PASS [   0.008s] (189/226) codex-tui claude_panes::tests::interrupt_turn_cancels_prepared_claude_token_and_finishes_cleanly
+        PASS [   0.009s] (190/226) codex-tui claude_panes::tests::interrupted_partial_output_keeps_planned_session_id_without_stdout_session
+        PASS [   0.009s] (191/226) codex-tui claude_panes::tests::interrupted_partial_output_prefers_stdout_session_id
+        PASS [   0.008s] (192/226) codex-tui claude_panes::tests::interrupted_turn_with_planned_session_resumes_next_turn
+        PASS [   0.008s] (193/226) codex-tui external_agent_config_migration::flow::tests::external_agent_config_migration_status_lines_use_semantic_colors
+        PASS [   0.008s] (194/226) codex-tui keymap::tests::interrupt_turn_allows_backtrack_escape_and_can_be_remapped_or_unbound
+        PASS [   0.006s] (195/226) codex-tui keymap::tests::interrupt_turn_rejects_other_fixed_shortcuts
+        PASS [   0.006s] (196/226) codex-tui keymap::tests::interrupt_turn_rejects_request_user_input_question_navigation_bindings
+        PASS [   0.005s] (197/226) codex-tui model_catalog::tests::configured_runtime_model_does_not_duplicate_existing_exact_or_inferred_provider
+        PASS [   0.007s] (198/226) codex-tui model_catalog::tests::claude_current_does_not_seed_local_or_custom_providers_on_manager_refresh
+        PASS [   0.006s] (199/226) codex-tui model_catalog::tests::duplicate_model_slugs_retain_exact_catalog_provider_identity
+        PASS [   0.006s] (200/226) codex-tui model_catalog::tests::configured_runtime_model_is_added_with_exact_provider_identity
+        PASS [   0.006s] (201/226) codex-tui model_catalog::tests::resumed_session_recovery_is_consumed_once
+        PASS [   0.006s] (202/226) codex-tui model_catalog::tests::runtime_refresh_replaces_only_gpu_models
+        PASS [   0.006s] (203/226) codex-tui multi_agents::tests::collab_resume_interrupted_snapshot
+        PASS [   0.007s] (204/226) codex-tui model_catalog::tests::runtime_sync_preserves_shared_opaque_custom_routes_but_not_idle_local_runtimes
+        PASS [   0.009s] (205/226) codex-tui provider_management_host::tests::replacement_candidates_are_exact_ready_active_non_current_rows
+        PASS [   0.009s] (206/226) codex-tui provider_management_host::tests::current_and_unready_providers_are_never_replacement_candidates
+        PASS [   0.008s] (207/226) codex-tui provider_status_host::tests::authorized_command_runtime_converges_to_configured_ready
+        PASS [   0.008s] (208/226) codex-tui provider_status_host::tests::blank_or_missing_corbanu_aliases_allow_the_managed_credential_fallback
+        PASS [   0.008s] (209/226) codex-tui provider_status_host::tests::command_authorization_rejection_is_exact_and_debug_output_is_secret_free
+        PASS [   0.009s] (210/226) codex-tui provider_status_host::tests::correlated_corbanu_metadata_resolves_without_credential_reread
+        PASS [   0.008s] (211/226) codex-tui provider_status_host::tests::current_selection_changes_status_without_persisting_policy
+        PASS [   0.007s] (212/226) codex-tui provider_status_host::tests::custom_storage_metadata_is_secret_free_and_missing_file_is_active
+        PASS [   0.006s] (213/226) codex-tui provider_status_host::tests::environment_precedence_skips_managed_reads_until_environment_is_missing
+        PASS [   0.010s] (214/226) codex-tui provider_status_host::tests::eligibility_survives_restart_without_touching_credentials
+        PASS [   0.006s] (215/226) codex-tui provider_status_host::tests::every_corbanu_environment_alias_is_ready_and_precedes_stored_account_status
+        PASS [   0.109s] (216/226) codex-tui claude_panes::tests::cancelling_running_command_returns_interrupted_output
+        PASS [   0.010s] (217/226) codex-tui provider_status_host::tests::local_and_no_auth_custom_providers_are_ready_without_enrollment
+        PASS [   0.009s] (218/226) codex-tui provider_status_host::tests::unchecked_command_is_configured_but_a_rejected_authorization_is_status_only
+        PASS [   0.101s] (219/226) codex-tui claude_panes::tests::registry_restores_session_id_from_artifact_when_interrupted_audit_lost_it
+        PASS [   0.006s] (220/226) codex-tui terminal_title::tests::sanitizes_terminal_title
+        PASS [   0.009s] (221/226) codex-tui status_indicator_widget::tests::renders_remapped_interrupt_hint
+        PASS [   0.006s] (222/226) codex-tui terminal_title::tests::strips_invisible_format_chars_from_terminal_title
+        PASS [   0.006s] (223/226) codex-tui terminal_title::tests::truncates_terminal_title
+        PASS [   0.008s] (224/226) codex-tui terminal_title::tests::truncation_prefers_visible_char_over_pending_space
+        PASS [   0.006s] (225/226) codex-tui terminal_title::tests::writes_osc_title_with_bel_terminator
+        PASS [   0.187s] (226/226) codex-tui provider_status_host::tests::saved_managed_custom_key_resolves_configured_ready_without_secret_leakage
+────────────
+     Summary [   1.781s] 226 tests run: 226 passed, 3842 skipped

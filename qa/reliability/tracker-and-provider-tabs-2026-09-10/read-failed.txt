@@ -1,0 +1,21 @@
+│ permissions: YOLO mode                                │
+╰───────────────────────────────────────────────────────╯
+
+• Campaign Tracker recording enabled for this workspace.
+Prompts are preserved; sharing needs an explicit history
+grant.
+
+• Campaign Tracker recording paused for this workspace.
+
+• Campaign Tracker change saved.
+
+
+  Campaign Tracker
+  Load activity failed. Tracker service unavailable
+
+› 1. Retry        Reload the failed view
+  2. Edit search  Correct the query while retaining its
+                  scope
+  3. Overview     Open Campaign Tracker status
+
+  Press enter to confirm or esc to go back

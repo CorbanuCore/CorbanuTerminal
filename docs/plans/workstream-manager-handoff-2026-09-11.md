@@ -8,6 +8,29 @@ the mandate. Product citation: **Internal delivery control — TO BUILD**,
 
 ## Receiving checkpoint
 
+September 12 source-maintenance update supersedes the historical remote/source
+statements below. Dashboard repair540db21ac was published from this receiving
+checkout by Luna Extra High (collection04:35:41UTC, verified exact manifest and
+service success). Travis explicitly authorized keeping this checkout current.
+PF13 owner then landed verified main d870c92dab2bf3fbb602dc3b8447fe9f3534aecb;
+manager reconciled it locally without resetting accounting/TaskNode work. The
+sole merge conflict was this portfolio's sprint-index rows: accepted security
+and provider records retained alongside newer accounting/TaskNode progress.
+No manager main push, release, installed-app update or native acceptance claim.
+Rerun combined native affected tests before the next native acceptance/dispatch;
+dashboard publication validates only its own combined Python/governance surface.
+
+The private wrapper now exports current receiving HEAD/content, rejects branch,
+revision/content/config drift, preflights render and verifies exact publication.
+ACTIVE ten-minute heartbeat maintains source semantics before Luna sync, not
+merely old-source republishing. Failures preserve last good pages and collection
+age; server render timer cannot clear a failed source sync. Private handoff
+manager-continuation.9Id1V1 and dashboard-status.71t9SZ hold current receipts.
+Native latest-quote and validity workers returned uncommitted; both closed and
+awaiting parent review/integration, not human approvals. PF13 owner exclusively
+prepares PF27S04 in security-broker-resume-20260911 at accepted main; no overlapping
+security allocation. Posting OFF; full decision panel/Slack sender still pending.
+
 - Owner/worktree: Codex management,
   `/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911`.
 - Branch: `integrate/management-workstreams-20260911`.

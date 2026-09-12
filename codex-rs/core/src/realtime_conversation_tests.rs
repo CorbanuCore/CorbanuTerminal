@@ -20,6 +20,171 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
 
+fn pf_30_realtime_start(
+    model_client: crate::client::ModelClient,
+    base_url: String,
+    sdp: Option<String>,
+) -> super::RealtimeStart {
+    let mut api_provider = model_client.provider_info().to_api_provider(None).unwrap();
+    api_provider.base_url = base_url;
+    super::RealtimeStart {
+        api_provider,
+        realtime_sideband_base_url: None,
+        extra_headers: None,
+        client_managed_handoffs: false,
+        flush_transcript_tail_on_session_end: true,
+        codex_responses_as_items: false,
+        codex_response_item_prefix: None,
+        codex_response_handoff_mode: CodexResponseHandoffMode::default(),
+        codex_response_handoff_channel_prefixes: None,
+        realtime_call_api_provider: None,
+        session_config: codex_api::RealtimeSessionConfig {
+            instructions: "unadmitted-initial-instructions".into(),
+            initial_items: Vec::new(),
+            model: None,
+            session_id: None,
+            event_parser: RealtimeEventParser::V1,
+            session_mode: codex_api::RealtimeSessionMode::Conversational,
+            output_modality: codex_protocol::protocol::RealtimeOutputModality::Audio,
+            voice: codex_protocol::protocol::RealtimeVoice::Alloy,
+        },
+        model_client,
+        sdp,
+    }
+}
+
+#[tokio::test]
+async fn pf_30_s01_realtime_transports_deny_protected_start_before_network() {
+    use codex_security_policy::SecurityLevel;
+    let (session, _) = crate::session::tests::make_session_and_context().await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    for level in [SecurityLevel::Moderate, SecurityLevel::Aggressive] {
+        for sdp in [None, Some("unadmitted-sdp".into())] {
+            let model_client = session
+                .services
+                .model_client()
+                .as_ref()
+                .clone()
+                .with_ingress_level(level);
+            let manager = super::RealtimeConversationManager::new();
+            let result = manager
+                .start(pf_30_realtime_start(model_client, base_url.clone(), sdp))
+                .await;
+            let error = result.err().expect("protected realtime must fail closed");
+            assert!(error.to_string().contains("source admission"), "{error}");
+            assert!(manager.running_state().await.is_none());
+        }
+    }
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(100), listener.accept())
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn pf_30_s01_realtime_live_strengthening_stops_next_frame() {
+    use crate::security::EffectivePolicyInitialization;
+    use crate::security::EffectivePolicyView;
+    use crate::security::PersistedHumanSecurityState;
+    use crate::security::TrustedSecurityController;
+    use codex_protocol::protocol::ConversationTextParams;
+    use codex_protocol::protocol::ConversationTextRole;
+    use codex_security_policy::PolicyPrincipal;
+    use codex_security_policy::PrincipalKind;
+    use codex_security_policy::RevocationState;
+    use codex_security_policy::SecurityLevel;
+    use codex_security_policy::SecuritySettings;
+    use futures::StreamExt;
+    use std::time::Duration;
+
+    let (session, _) = crate::session::tests::make_session_and_context().await;
+    let view = EffectivePolicyView::default();
+    let controller = TrustedSecurityController::initialize(
+        &view,
+        PersistedHumanSecurityState::new(
+            SecuritySettings::new(SecurityLevel::Permissive),
+            PolicyPrincipal::new(PrincipalKind::Human, "fixture-human").unwrap(),
+            RevocationState::new(),
+        )
+        .unwrap(),
+        session.thread_id,
+        codex_protocol::SessionId::from(session.thread_id),
+        EffectivePolicyInitialization::Root,
+    )
+    .unwrap();
+    let model_client = session
+        .services
+        .model_client()
+        .as_ref()
+        .clone()
+        .with_ingress_policy(SecurityLevel::Permissive, view);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    let (frames_tx, frames_rx) = async_channel::unbounded();
+    let server = tokio::spawn(async move {
+        let (socket, _) = listener.accept().await.unwrap();
+        let mut websocket = tokio_tungstenite::accept_async(socket).await.unwrap();
+        while let Some(Ok(message)) = websocket.next().await {
+            if let tokio_tungstenite::tungstenite::Message::Text(text) = message {
+                frames_tx.send(text.to_string()).await.unwrap();
+            }
+        }
+    });
+    let manager = super::RealtimeConversationManager::new();
+    let output = manager
+        .start(pf_30_realtime_start(model_client, base_url, None))
+        .await
+        .unwrap();
+    let initial = tokio::time::timeout(Duration::from_secs(5), frames_rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(initial.contains("unadmitted-initial-instructions"));
+    manager
+        .text_in(ConversationTextParams {
+            text: "permissive-text".into(),
+            role: ConversationTextRole::User,
+        })
+        .await
+        .unwrap();
+    let text = tokio::time::timeout(Duration::from_secs(5), frames_rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(text.contains("permissive-text"));
+    controller
+        .apply_confirmed_change(
+            controller
+                .confirm_level_change(SecurityLevel::Moderate, RevocationState::new())
+                .unwrap(),
+        )
+        .unwrap();
+    manager
+        .text_in(ConversationTextParams {
+            text: "protected-canary".into(),
+            role: ConversationTextRole::User,
+        })
+        .await
+        .unwrap();
+    let event = tokio::time::timeout(Duration::from_secs(5), output.events_rx.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        matches!(event, codex_api::RealtimeEvent::Error(error) if error.contains("source admission"))
+    );
+    // Await task completion before checking the recording, so absence is not a
+    // race with the sender. No transcript tail may re-enter Core after denial.
+    manager.shutdown().await.unwrap();
+    while let Ok(frame) = frames_rx.try_recv() {
+        assert!(!frame.contains("protected-canary"));
+    }
+    assert!(output.transcript_tail_rx.try_recv().is_err());
+    server.abort();
+}
+
 #[test]
 fn prefers_handoff_input_transcript_over_active_transcript() {
     let handoff = RealtimeHandoffRequested {

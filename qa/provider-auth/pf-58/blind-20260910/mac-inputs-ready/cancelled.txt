@@ -1,0 +1,43 @@
+WARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporar
+y dir "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/tmp" (codex_home: AbsolutePathBuf("/Volumes/
+CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/tmp/bi-9xen362x/profile"))
+╭───────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)             │
+│                                           │
+│ model:     gpt-6-astra   /model to change │
+│ directory: ~                              │
+╰───────────────────────────────────────────╯
+
+
+  Providers
+  Configure providers and control whether they are eligible for use.
+
+  1. OpenAI          Enabled · configured · current
+  2. Claude Account  Not configured · unavailable
+  3. Corbanu API     Not configured · unavailable
+› 4. Anthropic       Not configured · unavailable
+  5. Ambient         Not configured · unavailable
+  6. Kimi Code       Not configured · unavailable
+  7. Z.AI            Not configured · unavailable
+  8. DeepSeek        Not configured · unavailable
+
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

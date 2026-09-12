@@ -1,0 +1,44 @@
+╭────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                      │
+│                                                    │
+│ model:       gpt-6-astra   /model to change        │
+│ directory:   /mnt/…/compatibility-repair/workspace │
+│ permissions: YOLO mode                             │
+╰────────────────────────────────────────────────────╯
+
+
+  Wallet
+  Unavailable: wallet daemon is unavailable: required
+  wallet daemon executable is missing from this Corbanu
+  Terminal installation:
+  /mnt/HC_Volume_101713660/pfrpc/scratch/corbanu-wallet-p
+  ackage-qa/released/bin/pfterminal-walletd
+
+› 1. Retry
+
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

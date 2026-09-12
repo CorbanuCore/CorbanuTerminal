@@ -1,0 +1,45 @@
+
+╭─────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                       │
+│                                                     │
+│ model:     gpt-6-astra high   /model to change      │
+│ directory: ~/worktrees/provider-reauth-health-final │
+╰─────────────────────────────────────────────────────╯
+
+• Model changed to GPT-6 Astra via OpenAI high
+
+
+› Check the selected model.
+
+
+• astra selector request succeeded
+
+
+› Use /skills to list available skills
+
+  GPT-6 Astra high · ~/worktrees/provider-reauth-health-final · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -2,8 +2,8 @@
 
 | Field             | Value                                                                                                                    |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Policy version    | 1.5                                                                                                                      |
-| Updated           | 2026-08-30                                                                                                               |
+| Policy version    | 1.6                                                                                                                      |
+| Updated           | 2026-09-10                                                                                                               |
 | Policy owner      | Lead developer, as assigned in the [product roles table](docs/corbanu-product-spec.md#ownership-and-decision-rights)     |
 | Product authority | The decision roles in the product specification                                                                          |
 | Amendment rule    | Changes to product scope or hard release gates require the product decision process defined in the product specification |
@@ -108,6 +108,43 @@ candidate passes a true TUI workflow in a PTY with actual keys sent.
   from a human with release authority.
 
 Use the repository's [$test-tui skill](.codex/skills/test-tui/SKILL.md).
+
+### Code-blind functional test design
+
+User-authorized process amendment, September 10, 2026. For new or changed
+user-facing features, including bounded UX fixes, obtain an independent test
+design before declaring a candidate ready for human testing. Apply this to the
+next handoff of in-progress work; do not relabel historical runs as compliant.
+For non-user-facing work, record a reasoned not-applicable decision.
+
+- Use a fresh-context agent given only user intent, essential product constraints
+  and screenshots of the feature/important transitions. Do not give it code,
+  implementation rationale, existing tests, results or prior review conclusions.
+  The agent proposes tests; it does not implement or approve its own expectations.
+- Freeze its original, prioritized starting-state/action/observable-result cases
+  before comparing them with implementation tests. Preserve ambiguities and
+  subsequent amendments; do not coach it toward a preferred answer.
+- Map every proposed case to execution evidence or an explicit disposition.
+  Exercise the exact packaged candidate through real keys and representative
+  fresh/existing profiles on applicable platforms. Screenshots alone cannot
+  prove routing, persistence, native prompts or successful tool execution.
+- A missing case, basic functional failure or unresolved prerequisite blocks
+  an unqualified human-test handoff. Out-of-scope dispositions require a reason
+  and recorded acceptance by product authority, not unilateral deletion by the
+  implementing agent. A human may explicitly agree to limited testing around
+  a named prerequisite; preserve that limitation rather than calling it passed.
+- Normally use one independent design pass and one brief evidence check, both
+  charged to the existing per-track review budget (default maximum five total,
+  including code/external reviews). Do not reset the budget for this step.
+  Further reviews require the existing critical-finding exception or an explicit
+  human budget amendment; a spent budget is not permission to skip the gate.
+
+Use [the workflow and artifact templates](qa/code-blind-functional/README.md)
+and its handoff checker. The checker validates traceability, not the truth of
+screenshots, independent context or declared results; the evidence-check agent
+must verify those. This gate does not replace code/security reviews, native
+verification or named-human acceptance, and does not override the explicit
+human release-authority rule below.
 
 ## Live-codebase qualification
 

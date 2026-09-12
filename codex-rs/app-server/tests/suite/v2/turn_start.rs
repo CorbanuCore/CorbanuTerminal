@@ -1185,6 +1185,75 @@ async fn turn_start_rejects_combined_oversized_text_input() -> Result<()> {
 }
 
 #[tokio::test]
+async fn permission_reload_preserves_active_runtime_despite_incompatible_saved_default()
+-> Result<()> {
+    let server = responses::start_mock_server().await;
+    let response_mock = responses::mount_sse_once(
+        &server,
+        responses::sse(vec![
+            responses::ev_response_created("runtime-permissions"),
+            responses::ev_assistant_message("runtime-message", "active runtime preserved"),
+            responses::ev_completed("runtime-permissions"),
+        ]),
+    )
+    .await;
+    let home = TempDir::new()?;
+    MockResponsesConfig::new(&server.uri()).write(home.path())?;
+    let mut app = TestAppServer::builder()
+        .with_codex_home(home.path())
+        .build_initialized()
+        .await?;
+    let ThreadStartResponse { thread, .. } = app.start_thread(ThreadStartParams::default()).await?;
+
+    // Reproduce the pair seen when a CLI model override differs from the saved
+    // default. The active thread has a valid, distinct loopback runtime.
+    let path = home.path().join("config.toml");
+    let mut saved: toml::Value = toml::from_str(&std::fs::read_to_string(&path)?)?;
+    saved["model"] = toml::Value::String("gpt-6-astra".into());
+    saved["model_provider"] = toml::Value::String("claude-plan".into());
+    std::fs::write(path, toml::to_string(&saved)?)?;
+    let _: TurnStartResponse = app
+        .request(|request_id| ClientRequest::TurnStart {
+            request_id,
+            params: TurnStartParams {
+                thread_id: thread.id.clone(),
+                input: vec![V2UserInput::Text {
+                    text: "check active runtime".into(),
+                    text_elements: Vec::new(),
+                }],
+                permissions: Some(
+                    codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY.to_string(),
+                ),
+                ..Default::default()
+            },
+        })
+        .await?;
+    let completed: TurnCompletedNotification = timeout(
+        DEFAULT_READ_TIMEOUT,
+        app.read_notification("turn/completed"),
+    )
+    .await??;
+    assert_eq!(completed.turn.status, TurnStatus::Completed);
+    assert_eq!(
+        response_mock.single_request().body_json()["model"],
+        "mock-model"
+    );
+    let inventory: codex_app_server_protocol::ListMcpServerStatusResponse = app
+        .request(|request_id| ClientRequest::McpServerStatusList {
+            request_id,
+            params: codex_app_server_protocol::ListMcpServerStatusParams {
+                cursor: None,
+                limit: None,
+                detail: None,
+                thread_id: Some(thread.id.clone()),
+            },
+        })
+        .await?;
+    assert!(inventory.data.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
 async fn turn_start_rejects_invalid_permission_selection_before_starting_turn() -> Result<()> {
     let codex_home = TempDir::new()?;
     MockResponsesConfig::new("http://localhost/unused")

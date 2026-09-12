@@ -181,6 +181,16 @@ pub struct ProviderStatusCatalog {
 }
 
 impl ProviderStatusCatalog {
+    /// Refresh already-known providers from a settled discovery result without
+    /// introducing providers or performing another credential-store read.
+    pub fn update(&mut self, snapshots: &[ProviderStatusSnapshot]) {
+        for entry in &mut self.entries {
+            if let Some(snapshot) = snapshots.iter().find(|snapshot| snapshot.id == entry.id) {
+                *entry = snapshot.clone();
+            }
+        }
+    }
+
     pub fn entries(&self) -> &[ProviderStatusSnapshot] {
         &self.entries
     }
@@ -255,6 +265,10 @@ pub enum ConfiguredAvailability {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderRecoveryReason {
+    CredentialRejected {
+        source: ProviderCredentialSource,
+        control: CredentialControl,
+    },
     InvalidEnvironmentCredential,
     OpenAiRefreshRequired,
     MissingMetadataAdapter,

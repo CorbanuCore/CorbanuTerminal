@@ -125,6 +125,7 @@ pub const CORBANU_API_GPT_5_6_SOL_MODEL: &str = "corbanu/gpt-5.6-sol";
 /// decoded and reported accurately. It is not part of the active catalog.
 pub const CORBANU_API_CLAUDE_FABLE_5_MODEL: &str = "corbanu/claude-fable-5";
 pub const CORBANU_API_KIMI_K3_MODEL: &str = "corbanu/kimi-k3";
+pub const CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL: &str = "corbanu/deepseek-v4.1-flash";
 pub const CORBANU_API_DEEPSEEK_V4_PRO_MODEL: &str = "corbanu/deepseek-v4-pro";
 pub const PFTERMINAL_PLAN_PROVIDER_ID: &str = "pfterminal-plan";
 /// Anthropic-wire sibling of the Corbanu Plan provider. Same gateway, same

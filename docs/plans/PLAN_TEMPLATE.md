@@ -117,6 +117,11 @@ initiative remains unfinished until every acceptance and release gate passes.
 
 ## Automated evidence
 
+Code-blind functional design: `<packet/design/disposition record or reasoned N/A>`.
+Follow repository-root `AGENTS.md` and `qa/code-blind-functional/README.md`.
+Reserve one design pass and one evidence check within the track's existing
+review allowance; do not expose implementation/results to the design agent.
+
 Run fix and formatting tools before the final affected tests.
 
 | Check | Final-tree command | Result | Artifact |
@@ -173,6 +178,7 @@ separate key actions. Corbanu `exec` is not acceptable proof.
 - [ ] Product linkage, scope, invariants, and worktrees are current.
 - [ ] Every implementation unit is represented by a valid single-feature sprint.
 - [ ] Required final-tree automated evidence passes.
+- [ ] Code-blind cases and final-package evidence reconciled; independent evidence check and review-budget ledger linked (or non-user-facing N/A).
 - [ ] Required true-TUI and live-repository evidence passes.
 - [ ] Human acceptance passes.
 - [ ] Finished documentation matches the candidate.

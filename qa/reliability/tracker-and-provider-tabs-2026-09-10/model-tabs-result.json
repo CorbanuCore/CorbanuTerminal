@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "binary": "/mnt/HC_Volume_101713660/pfrpc/build-cache/cargo-workspaces/corbanu-wallet-launch-hotfix-db67e02208dd/debug/corbanu",
+  "checks": [
+    "Providers refresh with Claude current",
+    "OpenAI tab contains OpenAI models and no Claude Plan model",
+    "Claude Plan tab retains Fable",
+    "cancel closes picker"
+  ],
+  "modelCalls": 0,
+  "credentials": "synthetic; fresh isolated home"
+}

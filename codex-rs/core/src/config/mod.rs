@@ -1610,7 +1610,10 @@ fn current_corbanu_auth_helper() -> String {
 
 fn corbanu_auth_helper_from_executable(path: PathBuf) -> Option<String> {
     let file_stem = path.file_stem()?.to_str()?;
-    if matches!(file_stem, "corbanu" | "corbanu-debug") {
+    if matches!(
+        file_stem,
+        "corbanu" | "corbanu-debug" | "codex" | "pfterminal" | "pfterminal-debug"
+    ) {
         return path.to_str().map(ToString::to_string);
     }
     // Linux marks the procfs target of a running executable as deleted when an update or
@@ -1619,7 +1622,14 @@ fn corbanu_auth_helper_from_executable(path: PathBuf) -> Option<String> {
     #[cfg(target_os = "linux")]
     {
         let file_name = path.file_name()?.to_str()?;
-        if matches!(file_name, "corbanu (deleted)" | "corbanu-debug (deleted)") {
+        if matches!(
+            file_name,
+            "corbanu (deleted)"
+                | "corbanu-debug (deleted)"
+                | "codex (deleted)"
+                | "pfterminal (deleted)"
+                | "pfterminal-debug (deleted)"
+        ) {
             return Some("/proc/self/exe".to_string());
         }
     }
@@ -2009,6 +2019,12 @@ impl Config {
             cfg,
             ConfigOverrides {
                 cwd: Some(self.cwd.to_path_buf()),
+                // Session runtime selections are typesafe overrides and may not
+                // appear in the persisted layers. Keep them while refreshing
+                // requirements and plugin configuration for this live thread.
+                model: self.model.clone(),
+                model_provider: Some(self.model_provider_id.clone()),
+                codex_self_exe: self.codex_self_exe.clone(),
                 default_zsh_path,
                 ..Default::default()
             },

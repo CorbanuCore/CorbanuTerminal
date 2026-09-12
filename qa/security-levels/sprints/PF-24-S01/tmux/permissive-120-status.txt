@@ -1,0 +1,32 @@
+╭─────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.38)               │
+│                                             │
+│ model:     gpt-5.6-terra   /model to change │
+│ directory: ~/worktrees/security-round5-ui   │
+╰─────────────────────────────────────────────╯
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.38)                                                           │
+│                                                                                          │
+│ Visit https://chatgpt.com/codex/settings/usage for up-to-date                            │
+│ information on rate limits and credits                                                   │
+│                                                                                          │
+│  Model:                GPT-5.6-Terra (reasoning medium, summaries auto)                  │
+│  Directory:            ~/worktrees/security-round5-ui                                    │
+│  Permissions:          Workspace (Ask for approval)                                      │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            AGENTS.md                                                         │
+│  Account:              OpenAI API key configured (run corbanu login to use ChatGPT)      │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a06f02-f355-70e2-b589-42124a2cd751                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Summarize recent commits
+
+  GPT-5.6-Terra default · ~/worktrees/security-round5-ui · Corbanu Terminal · TPS: -- tok/s

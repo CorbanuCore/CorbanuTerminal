@@ -1,0 +1,45 @@
+review still running: codex elapsed=60s pid=8861 cpu=0.9s/60s(1%) rss=142M state=S
+review still running: codex elapsed=120s pid=8861 cpu=0.3s/60s(1%) rss=142M state=S
+review still running: codex elapsed=180s pid=8861 cpu=0.5s/60s(1%) rss=143M state=S
+autoreview target: branch
+branch: feat/security-round5-provenance
+engine: codex
+model: claude-fable-5-1-plan
+thinking: high
+tools: on
+web_search: on
+ref: 4f263ca73
+bundle: 130114 chars
+autoreview findings: 1
+[P2] Memory stage-one model requests bypass the admission floor via an out-of-crate ModelClient
+codex-rs/core/src/client.rs:763
+`ModelClient::new` defaults `ingress_level` to Permissive with no bound policy, and the only way to raise it (`with_ingress_policy`) is `pub
+(crate)`. `codex-memories-write` (`memories/write/src/runtime.rs:251`, reached from `phase1.rs:323` and started by `app-server/src/request_p
+rocessors/turn_processor.rs:643` whenever `Feature::MemoryTool` is on) constructs its own `ModelClient` and streams a prompt whose user mess
+age embeds full rollout contents (prior tool outputs, external content) through `build_responses_request`. Because that client is never boun
+d to the session's effective policy, a Moderate/Aggressive configured thread still sends unscreened external context to the provider on this
+ path — the same class of alternate-route omission Review 2 found for the direct realtime WebSocket. The `check_source_admission` added to `
+summarize_memories` (client.rs:1228) covers only the `/memories/trace_summarize` endpoint, so the README line 28 claim that memory routes fa
+il closed does not hold for the stage-one memory request. Smallest pre-merge fix: either bind the floor in the constructor from the config (
+`config.security_level` is available in `stream_stage_one_prompt`) via a non-`pub(crate)` hook, or narrow the README/sprint claim to the tra
+ce-summarize endpoint. Note the code fix touches `memories/write`, outside this lane's recorded `write_scope`; record that expansion rather
+than absorbing it silently.
+
+overall: patch is incorrect (0.7)
+Verified the Review 2 remediation: `RealtimeConversationManager::start_inner` now calls `model_client.check_source_admission` before either
+the direct `RealtimeWebsocketClient::connect` or the WebRTC `create_realtime_call_with_headers` path (the latter is double-guarded), the Web
+RTC sideband task re-admits before `connect_webrtc_sideband`, and `run_realtime_input_task` re-admits after dequeuing each text/handoff/serv
+er-event/audio item, breaking the loop on denial and gating the transcript-tail flush on a fresh admission check. The Astra fixes remain int
+act: `Session::build_model_client_for_configuration` (used by `update_settings`) calls `with_native_ingress_from`, which shares the `Arc<Std
+Mutex<NativeIngress>>` only when `state.thread_id` matches; `for_provider`/`new_session` clone the ingress fields; `Cargo.lock` carries the
+`codex-content-security` edge under `codex-core`. `source_admission_level` takes `max(configured, live snapshot)` and an unbound/uninitializ
+ed policy errors rather than degrading to Permissive; all three wire builders (HTTP, websocket responses, chat, anthropic, and the compact s
+ize-estimation path) route through `source_admitted_input`, and Permissive returns the original formatted input. Tool origins are registered
+ by the router before the MCP handler refines Tool→Mcp, so the refinement branch is reached in the correct order. Envelope deserialization i
+s strict, projection is deterministic, capacity/oversize mark the registry unavailable rather than evicting, and the 8,192-byte projection b
+ound is enforced after escaping; diagnostics are static strings. One remaining in-scope-class landability issue: the `codex-memories-write`
+crate builds its own `ModelClient` with the default Permissive floor and no policy binding, so the memory stage-one request (rollout content
+s) reaches the provider unscreened in protected configurations, contradicting the README's memory fail-closed claim. Read-only inspection; n
+o tests run or files modified.
+
+Review 3 completed: exit 1. Press Enter to close this private fixture.

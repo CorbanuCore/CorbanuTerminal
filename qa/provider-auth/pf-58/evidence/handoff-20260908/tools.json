@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "candidate": "/home/travis/security-round5/evidence/provider-reauth-health-final/candidate-preflight/codex",
+  "sha256": "37511bb9348e3793255ce67806d23060f3436cee53ef0a041b921420b201da35",
+  "host_sha256": "b91e5ab7e7af108b5651cf30a73dae98d2e98c49ecc6a87aaed8154ef92179a5",
+  "human_acceptance": false,
+  "tool_round_trips": 4,
+  "concurrent_processes": 3,
+  "same_home_restart": true,
+  "stream_cancel_recovery": true,
+  "permissions_security_cancel_inert": true,
+  "claude_guidance_40_columns": true
+}

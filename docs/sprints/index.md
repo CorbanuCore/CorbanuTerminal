@@ -126,6 +126,9 @@ separate authority. Current assignments/evidence are in the
 3. Set it to `in_progress` before code changes.
 4. Execute only `Remaining` items; move verified work to `Done` with `[x]`.
 5. Run formatting before final affected tests and true-TUI QA.
+   For user-facing work, collect the root policy's code-blind functional design
+   before disclosing test results, then execute its cases and reconcile every
+   disposition before human handoff. Link the record and shared review budget.
 6. Complete every verification and exit-evidence checkbox.
 7. Set status to `completed`, move the file to `archive/<plan-slug>/`, and remove
    it from current MkDocs navigation.
@@ -135,10 +138,10 @@ separate authority. Current assignments/evidence are in the
 
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
-| [PF-13 / security — workstream 1](../plans/active/p0-security-levels.md) | Active | [53 current sprints](current/p0-security-levels/index.md), 28 completed archives | PF-35-S01 retains its reservation; unusable PF-27-S04 allocation returned to draft with preserved recovery pin; PF13 task untouched |
+| [PF-13 / security — workstream 1](../plans/active/p0-security-levels.md) | Active | [52 current sprints](current/p0-security-levels/index.md), 32 completed archives | Accepted main d870c92da reconciled; PF-35 external, PF-27-S04 owner preparing fresh allocation |
 | [Accounting — workstream 2](../plans/active/portfolio-agent-cost-accounting.md) | Active | 3 current PF-60 sprints; S01 archived | S02 isolated native-state journal allocated after S01 review and defaults approval; no live collection |
-| [Task Node — workstream 3](../plans/active/initiative-delivery-control.md) | Active | PF-80-S01, two PF-79 beta drafts, PF-81-S01 visual QA draft | Offline port integrated locally; native preparation follow-up running; beta/harness dependencies unchanged |
-| [Unified provider onboarding and management](../plans/proposed/unified-provider-auth.md) | Deferred | [0 current sprints](current/unified-provider-auth/index.md) | Completed PF-55/provider evidence remains unchanged; no completion claim added |
+| [Task Node — workstream 3](../plans/active/initiative-delivery-control.md) | Active | PF-80-S01, two PF-79 beta drafts, PF-81-S01 visual QA draft | Offline native increments integrated locally; latest validity worker returned for manager review; beta/harness dependencies unchanged |
+| [Unified provider onboarding and management](../plans/proposed/unified-provider-auth.md) | Deferred | [1 current sprint](current/unified-provider-auth/index.md) | PF-58 human accepted for integration; residual automated/native qualification retained separately |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
 | [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | Historical 72-sprint decomposition remains cancelled; every record maps into the active P0 plan's current work |
 

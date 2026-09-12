@@ -80,9 +80,7 @@ impl ChatWidget {
         Ok((session, store, client))
     }
     fn tracker_api_key(&self) -> String {
-        if let Ok(key) = std::env::var(codex_model_provider_info::PFTERMINAL_PLAN_API_KEY_ENV_VAR)
-            && !key.is_empty()
-        {
+        if let Some(key) = codex_model_provider_info::corbanu_api_key_from_env() {
             return key;
         }
         codex_login::provider_api_key_from_auth_storage(
@@ -102,6 +100,10 @@ impl ChatWidget {
         if path == "/sync" {
             self.campaign_tracker_sync();
             return;
+        }
+        let mut recovery_body = body.clone();
+        if let Some(Value::Object(fields)) = &mut recovery_body {
+            fields.remove("apiKey");
         }
         let enrollment = if path == "/enrollment" {
             body.as_ref().and_then(|b| b["enabled"].as_bool())
@@ -127,6 +129,7 @@ impl ChatWidget {
             move |result| AppEvent::CampaignTrackerResult {
                 path,
                 enrollment,
+                body: recovery_body,
                 result,
             },
         );
@@ -135,18 +138,13 @@ impl ChatWidget {
         &mut self,
         path: String,
         enrollment: Option<bool>,
+        body: Option<Value>,
         result: Result<Value, String>,
     ) {
         let data = match result {
             Ok(value) => value,
             Err(error) => {
-                self.tracker_selection(SelectionViewParams {
-                    view_id: Some(VIEW),
-                    title: Some("Campaign Tracker".to_string()),
-                    subtitle: Some(error),
-                    items: vec![item("Retry", "Reload status", "/status".to_string(), None)],
-                    ..Default::default()
-                });
+                self.tracker_request_failed(&path, body, error);
                 return;
             }
         };

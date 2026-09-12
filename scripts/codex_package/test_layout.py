@@ -168,6 +168,36 @@ class PackageLayoutTest(unittest.TestCase):
 
             self.assertTrue((package_dir / "bin" / "codex-code-mode-host").is_file())
 
+    def test_codex_package_requires_wallet_runtime_companion(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            variant = PACKAGE_VARIANTS["codex"]
+            spec = TARGET_SPECS["x86_64-unknown-linux-gnu"]
+            inputs = PackageInputs(
+                entrypoint_bin=touch_executable(root / "codex"),
+                code_mode_host_bin=touch_executable(root / "codex-code-mode-host"),
+                extra_bins={
+                    extra.entrypoint_name(spec): touch_executable(
+                        root / extra.entrypoint_name(spec)
+                    )
+                    for extra in variant.extra_binaries
+                },
+                rg_bin=touch_executable(root / "rg"),
+                zsh_bin=None,
+                bwrap_bin=touch_executable(root / "bwrap"),
+                codex_command_runner_bin=None,
+                codex_windows_sandbox_setup_bin=None,
+            )
+            package = root / "package"
+            package.mkdir()
+            build_package_dir(package, "1.2.3", variant, spec, inputs)
+            validate_package_dir(package, variant, spec, include_zsh=False)
+            companion = package / "bin" / "pfterminal-walletd"
+            self.assertTrue(companion.is_file())
+            companion.unlink()
+            with self.assertRaises(RuntimeError):
+                validate_package_dir(package, variant, spec, include_zsh=False)
+
     def test_corbanu_debug_alias_is_relative_and_survives_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -213,7 +243,9 @@ class PackageLayoutTest(unittest.TestCase):
                 alias_path = package_dir / "bin" / alias
                 self.assertTrue(alias_path.is_symlink(), alias)
                 self.assertFalse(os.path.isabs(os.readlink(alias_path)), alias)
-                self.assertEqual(alias_path.resolve(), package_dir / "bin" / target)
+                self.assertEqual(
+                    alias_path.resolve(), (package_dir / "bin" / target).resolve()
+                )
             for canonical in ("corbanu", "corbanu-acp", "corbanu-walletd"):
                 self.assertFalse((package_dir / "bin" / canonical).is_symlink())
             for legacy in (
@@ -239,7 +271,9 @@ class PackageLayoutTest(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
 
-    @unittest.skipUnless(shutil.which("cc"), "C compiler is required")
+    @unittest.skipUnless(
+        os.name == "posix" and shutil.which("cc"), "Unix C compiler is required"
+    )
     def test_unix_native_binaries_are_stripped_with_external_sidecars(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -247,9 +281,16 @@ class PackageLayoutTest(unittest.TestCase):
             source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
             entrypoint = root / "codex-app-server"
             code_mode_host = root / "codex-code-mode-host"
+            # dsymutil needs the original object to collect Mach-O debug data.
+            # A single compile-and-link cc invocation deletes that object.
+            object_file = root / "main.o"
+            subprocess.run(
+                ["cc", "-g", "-O0", "-c", source, "-o", object_file],
+                check=True,
+            )
             for output in (entrypoint, code_mode_host):
                 subprocess.run(
-                    ["cc", "-g", "-O0", source, "-o", output],
+                    ["cc", "-g", object_file, "-o", output],
                     check=True,
                 )
             unstripped_size = entrypoint.stat().st_size
@@ -282,8 +323,18 @@ class PackageLayoutTest(unittest.TestCase):
                 (package_dir / "bin" / "codex-app-server").stat().st_size,
                 unstripped_size,
             )
-            self.assertTrue((symbols_dir / "codex-app-server.debug").is_file())
-            self.assertTrue((symbols_dir / "codex-code-mode-host.debug").is_file())
+            for name in ("codex-app-server", "codex-code-mode-host"):
+                sidecar = (
+                    symbols_dir
+                    / f"{name}.dSYM"
+                    / "Contents"
+                    / "Resources"
+                    / "DWARF"
+                    / name
+                    if sys.platform == "darwin"
+                    else symbols_dir / f"{name}.debug"
+                )
+                self.assertTrue(sidecar.is_file(), sidecar)
             self.assertFalse(
                 (package_dir / "codex-resources" / "debug-symbols").exists()
             )

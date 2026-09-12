@@ -527,6 +527,7 @@ async fn corbanu_api_public_models_inherit_exact_catalog_metadata() {
         ("corbanu/gpt-5.6-sol", "gpt-5.6-sol"),
         ("corbanu/kimi-k3", "vercel/moonshotai/kimi-k3"),
         ("corbanu/deepseek-v4-pro", "deepseek-v4-pro"),
+        ("corbanu/deepseek-v4.1-flash", "corbanu/deepseek-v4.1-flash"),
     ] {
         let public_info = manager.get_model_info(public_model, &config).await;
         let catalog_info = manager.get_model_info(catalog_model, &config).await;
@@ -539,6 +540,13 @@ async fn corbanu_api_public_models_inherit_exact_catalog_metadata() {
             catalog_info.max_output_tokens
         );
         assert_eq!(public_info.input_modalities, catalog_info.input_modalities);
+        assert_eq!(
+            public_info.supports_parallel_tool_calls,
+            catalog_info.supports_parallel_tool_calls
+        );
+        if public_model == "corbanu/deepseek-v4.1-flash" {
+            assert!(!public_info.supports_parallel_tool_calls);
+        }
         assert_eq!(
             public_info.supported_reasoning_levels,
             catalog_info.supported_reasoning_levels

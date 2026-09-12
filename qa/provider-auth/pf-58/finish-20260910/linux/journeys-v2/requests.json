@@ -1,0 +1,200 @@
+[
+  {
+    "serial": 1,
+    "path": "/v1/responses",
+    "model": "gpt-5.6-sol",
+    "effort": "low",
+    "auth_route": "openai",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-7172-7d03-9e9a-8cca8fd23df7\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Confirm cancellation leaves the selected route intact\"}], \"internal_chat_message_metadata_passthrough\": {\"turn_id\": \"01a08ec3-7118-7a21-9b12-ea2f4c6f6d34\"}}"
+  },
+  {
+    "serial": 2,
+    "path": "/v1/responses",
+    "model": "gpt-6-astra",
+    "effort": "high",
+    "auth_route": "openai",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-7547-7d01-ac72-a4979fa46246\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Prove selected model and effort High\"}], \"internal_chat_message_metadata_passthrough\": {\"turn_id\": \"01a08ec3-74fc-7a22-a3fb-f8fa6885ab2d\"}}"
+  },
+  {
+    "serial": 3,
+    "path": "/v1/responses",
+    "model": "gpt-5.6-sol",
+    "effort": "low",
+    "auth_route": "openai",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-7a23-7482-b13a-8a86d62079ac\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Prove selected model and effort Low\"}], \"internal_chat_message_metadata_passthrough\": {\"turn_id\": \"01a08ec3-79d7-7832-bdd0-7bec47a262b4\"}}"
+  },
+  {
+    "serial": 4,
+    "path": "/v1/responses",
+    "model": "gpt-5.6-sol",
+    "effort": "low",
+    "auth_route": "openai",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-9327-7e13-a908-e1b54ea3e3be\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Restart persistence request 0\"}], \"internal_chat_message_metadata_passthrough\": {\"turn_id\": \"01a08ec3-92df-7482-8585-81d29814a911\"}}"
+  },
+  {
+    "serial": 5,
+    "path": "/v1/responses",
+    "model": "gpt-5.6-sol",
+    "effort": "low",
+    "auth_route": "openai",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-a11d-7e51-ad4c-a7f4f6aeddaa\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Restart persistence request 1\"}], \"internal_chat_message_metadata_passthrough\": {\"turn_id\": \"01a08ec3-a0d4-7dc0-8a1e-25c7d3530de2\"}}"
+  },
+  {
+    "serial": 6,
+    "path": "/v1/responses",
+    "model": "gpt-5.6-sol",
+    "effort": "low",
+    "auth_route": "openai",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-c7bb-7601-a96d-6e3f8e3f14d2\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"After resize, route and composer remain usable\"}], \"internal_chat_message_metadata_passthrough\": {\"turn_id\": \"01a08ec3-c773-7493-ac0f-7112bce9571a\"}}"
+  },
+  {
+    "serial": 7,
+    "path": "/v1/responses",
+    "model": "gpt-5.6-sol",
+    "effort": "low",
+    "auth_route": "openai",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-c8ab-7572-83d9-97c9ba610fc7\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"After first detach\"}], \"internal_chat_message_metadata_passthrough\": {\"turn_id\": \"01a08ec3-c871-7873-88ff-0fd63c50ae6b\"}}"
+  },
+  {
+    "serial": 8,
+    "path": "/v1/responses",
+    "model": "gpt-5.6-sol",
+    "effort": "low",
+    "auth_route": "openai",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-ca0f-7081-be0d-5879332638ae\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"After second detach\"}], \"internal_chat_message_metadata_passthrough\": {\"turn_id\": \"01a08ec3-c9d5-7762-a1b6-c1bdf60f82f8\"}}"
+  },
+  {
+    "serial": 9,
+    "path": "/v1/responses",
+    "model": "gpt-5.6-sol",
+    "effort": "low",
+    "auth_route": "openai",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-cb0c-76a3-8ca9-6c45882049f9\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"DELAY_FIXTURE controlled late response\"}], \"internal_chat_message_metadata_passthrough\": {\"turn_id\": \"01a08ec3-cad2-7221-b19a-e2a16baa74e3\"}}"
+  },
+  {
+    "serial": 10,
+    "path": "/a/responses",
+    "model": "fixture-model",
+    "effort": "low",
+    "auth_route": "a",
+    "status": 403,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-da04-7012-beee-3b59ef1fbbb6\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Controlled service failure 403\"}]}"
+  },
+  {
+    "serial": 11,
+    "path": "/a/responses",
+    "model": "fixture-model",
+    "effort": "low",
+    "auth_route": "a",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-e39e-7421-8b56-55e22b2fe499\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Retry after service restoration 403\"}]}"
+  },
+  {
+    "serial": 12,
+    "path": "/a/responses",
+    "model": "fixture-model",
+    "effort": "low",
+    "auth_route": "a",
+    "status": 429,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-e495-7602-870f-a8715d1a72e4\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Controlled service failure 429\"}]}"
+  },
+  {
+    "serial": 13,
+    "path": "/a/responses",
+    "model": "fixture-model",
+    "effort": "low",
+    "auth_route": "a",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-ee3a-7853-8151-e31325a75734\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Retry after service restoration 429\"}]}"
+  },
+  {
+    "serial": 14,
+    "path": "/a/responses",
+    "model": "fixture-model",
+    "effort": "low",
+    "auth_route": "a",
+    "status": 500,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-ef35-7933-8944-b68e76980380\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Controlled service failure 500\"}]}"
+  },
+  {
+    "serial": 15,
+    "path": "/a/responses",
+    "model": "fixture-model",
+    "effort": "low",
+    "auth_route": "a",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-f8d8-72a1-840a-7ef3689ddd01\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Retry after service restoration 500\"}]}"
+  },
+  {
+    "serial": 16,
+    "path": "/a/responses",
+    "model": "fixture-model",
+    "effort": "low",
+    "auth_route": "a",
+    "status": 401,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec3-f9c8-7122-bcd3-238032933f9d\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Controlled rejected credential\"}]}"
+  },
+  {
+    "serial": 17,
+    "path": "/a/responses",
+    "model": "fixture-model",
+    "effort": "low",
+    "auth_route": "a2",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec4-05e6-7cc1-98c2-49f1f326b5b0\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Continue after explicit credential repair\"}]}"
+  },
+  {
+    "serial": 18,
+    "path": "/a/responses",
+    "model": "fixture-model",
+    "effort": "low",
+    "auth_route": "a2",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec4-10fc-78a2-aa4e-7f3495c20bcb\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Nonselected repair must not change current routing\"}]}"
+  },
+  {
+    "serial": 19,
+    "path": "/b/responses",
+    "model": "fixture-model",
+    "effort": "none",
+    "auth_route": "b2",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec4-13e6-7233-ad5b-f6dcd8fe8f1e\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Use the explicitly selected repaired route\"}]}"
+  },
+  {
+    "serial": 20,
+    "path": "/b/responses",
+    "model": "fixture-model",
+    "effort": "none",
+    "auth_route": "b2",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec4-206c-7d41-a8a5-6a1282fd11cb\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Cancel current-provider deactivation\"}]}"
+  },
+  {
+    "serial": 21,
+    "path": "/a/responses",
+    "model": "fixture-model",
+    "effort": "none",
+    "auth_route": "a2",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec4-2cf5-79c1-8cd6-b795fb9c7961\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Explicit replacement of disabled current provider\"}]}"
+  },
+  {
+    "serial": 22,
+    "path": "/b/responses",
+    "model": "fixture-model",
+    "effort": "none",
+    "auth_route": "b2",
+    "status": 200,
+    "latest_user": "{\"type\": \"message\", \"id\": \"msg_01a08ec4-39f9-7132-b269-d2ae413dbb8f\", \"role\": \"user\", \"content\": [{\"type\": \"input_text\", \"text\": \"Reactivated route retains repaired credential\"}]}"
+  }
+]

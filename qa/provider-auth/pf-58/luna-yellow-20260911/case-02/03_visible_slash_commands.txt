@@ -1,0 +1,48 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       claude-fable-5-1-plan high   /model to cha… │
+│ directory:   ~/work                                      │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.41)                                                           │
+│                                                                                          │
+│  Model:                Claude Fable 5.1 Plan                                             │
+│  Model provider:       Claude Plan - https://api.anthropic.com/v1                        │
+│  Directory:            ~/work                                                            │
+│  Permissions:          Full Access                                                       │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Claude Plan account connected                                     │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a08f73-8b93-7a83-915a-253d0c5a5cda                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+• Unrecognized command '/help'. Type "/" for a list of supported commands.
+
+
+› /
+
+  /model         choose what model and reasoning effort to use
+  /gpu           rent, inspect, or terminate GPU capacity
+  /ide           include current selection, open files, and other context from your IDE
+  /permissions   choose what Corbanu Terminal is allowed to do
+  /security      explore security profiles and protection readiness (read only)
+  /keymap        remap TUI shortcuts
+  /vim           toggle Vim mode for the composer
+  /experimental  toggle experimental features
+
+
+
+
+
+
+
+

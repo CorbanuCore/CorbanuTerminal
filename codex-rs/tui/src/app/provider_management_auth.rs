@@ -135,6 +135,9 @@ impl App {
         if expected.as_ref() != Some(&provider_id) {
             return;
         }
+        // Account challenges remain open while the browser completes login.
+        // Dismiss only this correlated flow, not an unrelated popup.
+        self.chat_widget.dismiss_shared_account_auth();
         let Some(host) = self.provider_management_host.as_mut() else {
             return;
         };

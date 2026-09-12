@@ -1,0 +1,44 @@
+╭─────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                       │
+│                                                     │
+│ model:     fixture-model   /model to change         │
+│ directory: ~/worktrees/provider-reauth-health-final │
+╰─────────────────────────────────────────────────────╯
+
+
+› upgrade request
+
+
+⚠ Model metadata for `fixture-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+
+• PF55 response
+
+
+› Explain this codebase
+
+  fixture-model default · ~/worktrees/provider-reauth-health-final · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

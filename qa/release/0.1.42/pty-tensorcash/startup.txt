@@ -1,0 +1,12 @@
+╭──────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                    │
+│                                                  │
+│ model:       gpt-5.6-sol   /model to change      │
+│ directory:   /mnt/…/corbanu-0.1.42-qa/tensorcash │
+│ permissions: YOLO mode                           │
+╰──────────────────────────────────────────────────╯
+
+
+› Explain this codebase
+
+  GPT-5.6-Sol default · /mnt/HC_Volume_101713660/pfrpc/scr…

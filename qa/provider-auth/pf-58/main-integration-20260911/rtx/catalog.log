@@ -1,0 +1,72 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.21s
+────────────
+ Nextest run ID 3e3cb082-bf57-4249-be9f-6aec2bfd22fe with nextest profile: local
+    Starting 65 tests across 1 binary
+        PASS [   0.002s] ( 1/65) codex-model-provider-info tests::canonical_catalog_provider_exposes_exact_picker_runtime_pairs
+        PASS [   0.002s] ( 2/65) codex-model-provider-info tests::configured_built_in_provider_can_override_transport_knobs
+        PASS [   0.002s] ( 3/65) codex-model-provider-info tests::built_in_command_auth_uses_the_canonical_installed_executable
+        PASS [   0.002s] ( 4/65) codex-model-provider-info tests::ambient_glm_context_ceiling_is_scoped_to_ambient_routes
+        PASS [   0.002s] ( 5/65) codex-model-provider-info tests::corbanu_api_kimi_uses_the_gateway_messages_provider
+        PASS [   0.002s] ( 6/65) codex-model-provider-info tests::corbanu_environment_precedence_and_blank_fallback_match_both_wire_providers
+        PASS [   0.002s] ( 7/65) codex-model-provider-info tests::corrected_catalog_provider_fixes_impossible_pairs_only
+        PASS [   0.002s] ( 8/65) codex-model-provider-info tests::corbanu_messages_provider_does_not_expose_the_retired_fable_route
+        PASS [   0.002s] ( 9/65) codex-model-provider-info tests::credential_source_classifies_adjacent_runtime_auth_shapes
+        PASS [   0.002s] (10/65) codex-model-provider-info tests::direct_zai_retries_transient_provider_rate_limits
+        PASS [   0.002s] (11/65) codex-model-provider-info tests::fable_plan_versions_resolve_to_their_exact_upstream_models
+        PASS [   0.002s] (12/65) codex-model-provider-info tests::kimi_code_provider_is_builtin_and_resolves_k3
+        PASS [   0.002s] (13/65) codex-model-provider-info tests::only_kimi_built_in_uses_ambiguous_action_stop_semantics
+        PASS [   0.002s] (14/65) codex-model-provider-info tests::openai_provider_base_url_override_conservatively_disables_websockets
+        PASS [   0.002s] (15/65) codex-model-provider-info tests::openai_provider_uses_codex_compat_version_header
+        PASS [   0.002s] (16/65) codex-model-provider-info tests::openrouter_preserves_nonempty_model_slugs
+        PASS [   0.002s] (17/65) codex-model-provider-info tests::plan_fable_context_ceiling_is_scoped_to_the_skyapi_route
+        PASS [   0.002s] (18/65) codex-model-provider-info tests::plan_fable_output_ceiling_is_scoped_to_the_skyapi_route
+        PASS [   0.002s] (19/65) codex-model-provider-info tests::test_amazon_bedrock_provider_adds_mantle_client_agent_header
+        PASS [   0.002s] (20/65) codex-model-provider-info tests::test_built_in_model_providers_include_amazon_bedrock
+        PASS [   0.002s] (21/65) codex-model-provider-info tests::test_built_in_model_providers_include_ambient
+        PASS [   0.002s] (22/65) codex-model-provider-info tests::test_built_in_model_providers_include_anthropic
+        PASS [   0.002s] (23/65) codex-model-provider-info tests::test_built_in_model_providers_include_baseten
+        PASS [   0.002s] (24/65) codex-model-provider-info tests::test_built_in_model_providers_include_baseten_anthropic
+        PASS [   0.002s] (25/65) codex-model-provider-info tests::test_built_in_model_providers_include_claude_plan
+        PASS [   0.002s] (26/65) codex-model-provider-info tests::test_built_in_model_providers_include_deepseek_flash_responses
+        PASS [   0.002s] (27/65) codex-model-provider-info tests::test_built_in_model_providers_include_meta
+        PASS [   0.002s] (28/65) codex-model-provider-info tests::test_built_in_model_providers_include_openrouter
+        PASS [   0.002s] (29/65) codex-model-provider-info tests::test_built_in_model_providers_include_openrouter_anthropic
+        PASS [   0.002s] (30/65) codex-model-provider-info tests::test_built_in_model_providers_include_vercel
+        PASS [   0.002s] (31/65) codex-model-provider-info tests::test_built_in_model_providers_include_vercel_anthropic
+        PASS [   0.002s] (32/65) codex-model-provider-info tests::test_built_in_model_providers_include_zai
+        PASS [   0.002s] (33/65) codex-model-provider-info tests::test_built_in_model_providers_include_zai_anthropic
+        PASS [   0.002s] (34/65) codex-model-provider-info tests::test_built_in_model_providers_keep_legacy_plan_id_with_corbanu_name
+        PASS [   0.002s] (35/65) codex-model-provider-info tests::test_corbanu_plan_uses_the_branded_public_api_origin
+        PASS [   0.002s] (36/65) codex-model-provider-info tests::test_create_amazon_bedrock_provider
+        PASS [   0.002s] (37/65) codex-model-provider-info tests::test_create_ambient_provider
+        PASS [   0.002s] (38/65) codex-model-provider-info tests::test_create_anthropic_provider
+        PASS [   0.002s] (39/65) codex-model-provider-info tests::test_create_zai_provider
+        PASS [   0.002s] (40/65) codex-model-provider-info tests::test_create_claude_plan_provider
+        PASS [   0.002s] (41/65) codex-model-provider-info tests::test_deserialize_anthropic_wire_api
+        PASS [   0.002s] (42/65) codex-model-provider-info tests::test_deserialize_azure_model_provider_toml
+        PASS [   0.002s] (43/65) codex-model-provider-info tests::test_deserialize_chat_wire_api
+        PASS [   0.002s] (44/65) codex-model-provider-info tests::test_deserialize_example_model_provider_toml
+        PASS [   0.002s] (45/65) codex-model-provider-info tests::test_deserialize_ollama_model_provider_toml
+        PASS [   0.002s] (46/65) codex-model-provider-info tests::test_deserialize_provider_auth_config_allows_zero_refresh_interval
+        PASS [   0.002s] (47/65) codex-model-provider-info tests::test_deserialize_provider_auth_config_defaults
+        PASS [   0.002s] (48/65) codex-model-provider-info tests::test_deserialize_provider_aws_config
+        PASS [   0.002s] (49/65) codex-model-provider-info tests::test_header_auth_uses_chatgpt_codex_base_url
+        PASS [   0.002s] (50/65) codex-model-provider-info tests::test_deserialize_websocket_connect_timeout
+        PASS [   0.002s] (51/65) codex-model-provider-info tests::test_merge_configured_model_providers_adds_custom_provider
+        PASS [   0.002s] (52/65) codex-model-provider-info tests::test_merge_configured_model_providers_allows_amazon_bedrock_default_fields
+        PASS [   0.002s] (53/65) codex-model-provider-info tests::test_merge_configured_model_providers_applies_amazon_bedrock_profile_override
+        PASS [   0.002s] (54/65) codex-model-provider-info tests::test_merge_configured_model_providers_applies_amazon_bedrock_transport_overrides
+        PASS [   0.002s] (55/65) codex-model-provider-info tests::test_merge_configured_model_providers_rejects_amazon_bedrock_non_default_fields
+        PASS [   0.002s] (56/65) codex-model-provider-info tests::test_personal_access_token_uses_chatgpt_codex_base_url
+        PASS [   0.002s] (57/65) codex-model-provider-info tests::test_supports_remote_compaction_for_azure_name
+        PASS [   0.002s] (58/65) codex-model-provider-info tests::test_supports_remote_compaction_for_non_openai_non_azure_provider
+        PASS [   0.002s] (59/65) codex-model-provider-info tests::test_supports_remote_compaction_for_openai
+        PASS [   0.002s] (60/65) codex-model-provider-info tests::test_uses_openai_actor_authorization
+        PASS [   0.002s] (61/65) codex-model-provider-info tests::test_validate_provider_aws_rejects_conflicting_auth
+        PASS [   0.002s] (62/65) codex-model-provider-info tests::test_validate_provider_aws_rejects_websockets
+        PASS [   0.002s] (63/65) codex-model-provider-info tests::wallet_plan_anthropic_route_accepts_both_fable_versions
+        PASS [   0.002s] (64/65) codex-model-provider-info tests::vercel_new_catalog_models_preserve_provider_and_wire_identity
+        PASS [   0.002s] (65/65) codex-model-provider-info tests::zai_glm_5_3_resolves_only_on_the_direct_zai_route
+────────────
+     Summary [   0.030s] 65 tests run: 65 passed, 0 skipped

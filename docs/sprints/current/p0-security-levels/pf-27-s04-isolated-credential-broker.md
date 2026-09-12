@@ -5,13 +5,13 @@ status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-27"
 execution_order: 28
-owner: "/root/pf27_isolated_broker"
+owner: "/root/broker"
 parallel_lane: "isolated-broker"
-write_scope: "codex-rs/secret-broker/, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/core/src/security/broker_client.rs, codex-rs/core/src/security/broker_client_tests.rs, codex-rs/core/src/config/network_proxy_credential.rs, codex-rs/core/src/config/network_proxy_credential_tests.rs, codex-rs/vault/src/capability.rs, codex-rs/vault/src/capability_tests.rs, qa/security-levels/sprints/PF-27-S04/, docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md"
-integration_gate: "After PF-22-S02 is integrated and archived, the Codex ingress/classifier integration owner rebases PF-27-S04, audits the literal scope, serializes Core module/Cargo/Bazel/lock registration, reruns secret-broker/network-proxy/Vault/Core/platform/governance suites, completes TMUX and Opus 5 Max closure, and pauses before final Linux/Windows qualification until the user confirms the tailnet switch."
-worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-isolated-broker"
-branch: "feat/p0-security-isolated-broker"
-base_commit: "43d2d86488d5c1b2eb5cbc401ee8371dbdb76bf4"
+write_scope: "codex-rs/secret-broker-service/, codex-rs/secret-broker/, codex-rs/network-proxy/src/credential_broker.rs, codex-rs/network-proxy/src/credential_broker/, codex-rs/network-proxy/src/credential_broker_tests.rs, codex-rs/core/src/security/broker_client.rs, codex-rs/core/src/security/broker_client_tests.rs, codex-rs/core/src/config/network_proxy_credential.rs, codex-rs/core/src/config/network_proxy_credential_tests.rs, codex-rs/vault/src/capability.rs, codex-rs/vault/src/capability_tests.rs, qa/security-levels/sprints/PF-27-S04/, docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md"
+integration_gate: "Codex /root serializes shared Core/Vault/network-proxy and Cargo/Bazel/lock registration, audits scope, reruns broker/network-proxy/Vault/Core and governance suites on RTX plus TMUX, Astra High and Fable 5.1 High reviews (maximum five per lane). Native service, provider data-plane and all-OS qualification remain mandatory for completion; intermediate leaves cannot enable protected activation."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-broker"
+branch: "feat/security-round5-broker"
+base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
 depends_on: "PF-27-S01, PF-13-S04, PF-27-S03, PF-41-S03"
 created: 2026-08-28
 updated: 2026-09-11
@@ -55,8 +55,21 @@ below are not a current allocation; [reconcile before resuming](../../../plans/m
 ## Done
 
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
+- [x] Recovered reviewed broker leaves from `cdb821289` in provenance commit
+  `90ae3a0cf`, without overwriting the current allocation or shared registrations.
+- [x] Implemented digest-bound PF-41 journal integration and bounded native Linux
+  peer/framing/channel teardown primitives, including concurrent disconnect
+  cancellation and bounded partial-frame deadlines without idle timeouts.
+  Final post-format remote suites pass 338/338 broker/Vault/proxy and 6/6
+  focused Core tests; Cargo/Bazel parity passes. Astra and Fable repairs are
+  verified; final Fable review has no blocking findings and one deferred P3
+  signal-interruption follow-up (helper exit 1). Four of five reviews used.
+  Production service, data-plane and all-OS qualification remain open;
+  see `qa/security-levels/sprints/PF-27-S04/round5-evidence.md`.
 
 ## Remaining
+
+- [ ] Rolling pipeline service substage: compose a narrow `codex-secret-broker-service` crate around broker/Vault/PF-41 without a dependency cycle; accept only trusted bootstrap handles, preserve unsupported/default-deny behavior and qualify lifecycle with synthetic Linux subprocess fixtures. Coordinator owns shared registration. No service-principal creation, installation, ownership/ACL migration or existing Vault transfer without separate explicit setup authority. Handle EINTR before adding service signal handlers. Provider response streaming remains a separately specified gate.
 
 - [ ] Implement the completed PF-27-S03 OS identity/IPC/handle design and PF-41-S03 durable-event contract; verify controller/broker state cannot be read or rewritten by the real agent process.
 - [ ] Include fresh connections after same-run re-registration with cached TLS handlers and admitted hosts, not only reuse of an old channel. Revocation fences queued dispatch, streams and uploads; new generations cannot inherit old credentials.

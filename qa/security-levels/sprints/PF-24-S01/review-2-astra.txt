@@ -1,0 +1,3 @@
+autoreview clean: no accepted/actionable findings reported
+overall: patch is correct (0.91)
+No actionable introduced defects found. Profile exploration and Enter remain observation-only; cancellation and configured navigation follow existing input handling. Requested configuration is clearly separated from unverified effective protection, and existing permissions remain unchanged. Reviewed layout, tests, snapshots, and supplied TMUX evidence; did not run tests or modify files.

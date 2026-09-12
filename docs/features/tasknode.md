@@ -75,6 +75,14 @@ Task lists use stable status tabs. Opening a task shows its details and the
 actions currently available for that state, including evidence guidance and
 verification-related work.
 
+## Read your team's shared context
+
+Run `/tasknode team` or choose **Team Context** from `/tasknode`, then select **Read full report**. The report shows collaborators' shared work summaries, rewarded-task counts, update time and freshness. Scroll with the pager keys; press Esc to return and choose **Refresh Team Context** for the latest report and sharing permissions.
+
+Agents can retrieve the same report with `corbanu tasknode team context --json`. While testing a newer local debug build, use `corbanu-debug tasknode team context --json`; the bundled agent guidance detects older helpers by command support. This uses the active profile's linked Task Node account. Access follows the same task-history grants as the web Team page. Reading the report does not require enabling **Use in personal context**; that separate preference controls Task Node chat context. Private context documents are not exposed by this command.
+
+If the report is pending or unavailable, its status is shown explicitly. An older report is labeled as previous. Manage teammates and sharing in the Task Node app.
+
 ## Request work and use context
 
 ```text
@@ -119,6 +127,10 @@ Chat supports large streamed replies and reports an interrupted stream as an err
 Product specification: **Campaign Tracker — LOCAL PILOT CANDIDATE**, “preserve attributable user prompts and compact GLM 5.3 Flash summaries in a bounded database”. The September 7 debug rollout connects this feature to the live Task Node backend.
 
 Open `/tasknode`, choose **Campaign Tracker**, and enable the workspace. The **Tracker REC** indicator shows recording and pending uploads. **My activity** opens saved prompts, compact output summaries and observed actions; choose an action for session replay or **Read full action** for a scrollable view. **Pause this workspace** stops new capture.
+
+If a request is rejected, Campaign Tracker shows the failed operation and the server's correction guidance. **Retry** reloads the same failed read, including its filters; **Overview** opens status. Failed campaign, mapping and review forms offer **Edit draft** with your input retained. Review saved items after a connection failure before submitting a write again. Recording changes can be retried with a newly resolved credential.
+
+Recording accepts the same environment credential aliases as Corbanu API, in order: `CORBANU_API_KEY`, `CORBANU_PLAN_API_KEY`, then `PFTERMINAL_PLAN_API_KEY`, with the existing saved credential fallback. Blank aliases are skipped. Missing credentials direct you to Providers; they do not delete the encrypted outbox.
 
 Recording belongs to the linked Task Node account. Sharing requires an explicit Campaign Tracker grant in addition to an accepted collaborator or direct-report relationship. A manager relationship alone does not expose another person's prompts. Access audit shows reads and grant changes.
 

@@ -13,10 +13,12 @@ PF-55-S03 is completed and archived: the native Astra repair passed real TUI
 inference/tool, cancel/recovery and same-thread resume in both default test
 repositories, and the exact qualified binary is installed for human testing.
 PF-55-S04 is completed and archived: exact Luna/Kimi K3 child launches, results
-and cold resume pass in both live repositories. No executable sprint remains.
+and cold resume pass in both live repositories. PF-58 is the current serial
+credential-health and reauthentication follow-up.
 
 | Order | Sprint | Outcome | Status | Depends on |
 | ---: | --- | --- | --- | --- |
+| 22 | [PF-58-S01](pf-58-s01-credential-health-and-reauth.md) | Credential-scoped health and keyboard reauthentication | draft residual qualification; human-accepted for main integration | PF-57-S01 |
 | 7 | [PF-48-S01](../../archive/unified-provider-auth/pf-48-s01-provider-catalog-contract.md) | Typed provider catalog and capability contract | completed | PF-47-S01 |
 | 8 | [PF-49-S01](../../archive/unified-provider-auth/pf-49-s01-status-and-eligibility.md) | Shared metadata status and eligibility persistence | completed | PF-48-S01 |
 | 9 | [PF-50-S01](../../archive/unified-provider-auth/pf-50-s01-api-key-flow-controller.md) | Shared typed controller and API-key adapter | completed | PF-49-S01 |

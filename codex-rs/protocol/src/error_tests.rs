@@ -642,6 +642,35 @@ fn unexpected_status_payment_required_is_not_retryable() {
 }
 
 #[test]
+fn unexpected_status_preserves_definite_auth_rejection_for_clients() {
+    for status in [
+        StatusCode::UNAUTHORIZED,
+        StatusCode::FORBIDDEN,
+        StatusCode::TOO_MANY_REQUESTS,
+        StatusCode::SERVICE_UNAVAILABLE,
+    ] {
+        let err = CodexErr::UnexpectedStatus(UnexpectedResponseError {
+            status,
+            body: String::new(),
+            user_message: None,
+            url: None,
+            cf_ray: None,
+            request_id: None,
+            identity_authorization_error: None,
+            identity_error_code: None,
+        });
+        assert_eq!(
+            err.to_codex_protocol_error(),
+            if status == StatusCode::UNAUTHORIZED {
+                CodexErrorInfo::Unauthorized
+            } else {
+                CodexErrorInfo::Other
+            }
+        );
+    }
+}
+
+#[test]
 fn unexpected_status_transient_statuses_are_retryable() {
     for status in [
         StatusCode::REQUEST_TIMEOUT,

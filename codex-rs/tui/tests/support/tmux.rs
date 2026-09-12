@@ -41,6 +41,7 @@ impl TerminalSize {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TmuxKey {
     Down,
+    Right,
     Enter,
     Escape,
 }
@@ -49,6 +50,7 @@ impl TmuxKey {
     fn name(self) -> &'static str {
         match self {
             Self::Down => "Down",
+            Self::Right => "Right",
             Self::Enter => "Enter",
             Self::Escape => "Escape",
         }
@@ -312,6 +314,17 @@ pub(crate) struct TmuxSession<'a> {
 }
 
 impl<'a> TmuxSession<'a> {
+    /// Attachment targets only this owned private fixture; callers must keep it alive.
+    pub(crate) fn attachment_command(&self) -> Command {
+        let mut command = self.server.command();
+        command.args(["attach-session", "-t", &self.name]);
+        command
+    }
+
+    pub(crate) fn is_running(&self) -> bool {
+        self.server.has_session(&self.name) || process_is_running(self.primary_pane.pid)
+    }
+
     pub(crate) fn primary_pane(&self) -> &TmuxPane<'a> {
         &self.primary_pane
     }

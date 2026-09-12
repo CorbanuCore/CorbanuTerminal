@@ -14,6 +14,27 @@ use std::time::Duration;
 use std::time::Instant;
 use tracing::trace;
 
+#[cfg(target_os = "macos")]
+mod macos_interaction;
+#[cfg(any(target_os = "macos", test))]
+mod prompt_budget;
+
+fn with_native_interaction<T>(
+    service: &str,
+    account: &str,
+    callback: impl FnOnce() -> Result<T, CredentialStoreError>,
+) -> Result<T, CredentialStoreError> {
+    #[cfg(target_os = "macos")]
+    {
+        macos_interaction::run(service, account, callback)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (service, account);
+        callback()
+    }
+}
+
 const DEFAULT_KEYRING_OPERATION_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug)]
@@ -222,24 +243,27 @@ impl KeyringStore for DefaultKeyringStore {
             "load",
             DEFAULT_KEYRING_OPERATION_TIMEOUT,
             move || {
-                trace!("keyring.load start, service={service}, account={account}");
-                let entry = Entry::new(&service, &account).map_err(CredentialStoreError::new)?;
-                match entry.get_password() {
-                    Ok(password) => {
-                        trace!("keyring.load success, service={service}, account={account}");
-                        Ok(Some(password))
+                with_native_interaction(&service, &account, || {
+                    trace!("keyring.load start, service={service}, account={account}");
+                    let entry =
+                        Entry::new(&service, &account).map_err(CredentialStoreError::new)?;
+                    match entry.get_password() {
+                        Ok(password) => {
+                            trace!("keyring.load success, service={service}, account={account}");
+                            Ok(Some(password))
+                        }
+                        Err(keyring::Error::NoEntry) => {
+                            trace!("keyring.load no entry, service={service}, account={account}");
+                            Ok(None)
+                        }
+                        Err(error) => {
+                            trace!(
+                                "keyring.load error, service={service}, account={account}, error={error}"
+                            );
+                            Err(CredentialStoreError::new(error))
+                        }
                     }
-                    Err(keyring::Error::NoEntry) => {
-                        trace!("keyring.load no entry, service={service}, account={account}");
-                        Ok(None)
-                    }
-                    Err(error) => {
-                        trace!(
-                            "keyring.load error, service={service}, account={account}, error={error}"
-                        );
-                        Err(CredentialStoreError::new(error))
-                    }
-                }
+                })
             },
         )
     }
@@ -254,23 +278,26 @@ impl KeyringStore for DefaultKeyringStore {
             "save",
             DEFAULT_KEYRING_OPERATION_TIMEOUT,
             move || {
-                trace!(
-                    "keyring.save start, service={service}, account={account}, value_len={}",
-                    value.len()
-                );
-                let entry = Entry::new(&service, &account).map_err(CredentialStoreError::new)?;
-                match entry.set_password(&value) {
-                    Ok(()) => {
-                        trace!("keyring.save success, service={service}, account={account}");
-                        Ok(())
+                with_native_interaction(&service, &account, || {
+                    trace!(
+                        "keyring.save start, service={service}, account={account}, value_len={}",
+                        value.len()
+                    );
+                    let entry =
+                        Entry::new(&service, &account).map_err(CredentialStoreError::new)?;
+                    match entry.set_password(&value) {
+                        Ok(()) => {
+                            trace!("keyring.save success, service={service}, account={account}");
+                            Ok(())
+                        }
+                        Err(error) => {
+                            trace!(
+                                "keyring.save error, service={service}, account={account}, error={error}"
+                            );
+                            Err(CredentialStoreError::new(error))
+                        }
                     }
-                    Err(error) => {
-                        trace!(
-                            "keyring.save error, service={service}, account={account}, error={error}"
-                        );
-                        Err(CredentialStoreError::new(error))
-                    }
-                }
+                })
             },
         )
     }
@@ -284,24 +311,27 @@ impl KeyringStore for DefaultKeyringStore {
             "delete",
             DEFAULT_KEYRING_OPERATION_TIMEOUT,
             move || {
-                trace!("keyring.delete start, service={service}, account={account}");
-                let entry = Entry::new(&service, &account).map_err(CredentialStoreError::new)?;
-                match entry.delete_credential() {
-                    Ok(()) => {
-                        trace!("keyring.delete success, service={service}, account={account}");
-                        Ok(true)
+                with_native_interaction(&service, &account, || {
+                    trace!("keyring.delete start, service={service}, account={account}");
+                    let entry =
+                        Entry::new(&service, &account).map_err(CredentialStoreError::new)?;
+                    match entry.delete_credential() {
+                        Ok(()) => {
+                            trace!("keyring.delete success, service={service}, account={account}");
+                            Ok(true)
+                        }
+                        Err(keyring::Error::NoEntry) => {
+                            trace!("keyring.delete no entry, service={service}, account={account}");
+                            Ok(false)
+                        }
+                        Err(error) => {
+                            trace!(
+                                "keyring.delete error, service={service}, account={account}, error={error}"
+                            );
+                            Err(CredentialStoreError::new(error))
+                        }
                     }
-                    Err(keyring::Error::NoEntry) => {
-                        trace!("keyring.delete no entry, service={service}, account={account}");
-                        Ok(false)
-                    }
-                    Err(error) => {
-                        trace!(
-                            "keyring.delete error, service={service}, account={account}, error={error}"
-                        );
-                        Err(CredentialStoreError::new(error))
-                    }
-                }
+                })
             },
         )
     }

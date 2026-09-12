@@ -189,9 +189,10 @@ impl StreamableHttpClient for StreamableHttpClientAdapter {
                 StreamableHttpClientAdapterError::SessionExpired404,
             ));
         }
-        if response.status == StatusCode::UNAUTHORIZED.as_u16()
-            && let Some(header) = response_header(&response.headers, WWW_AUTHENTICATE)
-        {
+        if response.status == StatusCode::UNAUTHORIZED.as_u16() {
+            // Some bearer-token services omit the OAuth challenge. HTTP 401 is
+            // still a typed authentication rejection, not an unstructured error.
+            let header = response_header(&response.headers, WWW_AUTHENTICATE).unwrap_or_default();
             return Err(StreamableHttpError::AuthRequired(AuthRequiredError::new(
                 header,
             )));

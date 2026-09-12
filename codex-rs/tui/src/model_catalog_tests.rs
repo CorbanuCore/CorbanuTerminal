@@ -1,6 +1,7 @@
 use super::*;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ReasoningEffort;
+use pretty_assertions::assert_eq;
 
 fn preset(model: &str, provider_id: Option<&str>) -> ModelPreset {
     ModelPreset {
@@ -96,22 +97,93 @@ fn configured_runtime_model_does_not_duplicate_existing_exact_or_inferred_provid
 }
 
 #[test]
-fn runtime_sync_is_idempotent_deterministic_and_preserves_exact_provider_identity() {
+fn runtime_sync_preserves_shared_opaque_custom_routes_but_not_idle_local_runtimes() {
     let catalog = ModelCatalog::new(vec![preset("shared-model", Some("provider-a"))]);
 
     catalog.sync_runtime_models(
-        ["provider-c", "provider-a", "provider-b"],
+        [
+            "provider-c",
+            "provider-a",
+            "provider-b",
+            "ollama",
+            "lmstudio",
+        ],
         Some("shared-model"),
+        "provider-b",
     );
     catalog.sync_runtime_models(
         ["provider-b", "provider-c", "provider-a"],
         Some("shared-model"),
+        "provider-b",
     );
 
     let models = catalog.try_list_models().unwrap();
     assert_eq!(models.len(), 3);
     assert_eq!(models[1].provider_id.as_deref(), Some("provider-b"));
     assert_eq!(models[1].id, "provider-b:shared-model");
-    assert_eq!(models[2].provider_id.as_deref(), Some("provider-c"));
     assert_eq!(models[2].id, "provider-c:shared-model");
+}
+
+#[test]
+fn claude_current_does_not_seed_local_or_custom_providers_on_manager_refresh() {
+    use codex_model_provider_info::*;
+    let current = CLAUDE_FABLE_5_1_PLAN_MODEL;
+    let catalog = ModelCatalog::new(vec![preset(current, Some(CLAUDE_PLAN_PROVIDER_ID))]);
+    for _ in 0..3 {
+        catalog.sync_runtime_models(
+            [
+                CLAUDE_PLAN_PROVIDER_ID,
+                "ollama",
+                "lmstudio",
+                "custom",
+                ANTHROPIC_PROVIDER_ID,
+            ],
+            Some(current),
+            CLAUDE_PLAN_PROVIDER_ID,
+        );
+    }
+    let models = catalog.try_list_models().unwrap();
+    assert_eq!(
+        models
+            .iter()
+            .map(|p| (p.model.as_str(), p.provider_id.as_deref()))
+            .collect::<Vec<_>>(),
+        vec![
+            (current, Some(CLAUDE_PLAN_PROVIDER_ID)),
+            (ANTHROPIC_DEFAULT_MODEL, Some(ANTHROPIC_PROVIDER_ID))
+        ],
+    );
+}
+
+#[test]
+fn runtime_refresh_does_not_clone_models_into_incompatible_provider_tabs() {
+    use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
+    use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
+    use codex_model_provider_info::CLAUDE_PLAN_MODEL;
+    use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+    use codex_model_provider_info::OPENAI_PROVIDER_ID;
+    use codex_model_provider_info::ZAI_DEFAULT_MODEL;
+
+    for model in [
+        CLAUDE_PLAN_MODEL,
+        CLAUDE_FABLE_5_PLAN_MODEL,
+        CLAUDE_FABLE_5_1_PLAN_MODEL,
+        ZAI_DEFAULT_MODEL,
+    ] {
+        let owner = canonical_catalog_provider(model).unwrap();
+        let catalog = ModelCatalog::new(vec![preset(model, Some(owner))]);
+        for _ in 0..2 {
+            catalog.sync_runtime_models(
+                [OPENAI_PROVIDER_ID, CLAUDE_PLAN_PROVIDER_ID],
+                Some(model),
+                owner,
+            );
+        }
+        let models = catalog.try_list_models().unwrap();
+        assert!(
+            models
+                .iter()
+                .all(|p| p.model != model || p.provider_id.as_deref() == Some(owner))
+        );
+    }
 }

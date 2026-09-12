@@ -1,0 +1,42 @@
+review still running: codex elapsed=60s pid=96334 cpu=0.9s/60s(1%) rss=145M state=S
+review still running: codex elapsed=120s pid=96334 cpu=0.5s/60s(1%) rss=146M state=S
+review still running: codex elapsed=180s pid=96334 cpu=0.4s/60s(1%) rss=146M state=S
+review still running: codex elapsed=240s pid=96334 cpu=0.3s/60s(1%) rss=149M state=S
+autoreview target: branch
+branch: feat/security-round5-provenance
+engine: codex
+model: claude-fable-5-1-plan
+thinking: high
+tools: on
+web_search: on
+ref: 4f263ca73
+bundle: 102362 chars
+autoreview findings: 1
+[P2] Default realtime websocket transport bypasses the protected source-admission guard
+codex-rs/core/src/client.rs:1187
+`check_source_admission` was added only to `ModelClient::create_realtime_call_with_headers` (WebRTC). In `core/src/realtime_conversation.rs`
+, `ConversationStartTransport::Websocket` is the default (`prepare_realtime_start` falls back to `Websocket`, and `sdp` is `None`), and that
+ branch calls `RealtimeWebsocketClient::connect(session_config, ...)` directly at ~line 604 without touching `ModelClient`, so a Moderate/Ag
+gressive session opens a provider realtime connection (session instructions, then user text/audio and Codex handoff output) with no admissio
+n check and before any fail-closed error. The QA record added in this diff (`qa/security-levels/sprints/PF-30-S01-typed-source-envelope/READ
+ME.md`: "Memory and realtime alternate input routes also fail closed") and the review scope ("Transport changes must preserve the guard") th
+erefore overstate the boundary. Smallest pre-merge fix: either call `model_client.check_source_admission(&Prompt::default())` (or an equival
+ent `pub(crate)` guard on `ModelClient`) before the websocket `connect` in `RealtimeStart` handling, or narrow the README/sprint claim to th
+e WebRTC call route only. Note that adding the guard requires editing `core/src/realtime_conversation.rs`, which is outside this lane's reco
+rded `write_scope`; that scope expansion should be recorded rather than silently absorbed.
+
+overall: patch is incorrect (0.7)
+Verified both Astra review-1 fixes: `Cargo.lock` now carries the `codex-content-security` edge under `codex-core` (package entry already pre
+sent; Bazel derives deps from Cargo), and `Session::build_model_client_for_configuration` constructs the replacement client with the same `s
+elf.thread_id` and calls `with_native_ingress_from`, which shares the `Arc<StdMutex<NativeIngress>>` only on matching thread identity; `for_
+provider`/`new_session` also clone the ingress fields. `source_admission_level` takes `max(configured, live snapshot)` (SecurityLevel derive
+s Ord Permissive<Moderate<Aggressive) and an unbound/uninitialized policy errors rather than degrading to Permissive; all three wire builder
+s (used by the responses HTTP/websocket, chat, anthropic, and compact paths) route through `source_admitted_input`, and Permissive returns t
+he original `get_formatted_input_for_request` output. Envelope deserialization is strict (`deny_unknown_fields`, untrusted-only authority, l
+ineage/digest recomputation), tool origins are registered only by the router/MCP dispatcher, projection is deterministic, capacity/oversize
+mark the registry unavailable rather than evicting, and the 8,192-byte JSON projection bound is enforced after escaping (normalized text ≤2,
+048 bytes, so worst case stays well under the 10k-token hard cap while plausibly exceeding 1,000 tokens, as disclosed). Diagnostics are stat
+ic strings. The one landability issue found: the default realtime websocket transport never passes through `ModelClient`, so the diff's own
+QA claim that realtime routes fail closed does not hold for that path. Read-only inspection; no tests run or files modified.
+
+Review 2 completed: exit 1. Press Enter to close this private fixture.

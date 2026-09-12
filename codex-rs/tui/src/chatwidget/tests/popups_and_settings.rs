@@ -22,6 +22,7 @@ use codex_model_provider_info::CLAUDE_FABLE_5_1_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_MODEL;
 use codex_model_provider_info::CLAUDE_FABLE_5_PLAN_MODEL;
 use codex_model_provider_info::CLAUDE_PLAN_MODEL;
+use codex_model_provider_info::CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL;
 use codex_model_provider_info::CORBANU_API_DEEPSEEK_V4_PRO_MODEL;
 use codex_model_provider_info::CORBANU_API_GLM_5_3_FLASH_MODEL;
 use codex_model_provider_info::CORBANU_API_GLM_5_3_MODEL;
@@ -3846,6 +3847,123 @@ fn move_model_picker_selection_to(chat: &mut ChatWidget, model: &str) {
 }
 
 #[tokio::test]
+async fn model_picker_same_slug_marks_only_exact_provider_current() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some(CLAUDE_FABLE_5_1_PLAN_MODEL)).await;
+    let base = chat
+        .model_catalog
+        .try_list_models()
+        .unwrap()
+        .into_iter()
+        .find(|preset| preset.model == CLAUDE_FABLE_5_1_PLAN_MODEL)
+        .unwrap();
+    let mut first = base.clone();
+    first.provider_id = Some("custom-a".to_string());
+    let mut second = base;
+    second.provider_id = Some("custom-b".to_string());
+    chat.config.model_provider_id = "custom-b".to_string();
+    chat.open_all_models_popup(vec![first, second]);
+    let popup = render_bottom_popup_with_height(&chat, /*width*/ 120, /*height*/ 20);
+    assert_eq!(popup.matches("(current)").count(), 1, "{popup}");
+    insta::assert_snapshot!("model_picker_exact_provider_current", popup);
+}
+
+#[tokio::test]
+async fn model_picker_claude_recovery_refresh_restores_full_subscription_catalog() {
+    use crate::provider_status_host::ProviderAccountMetadata;
+    use crate::provider_status_host::ProviderStatusHost;
+    use codex_provider_auth::ClaudeCredentialMetadata;
+    use codex_provider_auth::ClaudeCredentialSource;
+    use codex_provider_auth::ProviderRuntimeAuthorizations;
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some(CLAUDE_FABLE_5_1_PLAN_MODEL)).await;
+    let home = tempfile::tempdir().unwrap();
+    let mut config = crate::legacy_core::config::ConfigBuilder::default()
+        .codex_home(home.path().to_path_buf())
+        .build()
+        .await
+        .unwrap();
+    config.cli_auth_credentials_store_mode = codex_login::AuthCredentialsStoreMode::File;
+    config.model_provider_id = "claude-plan".to_string();
+    chat.config.model_provider_id = "claude-plan".to_string();
+    let host = ProviderStatusHost::from_config(&config, ProviderAccountMetadata::default());
+    chat.model_catalog.set_provider_policy(
+        super::super::provider_model_policy::ProviderModelPolicy::new(
+            host.clone(),
+            ProviderRuntimeAuthorizations::default(),
+        ),
+    );
+    assert!(
+        !chat
+            .model_catalog
+            .provider_is_selectable("claude-plan", CLAUDE_PLAN_MODEL)
+    );
+    host.update_account_metadata(ProviderAccountMetadata {
+        claude: ClaudeCredentialMetadata::Configured {
+            source: ClaudeCredentialSource::Managed,
+        },
+        ..Default::default()
+    });
+    chat.model_catalog
+        .update_provider_statuses(host.resolve().entries());
+    chat.model_catalog.sync_runtime_models(
+        config.model_providers.keys().map(String::as_str),
+        Some(CLAUDE_FABLE_5_1_PLAN_MODEL),
+        "claude-plan",
+    );
+    let presets = chat.model_catalog.try_list_models().unwrap();
+    chat.open_all_models_popup(presets);
+    let popup = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 30);
+    for model in [
+        CLAUDE_PLAN_MODEL,
+        CLAUDE_FABLE_5_PLAN_MODEL,
+        CLAUDE_FABLE_5_1_PLAN_MODEL,
+    ] {
+        assert!(popup.contains(model), "{popup}");
+    }
+    assert_eq!(popup.matches("(current)").count(), 1, "{popup}");
+    assert!(!popup.contains("[Other]"), "{popup}");
+    assert!(
+        !chat
+            .model_catalog
+            .provider_is_selectable("anthropic", ANTHROPIC_DEFAULT_MODEL)
+    );
+    insta::assert_snapshot!("model_picker_recovered_claude_subscription", popup);
+
+    // A separately configured API key enables Anthropic without moving the
+    // current subscription session or borrowing the subscription credential.
+    codex_login::login_with_provider_api_key(
+        home.path(),
+        "ANTHROPIC_API_KEY",
+        "synthetic-picker-anthropic-key",
+        config.cli_auth_credentials_store_mode,
+        config.auth_keyring_backend_kind(),
+    )
+    .unwrap();
+    chat.model_catalog
+        .update_provider_statuses(host.resolve().entries());
+    assert!(
+        chat.model_catalog
+            .provider_is_selectable("anthropic", ANTHROPIC_DEFAULT_MODEL)
+    );
+    chat.handle_key_event(KeyEvent::from(KeyCode::Esc));
+    chat.open_all_models_popup(chat.model_catalog.try_list_models().unwrap());
+    chat.handle_key_event(KeyEvent::from(KeyCode::Right));
+    let api_popup = render_bottom_popup_with_height(&chat, /*width*/ 140, /*height*/ 30);
+    assert!(api_popup.contains("[Anthropic]"), "{api_popup}");
+    for model in [
+        ANTHROPIC_DEFAULT_MODEL,
+        CLAUDE_FABLE_5_MODEL,
+        CLAUDE_FABLE_5_1_MODEL,
+    ] {
+        assert!(
+            api_popup.contains(&format!("Model: {model}.")),
+            "{api_popup}"
+        );
+    }
+    assert_eq!(api_popup.matches("(current)").count(), 0);
+    assert_eq!(chat.config.model_provider_id, "claude-plan");
+}
+
+#[tokio::test]
 async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(Some(AMBIENT_DEFAULT_MODEL)).await;
     chat.thread_id = Some(ThreadId::new());
@@ -3890,6 +4008,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     let (mut claude_plan_chat, _claude_plan_rx, _claude_plan_op_rx) =
         make_chatwidget_manual(Some(CLAUDE_PLAN_MODEL)).await;
     claude_plan_chat.thread_id = Some(ThreadId::new());
+    claude_plan_chat.config.model_provider_id = "claude-plan".to_string();
     let presets = claude_plan_chat
         .model_catalog
         .try_list_models()
@@ -3916,6 +4035,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     let (mut anthropic_chat, _anthropic_rx, _anthropic_op_rx) =
         make_chatwidget_manual(Some(ANTHROPIC_DEFAULT_MODEL)).await;
     anthropic_chat.thread_id = Some(ThreadId::new());
+    anthropic_chat.config.model_provider_id = "anthropic".to_string();
     let presets = anthropic_chat
         .model_catalog
         .try_list_models()
@@ -3948,6 +4068,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     let (mut baseten_chat, _baseten_rx, _baseten_op_rx) =
         make_chatwidget_manual(Some(BASETEN_DEFAULT_MODEL)).await;
     baseten_chat.thread_id = Some(ThreadId::new());
+    baseten_chat.config.model_provider_id = "baseten".to_string();
     let presets = baseten_chat
         .model_catalog
         .try_list_models()
@@ -3968,6 +4089,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     let (mut kimi_chat, _kimi_rx, _kimi_op_rx) =
         make_chatwidget_manual(Some(KIMI_CODE_K3_MODEL)).await;
     kimi_chat.thread_id = Some(ThreadId::new());
+    kimi_chat.config.model_provider_id = KIMI_CODE_PROVIDER_ID.to_string();
     let presets = kimi_chat
         .model_catalog
         .try_list_models()
@@ -3988,6 +4110,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     let (mut vercel_chat, _vercel_rx, _vercel_op_rx) =
         make_chatwidget_manual(Some(VERCEL_DEFAULT_MODEL)).await;
     vercel_chat.thread_id = Some(ThreadId::new());
+    vercel_chat.config.model_provider_id = VERCEL_PROVIDER_ID.to_string();
     let presets = vercel_chat
         .model_catalog
         .try_list_models()
@@ -4025,6 +4148,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     let (mut vercel_fast_chat, _vercel_fast_rx, _vercel_fast_op_rx) =
         make_chatwidget_manual(Some(VERCEL_GLM_5_2_FAST_MODEL)).await;
     vercel_fast_chat.thread_id = Some(ThreadId::new());
+    vercel_fast_chat.config.model_provider_id = "vercel-anthropic-fast".to_string();
     let presets = vercel_fast_chat
         .model_catalog
         .try_list_models()
@@ -4046,6 +4170,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     let (mut minimax_chat, _minimax_rx, _minimax_op_rx) =
         make_chatwidget_manual(Some("minimax/minimax-m3")).await;
     minimax_chat.thread_id = Some(ThreadId::new());
+    minimax_chat.config.model_provider_id = OPENROUTER_PROVIDER_ID.to_string();
     let presets = minimax_chat
         .model_catalog
         .try_list_models()
@@ -4080,6 +4205,7 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
     let (mut openai_chat, _openai_rx, _openai_op_rx) =
         make_chatwidget_manual(Some("gpt-5.6-sol")).await;
     openai_chat.thread_id = Some(ThreadId::new());
+    openai_chat.config.model_provider_id = "openai".to_string();
     let presets = openai_chat
         .model_catalog
         .try_list_models()
@@ -4127,10 +4253,11 @@ async fn model_picker_hides_fake_openai_models_and_shows_curated_provider_models
 }
 
 #[tokio::test]
-async fn corbanu_api_model_picker_preserves_ambient_and_shows_the_six_public_routes() {
+async fn corbanu_api_model_picker_preserves_ambient_and_shows_the_seven_public_routes() {
     let (mut chat, _rx, _op_rx) =
         make_chatwidget_manual(Some(CORBANU_API_GLM_5_3_FLASH_MODEL)).await;
     chat.thread_id = Some(ThreadId::new());
+    chat.config.model_provider_id = PFTERMINAL_PLAN_PROVIDER_ID.to_string();
 
     let mut presets = chat
         .model_catalog
@@ -4142,6 +4269,7 @@ async fn corbanu_api_model_picker_preserves_ambient_and_shows_the_six_public_rou
 
     assert_chatwidget_snapshot!("corbanu_api_model_picker", popup);
     assert!(popup.contains("[Corbanu API]"), "{popup}");
+    assert_eq!(popup.matches("DeepSeek V4.1 Flash").count(), 1);
     for model in [
         CORBANU_API_GLM_5_3_FLASH_MODEL,
         AMBIENT_DEFAULT_MODEL,
@@ -4150,6 +4278,7 @@ async fn corbanu_api_model_picker_preserves_ambient_and_shows_the_six_public_rou
         CORBANU_API_GPT_5_6_SOL_MODEL,
         CORBANU_API_KIMI_K3_MODEL,
         CORBANU_API_DEEPSEEK_V4_PRO_MODEL,
+        CORBANU_API_DEEPSEEK_V4_1_FLASH_MODEL,
     ] {
         assert!(
             popup.contains(model),
@@ -4963,4 +5092,35 @@ async fn reasoning_popup_escape_returns_to_model_popup() {
     let after_escape = render_bottom_popup(&chat, /*width*/ 80);
     assert!(after_escape.contains("Select Model"));
     assert!(!after_escape.contains("Select Reasoning Level"));
+}
+
+#[tokio::test]
+async fn model_picker_runtime_refresh_keeps_claude_out_of_openai_tab() {
+    use codex_model_provider_info::CLAUDE_PLAN_PROVIDER_ID;
+    let (mut chat, _, _) = make_chatwidget_manual(Some(CLAUDE_FABLE_5_PLAN_MODEL)).await;
+    chat.config.model_provider_id = CLAUDE_PLAN_PROVIDER_ID.to_string();
+    chat.thread_id = Some(ThreadId::new());
+    chat.model_catalog.sync_runtime_models(
+        ["openai", CLAUDE_PLAN_PROVIDER_ID],
+        Some(CLAUDE_FABLE_5_PLAN_MODEL),
+        CLAUDE_PLAN_PROVIDER_ID,
+    );
+    let presets = chat.model_catalog.try_list_models().unwrap();
+    chat.open_all_models_popup(presets);
+    let claude = render_bottom_popup_with_height(&chat, 140, 36);
+    assert!(claude.contains("[Claude Plan]"), "{claude}");
+    assert!(claude.contains(&format!("Model: {CLAUDE_FABLE_5_PLAN_MODEL}.")));
+    for _ in 0..16 {
+        let popup = render_bottom_popup_with_height(&chat, 140, 36);
+        if popup.contains("[OpenAI]") {
+            assert!(
+                !popup.contains(&format!("Model: {CLAUDE_FABLE_5_PLAN_MODEL}.")),
+                "{popup}"
+            );
+            insta::assert_snapshot!("openai_tab_after_claude_runtime_refresh", popup);
+            return;
+        }
+        chat.handle_key_event(KeyEvent::from(KeyCode::Right));
+    }
+    panic!("OpenAI tab unavailable");
 }

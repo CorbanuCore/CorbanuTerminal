@@ -796,10 +796,20 @@ impl TurnRequestProcessor {
                     )));
                 };
                 let overrides = ConfigOverrides {
+                    // Reload permissions for this thread's runtime, not an unrelated
+                    // saved default. CLI/model switches can legitimately differ from
+                    // config.toml; validating a mixed pair blocks an otherwise valid turn.
+                    model: Some(model.clone().unwrap_or_else(|| snapshot.model.clone())),
+                    model_provider: Some(
+                        model_provider
+                            .clone()
+                            .unwrap_or_else(|| snapshot.model_provider_id.clone()),
+                    ),
                     cwd: environments
                         .as_ref()
                         .map(|environments| environments.legacy_fallback_cwd.to_path_buf()),
                     default_permissions: Some(permissions),
+                    codex_self_exe: self.arg0_paths.codex_self_exe.clone(),
                     codex_linux_sandbox_exe: self.arg0_paths.codex_linux_sandbox_exe.clone(),
                     main_execve_wrapper_exe: self.arg0_paths.main_execve_wrapper_exe.clone(),
                     ..Default::default()

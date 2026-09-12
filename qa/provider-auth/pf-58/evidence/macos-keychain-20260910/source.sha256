@@ -1,0 +1,6 @@
+dcdfae6b1e56fbebe3843d9c2428a89be3c957f15779c32a13aad92cbf94e4b9  codex-rs/keyring-store/src/lib.rs
+bc9656571df078ad15eacffdb6679cf8d9d32eb9c51d39e33360be506cd0a465  codex-rs/keyring-store/src/macos_interaction.rs
+26885e7e2919f2d187cdf474d4a0d107ae6ccd8dd7e6fa3274abb79bdc52da73  codex-rs/keyring-store/src/macos_interaction_tests.rs
+0b753ca658531fdf11bc2326e3b416662400d94e58175abec34bd1c829f8519a  codex-rs/keyring-store/src/prompt_budget.rs
+3324442b6f49fd56d0d13a476a81fefd9fbd351c825bd22bb9386fae35e6d4b6  codex-rs/keyring-store/src/prompt_budget_tests.rs
+47cecd7374c9ca2beacf8b0d60011ef056766b6b3e45913b33bb2f499227973d  qa/provider-auth/pf-58/handoff_tmux.py

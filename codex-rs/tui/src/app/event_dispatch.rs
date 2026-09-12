@@ -678,7 +678,10 @@ impl App {
                 } => self.chat_widget.open_shared_claude_challenge(challenge),
                 crate::provider_account_auth_host::ProviderAccountPresentation::Completion(
                     completion,
-                ) => self.apply_shared_account_completion(completion),
+                ) => {
+                    self.chat_widget.dismiss_shared_account_auth();
+                    self.apply_shared_account_completion(completion);
+                }
                 crate::provider_account_auth_host::ProviderAccountPresentation::Failed(failure) => {
                     self.chat_widget.open_shared_account_failure(failure);
                 }
@@ -2399,7 +2402,7 @@ impl App {
                 });
             }
             AppEvent::OpenSharedProviderSetup => {
-                let host = self.shared_provider_status_host.clone().unwrap_or_else(|| {
+                let host = self.reusable_provider_status_host().unwrap_or_else(|| {
                     crate::provider_status_host::ProviderStatusHost::from_config(
                         &self.config,
                         crate::provider_status_host::ProviderAccountMetadata {
@@ -2411,16 +2414,13 @@ impl App {
                 let session = crate::onboarding::provider_setup::ProviderSetupSession::from_statuses(
                     host.resolve().entries(),
                 );
-                self.shared_provider_status_host = Some(host);
+                self.shared_provider_status_host = Some(host.clone());
                 self.shared_provider_setup_session = Some(session);
                 self.shared_provider_account_auth_host = Some(
                     crate::provider_account_auth_host::ProviderAccountAuthHost::new(
                         app_server.request_handle(),
                         self.app_event_tx.clone(),
-                        self.shared_provider_status_host
-                            .as_ref()
-                            .expect("shared provider status host")
-                            .clone(),
+                        host,
                         self.config.clone(),
                     ),
                 );
@@ -2656,6 +2656,17 @@ impl App {
             AppEvent::OpenProviderManagerActions { provider_id } => {
                 self.open_provider_manager_actions(provider_id);
             }
+            AppEvent::OpenProviderManagerRecovery { provider_id } => {
+                self.open_provider_manager_recovery(provider_id);
+            }
+            AppEvent::ProviderManagerApiKeyCancelled { attempt_id, provider_id } => {
+                if self.provider_management_host.as_ref()
+                    .and_then(crate::provider_management_host::ProviderManagementHost::authenticating_attempt)
+                    == Some((attempt_id, provider_id.clone()))
+                {
+                    self.provider_manager_authentication_cancelled(provider_id);
+                }
+            }
             AppEvent::ProviderManagerBeginAuthentication {
                 provider_id,
                 capability,
@@ -2731,6 +2742,7 @@ impl App {
                     self.model_catalog.sync_runtime_models(
                         self.config.model_providers.keys().map(String::as_str),
                         self.config.model.as_deref(),
+                        &self.config.model_provider_id,
                     );
                     self.model_catalog.refresh_provider_policy();
                 }
@@ -3615,10 +3627,11 @@ impl App {
             AppEvent::CampaignTrackerResult {
                 path,
                 enrollment,
+                body,
                 result,
             } => {
                 self.chat_widget
-                    .campaign_tracker_result(path, enrollment, result);
+                    .campaign_tracker_result(path, enrollment, body, result);
             }
             AppEvent::CampaignTrackerSync { identity, result } => {
                 self.chat_widget
@@ -3701,6 +3714,24 @@ impl App {
             AppEvent::SubmitTaskNodeTaskRequestResult { result } => {
                 self.chat_widget
                     .handle_submit_tasknode_task_request_result(result);
+            }
+            AppEvent::TaskNodeTeamContextDocument { text } => {
+                let _ = tui.enter_alt_screen();
+                let lines = text.lines().flat_map(|line| {
+                    textwrap::wrap(line, 100).into_iter().map(|line| ratatui::text::Line::from(line.into_owned()))
+                }).collect();
+                self.overlay = Some(Overlay::new_static_with_lines(
+                    lines,
+                    "Task Node Team Context · read only".to_string(),
+                    self.keymap.pager.clone(),
+                ));
+                tui.frame_requester().schedule_frame();
+            }
+            AppEvent::OpenTaskNodeTeamContext => {
+                self.chat_widget.open_tasknode_team_context();
+            }
+            AppEvent::OpenTaskNodeTeamContextResult { result } => {
+                self.chat_widget.handle_tasknode_team_context_result(result);
             }
             AppEvent::OpenTaskNodeContext => {
                 self.chat_widget.open_tasknode_context();

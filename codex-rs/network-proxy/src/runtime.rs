@@ -3,6 +3,9 @@ use crate::config::NetworkMode;
 use crate::config::NetworkProxyConfig;
 use crate::config::ValidatedUnixSocketPath;
 use crate::credential_broker::CredentialBroker;
+use crate::credential_broker::IsolatedCredentialDispatchError;
+use crate::credential_broker::IsolatedCredentialReceipt;
+use crate::credential_broker::IsolatedCredentialRoute;
 use crate::credential_broker::ScopedCredentialInjectionError;
 use crate::credential_broker::ScopedCredentialRoute;
 use crate::credential_broker::ScopedCredentialRouteError;
@@ -426,6 +429,27 @@ impl NetworkProxyState {
 
     pub fn scoped_credential_route_enabled(&self) -> bool {
         self.credential_broker.scoped_openai_enabled()
+    }
+
+    /// Register an opaque broker route; this does not qualify its OS service.
+    pub fn install_isolated_credential_route(
+        &self,
+        route: IsolatedCredentialRoute,
+    ) -> Result<(), ScopedCredentialRouteError> {
+        self.credential_broker.install_isolated_openai_route(route)
+    }
+
+    /// Dispatch only through the installed exact-host isolated credential route.
+    pub fn dispatch_isolated_credential(
+        &self,
+        scheme: &str,
+        host: &str,
+        port: u16,
+        method: &str,
+        path: &str,
+    ) -> Result<IsolatedCredentialReceipt, IsolatedCredentialDispatchError> {
+        self.credential_broker
+            .dispatch_isolated_openai(scheme, host, port, method, path)
     }
 
     pub fn scoped_credential_route_matches_host(&self, host: &str) -> bool {

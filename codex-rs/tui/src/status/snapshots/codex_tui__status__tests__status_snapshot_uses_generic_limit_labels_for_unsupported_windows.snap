@@ -5,12 +5,14 @@ expression: sanitized
 /status
 
 ╭──────────────────────────────────────────────────────────────────────────────╮
-│  >_ Corbanu Terminal (v0.1.31)                                               │
+│  >_ Corbanu Terminal (v0.1.38)                                               │
 │                                                                              │
 │  Model:                   gpt-5.1-codex-max                                  │
 │  Model provider:          Ambient                                            │
 │  Directory: [[workspace]]                                                    │
 │  Permissions:             Custom (workspace with network access, Ask for app │
+│  Security:                Requested Permissive; effective protection         │
+│                           unverified (/security)                             │
 │  Agents.md:               <none>                                             │
 │                                                                              │
 │  Token usage:             1.2K total  (800 input + 400 output)               │

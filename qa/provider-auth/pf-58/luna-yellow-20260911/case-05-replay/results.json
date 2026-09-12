@@ -1,0 +1,44 @@
+{
+  "case_number": 5,
+  "status": "passed",
+  "summary": "Claude Fable 5.1 Plan was offered, selected at Max, and returned exactly FABLE_51_OK in a live request; both visible model labels changed to max and no missing-environment or provider-auth-command error appeared.",
+  "observed_checks": [
+    {
+      "name": "Fable 5.1 offered",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-05-replay/evidence/02-model-picker.txt"
+    },
+    {
+      "name": "Both model labels changed to Max",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-05-replay/evidence/06-fable-max-selected.txt"
+    },
+    {
+      "name": "Exact live response",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-05-replay/evidence/09-request-complete.txt"
+    },
+    {
+      "name": "No missing-environment or provider-auth-command error visible",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-05-replay/evidence/09-request-complete.txt"
+    }
+  ],
+  "blockers": [],
+  "actions": [
+    "Started the supplied candidate in the dedicated target tmux session.",
+    "Accepted the visible startup trust prerequisite.",
+    "Ran /model, selected Claude Fable 5.1 Plan, followed More reasoning… to Max, and confirmed the selection.",
+    "Typed Reply with exactly: FABLE_51_OK and pressed Enter separately.",
+    "Captured named plaintext UI checkpoints.",
+    "Sent Ctrl+D at the empty composer; the dedicated target session exited normally."
+  ],
+  "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "platform": "macOS arm64",
+  "limitations": [
+    "Bound to this candidate and platform; no Linux inference.",
+    "Evidence is tmux terminal UI capture, not native desktop UI evidence.",
+    "Credential validity is not inferred beyond the observed successful request."
+  ],
+  "test_instruction_ambiguity": "The visible model is labeled Claude Fable 5.1 Plan / claude-fable-5-1-plan, while the instruction says Claude Fable 5.1; it was treated as the matching sole Fable 5.1 catalog entry."
+}

@@ -27,6 +27,30 @@ reviewable flow.
 Keep enough SOL for transaction fees unless checkout explicitly reports that
 fees are sponsored. Never paste recovery material into chat.
 
+## Wallet unavailable after updating to 0.1.41
+
+The 0.1.41 package contains `corbanu-walletd`, but its wallet client looks for the
+old `pfterminal-walletd` filename. This can prevent `/wallet` from opening even
+though installation succeeded. Repeatedly restarting the terminal does not
+repair the filename mismatch.
+
+On Linux or macOS, create a compatibility link beside the installed executable.
+Use the exact `bin` directory printed in the error:
+
+```sh
+cd "/path/from/the/error/bin" &&
+  test -x corbanu-walletd &&
+  ln -s corbanu-walletd pfterminal-walletd
+```
+
+Then choose **Retry** in Wallet. This links the bundled daemon under the name
+0.1.41 expects; it does not change wallet data. Do not delete the wallet directory
+to resolve this installation error.
+
+This recovery supports product-spec heading **Shipping MVP — LIVE**, **Wallet
+and payments**: “Local Solana wallet, SOL and canonical USDC support, scoped
+signing, backup/restore, and Corbanu Plan purchase/recovery.”
+
 ## Fund and use Corbanu API
 
 1. Open `/wallet` and choose **Corbanu API**.
@@ -41,6 +65,13 @@ The account view shows the current dollar balance, per-model input, cached-input
 cache-write, and output prices, plus the privacy boundary. API keys share the
 wallet's balance but retain separate creation, last-use, revocation, request,
 and spend attribution.
+
+The 0.1.42 release candidate includes **DeepSeek V4.1 Flash** under `/model` →
+**Corbanu API**, using your existing API credential. Its model ID is
+`corbanu/deepseek-v4.1-flash`. The picker shows High reasoning and the published
+rates: $0.22/M input, $0.007/M cached input, $0.66/M output, plus $0.0001 per
+request. It supports image input, streaming and tool calls. Selecting it keeps
+the Corbanu API route when you restart Terminal.
 
 ## Wallet and API controls
 

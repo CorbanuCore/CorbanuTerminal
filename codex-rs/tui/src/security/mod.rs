@@ -1,5 +1,6 @@
-//! Internal PF-24/25 seam. No slash command, key handler, or policy mutation is
-//! activated here. Core owns authority; the TUI can only prepare proposals.
+//! PF-24 profile copy and the future authenticated PF-24/25 observation seam.
+//! `/security` currently explores configuration intent only. The state below is
+//! not connected to a live event channel; no policy mutation is activated.
 #![allow(dead_code)]
 
 pub(crate) mod view;

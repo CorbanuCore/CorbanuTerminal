@@ -652,6 +652,7 @@ pub(crate) enum AppEvent {
     CampaignTrackerResult {
         path: String,
         enrollment: Option<bool>,
+        body: Option<serde_json::Value>,
         result: Result<serde_json::Value, String>,
     },
     CampaignTrackerSync {
@@ -750,6 +751,16 @@ pub(crate) enum AppEvent {
         result: Result<serde_json::Value, String>,
     },
     /// Show the current Task Node context document.
+    TaskNodeTeamContextDocument {
+        text: String,
+    },
+
+    OpenTaskNodeTeamContext,
+
+    OpenTaskNodeTeamContextResult {
+        result: Result<serde_json::Value, String>,
+    },
+
     OpenTaskNodeContext,
     /// Task Node context document loaded.
     OpenTaskNodeContextResult {
@@ -1593,6 +1604,13 @@ pub(crate) enum AppEvent {
         metadata: crate::provider_status_host::ProviderAccountMetadata,
     },
     OpenProviderManagerActions {
+        provider_id: codex_provider_auth::ProviderCatalogId,
+    },
+    OpenProviderManagerRecovery {
+        provider_id: codex_provider_auth::ProviderCatalogId,
+    },
+    ProviderManagerApiKeyCancelled {
+        attempt_id: codex_provider_auth::ProviderManagementAttemptId,
         provider_id: codex_provider_auth::ProviderCatalogId,
     },
     ProviderManagerBeginAuthentication {

@@ -23,7 +23,9 @@ impl ChatWidget {
         display_name: String,
     ) {
         let tx = self.app_event_tx.clone();
-        let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret(
+        let cancel_tx = self.app_event_tx.clone();
+        let cancelled_provider = target.provider_id.clone();
+        let view = crate::bottom_pane::vault_secret_entry::VaultSecretEntryView::new_fixed_secret_with_cancel(
             format!("provider:{}", target.provider_id),
             format!("Add {display_name}"),
             "API key — masked".to_string(),
@@ -35,6 +37,9 @@ impl ChatWidget {
                     api_key: crate::app_event::ProviderApiKeySecret::new(secret),
                 });
             }),
+            Box::new(move || cancel_tx.send(AppEvent::ProviderManagerApiKeyCancelled {
+                attempt_id, provider_id: cancelled_provider.clone(),
+            })),
         );
         self.bottom_pane.show_view(Box::new(view));
     }
@@ -51,11 +56,15 @@ impl ChatWidget {
         header.push(Line::from(
             "Configure providers and control whether they are eligible for use.",
         ));
+        header.push(Line::from(
+            "Configured means credentials are present, not verified by the provider.",
+        ));
         let items = statuses
             .iter()
             .filter_map(|status| {
                 let entry = catalog.get(status.id.as_str())?;
                 let provider_id = status.id.clone();
+                let recovery_id = status.id.clone();
                 Some(SelectionItem {
                     name: entry.display_name.clone(),
                     description: Some(status_description(status)),
@@ -65,6 +74,15 @@ impl ChatWidget {
                         });
                     })],
                     dismiss_on_select: false,
+                    selected_shortcuts: vec![crate::bottom_pane::SelectionShortcutAction {
+                        key: crate::key_hint::plain(KeyCode::Char('r')),
+                        action: Box::new(move |tx| {
+                            tx.send(AppEvent::OpenProviderManagerRecovery {
+                                provider_id: recovery_id.clone(),
+                            })
+                        }),
+                        dismiss_on_select: false,
+                    }],
                     ..Default::default()
                 })
             })
@@ -73,6 +91,7 @@ impl ChatWidget {
             view_id: Some(MANAGER_VIEW_ID),
             header: Box::new(header),
             items,
+            footer_note: Some("r recover credentials · Enter manage · Esc back".into()),
             initial_selected_idx: focused_provider.and_then(|provider_id| {
                 statuses.iter().position(|status| status.id == *provider_id)
             }),
@@ -97,6 +116,11 @@ impl ChatWidget {
         let mut header = ColumnRenderable::new();
         header.push(Line::from(entry.display_name.clone().bold()));
         header.push(Line::from(status_description(status)));
+        if status.configuration == ProviderConfigurationState::Configured {
+            header.push(Line::from(
+                "Credentials are present; a successful request is needed to verify access.",
+            ));
+        }
         if let Some(note) = credential_control_note(status) {
             header.push(Line::from(note));
         }
@@ -221,11 +245,11 @@ fn policy_item(
 fn status_description(status: &ProviderStatusSnapshot) -> String {
     let state = match status.configuration {
         ProviderConfigurationState::Configured => match status.eligibility {
-            ProviderEligibilityState::Active => "Active",
+            ProviderEligibilityState::Active => "Enabled · configured",
             ProviderEligibilityState::Inactive => "Inactive",
             _ => "Configured",
         },
-        ProviderConfigurationState::RecoveryRequired => "Recovery required",
+        ProviderConfigurationState::RecoveryRequired => "Credential needs attention · r recover",
         ProviderConfigurationState::NotConfigured => "Not configured",
         ProviderConfigurationState::Checking => "Checking",
         ProviderConfigurationState::Unavailable => "Unavailable",

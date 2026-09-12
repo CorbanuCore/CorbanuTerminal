@@ -102,6 +102,9 @@ PACKAGE_VARIANTS: dict[str, PackageVariant] = {
         executable_stem="codex",
         extra_binaries=(
             PackageExtraBinary(cargo_bin="pfterminal", executable_stem="pfterminal"),
+            PackageExtraBinary(
+                cargo_bin="pfterminal-walletd", executable_stem="pfterminal-walletd"
+            ),
         ),
     ),
     "codex-app-server": PackageVariant(

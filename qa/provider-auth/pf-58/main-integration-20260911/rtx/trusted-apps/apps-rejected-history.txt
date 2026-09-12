@@ -1,0 +1,63 @@
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                          │
+│                                                        │
+│ model:       loading   /model to change                │
+│ directory:   /home/travis/…/pf13-main-release-20260911 │
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+
+
+› Summarize recent commits
+
+  GPT-6 Astra via qa-healthy default · /home/travis/worktrees/pf13-main-release-20260911 · Corbanu Terminal · TPS: -- tok/s
+
+
+› Summarize recent commits
+
+  GPT-6 Astra via qa-healthy default · /home/travis/worktrees/pf13-main-release-20260911 · Corbanu Terminal · TPS: -- tok/s
+
+╭────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.42)                          │
+│                                                        │
+│ model:       gpt-6-astra   /model to change            │
+│ directory:   /home/travis/…/pf13-main-release-20260911 │
+│ permissions: YOLO mode                                 │
+╰────────────────────────────────────────────────────────╯
+
+⚠ OpenAI (openai) credential was rejected. Open /providers, select OpenAI, and press r to recover. Other providers are unchanged.
+
+⚠ OpenAI account authentication for codex_apps was rejected. Open /providers, select OpenAI, and press r to sign in again. Other providers
+  are unchanged.
+
+⚠ MCP startup incomplete (failed: codex_apps)
+
+
+› Summarize recent commits
+
+  GPT-6 Astra via qa-healthy default · /home/travis/worktrees/pf13-main-release-20260911 · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -5,16 +5,16 @@ status: draft
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-30"
 execution_order: 37
-owner: "UNALLOCATED"
-parallel_lane: "UNALLOCATED"
-write_scope: "UNALLOCATED"
-integration_gate: "UNALLOCATED"
-worktree: "UNALLOCATED"
-branch: "UNALLOCATED"
-base_commit: "UNALLOCATED"
+owner: "/root/provenance"
+parallel_lane: "source-envelope"
+write_scope: "codex-rs/protocol/src/provenance.rs, codex-rs/protocol/src/provenance_tests.rs, codex-rs/core/src/security/ingress/, codex-rs/core/src/context/provenance.rs, codex-rs/core/src/session/session.rs, codex-rs/core/src/client_tests.rs, codex-rs/core/src/session/turn.rs, codex-rs/core/src/client_common.rs, codex-rs/core/src/realtime_conversation.rs, codex-rs/core/src/realtime_conversation_tests.rs, codex-rs/core/src/tools/router.rs, codex-rs/core/src/mcp_tool_call.rs, codex-rs/core/tests/suite/provenance.rs, qa/security-levels/sprints/PF-30-S01-typed-source-envelope/, docs/sprints/current/p0-security-levels/pf-30-s01-typed-source-envelope.md"
+integration_gate: "Codex /root owns protocol/context/test exports and shared Cargo/Bazel/lock registration, audits native ingress coverage without changing Permissive, reruns protocol/Core/governance plus actual TMUX on RTX and Astra High/Fable 5.1 High reviews (maximum five per lane). Contract-only evidence cannot complete this sprint."
+worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/security-round5-provenance"
+branch: "feat/security-round5-provenance"
+base_commit: "07791288b6feeccfaee5a57c12452359cc666957"
 depends_on: "PF-22-S02"
 created: 2026-08-28
-updated: 2026-09-02
+updated: 2026-09-04
 ---
 
 # PF-30-S01 — Typed source envelope and trusted ingress
@@ -43,28 +43,48 @@ updated: 2026-09-02
 ## Preconditions
 
 - [x] Active plan; PF-22-S02 completed and archived at the exact recorded base.
-- [ ] Allocate a recoverable worktree, branch, base, owner, literal scope, and integration gate before returning this sprint to ready.
-- [ ] Read root and nearest implementation-path AGENTS.md; confirm source pins, provider request paths and fail-closed backend/API availability before code changes.
+- [x] Round-five allocation records a recoverable worktree, branch, base, owner, literal scope, and integration gate.
+- [x] Read root/Rust/Core policies, product citation and the recorded OC-4/OC-10 source review; inspected native session/MCP/tool and all three provider request paths. The lost pinned source checkout was not represented as a fresh source inspection. Protected screening readiness remains unavailable and fail closed.
 
 ## Done
 
 - [x] New single-feature record reconciled with current ownership and archived design input; no implementation claimed.
 - [x] On 2026-09-02, product authority confirmed the recovered repository contains no surviving PF-30 branch, implementation commit, or handoff artifact; the absent `/Volumes/CorbanuDrive/Corbanu/worktrees/p0-security-source-envelope` reservation was therefore released to draft.
+- [x] Round-five envelope/admission, native sidecar/hooks, inherited policy floor and realtime guard reached tested source `e592cf75a`; the exact 22-Core/285-protocol evidence, baseline full-Core failures and three reviews are retained in QA. This is a qualified staged boundary, not completed production screening or a clean overall review.
+- [x] Define immutable source ID/type, origin, actor, retrieval time, untrusted authority, digest, transformations and taint lineage separately from content. Descriptive protocol deserialization cannot mint Core admission.
+- [x] Add named source/role/metadata and missing-source regressions, including a synthetic unknown route/tool variant; connect exact admitted input to the three real provider adapters with unchanged Permissive shaping.
+- [x] Rolling continuation implements complete-input screening transport segmentation within the existing 2,048-byte input bound: chunks at most 512 bytes, one exact source/digest/count, full reassembly and atomic admission. No prefix release or per-segment authority. RTX after scoped fix/full formatting: 27 Core provenance tests and 22 content-security contract tests pass, including split Unicode escapes, partial/duplicate/cross-source/swapped-content chunks and exact provider-wire replay stability. Source checkpoint `078342d85` plus synchronized remote formatting; final candidate/TMUX/review ledger is recorded in QA.
 
 ## Remaining
 
-- [ ] Add a synthetic newly introduced provider/tool/ingress variant absent from the registry and prove rejection or conservative untrusted handling before model admission. Missing registration, malformed envelopes and allow verdicts cannot manufacture authority.
+- [ ] Connect a real trusted screening producer to the completed candidate/segment handoff. `codex-content-security` currently provides the contract/reassembler, not a production classifier; the positive tests use an explicitly synthetic engine. A production verdict cannot be fabricated and PF-35 qualification cannot be bypassed. Core client.rs and session/mod.rs belong exclusively to PF-30-S04; request any additional integration hooks from the coordinator.
 
 - [ ] Port forged metadata/role/model-token and Unicode wrapper fixtures, including complete markers before a clipped marker. Host-generated authorization notices use a separate typed constructor; external labels and unsafe-hook switches cannot mint trust or bypass required screening.
 
-- [ ] Define immutable source ID/type, origin, actor, retrieval time, trust/authority, digest, transformations and taint lineage outside content-controlled fields.
 - [ ] Assign envelopes only at trusted ingress for web/search, files, transcripts, social/trollbox/email, MCP/tool/plugin/hook output and child messages; unknown origin is untrusted, never human authority.
-- [ ] Serialize separate data envelopes into each provider context adapter; normalize forged role delimiters, special tokens, bidi/zero-width markers and unsafe display metadata without promoting content.
+- [ ] Complete finer native producer identity and unsupported hosted/opaque ingress coverage. Generic tool/transcript origins remain conservative; producer names or source text cannot substitute for an observed host adapter. The three provider projections and escaping are implemented, but do not prove missing native source coverage.
 - [ ] Keep user-issued authority on an authenticated human event channel; quoted text inside a human message is not automatically a grant.
 - [ ] Test forged system/human markers, missing envelope, mixed-source chunks, Unicode confusables and provider round trips.
-- [ ] Add named `pf_30_s01` regression tests; update affected Cargo/Bazel/lock/schema edges together without broadening this feature.
+- [ ] Finish whole-feature native/production qualification and record final-tree review/TMUX evidence; no archive based on fixture screening alone. Shared registrations remain coordinator-owned.
 
 ## Verification
+
+Round-five staged checkpoint: validated envelopes, native host observation/pending
+screening handoff and three wire projections are implemented and tested, without
+claiming production screening or complete source coverage. RTX focused protocol:
+285/285; latest combined Core provenance/realtime: 88/88 (22 provenance tests).
+Full Core: 3,455 passed, five request-permissions failures reproduced on the
+allocation baseline, eight skips. Astra review 1 fixes and Fable review 2 realtime
+remediation are tracked in the QA ledger. Final realtime actual-key TMUX passed;
+review 3 verified those fixes and identified a separate unbound stage-one memory
+worker outside the allocation. That finding is retained and escalated; no overall
+clean review or complete memory-path protection is claimed.
+2026-09-04: returned incomplete to draft, releasing its slot for PF-20-S03.
+Coordinates/scope are historical, not current write authority. Frozen handoff:
+source `2a4fb5857`, evidence `e890ae4a9`, integrated `0266c2db9`;
+envelope/admission/segmentation contracts unchanged. Core 27/27, content-security
+22/22, actual-key TMUX and clean Astra/Fable reviews; budget 5/5. Earlier baseline
+failures and all remaining production/coverage gates persist; no dependency unlocks.
 
 - [ ] Run `cd codex-rs && just fix -p <affected-crate>` for each listed crate, then `just fmt`; inspect the final diff.
 - [ ] Focused: `cd codex-rs && just test -p codex-protocol pf_30_s01 && just test -p codex-core pf_30_s01`; confirm tests actually ran.

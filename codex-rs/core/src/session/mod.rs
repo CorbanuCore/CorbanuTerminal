@@ -218,6 +218,7 @@ mod mcp;
 mod mcp_prewarm;
 mod mcp_refresh;
 mod mcp_runtime;
+mod memory_stage_one;
 pub(crate) mod multi_agents;
 mod output_text_stream;
 mod review;
@@ -1768,6 +1769,11 @@ impl Session {
             self.services.attestation_provider.clone(),
             config.http_client_factory(),
         )
+        .with_ingress_policy(
+            config.security_level,
+            self.services.agent_control.effective_security_policy(),
+        )
+        .with_native_ingress_from(&self.services.model_client())
         .with_prompt_cache_key_override(
             crate::guardian::prompt_cache_key_override_for_review_session(
                 &configuration.session_source,
@@ -3206,6 +3212,7 @@ impl Session {
     ) {
         let items = self.prepare_conversation_items_for_history(turn_context, items);
         let items = items.as_ref();
+        self.services.model_client().observe_native_ingress(items);
         {
             let mut state = self.state.lock().await;
             state.current_time_reminder.note_recorded_items(items);

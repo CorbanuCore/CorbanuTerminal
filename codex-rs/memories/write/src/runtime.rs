@@ -1,18 +1,17 @@
 use codex_core::CodexThread;
-use codex_core::ModelClient;
 use codex_core::NewThread;
 use codex_core::Prompt;
-use codex_core::ResponseEvent;
 use codex_core::StartThreadOptions;
 use codex_core::ThreadManager;
 use codex_core::config::Config;
-use codex_core::content_items_to_text;
 use codex_core::detached_memory_responses_metadata;
+use codex_core::memory_stage_one::StageOneMemoryClient;
+use codex_core::memory_stage_one::StageOneMemoryDenial;
+use codex_core::memory_stage_one::StageOneMemoryError;
+use codex_core::memory_stage_one::StageOneMemoryRequest;
 use codex_core::resolve_installation_id;
-use codex_features::Feature;
 use codex_login::AuthManager;
 use codex_login::CodexAuth;
-use codex_login::auth::AgentIdentityAuthPolicy;
 use codex_login::auth_env_telemetry::collect_auth_env_telemetry;
 use codex_login::default_client::originator;
 use codex_model_provider::ModelProvider;
@@ -31,10 +30,8 @@ use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::ThreadSource;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::user_input::UserInput;
-use codex_rollout_trace::InferenceTraceContext;
 use codex_state::StateRuntime;
 use codex_terminal_detection::user_agent;
-use futures::StreamExt;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -193,6 +190,38 @@ impl MemoryStartupContext {
         self.provider.as_ref()
     }
 
+    pub(crate) fn stage_one_provider(&self, config: &Config) -> SharedModelProvider {
+        if self.provider.info() == &config.model_provider {
+            Arc::clone(&self.provider)
+        } else {
+            create_model_provider(
+                config.model_provider.clone(),
+                Some(Arc::clone(&self.auth_manager)),
+            )
+        }
+    }
+
+    pub(crate) async fn current_stage_one_config(
+        &self,
+        config: &Config,
+    ) -> Result<Arc<Config>, StageOneMemoryError> {
+        let snapshot = self.thread.config_snapshot().await;
+        let mut current = config.clone();
+        if snapshot.model_provider_id != config.model_provider_id {
+            current.model_provider = config
+                .model_providers
+                .get(&snapshot.model_provider_id)
+                .cloned()
+                .ok_or(StageOneMemoryDenial::ProviderChanged)?;
+            current.model_provider_id = snapshot.model_provider_id;
+        }
+        current.model = Some(snapshot.model);
+        // The factory asserts this snapshot against the live host again. It is
+        // not a capability to choose an arbitrary replacement provider.
+        self.stage_one_client(&current).await?;
+        Ok(Arc::new(current))
+    }
+
     pub(crate) fn counter(&self, name: &str, inc: i64, tags: &[(&str, &str)]) {
         self.session_telemetry.counter(name, inc, tags);
     }
@@ -237,34 +266,29 @@ impl MemoryStartupContext {
         }
     }
 
+    pub(crate) async fn stage_one_client(
+        &self,
+        config: &Config,
+    ) -> Result<StageOneMemoryClient, StageOneMemoryError> {
+        // These are assertions about this startup owner, not selectors. A provider
+        // switch invalidates this run; the next startup obtains a fresh binding.
+        self.thread
+            .stage_one_memory_client(self.thread_id, &config.model_provider)
+            .await
+    }
+
     pub(crate) async fn stream_stage_one_prompt(
         &self,
         config: &Config,
         prompt: &Prompt,
         context: &StageOneRequestContext,
-    ) -> anyhow::Result<(String, Option<TokenUsage>)> {
+    ) -> anyhow::Result<(String, Option<TokenUsage>, StageOneMemoryClient)> {
+        let mut client = self.stage_one_client(config).await?;
         let installation_id = resolve_installation_id(&config.codex_home).await?;
         let config_snapshot = self.thread.config_snapshot().await;
         let session_source = config_snapshot.session_source;
         let session_id = SessionId::from(self.thread_id);
         let session_id_string = session_id.to_string();
-        let model_client = ModelClient::new(
-            Some(Arc::clone(&self.auth_manager)),
-            AgentIdentityAuthPolicy::JwtOnly,
-            self.thread_id,
-            config.model_provider.clone(),
-            session_source.clone(),
-            config_snapshot.originator,
-            config.model_verbosity,
-            config.features.enabled(Feature::EnableRequestCompression),
-            config.features.enabled(Feature::RuntimeMetrics),
-            /*beta_features_header*/ None,
-            /*concurrent_reasoning_summaries_enabled*/ false,
-            /*attestation_provider*/ None,
-            config.http_client_factory(),
-        );
-
-        let mut client_session = model_client.new_session();
         let window_id = format!("{}:0", self.thread_id);
         let responses_metadata = detached_memory_responses_metadata(
             installation_id,
@@ -276,43 +300,18 @@ impl MemoryStartupContext {
             /*sandbox*/ None,
         )
         .await;
-        let mut stream = client_session
-            .stream(
+        let output = client
+            .extract(StageOneMemoryRequest {
                 prompt,
-                &context.model_info,
-                &context.session_telemetry,
-                context.reasoning_effort.clone(),
-                context.reasoning_summary,
-                context.service_tier.clone(),
-                &responses_metadata,
-                &InferenceTraceContext::disabled(),
-            )
+                model_info: &context.model_info,
+                session_telemetry: &context.session_telemetry,
+                reasoning_effort: context.reasoning_effort.clone(),
+                reasoning_summary: context.reasoning_summary,
+                service_tier: context.service_tier.clone(),
+                responses_metadata: &responses_metadata,
+            })
             .await?;
-
-        let mut result = String::new();
-        let mut token_usage = None;
-        while let Some(message) = stream.next().await.transpose()? {
-            match message {
-                ResponseEvent::OutputTextDelta { delta, .. } => result.push_str(&delta),
-                ResponseEvent::OutputItemDone(item) => {
-                    if result.is_empty()
-                        && let codex_protocol::models::ResponseItem::Message { content, .. } = item
-                        && let Some(text) = content_items_to_text(&content)
-                    {
-                        result.push_str(&text);
-                    }
-                }
-                ResponseEvent::Completed {
-                    token_usage: usage, ..
-                } => {
-                    token_usage = usage;
-                    break;
-                }
-                _ => {}
-            }
-        }
-
-        Ok((result, token_usage))
+        Ok((output.text, output.token_usage, client))
     }
 
     pub(crate) async fn spawn_consolidation_agent(

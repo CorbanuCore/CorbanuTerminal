@@ -1,0 +1,347 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+warning: variant `OpenPlans` is never constructed
+   --> tui/src/app_event.rs:318:5
+    |
+313 | pub(crate) enum WalletUnlockContinuation {
+    |                 ------------------------ variant in this enum
+...
+318 |     OpenPlans {
+    |     ^^^^^^^^^
+    |
+    = note: `WalletUnlockContinuation` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variants `ProviderCredentialStatusesReady`, `OpenWalletPlanReceipt`, and `WalletRecoverPlanRequested` are never constructed
+    --> tui/src/app_event.rs:1764:5
+     |
+ 395 | pub(crate) enum AppEvent {
+     |                 -------- variants in this enum
+...
+1764 |     ProviderCredentialStatusesReady {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1930 |     OpenWalletPlanReceipt {
+     |     ^^^^^^^^^^^^^^^^^^^^^
+...
+1934 |     WalletRecoverPlanRequested,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `AppEvent` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: variant `Checking` is never constructed
+   --> tui/src/chatwidget/claude_code_login.rs:186:5
+    |
+185 | pub(crate) enum ClaudeCodePlanStatus {
+    |                 -------------------- variant in this enum
+186 |     Checking,
+    |     ^^^^^^^^
+    |
+    = note: `ClaudeCodePlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: variants `Checking`, `Active`, `WalletOnly`, `ConnectedStatusUnavailable`, `NotConnected`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:7:5
+   |
+ 6 | pub(crate) enum PfTerminalPlanStatus {
+   |                 -------------------- variants in this enum
+ 7 |     Checking,
+   |     ^^^^^^^^
+ 8 |     Active {
+   |     ^^^^^^
+...
+12 |     WalletOnly {
+   |     ^^^^^^^^^^
+...
+15 |     ConnectedStatusUnavailable {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+18 |     NotConnected,
+   |     ^^^^^^^^^^^^
+19 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `PfTerminalPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `load` is never used
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:22:21
+   |
+22 | pub(crate) async fn load(
+   |                     ^^^^
+
+warning: constant `PROVIDER_STATUS_TIMEOUT` is never used
+  --> tui/src/chatwidget/provider_credentials.rs:33:7
+   |
+33 | const PROVIDER_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
+   |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `AvailableFromEnvironment`, `Stored`, `NotConfigured`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/provider_credentials.rs:38:5
+   |
+36 | pub(crate) enum ProviderApiKeyStatus {
+   |                 -------------------- variants in this enum
+37 |     Checking,
+38 |     AvailableFromEnvironment,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+39 |     Stored,
+   |     ^^^^^^
+40 |     NotConfigured,
+   |     ^^^^^^^^^^^^^
+41 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `ProviderApiKeyStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: methods `open_provider_credentials_menu` and `refresh_provider_credentials_status_in_background` are never used
+   --> tui/src/chatwidget/provider_credentials.rs:108:19
+    |
+107 | impl ChatWidget {
+    | --------------- methods in this implementation
+108 |     pub(crate) fn open_provider_credentials_menu(&mut self) {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+137 |     fn refresh_provider_credentials_status_in_background(&self) {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `provider_api_key_statuses` is never used
+   --> tui/src/chatwidget/provider_credentials.rs:380:4
+    |
+380 | fn provider_api_key_statuses(codex_home: &Path) -> Vec<(String, ProviderApiKeyStatus)> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `provider_api_key_unavailable_statuses` is never used
+   --> tui/src/chatwidget/provider_credentials.rs:409:4
+    |
+409 | fn provider_api_key_unavailable_statuses() -> Vec<(String, ProviderApiKeyStatus)> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: variants `New`, `Onboarding`, and `Upgrade` are never constructed
+  --> tui/src/chatwidget/wallet_menu.rs:55:5
+   |
+54 | pub(crate) enum WalletPlanPurchaseMode {
+   |                 ---------------------- variants in this enum
+55 |     New,
+   |     ^^^
+56 |     Onboarding {
+   |     ^^^^^^^^^^
+...
+59 |     Upgrade {
+   |     ^^^^^^^
+   |
+   = note: `WalletPlanPurchaseMode` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `wallet_address` is never read
+   --> tui/src/chatwidget/wallet_menu.rs:114:16
+    |
+113 | pub(crate) struct WalletPlanStatus {
+    |                   ---------------- field in this struct
+114 |     pub(crate) wallet_address: String,
+    |                ^^^^^^^^^^^^^^
+    |
+    = note: `WalletPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: function `latest_plan_receipt` is never used
+   --> tui/src/chatwidget/wallet_receipt.rs:190:15
+    |
+190 | pub(super) fn latest_plan_receipt(
+    |               ^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-tui` (lib) generated 13 warnings
+   Compiling codex-tui v0.1.42 (/home/travis/worktrees/pf13-main-release-20260911/codex-rs/tui)
+warning: variants `ProviderCredentialStatusesReady`, `OpenWalletPlanReceipt`, and `WalletRecoverPlanRequested` are never constructed
+    --> tui/src/app_event.rs:1764:5
+     |
+ 395 | pub(crate) enum AppEvent {
+     |                 -------- variants in this enum
+...
+1764 |     ProviderCredentialStatusesReady {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+1930 |     OpenWalletPlanReceipt {
+     |     ^^^^^^^^^^^^^^^^^^^^^
+...
+1934 |     WalletRecoverPlanRequested,
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `AppEvent` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variants `Checking`, `ConnectedStatusUnavailable`, `NotConnected`, and `Unavailable` are never constructed
+  --> tui/src/chatwidget/pfterminal_plan_status.rs:7:5
+   |
+ 6 | pub(crate) enum PfTerminalPlanStatus {
+   |                 -------------------- variants in this enum
+ 7 |     Checking,
+   |     ^^^^^^^^
+...
+15 |     ConnectedStatusUnavailable {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+18 |     NotConnected,
+   |     ^^^^^^^^^^^^
+19 |     Unavailable,
+   |     ^^^^^^^^^^^
+   |
+   = note: `PfTerminalPlanStatus` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: variants `Onboarding` and `Upgrade` are never constructed
+  --> tui/src/chatwidget/wallet_menu.rs:56:5
+   |
+54 | pub(crate) enum WalletPlanPurchaseMode {
+   |                 ---------------------- variants in this enum
+55 |     New,
+56 |     Onboarding {
+   |     ^^^^^^^^^^
+...
+59 |     Upgrade {
+   |     ^^^^^^^
+   |
+   = note: `WalletPlanPurchaseMode` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: constant `OTHER_TOOLTIP` is never used
+  --> tui/src/tooltips.rs:20:7
+   |
+20 | const OTHER_TOOLTIP: &str = "*New* Build faster with the **Desktop app**. Run 'codex app' or visit https://chatgpt.com/codex?app-lan...
+   |       ^^^^^^^^^^^^^
+
+warning: constant `OTHER_TOOLTIP_NON_MAC` is never used
+  --> tui/src/tooltips.rs:22:7
+   |
+22 | const OTHER_TOOLTIP_NON_MAC: &str = "*New* Build faster with Codex.";
+   |       ^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `FREE_GO_TOOLTIP` is never used
+  --> tui/src/tooltips.rs:24:7
+   |
+24 | const FREE_GO_TOOLTIP: &str =
+   |       ^^^^^^^^^^^^^^^
+
+warning: function `get_update_action` is never used
+  --> tui/src/update_action.rs:59:8
+   |
+59 | pub fn get_update_action() -> Option<UpdateAction> {
+   |        ^^^^^^^^^^^^^^^^^
+
+warning: function `get_upgrade_version` is never used
+  --> tui/src/updates.rs:23:8
+   |
+23 | pub fn get_upgrade_version(config: &Config) -> Option<String> {
+   |        ^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CORBANU_LATEST_RELEASE_URL` is never used
+  --> tui/src/updates.rs:56:7
+   |
+56 | const CORBANU_LATEST_RELEASE_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `CORBANU_RELEASE_BY_TAG_URL` is never used
+  --> tui/src/updates.rs:58:7
+   |
+58 | const CORBANU_RELEASE_BY_TAG_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `LEGACY_PFTERMINAL_LATEST_RELEASE_URL` is never used
+  --> tui/src/updates.rs:60:7
+   |
+60 | const LEGACY_PFTERMINAL_LATEST_RELEASE_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `LEGACY_PFTERMINAL_RELEASE_BY_TAG_URL` is never used
+  --> tui/src/updates.rs:62:7
+   |
+62 | const LEGACY_PFTERMINAL_RELEASE_BY_TAG_URL: &str =
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `RELEASE_VALIDATION_TIMEOUT` is never used
+  --> tui/src/updates.rs:64:7
+   |
+64 | const RELEASE_VALIDATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(8);
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `check_for_update` is never used
+  --> tui/src/updates.rs:71:10
+   |
+71 | async fn check_for_update(
+   |          ^^^^^^^^^^^^^^^^
+
+warning: function `get_upgrade_version_for_popup` is never used
+   --> tui/src/updates.rs:161:14
+    |
+161 | pub async fn get_upgrade_version_for_popup(config: &Config) -> Option<String> {
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `codex-tui` (lib test) generated 24 warnings (9 duplicates)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.12s
+────────────
+ Nextest run ID c555e2e1-429c-41b4-8424-7172393643b1 with nextest profile: local
+    Starting 70 tests across 1 binary (3934 tests skipped)
+        PASS [   0.011s] ( 1/70) codex-tui app::tests::model_catalog::accepted_model_migration_persists_target_default_reasoning_effort
+        PASS [   0.013s] ( 2/70) codex-tui app::tests::model_catalog::model_migration_prompt_respects_hide_flag_and_self_target
+        PASS [   0.015s] ( 3/70) codex-tui app::tests::model_catalog::model_migration_prompt_shows_for_hidden_model
+        PASS [   0.011s] ( 4/70) codex-tui app::tests::model_catalog::model_migration_prompt_skips_hidden_gpt_targets
+        PASS [   0.010s] ( 5/70) codex-tui app::tests::model_catalog::model_migration_prompt_skips_when_target_missing_or_hidden
+        PASS [   0.026s] ( 6/70) codex-tui app::provider_management_status::tests::manager_open_syncs_configured_runtime_models_before_policy_refresh
+        PASS [   0.014s] ( 7/70) codex-tui app::tests::model_catalog::prepare_startup_tooltip_override_suppresses_model_availability_nux
+        PASS [   0.011s] ( 8/70) codex-tui app::tests::model_catalog::select_model_availability_nux_does_not_fall_back_to_older_announcement
+        PASS [   0.010s] ( 9/70) codex-tui app::tests::model_catalog::select_model_availability_nux_picks_only_eligible_model
+        PASS [   0.009s] (10/70) codex-tui app::tests::model_catalog::select_model_availability_nux_returns_none_when_all_models_are_exhausted
+        PASS [   0.008s] (11/70) codex-tui app::tests::model_catalog::select_model_availability_nux_uses_existing_model_order_as_priority
+        PASS [   0.009s] (12/70) codex-tui app::tests::provider_manager_claude_intent_uses_typed_status_and_recovery_source
+        PASS [   0.011s] (13/70) codex-tui app::tests::provider_manager_open_preserves_lazy_command_authorization_without_shared_state
+        PASS [   0.019s] (14/70) codex-tui app::tests::provider_manager_reuses_policy_health_after_setup_handle_is_cleared
+        PASS [   0.011s] (15/70) codex-tui bottom_pane::list_selection_view::tests::snapshot_model_picker_width_80
+        PASS [   0.006s] (16/70) codex-tui chatwidget::model_popups::tests::model_picker_display_label_uses_catalog_name_with_slug_in_description
+        PASS [   0.008s] (17/70) codex-tui chatwidget::model_popups::tests::model_picker_groups_models_by_user_facing_provider
+        PASS [   0.024s] (18/70) codex-tui chatwidget::provider_health::tests::apps_rejection_marks_openai_not_current_claude_and_r_opens_recovery
+        PASS [   0.019s] (19/70) codex-tui chatwidget::provider_health::tests::late_turn_failure_names_original_provider_and_ignores_recovered_attempt
+        PASS [   0.007s] (20/70) codex-tui chatwidget::provider_health::tests::only_definite_typed_auth_rejections_require_reauthentication
+        PASS [   0.008s] (21/70) codex-tui chatwidget::provider_manager::tests::external_credential_copy_never_claims_deletion
+        PASS [   0.018s] (22/70) codex-tui chatwidget::provider_manager::tests::opening_provider_actions_keeps_manager_as_the_parent_view
+        PASS [   0.129s] (23/70) codex-tui app::tests::stale_provider_manager_claude_recovery_source_is_inert
+        PASS [   0.132s] (24/70) codex-tui app::tests::provider_picker_refresh::provider_manager_late_refresh_updates_picker_without_reopening_dismissed_menu
+        PASS [   0.137s] (25/70) codex-tui app::tests::provider_manager_stale_api_key_completion_is_inert_and_current_settles
+        PASS [   0.020s] (26/70) codex-tui chatwidget::provider_manager::tests::provider_manager_uses_shared_status_copy_snapshot
+        PASS [   0.008s] (27/70) codex-tui chatwidget::tasknode_menu::team_context::tests::shared_report_includes_work_and_preserves_unshared_counts
+        PASS [   0.007s] (28/70) codex-tui chatwidget::tasknode_menu::team_context::tests::states_keep_previous_report_explicit_and_do_not_invent_zero_counts
+        PASS [   0.020s] (29/70) codex-tui chatwidget::provider_manager::tests::refresh_preserves_provider_selection_by_identity_and_falls_back_when_removed
+        PASS [   0.025s] (30/70) codex-tui chatwidget::tasknode_menu::team_context::tests::report_menu_and_failure_offer_refresh
+        PASS [   0.018s] (31/70) codex-tui chatwidget::tasknode_menu::tests::request_prompt_matches_the_terminal_and_stale_views_are_rejected
+        PASS [   0.020s] (32/70) codex-tui chatwidget::tasknode_menu::tests::tasknode_menu_renders_the_selected_profile_scope
+        PASS [   0.007s] (33/70) codex-tui chatwidget::tasknode_menu::tests::tasknode_sse_parser_accepts_crlf_boundaries
+        PASS [   0.007s] (34/70) codex-tui chatwidget::tasknode_menu::tests::tasknode_sse_parser_handles_delta_and_done_events
+        PASS [   0.024s] (35/70) codex-tui chatwidget::tasknode_menu::tests::tasknode_refresh_preserves_keyboard_selection_and_search
+        PASS [   0.020s] (36/70) codex-tui chatwidget::tasknode_menu::tests::tasknode_relink_error_uses_current_corbanu_guidance
+        PASS [   0.021s] (37/70) codex-tui chatwidget::tests::custom_model_identity::custom_model_routes_are_distinguishable_before_selection
+        PASS [   0.020s] (38/70) codex-tui chatwidget::tests::popups_and_settings::codex_pane_model_picker_uses_provider_tabs_and_opens_name_prompt
+        PASS [   0.022s] (39/70) codex-tui chatwidget::tests::popups_and_settings::corbanu_api_model_picker_preserves_ambient_and_shows_the_seven_public_routes
+        PASS [   0.019s] (40/70) codex-tui chatwidget::tests::popups_and_settings::model_picker_hides_show_in_picker_false_models_from_cache
+        PASS [   0.086s] (41/70) codex-tui chatwidget::tests::popups_and_settings::model_picker_hides_fake_openai_models_and_shows_curated_provider_models
+        PASS [   0.020s] (42/70) codex-tui chatwidget::tests::popups_and_settings::model_picker_opens_vercel_glm_reasoning_modes
+        PASS [   0.037s] (43/70) codex-tui chatwidget::tests::popups_and_settings::model_picker_runtime_refresh_keeps_claude_out_of_openai_tab
+        PASS [   0.019s] (44/70) codex-tui chatwidget::tests::popups_and_settings::model_picker_same_slug_marks_only_exact_provider_current
+        PASS [   0.173s] (45/70) codex-tui chatwidget::tests::popups_and_settings::model_picker_dismisses_after_selecting_openrouter_model_without_effort_choices
+        PASS [   0.007s] (46/70) codex-tui model_catalog::tests::claude_current_does_not_seed_local_or_custom_providers_on_manager_refresh
+        PASS [   0.006s] (47/70) codex-tui model_catalog::tests::configured_runtime_model_does_not_duplicate_existing_exact_or_inferred_provider
+        PASS [   0.006s] (48/70) codex-tui model_catalog::tests::configured_runtime_model_is_added_with_exact_provider_identity
+        PASS [   0.006s] (49/70) codex-tui model_catalog::tests::duplicate_model_slugs_retain_exact_catalog_provider_identity
+        PASS [   0.005s] (50/70) codex-tui model_catalog::tests::resumed_session_recovery_is_consumed_once
+        PASS [   0.172s] (51/70) codex-tui chatwidget::tests::popups_and_settings::model_picker_opens_openrouter_reasoning_options_for_gemini
+        PASS [   0.006s] (52/70) codex-tui model_catalog::tests::runtime_refresh_replaces_only_gpu_models
+        PASS [   0.009s] (53/70) codex-tui model_catalog::tests::runtime_refresh_does_not_clone_models_into_incompatible_provider_tabs
+        PASS [   0.008s] (54/70) codex-tui model_catalog::tests::runtime_sync_preserves_shared_opaque_custom_routes_but_not_idle_local_runtimes
+        PASS [   0.008s] (55/70) codex-tui provider_management_host::tests::current_and_unready_providers_are_never_replacement_candidates
+        PASS [   0.008s] (56/70) codex-tui provider_management_host::tests::replacement_candidates_are_exact_ready_active_non_current_rows
+        PASS [   0.009s] (57/70) codex-tui provider_status_host::tests::authorized_command_runtime_converges_to_configured_ready
+        PASS [   0.006s] (58/70) codex-tui provider_status_host::tests::blank_or_missing_corbanu_aliases_allow_the_managed_credential_fallback
+        PASS [   0.008s] (59/70) codex-tui provider_status_host::tests::command_authorization_rejection_is_exact_and_debug_output_is_secret_free
+        PASS [   0.010s] (60/70) codex-tui provider_status_host::tests::correlated_corbanu_metadata_resolves_without_credential_reread
+        PASS [   0.008s] (61/70) codex-tui provider_status_host::tests::current_selection_changes_status_without_persisting_policy
+        PASS [   0.008s] (62/70) codex-tui provider_status_host::tests::custom_storage_metadata_is_secret_free_and_missing_file_is_active
+        PASS [   0.009s] (63/70) codex-tui provider_status_host::tests::eligibility_survives_restart_without_touching_credentials
+        PASS [   0.006s] (64/70) codex-tui provider_status_host::tests::environment_precedence_skips_managed_reads_until_environment_is_missing
+        PASS [   0.006s] (65/70) codex-tui provider_status_host::tests::every_corbanu_environment_alias_is_ready_and_precedes_stored_account_status
+        PASS [   0.008s] (66/70) codex-tui provider_status_host::tests::local_and_no_auth_custom_providers_are_ready_without_enrollment
+        PASS [   0.009s] (67/70) codex-tui provider_status_host::tests::unchecked_command_is_configured_but_a_rejected_authorization_is_status_only
+        PASS [   0.298s] (68/70) codex-tui chatwidget::tests::popups_and_settings::model_picker_claude_recovery_refresh_restores_full_subscription_catalog
+        PASS [   0.191s] (69/70) codex-tui chatwidget::tests::popups_and_settings::model_picker_selects_kimi_k3_with_required_max_reasoning
+        PASS [   0.180s] (70/70) codex-tui provider_status_host::tests::saved_managed_custom_key_resolves_configured_ready_without_secret_leakage
+────────────
+     Summary [   0.679s] 70 tests run: 70 passed, 3934 skipped

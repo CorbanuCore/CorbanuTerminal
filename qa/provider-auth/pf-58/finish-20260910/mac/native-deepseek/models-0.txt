@@ -1,0 +1,45 @@
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                        │
+│                                                      │
+│ model:     deepseek-v4-flash high   /model to change │
+│ directory: /Volumes/CorbanuDrive/Corbanu             │
+╰──────────────────────────────────────────────────────╯
+
+
+  Select Model and Effort
+  DeepSeek API key
+
+  Ambient  [DeepSeek]  Claude Plan
+
+  1. DeepSeek V4 Pro (Direct)                   Model: deepseek-v4-pro. DeepSeek API: V4 Pro - $0.435/M input, $0.003625/M cached input, $0.87/M
+                                                output.
+› 2. DeepSeek V4 Flash 0731 (Direct) (current)  Model: deepseek-v4-flash. DeepSeek Responses API: V4 Flash 0731 - $0.14/M input, $0.0028/M cached
+                                                input, $0.28/M output.
+
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

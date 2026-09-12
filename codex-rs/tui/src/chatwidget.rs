@@ -378,7 +378,9 @@ use self::plugins::PluginsCacheState;
 mod plan_implementation;
 use self::plan_implementation::PLAN_IMPLEMENTATION_TITLE;
 mod model_popups;
+mod provider_health;
 pub(crate) mod provider_model_policy;
+mod provider_recovery;
 pub(crate) use model_popups::ModelSelectionPurpose;
 mod notifications;
 use self::notifications::Notification;
@@ -431,6 +433,7 @@ mod turn_runtime;
 use self::turn_lifecycle::TurnLifecycleState;
 pub(crate) mod agent_control;
 pub(crate) mod campaign_tracker;
+mod campaign_tracker_recovery;
 mod campaign_tracker_workflows;
 #[allow(dead_code)] // Hidden typed host adapter; PF-53/PF-54 own renderer adoption.
 pub(crate) mod claude_auth_adapter;
