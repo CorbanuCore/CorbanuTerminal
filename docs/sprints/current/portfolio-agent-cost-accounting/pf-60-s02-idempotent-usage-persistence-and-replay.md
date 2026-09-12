@@ -53,6 +53,7 @@ records approved daily expiry; [latest-quote allocation](../../../research/agent
 
 ## Done
 
+- [x] Pure reduction B ac5a22d67 reviewed clean and integrated at7514be8ec; combined330 state/TaskNode tests pass9.928s, nextest178ce26c-71f5-4405-95b2-817ebdaa1a4b. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/retention-reduction-increment.md). Four paths507lines/131non-test; B code allowance used, unused correction retained. No mutation/runtime claim.
 - [x] Read-only input A8eca814f8 reviewed clean and integrated atfd46c5897; combined325 state/TaskNode tests pass9.100s. No reduction/mutation claim. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/retention-plan-increment.md). Original904-line draft preserved; accepted A775lines.
 
 - [x] Canonical receiving fast-forwarded to 87e31f521672e627e6230d48fc16a4cfaa7ff44c with reviewed native prerequisites; prior overlapping Facilities edits preserved privately and reconciled. Integrator authorizes two additional scoped review passes (code plus substantive correction only), preserving prior history.
@@ -71,7 +72,7 @@ records approved daily expiry; [latest-quote allocation](../../../research/agent
 
 ## Remaining
 
-- [ ] Implement [pure retention reduction B](../../../research/agent-cost-accounting/retention-reduction-next.md) in the five front-matter paths; accepted reader remains frozen apart from private registration. Return complete no-write/boundary/reopen proof. Coupled mutation/read/delete/admission follows separately; no S03 activation.
+- [ ] Manager allocates coupled mutation/read/delete/admission after accepted [reduction B](../../../research/agent-cost-accounting/retention-reduction-next.md), explicitly reconciling fixture setup before a first checkpoint with strict postactivation admission. Preserve all A/B assertions; manager-owned preparation, not a new user decision. No S03 activation.
 - [ ] After reviewing the first increment, manager allocates production migration/dispatch/presence/price/retention wiring and complete S02 golden tests separately; do not broaden this worker's scope.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 

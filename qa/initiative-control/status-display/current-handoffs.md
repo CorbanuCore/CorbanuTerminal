@@ -1,5 +1,15 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 10:02 UTC, September12
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): reduction B is independently reviewed and integrated at7514be8ec. All330 combined state/TaskNode tests pass. Manager prepares the coupled retention/read/delete/admission allocation, resolving fixture setup explicitly; no new user decision or S03 activation.
+- [TaskNode PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): feed wiring returned553changed lines with109 passing tests; scoped code review is running. One real-server regression and desktop/phone/keyboard plus independent evidence remain outstanding. Slack is not connected; live progress remains OFF pending qualification.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): manifest checkpoint2c7c4e6c0 passed Astra16/Fable17 and RTX3/35/356 tests (two existing affected-suite skips). Fresh exact-checkpoint owner main window granted; actual landing/release confirmation pending. Inspection only, not protected execution or installation.
+
+The declined publisher still lacks confirmed app termination; no duplicate
+publisher or live-dashboard freshness claim. Local integration continues.
+Earlier observations below are history, not current agent assignments.
+
 ## Current observation — 09:46 UTC, September12
 
 Canonical source a0e2c3270 includes accepted launcher, retention-input A and

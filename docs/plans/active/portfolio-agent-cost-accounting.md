@@ -27,7 +27,7 @@ implementation_worktrees:
 
 # 2. Accounting — unified agent cost and usage
 
-Current September12: validated-input A8eca814f8 reviewed clean and integrated atfd46c5897; combined325 state/TaskNode tests pass. [Pure reduction B](../../research/agent-cost-accounting/retention-reduction-next.md) is now allocated; same five-file boundary specified there and in S02. A used1 ofprior+2 reviews; integrator adds one B code pass, retaining unused correction/history. No retention mutation/runtime or S03 activation.
+Current September12: A and [pure reduction B](../../research/agent-cost-accounting/retention-reduction-next.md) are reviewed clean and integrated at7514be8ec; combined330 state/TaskNode tests pass9.928s. B candidateac5a22d67 changes507lines/131non-test. A and B code passes used; unused correction/history retained. Manager prepares coupled mutation/read/delete/admission with explicit fixture activation compatibility; existing scope remains frozen until allocation. No retention mutation/runtime or S03 activation.
 
 Policy: repository-root `AGENTS.md`. Lifecycle: [plans](../index.md).
 Portfolio: [source coverage, sequencing and human capacity](../portfolio-2026-09-09.md).

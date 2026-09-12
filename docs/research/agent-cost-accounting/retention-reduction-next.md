@@ -1,5 +1,10 @@
 # PF-60-S02 — allocation B: pure retention reduction
 
+Accepted September12: candidateac5a22d67a6ffd9ffb56783754c55a15eb26a4f4,
+integrated7514be8ec7b5fc92288bcaf3aff2559bfe23337b. One clean AstraHigh
+code review; parent combined330 tests pass9.928s. Original allocation below
+is retained; it does not authorize the next coupled mutation increment.
+
 Status: allocated September12 after reviewed input8eca814f84b6005c25cbf85d4eb6a88dd353ebf9
 was integrated atfd46c5897c3c3a1c146a97f544e5bacf4e996f9d. Combined state/
 TaskNode325passed0skipped9.100s, run0ab6b70f-e645-44eb-8e4d-9a3adaadd41a.
