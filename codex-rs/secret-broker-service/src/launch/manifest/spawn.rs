@@ -86,6 +86,9 @@ impl Reservation {
         deadline: Instant,
         start: impl FnOnce(Job) -> io::Result<()>,
     ) -> Result<LaunchHandle, (io::Error, B::Image)> {
+        let Some(permit) = self.permit.as_ref().map(Arc::clone) else {
+            return Err((io::Error::other("reservation has no permit"), image));
+        };
         let shared = Arc::new(Shared {
             cancel: AtomicBool::new(false),
             deadline,
@@ -94,17 +97,20 @@ impl Reservation {
         let pending = Arc::new(Mutex::new(Some(image)));
         let worker_pending = Arc::clone(&pending);
         let worker_state = Arc::clone(&shared);
-        let permit = Arc::clone(self.permit.as_ref().expect("reservation owns permit"));
         // The boxed job and retained input exist BEFORE thread creation. A
         // failed Builder::spawn drops its job without executing it; pending
         // retains the image so it can be returned to this trusted caller.
         let job = Box::new(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let image = worker_pending
+                let Some(image) = worker_pending
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .take()
-                    .expect("one worker owns the pending image");
+                else {
+                    // Internal ownership violation: catch_unwind quarantines
+                    // it instead of manufacturing a no-launch cleanup receipt.
+                    panic!("worker lost its pending image");
+                };
                 supervise(image, backend, &worker_state)
             }));
             match result {
@@ -120,11 +126,15 @@ impl Reservation {
             }
         });
         if let Err(error) = start(job) {
-            let image = pending
+            let Some(image) = pending
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .take()
-                .expect("failed worker creation did not run job");
+            else {
+                // Builder::spawn cannot run the job and return Err. The private
+                // injected factory must preserve that same ownership contract.
+                panic!("failed worker factory consumed its input");
+            };
             return Err((error, image));
         }
         // Worker now owns the permit. Dropping a caller must never release it.
