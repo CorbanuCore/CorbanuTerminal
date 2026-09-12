@@ -189,6 +189,16 @@ impl Client {
         path: &str,
         body: Option<&Value>,
     ) -> Result<Response, ClientError> {
+        let (status, bytes) = self.request_bytes(method, path, body).await?;
+        decode_response(status, &bytes)
+    }
+
+    pub(crate) async fn request_bytes(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&Value>,
+    ) -> Result<(u16, Vec<u8>), ClientError> {
         static HTTP: OnceLock<Result<reqwest::Client, String>> = OnceLock::new();
         let http = HTTP
             .get_or_init(|| {
@@ -217,7 +227,7 @@ impl Client {
             }
             bytes.extend_from_slice(&chunk);
         }
-        decode_response(status, &bytes)
+        Ok((status, bytes))
     }
 
     /// Invoke from a blocking worker, never from an async runtime thread.
