@@ -26,9 +26,21 @@ implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health"
     branch: "feat/provider-reauth-health"
     base_commit: "eb7af932bc8cc859122b5b2dbef223fbd45ea25c"
+  - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/slack-registration-20260912"
+    branch: "integrate/slack-registration-20260912"
+    base_commit: "4b9904d306dd8a3c35b9f6d43291ebaed905cccf"
 ---
 
 # 3. Task Node integration and delivery control
+
+Latest17:12UTC: third Slack recovery candidate2116/840 has225 passing tests.
+Review04 found an abrupt-listener-exit gap; source freezes for exact session/fence
+recovery contract classification by manager, with James preparing the proposal.
+The missing-fence recovery limitation is included, not silently reset. Prior
+review03 and its two-cycle convergence classification remain in the allocation.
+Manager shared registration is actual uncommitted code in the separately declared
+staging checkout, with passing local ingress/two-question/revision proof; not
+accepted, published or live. No new human approval requested for manager work.
 
 Latest16:13UTC: real SDK first correction returned1688total/768non-test with208
 passing Python tests. Review02 found three remaining integration defects: stale

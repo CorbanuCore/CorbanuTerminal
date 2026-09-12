@@ -27,6 +27,14 @@ implementation_worktrees:
 
 # 2. Accounting — unified agent cost and usage
 
+Latest17:12UTC: native caller returned frozen at87a9a81ad,3017total/904non-test
+across20 worker paths; combined dependency delta3019/906 fits the allocation.
+Focused native/API208/state287 pass. Full Core3401passed/132failed/19skipped/
+1leaky remains non-clean, with no proven baseline attribution. First independent
+code review and one matched clean-launch baseline diagnostic are running; source
+stays frozen. Manager owns classification/integration, not a new human blocker.
+No acceptance, live collection or S03 activation is claimed.
+
 Latest16:08UTC: manager accepts [native Anthropic sampling allocation](../../research/agent-cost-accounting/anthropic-dispatch-allocation.md),20 worker files plus3 serialized manager dependency files. Direct-first explicit native opt-in, defaultOFF; actual per-send admission/retry identity/raw usage/original bundled-price/reopen proof. Target3500/1350, STOP3750/1450; one new code review plus up to2 scoped corrections, earlier review history retained. Security owner granted a narrow30-minute lockfile lease; no PF27 implementation or unsafe approval. Exact worker dispatch/launch is recorded separately, not inferred from this allocation. S02 continues; S03 remains draft.
 
 Latest15:45UTC: normal-library store accepted at6b2dbcab5 and integrated into

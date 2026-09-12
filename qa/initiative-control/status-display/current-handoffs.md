@@ -1,5 +1,18 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 17:12 UTC
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): native caller returned frozen at87a9a81ad,3017total/904non-test. Focused native tests pass, API208 and state287 pass; full Core3401passed/132failed/19skipped/1leaky is not clean. First independent review is running. Mendel is assigned a matched clean-launch baseline diagnostic to distinguish regressions from existing failures, without editing the candidate. No new human answer required; OFF, not S02/S03 acceptance.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): third Slack correction passed225 tests,2116total/840non-test. Review04 found a real lost-outage issue after abrupt listener termination. Source edits pause for a concrete session/fence recovery contract, including the already-known missing-fence recovery route; James prepares the bounded proposal and manager owns its decision. Shared CLI/cache/per-question status code is underway in separate staging, with a passing actual local-ingress/two-question revision test. Live Slack and posting remain OFF.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): owner021f82e6 remains clean; [isolated-adapter question](pf27-launch-adapter-decision.md) is still the last-known open decision. Main406aa3c5 remains reconciled. No inferred approval or duplicate security worker.
+
+Both source candidates have returned: zero source-implementation workers at this
+observation, one baseline-diagnostic worker, one recovery-design worker and one
+independent review. These are manager-owned next steps, not new human blockers.
+Last verified publication16:17:16UTC,4b9904d30/build-52koqg3r; user-turn private
+index/Facilities HTTP checks also passed16:55. This update awaits this heartbeat's
+one Luna sync. Earlier observations below remain historical.
+
 ## Current observation — 16:13 UTC
 
 - [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Mendel is dispatched on actual native Anthropic sampling from87a9a81ad: per-send durable admission, retry identity, raw usage presence, trusted original prices and native recovery tests.20 disjoint source/test/receipt files, default OFF. Manager completed the existing SQLx test dependency under the security owner's narrow lease and released it. This is implementation, not a finished sprint or live collector.

@@ -20,6 +20,12 @@ branch `workstream/tasknode-pf80-s01-20260911`; manager receiving is
 0368ed402a9dac4276b427313b9d7335670ee91c. Manager records actual clean launch
 after accepting this allocation; one worker, no overlap with accounting/security.
 
+Manager's ten shared paths are implemented separately in
+`/Volumes/CorbanuDrive/Corbanu/worktrees/slack-registration-20260912`, branch
+`integrate/slack-registration-20260912`, base4b9904d306dd8a3c35b9f6d43291ebaed905cccf.
+This is the same PF-80-S01 integration owner, not another worker/initiative.
+Canonical receiving remains the publisher; unaccepted staging is not exported.
+
 ## Exact ownership and size
 
 Paths are repository-relative to the owner's checkout. No other paths allocated.
@@ -52,6 +58,29 @@ One new independent code pass plus scoped correction; prior review usage retaine
 Code-blind design/evidence remain required before human-ready handoff, not waived.
 
 ## Implementation contract
+
+September12 17:12: second correction1879/805 passed217tests; review03/helper15900
+found transformed-history association and cancelled-event queue recovery P2s.
+After the mandatory two-cycle pause, manager classified both in-scope recovery
+blockers and granted2250/1000worker,650/500parent,2900/1500combined. Third return
+2116/840 passed225tests; receipt113lines SHAca0b98b36d5b37a4492d53aeb5277a61019ff59fbf5a8ed9068830efbd8c9c4e,
+manifestce83f11ca3e9fcf44debc7dcb0b65a6773e4f19495ea657cd13b64d6838812f4.
+Original attempts/payload digests stay immutable; positive history association
+uses exact attempt/client-message identity and channel/bot/app/thread, not
+Slack-transformed text equality. Cancelled events retain audited non-actionable
+disposition and do not prevent valid siblings draining. No live result inferred.
+
+Review04/helper7825 failed one P1: abrupt established-listener exit loses outage
+evidence; restart can clear startup hold without gap review. Parent read literal
+listen/gate/qualify paths and accepts the defect, but a private session lifecycle
+contract must be fixed before further code. Source2116/840 freezes; James has
+one bounded private proposal assignment covering actual process-liveness/lease,
+durable crash boundaries, lock order and missing-fence recovery without replay
+or state reset. Manager owns contract classification/next allocation, not Travis.
+No further source-size or review extension is granted by this preparation.
+Parent CLI/cache-v2/per-question status staging is implemented but unaccepted;
+one actual local-ingress/two-question/revision test passed1.563s. Combined final
+tests/review and all real Slack/phone/native-agent gates remain outstanding.
 
 September12 16:13: first correction returned1688total/768non-test,208 Python
 tests passed. Review02/helper82261 failed with three in-scope P1s: ACK notice

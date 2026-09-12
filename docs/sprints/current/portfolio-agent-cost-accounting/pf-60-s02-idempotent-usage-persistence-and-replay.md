@@ -19,6 +19,11 @@ updated: 2026-09-12
 
 # PF-60-S02 — Idempotent usage persistence and replay
 
+17:12UTC: native caller returned3017/904 at87a9a81ad; first code review and
+matched baseline diagnosis are active. Focused/API/state tests pass, but full
+Core132failures/19skips/1leaky remain undispositioned. Candidate is not accepted;
+manager-owned review and combined proof precede any next implementation.
+
 S01 is archived; journal/quotation/storage/contributions, compact values and A/B/C1/C2/native are integrated. Accepted scopes and receipts stay frozen. The [production store allocation](../../../research/agent-cost-accounting/production-store-allocation.md) owns the next mandate; [native allocation](../../../research/agent-cost-accounting/native-ownership-allocation.md) and [C2 allocation](../../../research/agent-cost-accounting/retention-coupled-next.md) are accepted history, not repeated work. The [retention handoff](../../../research/agent-cost-accounting/retention-design-handoff.md) retains approved daily expiry. This pass edits allocation documents only; source waits for parent acceptance/integration and dispatch.
 
 ## Execution mandate
