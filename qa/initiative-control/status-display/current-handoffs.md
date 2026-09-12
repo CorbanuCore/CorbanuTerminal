@@ -1,5 +1,18 @@
 # Current workstream handoffs — September 12
 
+## Current observation — Music Studio link integration, September 12
+
+The publication approval issue is resolved: nothing to click. Previous native
+Luna publication succeeded at10:40:01Z; this new source awaits its own verified
+publication. [Facilities link evidence](music-studio-link.md) records the
+seven-entry update, unchanged six service controls and limited keyboard proof.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): C1 reviewed clean and integrated; combined native tests335passed,2leaky,0skipped. C2 allocation/dispatch is manager work still pending, not a running agent or user blocker. S03 remains dependent.
+- [TaskNode PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): independent browser evidence check returned; relative-age defect and partial redaction/advisory evidence gaps need targeted follow-up. Slack sender/replies and live mapping remain unqualified; posting OFF. No repeat authority question.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): static feasibility checkpoint97d4cb6e landed and is reconciled. Existing owner is authorized for bounded sealed-byte ELF inspection after recording exact allocation; no protected execution or installation claim.
+
+These observations supersede older worker assignments below. No new human decision.
+
 ## Current observation — 10:37 UTC, September12
 
 Publication approval is resolved; there is nothing to click. A separate source

@@ -95,14 +95,30 @@ class ControlTests(unittest.TestCase):
                            "ace-step/ACE-Step-1.5", "RVC-Project/Retrieval-based-Voice-Conversion-WebUI"):
             self.assertIn(f'href="https://github.com/{repository}"', body)
         self.assertIn('href="https://huggingface.co/MiniMaxAI/MiniMax-Music3"', body)
-        self.assertIn("6 registered interfaces", body)
-        self.assertEqual(body.count('<article class="test facility-card"'), 6)
+        self.assertIn("7 registered interfaces", body)
+        self.assertEqual(body.count('<article class="test facility-card"'), 7)
         self.assertEqual(body.count('data-facility-action="start"'), 6)
         self.assertEqual(body.count('data-facility-action="stop"'), 6)
         self.assertIn('data-control-endpoint="http://127.0.0.1:8770"', body)
         self.assertIn("Live service status", body)
         self.assertIn("At a glance", body)
         self.assertIn("An unavailable machine remains unavailable", body)
+
+    def test_music_studio_is_link_only_without_bridge_action_authority(self):
+        import facility_control
+
+        body = control.facilities()
+        self.assertEqual(body.count('href="http://100.99.88.49:7864/"'), 3)
+        card = body.split('id="music-studio">', 1)[1].split('</article>', 1)[0]
+        self.assertIn("Private Tailscale access required", card)
+        self.assertIn("no upstream repository", card)
+        self.assertNotIn("data-facility-status", card)
+        self.assertNotIn("data-facility-action", card)
+        self.assertNotIn('data-facility-id="music-studio"', body)
+        with patch.object(facility_control, "_run_remote", side_effect=AssertionError("link must not grant remote action")):
+            code, payload = facility_control.action("music-studio", "start", Path("/tmp/unused-key"))
+        self.assertEqual(code, 404)
+        self.assertFalse(payload["ok"])
 
     def test_top_navigation_links_facilities(self):
         for title in ("Initiative map", "Facilities", "Sprint document"):

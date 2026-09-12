@@ -3,6 +3,10 @@ from html import escape
 from urllib.parse import urlsplit
 
 
+# Link-only integration: listing this UI does not add bridge action authority.
+MUSIC_STUDIO_URL = "http://100.99.88.49:7864/"
+
+
 FACILITIES = (
     {
         "id": "comfyui",
@@ -84,7 +88,7 @@ def facilities():
              'the dashboard host never stores machine passwords. An unavailable machine remains unavailable rather than being '
              'treated as stopped.</aside>')
     body += ('<section data-facilities-root data-control-endpoint="http://127.0.0.1:8770">'
-             '<div class="section-title"><h2>Machine interfaces</h2><span>6 registered interfaces · Live service status · refreshes every 15 seconds</span></div>'
+             '<div class="section-title"><h2>Machine interfaces</h2><span>7 registered interfaces · Live service status for 6 · refreshes every 15 seconds</span></div>'
              '<div class="test-grid">')
     for item in FACILITIES:
         detail = item.get("detail", "Service status and controls are provided by the local operator bridge.")
@@ -98,10 +102,23 @@ def facilities():
                  f'<a class="facility-open" href="{escape(item["url"])}" rel="noreferrer noopener">Open interface ↗</a>'
                  '</div>'
                  f'<small><a href="{escape(item["upstream"])}" rel="noreferrer noopener">Upstream repository</a></small></article>')
+    body += ('<article class="test facility-card" id="music-studio">'
+             '<div class="lane-top"><span class="facility-status">Link only</span>'
+             '<span class="muted">RTX PRO 6000</span></div>'
+             f'<h3><a href="{MUSIC_STUDIO_URL}" rel="noreferrer noopener">Music Studio</a></h3>'
+             '<p>Shared music workspace for Yue2, MiniMax Music 3 and ACE-Step.</p>'
+             '<p class="muted">Private Tailscale access required. Live status and start/stop controls '
+             'are not connected to this dashboard.</p>'
+             f'<div class="facility-controls"><a class="facility-open" href="{MUSIC_STUDIO_URL}" '
+             'rel="noreferrer noopener">Open Music Studio ↗</a></div>'
+             '<small>Private wrapper; no upstream repository.</small></article>')
     body += '</div></section><section><h2>At a glance</h2><div class="table-wrap"><table><thead><tr><th>Facility</th><th>Machine</th><th>Address / port</th><th>Primary use</th><th>Status</th></tr></thead><tbody>'
     for item in FACILITIES:
         body += (f'<tr data-facility-row data-facility-id="{escape(item["id"])}">'
                  f'<td><a href="{escape(item["url"])}" rel="noreferrer noopener">{escape(item["name"])}</a></td>'
                  f'<td>{escape(item["machine"])}</td><td>{escape(urlsplit(item["url"]).netloc)}</td>'
                  f'<td>{escape(item["purpose"])}</td><td><span class="facility-status status-checking" data-facility-status>Checking…</span></td></tr>')
+    body += (f'<tr><td><a href="{MUSIC_STUDIO_URL}" rel="noreferrer noopener">Music Studio</a></td>'
+             '<td>RTX PRO 6000</td><td>100.99.88.49:7864</td><td>Shared music workspace</td>'
+             '<td>Link only · not monitored</td></tr>')
     return body + '</tbody></table></div></section>'

@@ -81,7 +81,7 @@ class FeedTests(unittest.TestCase):
             self.assertTrue((self.install / "site/current" / control.route(path)).is_file())
         for path in ("state/decisions.fixture.json", "qa/not-published.md"):
             self.assertFalse((target / path).exists())
-        self.assertIn("6 registered interfaces", (self.install / "site/current/facilities.html").read_text())
+        self.assertIn("7 registered interfaces", (self.install / "site/current/facilities.html").read_text())
         before = (self.state / "decisions.fixture.json").read_bytes()
         for _ in range(2):
             later_data, later_page, later_health = self.publish(LATER)
