@@ -1,8 +1,20 @@
-# Approval requested: isolated Linux launch adapter
+# Approved: isolated Linux launch adapter
 
 [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md)
-is held on this security-design decision. Accounting and Slack backend implementation
-continue independently. Decision ID: `pf27-linux-launch-adapter`. Owner: Travis Good.
+is no longer waiting for this approval. Decision ID: `pf27-linux-launch-adapter`.
+Travis Good explicitly answered “I approve the isolated adapter” in the manager
+task; recorded September12 17:23:24UTC, resolved question revision1. Original
+question/evidence remain below as history; approval is not runtime qualification.
+
+The existing security owner has been instructed to record the exact allocation,
+resume bounded isolated-adapter implementation and run non-root synthetic Linux
+tests with independent security review. Travis confirms multiple Linux machines
+are available; use already configured test hosts and record the actual OS/kernel/
+libc/architecture matrix. The main broker's unsafe-code prohibition stays intact.
+No privileged installation, live credentials/protected activation, main push or
+release is authorized by this decision. The next steps are owner engineering,
+not another question for Travis. Owner acknowledgment/actual execution is tracked
+separately in [current handoffs](current-handoffs.md).
 
 ## Question and recommendation
 
@@ -15,7 +27,7 @@ OS testing, with independent security reviews before integration. This does not
 authorize privileged installation, live protected execution, credentials, release,
 or main pushes. A separate exact source/graph/test allocation remains required.
 
-## Why this needs explicit approval
+## Why explicit approval was required
 
 The available safe Rust APIs did not provide the required complete combination
 of immutable executable binding and stable child-process ownership. The security
@@ -49,8 +61,10 @@ not implementation. Parent read the complete118-line new amendment. Matching
 Ubuntu libc package-version source, symbols and checksum consistency were found;
 the signing chain and reproducible binary correspondence were not independently
 established. Runtime failure, cleanup and actual non-root execution proof remain.
-The owner proposes adapter+OS-proof followed by owner integration as two coherent
-stages, not a mock-only substitute. No new source or invocation was authorized.
+The owner proposed adapter+OS-proof followed by owner integration as two coherent
+stages, not a mock-only substitute. At that historical checkpoint no new source
+or invocation was authorized; the bounded approval above now supersedes that hold.
 
-This question is raised in the manager task and staged for the next dashboard
-refresh. Slack alerts/reply routing are not connected; no Slack delivery is claimed.
+The answer was received directly in the manager task, recorded in the append-only
+decision history and sent to the existing security owner. Updated dashboard
+publication follows; Slack is not connected and no Slack delivery is claimed.

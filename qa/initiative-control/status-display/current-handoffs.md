@@ -1,5 +1,16 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 17:24 UTC: isolated adapter approved
+
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): Travis explicitly approved the [isolated adapter](pf27-launch-adapter-decision.md). Feed revision9 records resolution against question revision1 at17:23:24UTC. The existing owner was instructed to record/check its allocation and resume adapter implementation, independent review and non-root tests across available configured Linux hosts. Owner acknowledgment is pending; no invented running-worker, privileged-installation or live-credential claim.
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): first review's dropped role retry/timeout settings P2 is accepted; its bounded correction is queued after the active matched baseline diagnostic. No new human decision, collection OFF.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): manager narrowed the recovery proposal and dispatched the lifetime-lock/session-lease correction to James at17:22. Broader recovery-send/quarantine/migration is excluded; missing-fence recovery remains a pre-live manager requirement. Shared18-test status-registration staging is unaccepted; live Slack/posting OFF.
+
+There are no open decisions in the current manager feed. Engineering, review and
+acceptance gates remain; this does not mark any sprint complete. The prior
+17:15:52 publication succeeded; this user-answer update is not yet published.
+Older stopped-worker counts and approval holds below are dated history.
+
 ## Current observation — 17:12 UTC
 
 - [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): native caller returned frozen at87a9a81ad,3017total/904non-test. Focused native tests pass, API208 and state287 pass; full Core3401passed/132failed/19skipped/1leaky is not clean. First independent review is running. Mendel is assigned a matched clean-launch baseline diagnostic to distinguish regressions from existing failures, without editing the candidate. No new human answer required; OFF, not S02/S03 acceptance.

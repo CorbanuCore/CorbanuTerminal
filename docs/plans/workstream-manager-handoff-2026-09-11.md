@@ -1,6 +1,15 @@
 # Workstream continuation — September 11
 
-## Current status source — September 12, 17:12 UTC
+## Current status source — September 12, 17:24 UTC
+
+Travis approved the isolated Linux adapter; decisionpf27-linux-launch-adapter
+resolved17:23:24 against revision1, feedrevision9. Existing security owner was
+directed to record/check allocation and resume bounded implementation/non-root
+tests with independent review; acknowledgment is pending. No open manager-feed
+questions remain. James's narrowed listener-lifecycle correction is dispatched;
+Mendel's role-override correction is queued after matched baseline diagnosis.
+All live/main/release gates remain. The paragraphs below retain17:12 history;
+use the linked current handoffs for latest actual dispatch/publication evidence.
 
 Use [current workstream handoffs](../../qa/initiative-control/status-display/current-handoffs.md)
 for current assignments, reviews and publication. Approval recovery is resolved:
