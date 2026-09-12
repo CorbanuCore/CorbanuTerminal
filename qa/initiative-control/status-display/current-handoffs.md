@@ -1,5 +1,17 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 14:18 UTC
+
+Two source implementation workers are running. [Review/integration ledger](integration-20260912-1356.md)
+retains earlier results and the current bounded correction disposition.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): Mendel now implements the [normal-library opt-in store](../../../docs/research/agent-cost-accounting/production-store-allocation.md), clean launchef13b347c. Allocation reviewed clean and integrated;17 files, default no-install/collection OFF. Native354-test acceptance remains valid; full S02/S03 is not complete.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): James corrects a concurrent decision-revision race at final handoff.167 Python tests passed on the prior candidate; review03 identified this remaining issue. Manager performed scope/convergence review and authorized one narrow same-owner correction plus review, not another contract or user blocker. Real Slack remains unconnected.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): the [isolated adapter question](pf27-launch-adapter-decision.md) remains open at owner021f82e6; no new answer or repeated alert. Independent work continues.
+
+Last verified publication:14:01:06UTC from8aeebf72d. These later observations await
+this heartbeat's one native Luna Extra High sync; no publication approval is pending.
+
 ## Current observation — 13:56 UTC
 
 Publication is healthy; no click is required. [Receiving evidence](integration-20260912-1356.md)
