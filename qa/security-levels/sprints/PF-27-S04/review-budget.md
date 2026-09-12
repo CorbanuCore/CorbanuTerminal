@@ -85,3 +85,12 @@ No root-positive execution, installation or main-write window is granted.
 | --- | --- | --- | --- |
 | 16 | 2026-09-12 09:51:08Z | Astra High; manifest inspection over919b1652d, Rust5df6837f11abe2b176c18e1e69a53ef27b595194 | Exit0, findings[]; manifest-20260912/astra-sixteen.json. |
 | 17 | 2026-09-12 09:52Z | Fable5.1High Corbanu/privateTMUX; same source and completed RTX/TMUX evidence | Engine started09:52:45Z; exit0/findings[]; manifest-20260912/fable-seventeen.json. |
+
+## Sealed image — scoped integrator extension
+
+September12 manager task `01a08522-76a1-7ad1-afe6-ad690d55c0d7` accepted
+sealed-image-next-20260912.md and granted TWO necessary new-stage passes,
+Astra High and Fable5.1High Corbanu/TMUX. **0 used / 2 available**.
+Historical1–17 and the old unused contingency remain unchanged; no scheduled
+wait or reset. Reserve each dispatch first. No executable invocation, privileged
+installation, new main window or dynamic-loader trust is authorized.

@@ -1,6 +1,7 @@
 # PF27 next allocation proposal — seal the inspected executable bytes
 
-**Preparation only; receiving-owner review required before implementation.**
+**Accepted for bounded implementation September12 by receiving owner task
+`01a08522-76a1-7ad1-afe6-ad690d55c0d7`. No executable invocation authorized.**
 Follows accepted main `2c7c4e6c0212a428d332eee7fbec34a9bc1e8d39`, source
 `099fa6f6dacd7783afbd98f1493b491015bc84af`, Rust tree
 `5df6837f11abe2b176c18e1e69a53ef27b595194`. The main window is released.
@@ -87,9 +88,9 @@ No new user-facing feature; no code-blind UX design or human readiness claim.
 
 ## Approval, review and remaining gates
 
-Request acceptance of the sealed-image design before implementation. Ask for
-the two necessary new-stage Astra High/Fable5.1High Corbanu/TMUX passes when
-allocating; reviews1–17 stay spent, the prior contingency stays unused and the
+The receiving owner accepted the exact sealed-image design and granted two
+necessary new-stage Astra High/Fable5.1High Corbanu/TMUX passes; reviews1–17
+stay spent, the prior contingency stays unused and the
 scheduled six-hour anchor is unchanged. No review is dispatched for this proposal.
 
 Actual exec from the sealed descriptor, dynamic loader closure, subprocess
