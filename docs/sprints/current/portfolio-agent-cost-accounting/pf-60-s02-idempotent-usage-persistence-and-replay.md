@@ -1,17 +1,17 @@
 ---
 sprint_id: "PF-60-S02"
 title: "Idempotent usage persistence and replay"
-status: in_progress
+status: blocked
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 2
-owner: "Astra High accounting compact values"
+owner: "Codex management; Travis retention-boundary decision"
 parallel_lane: "accounting-compact-values"
 write_scope: "codex-rs/state/src/runtime/accounting_lifecycle.rs, codex-rs/state/src/runtime/accounting_compact_values.rs, codex-rs/state/src/runtime/accounting_compact_values_tests.rs, qa/portfolio/agent-cost-accounting/pf-60-s02/compact-values-increment.md"
 integration_gate: "Codex management reviews exact codec/composition, serializes child registration and reruns state/governance tests on combined tree. No retention mutation, production, worker commit/merge/push or live collection."
 worktree: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
 branch: "workstream/accounting-pf60-s01-20260911"
-base_commit: "3898eaa658924361b94cdbfc6751f930550ddee4"
+base_commit: "c8d46d7097d27a75c0cad51049468ea172f277c2"
 depends_on: "PF-60-S01"
 created: 2026-09-09
 updated: 2026-09-11
@@ -20,13 +20,14 @@ updated: 2026-09-11
 # PF-60-S02 — Idempotent usage persistence and replay
 
 S01 is archived; journal/quotation/storage/contributions/deletion are integrated.
-Exact compact values are next. Reuse the clean idle worker checkout; its name
-preserves history, not S01 ownership. Record actual dispatch HEAD separately.
-[Current allocation](../../../research/agent-cost-accounting/compact-values-allocation.md).
+Exact compact values are reviewed/integrated; the worker is closed and previous
+literal scope frozen. No current native writes. The
+[retention handoff](../../../research/agent-cost-accounting/retention-design-handoff.md)
+records the newly delivered boundary-day decision and gated next design/test work.
 
 ## Execution mandate
 
-- Next increment: pure exact compact-value codec/composition, no database mutation. Full S02 still owes compaction/retention, native owner/admission wiring and complete goldens.
+- Next: record retention-boundary answer and manager's reviewed exact mutation allocation before dispatch. Full S02 still owes compaction/retention, native owner/admission wiring and complete goldens.
 - Excludes: Changing prices, rebilling historical customers, collecting prompts, restoring legacy Plan allowances, or silently converting allowance to cash.
 - Budget proposal: 2–4 builder-days plus independent testing; not a commitment. Stop and re-slice if the bound is exceeded.
 
@@ -39,8 +40,8 @@ preserves history, not S01 ownership. Record actual dispatch HEAD separately.
 ## Code boundaries
 
 - Existing, read before work: `codex-rs/state/migrations/0041_provider_request_cache_usage.sql`; `codex-rs/app-server/src/request_processors/token_usage_replay.rs`; `codex-rs/tui/src/chatwidget/usage.rs`; `codex-rs/tui/src/token_usage.rs`.
-- Planned output: front-matter paths only; lifecycle child registration and pure stored-amount/compact-value interfaces. No journal/storage/pricing behavior changes.
-- Tests/evidence: new compact-values receipt; preserve earlier evidence. Native ABI, dependencies, production migrations and collectors excluded.
+- Previous output: front-matter paths are frozen B1 scope, not a new allocation. Parent must specify/review exact paths before any retention mutation.
+- Tests/evidence: accepted compact-values receipt; preserve it. Native ABI, dependencies, production migrations and collectors remain excluded.
 
 ## Preconditions
 
@@ -48,7 +49,7 @@ preserves history, not S01 ownership. Record actual dispatch HEAD separately.
 - [x] S01 accepted/archived after defaults approval, combined-tree fixture proof and independently reviewed technical handoff.
 - [x] Exact worker/branch/base and four-file B1 scope match plan; parent must clean-fast-forward and record launch HEAD at dispatch.
 - [x] Travis approved the default policy; synthetic/local tests only, no billing/live collection. Bound this allocation to one worker, at most 500 non-test lines, one independent review plus scoped corrections; no exhausted allowance reset.
-- [x] Parent inspected DayTotals/Decimal visibility and amount/rate parsing distinction; current allocation linked above. New codec test passes pending.
+- [x] Parent inspected DayTotals/Decimal visibility and amount/rate parsing distinction; B1 is now reviewed and tested, receipt below.
 
 ## Done
 
@@ -59,16 +60,18 @@ preserves history, not S01 ownership. Record actual dispatch HEAD separately.
 
 - [x] Contributions/deletion b08fff66d reviewed clean and integrated at3898eaa65;226 state tests pass there. Exact current totals, atomic all-version deletion/shared snapshot retention, deterministic serialization orders and two disk reopens; no simultaneous lock-contention/pruning/native owner claim. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/contribution-deletion-increment.md).
 
+- [x] Exact compact-value codec c8d46d709 independently reviewed clean and integrated;237 state tests pass on receiving tree. Canonical u128/24-place USD, all seven metric populations, checked composition and malformed/overflow rejection; no DB mutation. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/compact-values-increment.md).
+
 ## Remaining
 
-- [ ] Implement/test exact canonical stored amounts, all-seven-metric compact values and checked composition under the B1 allocation; no retention-service claim.
+- [ ] Record Travis's answer to the newly delivered conservative daily-expiry question; keep the 90-day detail and exact 365-day replay policies unchanged. No silent early loss or extended retention.
 - [ ] Manager resolves daily/rolling expiry coverage, stale/unquoted source and late-import semantics before allocating any compaction mutation; no repeated defaults question.
 - [ ] After reviewing the first increment, manager allocates production migration/dispatch/presence/price/retention wiring and complete S02 golden tests separately; do not broaden this worker's scope.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
 
 ## Verification
 
-- [ ] Current increment: compact_values::tests under runtime::accounting::pricing::storage::lifecycle plus lifecycle/storage/pricing/journal selectors, full state and normal-library check via pinned offline commands.
+- [x] B1:11 compact-value tests and four existing selectors passed; combined237 state/73 Task Node tests and normal-library check passed atc8d46d709. One non-accounting LEAK marker disclosed in manager handoff; no leak-clean claim.
 - [ ] Integration: from repo root, `python3 docs/plans/check.py; python3 docs/sprints/check.py`; `git diff --check`.
 - [ ] Resolve TUI applicability against the plan; record actual-key success, failure/cancel, recovery/resume and final binary evidence for every affected interactive path.
 - [ ] Record expected versus actual results and nonzero test counts; no unchecked assumption is converted into a pass.

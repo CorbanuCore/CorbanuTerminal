@@ -31,7 +31,20 @@ promise to integrate later. New allocation/policy changes receive their own revi
 
 ## Current queue and owners
 
-Latest receiving checkpoint, September 12 02:20 UTC:
+Latest receiving checkpoint, September 12 02:50 UTC:
+`c8d46d7097d27a75c0cad51049468ea172f277c2` adds exact compact values B1.
+Four paths,649add/0delete,206non-test; parent read all code/tests/receipt and verified
+hashes. First independent Astra High Autoreview returned zero findings/exit0.
+Combined `cc91d00a-5287-4794-b9fe-0a8fb9f43fc5`:310 passed,0 skipped,7.752s
+(237 state/73 Task Node). One LEAK marker:
+`extract::tests::turn_context_sets_permission_profile_metadata`; cause uninvestigated,
+not a failed assertion or a leak-clean run. Worker warnings remain in its receipt.
+Both normal libraries passed offline locked check in1.66s;129 Python/governance
+tests passed (54/48/5/22). Full log retained privately as compact-values-combined-tests.log.
+No native edits after reviewed/formatted worker bytes. Leibniz closed.
+The next retention decision was actually delivered; no new native worker assigned.
+
+Earlier receiving checkpoint, September 12 02:20 UTC:
 `3898eaa658924361b94cdbfc6751f930550ddee4` combines reviewed accounting
 contributions/deletion `b08fff66d` and Task Node reconciliation `177ec93fc`.
 Each exact candidate passed its first independent Astra High review with zero
@@ -92,7 +105,7 @@ production collection, UI, live repository, benchmark or human acceptance.
 | Workstream | Completed | Next action | Who owns the gate? |
 | --- | --- | --- | --- |
 | PF13 | No new completion inferred | Preserve owner task and paused security allowance | Existing PF13 owner / Travis; do not reactivate here |
-| Accounting PF-60-S02 | S01 archived; contributions/deletion also reviewed/integrated | Four-file compact-value foundation allocated | Manager dispatches; approved defaults unchanged |
+| Accounting PF-60-S02 | B1 compact values also reviewed/integrated; worker closed | Blocked on newly delivered boundary-day availability decision; then exact retention allocation | Travis answers narrow tradeoff; manager owns source/admission/read design |
 | Task Node PF-80-S01 | Reconciliation reviewed/integrated; worker closed | Blocked on already delivered setup/validity decisions; then manager runtime design | Travis answers existing questions; manager owns design/qualification packet |
 
 Missing preparation, allocation or receiving evidence is manager work. It is
@@ -182,19 +195,20 @@ No upstream upgrade qualification is claimed.
 
 ## Current next assignments
 
-Both active plans and sprints now record receiving base
-`3898eaa658924361b94cdbfc6751f930550ddee4`. After this allocation's independent
-review, parent fast-forwards the idle clean accounting checkout and records actual
-agent ID/launch HEAD in the private continuation receipt. Task Node is blocked,
-not running; no native write assignment. Earlier literal allocations above and
-in old handoffs are historical, not permission to edit those files now.
+Accounting plan/sprint now record receiving base
+`c8d46d7097d27a75c0cad51049468ea172f277c2`; Task Node keeps its accepted
+`3898eaa658924361b94cdbfc6751f930550ddee4` checkpoint. Both workers are closed;
+no current native write assignment. Earlier literal scopes are frozen historical
+allocations. A recorded decision and reviewed exact allocation precede dispatch.
 
-Accounting: [four-file compact values](../research/agent-cost-accounting/compact-values-allocation.md),
-exact stored-amount decoder and checked seven-metric composition. No database
-mutation. Whole compaction is too large for one bounded patch; B1 is a coherent
-foundation. Manager must resolve daily aggregate versus rolling expiry coverage,
-unquoted/stale source, late imports and checkpoint/read semantics before allocating
-mutation. No early-loss/over-retention default silently chosen. S03 remains gated.
+Accounting: [retention design/test handoff](../research/agent-cost-accounting/retention-design-handoff.md).
+B1 is integrated; exact daily sums cannot subtract individually expired members
+after detail deletion. Manager delivered a NEW narrow question to Travis: allow
+daily expiry at UTC-day-start+365days, losing under24h history while never retaining
+a contribution too long? Recommend yes with visible oldest day; answer pending.
+This is not reapproval of the existing defaults, and is not secretly chosen.
+90-day detail/exact365-day replay remain unchanged. Source/admission/read/ownership
+design and patch sizing stay manager work. No speculative fixture lane; S03 gated.
 
 Task Node: [runtime recovery handoff](../research/tasknode-integration/recovery-decision-handoff.md)
 now records the concrete next design/operator boundary and human test plan. Current
