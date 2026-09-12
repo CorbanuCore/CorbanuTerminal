@@ -27,6 +27,13 @@ implementation_worktrees:
 
 # 2. Accounting — unified agent cost and usage
 
+17:22UTC: first native-caller review found one P2: accounting's provider copy on
+role reload discards explicit child retry/timeout overrides. Parent verified the
+literal merge path and authorized the first same20-path correction after the
+current baseline diagnostic; preserve explicit supported role settings and fail
+unapproved endpoint changes before send. Existing size/review allowance suffices;
+no new auth/product decision, source acceptance or baseline waiver.
+
 Latest17:12UTC: native caller returned frozen at87a9a81ad,3017total/904non-test
 across20 worker paths; combined dependency delta3019/906 fits the allocation.
 Focused native/API208/state287 pass. Full Core3401passed/132failed/19skipped/

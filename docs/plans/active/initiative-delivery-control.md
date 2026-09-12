@@ -33,6 +33,14 @@ implementation_worktrees:
 
 # 3. Task Node integration and delivery control
 
+17:22 manager classification: the [allocation](../../research/tasknode-integration/slack-live-allocation.md)
+now authorizes the narrow lifetime-lock/session-lease correction only, same
+seven worker paths. Worker2600/1100, combined3250/1600 and one changed-candidate
+review preserve prior usage. Broader quarantine/recovery-send/migration proposals
+are excluded; missing-fence bookkeeping recovery remains a separate pre-live
+manager action. Canonical publication17:15:52 is verified; this later amendment
+awaits the next scheduled sync, not a second publication in this heartbeat.
+
 Latest17:12UTC: third Slack recovery candidate2116/840 has225 passing tests.
 Review04 found an abrupt-listener-exit gap; source freezes for exact session/fence
 recovery contract classification by manager, with James preparing the proposal.

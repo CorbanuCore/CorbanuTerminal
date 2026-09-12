@@ -19,6 +19,10 @@ updated: 2026-09-12
 
 # PF-60-S02 — Idempotent usage persistence and replay
 
+17:22UTC: parent accepted review01's dropped role retry/timeout overrides P2 as
+in-scope; first correction queued after the matched baseline run. Same20 paths
+and existing allowance; native child override/mismatched-route proof required.
+
 17:12UTC: native caller returned3017/904 at87a9a81ad; first code review and
 matched baseline diagnosis are active. Focused/API/state tests pass, but full
 Core132failures/19skips/1leaky remain undispositioned. Candidate is not accepted;

@@ -59,6 +59,43 @@ Code-blind design/evidence remain required before human-ready handoff, not waive
 
 ## Implementation contract
 
+September12 17:22 manager disposition after the source-sync freeze released:
+approve ONLY the listener-lifecycle portion of the private recovery proposal,
+not its new quarantine/reaffirmation/recovery-send/migration architecture.
+The P1 is introduced by this candidate and is an in-scope recovery blocker;
+these explicit storage invariants resolve its contract before source edits.
+Same seven worker paths atba3a2457c; no canonical decision/reply schema edits.
+One stable owner-only lifetime flock plus durable private schema2 session/phase/
+epoch/binding identity and a monotonic lease proves current process ownership
+and recent connected observation together. Neither alone suffices. Observe the
+same lease/session at send, interpretation/CAS, status and both final permit
+checks. No listener, expired/stalled lease, missing/replaced lock, interrupted
+startup or renewal failure denies work, even before a replacement listener.
+Bind existing explicit manager gap-review evidence to the current session/epoch
+plus existing binding/watermark/ingress. Reconnection never clears a prior gap.
+Preserve transient store/feed/transport ordering; ownership probes are nonblocking
+under transport, with no callbacks waiting for store/feed. Stop/join actual
+runtime handles, not guessed PIDs. OFF remains no files/SDK/credentials/network.
+Fresh initialization may create schema2; older initialized shapes remain held,
+never silently treated as first startup. No live migration or data reset claimed.
+
+Missing-fence recovery remains a separate manager-owned pre-live requirement;
+the proposal's archive/generation migration, per-question quarantine, renewed
+authority and recovery-send capability are NOT authorized here. Preserve all
+old ledgers, uncertain attempts, accepted native evidence and consumed permits.
+No new public/auth authority. Before live enablement the manager must separately
+resolve loss-preserving bookkeeping recovery; this correction does not waive it.
+Integrator grants worker2600total/1100non-test, parent650/500 reserve, combined
+3250/1600 for this narrowed coherent lifecycle correction; report before overage,
+never compress proof. Preserve prior2250/1000,2900/1500 and all earlier limits.
+One changed-candidate corrective review is authorized; retain failed04 and all
+prior usage, and reclassify any further expansion. Required tests use actual
+SIGKILL after connect before restart/work inside900s/5s, SIGSTOP/CONT past lease,
+single-owner contention, failed renewal/stop write, startup crashes, changed
+session around durable permit, and explicit reviewed-gap recovery. Preserve all
+225 baseline methods/assertions, full pinned Python/Facilities/governance and
+exact final hashes/counts; no complete live/operator case is claimed.
+
 September12 17:12: second correction1879/805 passed217tests; review03/helper15900
 found transformed-history association and cancelled-event queue recovery P2s.
 After the mandatory two-cycle pause, manager classified both in-scope recovery
