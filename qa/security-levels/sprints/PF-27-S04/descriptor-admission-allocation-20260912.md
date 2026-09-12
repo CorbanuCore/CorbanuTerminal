@@ -1,5 +1,39 @@
 # PF27 Stage B allocation: bounded private socket admission
 
+## Review30 manager disposition — buffered peer shutdown
+
+Manager read literal Astra30 JSON/exit1 and actual tick, connection helper and
+connector. Accept its P2: MSG_PEEK returns an unread role/data byte even after
+remote SHUT_WR, hiding EOF until drain/deadline and leaving the other reader
+blocked. Existing helper read_exact drains that marker before admission. This
+is an in-scope failure of the already-required pair-wide shutdown contract.
+
+Authorize a narrow exception to the runtime254 freeze: change only the existing
+socket shutdown check in pair_admission.rs, with corresponding same-file-scope
+tests. Nonblocking poll for POLLRDHUP/POLLHUP/POLLERR (including invalid-descriptor
+failure) must detect shutdown independently of buffered data; retain the
+nonconsuming peek semantics. Readability alone is not a shutdown: healthy
+buffered peers must stay live and application bytes remain intact. Poll failure
+must fail closed, never establish peer liveness. No new API, dependencies,
+fixture/runtime ownership or paths. Same seven paths and hard900 from6d770938c;
+candidate863 plus estimated15–25 is not permission to exceed900.
+
+Fable31 is already running on frozen93bbe3b18: let that actual operation finish,
+preserve its input, and classify BOTH results before changing the candidate.
+Do not duplicate it. First record an actual failing RTX regression against the
+unchanged runtime. Peek the fixture role marker rather than draining it, retain
+the original empty-EOF scenarios, add buffered-victim EOF for both roles, and
+drain only the other role before testing that its reader blocks then wakes.
+Preserve healthy buffered data, pair reaping/capacity and original failure logs.
+Then repair, format and repeat final exact-source required proof.
+
+Authorize exactly one additional scoped Fable5.1 High review32 via the existing
+Corbanu/TMUX helper after both30/31 are classified and repaired proof passes.
+Retain all reviews1–31; no budget reset, blanket follow-up pass or second opinion
+on unchanged clean code. Any different contract/scope finding returns to manager.
+Owner records this amendment and governance before edits; no human decision,
+source push, native activation, whole-sprint or independent-functional acceptance.
+
 ## 21:02 UTC manager size disposition
 
 Owner stopped before original800 ceiling and reported measured791: pair38,
