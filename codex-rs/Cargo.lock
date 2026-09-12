@@ -3542,6 +3542,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-linux-pidfd-spawn"
+version = "0.1.42"
+dependencies = [
+ "libc",
+ "pretty_assertions",
+ "rustix 1.1.4",
+]
+
+[[package]]
 name = "codex-linux-sandbox"
 version = "0.1.42"
 dependencies = [
