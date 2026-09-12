@@ -4,6 +4,13 @@ This directory contains public, secret-free PF-35 evaluation contracts. It does
 not contain model weights, generated corpus records, blind examples, labels,
 signing keys, customer information, credentials, or protected financial data.
 
+Planning update, September 11, 2026: Travis selected DeepSeek API generation
+through Corbanu Terminal, with fine-tuning still on RTX PRO 6000. The checked-in
+local-generator preparation metadata is not evidence for that new route. Under
+a new allocation, reconcile manifests and any strict schema/tests before the API
+campaign; preserve historical hashes, custody and fail-closed checks. See the
+[current campaign brief](../planning/pf-35-external-qualification-agent-brief-2026-08-30.md).
+
 `corpus-manifest.json` pins the public source metadata, licensing rules,
 synthetic-campaign contract, custody boundary, hardware target, and external
 evidence that still must be supplied. `split-manifest.json` freezes grouped

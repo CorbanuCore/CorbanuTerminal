@@ -4,6 +4,12 @@ Use this document as the copy-ready handoff for the agent who will own PF-35's
 remaining classifier qualification. It supplements, but does not replace, the
 active plan and sprint records.
 
+Updated by Travis Good's September 11, 2026 decision: **dataset generation uses
+DeepSeek API through Corbanu Terminal; fine-tuning stays on RTX PRO 6000**.
+This supersedes the local Qwen/vLLM generator and ComfyUI-stop instructions in
+earlier handoffs. It does not start a campaign, choose an API model or authorize
+unbounded spend. Offline CPU inference and all existing quality gates remain.
+
 ## Mission
 
 Complete PF-35's remaining externally measured qualification without weakening
@@ -50,18 +56,21 @@ shared `main` checkout and do not infer authority from this brief.
 
 ## Decisions already made
 
-- Generate an English, synthetic-first corpus through pinned vLLM on the
-  owner-supplied RTX 6000 Pro host. Search Hugging Face using the token already
-  provisioned in the terminal and select an exact Qwen 3.8 27B-family repository
-  and immutable revision. An abliterated research derivative is explicitly
-  permitted when the standard checkpoint refuses to create prompt-injection
-  research fixtures. Stop ComfyUI during the campaign.
-- Treat the generator selection as a reproducibility and supply-chain decision:
-  verify its commercial-use license, provenance, architecture, vLLM
-  compatibility, tokenizer, repository owner, immutable revision and hashes.
-  Do not select from name or download count alone. Record a short candidate
-  comparison and replace the preparation manifest's Qwen3.5 placeholder with
-  the exact accepted identity before campaign evidence is accepted.
+- Generate an English, synthetic-first corpus using DeepSeek API through
+  Corbanu Terminal. Do not start a local generator, download Qwen weights or
+  stop ComfyUI for API generation. Fine-tune the detector on RTX PRO 6000 in S02.
+- Record the actual Corbanu build/provider route, approved API endpoint/model ID
+  and any exposed revision, output-use/data terms, prompt/config hashes,
+  supported sampling settings, request identities and output hashes. Hosted
+  weights and deterministic replay are not assumed. Preserve accepted outputs,
+  timestamp campaigns and flag model drift. Replace the preparation manifest's
+  local-generator placeholders under allocated schema/test work before accepting
+  DeepSeek evidence; do not relabel old preparation as a measured API run.
+- Establish bounded pilot/full-campaign spend, concurrency and retries before
+  paid generation. Check API usage/cost and stop at the cap. Only synthetic or
+  licensed public inputs may be sent; no real secrets, protected customer data,
+  existing blind examples or labels. Generate blind material separately under
+  custodian control and never return record-level output to the training lane.
 - Supplement synthetic data only with commercial-safe sources whose exact
   origin, revision, SHA-256, license, permitted use, attribution and
   transformations are recorded. Allowed baseline licenses are CC0-1.0,
@@ -116,40 +125,45 @@ captured, Git, evidence, logs, shell history or a new credential file. Validate
 access with a secret-free result and continue; do not pause merely because the
 credentials are absent from `AgentCredentials.md`.
 
-The Hugging Face token is already provisioned in the terminal. Resolve it
-through the existing Hugging Face tooling; do not print it, inspect its raw
-environment value, include it in a URL/command line, persist another copy or
-expose it to model-review context. A secret-free authentication/permission
-check and model metadata search are allowed.
+Resolve DeepSeek access through Corbanu Terminal's existing protected provider
+credential path. Do not print keys, inspect raw secret values, place them in
+URLs/command lines, persist another copy or expose them to reviewers. Confirm
+secret-free provider/model access before the pilot; ask for interactive setup
+only if the configured route is unavailable. Hugging Face access, if needed for
+the detector in S02, follows the same secret-handling boundary and is not a
+local-generator prerequisite.
 
 ## Execution stages
 
 ### Stage 1 — access and reproducibility inventory
 
-- Record secret-free machine facts for the RTX host: GPU, VRAM, OS, driver,
-  CUDA, container/runtime and storage paths.
-- Search Hugging Face for compatible Qwen 3.8 27B-family candidates, including
-  abliterated research derivatives. Record repository IDs, immutable revisions,
-  license/provenance, architecture, tokenizer and vLLM compatibility without
-  exposing the Hugging Face token.
-- Run a bounded refusal/format/throughput bakeoff using synthetic prompt-
-  injection research requests only. Select and pin the exact generator,
-  tokenizer, vLLM version, container digest, prompt templates, seeds and
-  sampling settings before the 10,000-acceptance pilot.
+- Verify the selected DeepSeek route in Corbanu Terminal, provider/model metadata,
+  permitted output use/data handling and pilot budget. Record the actual build
+  and configuration identities without credential values. Do not infer direct
+  versus proxy routing from a model label; resolve it before paid requests.
+- Record RTX GPU/VRAM, OS/driver/CUDA/runtime and storage facts for subsequent
+  fine-tuning. RTX local-generator availability does not gate API generation.
+- Within the approved budget, run a bounded refusal/format/throughput/cost pilot
+  using synthetic prompt-injection research requests only. Preserve refusals as
+  outcomes, not permission to switch provider or bypass controls. Record supported
+  sampling controls and output hashes before the 10,000-acceptance pilot.
+- Verify auth failure/recovery, rate limiting, timeout, cancellation, persisted
+  checkpoints, deduplication and safe resume through Corbanu Terminal. Bound
+  retries/costs; an ambiguous paid request must not trigger blind bulk replay.
 - Establish an append-only campaign ledger containing campaign/round IDs,
   timestamps, operator, prompt/config hashes, source-manifest hash, accepted and
-  rejected counts, output hashes and adjudication/audit counts.
+  rejected counts, output hashes, model identity, API usage/cost, retry/checkpoint
+  records and adjudication/audit counts.
 - Freeze a source ledger with license evidence before ingesting any open source.
   Ambiguous or incompatible licensing excludes that source.
 - Confirm private storage, backup, deletion and transfer procedures with the
   human blind custodian. Do not create the blind split in a training-visible
   location, even temporarily.
 
-The startup prompt supplies the machine login material, so the agent should
-attempt the authorized connection rather than request credentials again. Return
-a readiness report before bulk generation. Failed access after using the
-provided credentials, or missing custodian/signing/N100 authority, is a measured
-blocker rather than permission to mock the result.
+Return a readiness report before bulk generation. Missing DeepSeek setup, approved
+budget/data terms or custodian authority blocks the campaign; RTX fine-tuning,
+signing and N100 access block their respective later stages. Verify existing
+authorized access before requesting it again. Never mock missing evidence.
 
 ### Stage 2 — 10,000-acceptance pilot
 
@@ -219,7 +233,7 @@ bounds:
 
 ### Stage 5 — S01 → S02 → S03 handoff boundary
 
-PF-35-S02 owns production model training/export, artifact verification, signed
+PF-35-S02 owns production model fine-tuning on RTX PRO 6000, export, artifact verification, signed
 distribution and the runtime implementation. PF-35-S03 owns calibrated blind
 qualification and deterministic ingress enforcement. PF-35-S01 must not
 silently implement either successor.
@@ -301,10 +315,11 @@ them.
 Stop and report rather than proceeding when:
 
 - allocation, branch, worktree, base, owner or literal scope is absent/stale;
-- startup-supplied credentials fail to reach the authorized RTX host, or the
-  custodian, signing or N100 authority is not confirmed;
-- no Qwen 3.8 27B-family candidate has acceptable commercial-use licensing,
-  traceable provenance and pinned vLLM-compatible artifacts;
+- DeepSeek access through Corbanu Terminal, model/endpoint identity, acceptable
+  output-use/data terms or approved budget is missing; a cost cap is exhausted
+  or rate-limit/transport/auth failures exceed the bounded retry allowance;
+- required custodian authority is missing for generation, or RTX fine-tuning,
+  signing or N100 access is missing for its respective later stage;
 - a source lacks provable commercial-safe licensing or immutable revision/hash;
 - blind data becomes visible to training, model-building or review agents;
 - a split/group overlap, contradictory label or record-level blind leak occurs;

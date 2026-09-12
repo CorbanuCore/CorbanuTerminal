@@ -800,7 +800,7 @@ document original scope, not new passes.
 | `PF-32` | Screened web facade and search providers | [S01](../../sprints/current/p0-security-levels/pf-32-s01-web-facade-and-registry.md), [S02](../../sprints/current/p0-security-levels/pf-32-s02-existing-search-and-native-bypass.md), [S03](../../sprints/current/p0-security-levels/pf-32-s03-exa-search-adapter.md), [S04](../../sprints/current/p0-security-levels/pf-32-s04-brave-search-adapter.md), [S05](../../sprints/current/p0-security-levels/pf-32-s05-searxng-search-adapter.md), [S06](../../sprints/current/p0-security-levels/pf-32-s06-privacy-routing-and-failover.md) | draft |
 | `PF-33` | Destination validation and connection enforcement | [S01](../../sprints/current/p0-security-levels/pf-33-s01-url-dns-and-redirect-policy.md), [S02](../../sprints/current/p0-security-levels/pf-33-s02-connection-pinning-and-bypass.md), [S03 completed](../../sprints/archive/p0-security-levels/pf-33-s03-destination-policy-contract.md) | S03 completed; S01/S02 draft |
 | `PF-34` | Sanitization quarantine and safe review | [S01](../../sprints/current/p0-security-levels/pf-34-s01-render-aware-sanitization.md), [S02](../../sprints/current/p0-security-levels/pf-34-s02-quarantine-state-and-store.md), [S03](../../sprints/current/p0-security-levels/pf-34-s03-safe-quarantine-review.md), [S04 completed](../../sprints/archive/p0-security-levels/pf-34-s04-screening-contract-and-fixtures.md) | S04 completed; S01-S03 draft |
-| `PF-35` | Local classifier and blind qualification | [S01](../../sprints/current/p0-security-levels/pf-35-s01-classifier-corpus-and-evaluation.md), [S02](../../sprints/current/p0-security-levels/pf-35-s02-local-cpu-detector-artifact.md), [S03](../../sprints/current/p0-security-levels/pf-35-s03-calibration-and-ingress-gate.md) | S01 in progress; deterministic foundation merged, external qualification open; S02/S03 draft |
+| `PF-35` | Local classifier and blind qualification | [S01](../../sprints/current/p0-security-levels/pf-35-s01-classifier-corpus-and-evaluation.md), [S02](../../sprints/current/p0-security-levels/pf-35-s02-local-cpu-detector-artifact.md), [S03](../../sprints/current/p0-security-levels/pf-35-s03-calibration-and-ingress-gate.md) | S01 draft/external campaign pending: DeepSeek API through Corbanu Terminal; foundation merged. S02/S03 draft; RTX PRO 6000 fine-tuning, offline CPU inference unchanged |
 | `PF-36` | Optional hosted detector and safe fallback | [S01](../../sprints/current/p0-security-levels/pf-36-s01-hosted-detector-consent-contract.md), [S02](../../sprints/current/p0-security-levels/pf-36-s02-hosted-bakeoff-and-local-fallback.md) | draft |
 | `PF-37` | Origin-bound browser login and human handoff | [S01](../../sprints/current/p0-security-levels/pf-37-s01-origin-bound-browser-login.md), [S02](../../sprints/current/p0-security-levels/pf-37-s02-human-auth-handoff-lifecycle.md) | draft |
 | `PF-38` | Typed financial execution and exact effects | [S01](../../sprints/current/p0-security-levels/pf-38-s01-typed-financial-executor.md), [S02](../../sprints/current/p0-security-levels/pf-38-s02-full-effect-preview-and-mandate.md), [S03](../../sprints/current/p0-security-levels/pf-38-s03-sign-broadcast-and-receipts.md) | draft |
@@ -910,17 +910,28 @@ memory; S01/S02/S03 keep their original source and persistence qualification gat
 
 **Local classifier and blind qualification.** Ship a licensed, reproducible, offline CPU detector with leakage-free evaluator-owned holdouts and profile-calibrated thresholds. Screen complete bounded inputs before exposure. Missing artifacts/timeouts pause ingestion in Moderate and Aggressive; forced false negatives still cannot authorize secrets or financial actions.
 
-The 2026-08-30 product decisions select a synthetic-first, commercial-safe
-English corpus generated through pinned vLLM on the owner-supplied RTX host.
-The campaign owner searches Hugging Face using the already-provisioned token and
-pins an exact commercially usable Qwen 3.8 27B-family repository and immutable
-revision. An abliterated research derivative is explicitly permitted when the
-standard checkpoint refuses to generate prompt-injection research fixtures;
-selection requires license, provenance, architecture/vLLM compatibility and
-reproducibility review, not a popularity claim. The selected repository,
-revision, tokenizer, license, hashes and runtime/container identities replace
-the preparation placeholder before generation evidence is accepted. A
-separately custodied encrypted blind corpus and Intel N100/16 GiB/x86-64 Linux
+Travis Good's September 11, 2026 decision supersedes the August 30 local
+Qwen/vLLM generation route: generate the synthetic-first, commercial-safe English
+dataset using the **DeepSeek API through Corbanu Terminal**. Fine-tuning remains
+on the **RTX PRO 6000**; production detector inference remains offline on CPU.
+API generation does not require local generator weights, a vLLM server, or
+stopping ComfyUI. No automatic local-generator or alternate-provider fallback.
+
+Before the campaign, record the actual Corbanu build/provider route, DeepSeek
+model ID and any exposed revision, prompt/config hashes, supported sampling
+settings, request identities and output hashes. Do not invent immutable hosted
+weights, seed support or deterministic replay; preserve accepted outputs and
+record provider model drift. Verify endpoint, output-use/data terms and approved
+pilot/full-campaign spend and concurrency bounds before paid requests. Use the
+existing protected credential path, never keys in prompts or logs. Only synthetic
+or licensed public inputs may leave for generation; no secrets, customer/protected
+financial data, existing blind records or labels. Independently generated blind
+material remains exclusively in the custodian's lane. Replace the preparation
+manifest's local-generator placeholder under a separately allocated implementation
+scope before accepting campaign evidence; this amendment changes no schema and
+claims no API run.
+
+A separately custodied encrypted blind corpus and Intel N100/16 GiB/x86-64 Linux
 remain the qualification boundaries. DeBERTa-v3-xsmall exported to signed INT8
 ONNX Runtime is the primary detector path, with a custom lightweight classifier
 only if the primary cannot meet quality and resource gates. One calibrated
@@ -1156,7 +1167,7 @@ before qualification.
 | Expanded program capacity and integration allowance | Jim Ricketts / product authority | Execution scheduling | Maximal LLM capacity supplied; provisional 35% integration reserve and per-sprint/gate formula recorded above; three-active-sprint limit remains; October 8 feasibility pending measured estimates, no scope silently removed |
 | Platform access and isolation capability matrix | Jim Ricketts | PF-27-S03 completion and PF-27/PF-31 integration readiness | PF-27-S03 three-platform probes are accepted; all measured platforms remain ineligible, and unsupported protected paths block visibly pending real mechanism qualification |
 | Moderate workflow usability targets | Product authority / Jim Ricketts | PF-26-S02 readiness | Numeric task-completion, approval-count and latency targets with fixed workflows pending; no relaxation of protection |
-| Local detector hardware/corpus/license pins | Jim Ricketts / evaluator | PF-35-S01 | Product decisions recorded for synthetic/open commercial-safe sources, independent evaluator custody, provisional N100 floor, Hugging Face selection of a pinned Qwen 3.8 27B-family generator with an abliterated research derivative permitted after license/provenance/compatibility review, DeBERTa/ONNX primary detector, signing root and immutable-release distribution; exact source revision, machine facts and measured evidence remain sprint work |
+| Local detector hardware/corpus/license pins | Jim Ricketts / evaluator | PF-35-S01 | Travis's September 11 decision: DeepSeek API generation through Corbanu Terminal replaces local Qwen/vLLM; fine-tuning stays RTX PRO 6000. Synthetic/open commercial-safe sources, independent custody, N100 floor, DeBERTa/ONNX, signing and distribution unchanged. Actual API model/route, data terms, budget, manifest adaptation and measured evidence remain campaign prerequisites; no API execution claimed |
 | Retriever/API/model dependency pins | Jim Ricketts | Owning adapter sprint readiness | Verify then pin current supported artifacts and APIs; historical sources are not fresh release security evidence |
 | Optional hosted vendor and data terms | Product authority | PF-36-S02 real-service activation | No vendor selected; interface/fixtures and explicit disabled disposition are in scope |
 | First real login origin/test account | Human owner / security reviewer | PF-37-S01 readiness | Record one permitted exact HTTPS origin, reviewed form and non-production account; missing access blocks qualification |
