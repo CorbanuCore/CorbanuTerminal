@@ -53,3 +53,16 @@ Avoid further opinions once no substantive findings remain; proceed to integrati
 Extension accounting: **2 used / 0 available**. Both processes finished.
 Do not silently retry or erase the nonzero Fable result. The portability
 disposition and integration checkpoint are in probe-20260912/README.md.
+
+## Next launcher stage — additional integrator allowance
+
+After verified main `3e8bf6c95`, manager task
+`01a08522-76a1-7ad1-afe6-ad690d55c0d7` explicitly authorized **up to3 additional
+necessary scoped design/code/evidence passes** for the next launcher allocation
+without waiting for11:25Z. This is a separate +3 extension, not a reset of the
+five scheduled passes or the consumed +2 extension. No installation authority.
+
+Scope: [launcher recipe/identity preparation](launcher-next-20260912.md).
+**0 dispatched / 3 available**; next review14. Reserve before dispatch. Prefer
+the required Astra High and Fable5.1High closeout, keeping the third for a
+concrete repair/evidence need. Do not spend a pass just because it is available.
