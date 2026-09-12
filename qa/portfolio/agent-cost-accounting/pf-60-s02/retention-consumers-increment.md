@@ -10,10 +10,18 @@ C1 is already the consumer-only stage before C2. No tests or scope were removed.
 Aristotle's one allocated Astra High structured helper exited0/findings[]; parent
 read the literal implementation, tests and reviewJSON. Review-only size disposition
 and original outputs remain in private manager-continuation.9Id1V1.
-This append-only receipt adds17 lines, now1138total/413non-test including handoff.
+This append-only receipt initially added16 lines:1137total/412non-test including handoff.
 Code is accepted for receiving-tree integration; combined-tree validation and
 C2 allocation are still next, not implied by that code-review result. No new review
 of unchanged C1 or approval from Travis is needed. C2 remains excluded here.
+
+Combined proof: after merging receiving a37eb0b6a into worker8cdb6dcf, pinned
+offline `just test -p codex-state -p codex-tasknode-session` passed335/0skipped
+in9.285s, run df4aea21-b6f1-4213-9852-62f0869467bc. Nextest reports2 leaky
+tests; this is not leak-clean. Four fixture-helper warnings (one duplicate) remain.
+Parent source publication stays frozen separately; receiving integration follows
+the active Luna postflight. This six-line evidence addition plus count correction
+is documentation only; the tested Rust tree is unchanged.
 
 
 Status: implemented, formatted and tested; uncommitted and **not size-gate compliant**. Parent acceptance/integration is blocked by the measured 800-line overage below. No C2 transfer, activation writer, apply/maintain stub or production registration exists. No automatic third prerequisite is proposed.
