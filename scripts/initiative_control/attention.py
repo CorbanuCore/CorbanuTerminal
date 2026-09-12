@@ -88,3 +88,86 @@ def notices(data):
     counts = Counter(data["problems"])
     return render([issue(problem, count) for problem, count in counts.items()],
                   data["sprints"]["sprints"], data.get("documents", {}))
+
+
+def render_decisions(raw, now, sprints, documents):
+    """Pure, unconnected fixture fragment; documents is the approved safe corpus."""
+    from decisions import FRESH_SECONDS, project, stamp
+
+    view = project(raw, now)
+    body = '<section id="decisions"><h2>Needs your decision</h2><p>Offline manager assessment. Slack not connected. Answer in the manager task. No operational approval or agent activity is established here.</p>'
+    if view["state"] == "unknown":
+        return body + '<p>Unknown: decision input unavailable; open count unknown.</p></section>'
+    feed = view["feed"]
+    esc = html.escape
+    stale = view["state"] == "stale"
+    body += f'<p>Source {esc(feed["feed_id"])} / revision {feed["revision"]}; assessed {esc(feed["assessed_at"])}. {"Stale: current decisions unknown; showing last-known records." if stale else "Fresh manager assessment."}</p>'
+    opened = [d for d in feed["decisions"] if d["id"] in view["open"]]
+    body += f'<p>{"Last-known open" if stale else "Open decisions"}: {len(opened)}.'
+    if opened:
+        age = max(int((stamp(now) - stamp(d["revisions"][0]["raised_at"])).total_seconds() // 60) for d in opened)
+        body += f' Oldest raised {age} minutes ago.'
+    elif not stale:
+        body += ' No open decisions found in this fresh assessment.'
+    body += '</p>'
+    unavailable = {}
+
+    def link(label, path, available):
+        if available:
+            href = document_url(path)
+        else:
+            key = hashlib.sha256((label + str(path)).encode()).hexdigest()[:20]
+            href = '#decision-context-' + key
+            unavailable[key] = label
+        return f'<a href="{href}">{esc(label)}</a>'
+
+    def content(record, summary_only=False):
+        refs = {}
+        for ref in record["sprints"]:
+            sid, path = ref["sprint_id"], ref["path"]
+            available = path in documents and (path == HISTORY if ref["historical"] else any(s["sprint_id"] == sid and s["path"] == path for s in sprints))
+            refs[sid] = link(sid + (' (historical identity)' if ref["historical"] else ''), path, available)
+
+        def linked(value):
+            value = value if value is not None else 'Unknown: not assessed'
+            return ''.join(refs.get(part) or (link(part, None, False) if SPRINT.fullmatch(part) else esc(part))
+                           for part in re.split(r'(PF-\d{2}-S\d{2})', value))
+
+        if summary_only:
+            return linked(record["summary"])
+        old = stale or (stamp(now) - stamp(record["updated_at"])).total_seconds() > FRESH_SECONDS
+        result = f'<p>Revision {record["revision"]}: {esc(record["status"])}; raised {esc(record["raised_at"])}; context updated {esc(record["updated_at"])}. {"Stale context: stopped/continuing work and other details are last-known." if old else "Context within freshness window."}</p>'
+        result += '<p>Sprints: ' + ', '.join(refs.values()) + '</p>'
+        for label, field in (("Initiative", "initiative"), ("Summary", "summary"), ("Owner", "owner"), ("Background", "background"), ("Impact / tradeoffs", "impact"), ("Stopped work", "stopped"), ("Work that can continue", "continuing"), ("Recommendation (not an answer)", "recommendation")):
+            result += f'<p><strong>{label}</strong> {linked(record[field])}</p>'
+        result += '<p><strong>Options</strong></p><ul>' + ''.join('<li>' + linked(option) + '</li>' for option in record["options"]) + '</ul>'
+        result += '<p><strong>Question</strong> ' + linked(record["question"]) + '</p><p><strong>Evidence / context / test links</strong></p>'
+        if not record["evidence"]:
+            result += '<p>Unknown: no evidence supplied.</p>'
+        for item in record["evidence"]:
+            assessed = item["assessed_at"]
+            freshness = 'Unknown assessment time' if assessed is None else ('Stale evidence' if (stamp(now) - stamp(assessed)).total_seconds() > FRESH_SECONDS else 'Evidence within freshness window')
+            result += '<p>' + link(item["label"], item["path"], item["path"] in documents) + f' — {freshness}; assessed {esc(assessed or "unknown")}</p>'
+        if record["status"] == "acknowledged":
+            result += '<p>Acknowledged; unresolved. Acknowledgement is not approval.</p>'
+        if record["resolution"]:
+            answer = record["resolution"]
+            result += f'<p>Recorded {esc(record["status"])} against question revision {answer["answered_revision"]}; {esc(answer["recorded_at"])}.</p>'
+            for field in ("actor", "answer", "scope"):
+                result += f'<p><strong>{field.title()}</strong> {linked(answer[field])}</p>'
+        return result
+
+    for title, records in (("Open questions", opened), ("Decision history", [d for d in feed["decisions"] if d["id"] not in view["open"]])):
+        body += f'<div><h3>{title}</h3>'
+        for decision in records:
+            record = decision["revisions"][-1]
+            anchor = 'decision-' + decision["id"]
+            body += f'<details id="{anchor}"><summary>{content(record, True)} — {esc(record["owner"] or "Unknown owner")} — {esc(record["status"])}</summary><a href="#{anchor}">Permanent decision link</a>'
+            body += content(record)
+            for earlier in decision["revisions"][:-1]:
+                body += f'<details><summary>Retained revision {earlier["revision"]} (historical)</summary>' + content(earlier) + '</details>'
+            body += '</details>'
+        body += '</div>'
+    for key, label in unavailable.items():
+        body += f'<div id="decision-context-{key}" tabindex="-1"><h3>{esc(label)}: unavailable context</h3><p>No exact approved published context is available; no substitute selected.</p><a href="#decisions">Back to decisions</a></div>'
+    return body + '</section>'
