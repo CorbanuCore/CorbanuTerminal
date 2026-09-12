@@ -269,3 +269,6 @@ mod tests;
 
 #[path = "delivery_adapter.rs"]
 mod delivery_adapter;
+
+#[path = "delivery_reconcile.rs"]
+mod delivery_reconcile;
