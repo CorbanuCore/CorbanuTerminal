@@ -1,0 +1,48 @@
+[2m╭──────────────────────────────────────╮
+│ >_ [0;1mCorbanu Terminal[0;2m (v0.1.41)        │
+│                                      │
+│ model:       [0mclaude-fable-5-1-plan …[2m │
+│ directory:   [0m~/work[2m                  │
+│ permissions: [0mYOLO mode               │
+[2m╰──────────────────────────────────────╯
+
+
+[0m  [1mOpenAI account login[0m
+  Code: [REDACTED]
+  Open:
+  ]8;;https://auth.openai.com/codex/device\https://auth.openai.com/codex/device]8;;\
+  On a remote or headless machine,
+  open this link on another device and
+  enter the code.
+
+› 1. Cancel login
+
+  Press enter to confirm or esc to go ba
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

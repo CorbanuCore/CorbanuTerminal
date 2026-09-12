@@ -1,0 +1,11 @@
+---
+source: tui/src/chatwidget/tests/custom_model_identity.rs
+expression: popup
+---
+  Select Model and Effort
+  Access hidden models by running corbanu -m <model_name> or in your config.toml
+
+› 1. fixture-model via qa-a (current)  Configured runtime provider
+  2. fixture-model via qa-b            Configured runtime provider
+
+  Press enter to confirm or esc to go back

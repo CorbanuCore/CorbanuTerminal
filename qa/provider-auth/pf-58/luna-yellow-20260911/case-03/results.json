@@ -1,0 +1,73 @@
+{
+  "case_number": 3,
+  "status": "blocked",
+  "summary": "The candidate launched and the provider, wallet, and model surfaces opened promptly. Provider entries were inspectable without exposing secrets and Corbanu API was present. The wallet had no local wallet, and /model exposed only OpenAI models, so the wallet feature and Ambient/GLM 5.2 checks could not be completed without unauthorized credential or wallet setup.",
+  "observed_checks": [
+    {
+      "name": "Startup reached the main TUI",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/01-ready.txt"
+    },
+    {
+      "name": "Provider catalog opened and listed the visible providers",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/02-providers-initial.txt"
+    },
+    {
+      "name": "OpenAI, Claude Account, Corbanu API, Anthropic, Ambient, Kimi Code, Z.AI, and DeepSeek detail screens were inspected",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/05-corbanu-api.txt"
+    },
+    {
+      "name": "Corbanu API is present in the provider catalog",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/05-corbanu-api.txt"
+    },
+    {
+      "name": "No secret values or recovery material were visible",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/03-openai.txt"
+    },
+    {
+      "name": "Wallet opened without showing legacy plan-sale/recovery/details actions",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/12-wallet-initial.txt"
+    },
+    {
+      "name": "Wallet balance, top-up, model prices, API-key management, and wallet-level Corbanu API entry",
+      "status": "blocked",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/12-wallet-initial.txt"
+    },
+    {
+      "name": "Ambient exposes only GLM 5.2 and excludes Kimi 2.7 while other Kimi models remain unchanged",
+      "status": "blocked",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/15-model-openai-end.txt"
+    }
+  ],
+  "blockers": [
+    "The supplied profile has no local wallet; creating or restoring one was not authorized.",
+    "Ambient is unavailable and absent from the visible /model catalog; no authorized credential setup was available.",
+    "The required Ambient and cross-provider Kimi comparisons therefore remain unresolved."
+  ],
+  "actions": [
+    "Started the supplied candidate in the dedicated target tmux session.",
+    "Accepted the visible directory-trust prompt.",
+    "Ran /providers and opened every listed provider detail screen using raw tmux keys.",
+    "Ran /wallet and observed the no-local-wallet screen without creating or restoring a wallet.",
+    "Ran /model; navigated the visible OpenAI list and confirmed Down wrapped after item 5; Right made no visible catalog change.",
+    "Exited only the target tmux session with Ctrl-C after testing."
+  ],
+  "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "platform": "macOS arm64",
+  "limitations": [
+    "No Linux inference.",
+    "No credential values, login codes, wallet recovery material, browser content, wallet creation/restoration, purchases, or permission changes were performed.",
+    "Copied managed credential validity was not assumed or independently verified.",
+    "Startup update checks are disabled by the supplied harness.",
+    "The /vault command was not opened; vault hanging was not observed or ruled out."
+  ],
+  "test_instruction_ambiguity": [
+    "The requested wallet-level Corbanu API entry was not present on the observed no-wallet screen.",
+    "The requested Ambient selection was not available in the visible /model menu while Ambient was unavailable in /providers."
+  ]
+}

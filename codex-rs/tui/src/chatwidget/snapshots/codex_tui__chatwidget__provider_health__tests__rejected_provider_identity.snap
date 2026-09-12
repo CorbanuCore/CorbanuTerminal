@@ -1,0 +1,6 @@
+---
+source: tui/src/chatwidget/provider_health_tests.rs
+expression: warning
+---
+⚠ OpenAI (openai) credential was rejected. Open /providers, select OpenAI, and
+  press r to recover. Other providers are unchanged.

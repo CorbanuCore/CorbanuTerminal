@@ -188,7 +188,7 @@ async fn run_open_case(case: Case, fixture: &Fixture, pane: &TmuxPane<'_>) -> Re
             select_label(pane, "Nazgul")?;
             select_label(pane, "Create Nazgul pane")?;
             pane.wait_stable_contains(MODEL, READY_TIMEOUT)?;
-            select_label(pane, MODEL)?;
+            select_label(pane, &format!("{MODEL} via {A}"))?;
             pane.wait_stable_contains("Spawned Corbanu Terminal Nazgul pane", READY_TIMEOUT)?;
             pane.send_literal("/agent")?;
             pane.send_key(TmuxKey::Enter)?;
@@ -217,6 +217,7 @@ async fn run_open_case(case: Case, fixture: &Fixture, pane: &TmuxPane<'_>) -> Re
             require_authorization(&fixture.server, &fixture.command_key).await?;
         }
         Case::DuplicateSlug => {
+            pane.wait_stable_contains("via pf55-duplicate-b", READY_TIMEOUT)?;
             submit_and_wait(pane, "duplicate slug exact request", "PF55 response")?;
             require_authorization(&fixture.server, &fixture.dup_b_key).await?;
             ensure!(!authorization_seen(&fixture.server, &fixture.dup_a_key).await);

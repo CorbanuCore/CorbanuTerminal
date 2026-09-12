@@ -1,0 +1,45 @@
+╭──────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                        │
+│                                                      │
+│ model:     deepseek-v4-flash high   /model to change │
+│ directory: /Volumes/CorbanuDrive/Corbanu             │
+╰──────────────────────────────────────────────────────╯
+
+
+  Providers
+  Configure providers and control whether they are eligible for use.
+  Configured means credentials are present, not verified by the provider.
+
+› 1. OpenAI          Not configured · unavailable
+  2. Claude Account  Enabled · configured
+  3. Corbanu API     Not configured · unavailable
+  4. Anthropic       Not configured · unavailable
+  5. Ambient         Enabled · configured
+  6. Kimi Code       Not configured · unavailable
+  7. Z.AI            Not configured · unavailable
+  8. DeepSeek        Enabled · configured · current
+
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

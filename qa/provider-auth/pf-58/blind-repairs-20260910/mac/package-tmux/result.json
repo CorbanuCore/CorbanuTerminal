@@ -1,0 +1,17 @@
+{
+  "stream_cancel_key": "Escape",
+  "passed": true,
+  "candidate": "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/macos-candidate-blind-repairs-20260910/bin/corbanu",
+  "sha256": "865731588b5fd0447b0d7f60ad04ca4a544a8ab39a8ae48eb2764f37c90abb4d",
+  "host_sha256": "fbe01eb7679b95d8a1b207de72d1bd29d6a93cf1cc61a88a7496f6c58e1a7422",
+  "human_acceptance": false,
+  "tool_round_trips": 4,
+  "concurrent_processes": 3,
+  "same_home_restart": true,
+  "stream_cancel_recovery": true,
+  "permissions_security_cancel_inert": true,
+  "claude_guidance_40_columns": true,
+  "claude_catalog_after_setup_and_restart": true,
+  "anthropic_management_entry_present": true,
+  "anthropic_catalog_after_api_setup": true
+}

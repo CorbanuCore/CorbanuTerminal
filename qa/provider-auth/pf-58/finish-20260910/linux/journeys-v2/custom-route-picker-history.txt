@@ -1,0 +1,90 @@
+
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       loading   /model to change                  │
+│ directory:   /home/travis/…/provider-reauth-health-final │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+
+› Use /skills to list available skills
+
+  fixture-model via qa-a default · /home/travis/worktrees/provider-reauth-health-final · Corbanu Terminal · TPS: -- tok/s
+
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       fixture-model low   /model to change        │
+│ directory:   /home/travis/…/provider-reauth-health-final │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+
+› Controlled service failure 403
+
+
+⚠ Model metadata for `fixture-model` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.
+
+■ unexpected status 403 Forbidden: Synthetic controlled failure, url: http://127.0.0.1:43483/a/responses
+
+
+› Retry after service restoration 403
+
+
+• JOURNEY_REPLY_11
+
+
+› Controlled service failure 429
+
+
+■ rate limited by provider (429 Too Many Requests). Wait before continuing; immediate retry may fail again
+
+
+› Retry after service restoration 429
+
+
+• JOURNEY_REPLY_13
+
+
+› Controlled service failure 500
+
+
+■ We're currently experiencing high demand, which may cause temporary errors.
+
+
+› Retry after service restoration 500
+
+
+• JOURNEY_REPLY_15
+
+
+› Controlled rejected credential
+
+
+⚠ QA Route A (qa-a) credential was rejected. Open /providers, select QA Route A, and press r to recover. Other providers are unchanged.
+
+■ unexpected status 401 Unauthorized: Synthetic controlled failure, url: http://127.0.0.1:43483/a/responses
+
+
+› Continue after explicit credential repair
+
+
+• JOURNEY_REPLY_17
+
+
+› Nonselected repair must not change current routing
+
+
+• JOURNEY_REPLY_18
+
+
+  Select Model and Effort
+  Configured custom providers
+
+  OpenAI  [Other]
+
+› 1. fixture-model via qa-a (current)  Configured runtime provider
+  2. fixture-model via qa-b            Configured runtime provider
+
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back

@@ -1,0 +1,11 @@
+ENTER — accept visible directory trust prompt (default: Yes, continue)
+TYPE /model
+ENTER — execute /model
+ENTER — select highlighted Claude Fable 5.1 Plan model
+DOWN — move from High to Extra high
+DOWN — move from Extra high to More reasoning…
+ENTER — open More reasoning…
+ENTER — select Max reasoning
+TYPE exact prompt: FABLE_51_OK
+ENTER — submit exact prompt
+CLEANUP — exit only created target session

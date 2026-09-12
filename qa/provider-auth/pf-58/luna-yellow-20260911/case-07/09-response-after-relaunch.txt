@@ -1,0 +1,48 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       claude-fable-5-1-plan high   /model to cha… │
+│ directory:   ~/work                                      │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+/status
+
+╭──────────────────────────────────────────────────────────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.41)                                                           │
+│                                                                                          │
+│  Model:                Claude Fable 5.1 Plan                                             │
+│  Model provider:       Claude Plan - https://api.anthropic.com/v1                        │
+│  Directory:            ~/work                                                            │
+│  Permissions:          Full Access                                                       │
+│  Security:             Requested Permissive; effective protection unverified (/security) │
+│  Agents.md:            <none>                                                            │
+│  Account:              Claude Plan account connected                                     │
+│  Collaboration mode:   Default                                                           │
+│  Session:              01a08f8d-bee9-7863-8045-f9d65de5da8f                              │
+│                                                                                          │
+│  Token usage:          0 total  (0 input + 0 output)                                     │
+│  Limits:               data not available yet                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+› Reply with exactly: RESTART_OK
+
+
+• RESTART_OK
+
+
+› Write tests for @filename
+
+  Claude Fable 5.1 Plan via claude-plan high · ~/work · Corbanu Terminal · TPS: 3.6 tok/s
+
+
+
+
+
+
+
+
+
+
+

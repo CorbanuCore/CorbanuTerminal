@@ -1,0 +1,45 @@
+╭──────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                    │
+│                                                  │
+│ model:     z-ai/glm-5.2 xhigh   /model to change │
+│ directory: /Volumes/CorbanuDrive/Corbanu         │
+╰──────────────────────────────────────────────────╯
+
+
+› Reply only with PF58, NATIVE, LIVE, OK joined by underscores. Do not use tools.
+
+
+• PF58_NATIVE_LIVE_OK
+
+
+› Explain this codebase
+
+  Ambient GLM 5.2 via ambient deep · /Volumes/CorbanuDrive/Corbanu · Corbanu Terminal · TPS: 2.1 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

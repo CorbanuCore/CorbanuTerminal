@@ -1,0 +1,22 @@
+01 | Enter | accepted visible directory-trust default
+02 | literal text /providers | typed in chat composer
+03 | Enter | opened selected OpenAI provider
+04 | Escape | returned from OpenAI manage screen
+05 | r | opened recovery flow for selected OpenAI
+06 | Enter | chose visible Sign in to OpenAI again
+07 | Enter | confirmed visible Cancel login (first attempt)
+08 | r | reopened OpenAI recovery after cancellation
+09 | Enter | chose Sign in to OpenAI again after reopen
+10 | cleanup | second sign-in left open; external browser/device completion unavailable and not authorized
+11 | literal text /model | setup-only model availability check after clean target relaunch
+12 | Right | switched model picker from current Claude plan tab toward OpenAI (setup-only)
+13 | Enter | selected default visible OpenAI model GPT-5.6-Sol for setup-only request
+14 | Enter | selected default Low reasoning for setup-only OpenAI request
+15 | literal text "Reply with exactly OK." | harmless setup-only OpenAI live-auth request
+16 | literal text /model | begin cleanup restore of original Claude Fable 5.1 Plan/high state
+17 | Left | switched model picker to Claude Plan for cleanup restore
+18 | Down | selected Claude Fable 5.1 Plan for cleanup restore
+19 | Enter | confirmed Claude Fable 5.1 Plan cleanup restore choice
+20 | Enter | confirmed default High reasoning for Claude Fable 5.1 cleanup restore
+21 | literal text /providers | final visible provider-state check after live request and Claude restore
+22 | cleanup | terminated final target session only; no credentials changed

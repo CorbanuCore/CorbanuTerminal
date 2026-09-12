@@ -1,0 +1,36 @@
+ Nextest run ID a2c68f82-d05a-4061-b841-10fa48e789cb with nextest profile: local
+    Starting 32 tests across 1 binary (57 tests skipped)
+        PASS [   3.520s] ( 1/32) codex-tui::all suite::claude_auth::tmux_claude_auth_compatibility_selects_existing_login
+        PASS [   7.244s] ( 2/32) codex-tui::all suite::claude_auth::tmux_first_run_anthropic_account_selects_claude_login_after_success
+        PASS [  11.311s] ( 3/32) codex-tui::all suite::claude_auth::tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume
+        PASS [  22.938s] ( 4/32) codex-tui::all suite::provider_convergence::tmux_command_auth_is_visible_validated_and_has_no_enrollment_ui
+        PASS [  23.642s] ( 5/32) codex-tui::all suite::provider_convergence::tmux_custom_environment_provider_converges_across_hosts_picker_and_request
+        PASS [  18.284s] ( 6/32) codex-tui::all suite::provider_convergence::tmux_duplicate_model_slug_uses_exact_provider_identity
+        PASS [  23.562s] ( 7/32) codex-tui::all suite::provider_convergence::tmux_exact_replacement_persists_restart_and_request
+        PASS [  18.175s] ( 8/32) codex-tui::all suite::provider_convergence::tmux_existing_install_upgrade_preserves_current_and_request
+        PASS [  28.480s] ( 9/32) codex-tui::all suite::provider_convergence::tmux_fresh_a_then_b_preserves_first_success_across_restart
+        PASS [  22.141s] (10/32) codex-tui::all suite::provider_convergence::tmux_inactive_current_cancel_blocks_request_without_switch
+        PASS [  26.199s] (11/32) codex-tui::all suite::provider_convergence::tmux_inactive_noncurrent_is_managed_but_not_pickable_then_reactivates
+        PASS [  29.491s] (12/32) codex-tui::all suite::provider_convergence::tmux_managed_custom_key_survives_restart_and_request
+        PASS [  17.788s] (13/32) codex-tui::all suite::provider_convergence::tmux_missing_profile_current_never_silently_switches
+        PASS [  22.079s] (14/32) codex-tui::all suite::provider_convergence::tmux_native_spawn_picker_and_parent_request_share_exact_custom_runtime
+        PASS [  18.409s] (15/32) codex-tui::all suite::provider_convergence::tmux_permission_reload_preserves_active_runtime_over_saved_default
+        PASS [  19.668s] (16/32) codex-tui::all suite::provider_convergence::tmux_resumed_main_session_retains_exact_runtime_identity
+        PASS [   0.003s] (17/32) codex-tui::all suite::provider_management::binary_mtime_is_representable_for_evidence
+        PASS [  29.644s] (18/32) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_api_key_failure_cancel_replace_and_same_session_request
+        PASS [  21.214s] (19/32) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_environment_guidance_does_not_offer_vault_override
+        PASS [  22.465s] (20/32) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_openai_account_cancel_then_request_without_model_change
+        PASS [  18.707s] (21/32) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_openai_environment_key_preserves_external_ownership
+        PASS [   0.004s] (22/32) codex-tui::all suite::provider_management::selection_parser_accepts_exact_and_inline_replacement_rows
+        PASS [  18.803s] (23/32) codex-tui::all suite::provider_management::tmux_ambient_model_picker_offers_only_glm
+        PASS [  21.856s] (24/32) codex-tui::all suite::provider_management::tmux_astra_selection_cancel_restart_and_request
+        PASS [  22.401s] (25/32) codex-tui::all suite::provider_management::tmux_current_deactivate_cancel_is_inert
+        PASS [  33.405s] (26/32) codex-tui::all suite::provider_management::tmux_current_exact_replacement_is_persisted_before_deactivation
+        PASS [  21.955s] (27/32) codex-tui::all suite::provider_management::tmux_environment_copy_and_eligibility_never_delete_credentials
+        PASS [  39.408s] (28/32) codex-tui::all suite::provider_management::tmux_noncurrent_deactivate_reactivate_restart_retains_request_credential
+        PASS [  27.266s] (29/32) codex-tui::all suite::provider_management::tmux_pf50_api_key_setup_and_recovery_are_reused
+        PASS [  21.203s] (30/32) codex-tui::all suite::provider_management::tmux_pf51_openai_account_cancel_and_retry_are_correlated
+        PASS [  25.016s] (31/32) codex-tui::all suite::provider_management::tmux_pf52_claude_recovery_cancel_and_retry_are_reused
+        PASS [  30.253s] (32/32) codex-tui::all suite::provider_management::tmux_shared_and_custom_catalog_have_management_status_parity
+────────────
+     Summary [ 655.225s] 32 tests run: 32 passed, 57 skipped

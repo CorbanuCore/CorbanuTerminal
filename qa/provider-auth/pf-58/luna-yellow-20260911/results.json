@@ -1,0 +1,2235 @@
+[
+  {
+    "number": 1,
+    "run_name": "case-01",
+    "execution": {
+      "case": 1,
+      "started": 1789112889.913182,
+      "ended": 1789113058.8030221,
+      "exit_code": 0,
+      "stdout": "{\"exit_code\": 0, \"name\": \"case-01\"}\n",
+      "stderr": "",
+      "report_exists": true,
+      "results_exist": true
+    },
+    "title": "1. Launch from the app shortcut",
+    "agent_status": "blocked",
+    "summary": "The native Corbanu Terminal Launcher shortcut and macOS Desktop 3 placement could not be accessed through this interface; the required acceptance criterion was not exercised.",
+    "thread_id": "01a08f70-4664-7092-84c6-752a7f4bbaf4",
+    "usage": {
+      "input_tokens": 354928,
+      "cached_input_tokens": 297728,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 7567,
+      "reasoning_output_tokens": 3700
+    },
+    "result": {
+      "case_number": 1,
+      "status": "blocked",
+      "summary": "The native Corbanu Terminal Launcher shortcut and macOS Desktop 3 placement could not be accessed through this interface; the required acceptance criterion was not exercised.",
+      "observed_checks": [
+        {
+          "check": "Applications shortcut opens a new Terminal window on Desktop 3 in the first free position of the 2 x 3 card grid",
+          "status": "blocked",
+          "evidence": "evidence/initial-pane.txt",
+          "evidence_path": "evidence/initial-pane.txt"
+        }
+      ],
+      "blockers": [
+        "Native Applications shortcut and macOS Desktop placement are inaccessible through the provided interface.",
+        "tmux windows cannot substitute for the native-launch criterion."
+      ],
+      "actions": "evidence/actions.txt",
+      "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+      "platform": "macOS arm64",
+      "limitations": [
+        "No observation of Desktop 3, grid position, overlap, build-missing message, or shortcut behavior.",
+        "No Linux inference permitted.",
+        "The tmux pane capture is harness setup only and is not evidence of native launch behavior."
+      ],
+      "ambiguity": "None identified."
+    },
+    "artifacts": [
+      {
+        "path": "case-01/actions.txt",
+        "sha256": "67533a63890377c492047e5b48124a67c5af5a2a35db9ba4753f280d8b9b4049",
+        "redacted": false
+      },
+      {
+        "path": "case-01/exit-pane-2.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "redacted": false
+      },
+      {
+        "path": "case-01/exit-pane.txt",
+        "sha256": "89a29799ff55cff5d4d090f9910db9bf279e7f9209395fc437cf9bbe0a35e0a0",
+        "redacted": false
+      },
+      {
+        "path": "case-01/final.md",
+        "sha256": "d32712d10f90c5654fe8ec098e37e12b22b9bb5bd0b68c1668a893f92d81b467",
+        "redacted": false
+      },
+      {
+        "path": "case-01/initial-pane.txt",
+        "sha256": "059650b798807aa661d2454b87cfabec68dda8ac442d49f5650e251fff8af4d3",
+        "redacted": false
+      },
+      {
+        "path": "case-01/report.md",
+        "sha256": "7c10cbc138a9e3c6ef8af7d3d897be5a0cb0f84ca6c0f2d927b42c5097d4a114",
+        "redacted": false
+      },
+      {
+        "path": "case-01/results.json",
+        "sha256": "bfc8cb52a4053aa4393d98423cbe45f642825f7d1c3d2eb1d587ea3b6e2d5e95",
+        "redacted": false
+      }
+    ],
+    "coordinator_note": {
+      "note": "TMUX cannot certify the native shortcut. The user separately reported the second launch on another desktop; that known native failure remains open."
+    },
+    "display_status": "blocked"
+  },
+  {
+    "number": 2,
+    "run_name": "case-02",
+    "execution": {
+      "case": 2,
+      "started": 1789113064.915859,
+      "ended": 1789113443.4428182,
+      "exit_code": 0,
+      "stdout": "{\"exit_code\": 0, \"name\": \"case-02\"}\n",
+      "stderr": "",
+      "report_exists": true,
+      "results_exist": true
+    },
+    "title": "2. Verify startup identity and remembered setup",
+    "agent_status": "blocked",
+    "summary": "Startup reached a responsive chat composer and /status showed Claude Fable 5.1 Plan via Claude Plan. No onboarding, codex_apps warning, MCP interruption, UI stall, or update message was observed. The case is blocked because startup update checks are disabled by the harness and Code Mode availability was not directly observable through the allowed UI flow.",
+    "thread_id": "01a08f72-e07d-7a91-b7ea-35c34e37c270",
+    "usage": {
+      "input_tokens": 890499,
+      "cached_input_tokens": 805632,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 16580,
+      "reasoning_output_tokens": 8357
+    },
+    "result": {
+      "case_number": 2,
+      "status": "blocked",
+      "summary": "Startup reached a responsive chat composer and /status showed Claude Fable 5.1 Plan via Claude Plan. No onboarding, codex_apps warning, MCP interruption, UI stall, or update message was observed. The case is blocked because startup update checks are disabled by the harness and Code Mode availability was not directly observable through the allowed UI flow.",
+      "observed_checks": [
+        {
+          "check": "Startup reaches chat without forcing /providers",
+          "status": "passed",
+          "observation": "After the visible directory-trust prompt, the app reached the chat composer without provider onboarding or a /providers step.",
+          "evidence_path": "01_startup_composer.txt"
+        },
+        {
+          "check": "Previously selected provider/model is remembered",
+          "status": "passed",
+          "observation": "Startup showed claude-fable-5-1-plan at high effort; /status showed Claude Fable 5.1 Plan and Model provider Claude Plan, with the account connected.",
+          "evidence_path": "02_status.txt"
+        },
+        {
+          "check": "Code Mode is available",
+          "status": "blocked",
+          "observation": "No definitive Code Mode availability indicator appeared in startup, /status, or the visible slash-command list. The absence of a slash command is not treated as proof that the host is missing.",
+          "evidence_path": "03_visible_slash_commands.txt"
+        },
+        {
+          "check": "No codex_apps startup warning",
+          "status": "passed",
+          "observation": "No codex_apps startup warning was visible.",
+          "evidence_path": "01_startup_composer.txt"
+        },
+        {
+          "check": "MCP startup is not interrupted",
+          "status": "passed",
+          "observation": "Startup completed to the composer and /status returned normally; no MCP interruption was visible.",
+          "evidence_path": "02_status.txt"
+        },
+        {
+          "check": "Corbanu does not offer an update to older 0.1.37",
+          "status": "blocked",
+          "observation": "No update offer was visible, but the harness states that startup update checks are disabled, so this criterion cannot be established.",
+          "evidence_path": "01_startup_composer.txt"
+        },
+        {
+          "check": "UI does not stall",
+          "status": "passed",
+          "observation": "The composer accepted /status and the UI returned to a responsive composer; the slash-command list also appeared.",
+          "evidence_path": "04_clean_composer.txt"
+        }
+      ],
+      "blockers": [
+        "Harness disables startup update checks, so absence of an update notice is not evidence of correct version comparison.",
+        "Code Mode availability has no definitive observable checkpoint in the permitted startup/status interaction."
+      ],
+      "actions": [
+        "Started the supplied candidate in the dedicated target TMUX session with the supplied environment.",
+        "Pressed Enter on the visible directory-trust option 1.",
+        "Waited for the composer, then typed /status and pressed Enter.",
+        "Submitted read-only /help to inspect visible command support; it was reported unrecognized.",
+        "Typed / to open the visible slash-command list; no configuration command was submitted.",
+        "Pressed Ctrl-C to clear the composer, then Ctrl-D to exit only the target session."
+      ],
+      "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+      "platform": "macOS arm64",
+      "limitations": [
+        "No source, binary internals, prior reports, credential files, project policies, or filesystem outside this scratch run were inspected.",
+        "No model request, provider configuration, credential inspection, browser/native access, or external service interaction was performed.",
+        "Only the supplied macOS arm64 candidate was exercised; no Linux inference is made."
+      ],
+      "instruction_ambiguity": [
+        "The instruction requires Code Mode to be available but does not define an allowed visible control or checkpoint for verifying it.",
+        "There is no before-run UI baseline for independently proving the word remembered; this run observes only the preconfigured startup selection and /status output."
+      ]
+    },
+    "artifacts": [
+      {
+        "path": "case-02/01_startup_composer.txt",
+        "sha256": "ff82d5c759d5f7c694ccb6b7c7413a119fcd5911df82dda6c53514ef422bf55d",
+        "redacted": false
+      },
+      {
+        "path": "case-02/02_status.txt",
+        "sha256": "598a781142b71a9bcc89000b888a4f4ef77ca3ef462a9b0a26509d6a84cd6c2c",
+        "redacted": false
+      },
+      {
+        "path": "case-02/03_visible_slash_commands.txt",
+        "sha256": "c39f6dc5d28d7eca9cb09721bba5769dc9a5277fdf44da73e0780f58a71a5350",
+        "redacted": false
+      },
+      {
+        "path": "case-02/04_clean_composer.txt",
+        "sha256": "64aaf351019efe5d90a60c69e17a127733804c0c345881f736681e1627dccbe0",
+        "redacted": false
+      },
+      {
+        "path": "case-02/actions.log",
+        "sha256": "3f29d0e26ab645b9638daf5e5a484a308a210135ad7855e46e927ea4cd26ae6e",
+        "redacted": false
+      },
+      {
+        "path": "case-02/final.md",
+        "sha256": "cc013ff96ecd542f593f322b01071f0ee0c70a73cb1865ea46b6c3158ab433e1",
+        "redacted": false
+      },
+      {
+        "path": "case-02/report.md",
+        "sha256": "a786fd5cf8ef4a1a43ee0013d4e4ff0f47ff40439fb7568ad679172766199947",
+        "redacted": false
+      },
+      {
+        "path": "case-02/results.json",
+        "sha256": "7ed504c85ce3f371ddb061617286ec6cc4d945229ea3632deb518b715e415763",
+        "redacted": false
+      }
+    ],
+    "coordinator_note": {
+      "note": "Fixture v1 had an incorrectly relocated vault fallback key. Its startup/status observations do not prove live Claude validity. Code Mode and version-notice prerequisites were independently left unverified by the executor."
+    },
+    "display_status": "blocked"
+  },
+  {
+    "number": 3,
+    "run_name": "case-03",
+    "execution": {
+      "case": 3,
+      "started": 1789113449.476937,
+      "ended": 1789114010.493354,
+      "exit_code": 0,
+      "stdout": "{\"exit_code\": 0, \"name\": \"case-03\"}\n",
+      "stderr": "",
+      "report_exists": true,
+      "results_exist": true
+    },
+    "title": "3. Inspect the unified provider catalog",
+    "agent_status": "blocked",
+    "summary": "The candidate launched and the provider, wallet, and model surfaces opened promptly. Provider entries were inspectable without exposing secrets and Corbanu API was present. The wallet had no local wallet, and /model exposed only OpenAI models, so the wallet feature and Ambient/GLM 5.2 checks could not be completed without unauthorized credential or wallet setup.",
+    "thread_id": "01a08f78-bdf7-72a0-9321-dfe849d40e37",
+    "usage": {
+      "input_tokens": 1932062,
+      "cached_input_tokens": 1813760,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 23241,
+      "reasoning_output_tokens": 10428
+    },
+    "result": {
+      "case_number": 3,
+      "status": "blocked",
+      "summary": "The candidate launched and the provider, wallet, and model surfaces opened promptly. Provider entries were inspectable without exposing secrets and Corbanu API was present. The wallet had no local wallet, and /model exposed only OpenAI models, so the wallet feature and Ambient/GLM 5.2 checks could not be completed without unauthorized credential or wallet setup.",
+      "observed_checks": [
+        {
+          "name": "Startup reached the main TUI",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/01-ready.txt"
+        },
+        {
+          "name": "Provider catalog opened and listed the visible providers",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/02-providers-initial.txt"
+        },
+        {
+          "name": "OpenAI, Claude Account, Corbanu API, Anthropic, Ambient, Kimi Code, Z.AI, and DeepSeek detail screens were inspected",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/05-corbanu-api.txt"
+        },
+        {
+          "name": "Corbanu API is present in the provider catalog",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/05-corbanu-api.txt"
+        },
+        {
+          "name": "No secret values or recovery material were visible",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/03-openai.txt"
+        },
+        {
+          "name": "Wallet opened without showing legacy plan-sale/recovery/details actions",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/12-wallet-initial.txt"
+        },
+        {
+          "name": "Wallet balance, top-up, model prices, API-key management, and wallet-level Corbanu API entry",
+          "status": "blocked",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/12-wallet-initial.txt"
+        },
+        {
+          "name": "Ambient exposes only GLM 5.2 and excludes Kimi 2.7 while other Kimi models remain unchanged",
+          "status": "blocked",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-03/evidence/15-model-openai-end.txt"
+        }
+      ],
+      "blockers": [
+        "The supplied profile has no local wallet; creating or restoring one was not authorized.",
+        "Ambient is unavailable and absent from the visible /model catalog; no authorized credential setup was available.",
+        "The required Ambient and cross-provider Kimi comparisons therefore remain unresolved."
+      ],
+      "actions": [
+        "Started the supplied candidate in the dedicated target tmux session.",
+        "Accepted the visible directory-trust prompt.",
+        "Ran /providers and opened every listed provider detail screen using raw tmux keys.",
+        "Ran /wallet and observed the no-local-wallet screen without creating or restoring a wallet.",
+        "Ran /model; navigated the visible OpenAI list and confirmed Down wrapped after item 5; Right made no visible catalog change.",
+        "Exited only the target tmux session with Ctrl-C after testing."
+      ],
+      "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+      "platform": "macOS arm64",
+      "limitations": [
+        "No Linux inference.",
+        "No credential values, login codes, wallet recovery material, browser content, wallet creation/restoration, purchases, or permission changes were performed.",
+        "Copied managed credential validity was not assumed or independently verified.",
+        "Startup update checks are disabled by the supplied harness.",
+        "The /vault command was not opened; vault hanging was not observed or ruled out."
+      ],
+      "test_instruction_ambiguity": [
+        "The requested wallet-level Corbanu API entry was not present on the observed no-wallet screen.",
+        "The requested Ambient selection was not available in the visible /model menu while Ambient was unavailable in /providers."
+      ]
+    },
+    "artifacts": [
+      {
+        "path": "case-03/00-startup.txt",
+        "sha256": "358ad6e6d86537e419da9b350191054d608ac495f8a5639da68e703a8957b62d",
+        "redacted": false
+      },
+      {
+        "path": "case-03/01-ready.txt",
+        "sha256": "28f634288176a31c66971db02e4106258498a3e56cc77c88530feef19675b5be",
+        "redacted": false
+      },
+      {
+        "path": "case-03/02-providers-initial.txt",
+        "sha256": "10f041431333c131d860bb856819fda7e0e01359419b784356fbb60d85cc3228",
+        "redacted": false
+      },
+      {
+        "path": "case-03/03-openai.txt",
+        "sha256": "16172ca493d5674f8332ae830f7b884180e859c5ea35492c7edcbe41477f0c5d",
+        "redacted": false
+      },
+      {
+        "path": "case-03/04-claude-account.txt",
+        "sha256": "475e56093b55ca1b4513c5b2f057606b4e3a55a2d6ead5093c8096af9dbdee1c",
+        "redacted": false
+      },
+      {
+        "path": "case-03/05-corbanu-api.txt",
+        "sha256": "6ec41a4abddf346b70f7a701aa0c8c1c5f57b5aa140cfe7f0bc7a477bfe0bdc2",
+        "redacted": false
+      },
+      {
+        "path": "case-03/06-anthropic.txt",
+        "sha256": "b5f480d6d9708f49b790c3a42a5dcb55d2c0721057db86d30dd20e1b5bae869d",
+        "redacted": false
+      },
+      {
+        "path": "case-03/07-ambient-provider.txt",
+        "sha256": "d99a9eb1ebaac9b41b4b8eec542da255292473917c8ce40b2eddcfc04e04aab6",
+        "redacted": false
+      },
+      {
+        "path": "case-03/08-kimi-code.txt",
+        "sha256": "3746300f5fbd3205a933cf914b4513a7bbc9a4cbafe06bea496a091f464f209a",
+        "redacted": false
+      },
+      {
+        "path": "case-03/09-zai.txt",
+        "sha256": "9fe44800a704058b1274e166e796d867422370cd4c01da11b747b1c0f46f8baa",
+        "redacted": false
+      },
+      {
+        "path": "case-03/10-deepseek.txt",
+        "sha256": "99e14b20f86ea64241e261cbc2cc67844e7ebc3d42e9e695aad049b9f35d7007",
+        "redacted": false
+      },
+      {
+        "path": "case-03/11-after-providers.txt",
+        "sha256": "28f634288176a31c66971db02e4106258498a3e56cc77c88530feef19675b5be",
+        "redacted": false
+      },
+      {
+        "path": "case-03/12-wallet-initial.txt",
+        "sha256": "bac8eae35033e35fe18af083b98ff42f4e4d8cd6e4e5b124abb4da42b6a66467",
+        "redacted": false
+      },
+      {
+        "path": "case-03/13-model-initial.txt",
+        "sha256": "51978ac58cf439428c55d067d02dc6f798de5169bdb70e56ad58215f1136b3ac",
+        "redacted": false
+      },
+      {
+        "path": "case-03/14-model-after-openai.txt",
+        "sha256": "51978ac58cf439428c55d067d02dc6f798de5169bdb70e56ad58215f1136b3ac",
+        "redacted": false
+      },
+      {
+        "path": "case-03/15-model-openai-end.txt",
+        "sha256": "51978ac58cf439428c55d067d02dc6f798de5169bdb70e56ad58215f1136b3ac",
+        "redacted": false
+      },
+      {
+        "path": "case-03/16-model-right.txt",
+        "sha256": "51978ac58cf439428c55d067d02dc6f798de5169bdb70e56ad58215f1136b3ac",
+        "redacted": false
+      },
+      {
+        "path": "case-03/17-before-exit.txt",
+        "sha256": "28f634288176a31c66971db02e4106258498a3e56cc77c88530feef19675b5be",
+        "redacted": false
+      },
+      {
+        "path": "case-03/actions.txt",
+        "sha256": "3123dace79cb510652b27e89a0b00d97ddeb17eae931c5690f079094f502c904",
+        "redacted": false
+      },
+      {
+        "path": "case-03/final.md",
+        "sha256": "a37c9285a060e3e3fc30386da1585e075377fe5998641e93387d681991608489",
+        "redacted": false
+      },
+      {
+        "path": "case-03/report.md",
+        "sha256": "c6e5f42f0495dffd358a27a2f5b3011c5444f64396e5bd4dac94e0c815976dab",
+        "redacted": false
+      },
+      {
+        "path": "case-03/results.json",
+        "sha256": "8107e5fa54c4e67a20df2bd0509da7d504b7eed243acba60e7e1f3c41b9a56f6",
+        "redacted": false
+      }
+    ],
+    "coordinator_note": {
+      "note": "Fixture v1 caused Claude unavailability; this is not a new product regression. The missing wallet and Ambient credential are genuine missing test prerequisites. The original agent report is preserved."
+    },
+    "display_status": "blocked"
+  },
+  {
+    "number": 5,
+    "run_name": "case-05",
+    "execution": {
+      "case": 5,
+      "started": 1789114032.68463,
+      "ended": 1789114264.187737,
+      "exit_code": 0,
+      "stdout": "{\"exit_code\": 0, \"name\": \"case-05\"}\n",
+      "stderr": "",
+      "report_exists": true,
+      "results_exist": true
+    },
+    "title": "5. Select Fable 5.1 Max and make a live request",
+    "agent_status": "failed",
+    "summary": "Claude Fable 5.1 Plan was offered and selected at Max, with both visible labels changing immediately, but the live response to the exact prompt FABLE_51_OK was 'Acknowledged. What would you like me to do?' instead of the required exact response.",
+    "thread_id": "01a08f81-a438-7b10-8674-9fd5e503caab",
+    "usage": {
+      "input_tokens": 544530,
+      "cached_input_tokens": 500224,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 10943,
+      "reasoning_output_tokens": 4608
+    },
+    "result": {
+      "case_number": 5,
+      "status": "failed",
+      "summary": "Claude Fable 5.1 Plan was offered and selected at Max, with both visible labels changing immediately, but the live response to the exact prompt FABLE_51_OK was 'Acknowledged. What would you like me to do?' instead of the required exact response.",
+      "observed_checks": [
+        {
+          "name": "Claude Fable 5.1 is offered",
+          "status": "passed",
+          "evidence_path": "03-model-menu.txt"
+        },
+        {
+          "name": "Max reasoning is offered and selected",
+          "status": "passed",
+          "evidence_path": "05-more-reasoning.txt"
+        },
+        {
+          "name": "Header and footer change immediately to Fable 5.1 at max",
+          "status": "passed",
+          "evidence_path": "06-max-selected.txt"
+        },
+        {
+          "name": "Exact prompt FABLE_51_OK is entered and submitted",
+          "status": "passed",
+          "evidence_path": "07-prompt-typed.txt"
+        },
+        {
+          "name": "No visible missing-environment or provider-auth-command error",
+          "status": "passed",
+          "evidence_path": "08-request-submitted.txt"
+        },
+        {
+          "name": "Live response is exactly FABLE_51_OK",
+          "status": "failed",
+          "evidence_path": "08-request-submitted.txt"
+        }
+      ],
+      "blockers": [],
+      "actions": [
+        "Accepted the visible directory trust prompt with Enter.",
+        "Opened /model using literal text followed by a separate Enter.",
+        "Selected Claude Fable 5.1 Plan.",
+        "Opened More reasoning\u2026 and selected Max.",
+        "Typed FABLE_51_OK and pressed Enter separately.",
+        "Exited only the target TMUX session created for this run."
+      ],
+      "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+      "platform": "macOS arm64",
+      "limitations": [
+        "Black-box TUI observation only; no source, binary internals, credentials, prior reports, or external guidance were inspected."
+      ],
+      "test_instruction_ambiguity": "The UI labels the model Claude Fable 5.1 Plan and exposes Max under More reasoning\u2026 rather than on the first effort menu; the visible path was followed."
+    },
+    "artifacts": [
+      {
+        "path": "case-05/01-startup.txt",
+        "sha256": "b2db525d34ed9e67aa589637279ffa67b8e1a6a243b9a0812aef73c770542053",
+        "redacted": false
+      },
+      {
+        "path": "case-05/02-after-trust.txt",
+        "sha256": "dd7a7e16e245b570fad68ca310c5c1ed02777f3a111ee8395f1494f5cd1a287c",
+        "redacted": false
+      },
+      {
+        "path": "case-05/03-model-menu.txt",
+        "sha256": "702d2958c698398977e532a4898f8f913e082a321eaeec40205d8154bb9ef594",
+        "redacted": false
+      },
+      {
+        "path": "case-05/04-after-model-select.txt",
+        "sha256": "53c87c8ed1d684c7045da9166adfb37c279eec3a310120efa07ac2eedbd9669b",
+        "redacted": false
+      },
+      {
+        "path": "case-05/05-more-reasoning.txt",
+        "sha256": "a679289e47818f72cd2dfbac9ba851de1d2e2a356b0e036a0fe67e45236f3df6",
+        "redacted": false
+      },
+      {
+        "path": "case-05/06-max-selected.txt",
+        "sha256": "cb242523a9b2460bbda89a91d4b06d362d65e035bf85d657f3db80d943bde566",
+        "redacted": false
+      },
+      {
+        "path": "case-05/07-prompt-typed.txt",
+        "sha256": "33f0d55303c0639b17752b5bff5900842f162e719eb8e14ec278bdfa2c5682d5",
+        "redacted": false
+      },
+      {
+        "path": "case-05/08-request-submitted.txt",
+        "sha256": "6a1fbf7f847e8052300b6ab49dcdbcfee96f92be9f2ccb0e0818f8cc5952a7c7",
+        "redacted": false
+      },
+      {
+        "path": "case-05/09-final-full-scrollback.txt",
+        "sha256": "9d23c27e407d9723e1ae7dec95ab6703a7399315fa20d64334f5f2f424c8e388",
+        "redacted": false
+      },
+      {
+        "path": "case-05/actions.txt",
+        "sha256": "46734ae45b42ba40b690343525bcb9024059a51021c6a77e08fb9587f9ff0414",
+        "redacted": false
+      },
+      {
+        "path": "case-05/final.md",
+        "sha256": "472328977d3d8a56983baa00fdb46021299056c93e8d8b4750e4b867e6a2dced",
+        "redacted": false
+      },
+      {
+        "path": "case-05/report.md",
+        "sha256": "41888b1daa8abb132d28667b46aaacc644bb64e5a50e32599ef1aa98963a4e22",
+        "redacted": false
+      },
+      {
+        "path": "case-05/results.json",
+        "sha256": "e9758fee47e95c7d44ed2479dfe5a86ea3526e30f8cbce8435c1292d8fa0d1e3",
+        "redacted": false
+      }
+    ],
+    "coordinator_note": {
+      "status": "invalid_run",
+      "note": "The executor sent only FABLE_51_OK, not the prescribed full prompt Reply with exactly: FABLE_51_OK. Its observed reply therefore does not support the reported product failure. The original packet extraction lost inline-code formatting; formatting was restored for subsequent cases. Picker, matching labels and live reply observations remain useful. A faithful replay is required."
+    },
+    "display_status": "invalid_run"
+  },
+  {
+    "number": 6,
+    "run_name": "case-06",
+    "execution": {
+      "case": 6,
+      "started": 1789114270.3416152,
+      "ended": 1789114554.3943849,
+      "exit_code": 0,
+      "stdout": "{\"exit_code\": 0, \"name\": \"case-06\"}\n",
+      "stderr": "",
+      "report_exists": true,
+      "results_exist": true
+    },
+    "title": "6. Switch models and compare both labels",
+    "agent_status": "passed",
+    "summary": "Raw TMUX execution of /model switched from Claude Fable 5.1 Plan high to OpenAI GPT-5.6-Sol low and back to Claude Fable 5.1 Plan max. The boxed model indicator and footer agreed at each completed selection, with no observed restart, extra prompt, or premature label change.",
+    "thread_id": "01a08f85-44a0-7d22-a08f-a19a2567cdc8",
+    "usage": {
+      "input_tokens": 714292,
+      "cached_input_tokens": 634880,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 13464,
+      "reasoning_output_tokens": 5963
+    },
+    "result": {
+      "case_number": 6,
+      "status": "passed",
+      "summary": "Raw TMUX execution of /model switched from Claude Fable 5.1 Plan high to OpenAI GPT-5.6-Sol low and back to Claude Fable 5.1 Plan max. The boxed model indicator and footer agreed at each completed selection, with no observed restart, extra prompt, or premature label change.",
+      "observed_checks": [
+        {
+          "name": "Alternate provider/model selection",
+          "status": "passed",
+          "observation": "The visible /model menu exposed OpenAI and GPT-5.6-Sol; after confirmation the boxed indicator showed gpt-5.6-sol low and the footer showed GPT-5.6-Sol low.",
+          "evidence_path": "04-openai-model-menu.txt; 06-openai-selected.txt"
+        },
+        {
+          "name": "Return to Fable 5.1 Max",
+          "status": "passed",
+          "observation": "The visible Claude flow selected Claude Fable 5.1 Plan and then Max; after completion the boxed indicator showed claude-fable-5-1-plan max and the footer showed Claude Fable 5.1 Plan via claude-plan max.",
+          "evidence_path": "08-fable-selection-reasoning-menu.txt; 10-more-reasoning-menu.txt; 11-fable-max-selected.txt"
+        },
+        {
+          "name": "Boxed indicator/footer agreement and update timing",
+          "status": "passed",
+          "observation": "The immediate post-confirmation pane captures showed matching model/effort labels for both completed selections. No mismatch, premature change, redraw action, restart, or additional prompt was observed.",
+          "evidence_path": "05-after-openai-selection.txt; 06-openai-selected.txt; 08-fable-selection-reasoning-menu.txt; 11-fable-max-selected.txt; 12-final-scrollback.txt"
+        }
+      ],
+      "blockers": [],
+      "actions": [
+        "Started the supplied target session using the provided dedicated TMUX socket and command.",
+        "Pressed Enter on the visible trust prompt.",
+        "Typed /model and pressed Enter.",
+        "Pressed Right, selected GPT-5.6-Sol (default), and confirmed Low (default).",
+        "Typed /model and pressed Enter.",
+        "Pressed Left, selected Claude Fable 5.1 Plan, chose More reasoning\u2026, and confirmed Max.",
+        "Captured named plaintext pane checkpoints and the executed action history.",
+        "Exited only the target session created for this run."
+      ],
+      "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+      "platform": "macOS arm64",
+      "limitations": [
+        "Only visible TUI behavior was tested through raw TMUX interactions.",
+        "No source, binary internals, credentials, prior reports, or external guidance were inspected.",
+        "The result does not infer behavior on Linux.",
+        "The UI represents Fable 5.1 Max as Claude Fable 5.1 Plan plus Max reasoning; that interpretation is recorded in report.md."
+      ],
+      "test_instruction_ambiguity": "The instruction says Fable 5.1 Max, while the UI shows Claude Fable 5.1 Plan and a separate Max reasoning choice; the visible combination was used as the target."
+    },
+    "artifacts": [
+      {
+        "path": "case-06/01-initial.txt",
+        "sha256": "4c6d37e94fad05084943b94929a3507e988c40cf7c89ff45a9fcd379a8a81ab8",
+        "redacted": false
+      },
+      {
+        "path": "case-06/02-baseline.txt",
+        "sha256": "cbf023c536f7f902158857f7a37d2a4870ac29004b238163c107de71759a3a54",
+        "redacted": false
+      },
+      {
+        "path": "case-06/03-model-menu.txt",
+        "sha256": "702d2958c698398977e532a4898f8f913e082a321eaeec40205d8154bb9ef594",
+        "redacted": false
+      },
+      {
+        "path": "case-06/04-openai-model-menu.txt",
+        "sha256": "733c80012b1a30d2069700c6b08ee5c100d5cf6dec2f91d2e731e1c293852b1a",
+        "redacted": false
+      },
+      {
+        "path": "case-06/05-after-openai-selection.txt",
+        "sha256": "007315c9f31be394c1cfa97b0593d1b6a207c585df4c184581cd774e8a24ee4e",
+        "redacted": false
+      },
+      {
+        "path": "case-06/06-openai-selected.txt",
+        "sha256": "b188683b28a4cca9cbb0ec6ab90fa3ad5cd39a18c83c41702a214bab6a250f2b",
+        "redacted": false
+      },
+      {
+        "path": "case-06/07-return-menu-claude.txt",
+        "sha256": "05f38eaf1b5b20886618196b65cdf7054fcb6c0ee0d52ef7636c50100ffea042",
+        "redacted": false
+      },
+      {
+        "path": "case-06/08-fable-selection-reasoning-menu.txt",
+        "sha256": "35190856e9a032417429ff1c95f21ff978f71f2d00de6d835aca82ec37878777",
+        "redacted": false
+      },
+      {
+        "path": "case-06/09-max-option-highlighted.txt",
+        "sha256": "82627016ea1f76fc9e4d4fa88be61fe71aa72b6d9ede873ab8d26527ace4111c",
+        "redacted": false
+      },
+      {
+        "path": "case-06/10-more-reasoning-menu.txt",
+        "sha256": "58002b98711da7dc94c9f9e2b1a0a006f5c757da1b4988210d6f375870617be8",
+        "redacted": false
+      },
+      {
+        "path": "case-06/11-fable-max-selected.txt",
+        "sha256": "fd47738729a009dfbc98a9f9028ed08fe95677e395dd464ee3cf0cf5fffec97b",
+        "redacted": false
+      },
+      {
+        "path": "case-06/12-final-scrollback.txt",
+        "sha256": "930e12d0791344f83e67660862e16ea2c7bccf74b72ea8c73942b1bc8a6fcd10",
+        "redacted": false
+      },
+      {
+        "path": "case-06/action-history.txt",
+        "sha256": "4ab2139a048904a61086b5f444ccdc7331f4f0e11cc9b24dce049a3e1949844e",
+        "redacted": false
+      },
+      {
+        "path": "case-06/final.md",
+        "sha256": "1d4eb6e2d6b17810d339c2094378069b3171276f6c73fe33cde87fd4e97b1d5d",
+        "redacted": false
+      },
+      {
+        "path": "case-06/report.md",
+        "sha256": "a69daf81ddcb720a1aeef8c373173b50e38fdd1b4a47ada5b0a060e31125dea6",
+        "redacted": false
+      },
+      {
+        "path": "case-06/results.json",
+        "sha256": "93f5e578e7091ec976baf22d31fc5de6b97a98b86748ecd08acb0d1d02da0382",
+        "redacted": false
+      }
+    ],
+    "coordinator_note": {},
+    "display_status": "passed"
+  },
+  {
+    "number": 7,
+    "run_name": "case-07",
+    "execution": {
+      "case": 7,
+      "started": 1789114560.622207,
+      "ended": 1789115031.450125,
+      "exit_code": 0,
+      "stdout": "{\"exit_code\": 0, \"name\": \"case-07\"}\n",
+      "stderr": "",
+      "report_exists": true,
+      "results_exist": true
+    },
+    "title": "7. Restart and confirm provider persistence",
+    "agent_status": "blocked",
+    "summary": "Repeated supplied-harness relaunches reached chat, preserved the visible Claude Plan model/provider and connected account, and returned RESTART_OK. The full case is blocked because native app-shortcut relaunch could not be exercised through this interface.",
+    "thread_id": "01a08f89-b272-7883-87bd-647d44077806",
+    "usage": {
+      "input_tokens": 1704171,
+      "cached_input_tokens": 1587712,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 21030,
+      "reasoning_output_tokens": 9714
+    },
+    "result": {
+      "case_number": 7,
+      "status": "blocked",
+      "summary": "Repeated supplied-harness relaunches reached chat, preserved the visible Claude Plan model/provider and connected account, and returned RESTART_OK. The full case is blocked because native app-shortcut relaunch could not be exercised through this interface.",
+      "observed_checks": [
+        {
+          "check": "Relaunch reaches chat without automatic /providers screen (harness subset)",
+          "status": "passed",
+          "observation": "The second and third supplied-harness launches displayed the chat composer directly; no /providers screen appeared.",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/04-relaunch-chat.txt; /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/07-relaunch-chat.txt"
+        },
+        {
+          "check": "Selected provider/model visibly match before and after relaunch",
+          "status": "passed",
+          "observation": "Visible /status output showed Claude Fable 5.1 Plan with Claude Plan before and after relaunch.",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/02-status-before-request.txt; /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/05-status-after-relaunch.txt; /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/08-status-after-relaunch.txt"
+        },
+        {
+          "check": "Provider account remains visibly connected",
+          "status": "passed",
+          "observation": "Visible /status output showed Claude Plan account connected before and after relaunch.",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/02-status-before-request.txt; /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/05-status-after-relaunch.txt; /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/08-status-after-relaunch.txt"
+        },
+        {
+          "check": "Exact request returns RESTART_OK after relaunch",
+          "status": "passed",
+          "observation": "The visible assistant response was RESTART_OK.",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/09-response-after-relaunch.txt"
+        },
+        {
+          "check": "Relaunch from native app shortcut",
+          "status": "blocked",
+          "observation": "The native Applications shortcut is inaccessible through this interface; only the supplied TMUX harness launch was exercised.",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/07-relaunch-chat.txt"
+        }
+      ],
+      "blockers": [
+        "Native Applications shortcut and macOS Desktop placement are inaccessible through this interface, so the required native-shortcut relaunch cannot be verified."
+      ],
+      "actions": [
+        "Started and relaunched only the supplied target session with the provided TMUX command.",
+        "Used raw TMUX literal text plus separate Enter key actions for /status and the exact request.",
+        "Exited the target session with Ctrl-C after each exercised run; no target server remained.",
+        "Recorded the complete key/action history in actions.log."
+      ],
+      "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+      "platform": "macOS arm64",
+      "limitations": [
+        "No Linux behavior was inferred.",
+        "The first harness launch showed a visible one-time directory trust prompt; it was accepted per the prompt before baseline observation.",
+        "Only visible /status provider/account metadata was evaluated; no hidden credential state or native keychain prompt was inspected.",
+        "The supplied harness launch is not substituted for the required native app-shortcut launch."
+      ],
+      "test_instruction_ambiguity": [
+        "The instruction to quit normally did not identify a visible quit command or key; the visible slash-command list had no quit entry, and Ctrl-C exited the target session."
+      ]
+    },
+    "artifacts": [
+      {
+        "path": "case-07/00-initial-startup.txt",
+        "sha256": "c58fe0399f3d60ae26e02199ae2e376a2cb70fee6bda6df8e91c942adbb2e790",
+        "redacted": false
+      },
+      {
+        "path": "case-07/01-startup-chat.txt",
+        "sha256": "dd7a7e16e245b570fad68ca310c5c1ed02777f3a111ee8395f1494f5cd1a287c",
+        "redacted": false
+      },
+      {
+        "path": "case-07/02-status-before-request.txt",
+        "sha256": "2caa84663c576fce08b66cd292d69084bb8650b6ceb43423470b170f8b3d9b67",
+        "redacted": false
+      },
+      {
+        "path": "case-07/03-after-quit.txt",
+        "sha256": "6e8cfb47c16495e412c271681827e99d467b1a76a42cd1365c0d1e641b947005",
+        "redacted": false
+      },
+      {
+        "path": "case-07/04-relaunch-chat.txt",
+        "sha256": "28f634288176a31c66971db02e4106258498a3e56cc77c88530feef19675b5be",
+        "redacted": false
+      },
+      {
+        "path": "case-07/05-status-after-relaunch.txt",
+        "sha256": "ed24ee4ec64df86e12ed9a449b3b19adf41dbff03c850a18a18083ab80e61479",
+        "redacted": false
+      },
+      {
+        "path": "case-07/06-after-final-quit.txt",
+        "sha256": "6e8cfb47c16495e412c271681827e99d467b1a76a42cd1365c0d1e641b947005",
+        "redacted": false
+      },
+      {
+        "path": "case-07/07-relaunch-chat.txt",
+        "sha256": "6b35ff79237fc35ba936ac538b3c501a99e7eed5c43eddb7c0ffb3c747150ce5",
+        "redacted": false
+      },
+      {
+        "path": "case-07/08-status-after-relaunch.txt",
+        "sha256": "89de24f841f5a8f1761fc1f50dcb96e384882e480f143d03558b47b38e9e09c9",
+        "redacted": false
+      },
+      {
+        "path": "case-07/09-response-after-relaunch.txt",
+        "sha256": "2b58612d75b9fe4a4ca7f2b3545cc3d88301cdc8a9eb1db6f78fc9b0ecf4a30e",
+        "redacted": false
+      },
+      {
+        "path": "case-07/10-after-final-quit.txt",
+        "sha256": "6e8cfb47c16495e412c271681827e99d467b1a76a42cd1365c0d1e641b947005",
+        "redacted": false
+      },
+      {
+        "path": "case-07/actions.log",
+        "sha256": "54cbd36672aba40d741b3360b7a98d30b30b362fd1aecb3d9a30435d6492abd0",
+        "redacted": false
+      },
+      {
+        "path": "case-07/final.md",
+        "sha256": "0480f9a46aa11a4e519842dfa6bdb495211785cb9b17b52fce1a6c2e2986db30",
+        "redacted": false
+      },
+      {
+        "path": "case-07/report.md",
+        "sha256": "ad61f098c4e677042f4b4e0487d8cc2e8ec4c8c4aea5b11d7e9375c2476cb06f",
+        "redacted": false
+      },
+      {
+        "path": "case-07/results.json",
+        "sha256": "c5a50fcf4a2a1ad41d4029d876b6cc2d8c07d425b3a2a7b5d1d13e168a9d8130",
+        "redacted": false
+      }
+    ],
+    "coordinator_note": {},
+    "display_status": "blocked"
+  },
+  {
+    "number": 11,
+    "run_name": "case-11",
+    "execution": {
+      "case": 11,
+      "started": 1789115037.545739,
+      "ended": 1789115242.754727,
+      "exit_code": 0,
+      "stdout": "{\"exit_code\": 0, \"name\": \"case-11\"}\n",
+      "stderr": "",
+      "report_exists": true,
+      "results_exist": true
+    },
+    "title": "11. Cancel a stream and continue the same session",
+    "agent_status": "passed",
+    "summary": "A multi-paragraph response visibly streamed, Escape interrupted it cleanly, the same session returned exactly RECOVERY_OK, and the composer remained responsive.",
+    "thread_id": "01a08f90-fa60-74b3-a7c4-162ee0c3a7d6",
+    "usage": {
+      "input_tokens": 491179,
+      "cached_input_tokens": 448768,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 9771,
+      "reasoning_output_tokens": 4907
+    },
+    "result": {
+      "case_number": 11,
+      "status": "passed",
+      "summary": "A multi-paragraph response visibly streamed, Escape interrupted it cleanly, the same session returned exactly RECOVERY_OK, and the composer remained responsive.",
+      "observed_checks": [
+        {
+          "name": "multi_paragraph_stream_visible",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/evidence/02-final-pane.txt"
+        },
+        {
+          "name": "escape_interrupts_cleanly",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/evidence/02-final-pane.txt"
+        },
+        {
+          "name": "exact_recovery_response",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/evidence/02-final-pane.txt"
+        },
+        {
+          "name": "composer_remains_responsive",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-11/evidence/02-final-pane.txt"
+        }
+      ],
+      "blockers": [],
+      "actions": [
+        "Started the instructed target TMUX session.",
+        "Pressed Enter at the visible trust prompt.",
+        "Typed and submitted a harmless several-paragraph request.",
+        "Pressed Escape while response text was visibly streaming.",
+        "Typed and submitted exactly: Reply with exactly: RECOVERY_OK",
+        "Captured named pane checkpoints and action history."
+      ],
+      "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+      "platform": "macOS arm64",
+      "limitations": [
+        "Observed only in the supplied compiled candidate through the visible TMUX TUI.",
+        "The first response was intentionally interrupted before completion; its full answer was not evaluated.",
+        "No Linux inference or native-only UI claim is made."
+      ],
+      "test_instruction_ambiguity": "The subject and exact count for several paragraphs were unspecified; a harmless telescope-history prompt produced multiple visible paragraphs."
+    },
+    "artifacts": [
+      {
+        "path": "case-11/01-initial-trust-prompt.txt",
+        "sha256": "746ae5d08d621f8e61889845c1a49164b95768a00148760afa1ec5dc1387e1dd",
+        "redacted": false
+      },
+      {
+        "path": "case-11/02-final-pane.txt",
+        "sha256": "6e0c0069461520e09d85e8cce791b7b094b31aa95197e719a17e350e097f7d38",
+        "redacted": false
+      },
+      {
+        "path": "case-11/03-complete-pane-scrollback.txt",
+        "sha256": "ef552954babb9c840f4e75775707c346984d07e7102444e8eb403de1d6e5df27",
+        "redacted": false
+      },
+      {
+        "path": "case-11/actions.txt",
+        "sha256": "1589de64939b09ccd58d1c2083ac24f319314c107b391103d4d6f2ee9cded567",
+        "redacted": false
+      },
+      {
+        "path": "case-11/final.md",
+        "sha256": "4eb491fa4413227860b8f5086c444ad68b4913e8ed1fba06db44a11b4c0fa4d7",
+        "redacted": false
+      },
+      {
+        "path": "case-11/report.md",
+        "sha256": "dbcdd633a92abf3df74be5b6a94596272c02c5b2afeeb40366d07754b436eee2",
+        "redacted": false
+      },
+      {
+        "path": "case-11/results.json",
+        "sha256": "68016efa20dfa92c06e0d8902148c37fa61b42ce6049e0138748c126fb3886d3",
+        "redacted": false
+      }
+    ],
+    "coordinator_note": {},
+    "display_status": "passed"
+  },
+  {
+    "number": 12,
+    "run_name": "case-12",
+    "execution": {
+      "case": 12,
+      "started": 1789115248.641995,
+      "ended": 1789115700.795577,
+      "exit_code": 0,
+      "stdout": "{\"exit_code\": 0, \"name\": \"case-12\"}\n",
+      "stderr": "",
+      "report_exists": true,
+      "results_exist": true
+    },
+    "title": "12. Open three concurrent launcher windows",
+    "agent_status": "blocked",
+    "summary": "The accessible single-session TUI subset remained usable, switched models, and returned READY; the required three concurrent launcher windows on macOS Desktop 3 could not be exercised through the supplied interface.",
+    "thread_id": "01a08f94-32c9-74c3-a25f-2c16f2f15d33",
+    "usage": {
+      "input_tokens": 1783606,
+      "cached_input_tokens": 1661440,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 18144,
+      "reasoning_output_tokens": 7518
+    },
+    "result": {
+      "case_number": 12,
+      "status": "blocked",
+      "summary": "The accessible single-session TUI subset remained usable, switched models, and returned READY; the required three concurrent launcher windows on macOS Desktop 3 could not be exercised through the supplied interface.",
+      "observed_checks": [
+        {
+          "check": "Accessible TUI session remains usable and accepts a short request",
+          "status": "passed",
+          "evidence_path": "02_tui_model_switch_request.txt"
+        },
+        {
+          "check": "Accessible TUI session switches models",
+          "status": "passed",
+          "evidence_path": "02_tui_model_switch_request.txt"
+        },
+        {
+          "check": "Three concurrent launcher windows on Desktop 3 occupy distinct card slots and remain independently usable without replacement, overlap, or movement",
+          "status": "blocked",
+          "evidence_path": "01_tui_start.txt"
+        }
+      ],
+      "blockers": [
+        "The native Applications shortcut and macOS Desktop 3 placement are not accessible through this interface.",
+        "TMUX windows cannot be substituted as proof of native launcher windows or card slots.",
+        "The instruction does not specify which app shortcut to use, so no undocumented shortcut was guessed."
+      ],
+      "actions": "See actions.log for the complete executed key/action history.",
+      "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+      "platform": "macOS arm64",
+      "limitations": [
+        "Only visible TMUX TUI behavior was exercised.",
+        "Native Applications shortcut, Desktop 3, launcher cards, and cross-window independence were not observable.",
+        "No Linux behavior is inferred."
+      ]
+    },
+    "artifacts": [
+      {
+        "path": "case-12/01_tui_start.txt",
+        "sha256": "38f8a982f9baad920f7a0763f194322839e43a54cf95a52cd6e4c7b8d2d0a1c1",
+        "redacted": false
+      },
+      {
+        "path": "case-12/02_tui_model_switch_request.txt",
+        "sha256": "853d2153ed1211d50ca6bb6fce673600b56e1ae4af7087c57c369acd51a104ae",
+        "redacted": false
+      },
+      {
+        "path": "case-12/03_final_state.txt",
+        "sha256": "853d2153ed1211d50ca6bb6fce673600b56e1ae4af7087c57c369acd51a104ae",
+        "redacted": false
+      },
+      {
+        "path": "case-12/actions.log",
+        "sha256": "c56f9c2c31758a1d6ae6e7111e79cb165cb28b165987c1b8b70fae3a3f49a698",
+        "redacted": false
+      },
+      {
+        "path": "case-12/final.md",
+        "sha256": "044856825cd238f2bbf0b0215ece4164cb45340113ea248bc3697393ba9ff9ea",
+        "redacted": false
+      },
+      {
+        "path": "case-12/report.md",
+        "sha256": "8f8188cb46fef65f96da8ff278b21a00e8b51e950fc8faeaad546ea31b2defe0",
+        "redacted": false
+      },
+      {
+        "path": "case-12/results.json",
+        "sha256": "f640c888b6dd5e88e63bc23015edb48abc966e9eb646629eaf3cc08834aa46e5",
+        "redacted": false
+      }
+    ],
+    "coordinator_note": {},
+    "display_status": "blocked"
+  },
+  {
+    "number": 15,
+    "run_name": "case-15",
+    "execution": {
+      "case": 15,
+      "run_name": "case-15",
+      "started": 1789115983.051907,
+      "ended": 1789116368.202802,
+      "exit_code": 0,
+      "stdout": "{\"exit_code\": 0, \"name\": \"case-15\"}\n",
+      "stderr": "",
+      "report_exists": true,
+      "results_exist": true
+    },
+    "title": "15. Check API-key and browser guidance",
+    "agent_status": "blocked",
+    "summary": "The visible UI did not expose an API-key provider entry screen or an OpenAI account setup action, so the required guidance could not be inspected. The flow was cancelled and the dedicated target exited normally.",
+    "thread_id": "01a08f9f-66de-7791-a0ba-8424e5027800",
+    "usage": {
+      "input_tokens": 842427,
+      "cached_input_tokens": 752640,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 18637,
+      "reasoning_output_tokens": 8325
+    },
+    "result": {
+      "case_number": 15,
+      "status": "blocked",
+      "summary": "The visible UI did not expose an API-key provider entry screen or an OpenAI account setup action, so the required guidance could not be inspected. The flow was cancelled and the dedicated target exited normally.",
+      "observed_checks": [
+        {
+          "name": "API-key provider entry screen",
+          "status": "blocked",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15/evidence/09_openai_provider_tab.txt"
+        },
+        {
+          "name": "API-key guidance identifies environment variable, credential storage, and chat exclusion",
+          "status": "blocked",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15/evidence/09_openai_provider_tab.txt"
+        },
+        {
+          "name": "OpenAI account setup login link and device-code guidance",
+          "status": "blocked",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15/evidence/14_gpt6_entry.txt"
+        },
+        {
+          "name": "No repeated keychain prompts",
+          "status": "blocked",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15/evidence/16_returned_composer.txt"
+        },
+        {
+          "name": "Cancel flow and normal exit",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15/evidence/17_exit_status.txt"
+        }
+      ],
+      "blockers": [
+        "No API-key provider entry screen was visible in the supplied TUI.",
+        "No OpenAI account setup action, login link, or device-code guidance was visible.",
+        "Native browser/desktop access was not available through this interface."
+      ],
+      "actions": [
+        "Started the supplied target in the dedicated TMUX session.",
+        "Accepted the visible directory-trust prompt.",
+        "Inspected visible slash-command suggestions and opened /security read-only, then closed it.",
+        "Opened /model, inspected both visible provider tabs, and selected GPT-6 Astra to check for an account setup path; only reasoning-level selection appeared.",
+        "Cancelled with Escape and exited the empty composer with Ctrl+D.",
+        "Full action history: /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15/evidence/actions.log"
+      ],
+      "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+      "platform": "macOS arm64",
+      "limitations": [
+        "Black-box TUI only; no source, binary internals, prior reports, test implementations, credential files, project policies, or external guidance inspected.",
+        "Native Applications/Desktop placement and browser/native interfaces were inaccessible.",
+        "No credentials were entered, read, printed, or logged; managed-token validity was not assumed.",
+        "The cloned profile's native-keyring fallback cannot qualify a Keychain-prompt pass."
+      ],
+      "test_instruction_ambiguity": "The API-key provider and its visible entry route were not named; the UI exposed only OpenAI Codex plan and Claude Plan tabs, with no account-setup action. Hidden shortcuts were not guessed."
+    },
+    "artifacts": [
+      {
+        "path": "case-15/01_initial.txt",
+        "sha256": "bc6dfbe894bbb0ac55b1b1c5615453dd1f144fa1670914ec1e759598c4210d53",
+        "redacted": false
+      },
+      {
+        "path": "case-15/02_after_trust.txt",
+        "sha256": "c45d6fe101d00374db9ee9ec0f9b4f30a00cb49ee35ef1b4a3523a0cc0039ce9",
+        "redacted": false
+      },
+      {
+        "path": "case-15/03_command_suggestions.txt",
+        "sha256": "1125c1b2a02b6937d12611f1943ab6a95b01b9f634c8089a6eb4fa52767e0f10",
+        "redacted": false
+      },
+      {
+        "path": "case-15/04_security_typed.txt",
+        "sha256": "bb4dc16ca578511092af3743af3722b95581ae387a2e4d795f536dd746a9bd22",
+        "redacted": false
+      },
+      {
+        "path": "case-15/05_security_menu.txt",
+        "sha256": "76a11f96241587ff54f5a8b2425768ced14cd21c13cabb51078e1da6388285e1",
+        "redacted": false
+      },
+      {
+        "path": "case-15/06_after_security_close.txt",
+        "sha256": "c45d6fe101d00374db9ee9ec0f9b4f30a00cb49ee35ef1b4a3523a0cc0039ce9",
+        "redacted": false
+      },
+      {
+        "path": "case-15/07_model_typed.txt",
+        "sha256": "5850dddaf1262f38d33949321dc88004201a3468be7a2863645806e835cf8cba",
+        "redacted": false
+      },
+      {
+        "path": "case-15/08_model_picker.txt",
+        "sha256": "702d2958c698398977e532a4898f8f913e082a321eaeec40205d8154bb9ef594",
+        "redacted": false
+      },
+      {
+        "path": "case-15/09_openai_provider_tab.txt",
+        "sha256": "733c80012b1a30d2069700c6b08ee5c100d5cf6dec2f91d2e731e1c293852b1a",
+        "redacted": false
+      },
+      {
+        "path": "case-15/10_openai_list_down.txt",
+        "sha256": "759b2ae16fa481259fd80f7f40bae887df93b208a790bf4f9baddc73167aceb6",
+        "redacted": false
+      },
+      {
+        "path": "case-15/11_openai_model_entry.txt",
+        "sha256": "007315c9f31be394c1cfa97b0593d1b6a207c585df4c184581cd774e8a24ee4e",
+        "redacted": false
+      },
+      {
+        "path": "case-15/12_back_openai_picker.txt",
+        "sha256": "733c80012b1a30d2069700c6b08ee5c100d5cf6dec2f91d2e731e1c293852b1a",
+        "redacted": false
+      },
+      {
+        "path": "case-15/13_gpt6_selected.txt",
+        "sha256": "60806de4865930a0165a17089f4e990811b1a0edf08b5e2484fb4e817f636f2e",
+        "redacted": false
+      },
+      {
+        "path": "case-15/14_gpt6_entry.txt",
+        "sha256": "446675b336efa4a993a03391b269bd7f42c7a4c7ff1700ba1c32719176a085ed",
+        "redacted": false
+      },
+      {
+        "path": "case-15/15_after_gpt6_cancel.txt",
+        "sha256": "60806de4865930a0165a17089f4e990811b1a0edf08b5e2484fb4e817f636f2e",
+        "redacted": false
+      },
+      {
+        "path": "case-15/16_returned_composer.txt",
+        "sha256": "c45d6fe101d00374db9ee9ec0f9b4f30a00cb49ee35ef1b4a3523a0cc0039ce9",
+        "redacted": false
+      },
+      {
+        "path": "case-15/17_exit_status.txt",
+        "sha256": "c26d1014acd628b4de5e663f3b05b1499b925eea1ff0d3d84cbfe5ca683df8c1",
+        "redacted": false
+      },
+      {
+        "path": "case-15/actions.log",
+        "sha256": "53919a8c3c189eeddbbfbbd269be89e236aa918cdcc6c73b1b0298cdbe03c511",
+        "redacted": false
+      },
+      {
+        "path": "case-15/final.md",
+        "sha256": "5e4edd72348fc29e822ad5e2b3f4e9e397b862920911faff1191b4cc1195fbf3",
+        "redacted": false
+      },
+      {
+        "path": "case-15/report.md",
+        "sha256": "57d3fbf3a8b757ab4c9ec98b11c031dfd2c225410c36704160d5b6827e996d93",
+        "redacted": false
+      },
+      {
+        "path": "case-15/results.json",
+        "sha256": "bc33d9e9fd0402d5d77c57a1b7e285670a8bdf8611756c4a6d31dba2d7c10b7d",
+        "redacted": false
+      }
+    ],
+    "coordinator_note": {
+      "status": "invalid_run",
+      "note": "The original executor inspected /model rather than the /providers credential-management route. Its report of absent setup screens does not establish product unavailability. A fresh replay supplies the public entry route without changing the human expectations."
+    },
+    "display_status": "invalid_run"
+  },
+  {
+    "number": 20,
+    "run_name": "case-20",
+    "execution": {
+      "case": 20,
+      "run_name": "case-20",
+      "started": 1789116374.245298,
+      "ended": 1789116744.411103,
+      "exit_code": 0,
+      "stdout": "{\"exit_code\": 0, \"name\": \"case-20\"}\n",
+      "stderr": "",
+      "report_exists": true,
+      "results_exist": true
+    },
+    "title": "20. Continue your ordinary session",
+    "agent_status": "passed",
+    "summary": "On macOS arm64, the supplied candidate allowed read-only permissions inspection and cancellation, switched from the visible Claude Plan session to the visible OpenAI GPT-5.6-Sol model, returned OK to a harmless request, exited normally with Ctrl+D, restarted with the selected model retained, and allowed read-only /security inspection and cancellation with no visible policy change.",
+    "thread_id": "01a08fa5-5f01-7ab3-ae5d-ea8a2fd092bb",
+    "usage": {
+      "input_tokens": 967950,
+      "cached_input_tokens": 873216,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 16723,
+      "reasoning_output_tokens": 7091
+    },
+    "result": {
+      "case_number": 20,
+      "status": "passed",
+      "summary": "On macOS arm64, the supplied candidate allowed read-only permissions inspection and cancellation, switched from the visible Claude Plan session to the visible OpenAI GPT-5.6-Sol model, returned OK to a harmless request, exited normally with Ctrl+D, restarted with the selected model retained, and allowed read-only /security inspection and cancellation with no visible policy change.",
+      "observed_checks": [
+        {
+          "check": "Ordinary session launched",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/02-session.txt"
+        },
+        {
+          "check": "/permissions inspection and cancellation",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/03-permissions-open.txt",
+          "supporting_evidence": [
+            "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/04-permissions-cancelled.txt"
+          ]
+        },
+        {
+          "check": "Model/provider switching through /model",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/08-openai-selected.txt",
+          "supporting_evidence": [
+            "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/05-model-picker.txt",
+            "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/06-model-openai-tab.txt",
+            "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/07-openai-effort-or-active.txt"
+          ]
+        },
+        {
+          "check": "Harmless request produced an assistant reply",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/09-openai-request.txt"
+        },
+        {
+          "check": "Normal exit and restart",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/15-normal-exit.txt",
+          "supporting_evidence": [
+            "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/11-restarted.txt"
+          ]
+        },
+        {
+          "check": "/security read-only inspection and cancellation",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/13-security-inspected.txt",
+          "supporting_evidence": [
+            "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/12-security-open.txt",
+            "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/14-security-closed.txt"
+          ]
+        },
+        {
+          "check": "No visible policy change survived restart",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/11-restarted.txt",
+          "supporting_evidence": [
+            "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/13-security-inspected.txt",
+            "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-20/evidence/14-security-closed.txt"
+          ]
+        }
+      ],
+      "blockers": [],
+      "actions": [
+        "Accepted the visible trust prompt with Enter.",
+        "Opened /permissions and pressed Escape; did not select or apply a permission option.",
+        "Opened /model, switched to the visible OpenAI tab, selected GPT-5.6-Sol, and accepted Low reasoning.",
+        "Sent the harmless prompt: Reply with exactly: OK.",
+        "Pressed Ctrl+D at an empty composer; the dedicated target session exited.",
+        "Started a fresh target session.",
+        "Opened /security, inspected the highlighted Permissive profile, and pressed Escape without mutation.",
+        "Pressed Ctrl+D at an empty composer and verified the target session was absent."
+      ],
+      "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+      "platform": "macOS arm64",
+      "limitations": [
+        "The UI reported effective protection as unverified and protected modes as blocked; no protected-mode test was attempted.",
+        "Evidence is limited to the macOS arm64 tmux TUI; no native desktop behavior was claimed.",
+        "Only the selected OpenAI model's live usability was confirmed by an assistant reply; no credential values were accessed or recorded."
+      ],
+      "instruction_ambiguity": [
+        "The instruction to repeat /security did not specify whether to enter the highlighted profile; the visible read-only inspect flow was followed.",
+        "The instruction did not name which already-configured provider/model to select; the visible OpenAI default was used after recording both provider tabs.",
+        "The phrase normal Permissive test session differs from the visible /permissions labels YOLO mode and Full Access (current); both were recorded without equating them."
+      ]
+    },
+    "artifacts": [
+      {
+        "path": "case-20/01-initial.txt",
+        "sha256": "e96fc512fce3e8add93b82b19353f21e8d5f9d13f486cbdfad51111f3fd3ddef",
+        "redacted": false
+      },
+      {
+        "path": "case-20/02-session.txt",
+        "sha256": "28f634288176a31c66971db02e4106258498a3e56cc77c88530feef19675b5be",
+        "redacted": false
+      },
+      {
+        "path": "case-20/03-permissions-open.txt",
+        "sha256": "a8364a6ec27d4bf45f0068f5e1073b79dd8a8a92527a86c373473045cdfc7b49",
+        "redacted": false
+      },
+      {
+        "path": "case-20/04-permissions-cancelled.txt",
+        "sha256": "28f634288176a31c66971db02e4106258498a3e56cc77c88530feef19675b5be",
+        "redacted": false
+      },
+      {
+        "path": "case-20/05-model-picker.txt",
+        "sha256": "702d2958c698398977e532a4898f8f913e082a321eaeec40205d8154bb9ef594",
+        "redacted": false
+      },
+      {
+        "path": "case-20/06-model-openai-tab.txt",
+        "sha256": "733c80012b1a30d2069700c6b08ee5c100d5cf6dec2f91d2e731e1c293852b1a",
+        "redacted": false
+      },
+      {
+        "path": "case-20/07-openai-effort-or-active.txt",
+        "sha256": "007315c9f31be394c1cfa97b0593d1b6a207c585df4c184581cd774e8a24ee4e",
+        "redacted": false
+      },
+      {
+        "path": "case-20/08-openai-selected.txt",
+        "sha256": "9953f4c71fc2867bf1d488ca4f793756ca453acd57144a4f7f98b8692f7d1348",
+        "redacted": false
+      },
+      {
+        "path": "case-20/09-openai-request.txt",
+        "sha256": "6c7574fab459900dbfe5e8ac6e674c32e5e22c39909ac984036b87e59200c936",
+        "redacted": false
+      },
+      {
+        "path": "case-20/10-after-exit-key.txt",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "redacted": false
+      },
+      {
+        "path": "case-20/11-restarted.txt",
+        "sha256": "79d471039720a1608e83d57566ab6f9e644b43cfa5cad8a7904f86cbac059c49",
+        "redacted": false
+      },
+      {
+        "path": "case-20/12-security-open.txt",
+        "sha256": "3211c3e5a9360fc06b1aa9d3832b1b59a9fb20a07f47fa906f95181132c0aa53",
+        "redacted": false
+      },
+      {
+        "path": "case-20/13-security-inspected.txt",
+        "sha256": "3fa34a4c568a2568bc307e9cb07169c763b9e2151d8bdbd2dcd1e7f5ce4ec688",
+        "redacted": false
+      },
+      {
+        "path": "case-20/14-security-closed.txt",
+        "sha256": "79d471039720a1608e83d57566ab6f9e644b43cfa5cad8a7904f86cbac059c49",
+        "redacted": false
+      },
+      {
+        "path": "case-20/15-normal-exit.txt",
+        "sha256": "b37443c10fe2c85b0da2b946ed8c4f82aabc69e8da90ba7be01a9a1ca5c67a6b",
+        "redacted": false
+      },
+      {
+        "path": "case-20/actions.log",
+        "sha256": "a8a9eba15a86321a663b9deed24b7cd850b940a203d9ad59e846255bcf1ca8be",
+        "redacted": false
+      },
+      {
+        "path": "case-20/final.md",
+        "sha256": "c6ca3978c8622de1a639dac3177ff500d8eb60755ab385a9525ec5286e13af66",
+        "redacted": false
+      },
+      {
+        "path": "case-20/report.md",
+        "sha256": "dd1da9ca0ad5c750494acfd792dd945bbc4a08b7c7c31954a200d81618e38d3c",
+        "redacted": false
+      },
+      {
+        "path": "case-20/results.json",
+        "sha256": "e1902a6ec2105a4e7b98a73407422f9caed7c347c127d488b0aa5eb95b9ebbbf",
+        "redacted": false
+      }
+    ],
+    "coordinator_note": {},
+    "display_status": "passed"
+  },
+  {
+    "number": 24,
+    "run_name": "case-24",
+    "execution": {
+      "case": 24,
+      "run_name": "case-24",
+      "started": 1789116750.4480178,
+      "ended": 1789117350.4158552,
+      "exit_code": "timeout",
+      "stdout": "",
+      "stderr": "",
+      "report_exists": true,
+      "results_exist": true
+    },
+    "title": "24. Recover the affected account, not the current model",
+    "agent_status": "blocked",
+    "summary": "The OpenAI recovery TUI route and cancellation/reopen behavior were observed, but no OpenAI authentication failure occurred and the final device sign-in required an unavailable and unauthorized external browser/device. Successful sign-in refresh could not be verified.",
+    "thread_id": "01a08fab-1c6d-7151-bdd8-bf627f309eea",
+    "usage": null,
+    "result": {
+      "case_number": 24,
+      "status": "blocked",
+      "summary": "The OpenAI recovery TUI route and cancellation/reopen behavior were observed, but no OpenAI authentication failure occurred and the final device sign-in required an unavailable and unauthorized external browser/device. Successful sign-in refresh could not be verified.",
+      "observed_checks": [
+        {
+          "check": "Working Claude provider remains configured/current",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-24/evidence/02-providers-open.txt",
+          "observation": "Claude Account was visibly Enabled \u00b7 configured \u00b7 current; active model was Claude Fable 5.1 Plan/high."
+        },
+        {
+          "check": "Select OpenAI, press r, choose sign-in",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-24/evidence/05-recovery-menu.txt",
+          "observation": "The selected OpenAI row opened Recover OpenAI, and Sign in to OpenAI again was selected."
+        },
+        {
+          "check": "First cancellation changes nothing visibly",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-24/evidence/07-after-first-cancel.txt",
+          "observation": "After cancel, OpenAI remained Enabled \u00b7 configured and Claude remained Enabled \u00b7 configured \u00b7 current."
+        },
+        {
+          "check": "Recovery can be reopened",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-24/evidence/08-recovery-reopened.txt",
+          "observation": "The Recover OpenAI menu and sign-in choice appeared again."
+        },
+        {
+          "check": "OpenAI authentication failure/needs-attention precondition",
+          "status": "blocked",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-24/evidence/15-openai-live-request.txt",
+          "observation": "A harmless live OpenAI request returned OK; no authentication failure or needs-attention state was observed."
+        },
+        {
+          "check": "Finish sign-in and verify status/app connection refresh without changing the active model",
+          "status": "blocked",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-24/evidence/09-signin-second-open.txt",
+          "observation": "The reopened flow stopped at an external device-login page; no successful sign-in or refresh was observed."
+        }
+      ],
+      "blockers": [
+        "No OpenAI authentication failure was observed; the harmless live request succeeded.",
+        "External browser/device login is required and is unavailable and unauthorized for this executor."
+      ],
+      "actions": [
+        "Started the supplied candidate in the dedicated target tmux session.",
+        "Used raw tmux keys to open /providers, select OpenAI, press r, choose sign-in, cancel once, reopen, and launch sign-in again.",
+        "Ran one harmless OpenAI request for live-auth observation; it returned OK.",
+        "Restored Claude Fable 5.1 Plan/high and terminated only the target session."
+      ],
+      "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+      "platform": "macOS arm64",
+      "limitations": [
+        "Plaintext tmux captures only; no native desktop screenshot.",
+        "Browser/native login completion and Applications/Desktop shortcut were inaccessible.",
+        "Credential values and login codes were not recorded; code lines in captures are redacted.",
+        "No Linux inference."
+      ],
+      "test_instruction_ambiguity": "The instruction assumes an OpenAI authentication failure and a needs-attention state, but the live OpenAI request succeeded and the UI showed configured. This was treated as an unavailable prerequisite, not an invented failure."
+    },
+    "artifacts": [
+      {
+        "path": "case-24/00-initial.txt",
+        "sha256": "cb420f7f95a3feedab2c7bc89301f815d1c2a93d0c3b37e7e560ed330b4236ab",
+        "redacted": false
+      },
+      {
+        "path": "case-24/01-after-trust.txt",
+        "sha256": "4efb18e7915c23141b3760ec8554f081235a7d19c5e748481910fd2859483abf",
+        "redacted": false
+      },
+      {
+        "path": "case-24/02-providers-open.txt",
+        "sha256": "0cb106ad5c9f649b20a27b25f9babfa691b232a27865badc456d7794f935665f",
+        "redacted": false
+      },
+      {
+        "path": "case-24/03-openai-selected.txt",
+        "sha256": "16172ca493d5674f8332ae830f7b884180e859c5ea35492c7edcbe41477f0c5d",
+        "redacted": false
+      },
+      {
+        "path": "case-24/04-provider-list-before-recover.txt",
+        "sha256": "0cb106ad5c9f649b20a27b25f9babfa691b232a27865badc456d7794f935665f",
+        "redacted": false
+      },
+      {
+        "path": "case-24/05-recovery-menu.txt",
+        "sha256": "9b10dfe78f16eb0c21fa30a2d3332e76928c4fd8e971a23372ac9f346b008936",
+        "redacted": false
+      },
+      {
+        "path": "case-24/06-signin-first-open.txt",
+        "sha256": "b1ecf1342d09b044bb8bc304849eacba317879ffee28902ef3ea304227afbb19",
+        "redacted": false
+      },
+      {
+        "path": "case-24/07-after-first-cancel.txt",
+        "sha256": "0cb106ad5c9f649b20a27b25f9babfa691b232a27865badc456d7794f935665f",
+        "redacted": false
+      },
+      {
+        "path": "case-24/08-recovery-reopened.txt",
+        "sha256": "9b10dfe78f16eb0c21fa30a2d3332e76928c4fd8e971a23372ac9f346b008936",
+        "redacted": false
+      },
+      {
+        "path": "case-24/09-signin-second-open.txt",
+        "sha256": "e816f9f9563db89785bcf05b73561333ca16d89311ab6cc29b7eb9a6241f9b23",
+        "redacted": false
+      },
+      {
+        "path": "case-24/10-setup-restart.txt",
+        "sha256": "53ef17be4dbfb54c14a877f8f9f9cbbc701f9c0bb8edbbb33384cca1d7558afc",
+        "redacted": false
+      },
+      {
+        "path": "case-24/11-model-picker.txt",
+        "sha256": "702d2958c698398977e532a4898f8f913e082a321eaeec40205d8154bb9ef594",
+        "redacted": false
+      },
+      {
+        "path": "case-24/12-openai-model-tab.txt",
+        "sha256": "733c80012b1a30d2069700c6b08ee5c100d5cf6dec2f91d2e731e1c293852b1a",
+        "redacted": false
+      },
+      {
+        "path": "case-24/13-openai-model-selected.txt",
+        "sha256": "007315c9f31be394c1cfa97b0593d1b6a207c585df4c184581cd774e8a24ee4e",
+        "redacted": false
+      },
+      {
+        "path": "case-24/14-openai-active.txt",
+        "sha256": "1d67b5c1d64665578a4bdb4d6abd87fb27fc2779a279ca75afd7dd269524dff3",
+        "redacted": false
+      },
+      {
+        "path": "case-24/15-openai-live-request.txt",
+        "sha256": "6e3b9c5cf78afcb4c93fc1b8669bbd8beccef78e79db8e7162c7efa17c7593f9",
+        "redacted": false
+      },
+      {
+        "path": "case-24/16-model-picker-restore.txt",
+        "sha256": "4bac7f1a607c36f15eabe1494dd38e9d89daeb85633c69133250975311e81c85",
+        "redacted": false
+      },
+      {
+        "path": "case-24/17-claude-model-tab-restore.txt",
+        "sha256": "1dbb42bcc5dd6f166f89305dcae22b288d2424f96d82eb5158886d25fc230633",
+        "redacted": false
+      },
+      {
+        "path": "case-24/18-claude-fable-selected-restore.txt",
+        "sha256": "95d34d4eb3c22fb7f6b0ca89f1188705e329d0b40d7c9b8547f294bfb07f81d6",
+        "redacted": false
+      },
+      {
+        "path": "case-24/19-claude-effort-restore.txt",
+        "sha256": "f3cab376e5f91a2437ad0b6afbeac5cfae3dc64ff8a7d7350bd9467eebdb66d5",
+        "redacted": false
+      },
+      {
+        "path": "case-24/20-claude-restored.txt",
+        "sha256": "1f965b3697af846afbae9221c08daee42e4b4134d437d2e30452a03d48e9a4d2",
+        "redacted": false
+      },
+      {
+        "path": "case-24/21-final-providers.txt",
+        "sha256": "b719cdd723c78ca2ddff87146b79b33df800cae954abe29453ade04a3b43d9a2",
+        "redacted": false
+      },
+      {
+        "path": "case-24/actions.txt",
+        "sha256": "9e075cbbb357ea5a2d61b8423d3bb31b9a7b777fc35df5599129de7769d0b81b",
+        "redacted": false
+      },
+      {
+        "path": "case-24/report.md",
+        "sha256": "498f411c20ea47425aa0d300da5a474c734f60e70f824d4678ad4d609f679dc7",
+        "redacted": false
+      },
+      {
+        "path": "case-24/results.json",
+        "sha256": "ee2cf4dbcb2d22a35bf0623d513e8ca606f301a65b5055a7c0c03be2f6656f17",
+        "redacted": false
+      }
+    ],
+    "coordinator_note": {
+      "note": "The executor saved a partial blocked report but the process timed out. The current OpenAI credential worked, so expired-token recovery was not exercised; browser sign-in completion was not available."
+    },
+    "display_status": "timeout"
+  },
+  {
+    "number": 26,
+    "run_name": "case-26",
+    "execution": {
+      "case": 26,
+      "run_name": "case-26",
+      "started": 1789117356.5691168,
+      "ended": 1789117956.5748742,
+      "exit_code": "timeout",
+      "stdout": "",
+      "stderr": "",
+      "report_exists": false,
+      "results_exist": false
+    },
+    "title": "26. Recover according to the credential source",
+    "agent_status": "incomplete",
+    "summary": "Executor timed out without a final report. Captures and executed actions are retained; no pass is claimed.",
+    "thread_id": "01a08fb4-5c09-7471-bd1c-75c9179c8060",
+    "usage": null,
+    "result": {
+      "case_number": 26,
+      "status": "incomplete",
+      "summary": "Executor timed out without a final report. Captures and executed actions are retained; no pass is claimed."
+    },
+    "artifacts": [
+      {
+        "path": "case-26/00-initial.txt",
+        "sha256": "e755622c595c78eb89dfd3c4461f5306ffc8c9ea53eb8c04c64132ce6484cff7",
+        "redacted": false
+      },
+      {
+        "path": "case-26/01-after-trust.txt",
+        "sha256": "dd7a7e16e245b570fad68ca310c5c1ed02777f3a111ee8395f1494f5cd1a287c",
+        "redacted": false
+      },
+      {
+        "path": "case-26/02-providers.txt",
+        "sha256": "0cb106ad5c9f649b20a27b25f9babfa691b232a27865badc456d7794f935665f",
+        "redacted": false
+      },
+      {
+        "path": "case-26/03-openai-recover.txt",
+        "sha256": "9b10dfe78f16eb0c21fa30a2d3332e76928c4fd8e971a23372ac9f346b008936",
+        "redacted": false
+      },
+      {
+        "path": "case-26/04-openai-recover-confirmed.txt",
+        "sha256": "27d7335a360749009eaa5a8be93c84746bfcfa9f77225d73f506da1ae51d3d4d",
+        "redacted": false
+      },
+      {
+        "path": "case-26/05-after-openai-cancel.txt",
+        "sha256": "0cb106ad5c9f649b20a27b25f9babfa691b232a27865badc456d7794f935665f",
+        "redacted": false
+      },
+      {
+        "path": "case-26/06-openai-manage.txt",
+        "sha256": "16172ca493d5674f8332ae830f7b884180e859c5ea35492c7edcbe41477f0c5d",
+        "redacted": false
+      },
+      {
+        "path": "case-26/07-claude-selected.txt",
+        "sha256": "4fc5b2da617c99391e40ad24dc64d3332325f7f7c57b19bbdd5c0f69d7b2a883",
+        "redacted": false
+      },
+      {
+        "path": "case-26/08-claude-recover.txt",
+        "sha256": "074eb925ef2e5d422cc351d2fa0a235ca6b7bc52a8930ab099760e40cfd5cac4",
+        "redacted": false
+      },
+      {
+        "path": "case-26/09-claude-recover-confirmed.txt",
+        "sha256": "d8d6c1707d8fa548af05f401f42bac55ca64f9519988bdd159f84f07ac2ef996",
+        "redacted": false
+      },
+      {
+        "path": "case-26/10-model-picker.txt",
+        "sha256": "702d2958c698398977e532a4898f8f913e082a321eaeec40205d8154bb9ef594",
+        "redacted": false
+      },
+      {
+        "path": "case-26/11-model-right-1.txt",
+        "sha256": "733c80012b1a30d2069700c6b08ee5c100d5cf6dec2f91d2e731e1c293852b1a",
+        "redacted": false
+      },
+      {
+        "path": "case-26/12-model-right-2.txt",
+        "sha256": "702d2958c698398977e532a4898f8f913e082a321eaeec40205d8154bb9ef594",
+        "redacted": false
+      },
+      {
+        "path": "case-26/13-before-narrow.txt",
+        "sha256": "dd7a7e16e245b570fad68ca310c5c1ed02777f3a111ee8395f1494f5cd1a287c",
+        "redacted": false
+      },
+      {
+        "path": "case-26/14-narrow-chat.txt",
+        "sha256": "50a21eaae0a19524331a9fb75a448e023414cdaedf3bbaf3714d90719af37536",
+        "redacted": false
+      },
+      {
+        "path": "case-26/15-narrow-providers.txt",
+        "sha256": "35beeb373d3ac77aa39db9118c1d427a0badb4ac61f41de774b39de081346697",
+        "redacted": false
+      },
+      {
+        "path": "case-26/16-narrow-openai-recover.txt",
+        "sha256": "f026599d5f77eb607dacd128377f27bcb2a599751c820df0077b8bfafad7743e",
+        "redacted": false
+      },
+      {
+        "path": "case-26/17-narrow-openai-confirmed.txt",
+        "sha256": "64512c3696248d1923b96501f4dc2cd7e5704bf42d1a75b26e35dad7208debc5",
+        "redacted": false
+      },
+      {
+        "path": "case-26/18-narrow-claude-recover.txt",
+        "sha256": "a99f075c7bdd97366774ef8f53f07283197427543ba342f50abbbd755a9f3ad0",
+        "redacted": false
+      },
+      {
+        "path": "case-26/19-narrow-claude-confirmed.txt",
+        "sha256": "0db44c48e4b2a338afeec438f2bf4268bff4033e525c68dbcfbe689e2a62299f",
+        "redacted": false
+      },
+      {
+        "path": "case-26/20-narrow-claude-code-selected.txt",
+        "sha256": "081f6c368e781fdff02e23f33a4f9a7339aed4ccfca075a3d04c539212595ae0",
+        "redacted": false
+      },
+      {
+        "path": "case-26/21-narrow-claude-code-confirmed.txt",
+        "sha256": "0db44c48e4b2a338afeec438f2bf4268bff4033e525c68dbcfbe689e2a62299f",
+        "redacted": false
+      },
+      {
+        "path": "case-26/22-narrow-status.txt",
+        "sha256": "f7b4df8af1a6ff8ef111576a18d6600c88bfac1fd02cd99025f71bef5019b6a8",
+        "redacted": false
+      },
+      {
+        "path": "case-26/actions.txt",
+        "sha256": "c64d7cddef96dd27f69172e5c101b957aaae9ca26c82c46dab199777b6bf34b6",
+        "redacted": false
+      }
+    ],
+    "coordinator_note": {
+      "note": "The executor timed out without a final report. Environment, command/AWS and local-server fixtures were not provisioned; unrelated OpenAI/Claude account menus cannot qualify these credential-source cases."
+    },
+    "display_status": "timeout"
+  },
+  {
+    "number": 5,
+    "run_name": "case-05-replay",
+    "execution": {
+      "case": 5,
+      "run_name": "case-05-replay",
+      "started": 1789118280.784965,
+      "ended": 1789118589.0660129,
+      "exit_code": 0,
+      "stdout": "{\"exit_code\": 0, \"name\": \"case-05-replay\"}\n",
+      "stderr": "",
+      "report_exists": true,
+      "results_exist": true
+    },
+    "title": "5. Select Fable 5.1 Max and make a live request (replay)",
+    "agent_status": "passed",
+    "summary": "Claude Fable 5.1 Plan was offered, selected at Max, and returned exactly FABLE_51_OK in a live request; both visible model labels changed to max and no missing-environment or provider-auth-command error appeared.",
+    "thread_id": "01a08fc2-76b6-7032-bb0e-29a6324e57ca",
+    "usage": {
+      "input_tokens": 877223,
+      "cached_input_tokens": 789504,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 14471,
+      "reasoning_output_tokens": 5268
+    },
+    "result": {
+      "case_number": 5,
+      "status": "passed",
+      "summary": "Claude Fable 5.1 Plan was offered, selected at Max, and returned exactly FABLE_51_OK in a live request; both visible model labels changed to max and no missing-environment or provider-auth-command error appeared.",
+      "observed_checks": [
+        {
+          "name": "Fable 5.1 offered",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-05-replay/evidence/02-model-picker.txt"
+        },
+        {
+          "name": "Both model labels changed to Max",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-05-replay/evidence/06-fable-max-selected.txt"
+        },
+        {
+          "name": "Exact live response",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-05-replay/evidence/09-request-complete.txt"
+        },
+        {
+          "name": "No missing-environment or provider-auth-command error visible",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-05-replay/evidence/09-request-complete.txt"
+        }
+      ],
+      "blockers": [],
+      "actions": [
+        "Started the supplied candidate in the dedicated target tmux session.",
+        "Accepted the visible startup trust prerequisite.",
+        "Ran /model, selected Claude Fable 5.1 Plan, followed More reasoning\u2026 to Max, and confirmed the selection.",
+        "Typed Reply with exactly: FABLE_51_OK and pressed Enter separately.",
+        "Captured named plaintext UI checkpoints.",
+        "Sent Ctrl+D at the empty composer; the dedicated target session exited normally."
+      ],
+      "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+      "platform": "macOS arm64",
+      "limitations": [
+        "Bound to this candidate and platform; no Linux inference.",
+        "Evidence is tmux terminal UI capture, not native desktop UI evidence.",
+        "Credential validity is not inferred beyond the observed successful request."
+      ],
+      "test_instruction_ambiguity": "The visible model is labeled Claude Fable 5.1 Plan / claude-fable-5-1-plan, while the instruction says Claude Fable 5.1; it was treated as the matching sole Fable 5.1 catalog entry."
+    },
+    "artifacts": [
+      {
+        "path": "case-05-replay/00-prerequisite-initial.txt",
+        "sha256": "265dbcb5522ffa6e5729c11335a86f40ef12867ce029e80d4756514cad780c39",
+        "redacted": false
+      },
+      {
+        "path": "case-05-replay/01-after-prerequisite.txt",
+        "sha256": "dd7a7e16e245b570fad68ca310c5c1ed02777f3a111ee8395f1494f5cd1a287c",
+        "redacted": false
+      },
+      {
+        "path": "case-05-replay/02-model-picker.txt",
+        "sha256": "702d2958c698398977e532a4898f8f913e082a321eaeec40205d8154bb9ef594",
+        "redacted": false
+      },
+      {
+        "path": "case-05-replay/03-effort-picker.txt",
+        "sha256": "53c87c8ed1d684c7045da9166adfb37c279eec3a310120efa07ac2eedbd9669b",
+        "redacted": false
+      },
+      {
+        "path": "case-05-replay/04-more-reasoning-highlight.txt",
+        "sha256": "ddaa953b032550741e69095a46e22005dfae628ae966e7356dc4b7941e50737f",
+        "redacted": false
+      },
+      {
+        "path": "case-05-replay/05-after-max-selection.txt",
+        "sha256": "a679289e47818f72cd2dfbac9ba851de1d2e2a356b0e036a0fe67e45236f3df6",
+        "redacted": false
+      },
+      {
+        "path": "case-05-replay/06-fable-max-selected.txt",
+        "sha256": "cb242523a9b2460bbda89a91d4b06d362d65e035bf85d657f3db80d943bde566",
+        "redacted": false
+      },
+      {
+        "path": "case-05-replay/07-prompt-typed.txt",
+        "sha256": "b1e28fee9a135426b44c9caaccf6298c13d9ae97efd5c0dfb7ce529d65e38168",
+        "redacted": false
+      },
+      {
+        "path": "case-05-replay/08-request-progress.txt",
+        "sha256": "11124ebcaaa00ca38832ecc48c49d567d1330334cfc518ac48d9c79aa137a265",
+        "redacted": false
+      },
+      {
+        "path": "case-05-replay/09-request-complete.txt",
+        "sha256": "11124ebcaaa00ca38832ecc48c49d567d1330334cfc518ac48d9c79aa137a265",
+        "redacted": false
+      },
+      {
+        "path": "case-05-replay/10-normal-exit.txt",
+        "sha256": "bf38288f22fbfe35978e41994ccb22745cd2b0fc9ec005a3d937276193ffce0c",
+        "redacted": false
+      },
+      {
+        "path": "case-05-replay/final.md",
+        "sha256": "d0b214bf74ca11fa2cbb920b808e6e9d5f3e1e645741712bf9b7d0d2fe7b4095",
+        "redacted": false
+      },
+      {
+        "path": "case-05-replay/progress.md",
+        "sha256": "19c183ae783dbca780c62185e31a7b61761e0af19500ff805ca7e9880d6b3a53",
+        "redacted": false
+      },
+      {
+        "path": "case-05-replay/report.md",
+        "sha256": "e971deb8d01f720aae858057fb831fca6f8bf51d18483c5e917a4f33fee7e7df",
+        "redacted": false
+      },
+      {
+        "path": "case-05-replay/results.json",
+        "sha256": "8957c9b7c26f64c7932238d096282b12442c327bd36e7b79b4d54e94f91539ac",
+        "redacted": false
+      }
+    ],
+    "coordinator_note": {},
+    "display_status": "passed"
+  },
+  {
+    "number": 15,
+    "run_name": "case-15-replay",
+    "execution": {
+      "case": 15,
+      "run_name": "case-15-replay",
+      "started": 1789118594.993334,
+      "ended": 1789119045.7297049,
+      "exit_code": 0,
+      "stdout": "{\"exit_code\": 0, \"name\": \"case-15-replay\"}\n",
+      "stderr": "",
+      "report_exists": true,
+      "results_exist": true
+    },
+    "title": "15. Check API-key and browser guidance (replay)",
+    "agent_status": "passed",
+    "summary": "The API-key guidance and OpenAI device-login guidance were observed in the visible provider UI; both flows were canceled without entering credentials or completing login.",
+    "thread_id": "01a08fc7-4201-7853-b1d2-16ac55dac433",
+    "usage": {
+      "input_tokens": 1333818,
+      "cached_input_tokens": 1252608,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 21420,
+      "reasoning_output_tokens": 11497
+    },
+    "result": {
+      "case_number": 15,
+      "status": "passed",
+      "summary": "The API-key guidance and OpenAI device-login guidance were observed in the visible provider UI; both flows were canceled without entering credentials or completing login.",
+      "observed_checks": [
+        {
+          "check": "Startup prerequisite and provider-management UI available",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15-replay/evidence/01-after-prerequisite.txt"
+        },
+        {
+          "check": "API-key guidance names the environment variable, credential storage, and chat exclusion",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15-replay/evidence/04-anthropic-api-key-entry.txt"
+        },
+        {
+          "check": "API-key entry canceled without supplying a key",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15-replay/evidence/05-after-api-key-cancel.txt"
+        },
+        {
+          "check": "OpenAI account setup action exposes device link and remote-device guidance",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15-replay/evidence/09-openai-sign-in.txt"
+        },
+        {
+          "check": "OpenAI link remains represented as a terminal hyperlink in the narrow wrapped view",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15-replay/evidence/13-openai-sign-in-narrow-ansi.txt"
+        },
+        {
+          "check": "OpenAI login canceled and no repeated keychain prompt appeared",
+          "status": "passed",
+          "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15-replay/evidence/15-final-provider-list.txt"
+        }
+      ],
+      "blockers": [],
+      "actions": [
+        "Started only the supplied target TMUX session.",
+        "Accepted the visible directory-trust prerequisite.",
+        "Opened /providers and inspected Anthropic API-key setup, then pressed Escape.",
+        "Opened OpenAI management and its advertised recovery action.",
+        "Inspected the OpenAI device-login panel, redacting the device code in saved evidence, then pressed Escape.",
+        "Resized the target pane to 40 columns for the wrapping check and restored it to 150 columns.",
+        "Entered no credential, completed no login, and made no external purchase or permission change.",
+        "Returned to the empty chat composer and exited the dedicated target session with Ctrl+D."
+      ],
+      "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+      "platform": "macOS arm64",
+      "limitations": [
+        "Evidence is limited to visible raw-TMUX UI captures on macOS arm64.",
+        "The URL itself fit on one line at 40 columns; the surrounding device guidance wrapped.",
+        "Actual mouse activation or browser/native launch was not performed."
+      ],
+      "test_instruction_ambiguity": "The phrase 'clickable when wrapped' is ambiguous because the 40-column view wrapped the explanatory text but not the URL itself; the capture does show the URL enclosed by OSC 8 hyperlink metadata."
+    },
+    "artifacts": [
+      {
+        "path": "case-15-replay/00-start.txt",
+        "sha256": "3e48b590ef7c647a35404802e0af80ed7672538a29b4ff49510d17d774f0e417",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/01-after-prerequisite.txt",
+        "sha256": "3e48b590ef7c647a35404802e0af80ed7672538a29b4ff49510d17d774f0e417",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/02-providers.txt",
+        "sha256": "0cb106ad5c9f649b20a27b25f9babfa691b232a27865badc456d7794f935665f",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/03-anthropic-management.txt",
+        "sha256": "b5f480d6d9708f49b790c3a42a5dcb55d2c0721057db86d30dd20e1b5bae869d",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/04-anthropic-api-key-entry.txt",
+        "sha256": "ce234be44a23b054d58bb6c8cf27697bad9a37a68f2e9c364d5b650c3a14fcbd",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/05-after-api-key-cancel.txt",
+        "sha256": "9ef19a43fe854f92e702727ff08d96a10c2e77f35be3afcf890aeace114c023f",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/06-openai-management.txt",
+        "sha256": "16172ca493d5674f8332ae830f7b884180e859c5ea35492c7edcbe41477f0c5d",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/07-openai-selected-list.txt",
+        "sha256": "0cb106ad5c9f649b20a27b25f9babfa691b232a27865badc456d7794f935665f",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/08-openai-recovery.txt",
+        "sha256": "9b10dfe78f16eb0c21fa30a2d3332e76928c4fd8e971a23372ac9f346b008936",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/09-openai-sign-in.txt",
+        "sha256": "27d7335a360749009eaa5a8be93c84746bfcfa9f77225d73f506da1ae51d3d4d",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/10-after-openai-cancel.txt",
+        "sha256": "0cb106ad5c9f649b20a27b25f9babfa691b232a27865badc456d7794f935665f",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/11-openai-sign-in-wide.txt",
+        "sha256": "27d7335a360749009eaa5a8be93c84746bfcfa9f77225d73f506da1ae51d3d4d",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/12-openai-sign-in-narrow.txt",
+        "sha256": "64512c3696248d1923b96501f4dc2cd7e5704bf42d1a75b26e35dad7208debc5",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/13-openai-sign-in-narrow-ansi.txt",
+        "sha256": "caf67bfc5400e564f133e106ca656263ebc8a1ed65ae78933645b254a2742ba6",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/14-after-narrow-cancel.txt",
+        "sha256": "35beeb373d3ac77aa39db9118c1d427a0badb4ac61f41de774b39de081346697",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/15-final-provider-list.txt",
+        "sha256": "0cb106ad5c9f649b20a27b25f9babfa691b232a27865badc456d7794f935665f",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/16-empty-chat-before-exit.txt",
+        "sha256": "ff82d5c759d5f7c694ccb6b7c7413a119fcd5911df82dda6c53514ef422bf55d",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/17-exit-status.txt",
+        "sha256": "9f1a3a99872a0a6dded64f07e4f3ed19da39ae688a587e7c45a5451509ad79fc",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/final.md",
+        "sha256": "c8d85bc57efff2707c0274aa49fd63e6af56a3666d1a660000c9455b37fddd02",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/progress.md",
+        "sha256": "f972722283eadb91f81b0468017d907d3a3f6fda956a02d2e03aed4febf5c659",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/report.md",
+        "sha256": "781cbb076543996e82de4d6048d100b554f4f9f983a8c0f7cea51a5d3a767fb3",
+        "redacted": false
+      },
+      {
+        "path": "case-15-replay/results.json",
+        "sha256": "7d0a81529747d05bb22b2715d2207498989e9ca31acc70e7da8e4c2f734f9da6",
+        "redacted": false
+      }
+    ],
+    "coordinator_note": {
+      "status": "blocked",
+      "note": "API-key explanatory text, account device-login guidance, cancellation and hyperlink metadata were observed. The agent's full pass overreaches: native Keychain was deliberately bypassed by this fixture; actual hyperlink activation was not tested, and the URL itself did not wrap at 40 columns. These native/wrapping criteria remain unverified. Original verdict retained."
+    },
+    "display_status": "blocked"
+  }
+]

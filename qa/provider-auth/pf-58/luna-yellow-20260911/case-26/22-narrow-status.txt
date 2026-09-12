@@ -1,0 +1,48 @@
+╭──────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)        │
+│                                      │
+│ model:       claude-fable-5-1-plan … │
+│ directory:   ~/work                  │
+│ permissions: YOLO mode               │
+╰──────────────────────────────────────╯
+
+/status
+
+╭──────────────────────────────────────╮
+│  >_ Corbanu Terminal (v0.1.41)       │
+│                                      │
+│  Model:                Claude Fable  │
+│  Model provider:       Claude Plan - │
+│  Directory:            ~/work        │
+│  Permissions:          Full Access   │
+│  Security:             Requested     │
+│                        Permissive;   │
+│                        effective     │
+│                        protection    │
+│                        unverified (/ │
+│                        security)     │
+│  Agents.md:            <none>        │
+│  Account:              Claude Plan a │
+│  Collaboration mode:   Default       │
+│  Session:              01a08fb5-2410 │
+│                                      │
+│  Token usage:          0 total  (0 i │
+│  Limits:               data not avai │
+╰──────────────────────────────────────╯
+
+
+› Use /skills to list available skills
+
+  Claude Fable 5.1 Plan via claude-plan…
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,29 @@
+{
+  "1": {
+    "note": "TMUX cannot certify the native shortcut. The user separately reported the second launch on another desktop; that known native failure remains open."
+  },
+  "2": {
+    "note": "Fixture v1 had an incorrectly relocated vault fallback key. Its startup/status observations do not prove live Claude validity. Code Mode and version-notice prerequisites were independently left unverified by the executor."
+  },
+  "3": {
+    "note": "Fixture v1 caused Claude unavailability; this is not a new product regression. The missing wallet and Ambient credential are genuine missing test prerequisites. The original agent report is preserved."
+  },
+  "case-15-replay": {
+    "status": "blocked",
+    "note": "API-key explanatory text, account device-login guidance, cancellation and hyperlink metadata were observed. The agent's full pass overreaches: native Keychain was deliberately bypassed by this fixture; actual hyperlink activation was not tested, and the URL itself did not wrap at 40 columns. These native/wrapping criteria remain unverified. Original verdict retained."
+  },
+  "15": {
+    "status": "invalid_run",
+    "note": "The original executor inspected /model rather than the /providers credential-management route. Its report of absent setup screens does not establish product unavailability. A fresh replay supplies the public entry route without changing the human expectations."
+  },
+  "24": {
+    "note": "The executor saved a partial blocked report but the process timed out. The current OpenAI credential worked, so expired-token recovery was not exercised; browser sign-in completion was not available."
+  },
+  "26": {
+    "note": "The executor timed out without a final report. Environment, command/AWS and local-server fixtures were not provisioned; unrelated OpenAI/Claude account menus cannot qualify these credential-source cases."
+  },
+  "5": {
+    "status": "invalid_run",
+    "note": "The executor sent only FABLE_51_OK, not the prescribed full prompt Reply with exactly: FABLE_51_OK. Its observed reply therefore does not support the reported product failure. The original packet extraction lost inline-code formatting; formatting was restored for subsequent cases. Picker, matching labels and live reply observations remain useful. A faithful replay is required."
+  }
+}

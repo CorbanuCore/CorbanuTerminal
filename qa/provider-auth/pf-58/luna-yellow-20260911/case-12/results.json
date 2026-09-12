@@ -1,0 +1,35 @@
+{
+  "case_number": 12,
+  "status": "blocked",
+  "summary": "The accessible single-session TUI subset remained usable, switched models, and returned READY; the required three concurrent launcher windows on macOS Desktop 3 could not be exercised through the supplied interface.",
+  "observed_checks": [
+    {
+      "check": "Accessible TUI session remains usable and accepts a short request",
+      "status": "passed",
+      "evidence_path": "02_tui_model_switch_request.txt"
+    },
+    {
+      "check": "Accessible TUI session switches models",
+      "status": "passed",
+      "evidence_path": "02_tui_model_switch_request.txt"
+    },
+    {
+      "check": "Three concurrent launcher windows on Desktop 3 occupy distinct card slots and remain independently usable without replacement, overlap, or movement",
+      "status": "blocked",
+      "evidence_path": "01_tui_start.txt"
+    }
+  ],
+  "blockers": [
+    "The native Applications shortcut and macOS Desktop 3 placement are not accessible through this interface.",
+    "TMUX windows cannot be substituted as proof of native launcher windows or card slots.",
+    "The instruction does not specify which app shortcut to use, so no undocumented shortcut was guessed."
+  ],
+  "actions": "See actions.log for the complete executed key/action history.",
+  "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "platform": "macOS arm64",
+  "limitations": [
+    "Only visible TMUX TUI behavior was exercised.",
+    "Native Applications shortcut, Desktop 3, launcher cards, and cross-window independence were not observable.",
+    "No Linux behavior is inferred."
+  ]
+}

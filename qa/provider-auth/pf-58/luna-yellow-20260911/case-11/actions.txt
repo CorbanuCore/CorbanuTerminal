@@ -1,0 +1,12 @@
+Action history (visible TMUX execution)
+1. Started the supplied target with the instructed dedicated TMUX socket/session command.
+2. At the visible trust prompt, pressed Enter to continue.
+3. Typed: Write several paragraphs about the history of the telescope.
+4. Pressed Enter to submit.
+5. Observed multi-paragraph response text streaming in the pane.
+6. Pressed Escape while the response was streaming.
+7. Typed exactly: Reply with exactly: RECOVERY_OK
+8. Pressed Enter to submit.
+9. Observed the response RECOVERY_OK and the composer prompt returned.
+10. Captured the final pane and complete scrollback to the named evidence files.
+11. Exited only the `target` session on the dedicated socket.

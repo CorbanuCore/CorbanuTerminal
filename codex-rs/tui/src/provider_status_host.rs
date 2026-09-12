@@ -262,11 +262,11 @@ impl ProviderStatusHost {
         }
     }
 
-    pub(crate) fn reject_credential_attempt(&self, scope: &str) -> bool {
+    pub(crate) fn reject_credential_attempt(&self, scope: &str) -> Option<String> {
         self.health
             .write()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .reject(scope)
+            .reject_provider(scope)
     }
 
     pub(crate) fn finish_credential_attempt(&self, scope: &str) {

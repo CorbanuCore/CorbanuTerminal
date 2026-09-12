@@ -1,0 +1,48 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       claude-fable-5-1-plan high   /model to cha… │
+│ directory:   ~/work                                      │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+
+  Select Reasoning Level for Claude Fable 5.1 Plan
+
+  1. Low                       Lower latency and token use for narrow edits.
+  2. Medium                    Moderate reasoning for everyday coding.
+  3. High (default) (current)  Default Fable 5.1 reasoning for complex coding.
+  4. Extra high                Deeper reasoning for difficult implementation work.
+› 5. More reasoning…           Max consumes usage limits faster
+
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

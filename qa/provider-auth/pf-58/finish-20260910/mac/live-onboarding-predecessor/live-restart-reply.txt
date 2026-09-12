@@ -1,0 +1,44 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       claude-fable-5-1-plan high   /model to cha… │
+│ directory:   /Volumes/…/worktrees/provider-reauth-health │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+
+› Reply only with PF58, RESTART, LIVE, OK joined by underscores. Do not use tools.
+
+
+• PF58_RESTART_LIVE_OK
+
+
+› Improve documentation in @filename
+
+  Claude Fable 5.1 Plan via claude-plan high · /Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health · Corbanu Terminal · TPS: 8.9…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

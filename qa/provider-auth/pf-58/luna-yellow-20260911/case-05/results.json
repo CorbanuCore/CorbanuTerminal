@@ -1,0 +1,52 @@
+{
+  "case_number": 5,
+  "status": "failed",
+  "summary": "Claude Fable 5.1 Plan was offered and selected at Max, with both visible labels changing immediately, but the live response to the exact prompt FABLE_51_OK was 'Acknowledged. What would you like me to do?' instead of the required exact response.",
+  "observed_checks": [
+    {
+      "name": "Claude Fable 5.1 is offered",
+      "status": "passed",
+      "evidence_path": "03-model-menu.txt"
+    },
+    {
+      "name": "Max reasoning is offered and selected",
+      "status": "passed",
+      "evidence_path": "05-more-reasoning.txt"
+    },
+    {
+      "name": "Header and footer change immediately to Fable 5.1 at max",
+      "status": "passed",
+      "evidence_path": "06-max-selected.txt"
+    },
+    {
+      "name": "Exact prompt FABLE_51_OK is entered and submitted",
+      "status": "passed",
+      "evidence_path": "07-prompt-typed.txt"
+    },
+    {
+      "name": "No visible missing-environment or provider-auth-command error",
+      "status": "passed",
+      "evidence_path": "08-request-submitted.txt"
+    },
+    {
+      "name": "Live response is exactly FABLE_51_OK",
+      "status": "failed",
+      "evidence_path": "08-request-submitted.txt"
+    }
+  ],
+  "blockers": [],
+  "actions": [
+    "Accepted the visible directory trust prompt with Enter.",
+    "Opened /model using literal text followed by a separate Enter.",
+    "Selected Claude Fable 5.1 Plan.",
+    "Opened More reasoning… and selected Max.",
+    "Typed FABLE_51_OK and pressed Enter separately.",
+    "Exited only the target TMUX session created for this run."
+  ],
+  "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "platform": "macOS arm64",
+  "limitations": [
+    "Black-box TUI observation only; no source, binary internals, credentials, prior reports, or external guidance were inspected."
+  ],
+  "test_instruction_ambiguity": "The UI labels the model Claude Fable 5.1 Plan and exposes Max under More reasoning… rather than on the first effort menu; the visible path was followed."
+}

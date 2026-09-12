@@ -1,0 +1,44 @@
+■ rate limited by provider (429 Too Many Requests). Wait before continuing; immediate retry may fail again
+
+
+› Retry after service restoration 429
+
+
+• JOURNEY_REPLY_13
+
+
+› Controlled service failure 500
+
+
+■ We're currently experiencing high demand, which may cause temporary errors.
+
+
+› Retry after service restoration 500
+
+
+• JOURNEY_REPLY_15
+
+
+› Controlled rejected credential
+
+
+⚠ QA Route A (qa-a) credential was rejected. Open /providers, select QA Route A, and press r to recover. Other providers are unchanged.
+
+■ unexpected status 401 Unauthorized: Synthetic controlled failure, url: http://127.0.0.1:45997/a/responses
+
+
+› Continue after explicit credential repair
+
+
+• JOURNEY_REPLY_17
+
+
+› Implement {feature}
+
+  fixture-model via qa-a low · /home/travis/worktrees/provider-reauth-health-final · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+

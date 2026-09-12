@@ -1,0 +1,45 @@
+
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       gpt-5.6-sol low   /model to change          │
+│ directory:   /Volumes/…/worktrees/provider-reauth-health │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+
+› Restart persistence request 1
+
+
+• JOURNEY_REPLY_5
+
+
+  Providers
+  Configure providers and control whether they are eligible for use.
+  Configured means credentials are present, not verified by the provider.
+
+  10. Meta            Not configured · unavailable
+  11. Baseten         Not configured · unavailable
+  12. Vercel          Not configured · unavailable
+  13. Amazon Bedrock  Not configured · unavailable
+  14. Ollama          Enabled · configured
+  15. LM Studio       Enabled · configured
+  16. QA Route A      Enabled · configured
+› 17. QA Route B      Enabled · configured
+
+  r recover credentials · Enter manage · Esc back
+  Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+

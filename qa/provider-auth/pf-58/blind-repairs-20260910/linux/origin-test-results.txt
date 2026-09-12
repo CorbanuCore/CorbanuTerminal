@@ -1,0 +1,5 @@
+ Nextest run ID 18e75f47-d6af-4353-936b-c45ebf370148 with nextest profile: local
+    Starting 1 test across 1 binary (89 tests skipped)
+        PASS [  18.683s] (1/1) codex-tui::all suite::provider_management::reauthentication_apps::tmux_untrusted_apps_origin_preserves_account_and_healthy_model_route
+────────────
+     Summary [  18.684s] 1 test run: 1 passed, 89 skipped

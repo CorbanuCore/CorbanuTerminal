@@ -1,0 +1,272 @@
+fbeca78701ba7c0d400ce42832cd8339451191615df4ea28aac701b27c88437d  qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log
+acc2e09b102e63b9c3c5aa3ad9429dccd174df48732dd65f16759866e07b2427  qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log
+7376884c0880391e1f317278c0f10d55db518fbed8449e56d9ca62f64d00fa8d  qa/provider-auth/pf-58/finish-20260910/linux/tmux-followup.log
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:     Starting 227 tests across 2 binaries (3842 tests skipped)
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.003s] (  1/227) codex-provider-auth credential_health::tests::changed_credential_rejects_stale_failure_and_cancel_does_not_clear_failure
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.003s] (  2/227) codex-provider-auth credential_health::tests::no_auth_local_provider_is_not_given_a_login_failure
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.003s] (  3/227) codex-provider-auth credential_health::tests::old_source_failure_does_not_poison_replacement_source
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.003s] (  4/227) codex-provider-auth credential_health::tests::rejected_credential_preserves_selection_activation_and_unrelated_provider
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.002s] (  5/227) codex-provider-auth credential_health::tests::rejection_identity_is_captured_and_consumed_once
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.010s] (  6/227) codex-tui app::tests::active_turn_interrupt_race_extracts_actual_turn_id_from_mismatch
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (  7/227) codex-tui app::tests::interrupt_failure_message_is_pane_local
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.024s] (  8/227) codex-tui app::provider_management_status::tests::manager_open_syncs_configured_runtime_models_before_policy_refresh
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (  9/227) codex-tui app::tests::interrupted_turn_never_dispatches_even_with_complete_blocks
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.011s] ( 10/227) codex-tui app::tests::model_catalog::accepted_model_migration_persists_target_default_reasoning_effort
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.010s] ( 11/227) codex-tui app::tests::model_catalog::model_migration_prompt_respects_hide_flag_and_self_target
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.013s] ( 12/227) codex-tui app::tests::model_catalog::model_migration_prompt_shows_for_hidden_model
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.011s] ( 13/227) codex-tui app::tests::model_catalog::model_migration_prompt_skips_hidden_gpt_targets
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.010s] ( 14/227) codex-tui app::tests::model_catalog::model_migration_prompt_skips_when_target_missing_or_hidden
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.011s] ( 15/227) codex-tui app::tests::model_catalog::select_model_availability_nux_does_not_fall_back_to_older_announcement
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 16/227) codex-tui app::tests::model_catalog::select_model_availability_nux_picks_only_eligible_model
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.014s] ( 17/227) codex-tui app::tests::model_catalog::prepare_startup_tooltip_override_suppresses_model_availability_nux
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.010s] ( 18/227) codex-tui app::tests::model_catalog::select_model_availability_nux_returns_none_when_all_models_are_exhausted
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.009s] ( 19/227) codex-tui app::tests::model_catalog::select_model_availability_nux_uses_existing_model_order_as_priority
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 20/227) codex-tui app::tests::provider_manager_claude_intent_uses_typed_status_and_recovery_source
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.011s] ( 21/227) codex-tui app::tests::provider_manager_open_preserves_lazy_command_authorization_without_shared_state
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.019s] ( 22/227) codex-tui app::tests::native_spawn_turn_interrupt_updates_status_without_closing_app
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] ( 23/227) codex-tui app::tests::provider_manager_reuses_policy_health_after_setup_handle_is_cleared
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.024s] ( 24/227) codex-tui app::tests::replayed_interrupted_turn_restores_queued_input_to_composer
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.124s] ( 25/227) codex-tui app::tests::interrupt_without_active_turn_is_treated_as_handled
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.086s] ( 26/227) codex-tui app::tests::provider_manager_stale_api_key_completion_is_inert_and_current_settles
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.087s] ( 27/227) codex-tui app::tests::provider_picker_refresh::provider_manager_late_refresh_updates_picker_without_reopening_dismissed_menu
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.089s] ( 28/227) codex-tui app::tests::stale_provider_manager_claude_recovery_source_is_inert
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.019s] ( 29/227) codex-tui app::tests::token_usage_update_refreshes_status_line_with_runtime_context_window
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.009s] ( 30/227) codex-tui bottom_pane::app_link_view::tests::regular_app_link_does_not_require_terminal_title_action
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 31/227) codex-tui bottom_pane::app_link_view::tests::tool_suggestion_requires_terminal_title_action
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 32/227) codex-tui bottom_pane::chat_composer::effort_tests::effort_transition_does_not_queue_a_missing_outgoing_status_line
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.191s] ( 33/227) codex-tui app::tests::safety_buffering::active_turn_interrupt_is_nonblocking_and_coalesces_repeated_requests
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.009s] ( 34/227) codex-tui bottom_pane::chat_composer::tests::status_line_hyperlink_marks_pr_number_cells
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 35/227) codex-tui bottom_pane::effort_status_line::tests::label_and_refreshed_line_appear_in_order
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.009s] ( 36/227) codex-tui bottom_pane::effort_status_line::tests::clock_waits_for_the_first_visible_frame
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 37/227) codex-tui bottom_pane::effort_status_line::tests::outgoing_status_line_moves_right_and_clips_at_the_edge
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 38/227) codex-tui bottom_pane::effort_status_line::tests::palette_status_line_colors_survive_the_fade
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 39/227) codex-tui bottom_pane::effort_status_line::tests::ultra_letters_start_wide_at_the_edges_and_converge_to_the_center
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.009s] ( 40/227) codex-tui bottom_pane::effort_status_line::tests::transition_frames_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 41/227) codex-tui bottom_pane::effort_status_line::tests::unicode_and_span_boundaries_are_safe_on_narrow_rows
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 42/227) codex-tui bottom_pane::footer::tests::footer_status_line_truncates_to_keep_mode_indicator
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 43/227) codex-tui bottom_pane::pending_input_preview::tests::render_one_pending_steer_with_remapped_interrupt_binding
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.010s] ( 44/227) codex-tui bottom_pane::list_selection_view::tests::snapshot_model_picker_width_80
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.009s] ( 45/227) codex-tui bottom_pane::request_user_input::tests::esc_in_notes_mode_without_options_interrupts
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] ( 46/227) codex-tui bottom_pane::request_user_input::tests::esc_in_options_mode_interrupts
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 47/227) codex-tui bottom_pane::request_user_input::tests::interrupt_discards_queued_requests_and_emits_interrupt
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.010s] ( 48/227) codex-tui bottom_pane::request_user_input::tests::request_user_input_freeform_remapped_interrupt_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 49/227) codex-tui bottom_pane::request_user_input::tests::request_user_input_uses_remapped_interrupt_binding_while_notes_are_visible
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 50/227) codex-tui bottom_pane::status_line_setup::tests::brand_is_selectable_id
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 51/227) codex-tui bottom_pane::status_line_setup::tests::context_used_accepts_context_usage_legacy_id
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.009s] ( 52/227) codex-tui bottom_pane::status_line_setup::tests::context_remaining_is_selectable_id
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] ( 53/227) codex-tui bottom_pane::status_line_setup::tests::model_is_canonical_and_accepts_model_name_legacy_id
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] ( 54/227) codex-tui bottom_pane::status_line_setup::tests::git_summary_items_are_selectable_ids
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 55/227) codex-tui bottom_pane::status_line_setup::tests::parse_status_line_items_accepts_title_only_variants
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.011s] ( 56/227) codex-tui bottom_pane::status_line_setup::tests::preview_includes_thread_title
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.011s] ( 57/227) codex-tui bottom_pane::status_line_setup::tests::preview_uses_placeholders_when_runtime_values_are_missing
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.013s] ( 58/227) codex-tui bottom_pane::status_line_setup::tests::preview_uses_runtime_values
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 59/227) codex-tui bottom_pane::status_line_setup::tests::project_name_is_canonical_and_accepts_legacy_ids
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 60/227) codex-tui bottom_pane::status_line_setup::tests::reasoning_is_selectable_id
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 61/227) codex-tui bottom_pane::status_line_setup::tests::run_state_is_canonical_and_accepts_status_legacy_id
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] ( 62/227) codex-tui bottom_pane::status_line_style::tests::pull_request_number_uses_link_style
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.014s] ( 63/227) codex-tui bottom_pane::status_line_setup::tests::setup_view_snapshot_uses_runtime_preview_values
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] ( 64/227) codex-tui bottom_pane::status_line_style::tests::status_line_segments_can_disable_theme_colors
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] ( 65/227) codex-tui bottom_pane::status_line_style::tests::status_line_segments_dim_separators_and_use_theme_styles_first
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] ( 66/227) codex-tui bottom_pane::status_line_style::tests::status_line_segments_preserve_order_and_plain_text
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 67/227) codex-tui bottom_pane::status_line_style::tests::status_line_segments_return_none_when_empty
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 68/227) codex-tui bottom_pane::status_line_style::tests::status_line_segments_soften_rgb_theme_styles_without_dimming_text
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.009s] ( 69/227) codex-tui bottom_pane::tests::esc_interrupts_running_task_when_no_popup
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.010s] ( 70/227) codex-tui bottom_pane::tests::esc_dismisses_slash_command_popup_without_interrupting_task
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.009s] ( 71/227) codex-tui bottom_pane::tests::esc_release_after_dismissing_agent_picker_does_not_interrupt_task
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 72/227) codex-tui bottom_pane::tests::esc_with_agent_command_without_popup_does_not_interrupt_task
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 73/227) codex-tui bottom_pane::tests::remapped_interrupt_turn_uses_configured_key_including_agent_drafts
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 74/227) codex-tui bottom_pane::tests::esc_with_skill_popup_does_not_interrupt_task
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] ( 75/227) codex-tui bottom_pane::title_setup::tests::parse_terminal_title_items_accepts_kebab_case_variants
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 76/227) codex-tui bottom_pane::title_setup::tests::parse_terminal_title_items_preserves_order
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 77/227) codex-tui bottom_pane::title_setup::tests::parse_terminal_title_items_rejects_invalid_ids
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 78/227) codex-tui branch_summary::tests::status_line_pr_fallback_searches_parent_repo_first
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 79/227) codex-tui branch_summary::tests::status_line_pr_view_parser_requires_open_pr
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 80/227) codex-tui chatwidget::interrupts::tests::remove_resolved_prompt_keeps_lifecycle_events
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 81/227) codex-tui chatwidget::interrupts::tests::remove_resolved_prompt_matches_exec_approval_id
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 82/227) codex-tui chatwidget::interrupts::tests::remove_resolved_prompt_removes_matching_user_input_only
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] ( 83/227) codex-tui chatwidget::model_popups::tests::model_picker_display_label_uses_catalog_name_with_slug_in_description
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] ( 84/227) codex-tui chatwidget::model_popups::tests::model_picker_groups_models_by_user_facing_provider
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] ( 85/227) codex-tui chatwidget::provider_health::tests::late_turn_failure_names_original_provider_and_ignores_recovered_attempt
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.024s] ( 86/227) codex-tui chatwidget::provider_health::tests::apps_rejection_marks_openai_not_current_claude_and_r_opens_recovery
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] ( 87/227) codex-tui chatwidget::provider_health::tests::only_definite_typed_auth_rejections_require_reauthentication
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] ( 88/227) codex-tui chatwidget::provider_manager::tests::external_credential_copy_never_claims_deletion
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.016s] ( 89/227) codex-tui chatwidget::provider_manager::tests::opening_provider_actions_keeps_manager_as_the_parent_view
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.020s] ( 90/227) codex-tui chatwidget::provider_manager::tests::provider_manager_uses_shared_status_copy_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.016s] ( 91/227) codex-tui chatwidget::provider_manager::tests::refresh_preserves_provider_selection_by_identity_and_falls_back_when_removed
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.016s] ( 92/227) codex-tui chatwidget::tests::composer_submission::escape_interrupts_stream_when_progress_indicator_is_hidden
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] ( 93/227) codex-tui chatwidget::tests::composer_submission::interrupt_prepends_queued_messages_before_existing_composer_text
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] ( 94/227) codex-tui chatwidget::tests::composer_submission::interrupt_restores_queued_messages_into_composer
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.021s] ( 95/227) codex-tui chatwidget::tests::composer_submission::interrupted_turn_restore_keeps_active_mode_for_resubmission
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.477s] ( 96/227) codex-tui app::tests::safety_buffering::safety_retry_replays_older_interruption_notices
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.517s] ( 97/227) codex-tui app::tests::safety_buffering::safety_retry_preserves_a_committed_steer_from_the_interrupted_turn
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.021s] ( 98/227) codex-tui chatwidget::tests::composer_submission::output_free_ctrl_c_interrupt_keeps_prompt_and_opens_blank_composer
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] ( 99/227) codex-tui chatwidget::tests::composer_submission::output_free_esc_interrupt_keeps_prompt_and_opens_blank_composer
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (100/227) codex-tui chatwidget::tests::composer_submission::pending_steer_interrupt_uses_remapped_binding
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.021s] (101/227) codex-tui chatwidget::tests::custom_model_identity::custom_model_routes_are_distinguishable_before_selection
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.020s] (102/227) codex-tui chatwidget::tests::exec_flow::interrupt_preserves_unified_exec_processes
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (103/227) codex-tui chatwidget::tests::exec_flow::interrupt_preserves_unified_exec_wait_streak_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.020s] (104/227) codex-tui chatwidget::tests::popups_and_settings::codex_pane_model_picker_uses_provider_tabs_and_opens_name_prompt
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.022s] (105/227) codex-tui chatwidget::tests::popups_and_settings::corbanu_api_model_picker_preserves_ambient_and_shows_the_six_public_routes
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.083s] (106/227) codex-tui chatwidget::tests::popups_and_settings::model_picker_hides_fake_openai_models_and_shows_curated_provider_models
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (107/227) codex-tui chatwidget::tests::popups_and_settings::model_picker_hides_show_in_picker_false_models_from_cache
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.158s] (108/227) codex-tui chatwidget::tests::popups_and_settings::model_picker_dismisses_after_selecting_openrouter_model_without_effort_choices
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.019s] (109/227) codex-tui chatwidget::tests::popups_and_settings::model_picker_opens_vercel_glm_reasoning_modes
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.020s] (110/227) codex-tui chatwidget::tests::popups_and_settings::model_picker_same_slug_marks_only_exact_provider_current
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.157s] (111/227) codex-tui chatwidget::tests::popups_and_settings::model_picker_opens_openrouter_reasoning_options_for_gemini
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.015s] (112/227) codex-tui chatwidget::tests::review_mode::ctrl_c_interrupts_without_arming_quit_when_double_press_disabled
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.293s] (113/227) codex-tui chatwidget::tests::popups_and_settings::model_picker_claude_recovery_refresh_restores_full_subscription_catalog
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (114/227) codex-tui chatwidget::tests::review_mode::esc_with_pending_steers_overrides_agent_command_interrupt_behavior
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.020s] (115/227) codex-tui chatwidget::tests::review_mode::esc_interrupt_sends_all_pending_steers_immediately_and_keeps_existing_draft
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.456s] (116/227) codex-tui chatwidget::provider_model_policy::tests::custom_provider_selection_tracks_shared_active_policy
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (117/227) codex-tui chatwidget::tests::review_mode::esc_with_review_queued_steers_shows_warning_and_does_not_interrupt
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.016s] (118/227) codex-tui chatwidget::tests::review_mode::interrupted_turn_error_message_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.019s] (119/227) codex-tui chatwidget::tests::review_mode::interrupted_turn_after_goal_budget_limited_uses_budget_message_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.050s] (120/227) codex-tui chatwidget::tests::review_mode::interrupt_exec_marks_failed_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (121/227) codex-tui chatwidget::tests::review_mode::interrupted_turn_pending_steers_message_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.019s] (122/227) codex-tui chatwidget::tests::review_mode::interrupted_turn_restores_queued_messages_with_images_and_elements
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.019s] (123/227) codex-tui chatwidget::tests::review_mode::manual_interrupt_restores_pending_steer_mention_bindings_to_composer
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.019s] (124/227) codex-tui chatwidget::tests::review_mode::manual_interrupt_restores_pending_steers_before_queued_messages
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (125/227) codex-tui chatwidget::tests::review_mode::manual_interrupt_restores_pending_steers_to_composer
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.177s] (126/227) codex-tui chatwidget::tests::popups_and_settings::model_picker_selects_kimi_k3_with_required_max_reasoning
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.019s] (127/227) codex-tui chatwidget::tests::side::side_context_label_preserves_status_line_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.019s] (128/227) codex-tui chatwidget::tests::side::suppressed_interrupted_turn_notice_skips_history_warning
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (129/227) codex-tui chatwidget::tests::slash_commands::interrupted_merged_message_history_encodes_mentions_once
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (130/227) codex-tui chatwidget::tests::status_and_layout::ctrl_c_interrupt_pauses_active_goal_turn
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (131/227) codex-tui chatwidget::tests::status_and_layout::ctrl_c_interrupts_agent_turn_even_if_bottom_pane_running_state_is_stale
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (132/227) codex-tui chatwidget::tests::status_and_layout::default_status_line_includes_product_brand
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.053s] (133/227) codex-tui chatwidget::tests::slash_commands::interrupt_disambiguates_same_sized_goal_pastes
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (134/227) codex-tui chatwidget::tests::status_and_layout::gpu_spend_indicator_is_visible_when_status_line_has_no_configured_items
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (135/227) codex-tui chatwidget::tests::status_and_layout::esc_interrupt_pauses_active_goal_turn
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (136/227) codex-tui chatwidget::tests::status_and_layout::interrupted_turn_clears_visible_running_hook
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.016s] (137/227) codex-tui chatwidget::tests::status_and_layout::stale_status_line_git_summary_update_is_ignored
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (138/227) codex-tui chatwidget::tests::status_and_layout::raw_output_status_line_value_only_shows_when_enabled
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.020s] (139/227) codex-tui chatwidget::tests::status_and_layout::request_user_input_interrupt_pauses_active_goal_turn
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.016s] (140/227) codex-tui chatwidget::tests::status_and_layout::status_line_and_terminal_title_reasoning_render_only_effort
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.015s] (141/227) codex-tui chatwidget::tests::status_and_layout::status_line_branch_changes_render_no_changes
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.016s] (142/227) codex-tui chatwidget::tests::status_and_layout::status_line_branch_refreshes_after_interrupt
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.015s] (143/227) codex-tui chatwidget::tests::status_and_layout::status_line_branch_refreshes_after_turn_complete
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (144/227) codex-tui chatwidget::tests::status_and_layout::status_line_branch_state_resets_when_git_branch_disabled
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.016s] (145/227) codex-tui chatwidget::tests::status_and_layout::status_line_context_remaining_renders_labeled_percent
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (146/227) codex-tui chatwidget::tests::status_and_layout::status_line_context_used_renders_labeled_percent
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.016s] (147/227) codex-tui chatwidget::tests::status_and_layout::status_line_fast_mode_footer_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (148/227) codex-tui chatwidget::tests::status_and_layout::status_line_fast_mode_renders_on_and_off
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (149/227) codex-tui chatwidget::tests::status_and_layout::status_line_five_hour_item_omits_weekly_only_limit
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.016s] (150/227) codex-tui chatwidget::tests::status_and_layout::status_line_git_summary_items_render_values
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (151/227) codex-tui chatwidget::tests::status_and_layout::status_line_goal_active_token_budget_footer_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (152/227) codex-tui chatwidget::tests::status_and_layout::status_line_goal_complete_elapsed_footer_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (153/227) codex-tui chatwidget::tests::status_and_layout::status_line_identifies_custom_provider_with_shared_model_slug
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.015s] (154/227) codex-tui chatwidget::tests::status_and_layout::status_line_legacy_context_usage_renders_context_used_percent
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.021s] (155/227) codex-tui chatwidget::tests::status_and_layout::status_line_invalid_items_warn_once
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.019s] (156/227) codex-tui chatwidget::tests::status_and_layout::status_line_legacy_limit_items_prefer_matching_windows
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (157/227) codex-tui chatwidget::tests::status_and_layout::status_line_model_uses_active_external_pane_model
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (158/227) codex-tui chatwidget::tests::status_and_layout::status_line_model_with_reasoning_context_remaining_footer_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.019s] (159/227) codex-tui chatwidget::tests::status_and_layout::status_line_model_with_reasoning_fast_footer_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.019s] (160/227) codex-tui chatwidget::tests::status_and_layout::status_line_model_with_reasoning_includes_fast_for_fast_capable_models
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.016s] (161/227) codex-tui chatwidget::tests::status_and_layout::status_line_model_with_reasoning_updates_on_mode_switch_without_manual_refresh
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.020s] (162/227) codex-tui chatwidget::tests::status_and_layout::status_line_model_with_reasoning_plan_mode_footer_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (163/227) codex-tui chatwidget::tests::status_and_layout::status_line_reasoning_updates_on_mode_switch_without_manual_refresh
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (164/227) codex-tui chatwidget::tests::status_and_layout::status_line_secondary_only_non_weekly_limit_omits_primary_limit_item
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (165/227) codex-tui chatwidget::tests::status_and_layout::status_line_shows_secondary_non_weekly_when_primary_is_weekly
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (166/227) codex-tui chatwidget::tests::status_and_layout::status_line_single_monthly_primary_omits_weekly_limit_item
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (167/227) codex-tui chatwidget::tests::status_and_layout::status_line_tps_updates_during_active_streaming
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (168/227) codex-tui chatwidget::tests::status_and_layout::status_line_tps_updates_from_completed_turn_average
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (169/227) codex-tui chatwidget::tests::status_and_layout::status_line_tps_updates_when_usage_arrives_after_completion
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (170/227) codex-tui chatwidget::tests::status_and_layout::status_line_uses_secondary_fallback_for_unsupported_window
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.020s] (171/227) codex-tui chatwidget::tests::status_and_layout::status_line_tps_uses_streamed_text_when_usage_is_missing
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (172/227) codex-tui chatwidget::tests::status_and_layout::status_line_workspace_headline_omits_when_unavailable
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.015s] (173/227) codex-tui chatwidget::tests::status_and_layout::status_line_workspace_headline_renders_cached_value
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (174/227) codex-tui chatwidget::tests::status_and_layout::terminal_title_model_updates_on_model_change_without_manual_refresh
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.019s] (175/227) codex-tui chatwidget::tests::status_surface_previews::status_line_setup_popup_hardcoded_only_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.023s] (176/227) codex-tui chatwidget::tests::status_surface_previews::status_line_setup_popup_live_only_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.023s] (177/227) codex-tui chatwidget::tests::status_surface_previews::status_line_setup_popup_mixed_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.021s] (178/227) codex-tui chatwidget::tests::status_surface_previews::status_line_setup_popup_rate_limits_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.020s] (179/227) codex-tui chatwidget::tests::status_surface_previews::status_line_setup_popup_workspace_headline_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.017s] (180/227) codex-tui chatwidget::tests::status_surface_previews::terminal_title_app_name_uses_corbanu_identity
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (181/227) codex-tui chatwidget::tests::status_surface_previews::terminal_title_preview_uses_title_truncation_for_live_values
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.018s] (182/227) codex-tui chatwidget::tests::status_surface_previews::terminal_title_setup_popup_hardcoded_only_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.020s] (183/227) codex-tui chatwidget::tests::status_surface_previews::terminal_title_setup_popup_live_only_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.019s] (184/227) codex-tui chatwidget::tests::status_surface_previews::terminal_title_setup_popup_mixed_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.019s] (185/227) codex-tui chatwidget::tests::status_surface_previews::terminal_title_setup_popup_rate_limits_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.049s] (186/227) codex-tui chatwidget::tests::terminal_title::terminal_title_action_required_respects_spinner_setting
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.052s] (187/227) codex-tui chatwidget::tests::terminal_title::terminal_title_action_required_blinks_when_animations_are_enabled
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.047s] (188/227) codex-tui chatwidget::tests::terminal_title::terminal_title_activity_indicators_do_not_animate_when_animations_are_disabled
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] (189/227) codex-tui claude_panes::tests::interrupt_turn_cancels_prepared_claude_token_and_finishes_cleanly
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.047s] (190/227) codex-tui chatwidget::tests::terminal_title::terminal_title_shows_action_required_while_exec_approval_is_pending
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] (191/227) codex-tui claude_panes::tests::interrupted_partial_output_prefers_stdout_session_id
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.009s] (192/227) codex-tui claude_panes::tests::interrupted_partial_output_keeps_planned_session_id_without_stdout_session
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] (193/227) codex-tui claude_panes::tests::interrupted_turn_with_planned_session_resumes_next_turn
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] (194/227) codex-tui external_agent_config_migration::flow::tests::external_agent_config_migration_status_lines_use_semantic_colors
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] (195/227) codex-tui keymap::tests::interrupt_turn_allows_backtrack_escape_and_can_be_remapped_or_unbound
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] (196/227) codex-tui keymap::tests::interrupt_turn_rejects_request_user_input_question_navigation_bindings
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] (197/227) codex-tui keymap::tests::interrupt_turn_rejects_other_fixed_shortcuts
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] (198/227) codex-tui model_catalog::tests::claude_current_does_not_seed_local_or_custom_providers_on_manager_refresh
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] (199/227) codex-tui model_catalog::tests::configured_runtime_model_does_not_duplicate_existing_exact_or_inferred_provider
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] (200/227) codex-tui model_catalog::tests::configured_runtime_model_is_added_with_exact_provider_identity
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] (201/227) codex-tui model_catalog::tests::duplicate_model_slugs_retain_exact_catalog_provider_identity
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] (202/227) codex-tui model_catalog::tests::resumed_session_recovery_is_consumed_once
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] (203/227) codex-tui model_catalog::tests::runtime_refresh_replaces_only_gpu_models
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] (204/227) codex-tui model_catalog::tests::runtime_sync_preserves_shared_opaque_custom_routes_but_not_idle_local_runtimes
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] (205/227) codex-tui multi_agents::tests::collab_resume_interrupted_snapshot
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.009s] (206/227) codex-tui provider_management_host::tests::current_and_unready_providers_are_never_replacement_candidates
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] (207/227) codex-tui provider_management_host::tests::replacement_candidates_are_exact_ready_active_non_current_rows
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] (208/227) codex-tui provider_status_host::tests::blank_or_missing_corbanu_aliases_allow_the_managed_credential_fallback
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.010s] (209/227) codex-tui provider_status_host::tests::authorized_command_runtime_converges_to_configured_ready
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.009s] (210/227) codex-tui provider_status_host::tests::command_authorization_rejection_is_exact_and_debug_output_is_secret_free
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] (211/227) codex-tui provider_status_host::tests::correlated_corbanu_metadata_resolves_without_credential_reread
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.009s] (212/227) codex-tui provider_status_host::tests::current_selection_changes_status_without_persisting_policy
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] (213/227) codex-tui provider_status_host::tests::custom_storage_metadata_is_secret_free_and_missing_file_is_active
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] (214/227) codex-tui provider_status_host::tests::environment_precedence_skips_managed_reads_until_environment_is_missing
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] (215/227) codex-tui provider_status_host::tests::eligibility_survives_restart_without_touching_credentials
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] (216/227) codex-tui provider_status_host::tests::every_corbanu_environment_alias_is_ready_and_precedes_stored_account_status
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.110s] (217/227) codex-tui claude_panes::tests::cancelling_running_command_returns_interrupted_output
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.010s] (218/227) codex-tui provider_status_host::tests::local_and_no_auth_custom_providers_are_ready_without_enrollment
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.096s] (219/227) codex-tui claude_panes::tests::registry_restores_session_id_from_artifact_when_interrupted_audit_lost_it
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.007s] (220/227) codex-tui terminal_title::tests::sanitizes_terminal_title
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] (221/227) codex-tui status_indicator_widget::tests::renders_remapped_interrupt_hint
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.010s] (222/227) codex-tui provider_status_host::tests::unchecked_command_is_configured_but_a_rejected_authorization_is_status_only
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] (223/227) codex-tui terminal_title::tests::strips_invisible_format_chars_from_terminal_title
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.006s] (224/227) codex-tui terminal_title::tests::truncates_terminal_title
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] (225/227) codex-tui terminal_title::tests::truncation_prefers_visible_char_over_pending_space
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.008s] (226/227) codex-tui terminal_title::tests::writes_osc_title_with_bel_terminator
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:         PASS [   0.180s] (227/227) codex-tui provider_status_host::tests::saved_managed_custom_key_resolves_configured_ready_without_secret_leakage
+qa/provider-auth/pf-58/finish-20260910/linux/unit-strict.log:      Summary [   1.678s] 227 tests run: 227 passed, 3842 skipped
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:     Starting 33 tests across 1 binary (57 tests skipped)
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [   3.325s] ( 1/33) codex-tui::all suite::claude_auth::tmux_claude_auth_compatibility_selects_existing_login
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [   7.137s] ( 2/33) codex-tui::all suite::claude_auth::tmux_first_run_anthropic_account_selects_claude_login_after_success
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  11.075s] ( 3/33) codex-tui::all suite::claude_auth::tmux_claude_auth_managed_success_cancel_failure_recovery_and_resume
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  22.579s] ( 4/33) codex-tui::all suite::provider_convergence::tmux_command_auth_is_visible_validated_and_has_no_enrollment_ui
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  23.912s] ( 5/33) codex-tui::all suite::provider_convergence::tmux_custom_environment_provider_converges_across_hosts_picker_and_request
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  18.311s] ( 6/33) codex-tui::all suite::provider_convergence::tmux_duplicate_model_slug_uses_exact_provider_identity
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  24.463s] ( 7/33) codex-tui::all suite::provider_convergence::tmux_exact_replacement_persists_restart_and_request
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  18.190s] ( 8/33) codex-tui::all suite::provider_convergence::tmux_existing_install_upgrade_preserves_current_and_request
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  28.684s] ( 9/33) codex-tui::all suite::provider_convergence::tmux_fresh_a_then_b_preserves_first_success_across_restart
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  21.897s] (10/33) codex-tui::all suite::provider_convergence::tmux_inactive_current_cancel_blocks_request_without_switch
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  26.289s] (11/33) codex-tui::all suite::provider_convergence::tmux_inactive_noncurrent_is_managed_but_not_pickable_then_reactivates
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  29.940s] (12/33) codex-tui::all suite::provider_convergence::tmux_managed_custom_key_survives_restart_and_request
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  17.721s] (13/33) codex-tui::all suite::provider_convergence::tmux_missing_profile_current_never_silently_switches
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         FAIL [  24.166s] (14/33) codex-tui::all suite::provider_convergence::tmux_native_spawn_picker_and_parent_request_share_exact_custom_runtime
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  18.411s] (15/33) codex-tui::all suite::provider_convergence::tmux_permission_reload_preserves_active_runtime_over_saved_default
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  19.524s] (16/33) codex-tui::all suite::provider_convergence::tmux_resumed_main_session_retains_exact_runtime_identity
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [   0.003s] (17/33) codex-tui::all suite::provider_management::binary_mtime_is_representable_for_evidence
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  29.747s] (18/33) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_api_key_failure_cancel_replace_and_same_session_request
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  21.232s] (19/33) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_environment_guidance_does_not_offer_vault_override
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  22.683s] (20/33) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_openai_account_cancel_then_request_without_model_change
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  18.591s] (21/33) codex-tui::all suite::provider_management::reauthentication::tmux_reauth_openai_environment_key_preserves_external_ownership
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  18.670s] (22/33) codex-tui::all suite::provider_management::reauthentication_apps::tmux_untrusted_apps_origin_preserves_account_and_healthy_model_route
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [   0.004s] (23/33) codex-tui::all suite::provider_management::selection_parser_accepts_exact_and_inline_replacement_rows
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  18.727s] (24/33) codex-tui::all suite::provider_management::tmux_ambient_model_picker_offers_only_glm
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  21.543s] (25/33) codex-tui::all suite::provider_management::tmux_astra_selection_cancel_restart_and_request
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  22.171s] (26/33) codex-tui::all suite::provider_management::tmux_current_deactivate_cancel_is_inert
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  33.745s] (27/33) codex-tui::all suite::provider_management::tmux_current_exact_replacement_is_persisted_before_deactivation
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  21.581s] (28/33) codex-tui::all suite::provider_management::tmux_environment_copy_and_eligibility_never_delete_credentials
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  39.339s] (29/33) codex-tui::all suite::provider_management::tmux_noncurrent_deactivate_reactivate_restart_retains_request_credential
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  27.374s] (30/33) codex-tui::all suite::provider_management::tmux_pf50_api_key_setup_and_recovery_are_reused
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  20.565s] (31/33) codex-tui::all suite::provider_management::tmux_pf51_openai_account_cancel_and_retry_are_correlated
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  24.832s] (32/33) codex-tui::all suite::provider_management::tmux_pf52_claude_recovery_cancel_and_retry_are_reused
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         PASS [  29.706s] (33/33) codex-tui::all suite::provider_management::tmux_shared_and_custom_catalog_have_management_status_parity
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:      Summary [ 675.067s] 33 tests run: 32 passed, 1 failed, 57 skipped
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-final.log:         FAIL [  24.166s] (14/33) codex-tui::all suite::provider_convergence::tmux_native_spawn_picker_and_parent_request_share_exact_custom_runtime
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-followup.log:     Starting 2 tests across 1 binary (88 tests skipped)
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-followup.log:         PASS [  21.140s] (1/2) codex-tui::all suite::provider_convergence::tmux_native_spawn_picker_and_parent_request_share_exact_custom_runtime
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-followup.log:         PASS [  18.562s] (2/2) codex-tui::all suite::provider_management::reauthentication_apps::tmux_untrusted_apps_origin_preserves_account_and_healthy_model_route
+qa/provider-auth/pf-58/finish-20260910/linux/tmux-followup.log:      Summary [  39.703s] 2 tests run: 2 passed, 88 skipped

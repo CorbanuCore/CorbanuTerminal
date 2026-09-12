@@ -1,0 +1,54 @@
+{
+  "case_number": 15,
+  "status": "blocked",
+  "summary": "The visible UI did not expose an API-key provider entry screen or an OpenAI account setup action, so the required guidance could not be inspected. The flow was cancelled and the dedicated target exited normally.",
+  "observed_checks": [
+    {
+      "name": "API-key provider entry screen",
+      "status": "blocked",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15/evidence/09_openai_provider_tab.txt"
+    },
+    {
+      "name": "API-key guidance identifies environment variable, credential storage, and chat exclusion",
+      "status": "blocked",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15/evidence/09_openai_provider_tab.txt"
+    },
+    {
+      "name": "OpenAI account setup login link and device-code guidance",
+      "status": "blocked",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15/evidence/14_gpt6_entry.txt"
+    },
+    {
+      "name": "No repeated keychain prompts",
+      "status": "blocked",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15/evidence/16_returned_composer.txt"
+    },
+    {
+      "name": "Cancel flow and normal exit",
+      "status": "passed",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15/evidence/17_exit_status.txt"
+    }
+  ],
+  "blockers": [
+    "No API-key provider entry screen was visible in the supplied TUI.",
+    "No OpenAI account setup action, login link, or device-code guidance was visible.",
+    "Native browser/desktop access was not available through this interface."
+  ],
+  "actions": [
+    "Started the supplied target in the dedicated TMUX session.",
+    "Accepted the visible directory-trust prompt.",
+    "Inspected visible slash-command suggestions and opened /security read-only, then closed it.",
+    "Opened /model, inspected both visible provider tabs, and selected GPT-6 Astra to check for an account setup path; only reasoning-level selection appeared.",
+    "Cancelled with Escape and exited the empty composer with Ctrl+D.",
+    "Full action history: /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-15/evidence/actions.log"
+  ],
+  "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "platform": "macOS arm64",
+  "limitations": [
+    "Black-box TUI only; no source, binary internals, prior reports, test implementations, credential files, project policies, or external guidance inspected.",
+    "Native Applications/Desktop placement and browser/native interfaces were inaccessible.",
+    "No credentials were entered, read, printed, or logged; managed-token validity was not assumed.",
+    "The cloned profile's native-keyring fallback cannot qualify a Keychain-prompt pass."
+  ],
+  "test_instruction_ambiguity": "The API-key provider and its visible entry route were not named; the UI exposed only OpenAI Codex plan and Claude Plan tabs, with no account-setup action. Hidden shortcuts were not guessed."
+}

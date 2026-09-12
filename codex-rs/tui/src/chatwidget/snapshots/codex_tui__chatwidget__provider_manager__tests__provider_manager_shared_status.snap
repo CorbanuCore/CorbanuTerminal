@@ -4,6 +4,7 @@ expression: rendered
 ---
   Providers
   Configure providers and control whether they are eligible for use.
+  Configured means credentials are present, not verified by the provider.
 
 › 1. OpenAI          Enabled · configured · current
   2. Claude Account  Inactive

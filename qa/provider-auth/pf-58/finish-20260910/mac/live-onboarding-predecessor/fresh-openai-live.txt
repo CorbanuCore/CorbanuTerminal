@@ -1,0 +1,44 @@
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       gpt-6-astra high   /model to change         │
+│ directory:   /Volumes/…/worktrees/provider-reauth-health │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+• You have 3 usage limit resets available. Run /usage to use one.
+
+• Model changed to GPT-6-Astra via OpenAI high
+
+
+› Reply only with PF58, FRESH, OPENAI, OK joined by underscores. Do not use tools.
+
+
+• PF58_FRESH_OPENAI_OK
+
+
+› Explain this codebase
+
+  GPT-6-Astra high · /Volumes/CorbanuDrive/Corbanu/worktrees/provider-reauth-health · Corbanu Terminal · TPS: 4.6 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

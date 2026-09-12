@@ -1,0 +1,48 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                   │
+│                                                 │
+│ model:       gpt-5.6-sol low   /model to change │
+│ directory:   ~/work                             │
+│ permissions: YOLO mode                          │
+╰─────────────────────────────────────────────────╯
+
+• Model changed to GPT-5.6-Sol via OpenAI low
+
+
+› Improve documentation in @filename
+
+  GPT-5.6-Sol low · ~/work · Corbanu Terminal · TPS: -- tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

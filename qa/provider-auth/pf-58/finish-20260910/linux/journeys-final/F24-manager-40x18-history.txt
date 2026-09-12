@@ -1,0 +1,18 @@
+
+╭
+│ 12. Vercel       al Not configured ·
+│                     unavailable
+│ 13. Amazon Bedrock. Not configured ·
+                      unavailable
+  14. Ollama          Enabled ·
+                      configured
+  15. LM Studio       Enabled ·
+                      configured
+  16. QA Route A      Enabled ·
+                      configured
+› 17. QA Route B      Enabled ·
+                      configured
+
+  r recover credentials · Enter manage ·
+  Esc back
+  Press enter to confirm or esc to go ba

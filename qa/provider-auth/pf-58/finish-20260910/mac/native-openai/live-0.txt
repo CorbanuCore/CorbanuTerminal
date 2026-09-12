@@ -1,0 +1,45 @@
+╭────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                  │
+│                                                │
+│ model:     gpt-6-astra high   /model to change │
+│ directory: /Volumes/CorbanuDrive/Corbanu       │
+╰────────────────────────────────────────────────╯
+
+• You have 3 usage limit resets available. Run /usage to use one.
+
+
+› Reply only with PF58, NATIVE, LIVE, OK joined by underscores. Do not use tools.
+
+
+• PF58_NATIVE_LIVE_OK
+
+
+› Write tests for @filename
+
+  GPT-6 Astra high · /Volumes/CorbanuDrive/Corbanu · Corbanu Terminal · TPS: ~1.8 tok/s
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

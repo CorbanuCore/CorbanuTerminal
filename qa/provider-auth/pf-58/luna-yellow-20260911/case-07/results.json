@@ -1,0 +1,57 @@
+{
+  "case_number": 7,
+  "status": "blocked",
+  "summary": "Repeated supplied-harness relaunches reached chat, preserved the visible Claude Plan model/provider and connected account, and returned RESTART_OK. The full case is blocked because native app-shortcut relaunch could not be exercised through this interface.",
+  "observed_checks": [
+    {
+      "check": "Relaunch reaches chat without automatic /providers screen (harness subset)",
+      "status": "passed",
+      "observation": "The second and third supplied-harness launches displayed the chat composer directly; no /providers screen appeared.",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/04-relaunch-chat.txt; /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/07-relaunch-chat.txt"
+    },
+    {
+      "check": "Selected provider/model visibly match before and after relaunch",
+      "status": "passed",
+      "observation": "Visible /status output showed Claude Fable 5.1 Plan with Claude Plan before and after relaunch.",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/02-status-before-request.txt; /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/05-status-after-relaunch.txt; /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/08-status-after-relaunch.txt"
+    },
+    {
+      "check": "Provider account remains visibly connected",
+      "status": "passed",
+      "observation": "Visible /status output showed Claude Plan account connected before and after relaunch.",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/02-status-before-request.txt; /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/05-status-after-relaunch.txt; /Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/08-status-after-relaunch.txt"
+    },
+    {
+      "check": "Exact request returns RESTART_OK after relaunch",
+      "status": "passed",
+      "observation": "The visible assistant response was RESTART_OK.",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/09-response-after-relaunch.txt"
+    },
+    {
+      "check": "Relaunch from native app shortcut",
+      "status": "blocked",
+      "observation": "The native Applications shortcut is inaccessible through this interface; only the supplied TMUX harness launch was exercised.",
+      "evidence_path": "/Volumes/CorbanuDrive/Corbanu/.codex-work/luna-0911/case-07/evidence/07-relaunch-chat.txt"
+    }
+  ],
+  "blockers": [
+    "Native Applications shortcut and macOS Desktop placement are inaccessible through this interface, so the required native-shortcut relaunch cannot be verified."
+  ],
+  "actions": [
+    "Started and relaunched only the supplied target session with the provided TMUX command.",
+    "Used raw TMUX literal text plus separate Enter key actions for /status and the exact request.",
+    "Exited the target session with Ctrl-C after each exercised run; no target server remained.",
+    "Recorded the complete key/action history in actions.log."
+  ],
+  "candidate_sha256": "4a8eba7b10199ea49aee42a720687b63cb4b1b2194c2ce164d1b9f6f88ee510e",
+  "platform": "macOS arm64",
+  "limitations": [
+    "No Linux behavior was inferred.",
+    "The first harness launch showed a visible one-time directory trust prompt; it was accepted per the prompt before baseline observation.",
+    "Only visible /status provider/account metadata was evaluated; no hidden credential state or native keychain prompt was inspected.",
+    "The supplied harness launch is not substituted for the required native app-shortcut launch."
+  ],
+  "test_instruction_ambiguity": [
+    "The instruction to quit normally did not identify a visible quit command or key; the visible slash-command list had no quit entry, and Ctrl-C exited the target session."
+  ]
+}

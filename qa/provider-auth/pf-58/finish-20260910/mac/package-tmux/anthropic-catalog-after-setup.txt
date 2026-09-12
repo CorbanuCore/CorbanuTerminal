@@ -1,0 +1,50 @@
+WARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary di
+r "/Volumes/CorbanuDrive/Corbanu/.codex-work/provider-reauth-health/tmp" (codex_home: AbsolutePathBuf("/Volumes/CorbanuD
+rive/Corbanu/.codex-work/provider-reauth-health/tmp/ct-y1v_rl58/handoff-0"))
+╭──────────────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                            │
+│                                                          │
+│ model:       claude-fable-5-1-plan high   /model to cha… │
+│ directory:   /Volumes/…/worktrees/provider-reauth-health │
+│ permissions: YOLO mode                                   │
+╰──────────────────────────────────────────────────────────╯
+
+
+  Select Model and Effort
+  Anthropic API key
+
+  OpenAI  Claude Plan  [Anthropic]
+
+› 1. Claude Opus 5     Model: claude-opus-5. Claude Opus 5 through the Anthropic Messages API.
+  2. Claude Fable 5.1  Model: claude-fable-5-1. Claude Fable 5.1 through the Anthropic Messages API.
+  3. Claude Fable 5    Model: claude-fable-5. Claude Fable 5 through the Anthropic Messages API.
+
+  Use Left/Right to switch providers. Press Enter to confirm or Esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

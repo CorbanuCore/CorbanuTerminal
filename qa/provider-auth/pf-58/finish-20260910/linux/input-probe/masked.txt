@@ -1,0 +1,43 @@
+╭───────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)             │
+│                                           │
+│ model:     gpt-6-astra   /model to change │
+│ directory: ~                              │
+╰───────────────────────────────────────────╯
+
+▌ Add Anthropic
+▌ API key — masked
+▌
+▌ ••••••••••••••••••••••••••••••••
+
+Press enter to confirm or esc to go back
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

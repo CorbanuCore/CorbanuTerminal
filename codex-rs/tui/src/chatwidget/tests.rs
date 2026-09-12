@@ -237,6 +237,7 @@ mod approval_requests;
 mod composer_submission;
 #[path = "tests/config_errors_tests.rs"]
 mod config_errors;
+mod custom_model_identity;
 mod exec_flow;
 mod goal_menu;
 mod goal_validation;

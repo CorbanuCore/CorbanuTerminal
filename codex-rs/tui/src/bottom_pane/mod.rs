@@ -667,14 +667,16 @@ impl BottomPane {
             self.request_redraw();
             InputResult::None
         } else {
-            // If a task is running and a status line is visible, allow the
+            // If a task is running, allow the
             // configured action to interrupt even while the composer has focus.
             // When a popup is active, prefer dismissing it over interrupting the task.
-            if self.should_interrupt_running_task(key_event)
-                && let Some(status) = &self.status
-            {
+            if self.should_interrupt_running_task(key_event) {
                 // Send Op::Interrupt
-                status.interrupt();
+                if let Some(status) = &self.status {
+                    status.interrupt();
+                } else {
+                    self.app_event_tx.interrupt();
+                }
                 self.request_redraw();
                 return InputResult::None;
             }
@@ -1398,7 +1400,6 @@ impl BottomPane {
             && !(is_agent_command && key_event.code == KeyCode::Esc)
             && self.no_modal_or_popup_active()
             && !self.composer_should_handle_vim_insert_escape(key_event)
-            && self.status.is_some()
     }
 
     pub(crate) fn terminal_title_requires_action(&self) -> bool {

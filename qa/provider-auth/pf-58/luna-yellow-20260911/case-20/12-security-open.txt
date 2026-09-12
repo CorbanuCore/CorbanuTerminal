@@ -1,0 +1,48 @@
+╭─────────────────────────────────────────────────╮
+│ >_ Corbanu Terminal (v0.1.41)                   │
+│                                                 │
+│ model:       gpt-5.6-sol low   /model to change │
+│ directory:   ~/work                             │
+│ permissions: YOLO mode                          │
+╰─────────────────────────────────────────────────╯
+
+• You have 3 usage limit resets available. Run /usage to use one.
+
+Security profiles — read only
+Requested: Permissive (configuration only)
+Effective protection: unverified. Live security status is unavailable.
+Protected modes are blocked; required controls are not qualified.
+
+> Permissive
+  Moderate
+  Aggressive
+
+No additional security controls. Existing approvals, sandbox, vault, wallet, tool, network and agent policies remain unchanged.
+
+↑/↓ explore · enter inspect · esc close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
