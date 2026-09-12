@@ -34,8 +34,8 @@ promise to integrate later. New allocation/policy changes receive their own revi
 | Workstream | Completed | Next action | Who owns the gate? |
 | --- | --- | --- | --- |
 | PF13 | No new completion inferred | Preserve owner task and paused security allowance | Existing PF13 owner / Travis; do not reactivate here |
-| Accounting PF-60-S01 | Reviewed contract, fixtures, corrections, local tests and approved defaults | Finish concrete S02 adapter handoff and reconcile/archive S01 | Manager; no repeated product question |
-| Task Node PF-80-S01 | Reviewed offline port, corrections, local combined-tree tests | Native pure preparation slice below, then independent review | Manager allocates and dispatches; no live authority needed |
+| Accounting PF-60-S02 | S01 accepted/archived after reviewed handoff, tests and approved defaults | Implement isolated native-state journal, then independent review | Manager dispatches; no repeated product question |
+| Task Node PF-80-S01 | Reviewed offline port, corrections, local combined-tree tests | Native pure preparation worker running, then independent review | Manager follows returned work; no live authority needed |
 
 Missing preparation, allocation or receiving evidence is manager work. It is
 not a request for Travis to coordinate workers. The scheduled parent must keep
@@ -65,9 +65,10 @@ implementation defaults below. No billing or live collection was enabled:
 - Historical usage without trustworthy presence/attempt/pricing evidence stays
   unknown. No rebilling or balance-derived spend.
 
-The accepted answer resolves the default-policy decision, not missing technical
-evidence. Manager now finishes the exact S02 handoff, reconciles final evidence,
-and archives S01 once its remaining exit conditions are satisfied. Do not ask
+The accepted answer resolved the default-policy decision. The
+[S02 handoff](../research/agent-cost-accounting/s02-allocation.md) is now
+independently reviewed, S01 accepted/archived and S02's first test-only increment
+allocated. Later production wiring still needs its own evidence. Do not ask
 Travis this same question again or claim that he enabled billing/live collection.
 
 ## Task Node next assignment
@@ -122,6 +123,11 @@ provider-wire change; retain existing crate behavior with full crate tests.
 No upstream upgrade qualification is claimed.
 
 ## Following assignments, not activated
+
+Accounting S02 starts with the five-file test-only native journal in its current
+sprint. The manager follows review/testing and prepares the next same-sprint
+production-wiring allocation; a journal pass alone does not complete S02 or
+activate S03. Runtime human testing, collection and billing remain OFF.
 
 After native preparation review, manager allocates profile-bound one-event
 transport using the existing Client, with explicit account/origin/event/digest

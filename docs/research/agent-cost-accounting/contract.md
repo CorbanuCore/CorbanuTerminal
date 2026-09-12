@@ -1,5 +1,11 @@
 # PF-60-S01 accounting contract — proposal v1
 
+Acceptance update: Travis approved the v1 defaults in this task on September 11.
+The [manager decision](../../plans/workstream-manager-handoff-2026-09-11.md#accounting-decision)
+supersedes pending-policy wording in the original proposal below. S01 is accepted
+and archived; the reviewed S02 handoff allocates only a test-only native journal.
+No billing, live collection or production migration is enabled.
+
 Status: proposed for Travis Good; source inspection and synthetic fixture evidence
 only. This is an unfinished research contract, not shipped feature documentation,
 a migration, a provider billing assertion, or human acceptance. S02 and later
@@ -8,8 +14,8 @@ sprints remain blocked until the manager obtains acceptance and archives S01.
 Product citation: **Product measurement**, [product specification](../../corbanu-product-spec.md#product-measurement):
 “No commercial performance numbers have been supplied.” The active
 [PF-60 plan](../../plans/active/portfolio-agent-cost-accounting.md) authorizes this
-bounded preparation, with [PF-60-S01](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md)
-allocated `in_progress`. Change class: product initiative.
+bounded preparation, with [PF-60-S01](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md)
+originally allocated `in_progress`. Change class: product initiative.
 
 Source baseline: `f17e5a54daba11c6da2554f14b62f11ace752142`, verified clean on
 `workstream/accounting-pf60-s01-20260911` in

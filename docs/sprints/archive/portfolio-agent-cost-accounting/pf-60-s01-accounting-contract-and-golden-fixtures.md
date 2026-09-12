@@ -1,7 +1,7 @@
 ---
 sprint_id: "PF-60-S01"
 title: "Accounting contract and golden fixtures"
-status: in_progress
+status: completed
 plan_file: "docs/plans/active/portfolio-agent-cost-accounting.md"
 plan_feature: "PF-60"
 execution_order: 1
@@ -21,6 +21,10 @@ updated: 2026-09-11
 
 Allocated before post-merge dispatch. Status reserves the lane, not proof an
 agent has started; manager receipt records native subagent ID and actual HEAD.
+
+Closed locally September 11: reviewed fixtures/corrections, approved defaults
+and independently reviewed S02 handoff accepted by Codex management. This is
+contract/fixture completion, not accounting runtime, release or live enablement.
 
 ## Execution mandate
 
@@ -54,21 +58,22 @@ agent has started; manager receipt records native subagent ID and actual HEAD.
 - [x] Native source trace, proposed contract, hand-calculated fixtures and two reviewed corrections returned at 1c5978690 and integrated locally at 0415a00dc.
 - [x] Manager independently verified corrections and 48 combined-tree tests; review/commit evidence is retained in the handoff.
 - [x] Travis explicitly approved the v1 defaults in this task; [decision record](../../../plans/workstream-manager-handoff-2026-09-11.md#accounting-decision). No billing/live collection enabled.
+- [x] Exact [S02 handoff](../../../research/agent-cost-accounting/s02-allocation.md) reviewed with no findings; receiving owner accepts the bounded S01 artifact.
 
 ## Remaining
 
-- [ ] Finish the exact S02 native adapter/allocation handoff and reconcile final receiving evidence; do not start S02 before acceptance/archive.
+None in S01; runtime implementation and qualification remain in S02–S04.
 
 ## Verification
 
 - [x] Focused: 48 tests on combined baseline 0415a00dc; reviewer findings independently reproduced and corrected. No runtime proof claimed.
-- [ ] Integration: final allocation/policy candidate must pass `python3 docs/plans/check.py`, `python3 docs/sprints/check.py` and `git diff --check`.
-- [ ] Independently inspect source provenance, calculations and the plan's success/failure/recovery table; document-only checks do not qualify product UI.
-- [ ] Record reviewer, artifact digest, expected versus actual results and observed cases; identify automation as not applicable when none ran. Never invent a test count or pass.
+- [x] Combined baseline and reviewed allocation passed both governance checkers and whitespace; lifecycle transition rechecked by the manager before dispatch.
+- [x] Astra High reviews and parent reproductions cover source/calculations and synthetic success/failure/replay; native UI and real billing are not qualified.
+- [x] Exact candidates, test results and review artifacts recorded in the linked manager handoff and private manager-continuation receipt; no new collector or product automation tested.
 
 ## Exit evidence
 
-- [ ] Output commit/digest and input provenance recorded; checks linked to that final artifact/tree.
-- [ ] Named human/receiving owner accepts the bounded output; needed go/no-go decision is recorded.
-- [ ] Handoff includes changed scope, contracts, known gaps and required combined-tree evidence.
-- [ ] Done/Remaining ledgers updated honestly; archive accepted record under `docs/sprints/archive/portfolio-agent-cost-accounting/` and update plan backlinks.
+- [x] Fixture candidate 1c5978690 integrated at 0415a00dc; S02 handoff independently reviewed on receiving allocation base 265bf0c3e.
+- [x] Travis approved v1 defaults; Codex management accepts the bounded synthetic artifact and handoff, not runtime or release.
+- [x] Handoff names exact future scope, upstream ancestry, unknowns, test-only boundary and later native/human gates.
+- [x] Accepted S01 moved to archive; plan backlinks/navigation and one-sprint reservation reconciled.

@@ -19,34 +19,35 @@ product_spec:
 implementation_worktrees:
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/management-workstreams-20260911"
     branch: "integrate/management-workstreams-20260911"
-    base_commit: "0415a00dc3d3ee55a96662920c3eedbc0f0d4838"
+    base_commit: "265bf0c3e164e497d172f1a8e5a56bf4cd54ed46"
   - path: "/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911"
     branch: "workstream/accounting-pf60-s01-20260911"
-    base_commit: "295aed26e53b17f919f7199ae1c9748b1b1250ba"
+    base_commit: "265bf0c3e164e497d172f1a8e5a56bf4cd54ed46"
 ---
 
 # 2. Accounting — unified agent cost and usage
 
 Policy: repository-root `AGENTS.md`. Lifecycle: [plans](../index.md).
 Portfolio: [source coverage, sequencing and human capacity](../portfolio-2026-09-09.md).
-This is active workstream 2. Only S01 contract/fixture preparation is selected;
-runtime implementation and human acceptance remain gated. The worktree above is
-the manager's merge checkout; the second entry is the independent S01 worker.
+This is active workstream 2. S01 is accepted/archived; S02's first isolated
+native-state journal increment is allocated. Production wiring, live collection
+and runtime human acceptance remain gated. The first checkout is the receiving
+manager; the second is the reused independent accounting worker.
 Dispatch follows the verified main merge; an allocation is not a running-agent claim.
 
 Current receiving result: reviewed S01 candidate `1c5978690` is integrated
 locally at `0415a00dc3`; 48 fixture tests pass on the combined tree. The
 [manager handoff](../workstream-manager-handoff-2026-09-11.md#accounting-decision)
 records Travis's explicit approval of the v1 defaults in this task. Do not
-re-ask that decision. S02 preparation is manager-owned; technical handoff,
-final evidence reconciliation and S01 archival remain before S02 activation.
+re-ask that decision. The reviewed [S02 handoff](../../research/agent-cost-accounting/s02-allocation.md)
+resolves exact first-increment boundaries; S01 is now archived and S02 is selected.
 
 ## Activation record
 
 - Status: active; slot 2/3; target release/date not promised.
 - Authority: Travis's September 11 workstream selection and Astra High kickoff request.
 - Codex owns contract preparation; Travis approved the v1 defaults in this task on September 11, including vocabulary, retention/replay, exact USD estimates and unknown handling.
-- Before S02 runtime: finish the concrete adapter handoff, final S01 evidence and archive; do not request the already-recorded defaults again. Approval does not enable billing, a collector, a migration or live prices.
+- S01 handoff and archive are complete. S02 starts with test-only native-state persistence, not billing, a collector, production migration or live prices.
 
 ## User pain
 
@@ -81,14 +82,15 @@ Entry is the first sprint's approved contract; success, failure and return-use a
 
 | Accountable role | Worktree | Branch | Base | Scope |
 | --- | --- | --- | --- | --- |
-| Astra High accounting kickoff | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `295aed26e53b17f919f7199ae1c9748b1b1250ba` | PF-60-S01 contract and synthetic fixtures only |
+| Astra High accounting native journal | `/Volumes/CorbanuDrive/Corbanu/worktrees/accounting-pf60-s01-20260911` | `workstream/accounting-pf60-s01-20260911` | `265bf0c3e164e497d172f1a8e5a56bf4cd54ed46` | PF-60-S02 five-file test-only native-state increment |
 | Codex management / Travis acceptance | Manager checkout in front matter | Recorded above | Recorded above | Shared plan and receiving evidence |
 
-S01 is allocated to one Astra High subagent after main merge. Its only writes
-are research and synthetic QA in the sprint's literal scope; the manager owns
-shared plans and integration. Cross-repository work is not allocated. The worker
-branch starts at the recorded base and fast-forwards to the merged planning
-commit before dispatch; the dispatch receipt records the actual HEAD.
+S02 is allocated to one Astra High subagent. Its literal five-file scope is in
+the sprint and reviewed handoff; the manager serially delegates only its test
+module declaration in runtime.rs. No production migrations, API/Core wiring,
+manifests or other state writers are allocated. The idle worker fast-forwards to
+the reviewed receiving allocation before dispatch; its historical branch name
+does not change sprint ownership. Manager owns shared plans/integration.
 
 ## Useful code references
 
@@ -105,7 +107,7 @@ Research/artifact paths in the sprint table are planned files, not existing impl
 
 - Observed planning checkout: `/Volumes/CorbanuDrive/Corbanu/CorbanuTerminal`, branch `recovery/corbanu-drive-2026-09-02`, HEAD `6f8f4ce46446e951437e1ce7e7c4a526e5b9e546`.
 - Historical source only. This amendment receives main `295aed26e53b17f919f7199ae1c9748b1b1250ba`; the [current handoff](../main-workstreams-2026-09-11.md) supersedes the earlier scrum allocation. Preserve main's Corbanu API balance semantics, not legacy Plan entitlements.
-- Canonical upstream: `https://github.com/openai/codex.git`; verified upstream SHA for this future candidate: unresolved, blocks code readiness.
+- Canonical upstream: `https://github.com/openai/codex.git`; locally verified common ancestor `413492cd6c3a4d4f8dff6f406247ccda5a9d88aa`. Source seams, cached upstream identity and unintegrated newer tip are recorded in the reviewed S02 handoff; no upstream upgrade qualified.
 - Inspect the existing references above; keep product-owned implementation behind thin native adapters, preserving event/replay/schema contracts. Exact files, compatibility tests and retain/adapt/remove dispositions are filled at S01 handoff before code readiness.
 - Follow [upstream integration](../upstream-integration.md). Shared migrations, module registration, lockfiles and config schemas require serial ownership.
 
@@ -115,8 +117,8 @@ All records belong to the single feature **PF-60**. Dependencies are hard prereq
 
 | Sprint | Record / outcome | Depends on | Planned output | Evidence |
 | --- | --- | --- | --- | --- |
-| PF-60-S01 | [Accounting contract and golden fixtures](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md) | none | docs/research/agent-cost-accounting/contract.md | pending |
-| PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | codex-rs/state/ (exact migration and runtime files allocated after S01) | pending |
+| PF-60-S01 | [Accounting contract and golden fixtures](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md) | none | docs/research/agent-cost-accounting/contract.md | Accepted local contract/fixtures and reviewed handoff; archived |
+| PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Test-only native-state journal, exact five-file scope | First increment allocated; implementation/testing pending |
 | PF-60-S03 | [Inspectable run and campaign totals](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md) | PF-60-S02 | codex-rs/tui/src/chatwidget/usage.rs | pending |
 | PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03 | qa/portfolio/agent-cost-accounting/qualification.md | pending |
 

@@ -197,7 +197,6 @@ nav:
               - Overview: plans/portfolio-2026-09-09.md
               - "PF-60 — Unified agent cost and usage accounting":
                   - Plan: plans/active/portfolio-agent-cost-accounting.md
-                  - "PF-60-S01 — Accounting contract and golden fixtures": sprints/current/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md
                   - "PF-60-S02 — Idempotent usage persistence and replay": sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md
                   - "PF-60-S03 — Inspectable run and campaign totals": sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md
                   - "PF-60-S04 — Cost-accounting acceptance and handoff": sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md

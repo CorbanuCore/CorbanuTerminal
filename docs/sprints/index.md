@@ -126,8 +126,8 @@ separate authority. Current assignments/evidence are in the
 | Plan | Plan status | Current sprints | Execution authority |
 | --- | --- | ---: | --- |
 | [PF-13 / security — workstream 1](../plans/active/p0-security-levels.md) | Active | [53 current sprints](current/p0-security-levels/index.md), 28 completed archives | PF-35-S01 retains its reservation; unusable PF-27-S04 allocation returned to draft with preserved recovery pin; PF13 task untouched |
-| [Accounting — workstream 2](../plans/active/portfolio-agent-cost-accounting.md) | Active | 4 sequential PF-60 sprints | S01 contract/fixtures selected for independent Astra High allocation after main merge |
-| [Task Node — workstream 3](../plans/active/initiative-delivery-control.md) | Active | PF-80-S01, two PF-79 beta drafts, PF-81-S01 visual QA draft | Scoped main port and progress qualification first; manager selects one sequential follow-up; no follow-up launched |
+| [Accounting — workstream 2](../plans/active/portfolio-agent-cost-accounting.md) | Active | 3 current PF-60 sprints; S01 archived | S02 isolated native-state journal allocated after S01 review and defaults approval; no live collection |
+| [Task Node — workstream 3](../plans/active/initiative-delivery-control.md) | Active | PF-80-S01, two PF-79 beta drafts, PF-81-S01 visual QA draft | Offline port integrated locally; native preparation follow-up running; beta/harness dependencies unchanged |
 | [Unified provider onboarding and management](../plans/proposed/unified-provider-auth.md) | Deferred | [0 current sprints](current/unified-provider-auth/index.md) | Completed PF-55/provider evidence remains unchanged; no completion claim added |
 | [Arbitrary-model Autoreview](../plans/proposed/arbitrary-model-autoreview.md) | Proposed | [7 draft sprints](current/arbitrary-model-autoreview/index.md) | None until plan activation and sprint worktree allocation |
 | [Prompt-injection firewall and brokered authority](../plans/proposed/prompt-injection-firewall.md) | Proposed | 0 | Historical 72-sprint decomposition remains cancelled; every record maps into the active P0 plan's current work |
@@ -142,6 +142,8 @@ see the [identity reconciliation](identity-reconciliation-2026-09-10.md).
 September 11 adds PF-80-S01 (renamed operations PF-76) and PF-79-S01/S02:
 115 current, 121 archived. The subsequent PF-81-S01 visual-QA planning amendment
 adds one dependent draft: 116 current, 121 archived, still only three reserved.
+S01 accounting closeout then transfers its reservation to S02: 115 current,
+122 archived, still three reserved and no extra initiative.
 The three-initiative policy is now explicit; all
 identity/dependency regression checks remain, with no error exceptions.
 Each proposal's sprint execution map links every draft directly.
