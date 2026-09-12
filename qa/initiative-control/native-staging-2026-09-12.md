@@ -1,5 +1,32 @@
 # Native continuation — staged combined-tree evidence
 
+## Accepted-main refresh — September 12, 06:22 UTC heartbeat
+
+Remote `refs/heads/main` verified as
+`bba52cecc996a2f04ec558b7b86514426e67c845`, matching the PF13 owner's handoff.
+Merged locally in the same staging branch at
+`64cc30cf19a25f74ae07125eece91f6f766e8ebf`. Two documentation conflicts retain
+the owner's accepted PF27 closeout and budget amendment. No native edits or
+duplicate PF27 review; its qualification stays attributed to the owner.
+
+Final affected run on that combined source, same pinned offline environment:
+`just test -p codex-state -p codex-tasknode-session`: **322 passed, 0 skipped**,
+8.928s, nextest `8569a7a0-cb79-4430-8f00-9a024a86b8b7`, exit0. Retained private
+`manager-continuation.9Id1V1/pf27-main-staging-tests.log` has no LEAK markers.
+Initiative-control unittest discovery: **83 passed**, 4.735s, exit0; mocked
+publication messages remain fixture output. Governance checkers: 3 active,
+115 current, 126 archived. Earlier normal-library evidence below was not rerun
+or relabeled as this refresh. No format/source mutation after these native tests.
+
+Seven prepared-allocation/ledger documents then committed as `8736c5a3a`:
+250 additions/2 deletions, governance and staged whitespace checks pass. These
+are drafts, not new worker allocations or new review results. Receiving source
+has overlapping uncommitted Facilities edits; preserve and coordinate them.
+The existing publisher task remains waitingOnApproval. No receiving cutover,
+new sync worker, deployment or product implementation dispatch occurred.
+
+## Previous combined native checkpoint
+
 Manager-owned local integration under the existing PF60/PF80 active initiatives;
 product citations: **Product measurement**, “No commercial performance numbers
 have been supplied”; **Internal delivery control — TO BUILD**, “Use sequential
