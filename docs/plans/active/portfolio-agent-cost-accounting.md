@@ -33,6 +33,13 @@ implementation_worktrees:
 
 # 2. Accounting — unified agent cost and usage
 
+23:13UTC: ten-file Core candidate returned835/249,100focused and575shared tests
+plus normal check pass. Original eight errors cleared;24 emitted Clippy errors
+at16 pre-existing native-test helper sites remain. Manager inspected and added
+only those assertions to the [same correction](../../research/agent-cost-accounting/core-policy-repair-allocation.md),
+same ten paths/ceiling, runtime frozen. Mendel continuation precedes first
+material review; no new product question or historical failure waiver.
+
 22:44 manager continuation: eight-file policy repair reviewed clean and received
 at37f23b991; parent575/575 zero skips and normal six-library check pass. Core's
 eight existing-policy errors remain. [Current ten-file Core correction](../../research/agent-cost-accounting/core-policy-repair-allocation.md)

@@ -1,5 +1,22 @@
 # PF-60-S02 — Core policy correction allocation
 
+## September12 23:13 — exact test-helper continuation
+
+Frozen first candidate835total/249non-test,100focused/575shared/normal check
+pass; original eight Core errors absent. Clippy101 exposes24 emitted diagnostics
+at16 unique pre-existing unwrap sites in the two already-allocated native test
+files. Manager read every site/diagnostic and existing tests/all.rs expect_used
+policy. Authorize ONLY those16 test assertions to become descriptive expect
+assertions (or existing Result/context where directly compatible), retaining
+identical failure conditions, bodies/IDs/route/retry/zero-send assertions.
+No production panic, fallback/default, new lint allowance or generic helper
+rewrite. Same ten paths/checkout/base,950/300target1100/375STOP; estimate40–65
+extra test/receipt lines. First material review remains unspent until corrected
+candidate frozen. Preserve original835/100/575/Clippy101 manifest and all failures.
+Runtime and other seven source files frozen. Reformat two tests, rerun100focused,
+575shared, same Clippy/check/governance and return exact corrected manifest.
+Any further outside-scope errors return for classification before repair.
+
 September12 22:44UTC. Manager accepts the implementer's inspected ten-path
 proposal within existing PF-60, **Product measurement**, “No commercial
 performance numbers have been supplied.” This is a bounded restoration of the

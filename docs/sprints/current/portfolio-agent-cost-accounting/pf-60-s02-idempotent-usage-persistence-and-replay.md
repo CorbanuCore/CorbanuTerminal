@@ -19,7 +19,7 @@ updated: 2026-09-12
 
 # PF-60-S02 — Idempotent usage persistence and replay
 
-Current mandate: [ten-file Core policy correction](../../../research/agent-cost-accounting/core-policy-repair-allocation.md), fresh sequential checkout above. Prior eight-file correction received37f23b991, parent575/575 and normal check pass; Core lint errors remain. Earlier native/repair mandates below are historical, not concurrent authorization.
+Current23:13 mandate: [ten-file Core policy correction](../../../research/agent-cost-accounting/core-policy-repair-allocation.md). First835/249 passed100focused/575shared/normalcheck; only16 newly exposed native test unwrap sites added under same ceiling, runtime frozen. First material review after corrected proof. Earlier native/repair mandates and failures below are retained history.
 17:22UTC: parent accepted review01's dropped role retry/timeout overrides P2 as
 in-scope; first correction queued after the matched baseline run. Same20 paths
 and existing allowance; native child override/mismatched-route proof required.
