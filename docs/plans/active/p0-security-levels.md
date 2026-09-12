@@ -985,7 +985,7 @@ for design provenance; product scope remains in the specification.
 September12: manager accepted exact combined Stage A63cbce998/Rust205e89cd,
 all15 scoped exits0; [receiving proof](../../../qa/initiative-control/status-display/pf27-stage-a-receiving-20260912.md).
 Next [Stage B allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-admission-allocation-20260912.md)
-authorizes seven exact paths against owner6d770938c; hard800, estimate760,
+authorizes seven exact paths against owner6d770938c; measured791, amended hard900 for remaining tests/runner only (runtime frozen),
 reviews30AstraHigh/31Fable5.1High preserve1–29. Same owner/worktree/originalbase;
 record owner-side allocation/governance before code. No activation, source push,
 new dependency or whole-sprint/independent-functional acceptance.

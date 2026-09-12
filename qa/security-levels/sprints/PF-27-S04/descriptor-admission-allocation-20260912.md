@@ -1,5 +1,24 @@
 # PF27 Stage B allocation: bounded private socket admission
 
+## 21:02 UTC manager size disposition
+
+Owner stopped before original800 ceiling and reported measured791: pair38,
+pair_tests23, spawn3, admission254, admission_tests422, connector51. Manager
+verified tracked diff counts and actual untracked line counts. Authorize same
+seven paths with revised hard900 changed code/test/fixture lines, against the
+same6d770938c baseline. Additional109 maximum is TEST/runner-only: committed
+hash/profile runner35–45 and actual-pair pending-ticket/deadline cleanup25–40.
+Runtime admission254 and existing wiring are frozen unless a concrete defect
+requires separate manager disposition. Do not spend room on a larger API.
+
+This explicit narrow above800 exception keeps one inseparable real admission,
+cleanup and hash-bound runner proof; splitting the owner module now would add
+two files and another acceptance boundary without reducing risk. Preserve every
+required failure/race test, reviews30/31 and all historical attempts. Original
+800/760 estimates below remain history, superseded only by this amendment.
+No new review opinion, human question, product authority or independent-test
+waiver. Record owner-side plan/sprint and pass governance, then continue.
+
 Manager-authorized September 12 after literal combined Stage A proof acceptance.
 Same sole owner /root, PF-27-S04 in progress, security-broker-resume-20260911
 worktree and feat/security-broker-resume-20260911 branch. Original plan/worktree
