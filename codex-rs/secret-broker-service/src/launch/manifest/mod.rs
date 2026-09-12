@@ -1,8 +1,12 @@
-//! Fixed-path synthetic inspection only; no executable launch authority.
+//! Synthetic image inspection and private single-child owner; no protected activation.
 mod elf;
 mod files;
 mod schema;
 mod sealed;
+// Construction-stage private entry points, exercised by non-root OS tests.
+#[cfg(target_env = "gnu")]
+#[allow(dead_code)]
+mod spawn;
 pub use sealed::SyntheticSealedImage;
 
 use std::fs::File;
