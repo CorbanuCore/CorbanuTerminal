@@ -1,4 +1,5 @@
 import copy
+from contextlib import contextmanager
 import io
 import json
 import multiprocessing
@@ -7,6 +8,7 @@ from pathlib import Path
 import select
 import subprocess
 import sys
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import decisions as d
@@ -17,6 +19,104 @@ import slack_transport as s
 import test_slack_transport as fixtures
 from test_decisions import NOW, revision
 from test_decision_alerts import PIN, OWNER
+
+
+@contextmanager
+def fixture_child(mode, endpoint):
+    popen = subprocess.Popen
+    def launch(command, **kwargs):
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).parent) + os.pathsep + os.environ.get("PYTHONPATH", ""))
+        command = [command[0], "-B", "-c", "from test_decision_manager import supervised_child; import sys; supervised_child(*sys.argv[1:])",
+                   *command[4:], mode, endpoint]
+        return popen(command, env=env, **kwargs)
+    with patch.object(m.subprocess, "Popen", side_effect=launch):
+        yield
+
+
+def supervised_child(root, guard, control, mode, endpoint):
+    if mode == "ignore-term":
+        fixtures.signal.signal(fixtures.signal.SIGTERM, fixtures.signal.SIG_IGN)
+    def run(runtime, stop, data):
+        assert not os.get_inheritable(runtime.fd)
+        try:
+            subprocess.Popen([sys.executable, "-c", "pass"], pass_fds=(runtime.fd,))
+        except d.Invalid:
+            pass
+        else:
+            raise AssertionError("SDK child could create a guard-inheriting descendant")
+        transport = s.Transport(a.Store(root), PIN, lambda: ("fixture-bot", "fixture-app"), live=True, now=lambda: NOW,
+                                web_factory=lambda **kw: fixtures.WebClient(base_url=endpoint, **kw))
+        update, mark_original = s.Session.update, s.ingress_count
+        owners, peers = [], []
+        def connect(client):
+            client.issue_new_wss_url()
+            session = fixtures.Connection("wss://fixture.invalid", s.QUIET)
+            session.sock, peer = fixtures.socket.socketpair()
+            session.sock.settimeout(0.05)  # Match SDK connection timeout; a blocking fixture socket strands close.
+            peers.append(peer)
+            client.current_session = session
+        def renewed(owner, phase):
+            update(owner, phase)
+            if phase == "connected" and len(owners) == 1:
+                owners.append(owner)
+                m.Stdio().emit(dict(type="renewed"))
+            if phase == "connected" and not owners:
+                owners.append(owner)
+                m.Stdio().emit(dict(type="connected"))
+                if mode == "hung":
+                    transport.socket.enqueue_message(json.dumps(dict(type="events_api", envelope_id="fixture", payload=fixtures.payload())))
+        def blocked(store, mark=False):
+            if mark and fixtures.threading.current_thread() is not fixtures.threading.main_thread() and mode == "hung":
+                fd = os.open(store.root / ".ingress.fence", os.O_WRONLY | os.O_APPEND)
+                owners[0].release()  # Real SDK executor survives release of the old lease.
+                m.Stdio().emit(dict(type="stopped"))  # Deliberately false frame, never death evidence.
+                fixtures.threading.Event().wait()
+                os.close(fd)
+            return mark_original(store, mark=mark)
+        with (patch.object(fixtures.SocketModeClient, "connect", autospec=True, side_effect=connect),
+              patch.object(s.Session, "update", renewed), patch.object(s, "ingress_count", blocked)):
+            transport.listen(seconds=data["seconds"], ongoing=data["ongoing"], stop=stop, runtime=runtime)
+    m.listener_child(root, int(guard), int(control), run=run)
+
+
+def orphan_controller(root, endpoint):
+    manager = m.ManagedListener(a.Store(root), PIN, live=True)
+    with fixture_child("hung", endpoint):
+        manager.start(ongoing=True)
+        channel = m.Stdio(manager.process.stdout, manager.process.stdin)
+        assert channel.read() == dict(type="connected")
+        assert channel.read() == dict(type="stopped")
+        m.Stdio().emit(dict(type="owned-child-ready"))
+        fixtures.threading.Event().wait()
+
+
+def controller_boundary(root, endpoint, phase):
+    manager = m.ManagedListener(a.Store(root), PIN, live=True)
+    def boundary():
+        m.Stdio().emit(dict(type="boundary", phase=phase))
+        fixtures.threading.Event().wait()  # Controller killed here, never an invented successful wait.
+    with fixture_child("hung" if phase == "stop" else "connected", endpoint):
+        if phase == "before-ready":
+            emit = m.Stdio.emit
+            def before_config(channel, value):
+                if "binding" in value:
+                    boundary()
+                return emit(channel, value)
+            with patch.object(m.Stdio, "emit", before_config):
+                manager.start(ongoing=True)
+        else:
+            manager.start(ongoing=True)
+            channel = m.Stdio(manager.process.stdout, manager.process.stdin)
+            assert channel.read() == dict(type="connected")
+            if phase == "renewal":
+                assert channel.read() == dict(type="renewed")
+            elif phase == "stop":
+                assert channel.read() == dict(type="stopped")
+                with patch.object(manager.process, "wait", side_effect=lambda **_: boundary()):
+                    manager.stop()  # EOF already closed; no store lock is held at the injected boundary.
+            elif phase == "reap":
+                manager.stop()
+            boundary()
 
 
 def bridge_child(root, feed, key, mode):
@@ -67,6 +167,227 @@ def cli_child(root, feed, endpoint):
 
 
 class ManagerTests(fixtures.LiveFixture):
+    def supervised(self, mode="connected", **options):
+        self.quiesce()
+        manager = m.ManagedListener(self.store, PIN, live=True)
+        self.addCleanup(manager.stop)
+        with fixture_child(mode, self.endpoint):
+            manager.start(**options)
+        self.assertEqual(self.line(manager.process), dict(type="connected"))
+        return manager
+
+    def test_supervisor_waits_for_real_executor_old_inode_despite_false_stopped_frame(self):
+        self.sending()
+        manager = self.supervised("hung", ongoing=True)
+        self.assertEqual(self.line(manager.process), dict(type="stopped"))
+        self.assertIsNone(manager.process.poll())
+        case = self.lose_fence()
+        before = self.store.read("transport")
+        completed, errors = [], []
+        def repair():
+            try:
+                with manager.quiesced() as witness:
+                    completed.append(s.recover_missing_fence(self.store, PIN, expected_digest=case,
+                        evidence="fixture-loss-reviewed", now=NOW, quiesce_listener=witness))
+            except BaseException as error:
+                errors.append(error)
+        worker = fixtures.threading.Thread(target=repair)
+        process = manager.process
+        worker.start()
+        fixtures.time.sleep(0.2)
+        self.assertTrue(worker.is_alive())
+        self.assertEqual(self.store.read("transport"), before)
+        self.assertFalse((self.root / ".ingress.fence").exists())
+        with self.assertRaises(BlockingIOError), m.ManagedListener(self.store, PIN).quiesced():
+            self.fail("unowned callback admitted")
+        process.kill()  # Retained handle only, never the false stopped frame or a journal PID.
+        worker.join(5)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(completed[0]["state"], "held")
+        self.assertEqual(process.returncode, -fixtures.signal.SIGKILL)
+        self.assertEqual(self.store.read("transport")["posts"], before["posts"])
+
+    def test_supervisor_finite_graceful_eof_hung_close_and_expiring_scoped_hook(self):
+        manager = self.supervised(seconds=0.2)
+        process = manager.process
+        process.wait(5)
+        self.assertEqual(process.returncode, 0)
+        manager.stop()
+        with manager.quiesced() as expired:
+            expired()
+            with self.assertRaises(d.Invalid):
+                manager.start()
+        with manager.quiesced():
+            with self.assertRaises(d.Invalid):
+                expired()
+        manager = self.supervised("hung", ongoing=True)
+        self.assertEqual(self.line(manager.process), dict(type="stopped"))
+        process = manager.process
+        started = fixtures.time.monotonic()
+        manager.stop()
+        self.assertIsNotNone(process.returncode)
+        self.assertLess(fixtures.time.monotonic() - started, 9.5)
+        with manager.quiesced() as witness:
+            witness()
+
+    def test_controller_sigkill_orphan_eof_excludes_replacement_until_process_death(self):
+        self.sending()
+        self.quiesce()
+        command = [sys.executable, "-B", "-c", "from test_decision_manager import orphan_controller; import sys; orphan_controller(*sys.argv[1:])",
+                   str(self.root), self.endpoint]
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).parent) + os.pathsep + os.environ.get("PYTHONPATH", ""))
+        process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        try:
+            self.assertEqual(self.line(process), dict(type="owned-child-ready"))
+            process.kill()
+            process.wait(3)
+            replacement = m.ManagedListener(self.store, PIN)
+            with self.assertRaises(BlockingIOError), replacement.quiesced():
+                self.fail("orphan callback still exists")
+            deadline = fixtures.time.monotonic() + 8
+            while True:
+                try:
+                    with replacement.quiesced() as witness:
+                        witness()
+                    break
+                except BlockingIOError:
+                    self.assertLess(fixtures.time.monotonic(), deadline)
+                    fixtures.time.sleep(0.1)
+            self.assertEqual(m.project_status(self.store, NOW, True)["state"], "held")
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.communicate(timeout=3)
+
+    def test_controller_crashes_before_ready_after_renewal_during_stop_and_after_reap(self):
+        self.quiesce()
+        old = self.store.read("transport")
+        env = dict(os.environ, PYTHONPATH=str(Path(__file__).parent) + os.pathsep + os.environ.get("PYTHONPATH", ""))
+        for phase in ("before-ready", "renewal", "stop", "reap"):
+            with self.subTest(phase=phase):
+                command = [sys.executable, "-B", "-c", "from test_decision_manager import controller_boundary; import sys; controller_boundary(*sys.argv[1:])",
+                           str(self.root), self.endpoint, phase]
+                process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+                try:
+                    self.assertEqual(self.line(process), dict(type="boundary", phase=phase))
+                    if phase != "reap":
+                        with self.assertRaises(BlockingIOError), m.ManagedListener(self.store, PIN).quiesced():
+                            self.fail("live runtime admitted")
+                    process.kill()
+                    process.wait(3)
+                    deadline = fixtures.time.monotonic() + 8
+                    while True:
+                        try:
+                            with m.ManagedListener(self.store, PIN).quiesced() as witness:
+                                witness()
+                            break
+                        except BlockingIOError:
+                            self.assertLess(fixtures.time.monotonic(), deadline)
+                            fixtures.time.sleep(0.1)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                    process.communicate(timeout=3)
+        current = self.store.read("transport")
+        for key in ("posts", "bridges", "runtime_guard", "routes", "events"):
+            self.assertEqual(current[key], old[key])
+
+    def test_supervisor_sigstop_unknown_owner_and_real_forced_kill(self):
+        manager = self.supervised("ignore-term", ongoing=True)
+        process = manager.process
+        os.kill(process.pid, fixtures.signal.SIGSTOP)  # Exact owned fixture handle, not a discovered PID.
+        try:
+            with self.assertRaises(BlockingIOError), m.ManagedListener(self.store, PIN).quiesced():
+                self.fail("stopped process is not dead")
+            with (patch.object(process, "wait", side_effect=subprocess.TimeoutExpired("fixture wait", 2)),
+                  patch.object(process, "kill", side_effect=OSError("fixture kill failure")), self.assertRaises(OSError)):
+                manager.stop()
+            self.assertIs(manager.process, process)
+            with self.assertRaises(BlockingIOError), m.ManagedListener(self.store, PIN).quiesced():
+                self.fail("failed kill admitted recovery")
+            with patch.object(process, "terminate", wraps=process.terminate) as terminate, patch.object(process, "kill", wraps=process.kill) as kill:
+                manager.stop()
+            self.assertEqual(terminate.call_count, 1)
+            self.assertEqual(kill.call_count, 1)
+            self.assertEqual(process.returncode, -fixtures.signal.SIGKILL)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(3)
+        with m.ManagedListener(self.store, PIN).quiesced() as witness:
+            witness()
+
+    def test_supervisor_spawn_handshake_and_wait_failures_keep_exclusion_or_reap(self):
+        self.quiesce()
+        manager = m.ManagedListener(self.store, PIN, live=True)
+        self.addCleanup(manager.stop)
+        before = self.store.read("transport")
+        for call in ("pipe", "spawn", "write", "read"):
+            target = (patch.object(m.os, "pipe", side_effect=OSError("fixture pipe")) if call == "pipe" else
+                      patch.object(m.subprocess, "Popen", side_effect=OSError("fixture spawn")) if call == "spawn" else
+                      patch.object(m.Stdio, "emit" if call == "write" else "read", side_effect=OSError("fixture frame")))
+            with fixture_child("connected", self.endpoint), target, self.assertRaises(OSError):
+                manager.start(ongoing=True)
+            self.assertIsNone(manager.process)
+            with manager.quiesced() as witness:
+                witness()
+        self.assertEqual(self.store.read("transport")["bridges"], before["bridges"])
+        manager = self.supervised(ongoing=True)
+        process = manager.process
+        with patch.object(process, "wait", side_effect=OSError("fixture wait failure")), self.assertRaises(OSError):
+            manager.stop()
+        self.assertIs(manager.process, process)
+        manager.stop()  # Retry the same handle; no replacement/PID adoption.
+        self.assertIsNotNone(process.returncode)
+
+    def test_foreground_local_commands_repair_and_eof_without_live_sdk(self):
+        self.quiesce()
+        case = self.lose_fence()
+        incoming, writer = os.pipe()
+        reader, outgoing = os.pipe()
+        commands = [dict(binding=PIN), dict(operation="start", seconds=60, ongoing=True),
+                    dict(operation="inspect-fence-loss"), dict(operation="recover-missing-fence", case_digest=case,
+                    evidence="fixture-loss-reviewed"), dict(operation="status")]
+        try:
+            with os.fdopen(incoming, "rb") as source, os.fdopen(outgoing, "wb") as sink:
+                os.write(writer, b"".join(d.canonical(c) + b"\n" for c in commands))
+                os.close(writer)
+                writer = None
+                with patch.object(s.Transport, "web", side_effect=AssertionError("SDK on local operation")):
+                    result = m.main(["supervise-listener", "--store", str(self.root)], stdin=source, stdout=sink, now=lambda: NOW)
+                self.assertEqual(result["state"], "held")
+            frames = [json.loads(line)["result"] for line in os.read(reader, 16384).splitlines()]
+            self.assertEqual(frames[0], dict(state="held"))
+            self.assertEqual(frames[1]["case_digest"], case)
+            self.assertEqual(frames[2]["loss_id"], case)
+            self.assertEqual(frames[3]["state"], "off")
+        finally:
+            if writer is not None:
+                os.close(writer)
+            os.close(reader)
+
+    def test_dedicated_exec_rejects_wrong_root_and_inherited_descriptor_before_ready(self):
+        self.quiesce()
+        before = self.store.read("transport")
+        for wrong in ("root", "descriptor"):
+            with self.subTest(wrong=wrong):
+                guard = os.open(self.root / (".transport.lock" if wrong == "descriptor" else ".listener.runtime.lock"), os.O_RDWR)
+                reader, writer = os.pipe()
+                try:
+                    root = self.root / "not-initialized" if wrong == "root" else self.root
+                    command = [sys.executable, "-B", str(Path(m.__file__).resolve()), "_listen-child", str(root), str(guard), str(reader)]
+                    process = subprocess.Popen(command, pass_fds=(guard, reader), close_fds=True,
+                                               stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    output, error = process.communicate(d.canonical(dict(binding=PIN, seconds=1, ongoing=False)) + b"\n", timeout=7)
+                    self.assertEqual((process.returncode, output, error), (1, b"", b""))
+                finally:
+                    for fd in (guard, reader, writer):
+                        os.close(fd)
+                with m.ManagedListener(self.store, PIN).quiesced() as witness:
+                    witness()
+                self.assertEqual(self.store.read("transport"), before)
+
     def fence_recovery_flow(self, consumed):
         key = self.retained_ack()
         if consumed:
@@ -379,10 +700,12 @@ class ManagerTests(fixtures.LiveFixture):
         seen = []
         with os.fdopen(incoming, "rb") as source, os.fdopen(outgoing, "wb") as sink:
             os.write(writer, d.canonical(dict(binding=PIN)) + b"\n")
-            def listen(transport, **kwargs):
-                seen.extend([transport.now(), transport.now()])
+            def listen(manager, **kwargs):
+                seen.extend([m.utc_now(), m.utc_now()])  # The same clock callable used by the real child.
+                manager.process = SimpleNamespace(poll=lambda: 0, returncode=0)
             with patch.object(m.dt, "datetime") as clock, patch.object(s.Transport, "gate", return_value={}), \
-                    patch.object(s.Transport, "listen", autospec=True, side_effect=listen), \
+                    patch.object(m.ManagedListener, "start", autospec=True, side_effect=listen), \
+                    patch.object(m.ManagedListener, "stop"), \
                     patch.object(m, "project_status", return_value={}):
                 clock.now.side_effect = instants
                 m.main(["listen", "--store", str(self.root), "--live", "--ongoing"], stdin=source, stdout=sink)

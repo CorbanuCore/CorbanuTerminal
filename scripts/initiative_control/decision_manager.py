@@ -9,8 +9,12 @@ from contextlib import contextmanager
 import datetime as dt
 import json
 import os
+from pathlib import Path
 import select
+import stat
+import subprocess
 import sys
+import threading
 import time
 
 import decisions as d
@@ -19,6 +23,10 @@ import decision_replies as r
 import slack_transport as s
 
 COUNTS = "received needs_clarification recorded queued delivered agent_acknowledged".split()
+
+
+def utc_now():
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def validate_status(value):
@@ -84,11 +92,13 @@ class Stdio:
         finally:
             os.set_blocking(self.output, blocking)
 
-    def read(self):
+    def read(self, *, eof_ok=False):
         raw = bytearray()
         while len(raw) < 16384:
             self.ready(self.input)
             byte = os.read(self.input, 1)
+            if not byte and not raw and eof_ok:
+                return None
             d.require(bool(byte))
             if byte == b"\n":
                 value = json.loads(raw, object_pairs_hook=d.pairs)
@@ -231,10 +241,168 @@ class ResolutionStore(a.Store):
                 d.require(s.observe_session_locked(self, self.read("transport")) == session_pin)
 
 
+class ManagedListener:
+    """One owned executable, no adopted PID. Lock order: operation -> runtime -> store -> transport."""
+    def __init__(self, store, binding, *, live=False):
+        self.store, self.binding, self.live = store, a.identity(binding), live is True
+        self.process, self.control, self.guard = None, None, None
+        self.operation = threading.RLock()
+
+    def start(self, *, seconds=60, ongoing=False):
+        with self.operation:
+            d.require(self.live and self.guard is None and (self.process is None or self.process.poll() is not None))
+            d.require(type(ongoing) is bool and type(seconds) in (int, float) and 0 < seconds <= 60)
+            self.stop()
+            guard = s.runtime_file(self.store, self.binding)
+            reader = writer = None
+            try:
+                s.runtime_owned(guard, self.store, self.binding)
+                reader, writer = os.pipe()
+                self.process = subprocess.Popen([sys.executable, "-B", str(Path(__file__).resolve()), "_listen-child",
+                    str(self.store.root), str(guard), str(reader)], pass_fds=(guard, reader), close_fds=True,
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+                self.control, writer = writer, None
+                channel = Stdio(self.process.stdout, self.process.stdin, timeout=5)
+                channel.emit(dict(binding=self.binding, seconds=seconds, ongoing=ongoing))
+                d.require(channel.read() == dict(type="runtime-owned"))  # Not connected/qualified/stopped.
+                return dict(state="starting")
+            except BaseException:
+                self.stop()  # Retain the handle if actual death cannot be proved.
+                raise
+            finally:
+                for fd in (guard, reader, writer):
+                    if fd is not None:
+                        os.close(fd)  # Never LOCK_UN: child inherited the locked open-file description.
+
+    def stop(self):
+        with self.operation:
+            if self.control is not None:
+                fd, self.control = self.control, None
+                os.close(fd)  # EOF is an owned stop request, including controller death.
+            if self.process is not None:
+                process = self.process
+                for action, timeout in ((None, 5), (process.terminate, 2), (process.kill, 2)):
+                    try:
+                        if action is not None and process.poll() is None:
+                            action()
+                        process.wait(timeout=timeout)
+                        break
+                    except subprocess.TimeoutExpired:
+                        if action == process.kill:
+                            raise
+                d.require(process.returncode is not None)
+                process.stdin.close()
+                process.stdout.close()
+                self.process = None
+
+    @contextmanager
+    def quiesced(self):
+        with self.operation:
+            d.require(self.guard is None)
+            self.stop()  # No store/feed/transport lock held during bounded process death/reap.
+            fd = s.runtime_file(self.store, self.binding)
+            token = object()
+            try:
+                s.runtime_owned(fd, self.store, self.binding)
+                self.guard = (fd, token)
+                def witness():
+                    d.require(self.guard == (fd, token) and self.process is None)
+                    s.runtime_owned(fd, self.store, self.binding)
+                yield witness
+            finally:
+                self.guard = None
+                os.close(fd)
+
+
+def listener_child(root, guard, control, *, run=None):
+    """Dedicated exec only. Injected run is a local SDK fixture seam, never CLI input.
+
+    No cleanup unlocks guard: even successful SDK close need not join all runners.
+    os._exit and the parent's wait encompass every thread; no descendants allowed.
+    """
+    code = 1
+    try:
+        d.require(len({guard, control, 0, 1, 2}) == 5 and stat.S_ISFIFO(os.fstat(control).st_mode))
+        os.set_inheritable(guard, False)
+        os.set_inheritable(control, False)
+        channel = Stdio(timeout=5)
+        data = channel.read()
+        d.shape(data, "binding seconds ongoing")
+        d.require(type(data["ongoing"]) is bool and type(data["seconds"]) in (int, float) and 0 < data["seconds"] <= 60)
+        store = a.Store(root)
+        runtime = s._ChildRuntime(guard, store, a.identity(data["binding"]))
+        def no_descendants(event, args):
+            d.require(event not in {"subprocess.Popen", "os.fork", "os.forkpty", "os.posix_spawn", "os.exec"})
+        sys.addaudithook(no_descendants)  # Dedicated SDK child is threads-only; not a general sandbox claim.
+        stop = threading.Event()
+        deadline = None if data["ongoing"] else time.monotonic() + data["seconds"]
+        def watchdog():
+            try:
+                while not stop.is_set() and (deadline is None or time.monotonic() < deadline):
+                    if select.select([control], [], [], 0.1)[0]:
+                        break  # EOF or any data requests shutdown; no commands/credentials on this pipe.
+            finally:
+                stop.set()
+                time.sleep(5)
+                os._exit(72)  # SDK close/worker joins cannot strand an orphan indefinitely.
+        threading.Thread(target=watchdog, daemon=True).start()
+        channel.emit(dict(type="runtime-owned"))
+        if run is None:
+            credentials = lambda: (os.environ["CORBANU_SLACK_BOT_TOKEN"], os.environ["CORBANU_SLACK_APP_TOKEN"])
+            transport = s.Transport(store, data["binding"], credentials, live=True, now=utc_now)
+            transport.listen(seconds=data["seconds"], ongoing=data["ongoing"], stop=stop, runtime=runtime)
+        else:
+            run(runtime, stop, data)
+        code = 0
+    except BaseException:
+        pass  # Never export raw SDK errors, URLs, credentials or callback data.
+    finally:
+        os._exit(code)
+
+
+def supervise_listener(store, binding, *, live=False, stdin=None, stdout=None, now):
+    manager = ManagedListener(store, binding, live=live)
+    source, sink = stdin or sys.stdin, stdout or sys.stdout
+    try:
+        while True:
+            if not select.select([source.fileno()], [], [], 0.1)[0]:
+                if manager.process is not None and manager.process.poll() is not None:
+                    manager.stop()
+                continue  # Foreground owner waiting, not a 20-second listener lifetime or scheduler.
+            channel = Stdio(source, sink)
+            data = channel.read(eof_ok=True)
+            if data is None:
+                return dict(state="held")
+            operation = data.get("operation")
+            if operation == "exit":
+                channel.emit(dict(type="result", result=dict(state="held")))
+                return dict(state="held")
+            try:
+                if operation == "start":
+                    d.shape(data, "operation seconds ongoing")
+                    result = manager.start(seconds=data["seconds"], ongoing=data["ongoing"])
+                elif operation == "stop":
+                    manager.stop()
+                    result = dict(state="held")
+                elif operation == "status":
+                    result = project_status(store, now(), live)
+                else:
+                    d.require(operation in ("inspect-fence-loss", "recover-missing-fence"))
+                    with manager.quiesced() as witness:
+                        result = (s.inspect_fence_loss(store, binding) if operation == "inspect-fence-loss" else
+                                  s.recover_missing_fence(store, binding, expected_digest=data["case_digest"],
+                                      evidence=data["evidence"], quiesce_listener=witness, now=now()))
+            except (OSError, ValueError, KeyError, TypeError):
+                result = dict(state="held")
+            channel.emit(dict(type="result", result=result))
+    finally:
+        manager.stop()
+
+
 def main(argv=None, *, credentials=None, observe_owner=None, stdin=None, stdout=None, now=None, quiesce_listener=None):
-    clock = now or (lambda: dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    clock = now or utc_now
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices="status init-transport qualify send listen drain interpret resume dispatch reconcile project-status inspect-fence-loss recover-missing-fence".split())
+    parser.add_argument("operation", choices="status init-transport qualify send listen drain interpret resume dispatch reconcile project-status inspect-fence-loss recover-missing-fence supervise-listener".split())
     parser.add_argument("--store", required=True)
     parser.add_argument("--feed")
     parser.add_argument("--live", action="store_true")
@@ -248,9 +416,26 @@ def main(argv=None, *, credentials=None, observe_owner=None, stdin=None, stdout=
     if args.operation == "init-transport":
         s.initialize(store)
         return project_status(store, clock(), True)
-    d.require(args.live or args.operation in ("drain", "inspect-fence-loss", "recover-missing-fence"))
+    d.require(args.live or args.operation in ("drain", "inspect-fence-loss", "recover-missing-fence", "supervise-listener"))
     channel = Stdio(stdin, stdout)
     data = channel.read()  # Owner input, not a Slack envelope; no credentials/config file.
+    if args.operation == "supervise-listener":
+        return supervise_listener(store, data["binding"], live=args.live, stdin=stdin, stdout=stdout, now=clock)
+    if args.operation == "listen":
+        manager = ManagedListener(store, data["binding"], live=args.live)
+        try:
+            manager.start(ongoing=args.ongoing)
+            while manager.process.poll() is None:
+                if select.select([channel.input], [], [], 0.1)[0]:
+                    manager.stop()
+                    break  # Owner EOF/input stops this one-shot listener; no detached ongoing process.
+            if manager.process is not None:
+                d.require(manager.process.returncode == 0)
+        finally:
+            manager.stop()
+        result = project_status(store, clock(), True)
+        Stdio(stdin, stdout).emit(dict(type="result", result=result))
+        return result
     if args.operation in ("inspect-fence-loss", "recover-missing-fence"):
         result = (s.inspect_fence_loss(store, data["binding"]) if args.operation == "inspect-fence-loss" else
                   s.recover_missing_fence(store, data["binding"], expected_digest=data["case_digest"], evidence=data["evidence"],
@@ -271,9 +456,6 @@ def main(argv=None, *, credentials=None, observe_owner=None, stdin=None, stdout=
             if row["details"]["state"] == "sent":
                 transport.bind_alert(key, row)
             result = dict(key=key, state=row["details"]["state"])
-        elif args.operation == "listen":
-            transport.listen(ongoing=args.ongoing)
-            result = project_status(store, clock(), True)
         elif args.operation == "drain":
             result = dict(drained=s.drain(store, transport.binding))
         elif args.operation == "interpret":
@@ -304,7 +486,10 @@ def main(argv=None, *, credentials=None, observe_owner=None, stdin=None, stdout=
 
 if __name__ == "__main__":
     try:
-        main()
+        if len(sys.argv) == 5 and sys.argv[1] == "_listen-child":
+            listener_child(sys.argv[2], int(sys.argv[3]), int(sys.argv[4]))
+        else:
+            main()
     except Exception:
         print("Slack operation held; inspect redacted status and retained evidence.", file=sys.stderr)
         sys.exit(1)

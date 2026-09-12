@@ -1,9 +1,12 @@
 import copy
+import functools
 import json
 import multiprocessing
 import os
 import signal
 import socket
+import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,6 +23,7 @@ import decisions as d
 import decision_alerts as a
 import decision_replies as r
 import slack_transport as s
+import decision_manager as m
 from test_decisions import NOW, revision
 from test_decision_alerts import SlackFixture, PIN, OWNER, REMOTE
 
@@ -101,6 +105,8 @@ def cancel_under_lock(root, key, ready, release):
 
 def listener_process(root, ready, stop, mode="connected"):
     store = a.Store(root)
+    fd = s.runtime_file(store, PIN)
+    runtime = s._ChildRuntime(fd, store, PIN)  # Actual spawned child; fd remains owned until process death.
     transport = s.Transport(store, PIN, lambda: ("fixture-bot", "fixture-app"), live=True, now=lambda: NOW)
     updates, update = [0], s.Session.update
     def observed(owner, phase):
@@ -119,7 +125,7 @@ def listener_process(root, ready, stop, mode="connected"):
     with patch.object(SocketModeClient, "connect", autospec=True, side_effect=connect), \
             patch.object(s.Session, "update", observed):
         try:
-            transport.listen(ongoing=True, stop=stop)
+            transport.listen(ongoing=True, stop=stop, runtime=runtime)
         finally:
             if transport.socket.current_session:
                 transport.socket.current_session.fixture_peer.close()
@@ -156,11 +162,14 @@ def joined_callbacks():
 
 
 def crash_fence_repair(root, case, stage):
-    s.recover_missing_fence(a.Store(root), PIN, expected_digest=case, evidence="fixture-loss-reviewed", now=NOW,
-        quiesce_listener=joined_callbacks, checkpoint=lambda where: os._exit(61) if where == stage else None)
+    manager = m.ManagedListener(a.Store(root), PIN)
+    with manager.quiesced() as witness:
+        s.recover_missing_fence(manager.store, PIN, expected_digest=case, evidence="fixture-loss-reviewed", now=NOW,
+            quiesce_listener=witness, checkpoint=lambda where: os._exit(61) if where == stage else None)
 
 
 def old_inode_callback(root, ready, stop):
+    runtime = s._ChildRuntime(s.runtime_file(a.Store(root), PIN), a.Store(root), PIN)
     owner = s.Session(a.Store(root))
     owner.update("connected")
     fd = os.open(os.path.join(root, ".ingress.fence"), os.O_WRONLY | os.O_APPEND)
@@ -170,6 +179,53 @@ def old_inode_callback(root, ready, stop):
     os.fsync(fd)
     os.close(fd)
     owner.close()
+
+
+def runtime_case(function):
+    """Preserve literal assertions in a fresh exec, with a real lifetime guard, never a patched gate."""
+    @functools.wraps(function)
+    def wrapped(self):
+        if hasattr(self, "runtime"):
+            return function(self)
+        reader, writer = os.pipe()
+        try:
+            command = [sys.executable, "-B", "-c", "from test_slack_transport import runtime_case_child; import sys; runtime_case_child(sys.argv[1], int(sys.argv[2]))",
+                       function.__name__, str(reader)]
+            env = dict(os.environ, PYTHONPATH=os.path.dirname(__file__) + os.pathsep + os.environ.get("PYTHONPATH", ""))
+            with subprocess.Popen(command, pass_fds=(reader,), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, env=env) as process:
+                output, errors = process.communicate(d.canonical(dict(binding=PIN, seconds=60, ongoing=True)) + b"\n", timeout=30)
+                self.assertEqual(process.returncode, 0, errors.decode())
+                self.assertEqual(json.loads(output), dict(type="runtime-owned"))
+        finally:
+            os.close(reader)
+            os.close(writer)
+    return wrapped
+
+
+def runtime_case_child(name, control):
+    import traceback
+    case = TransportTests(name)
+    case.setUp()
+    guard = s.runtime_file(case.store, PIN)
+    def run(runtime, stop, data):
+        case.runtime = runtime
+        try:
+            getattr(case, name)()
+        except BaseException:
+            traceback.print_exc()
+            raise
+        finally:
+            case.tearDown()
+            case.doCleanups()
+    m.listener_child(str(case.root), guard, control, run=run)
+
+
+def legacy_sdk_before_session(ready, stop):
+    client = SocketModeClient(app_token="fixture-app", web_client=WebClient(token="fixture-bot"), logger=s.QUIET)
+    ready.set()  # Real SDK threads exist; no Session or runtime pin was ever claimed.
+    stop.wait(10)
+    client.close()
 
 
 class LiveFixture(SlackFixture):
@@ -298,6 +354,61 @@ class LiveFixture(SlackFixture):
 
 
 class TransportTests(LiveFixture):
+    def test_runtime_guard_unknown_legacy_binding_inode_and_direct_entry_refuse(self):
+        self.quiesce()
+        before = self.store.read("transport")
+        with patch.object(s.Transport, "web", side_effect=AssertionError("unguarded SDK")):
+            for runtime in (None, True, object()):
+                with self.assertRaises(d.Invalid):
+                    self.transport.listen(runtime=runtime)
+            with self.assertRaises(d.Invalid):
+                with m.ManagedListener(self.store, dict(PIN, human="wrong-human")).quiesced():
+                    self.fail("wrong identity admitted")
+        path = self.root / ".listener.runtime.lock"
+        path.rename(self.root / "retained-runtime")
+        for replacement in ("missing", "symlink", "new-inode"):
+            if replacement == "symlink":
+                path.symlink_to(self.root / "retained-runtime")
+            elif replacement == "new-inode":
+                path.unlink()
+                path.touch(mode=0o600)
+            with self.assertRaises((d.Invalid, OSError)), m.ManagedListener(self.store, PIN).quiesced():
+                self.fail("unknown runtime admitted")
+            self.assertEqual(self.store.read("transport"), before)
+        legacy = copy.deepcopy(before)
+        del legacy["runtime_guard"]
+        legacy["lifecycle"].update(session=None, epoch=0, history=[])
+        self.store.write("transport", legacy)
+        ctx = multiprocessing.get_context("spawn")
+        ready, stop = ctx.Event(), ctx.Event()
+        child = ctx.Process(target=legacy_sdk_before_session, args=(ready, stop))
+        child.start()
+        try:
+            self.assertTrue(ready.wait(5))
+            with self.assertRaises(d.Invalid), m.ManagedListener(self.store, PIN).quiesced():
+                self.fail("epoch zero is not a quiescence proof")
+            self.assertEqual(self.store.read("transport"), legacy)
+        finally:
+            stop.set()
+            child.join(5)
+            if child.is_alive():
+                child.kill()
+                child.join(3)
+
+    def test_runtime_birth_partial_fsync_failure_never_reinitializes(self):
+        root = self.root / "partial-birth"
+        root.mkdir(mode=0o700)
+        store = a.Store(root)
+        store.initialize()
+        with patch.object(s.os, "fsync", side_effect=OSError("fixture birth sync")), self.assertRaises(d.Invalid):
+            s.initialize(store)
+        self.assertTrue((root / ".listener.runtime.lock").exists())
+        self.assertFalse((root / "transport.json").exists())
+        with self.assertRaises(d.Invalid):
+            s.initialize(store)
+        with self.assertRaises((OSError, d.Invalid)), m.ManagedListener(store, PIN).quiesced():
+            self.fail("partial birth became ready")
+
     def test_fence_repair_real_crash_boundaries_preserve_loss_and_all_old_data(self):
         for stage in ("prepared", "cancelled", "partial", "staged", "linked", "synced", "restored"):
             with self.subTest(stage=stage):
@@ -326,8 +437,9 @@ class TransportTests(LiveFixture):
                         s.initialize(store)
                     with s.locked(store) as journal, self.assertRaises(d.Invalid):
                         s.observe_session_locked(store, journal)
-                result = s.recover_missing_fence(a.Store(store.root), PIN, expected_digest=case,
-                    evidence="fixture-loss-reviewed", now=NOW, quiesce_listener=joined_callbacks)
+                with m.ManagedListener(a.Store(store.root), PIN).quiesced() as witness:
+                    result = s.recover_missing_fence(a.Store(store.root), PIN, expected_digest=case,
+                        evidence="fixture-loss-reviewed", now=NOW, quiesce_listener=witness)
                 self.assertEqual(result, dict(loss_id=case, state="held", retired_count=1))
                 after = store.read("transport")
                 self.assertEqual(after["ingress"], before["ingress"])
@@ -344,8 +456,9 @@ class TransportTests(LiveFixture):
                 self.assertEqual(d.load_fixture(self.feed_root, NOW), self.feed)
                 with self.assertRaises(d.Invalid):
                     transport.gate()
-                s.recover_missing_fence(store, PIN, expected_digest=case, evidence="fixture-loss-reviewed", now=NOW,
-                                       quiesce_listener=joined_callbacks)
+                with m.ManagedListener(store, PIN).quiesced() as witness:
+                    s.recover_missing_fence(store, PIN, expected_digest=case, evidence="fixture-loss-reviewed", now=NOW,
+                                           quiesce_listener=witness)
                 self.assertEqual(store.read("transport"), after)
 
     def test_repair_waits_for_real_old_inode_callback_and_rejects_stale_preview(self):
@@ -814,6 +927,7 @@ class TransportTests(LiveFixture):
             evidence="fixture-cancel-gap-reviewed", ingress=s.ingress_count(self.store), **self.session_review()))
         self.transport.gate()
 
+    @runtime_case
     def test_sdk_silent_health_disconnect_is_polled_fenced_and_reconnected(self):
         transport, sessions, callbacks, pauses = self.transport, [], [], []
         test = self
@@ -847,7 +961,7 @@ class TransportTests(LiveFixture):
                 return self.stopped
         self.owner.close()
         with patch.object(SocketModeClient, "connect", autospec=True, side_effect=connect):
-            transport.listen(ongoing=True, stop=Control())
+            transport.listen(ongoing=True, stop=Control(), runtime=self.runtime)
         self.assertEqual(len(sessions), 2)
         self.assertIn(1, pauses)
         self.assertFalse(transport.active)
@@ -877,6 +991,7 @@ class TransportTests(LiveFixture):
         with s.locked(self.store) as value:
             self.assertEqual(value["ui_evidence"], ui_evidence())
 
+    @runtime_case
     def test_ongoing_reception_passes_sixty_seconds_reconnects_without_gap_clear(self):
         self.sending()
         transport, pauses, replies = self.transport, [], []
@@ -904,7 +1019,7 @@ class TransportTests(LiveFixture):
                 patch.object(SocketModeClient, "is_connected", return_value=True), \
                 patch.object(SocketModeClient, "send_socket_mode_response") as acknowledge, \
                 patch.object(s.time, "monotonic", side_effect=lambda: monotonic() + elapsed[0]):
-            transport.listen(ongoing=True, stop=Control())
+            transport.listen(ongoing=True, stop=Control(), runtime=self.runtime)
         self.assertEqual(connect.call_count, 2)
         self.assertEqual(acknowledge.call_count, 2)
         self.assertIn(1, pauses)
@@ -915,6 +1030,7 @@ class TransportTests(LiveFixture):
             self.assertIsNotNone(value["hold"])
         self.assertEqual(len(self.messages), 2)
 
+    @runtime_case
     def test_ongoing_reconnect_failure_streak_is_bounded_and_shutdown_is_explicit(self):
         self.reply = lambda *_: ({"ok": False, "error": "internal_error"}, 503, {})
         pauses = []
@@ -927,7 +1043,7 @@ class TransportTests(LiveFixture):
         self.owner.close()
         with patch.object(SocketModeClient, "connect", autospec=True, side_effect=lambda client: client.issue_new_wss_url()):
             with self.assertRaises(SlackApiError):
-                self.transport.listen(ongoing=True, stop=Control())
+                self.transport.listen(ongoing=True, stop=Control(), runtime=self.runtime)
         self.assertEqual(sum(method == "apps.connections.open" for method, _ in self.calls), 3)
         self.assertEqual(pauses, [1, 2])
         self.assertFalse(self.transport.active)
@@ -965,12 +1081,13 @@ class TransportTests(LiveFixture):
         with self.assertRaises(d.Invalid):
             self.transport.reconcile(reply)
 
+    @runtime_case
     def test_sdk_socket_rate_limit_and_forced_disconnect_cannot_retry(self):
         self.reply = lambda *_: ({"ok": False, "error": "ratelimited"}, 429, {"Retry-After": "1"})
         self.owner.close()
         with patch.object(SocketModeClient, "connect", autospec=True, side_effect=lambda client: client.issue_new_wss_url()):
             with self.assertRaises(SlackApiError):
-                self.transport.listen(seconds=0.2)
+                self.transport.listen(seconds=0.2, runtime=self.runtime)
         self.assertEqual(sum(method == "apps.connections.open" for method, _ in self.calls), 1)
         self.transport.socket.connect_to_new_endpoint(force=True)
         self.assertEqual(sum(method == "apps.connections.open" for method, _ in self.calls), 1)
@@ -1195,6 +1312,7 @@ class TransportTests(LiveFixture):
         with s.locked(self.store) as value:
             self.assertEqual(sum(not e["drained"] for e in value["events"].values()), 100)
 
+    @runtime_case
     def test_fsync_corruption_missing_extension_and_socket_shutdown_hold(self):
         self.sending()
         with patch.object(a.os, "fsync", side_effect=OSError("fixture disk failure")):
@@ -1215,7 +1333,7 @@ class TransportTests(LiveFixture):
             with s.locked(self.store) as value:
                 value["ingress"] = s.ingress_count(self.store)
                 self.store.write("transport", value)
-            self.transport.listen(seconds=0.1, stop=StopAfterConnect())
+            self.transport.listen(seconds=0.1, stop=StopAfterConnect(), runtime=self.runtime)
         self.assertEqual(connect.call_count, 1)
         self.assertFalse(self.transport.socket.auto_reconnect_enabled)
         with s.locked(self.store) as value:

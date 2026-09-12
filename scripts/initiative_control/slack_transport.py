@@ -34,8 +34,15 @@ def initialize(store):
         fd = os.open(store.root / ".listener.owner.lock", os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
         stat = os.fstat(fd)
         os.close(fd)
+        fd = os.open(store.root / ".listener.runtime.lock", os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+        try:
+            runtime = os.fstat(fd)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
         store.write("transport", dict(binding=None, last_verified=None, hold="unqualified", watermark=0,
             events={}, posts={}, routes={}, bridges={}, gap_reviews=[], ingress=0, ui_evidence=None, schema=2,
+            runtime_guard=dict(version=1, file=[runtime.st_dev, runtime.st_ino]),
             lifecycle=dict(owner_file=[stat.st_dev, stat.st_ino], session=None, epoch=0, history=[])))
 
 
@@ -77,7 +84,8 @@ def locked(store):
         value = store.read("transport")
         fields = "binding last_verified hold watermark events posts routes bridges gap_reviews ingress ui_evidence"
         d.shape(value, fields + (" schema lifecycle" if "schema" in value else "")
-                + (" fence_losses" if "fence_losses" in value else ""))
+                + (" fence_losses" if "fence_losses" in value else "")
+                + (" runtime_guard" if "runtime_guard" in value else ""))
         d.require(type(value["watermark"]) is int and value["watermark"] >= 0)
         losses(value)
         yield value
@@ -340,6 +348,59 @@ class Session:
             self.release()
 
 
+def runtime_file(store, binding):
+    """Immutable birth pin: never create, adopt or infer quiescence from the lease.
+
+    Atomic journal read avoids lock inversion; callers acquire runtime before
+    store/transport, then revalidate. No credential, SDK or mutable PID registry.
+    """
+    value = store.read("transport")
+    d.require(value.get("schema") == 2 and value["binding"] == a.identity(binding))
+    pin = value.get("runtime_guard")
+    d.shape(pin, "version file")
+    d.require(type(pin["version"]) is int and pin["version"] == 1)
+    fd = os.open(store.root / ".listener.runtime.lock", os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        info = os.fstat(fd)
+        d.owner_only(info)
+        d.require(pin["file"] == [info.st_dev, info.st_ino])
+        os.set_inheritable(fd, False)
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def runtime_owned(fd, store, binding):
+    probe = runtime_file(store, binding)
+    try:
+        own, other = os.fstat(fd), os.fstat(probe)
+        d.require((own.st_dev, own.st_ino) == (other.st_dev, other.st_ino))
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        raise d.Invalid()
+    finally:
+        os.close(probe)
+
+
+class _ChildRuntime:
+    """Only the dedicated child bootstrap constructs this; NO close/finalizer.
+
+    Its descriptor dies with the process, never with Session/SDK stack unwinding.
+    PID is only an anti-fork identity check, not a liveness or shutdown proof.
+    """
+    def __init__(self, fd, store, binding):
+        runtime_owned(fd, store, binding)
+        self.fd, self.root, self.binding, self.process = fd, store.root, copy.deepcopy(binding), os.getpid()
+
+    def check(self, store, binding):
+        d.require(self.process == os.getpid() and self.root == store.root and self.binding == binding)
+        runtime_owned(self.fd, store, binding)
+
+
 class Transport:
     def __init__(self, store, binding, credentials, *, live=False, now, web_factory=None):
         self.store, self.binding = store, a.identity(binding)
@@ -533,8 +594,10 @@ class Transport:
             except Exception:
                 pass  # The independent uncovered/missing fence already denies work after restart.
 
-    def listen(self, seconds=60, stop=None, ongoing=False):
+    def listen(self, seconds=60, stop=None, ongoing=False, *, runtime=None):
         d.require(self.live)
+        d.require(type(runtime) is _ChildRuntime)
+        runtime.check(self.store, self.binding)  # Before even the SDK constructor can start threads.
         self.gate(local=True)  # Connectivity recovery is not fresh send/work qualification.
         d.require(type(ongoing) is bool and 0 < seconds <= 60)
         stop = stop or threading.Event()
