@@ -37,6 +37,7 @@ use sha2::Sha256;
 
 mod client;
 mod commands;
+mod delivery_goal;
 mod recovery;
 mod stream;
 pub mod tracker;
