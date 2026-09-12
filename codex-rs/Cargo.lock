@@ -4010,6 +4010,7 @@ name = "codex-protected-state"
 version = "0.1.42"
 dependencies = [
  "codex-config",
+ "codex-linux-pidfd-spawn",
  "codex-security-audit",
  "codex-security-policy",
  "codex-utils-absolute-path",

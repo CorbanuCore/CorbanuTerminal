@@ -33,7 +33,51 @@ pub struct OwnedChild {
     status: Option<WaitIdStatus>,
 }
 
+/// Retained stable identity only, minted by the sole child owner. This cannot
+/// launch, signal or reap a process and does not confer protected authority.
+pub struct ChildIdentity {
+    pidfd: OwnedFd,
+}
+
+impl ChildIdentity {
+    /// Nonblocking liveness observation, not readiness or an activation grant.
+    pub fn check_live(&self) -> io::Result<()> {
+        let mut fd = libc::pollfd {
+            fd: self.pidfd.as_raw_fd(),
+            events: libc::POLLIN,
+            revents: 0,
+        };
+        // SAFETY: one initialized pollfd, retained live descriptor, zero timeout.
+        match unsafe { libc::poll(&mut fd, 1, 0) } {
+            0 => Ok(()),
+            -1 => Err(io::Error::last_os_error()),
+            _ => Err(io::ErrorKind::ConnectionAborted.into()),
+        }
+    }
+
+    /// Compare a kernel-obtained peer pidfd while checking the retained owner
+    /// before and after comparison. No numeric PID lookup or descriptor export.
+    pub fn matches_live_peer(&self, peer: std::os::fd::BorrowedFd<'_>) -> io::Result<bool> {
+        self.check_live()?;
+        let matches = super::peer::same_process(self.pidfd.as_fd(), peer)?;
+        self.check_live()?;
+        Ok(matches)
+    }
+}
+
 impl OwnedChild {
+    /// Duplicate only identity; termination/reaping remains exclusively here.
+    pub fn retain_identity(&self) -> io::Result<ChildIdentity> {
+        if self.status.is_some() {
+            return Err(io::ErrorKind::ConnectionAborted.into());
+        }
+        let identity = ChildIdentity {
+            pidfd: self.pidfd.try_clone()?,
+        };
+        identity.check_live()?;
+        Ok(identity)
+    }
+
     /// Compare stable kernel identities without transferring either descriptor.
     /// This is not liveness/readiness proof; callers must check the generation.
     pub fn is_same_process(&self, peer: std::os::fd::BorrowedFd<'_>) -> io::Result<bool> {

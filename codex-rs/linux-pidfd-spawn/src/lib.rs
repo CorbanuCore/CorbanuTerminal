@@ -10,6 +10,7 @@ mod ffi;
 mod peer;
 mod spawn;
 
+pub use spawn::ChildIdentity;
 pub use spawn::OwnedChild;
 pub use spawn::SyntheticRole;
 pub use spawn::spawn_synthetic_probe;

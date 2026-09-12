@@ -1,0 +1,42 @@
+RUST_MIN_STACK=8388608 NEXTEST_PROFILE=local cargo nextest run --no-fail-fast "$@"
+   Compiling codex-utils-absolute-path v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/absolute-path)
+   Compiling codex-utils-rustls-provider v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/rustls-provider)
+   Compiling codex-security-policy v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/security-policy)
+   Compiling codex-utils-cache v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/cache)
+   Compiling codex-http-client v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/http-client)
+   Compiling codex-utils-home-dir v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/home-dir)
+   Compiling codex-utils-path-uri v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/path-uri)
+   Compiling codex-utils-string v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/string)
+   Compiling codex-execpolicy v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/execpolicy)
+   Compiling codex-utils-image v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/image)
+   Compiling codex-extension-items v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/ext/items)
+   Compiling codex-network-proxy v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/network-proxy)
+   Compiling codex-async-utils v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/async-utils)
+   Compiling codex-client v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/codex-client)
+   Compiling codex-websocket-client v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/websocket-client)
+   Compiling codex-security-audit v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/security-audit)
+   Compiling codex-product-brand v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/product-brand)
+   Compiling codex-keyring-store v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/keyring-store)
+   Compiling codex-utils-path v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/path-utils)
+   Compiling codex-linux-pidfd-spawn v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/linux-pidfd-spawn)
+   Compiling codex-secret-broker v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/secret-broker)
+   Compiling codex-utils-cargo-bin v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/utils/cargo-bin)
+   Compiling codex-protocol v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/protocol)
+   Compiling codex-file-system v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/file-system)
+   Compiling codex-api v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/codex-api)
+   Compiling codex-git-utils v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/git-utils)
+   Compiling codex-secrets v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/secrets)
+   Compiling codex-vault v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/vault)
+   Compiling codex-otel v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/otel)
+   Compiling codex-model-provider-info v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/model-provider-info)
+   Compiling codex-features v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/features)
+   Compiling codex-config v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/config)
+   Compiling codex-protected-state v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/protected-state)
+   Compiling codex-secret-broker-service v0.1.42 (/home/travis/worktrees/security-broker-root-compat-20260912/codex-rs/secret-broker-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 25.33s
+────────────
+ Nextest run ID 00c5f14c-fb1f-42c8-8f72-a4d5b800a2ce with nextest profile: local
+    Starting 1 test across 7 binaries (69 tests skipped)
+        PASS [   0.002s] (1/1) codex-secret-broker-service launch::manifest::elf::tests::pf_27_s01_elf_profile_frozen_artifacts_as_data
+────────────
+     Summary [   0.003s] 1 test run: 1 passed, 69 skipped

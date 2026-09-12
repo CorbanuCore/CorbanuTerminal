@@ -982,6 +982,15 @@ for design provenance; product scope remains in the specification.
 
 ### PF-27
 
+Descriptor identity compatibility is qualified for manager receiving, source
+d776e938d8a0c07cc9b50b1d6a818d9f6feb0c11/Rustb48e9c4f9cb89e814b8bdabd6069be86cc47badd.
+[Exact proof](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-20260912/README.md):
+all25 commands+suite0 on non-root RTX/TMUX, both transport entries/five rejection
+scenarios, retained identity2, affected suites/strict lint/locks/source pass;
+Astra33/Fable34 exit0/findings[]. Original failed attempts retained. This is
+synthetic/default-OFF internal compatibility only; receiving combined proof,
+root dispatch composition and later protected-user/PF26/native gates remain open.
+
 Manager accepted receiving Stage B e1cc38a70/Rust2588dfe0: all17 commands+suite0,
 actual RTX/TMUX/provenance and unchanged locks verified. Next sole-owner
 [descriptor identity compatibility allocation](../../../qa/security-levels/sprints/PF-27-S04/descriptor-root-compat-allocation-20260912.md)
