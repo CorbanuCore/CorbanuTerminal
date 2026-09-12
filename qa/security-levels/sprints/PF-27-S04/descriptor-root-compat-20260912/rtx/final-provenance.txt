@@ -1,0 +1,25 @@
+Sat Sep 12 22:15:35 UTC 2026
+uid=1001(travis) gid=1001(travis) groups=1001(travis),27(sudo),100(users)
+Linux ambient-System-Product-Name 7.0.0-31-generic #31-Ubuntu SMP PREEMPT_DYNAMIC Sat Aug  1 04:26:38 UTC 2026 x86_64 GNU/Linux
+glibc 2.43
+rustc 1.95.0 (59807616e 2026-04-14)
+binary: rustc
+commit-hash: 59807616e1fa2540724bfbac14d7976d7e4a3860
+commit-date: 2026-04-14
+host: x86_64-unknown-linux-gnu
+release: 1.95.0
+LLVM version: 22.1.2
+d776e938d8a0c07cc9b50b1d6a818d9f6feb0c11
+b48e9c4f9cb89e814b8bdabd6069be86cc47badd
+e2dcd5d25bd6f7749b66d30928f5574bcd134d5f
+5ecff077dbbbf7887a61c03a8e9aa354f002e1ed
+cd6e30f5bb8d63b2d05ae4a7410f0da886d0d38a4f149d5a384b3d7e4350e5fe  codex-rs/Cargo.toml
+5101ffe0dea88d84e213fcd31025f1d2ca0f9a8cbd069b8ac5ea787d392b1459  codex-rs/Cargo.lock
+39bf33671e13bb1535ca521113cea61e5368e7e2915070a742e5a7fd4ad096fd  MODULE.bazel
+c8d7e3f8c8bec8f8e71cc3d1d39fcb952eec0f07a41cdac48401a6f64a60d979  MODULE.bazel.lock
+59ba145dc8178ae9680914943e8ba12c23c37d17ac4cc4a05a423539cbda1a6f  /home/travis/security-round5/evidence/pf27-adapter-20260912/profile-final/hold
+cc821a2ee024b3f17a9073de108a6212e5f2c34f77818715b775c59f880477ca  /home/travis/security-round5/evidence/pf27-adapter-20260912/profile-final/inspect
+f6ca8e3368dcbc8e5ba92bbbc7860ee825628b9470ac53116c6c3f6996bef3f0  /home/travis/security-round5/evidence/pf27-static-probe-20260912/linkage-retry/candidate/codex-protected-root-probe
+836d74a13c910359ab71abe90523b682211445d355e5c4851164423910d7d555  /home/travis/security-round5/evidence/pf27-sealed-20260912/verified/candidate/codex-protected-root-probe
+37fb0d7c5fd7e09ca23e9a5b1901b77786b87dfe8a869e191452c571bda7081d  /home/travis/security-round5/evidence/pf27-static-probe-20260912/uapi-retry/candidate/codex-protected-root-probe
+ext2/ext3

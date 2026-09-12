@@ -1,0 +1,10 @@
+bazel mod deps --lockfile_mode=update
+$TEST_TMPDIR defined, some defaults will be overridden
+Extracting Bazel installation...
+Starting local Bazel server (9.0.0) and connecting to it...
+INFO: Invocation ID: cb0813ff-bb4f-47d4-82ad-fbafc7785915
+WARNING: For repository 'platforms', the root module requires module version platforms@1.0.0, but got platforms@1.1.0 in the resolved dependency graph. Please update the version in your MODULE.bazel or set --check_direct_dependencies=off
+WARNING: For repository 'rules_cc', the root module requires module version rules_cc@0.2.18, but got rules_cc@0.2.20 in the resolved dependency graph. Please update the version in your MODULE.bazel or set --check_direct_dependencies=off
+ no actions running
+<root> (codex@_)
+
