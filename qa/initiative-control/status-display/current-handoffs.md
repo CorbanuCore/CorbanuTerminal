@@ -1,6 +1,6 @@
 # Current workstream handoffs — September 12
 
-## Current observation — 10:38 UTC, September12
+## Current observation — 10:37 UTC, September12
 
 Publication approval is resolved; there is nothing to click. A separate source
 pointer drift was reconciled while preserving Facilities. Final correction review
@@ -9,7 +9,7 @@ postflight is next, not yet claimed. See [reconciliation details](facilities-rec
 
 - [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): C1 returned255passing state tests. Manager explicitly authorized review of1121total/396non-test lines to preserve its detailed proof; Aristotle is reviewing. C2 remains next after acceptance, S03 dependent. No user size decision.
 - [TaskNode PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): all26 original browser cases executed at72854ec77. Helmholtz independently checks evidence; an additional static relative-age display defect is retained. Slack sender/replies and live mapping qualification remain pending; posting OFF.
-- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): reviewed sealed-image checkpoint140e094ad landed on main; main window released. Sole owner prepares the next bounded proposal. No protected execution/loader trust/install claim.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): reviewed sealed-image checkpoint140e094ad landed on main and is reconciled; main window released. Sole owner is authorized for build-only static-probe feasibility under the accepted next proposal. No artifact invocation, protected execution, loader trust or installation claim.
 
 These observations supersede earlier assignments below. No new user question.
 
