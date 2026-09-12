@@ -45,7 +45,7 @@ S01 is archived; journal/quotation/storage/contributions, compact values and A/B
 - [x] S01 accepted/archived after defaults approval, combined-tree fixture proof and independently reviewed technical handoff.
 - [x] Parent reports clean worker fast-forwarded to d5608c58d91a75396fea78b447477c44091d4625; exact worker/branch/base and six future paths match plan/allocation. Historical C2 zero-edit scope correction consumed no passes.
 - [x] Travis approved defaults; manager approved this native bridge and1200/500 target. Synthetic/local only, one worker, one new independent review plus necessary correction; prior failures/review usage retained, no billing/live authority.
-- [ ] Parent checks/integrates these allocation documents and verifies disjoint ownership before source dispatch.
+- [x] Parent read exact three-document allocation; native-ownership-allocation-review exited0 clean. Integrated f13e9740a atce8a81980; both checkers pass3/115/126, scope disjoint with sole accounting threads.rs ownership. Source dispatch may now proceed under the six-path mandate.
 - [x] Parent inspected DayTotals/Decimal visibility and amount/rate parsing distinction; B1 is now reviewed and tested, receipt below.
 
 ## Done
