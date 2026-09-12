@@ -234,6 +234,14 @@ impl Admission {
             }
         }
         for stream in self.channels.iter().flatten() {
+            // RDHUP ignores unread bytes; HUP/ERR/NVAL are returned unconditionally.
+            let mut fds = [PollFd::new(
+                stream.as_fd(),
+                PollFlags::from_bits_retain(nix::libc::POLLRDHUP),
+            )];
+            if !matches!(poll(&mut fds, PollTimeout::ZERO), Ok(0)) {
+                control.cancel();
+            }
             match recv(
                 stream.as_raw_fd(),
                 &mut [0u8; 1],

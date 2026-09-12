@@ -210,12 +210,15 @@ fn launch(generation: u64, expires: Instant) -> PairHandle {
 fn connections(listener: &UnixListener, count: usize) -> Vec<(u8, UnixStream)> {
     let mut peers = Vec::new();
     eventually(|| {
-        if let Ok((mut stream, _)) = listener.accept() {
+        if let Ok((stream, _)) = listener.accept() {
             stream
                 .set_read_timeout(Some(Duration::from_secs(1)))
                 .unwrap();
             let mut role = [0];
-            stream.read_exact(&mut role).unwrap();
+            assert_eq!(
+                recv(stream.as_raw_fd(), &mut role, MsgFlags::MSG_PEEK).unwrap(),
+                1
+            );
             peers.push((role[0], stream));
         }
         peers.len() == count
@@ -412,16 +415,28 @@ fn pf_27_s01_admission_real_uid_mismatch_and_unrelated_process() {
 #[ignore = "requires hashed static connector and qualified GNU2.43 pidfs host"]
 fn pf_27_s01_admission_real_peer_eof_death_receipt_drop_and_caller_drop() {
     let listener = listener();
-    for scenario in 0..8 {
+    for scenario in 0..10 {
         let handle = launch(7, deadline());
+        let control = handle.owner.control();
         let mut peers = connections(&listener, 4);
         let policy = outcome(&mut handle.admit(peers.remove(2).1).unwrap()).unwrap();
         let journal = outcome(&mut handle.admit(peers.remove(0).1).unwrap()).unwrap();
-        let (peer, other) = if scenario < 4 {
+        let (peer, other) = if scenario < 5 {
             (journal, policy)
         } else {
             (policy, journal)
         };
+        // Two worker round trips with buffered data must not fence either role.
+        for (_, stream) in peers {
+            assert_eq!(
+                outcome(&mut handle.admit(stream).unwrap())
+                    .err()
+                    .unwrap()
+                    .kind(),
+                io::ErrorKind::AlreadyExists
+            );
+        }
+        other.stream().read_exact(&mut [0]).unwrap();
         let reader = other.stream().try_clone().unwrap();
         reader
             .set_read_timeout(Some(Duration::from_secs(2)))
@@ -430,15 +445,21 @@ fn pf_27_s01_admission_real_peer_eof_death_receipt_drop_and_caller_drop() {
         let read = std::thread::spawn(move || {
             tx.send((&reader).read(&mut [0])).unwrap();
         });
-        match scenario % 4 {
-            0 => peer.stream().write_all(b"e").unwrap(),
+        match scenario % 5 {
+            0 => {
+                peer.stream().read_exact(&mut [0]).unwrap();
+                peer.stream().write_all(b"e").unwrap();
+            }
             1 => peer.stream().write_all(b"x").unwrap(),
-            2 => drop(peer),
+            2 => peer.stream().write_all(b"e").unwrap(),
+            3 => drop(peer),
             _ => drop(handle),
         }
-        assert_eq!(rx.recv_timeout(Duration::from_secs(3)).unwrap().unwrap(), 0);
+        let result = rx.recv_timeout(Duration::from_secs(3));
+        control.cancel();
         read.join().unwrap();
         reaped();
+        assert_eq!(result.unwrap().unwrap(), 0);
     }
 }
 
