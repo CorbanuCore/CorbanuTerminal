@@ -49,8 +49,11 @@ tests passing. Immutable storage d898fbac0 is now reviewed/integrated at56295f66
 all220 state tests pass on that combined tree. Contributions/deletion b08fff66d
 are reviewed and integrated at3898eaa65; all226 state tests pass there. Exact compact
 values c8d46d709 are now reviewed/integrated;237 state tests pass on that tree.
-The worker is closed. Retention mutation awaits the newly delivered boundary-day
-availability decision and manager-owned exact allocation; production stays OFF.
+The worker is closed. Conservative daily expiry was approved; do not re-ask it.
+Latest-quote8b6d629b6 passed independent review and combined staging tests at
+04ba6b8b7 (242state/80TaskNode). [Staging evidence](../../../qa/initiative-control/native-staging-2026-09-12.md)
+distinguishes this from canonical receiving/publication. Atomic-retention scope
+is manager preparation, not waiting on a product decision; production stays OFF.
 
 ## Activation record
 
@@ -100,7 +103,8 @@ task. The [compact-value allocation](../../research/agent-cost-accounting/compac
 is accepted and frozen, not a new worker assignment. The
 [retention design handoff](../../research/agent-cost-accounting/retention-design-handoff.md)
 records the approved policy. The [latest-quote allocation](../../research/agent-cost-accounting/latest-quote-allocation.md)
-owns the next exact three-file prerequisite; manager review/checks precede dispatch.
+owns the reviewed three-file prerequisite, now frozen after return. Parent is
+preparing the next atomic-retention allocation; no new implementation dispatched.
 Custom range/interval filtering is recorded in S03 draft, not implemented here.
 No production migrations, API/Core wiring, manifests or other state writers are
 allocated. The idle worker fast-forwards to
@@ -133,7 +137,7 @@ All records belong to the single feature **PF-60**. Dependencies are hard prereq
 | Sprint | Record / outcome | Depends on | Planned output | Evidence |
 | --- | --- | --- | --- | --- |
 | PF-60-S01 | [Accounting contract and golden fixtures](../../sprints/archive/portfolio-agent-cost-accounting/pf-60-s01-accounting-contract-and-golden-fixtures.md) | none | docs/research/agent-cost-accounting/contract.md | Accepted local contract/fixtures and reviewed handoff; archived |
-| PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Latest-quote reader before retention mutation, test-only | B1 accepted; expiry approved; manager allocation review/dispatch, full S02 pending |
+| PF-60-S02 | [Idempotent usage persistence and replay](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md) | PF-60-S01 | Atomic retention next; reader remains test-only | Latest quote reviewed/tested in staging; expiry approved; next allocation in preparation, full S02 pending |
 | PF-60-S03 | [Inspectable run and campaign totals](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s03-inspectable-run-and-campaign-totals.md) | PF-60-S02 | codex-rs/tui/src/chatwidget/usage.rs | pending |
 | PF-60-S04 | [Cost-accounting acceptance and handoff](../../sprints/current/portfolio-agent-cost-accounting/pf-60-s04-cost-accounting-acceptance-and-handoff.md) | PF-60-S03 | qa/portfolio/agent-cost-accounting/qualification.md | pending |
 

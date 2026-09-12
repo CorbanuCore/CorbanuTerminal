@@ -75,7 +75,9 @@ Exact-goal reconciliation177ec93fc is also reviewed/integrated at3898eaa65;
 all73 native tests pass there. Travis approved both setup/validity directions;
 PF-80-S01 is in manager-owned allocation preparation, not waiting on those answers.
 The [native-validity allocation](../../research/tasknode-integration/native-validity-allocation.md)
-owns the next production-compiled private path; review/checks precede dispatch.
+owns the now-reviewed production-compiled private path bda5b35b4. Combined staging
+04ba6b8b7 passes242state/80TaskNode tests; no public caller enabled. See
+[staging evidence](../../../qa/initiative-control/native-staging-2026-09-12.md).
 The [dashboard decision/Slack amendment](../decision-escalation.md) is queued within
 PF-80-S01. Channel setup and publication qualification are separate from this code.
 The [runtime recovery handoff](../../research/tasknode-integration/recovery-decision-handoff.md)
@@ -96,7 +98,9 @@ The private dashboard, tested adapter and default-OFF checker exist on the
 recovery source, not this main baseline. PF-80-S01 must port the bounded tooling,
 qualify it here and prepare a reviewed first-event path. The port and corrections
 are now integrated locally at the receiving base recorded above; remote main and
-the published recovery-source dashboard are unchanged. Do not copy the whole
+the current publisher remain distinct. September12 cutover already selected
+the manager receiving checkout; its pending publication command prevents this
+new staging checkpoint being published yet. Do not copy the whole
 recovery branch or any auth/session/state directory.
 
 ## Invariants
@@ -132,7 +136,7 @@ and runtime recovery handoff above before a new allocation.
 
 | Feature | Sprint | State and acceptance |
 | --- | --- | --- |
-| PF-80 | [S01 native delivery-control integration](../../sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md) | Setup/validity approved; native-validity allocation review/dispatch; dashboard/Slack follow-up planned; live acceptance separate |
+| PF-80 | [S01 native delivery-control integration](../../sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md) | Native validity reviewed/tested in staging; next contextual decision allocation in preparation; Slack and live acceptance still pending |
 | PF-79 | [S01 Desktop beta channel/test contract](../../sprints/current/initiative-delivery-control/pf-79-s01-beta-channel-and-test-contract.md) | Draft; depends on PF-80-S01; Desktop source/permissions unresolved |
 | PF-79 | [S02 public beta pilot](../../sprints/current/initiative-delivery-control/pf-79-s02-public-beta-pilot.md) | Draft; depends on S01; no public launch |
 | PF-81 | [S01 bounded screenshot/inference QA harness](../../sprints/current/initiative-delivery-control/pf-81-s01-visual-test-harness.md) | Draft; depends on PF-80-S01; existing PF13 task owns later implementation, no new worker |

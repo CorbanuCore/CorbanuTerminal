@@ -8,6 +8,17 @@ the mandate. Product citation: **Internal delivery control — TO BUILD**,
 
 ## Receiving checkpoint
 
+September12 06:01UTC: both latest native increments now reviewed/tested in
+**temporary staging**, not canonical receiving:04ba6b8b7, branch
+integrate/manager-staging-20260912, same-named worktree under Corbanu/worktrees.
+Accounting8b6d629b6 and TaskNodebda5b35b4 first independent reviews clean;
+322combined native tests and both normal-library checks pass. [Receipt](../../qa/initiative-control/native-staging-2026-09-12.md).
+Accepted owner mainc065, Facilities025c and PF35 DeepSeek amendment also staged.
+Canonical receivinga210 stays frozen while prior real publication approval is
+pending; no alternate source or duplicate sync. Two private AstraHigh sidecars
+prepare atomic retention and contextual decisions; no new implementation yet.
+Same sprint reservations, no new human product blockers or successor activation.
+
 September 12 source-maintenance update supersedes the historical remote/source
 statements below. Dashboard repair540db21ac was published from this receiving
 checkout by Luna Extra High (collection04:35:41UTC, verified exact manifest and

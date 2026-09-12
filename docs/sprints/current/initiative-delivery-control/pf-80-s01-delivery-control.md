@@ -53,6 +53,8 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 
 ## Done
 
+- [x] Private native validitybda5b35b4 reviewed clean; combined staging04ba6b8b7 passes80TaskNode/242state tests. [Evidence](../../../../qa/initiative-control/native-staging-2026-09-12.md). No enabled caller; canonical receiving transfer/publication pending.
+
 - [x] Travis approved this Mac/existing publisher for now and native server-backed no-expiry validity design; no credential/enrollment/post permission inferred.
 - [x] Recovery source implemented and independently reviewed the internal dashboard; historical evidence retained without claiming a main-tree port pass.
 - [x] Verified native account setup and generated task IDs; no seed/password needed, no task accepted or completed.
@@ -68,7 +70,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 
 ## Remaining
 
-- [ ] Implement/prove the exact private native-validity allocation; preserve ExpiryUnknown in the existing engine and no public entry/live caller.
+- [ ] Transfer reviewed/tested staging checkpoint into canonical receiving after pending publication resolves; preserve ExpiryUnknown, private entry and posting OFF.
 - [ ] Then allocate contextual dashboard decisions and private AmbientCrypto Slack alerts per [amendment](../../../plans/decision-escalation.md); no deployment/connection claim from planning alone.
 - [ ] Manager scopes accessible recovery/input/retention and restart/cross-process fences before the later CLI allocation; this is manager work, not unanswered product approval.
 - [ ] Reconcile historical PF-76 reports/queued events with PF-80 explicitly; no silent replay, deletion or automatic flushing of the historical batch.

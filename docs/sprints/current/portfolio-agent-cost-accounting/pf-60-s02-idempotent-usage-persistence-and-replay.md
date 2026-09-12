@@ -21,13 +21,13 @@ updated: 2026-09-11
 
 S01 is archived; journal/quotation/storage/contributions/deletion are integrated.
 Exact compact values are reviewed/integrated; the worker is closed and previous
-literal scope frozen. The next reader starts after allocation review/checks. The
+literal scope frozen. Latest reader reviewed/tested in staging; next allocation pending. The
 [retention handoff](../../../research/agent-cost-accounting/retention-design-handoff.md)
 records approved daily expiry; [latest-quote allocation](../../../research/agent-cost-accounting/latest-quote-allocation.md) owns the new exact mandate.
 
 ## Execution mandate
 
-- Next: caller-transaction latest quote using immutable bindings without repricing or writes. Full S02 still owes compaction/retention, native owner/admission wiring and complete goldens.
+- Next: manager allocates atomic retention after the reviewed latest-quote prerequisite. Full S02 still owes compaction/retention, native owner/admission wiring and complete goldens.
 - Excludes: Changing prices, rebilling historical customers, collecting prompts, restoring legacy Plan allowances, or silently converting allowance to cash.
 - Budget proposal: 2–4 builder-days plus independent testing; not a commitment. Stop and re-slice if the bound is exceeded.
 
@@ -53,6 +53,8 @@ records approved daily expiry; [latest-quote allocation](../../../research/agent
 
 ## Done
 
+- [x] Latest quote8b6d629b6 reviewed clean and combined staging04ba6b8b7 passes242state/80TaskNode tests; reader only, no retention mutation. [Evidence](../../../../qa/initiative-control/native-staging-2026-09-12.md). Canonical receiving transfer/publication pending.
+
 - [x] Travis approved conservative UTC-day-start+365-day aggregate expiry; no reapproval needed. Detail90/replay365 policies unchanged; S03 requested range/interval filters remain draft.
 - [x] First test-only journal and native SQLite regressions reviewed clean and integrated at c33d47f6c (worker 3f39d7a65); 202 state tests pass on combined tree. [Receipt](../../../../qa/portfolio/agent-cost-accounting/pf-60-s02/first-increment.md).
 - [x] Real on-disk close/reopen, duplicate/reordered revision, rollback, concurrent writer, unknown/zero and partial Anthropic regressions pass; no process-kill or production claim.
@@ -65,7 +67,7 @@ records approved daily expiry; [latest-quote allocation](../../../research/agent
 
 ## Remaining
 
-- [ ] Implement and prove the exact latest-quote reader allocation; preserve immutable bindings, validate all versions and leave all rows unchanged.
+- [ ] Transfer reviewed/tested staging checkpoint into canonical receiving after its pending publication resolves, preserving the exact candidate.
 - [ ] Manager resolves daily/rolling expiry coverage, stale/unquoted source and late-import semantics before allocating any compaction mutation; no repeated defaults question.
 - [ ] After reviewing the first increment, manager allocates production migration/dispatch/presence/price/retention wiring and complete S02 golden tests separately; do not broaden this worker's scope.
 - [ ] Record actual outputs, counterexamples, remaining limitations and a concrete next-sprint handoff; stop on changed scope.
