@@ -2,7 +2,7 @@
 sprint_id: "PF-35-S01"
 title: "Classifier corpus and leakage-free evaluation"
 status: draft
-external_qualification_state: "Independent external campaign pending; engineering reservation released, not completed"
+external_qualification_state: "DeepSeek API generation via Corbanu Terminal pending; RTX PRO 6000 fine-tuning retained; engineering reservation released, not completed"
 plan_file: "docs/plans/active/p0-security-levels.md"
 plan_feature: "PF-35"
 execution_order: 20
@@ -16,12 +16,17 @@ base_commit: "9d08b15fa94676c1383ee1605b77e7cc7218dcc4"
 allocation_commit: "e0c23fe95165636d621dae8c16a5366c4f7250ac"
 depends_on: "PF-34-S04"
 created: 2026-08-28
-updated: 2026-09-04
+updated: 2026-09-11
 ---
 
 # PF-35-S01 — Classifier corpus and leakage-free evaluation
 
 ## Execution mandate
+
+Travis Good's September 11, 2026 decision: **DeepSeek API through Corbanu Terminal** replaces local RTX Qwen/vLLM dataset generation.
+RTX PRO 6000 remains the S02 fine-tuning machine, not a generation prerequisite; offline CPU inference, corpus targets and blind-custody/quality gates are unchanged.
+Plan amendment only: no API run, paid campaign approval or new allocation.
+See the [current external campaign brief](../../../../qa/security-levels/planning/pf-35-external-qualification-agent-brief-2026-08-30.md).
 
 On 2026-09-04 the user removed PF-35 from the engineering main path.
 This record releases its engineering reservation to draft under the existing
@@ -56,7 +61,7 @@ consumers still require honest completion and archival. Handoff:
 - [x] Read root and nearest implementation-path AGENTS.md; verify exact plan/worktree coordinates.
 - [x] Confirm source pins and declared crate/module paths.
 - [x] Reconciled the plan-mandated immutable dispatch base (`9d08b15f…`) with the later coordination/allocation commit (`e0c23fe95…`) from which this worktree was created; both coordinates are explicit.
-- [ ] Obtain external RTX, private-custodian, signing and qualifying-N100 availability; unresolved security prerequisites block readiness.
+- [ ] Confirm DeepSeek access through Corbanu Terminal, actual model/endpoint and output-use/data terms, bounded pilot/campaign budget and concurrency, and private-custodian availability. Retain signing/N100 and RTX fine-tuning prerequisites for their qualifying stages; local generator availability is no longer a prerequisite.
 
 ## Done
 
@@ -72,7 +77,9 @@ consumers still require honest completion and archival. Handoff:
 
 ## Remaining
 
-- [ ] Acquire, license-review, group and freeze the approximately 250k/25k/150k train/development/blind records on the external RTX/custodian lanes; no such run or private corpus is claimed here.
+- [ ] Under a fresh allocation, adapt local-generator preparation metadata and any strict evaluator schema/tests to API provenance without weakening custody, identity or quality checks; existing manifests remain historical preparation, not DeepSeek evidence.
+- [ ] Record Corbanu build/provider/model identity, prompt/config and output hashes, supported sampling settings, API usage/cost, bounded retries and resumable/deduplicated checkpoints. Verify auth failure, rate limiting, timeout, cancel/resume and budget exhaustion before scaling; no silent local fallback or unbounded paid retries.
+- [ ] Generate through DeepSeek API in Corbanu Terminal, license-review, group and freeze the approximately 250k/25k/150k train/development/blind records. Preserve independent custodian generation/storage for blind records; never send existing blind examples/labels, credentials or protected customer data to the provider. Fine-tuning stays RTX PRO 6000 in S02. No such run or private corpus is claimed here.
 - [ ] Obtain the custodian's aggregate blind report and signed train/development/blind group-tuple overlap audit without disclosing record-level blind output; unequal fingerprints alone are declarations and do not prove disjointness.
 - [ ] Measure the signed production artifact on the qualifying Intel N100/16 GiB/x86-64 Linux floor at 2,048 tokens; prove model ≤300 MiB, p95 ≤50 ms and peak RSS ≤512 MiB.
 

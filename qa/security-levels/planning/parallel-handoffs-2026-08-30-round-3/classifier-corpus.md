@@ -1,5 +1,13 @@
 # PF-35-S01 classifier-corpus handoff
 
+Historical allocation. Travis Good's September 11, 2026 decision supersedes
+the local Qwen/vLLM generation bullet below: **DeepSeek API through Corbanu
+Terminal generates the dataset; RTX PRO 6000 still performs fine-tuning**.
+Do not start a local generator or stop ComfyUI for generation. Use the
+[updated external campaign brief](../pf-35-external-qualification-agent-brief-2026-08-30.md)
+and current plan/sprint allocation; the original decisions below remain history,
+not permission to execute a superseded route.
+
 Owner: Raman. Branch/worktree/base and literal scope are authoritative in the
 sprint front matter. Shared Cargo/Bazel/lock/navigation files are read-only and
 belong to the integration owner.

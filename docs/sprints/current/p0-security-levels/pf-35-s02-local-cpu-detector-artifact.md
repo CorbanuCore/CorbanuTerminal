@@ -11,12 +11,16 @@ branch: "feat/p0-security-levels"
 base_commit: "7cc15ae0762664d6d01765de407329887da9f876"
 depends_on: "PF-35-S01"
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-09-11
 ---
 
 # PF-35-S02 — Reproducible local CPU detector artifact
 
 ## Execution mandate
+
+Travis Good confirmed September 11, 2026: **fine-tuning stays on RTX PRO 6000**.
+S01 now generates the dataset through DeepSeek API in Corbanu Terminal. This
+does not move training to the API or change offline CPU production inference.
 
 - Deliver: The local detector runs offline within an explicit resource envelope and identifies its exact artifact.
 - Excludes: adjacent feature implementation, Permissive policy changes, and unlisted integrations.
@@ -53,7 +57,7 @@ updated: 2026-08-28
 
 - [ ] Record and verify the separately selected CPU model/license/artifact/runtime; OpenClaw's regex signals are not that model and supply no quality or resource qualification. Keep deterministic policy independent of the detector.
 
-- [ ] Compare untuned and small fine-tuned candidates using the frozen training/validation split; retain model selection rationale, licenses and reproducible seeds/config.
+- [ ] Compare untuned and small fine-tuned candidates on RTX PRO 6000 using S01's frozen training/validation split; retain model selection rationale, licenses, machine/runtime facts and reproducible seeds/config. DeepSeek is the dataset generator only; blind data remains evaluator-owned.
 - [ ] Package selected model/tokenizer and ONNX-compatible CPU runtime with pinned hashes, dependency inventory, signature and deterministic artifact verification.
 - [ ] Enforce memory/latency/segment limits and offline operation; no external telemetry, protected-data training, hidden downloads or runtime model replacement.
 - [ ] Return typed unavailable on missing/corrupt artifact, unsupported CPU, timeout and resource exhaustion; never silently return benign.
