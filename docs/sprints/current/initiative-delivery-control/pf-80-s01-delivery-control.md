@@ -21,7 +21,6 @@ updated: 2026-09-11
 September12: F01 corrected/reviewed; actual browser packet returned, independent evidence check running. DEC021partial/DEC025advisory remain. [Slack recovery allocation](../../../research/tasknode-integration/slack-recovery-allocation.md) owns the next five new files; manager review/integration precedes dispatch. No live Slack or unqualified human-readiness claim.
 
 Port/preparation/engine/adapter/reconciliation are reviewed and integrated locally.
-The previous literal write scope is frozen, not an active worker assignment.
 Setup/validity decisions approved; manager review/checks precede new dispatch.
 [Native validity allocation](../../../research/tasknode-integration/native-validity-allocation.md)
 and [recovery handoff](../../../research/tasknode-integration/recovery-decision-handoff.md).
@@ -53,6 +52,7 @@ and [recovery handoff](../../../research/tasknode-integration/recovery-decision-
 - [x] Exact owner, worker worktree/base and disjoint scope allocated; dispatch waits for the verified main merge and worker fast-forward.
 
 ## Done
+- [x] First Slack recovery review's two duplicate-delivery P2s reproduced and corrected;161 Python/Facilities tests pass. Manager accepts1274total/590non-test narrow candidate disposition, original1200target/history retained. Corrective review02 has an open edited-reply recovery finding; same-path cycle2 is running, not accepted code. [Review and integration ledger](../../../../qa/initiative-control/status-display/integration-20260912-1356.md).
 - [x] Corrected F01 age1a6d9c8df reviewed/integrated at60c5671b9;122Python/Facilities Node pass. Initial review P2 ID collision corrected, one added corrective review clean; prior usage retained. [Receiving proof](../../../../qa/initiative-control/status-display/integration-20260912-1232.md). Actual browser/evidence qualification remains separate.
 - [x] All26 original browser cases executed at72854ec77; independent check verified714filehashes,24supported/DEC021partial/DEC025advisory. F01 and Facilities phone-table observation retained; original evidence not relabeled as acceptance of newer code.
 - [x] Feed72854ec77 accepted590lines/281non-test after reproduced destination-less export failure, compatibility correction and clean additional review;111combined tests pass including actual server. [Receipt](../../../../qa/initiative-control/pf-80-s01/decision-projection/feed-receipt.md). Prior reviews preserved; independent evidence remains pending.

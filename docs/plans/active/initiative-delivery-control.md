@@ -30,6 +30,15 @@ implementation_worktrees:
 
 # 3. Task Node integration and delivery control
 
+Latest13:56UTC: [manager evidence](../../../qa/initiative-control/status-display/integration-20260912-1356.md)
+records actual Slack recovery review/correction. First review's two P2 duplicate
+delivery bugs were reproduced and corrected with161 Python tests; corrective
+review02 found an edited-reply recovery hold. James corrects it in the same five
+paths. Manager accepts the corrected1274total/590non-test narrow size disposition,
+74 above original1200 target for preserved regression proof; not a reset or full
+feature acceptance. One scoped second correction and its final helper remain;
+any further finding requires convergence/scope reassessment. Live Slack is OFF.
+
 Current September12: F01 age1a6d9c8df reviewed/integrated;122Python/Facilities Node pass. Laplace returned exact-package browser proof: age and legal-ID history regression pass;152 no-exposure trials, DEC021mixed-feed useful-content expectation still partial. Darwin independently checks the packet; no new human-readiness claim. Earlier code/design/evidence usage and corrected P2 remain recorded. [Slack recovery allocation](../../research/tasknode-integration/slack-recovery-allocation.md) now owns five new files, target1200total/650non-test with explicit coherent-unit exception, one new-code review plus necessary correction. Manager reviews/integrates allocation before Astra High dispatch; real Slack/Task Node stay OFF. UI evidence does not block this independent offline successor.
 
 ## Activation record

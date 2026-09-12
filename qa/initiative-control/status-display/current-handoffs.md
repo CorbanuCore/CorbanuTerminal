@@ -1,5 +1,18 @@
 # Current workstream handoffs — September 12
 
+## Current observation — 13:56 UTC
+
+Publication is healthy; no click is required. [Receiving evidence](integration-20260912-1356.md)
+supersedes older implementation/review observations below.
+
+- [Accounting PF-60-S02](../../../docs/sprints/current/portfolio-agent-cost-accounting/pf-60-s02-idempotent-usage-persistence-and-replay.md): native ownership/deletion bridge is independently reviewed and integrated at8725e1ff7;354 combined native tests pass. Mendel prepares the exact normal-build opt-in store allocation; production source dispatch follows manager acceptance, not another human approval. S03 remains dependent.
+- [Task Node PF-80-S01](../../../docs/sprints/current/initiative-delivery-control/pf-80-s01-delivery-control.md): James corrects the second-review edited-reply recovery finding after161 Python tests. Earlier two duplicate-delivery findings were corrected; this candidate has not passed final review or integration. Real Slack transport/registration follows, with live delivery OFF.
+- [Security PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md): [isolated Linux adapter approval](pf27-launch-adapter-decision.md) remains open at unchanged owner021f82e6. Accounting and Slack continue independently; no repeated question or inferred approval.
+
+One source implementation worker runs (Slack correction), one allocation worker
+runs (accounting), and the manager owns integration. This source awaits this
+heartbeat's one verified publication; no live result is inferred.
+
 ## New decision — 13:14 UTC
 
 [PF-27-S04](../../../docs/sprints/current/p0-security-levels/pf-27-s04-isolated-credential-broker.md)
