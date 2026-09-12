@@ -241,13 +241,6 @@ async fn retained_totals_freshness_coverage_corruption_and_reopens() -> anyhow::
         store.read_day(a.thread_id, 1).await.unwrap_err(),
         "read_retained_day",
     );
-    assert_error(
-        store
-            .delete_recorded_thread(a.thread_id, DAY_MS)
-            .await
-            .unwrap_err(),
-        "coupled maintenance",
-    );
     assert_eq!(dump(&mut conn).await?, before);
     for (day, time, marker) in [
         (-1, DAY_MS, "negative day"),

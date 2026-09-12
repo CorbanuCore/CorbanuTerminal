@@ -190,3 +190,52 @@ pub(super) async fn reopened(
     }
     Ok(())
 }
+
+// Explicit expected keys/values supplied by each case, never derived by reduction or mutation.
+pub(super) fn retained_rows(
+    baseline: &[Vec<String>],
+    removed: &[u128],
+    days: &[(u128, i64, CompactValues, Vec<u128>)],
+    tombstones: &[(u128, i64)],
+    prices: &[u128],
+    time: i64,
+) -> anyhow::Result<Vec<Vec<String>>> {
+    let mut expected = baseline.to_vec();
+    let ids: Vec<String> = removed
+        .iter()
+        .map(|id| Uuid::from_u128(*id).to_string())
+        .collect();
+    let snapshots: Vec<String> = prices
+        .iter()
+        .map(|id| Uuid::from_u128(*id).to_string())
+        .collect();
+    for index in [0, 1, 3, 4, 5] {
+        expected[index].retain(|row| {
+            let fields: serde_json::Value = serde_json::from_str(row).unwrap();
+            !ids.iter().any(|id| fields[0] == *id)
+        });
+    }
+    expected[2].retain(|row| {
+        let fields: serde_json::Value = serde_json::from_str(row).unwrap();
+        snapshots.iter().any(|id| fields[0] == *id)
+    });
+    expected[6] = tombstones
+        .iter()
+        .map(|(id, expiry)| json!([Uuid::from_u128(*id), expiry]).to_string())
+        .collect();
+    expected[7].clear();
+    expected[8].clear();
+    for (owner, day, values, refs) in days {
+        expected[7].push(json!([Uuid::from_u128(*owner), day, values.encode()?]).to_string());
+        for snapshot in refs {
+            expected[8].push(
+                json!([Uuid::from_u128(*owner), day, Uuid::from_u128(*snapshot)]).to_string(),
+            );
+        }
+    }
+    for rows in &mut expected[6..9] {
+        rows.sort();
+    }
+    expected[9] = vec![json!([1, time, 1]).to_string()];
+    Ok(expected)
+}

@@ -196,10 +196,9 @@ impl<'a> Lifecycle<'a> {
             .begin_with("BEGIN IMMEDIATE")
             .await?;
         let result = async {
-            ensure!(
-                matches!(retention_fixture_on_connection(&mut tx).await?, RetentionFixture::Absent),
-                "installed retention deletion requires coupled maintenance"
-            );
+            if !matches!(retention_fixture_on_connection(&mut tx).await?, RetentionFixture::Absent) {
+                return retention_plan::reduction::atomic::delete_on_connection(&mut tx, thread, as_of_ms).await;
+            }
             let attempts = owned_attempts(&mut tx, thread).await?;
             let mut snapshots = HashSet::new();
             for (attempt, _) in attempts {
