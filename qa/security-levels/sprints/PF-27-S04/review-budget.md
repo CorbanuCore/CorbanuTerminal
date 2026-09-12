@@ -90,7 +90,12 @@ No root-positive execution, installation or main-write window is granted.
 
 September12 manager task `01a08522-76a1-7ad1-afe6-ad690d55c0d7` accepted
 sealed-image-next-20260912.md and granted TWO necessary new-stage passes,
-Astra High and Fable5.1High Corbanu/TMUX. **0 used / 2 available**.
+Astra High and Fable5.1High Corbanu/TMUX. **2 used / 0 available**.
 Historical1–17 and the old unused contingency remain unchanged; no scheduled
 wait or reset. Reserve each dispatch first. No executable invocation, privileged
 installation, new main window or dynamic-loader trust is authorized.
+
+| Review | Reservation UTC | Model / scope | Outcome / evidence |
+| --- | --- | --- | --- |
+| 18 | 2026-09-12 10:12:08Z | Astra High; sealed image over e66438e33, Rust0aa65bd04f5e30f3a21e1309aac7aa6b83336859 | Exit0, findings[]; sealed-20260912/astra-eighteen.json. |
+| 19 | 2026-09-12 10:13:19Z | Fable5.1High Corbanu/privateTMUX; same source and completed RTX/TMUX evidence | Exit0, findings[]; sealed-20260912/fable-nineteen.json. |
