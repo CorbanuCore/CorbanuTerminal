@@ -18,12 +18,12 @@ pub use checkpoint::PolicyCheckpoint;
 pub use error::RootError;
 #[cfg(target_os = "linux")]
 pub use native::NativeAnchorClient;
+#[cfg(all(target_os = "linux", target_env = "gnu", feature = "synthetic-fixture"))]
+pub use native::synthetic_fixture::SyntheticRootFixture;
 #[cfg(target_os = "linux")]
 pub use store::ControllerRoot;
 #[cfg(target_os = "linux")]
 pub use store::Enrollment;
-#[cfg(all(target_os = "linux", target_env = "gnu", feature = "synthetic-fixture"))]
-pub use native::synthetic_fixture::SyntheticRootFixture;
 
 /// PF-20's existing policy-anchor operations, independent of Core's private
 /// adapter type. Implementations supply exact durable CAS for a previously
